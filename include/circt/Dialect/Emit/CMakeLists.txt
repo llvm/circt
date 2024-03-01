@@ -12,3 +12,9 @@
 add_circt_dialect(Emit emit)
 add_circt_dialect_doc(Emit emit)
 add_dependencies(circt-headers MLIREmitIncGen)
+
+set(LLVM_TARGET_DEFINITIONS EmitOpInterfaces.td)
+mlir_tablegen(EmitOpInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(EmitOpInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(CIRCTEmitOpInterfacesIncGen)
+add_dependencies(circt-headers CIRCTEmitOpInterfacesIncGen)

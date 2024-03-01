@@ -59,7 +59,11 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   }];
 
   let constructor = "circt::seq::createHWMemSimImplPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
 
   let options = [
     Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",

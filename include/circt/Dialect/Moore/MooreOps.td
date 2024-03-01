@@ -73,6 +73,69 @@ def InstanceOp : MooreOp<"instance", [
   }];
 }
 
+def Initial: I32EnumAttrCase<"Initial", 0, "initial">;
+def Final: I32EnumAttrCase<"Final", 1, "final">;
+def Always: I32EnumAttrCase<"Always", 2, "always">;
+def AlwaysComb: I32EnumAttrCase<"AlwaysComb", 3, "always_comb">;
+def AlwaysLatch: I32EnumAttrCase<"AlwaysLatch", 4, "always_latch">;
+def AlwaysFF: I32EnumAttrCase<"AlwaysFF", 5, "always_ff">;
+
+def ProcedureKindAttr: I32EnumAttr<"ProcedureKind", "Procedure kind",
+            [Initial, Final, Always, AlwaysComb, AlwaysLatch, AlwaysFF]>{
+  let cppNamespace = "circt::moore";
+}
+
+def ProcedureOp : MooreOp<"procedure", [
+  SingleBlock,
+  NoTerminator,
+  NoRegionArguments,
+  RecursiveMemoryEffects,
+  RecursivelySpeculatable
+]> {
+  let summary = "A procedure executed at different points in time";
+  let description = [{
+    The `moore.procedure` operation represents the SystemVerilog `initial`,
+    `final`, `always`, `always_comb`, `always_latch`, and `always_ff`
+    procedures.
+
+    Execution times of the various procedures:
+
+    - An `initial` procedure is executed once at the start of a design's
+      lifetime, before any other procedures are executed.
+
+    - A `final` procedure is executed once at the end of a design's lifetime,
+      after all other procedures have stopped execution.
+
+    - An `always` or `always_ff` procedure is repeatedly executed during a
+      design's lifetime. Timing and event control inside the procedure can
+      suspend its execution, for example to wait for a signal to change. If no
+      such timing or event control is present, the procedure repeats infinitely
+      at the current timestep, effectively deadlocking the design.
+
+    - An `always_comb` or `always_latch` procedure is executed once at the start
+      of a design's lifetime, after any `initial` procedures, and throughout the
+      lifetime of the design whenever any of the variables read by the body of
+      the procedure changes. Since the procedure is only executed when its
+      change, and not repeatedly, the body generally does not contain any timing
+      or event control. This behavior mitigates a shortcoming of `always`
+      procedures, which commonly have an event control like `@*` that blocks
+      and waits for a change of any input signals. This prevents the body from
+      executing when the design is initialized and properly reacting to the
+      initial values of signals. In contrast, `always_comb` and `always_latch`
+      procedures have an implicit unconditional execution at design start-up.
+
+    See IEEE 1800-2017 § 9.2 "Structured procedures".
+  }];
+
+  let regions = (region SizedRegion<1>:$bodyRegion);
+  let arguments = (ins ProcedureKindAttr:$kind);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $kind attr-dict-with-keyword $bodyRegion
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//

@@ -54,6 +54,9 @@ struct Context {
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
 
+  // Convert a statement AST node to MLIR ops.
+  LogicalResult convertStatement(const slang::ast::Statement *statement);
+
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
   SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;

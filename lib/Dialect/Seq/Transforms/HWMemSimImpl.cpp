@@ -13,6 +13,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -499,24 +500,29 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     } else {
       OpBuilder::InsertionGuard guard(b);
 
-      // Create a new module with the readmem op.
-      b.setInsertionPointAfter(op);
-      auto boundModule = b.create<HWModuleOp>(
-          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init")),
-          ArrayRef<PortInfo>());
+      // Assign a name to the bound module.
+      StringAttr boundModuleName =
+          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init"));
 
-      auto filename = op->getAttrOfType<OutputFileAttr>("output_file");
-      if (filename) {
-        if (!filename.isDirectory()) {
-          SmallString<128> dir(filename.getFilename().getValue());
-          llvm::sys::path::remove_filename(dir);
-          filename = hw::OutputFileAttr::getFromDirectoryAndFilename(
-              b.getContext(), dir, boundModule.getName() + ".sv");
+      // Generate a name for the file containing the bound module and the bind.
+      StringAttr filename;
+      if (auto fileAttr = op->getAttrOfType<OutputFileAttr>("output_file")) {
+        if (!fileAttr.isDirectory()) {
+          SmallString<128> path(fileAttr.getFilename().getValue());
+          llvm::sys::path::remove_filename(path);
+          llvm::sys::path::append(path, boundModuleName.getValue() + ".sv");
+          filename = b.getStringAttr(path);
+        } else {
+          filename = fileAttr.getFilename();
         }
       } else {
-        filename = hw::OutputFileAttr::getFromFilename(
-            b.getContext(), boundModule.getName() + ".sv");
+        filename = b.getStringAttr(boundModuleName.getValue() + ".sv");
       }
+
+      // Create a new module with the readmem op.
+      b.setInsertionPointAfter(op);
+      auto boundModule =
+          b.create<HWModuleOp>(boundModuleName, ArrayRef<PortInfo>());
 
       // Build the hierpathop
       auto path = b.create<hw::HierPathOp>(
@@ -524,8 +530,6 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getArrayAttr(
               ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 
-      boundModule->setAttr("output_file", filename);
-      b.setInsertionPointToStart(op.getBodyBlock());
       b.setInsertionPointToStart(boundModule.getBodyBlock());
       b.create<sv::InitialOp>([&]() {
         auto xmr = b.create<sv::XMRRefOp>(reg.getType(), path.getSymNameAttr());
@@ -544,11 +548,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
               moduleNamespace.newName(boundInstance.getInstanceName()))));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
-      // Bind the new module.
-      b.setInsertionPointAfter(boundModule);
-      auto bind = b.create<sv::BindOp>(hw::InnerRefAttr::get(
-          op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
-      bind->setAttr("output_file", filename);
+      // Build the file container and reference the module from it.
+      b.setInsertionPointAfter(op);
+      b.create<emit::FileOp>(filename, [&] {
+        b.create<emit::RefOp>(FlatSymbolRefAttr::get(boundModuleName));
+        b.create<sv::BindOp>(hw::InnerRefAttr::get(
+            op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
+      });
     }
   }
 

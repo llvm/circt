@@ -428,7 +428,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
         calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.readEn(),
                                      oneI1);
-    regWriteEn = memoryInterface.readDone();
+    regWriteEn = memoryInterface.done();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
       // Single load from memory; we do not need to write the output to a
@@ -436,7 +436,36 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       // again
       needReg = false;
       rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
-                                          memoryInterface.readDone());
+                                          memoryInterface.done());
+      // We refrain from replacing the loadOp result with
+      // memoryInterface.readData, since multiple loadOp's need to be converted
+      // to a single memory's ReadData. If this replacement is done now, we lose
+      // the link between which SSA memref::LoadOp values map to which groups
+      // for loading a value from the Calyx memory. At this point of lowering,
+      // we keep the memref::LoadOp SSA value, and do value replacement _after_
+      // control has been generated (see LateSSAReplacement). This is *vital*
+      // for things such as calyx::InlineCombGroups to be able to properly track
+      // which memory assignment groups belong to which accesses.
+      res = loadOp.getResult();
+    }
+  } else if (memoryInterface.contentEnOpt().has_value()) {
+    auto oneI1 =
+        calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 1);
+    auto zeroI1 =
+        calyx::createConstant(loadOp.getLoc(), rewriter, getComponent(), 1, 0);
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(),
+                                     memoryInterface.contentEn(), oneI1);
+    rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeEn(),
+                                     zeroI1);
+    regWriteEn = memoryInterface.done();
+    if (calyx::noStoresToMemory(memref) &&
+        calyx::singleLoadFromMemory(memref)) {
+      // Single load from memory; we do not need to write the output to a
+      // register. The readData value will be held until contentEn is asserted
+      // again
+      needReg = false;
+      rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(),
+                                          memoryInterface.done());
       // We refrain from replacing the loadOp result with
       // memoryInterface.readData, since multiple loadOp's need to be converted
       // to a single memory's ReadData. If this replacement is done now, we lose
@@ -496,8 +525,13 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryInterface.writeEn(),
       createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(),
-                                      memoryInterface.writeDone());
+  if (memoryInterface.contentEnOpt().has_value()) {
+    // If memory has content enable, it must be asserted when writing
+    rewriter.create<calyx::AssignOp>(
+        storeOp.getLoc(), memoryInterface.contentEn(),
+        createConstant(storeOp.getLoc(), rewriter, getComponent(), 1, 1));
+  }
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
 
   return success();
 }
@@ -1083,7 +1117,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       unsigned outPortsIt = extMemPortIndices.getSecond().second +
                             compOp.getInputPortInfo().size();
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
-      extMemPorts.writeDone = compOp.getArgument(inPortsIt);
+      extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
       unsigned nAddresses = extMemPortIndices.getFirst()
                                 .getType()

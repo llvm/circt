@@ -5,7 +5,7 @@
 // RUN: cd ..
 // RUN: esiquery trace w:%t6/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
 // RUN: %python %s.py trace w:%t6/esi_system_manifest.json
-// RUN: %python esi-cosim-runner.py --exec %s.py %t6/*.sv
+// RUN: esi-cosim.py --source %t6 --top top -- %python %s.py cosim env
 
 !sendI8 = !esi.bundle<[!esi.channel<i8> from "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>

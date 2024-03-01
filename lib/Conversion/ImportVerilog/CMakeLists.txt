@@ -30,6 +30,7 @@ endif ()
 
 add_circt_translation_library(CIRCTImportVerilog
   ImportVerilog.cpp
+  Statements.cpp
   Structure.cpp
   Types.cpp
 

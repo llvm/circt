@@ -1739,9 +1739,10 @@ void GrandCentralPass::runOnOperation() {
               << "the '" << block.getOperationName() << "' op is here";
           removalError = true;
         }
+        auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
         if (dutModules.contains(mod) ||
             AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
-            cast<InstanceOp>(*a->getInstance()).getLowerToBind())
+            (instOp && instOp.getLowerToBind()))
           continue;
         modules.push_back(mod);
         dutModules.insert(mod);

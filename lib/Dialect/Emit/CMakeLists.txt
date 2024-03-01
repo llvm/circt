@@ -11,6 +11,7 @@
 
 add_circt_dialect_library(CIRCTEmit
   EmitDialect.cpp
+  EmitOpInterfaces.cpp
   EmitOps.cpp
 
   ADDITIONAL_HEADER_DIRS

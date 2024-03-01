@@ -197,7 +197,7 @@ find_package(Python3 COMPONENTS Interpreter Development)
 if(Python3_FOUND)
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.
-    set_target_properties(Python::Module PROPERTIES
+    set_target_properties(Python3::Module PROPERTIES
           MAP_IMPORTED_CONFIG_DEBUG ";RELEASE")
   ENDIF(MSVC)
 
