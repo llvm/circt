@@ -24,6 +24,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
   EMBED_CAPI_LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIDebug
+    CIRCTCAPIEmit
     CIRCTCAPIESI
     CIRCTCAPIExportVerilog
     CIRCTCAPIFSM
@@ -161,6 +162,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/verif.py
   DIALECT_NAME verif)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/EmitOps.td
+  SOURCES
+    dialects/emit.py
+  DIALECT_NAME emit)
 
 ################################################################################
 # Build composite binaries
