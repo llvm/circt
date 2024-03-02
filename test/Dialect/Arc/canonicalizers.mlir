@@ -135,8 +135,8 @@ arc.define @memWrite(%arg0: i32, %arg1: i32, %arg2: i1) -> (i32, i32, i1) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i1
 }
 
-// CHECK-LABEL: arc.model "StorageGetCanonicalizers"
-arc.model "StorageGetCanonicalizers" {
+// CHECK-LABEL: arc.model @StorageGetCanonicalizers
+arc.model @StorageGetCanonicalizers io !hw.modty<> {
 // CHECK-NEXT: ^bb
 ^bb0(%arg0: !arc.storage<512>):
   %0 = arc.storage.get %arg0[16] : !arc.storage<512> -> !arc.storage<16>

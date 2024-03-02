@@ -47,21 +47,21 @@ arc.define @Bar() {
 // -----
 
 // expected-error @below {{op must have exactly one argument}}
-arc.model "MissingArg" {
+arc.model @MissingArg io !hw.modty<> {
 ^bb0:
 }
 
 // -----
 
 // expected-error @below {{op must have exactly one argument}}
-arc.model "TooManyArgs" {
+arc.model @TooManyArgs io !hw.modty<> {
 ^bb0(%arg0: !arc.storage, %arg1: !arc.storage):
 }
 
 // -----
 
 // expected-error @below {{op argument must be of storage type}}
-arc.model "WrongArgType" {
+arc.model @WrongArgType io !hw.modty<> {
 ^bb0(%arg0: i32):
 }
 

@@ -1,12 +1,12 @@
 // RUN: circt-opt %s --arc-lower-state | FileCheck %s
 
-// CHECK-LABEL: arc.model "Empty" {
+// CHECK-LABEL: arc.model @Empty
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
 // CHECK-NEXT:  }
 hw.module @Empty() {
 }
 
-// CHECK-LABEL: arc.model "InputsAndOutputs" {
+// CHECK-LABEL: arc.model @InputsAndOutputs
 hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
   %0 = comb.add %a, %a : i42
   %1 = comb.add %b, %b : i17
@@ -27,7 +27,7 @@ hw.module @InputsAndOutputs(in %a: i42, in %b: i17, out c: i42, out d: i17) {
   // CHECK-NEXT: }
 }
 
-// CHECK-LABEL: arc.model "State" {
+// CHECK-LABEL: arc.model @State
 hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
   %gclk = seq.clock_gate %clk, %en, %en2
   %3 = arc.state @DummyArc(%6) clock %clk latency 1 : (i42) -> i42
@@ -63,7 +63,7 @@ hw.module @State(in %clk: !seq.clock, in %en: i1, in %en2: i1) {
   // CHECK-NEXT: }
 }
 
-// CHECK-LABEL: arc.model "State2" {
+// CHECK-LABEL: arc.model @State2
 hw.module @State2(in %clk: !seq.clock) {
   %3 = arc.state @DummyArc(%3) clock %clk latency 1 : (i42) -> i42
   %4 = arc.state @DummyArc(%4) clock %clk latency 1 : (i42) -> i42
@@ -93,7 +93,7 @@ arc.define @DummyArc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
 }
 
-// CHECK-LABEL: arc.model "NonMaskedMemoryWrite"
+// CHECK-LABEL: arc.model @NonMaskedMemoryWrite
 hw.module @NonMaskedMemoryWrite(in %clk0: !seq.clock) {
   %c0_i2 = hw.constant 0 : i2
   %c9001_i42 = hw.constant 9001 : i42
@@ -120,7 +120,7 @@ arc.define @identity(%arg0: i2, %arg1: i42) -> (i2, i42) {
   arc.output %arg0, %arg1 : i2, i42
 }
 
-// CHECK-LABEL: arc.model "lowerMemoryReadPorts"
+// CHECK-LABEL: arc.model @lowerMemoryReadPorts
 hw.module @lowerMemoryReadPorts(out out0: i42, out out1: i42) {
   %c0_i2 = hw.constant 0 : i2
   %mem = arc.memory <4 x i42, i2>
@@ -140,7 +140,7 @@ arc.define @arcWithMemoryReadsIsLowered(%mem: !arc.memory<4 x i42, i2>) -> i42 {
   arc.output %0 : i42
 }
 
-// CHECK-LABEL:  arc.model "maskedMemoryWrite"
+// CHECK-LABEL:  arc.model @maskedMemoryWrite
 hw.module @maskedMemoryWrite(in %clk: !seq.clock) {
   %true = hw.constant true
   %c0_i2 = hw.constant 0 : i2
@@ -163,7 +163,7 @@ arc.define @identity2(%arg0: i2, %arg1: i42, %arg2: i1, %arg3: i42) -> (i2, i42,
 // CHECK:      [[DATA:%.+]] = comb.or bin [[OLD_MASKED]], [[NEW_MASKED]] : i42
 // CHECK:      arc.memory_write [[MEM]][[[RES]]#0], [[DATA]] if [[RES]]#2 : <4 x i42, i2>
 
-// CHECK-LABEL: arc.model "Taps"
+// CHECK-LABEL: arc.model @Taps
 hw.module @Taps() {
   // CHECK-NOT: arc.tap
   // CHECK-DAG: [[VALUE:%.+]] = hw.constant 0 : i42
@@ -173,7 +173,7 @@ hw.module @Taps() {
   arc.tap %c0_i42 {name = "myTap"} : i42
 }
 
-// CHECK-LABEL: arc.model "MaterializeOpsWithRegions"
+// CHECK-LABEL: arc.model @MaterializeOpsWithRegions
 hw.module @MaterializeOpsWithRegions(in %clk0: !seq.clock, in %clk1: !seq.clock, out z: i42) {
   %true = hw.constant true
   %c19_i42 = hw.constant 19 : i42
@@ -245,7 +245,7 @@ hw.module @stateReset(in %clk: !seq.clock, in %arg0: i42, in %rst: i1, out out0:
   %2, %3 = arc.state @DummyArc2(%arg0) clock %clk enable %0 reset %1 latency 1 : (i42) -> (i42, i42)
   hw.output %2, %3 : i42, i42
 }
-// CHECK-LABEL: arc.model "stateReset"
+// CHECK-LABEL: arc.model @stateReset
 // CHECK: [[ALLOC1:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 // CHECK: [[ALLOC2:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
 // CHECK: arc.clock_tree %{{.*}} {
@@ -269,7 +269,7 @@ hw.module @SeparateResets(in %clock: !seq.clock, in %i0: i42, in %rst1: i1, in %
   hw.output %0, %1 : i42, i42
 }
 
-// CHECK-LABEL: arc.model "SeparateResets"
+// CHECK-LABEL: arc.model @SeparateResets
 // CHECK: [[FOO_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "foo"} : (!arc.storage) -> !arc.state<i42>
 // CHECK: [[BAR_ALLOC:%.+]] = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i42>
 // CHECK: arc.clock_tree %{{.*}} {
@@ -307,7 +307,7 @@ arc.define @CombLoopRegressionArc2(%arg0: i1) -> (i1, i1) {
 }
 
 // Regression check for invalid memory port lowering errors.
-// CHECK-LABEL: arc.model "MemoryPortRegression"
+// CHECK-LABEL: arc.model @MemoryPortRegression
 hw.module private @MemoryPortRegression(in %clock: !seq.clock, in %reset: i1, in %in: i3, out x: i3) {
   %0 = arc.memory <2 x i3, i1> {name = "ram_ext"}
   %1 = arc.memory_read_port %0[%3] : <2 x i3, i1>
@@ -326,7 +326,7 @@ arc.define @Queue_arc_1(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
 }
 
-// CHECK-LABEL: arc.model "BlackBox"
+// CHECK-LABEL: arc.model @BlackBox
 hw.module @BlackBox(in %clk: !seq.clock) {
   %0 = arc.state @DummyArc(%2) clock %clk latency 1 : (i42) -> i42
   %1 = comb.and %0, %0 : i42

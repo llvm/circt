@@ -49,4 +49,10 @@ def StorageType : ArcTypeDef<"Storage"> {
   let assemblyFormat = "(`<` $size^ `>`)?";
 }
 
+def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
+  let mnemonic = "sim.instance";
+  let parameters = (ins "mlir::FlatSymbolRefAttr":$model);
+  let assemblyFormat = "`<` $model `>`";
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCTYPES_TD
