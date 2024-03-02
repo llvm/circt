@@ -355,10 +355,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     return op == firReg || !isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
   });
 
-  SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
-  auto addToWorklist = [&](Value reg, Value term, Value next) {
-    worklist.push_back({builder.getBlock(), reg, term, next});
-  };
+  SmallVector<std::tuple<Block *, Value, Value, Value, int64_t>> worklist;
 
   auto getArrayIndex = [&](Value reg, Value idx) {
     // Create an array index op just after `reg`.
@@ -368,12 +365,16 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   };
 
   SmallVector<Value, 8> opsToDelete;
-  addToWorklist(reg, term, next);
+  worklist.push_back({builder.getBlock(), reg, term, next, 0});
   while (!worklist.empty()) {
     OpBuilder::InsertionGuard guard(builder);
     Block *block;
     Value reg, term, next;
-    std::tie(block, reg, term, next) = worklist.pop_back_val();
+    int64_t depth;
+    std::tie(block, reg, term, next, depth) = worklist.pop_back_val();
+    auto addToWorklist = [&](Value reg, Value term, Value next) {
+      worklist.push_back({builder.getBlock(), reg, term, next, depth + 1});
+    };
     builder.setInsertionPointToEnd(block);
     if (areEquivalentValues(term, next))
       continue;
@@ -381,7 +382,8 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() && regMuxFanout.contains(mux)) {
+    if ((nestedIfDepthLimit == -1 || nestedIfDepthLimit > depth) && mux &&
+        mux.getTwoState() && regMuxFanout.contains(mux)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },

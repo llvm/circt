@@ -71,6 +71,8 @@ public:
             ckgEnableName, ckgTestEnableName, ckgInstName};
   }
 
+  int64_t getNestedIfDepthLimit() const { return nestedIfDepthLimit; }
+
   FirtoolOptions &setClockGateOptions(seq::ExternalizeClockGateOptions &opts) {
     ckgModuleName = opts.moduleName;
     ckgInputName = opts.inputName;
@@ -350,6 +352,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setNestedIfDepthLimit(int64_t value) {
+    nestedIfDepthLimit = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -396,6 +403,7 @@ private:
   bool stripFirDebugInfo;
   bool stripDebugInfo;
   bool fixupEICGWrapper;
+  int64_t nestedIfDepthLimit;
 };
 
 void registerFirtoolCLOptions();
