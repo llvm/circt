@@ -511,7 +511,7 @@ ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  auto ctxt = result.getContext();
+  MLIRContext *ctxt = result.getContext();
   modelArg.type =
       SimModelInstanceType::get(ctxt, FlatSymbolRefAttr::get(ctxt, modelName));
 
