@@ -345,7 +345,8 @@ struct SimInstantiateOpLowering
                   ConversionPatternRewriter &rewriter) const final {
     auto modelIt = modelInfo.find(
         cast<SimModelInstanceType>(op.getBody().getArgument(0).getType())
-            .getModel().getValue());
+            .getModel()
+            .getValue());
     ModelInfoMap &model = modelIt->second;
 
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
@@ -385,8 +386,10 @@ struct SimSetInputOpLowering : public ModelAwarePattern<arc::SimSetInputOp> {
   LogicalResult
   matchAndRewrite(arc::SimSetInputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto modelIt = modelInfo.find(
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue());
+    auto modelIt =
+        modelInfo.find(cast<SimModelInstanceType>(op.getInstance().getType())
+                           .getModel()
+                           .getValue());
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getInput());
@@ -413,8 +416,10 @@ struct SimGetPortOpLowering : public ModelAwarePattern<arc::SimGetPortOp> {
   LogicalResult
   matchAndRewrite(arc::SimGetPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto modelIt = modelInfo.find(
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue());
+    auto modelIt =
+        modelInfo.find(cast<SimModelInstanceType>(op.getInstance().getType())
+                           .getModel()
+                           .getValue());
     ModelInfoMap &model = modelIt->second;
 
     auto portIt = model.states.find(op.getPort());
@@ -442,8 +447,9 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
   LogicalResult
   matchAndRewrite(arc::SimStepOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    StringRef modelName =
-        cast<SimModelInstanceType>(op.getInstance().getType()).getModel().getValue();
+    StringRef modelName = cast<SimModelInstanceType>(op.getInstance().getType())
+                              .getModel()
+                              .getValue();
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
