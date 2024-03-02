@@ -720,4 +720,13 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "hw::HWModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// ConvertSimToSV
+//===----------------------------------------------------------------------===//
+
+def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
+  let summary = "Translate core dialects into yosys's RTL IR";
+  let constructor = "createExportYosys()";
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

@@ -530,16 +530,15 @@ endif()
 #-------------------------------------------------------------------------------
 # slang Verilog Frontend
 #-------------------------------------------------------------------------------
-
-option(CIRCT_SLANG_FRONTEND_ENABLED "Enables the slang Verilog frontend." OFF)
+option(CIRCT_SLANG_FRONTEND_ENABLED "Enables the slang Verilog frontend." ON)
 option(CIRCT_SLANG_BUILD_FROM_SOURCE
   "Build slang from source instead of finding an installed package" ON)
 
 llvm_canonicalize_cmake_booleans(CIRCT_SLANG_FRONTEND_ENABLED)
 llvm_canonicalize_cmake_booleans(CIRCT_SLANG_BUILD_FROM_SOURCE)
-
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   message(STATUS "slang Verilog frontend is enabled")
+  message(STATUS "slang integration is enabled")
   if(CIRCT_SLANG_BUILD_FROM_SOURCE)
     # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
     message(STATUS "Building slang from source")
@@ -585,6 +584,35 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
   else()
     find_package(slang 3.0 REQUIRED)
   endif()
+endif()
+
+option(CIRCT_YOSYS_INTEGRATION_ENABLED "Enables the Yosys integration." ON)
+option(CIRCT_YOSYS_BUILD_FROM_SOURCE
+  "Build yosys from source instead of finding an installed package" OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_YOSYS_BACKEND_ENABLED)
+
+if(CIRCT_YOSYS_INTEGRATION_ENABLED)
+  message(STATUS "Yosys integration is enabled")
+  include(ExternalProject)
+  ExternalProject_Add(yosys
+    URL https://github.com/YosysHQ/yosys/archive/refs/tags/yosys-0.38.zip
+    URL_HASH SHA256=2bfbc60dd3244dd5f67e79fc725f0c5a8629e7ac9c6dc1189dd51dd5b41ff0d0
+    SOURCE_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    BINARY_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    INSTALL_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
+    # CONFIGURE_COMMAND sed -i "s/ENABLE_LIBYOSYS := 0/ENABLE_LIBYOSYS := 1/" Makefile && make config-gcc # TODO: Switch `make config-clang` or `make config-gcc` based on CXX_COMPILER
+    CONFIGURE_COMMAND make config-gcc && echo "ENABLE_LIBYOSYS := 1" >> Makefile.conf
+    BUILD_COMMAND make --jobs=12 # TODO: Make the number of workers configurable. We cannot get it from ninja.
+    INSTALL_COMMAND "" # skip install
+    TEST_COMMAND ""
+  )
+  ExternalProject_Get_Property(yosys INSTALL_DIR)
+  include_directories(${INSTALL_DIR}/share/include)
+  add_library (yosys_yosys SHARED IMPORTED)
+  message(STATUS, "${INSTALL_DIR} is here")
+  set_target_properties(yosys_yosys PROPERTIES IMPORTED_LOCATION "${INSTALL_DIR}/libyosys.so")
+  target_link_libraries(yosys_yosys INTERFACE "${INSTALL_DIR}/libyosys.so")
 endif()
 
 #-------------------------------------------------------------------------------

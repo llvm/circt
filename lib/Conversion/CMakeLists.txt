@@ -32,3 +32,8 @@ add_subdirectory(CalyxNative)
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   add_subdirectory(ImportVerilog)
 endif()
+
+if(CIRCT_YOSYS_INTEGRATION_ENABLED)
+  add_subdirectory(ExportYosys)
+endif()
+

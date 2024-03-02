@@ -31,6 +31,7 @@ target_link_libraries(circt-opt
   CIRCTESI
   CIRCTExportChiselInterface
   CIRCTExportVerilog
+  CIRCTExportYosys
   CIRCTFIRRTL
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
