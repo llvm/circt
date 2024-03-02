@@ -3981,12 +3981,12 @@ ParseResult FIRStmtParser::parseObject() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Look up the class that is being referenced.
-  auto circuit =
-      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedClass = circuit.lookupSymbol<ClassLike>(className);
-  if (!referencedClass)
+  const auto &classMap = getConstants().classMap;
+  auto lookup = classMap.find(className);
+  if (lookup == classMap.end())
     return emitError(startTok.getLoc(), "use of undefined class name '" +
                                             className + "' in object");
+  auto referencedClass = lookup->getSecond();
   auto result = builder.create<ObjectOp>(referencedClass, id);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
