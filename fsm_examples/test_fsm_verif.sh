@@ -1,0 +1,4 @@
+cd ../build
+
+make 
+
