@@ -41,7 +41,7 @@ struct Context {
 
   /// Convert a slang `SourceLocation` into an MLIR `Location`.
   Location convertLocation(slang::SourceLocation loc);
-  /// Covnert a slang `SourceRange` into an MLIR `Location`.
+  /// Convert a slang `SourceRange` into an MLIR `Location`.
   Location convertLocation(slang::SourceRange range);
 
   /// Convert a slang type into an MLIR type. Returns null on failure. Uses the
