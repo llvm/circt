@@ -273,6 +273,11 @@ struct CircuitLoweringState {
     return it != newToOldModuleMap.end() ? it->second : nullptr;
   }
 
+  void recordModuleMapping(Operation *oldFMod, Operation *newHWMod) {
+    oldToNewModuleMap[oldFMod] = newHWMod;
+    newToOldModuleMap[newHWMod] = oldFMod;
+  }
+
   // Process remaining annotations and emit warnings on unprocessed annotations
   // still remaining in the annoSet.
   void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
@@ -610,8 +615,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
 
-              state.oldToNewModuleMap[&op] = loweredMod;
-              state.newToOldModuleMap[loweredMod] = &op;
+              state.recordModuleMapping(&op, loweredMod);
               modulesToProcess.push_back(loweredMod);
               // Lower all the alias types.
               module.walk([&](Operation *op) {
@@ -628,8 +632,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                   lowerExtModule(extModule, topLevelModule, state);
               if (!loweredMod)
                 return failure();
-              state.oldToNewModuleMap[&op] = loweredMod;
-              state.newToOldModuleMap[loweredMod] = &op;
+              state.recordModuleMapping(&op, loweredMod);
               return success();
             })
             .Case<FMemModuleOp>([&](auto memModule) {
@@ -637,8 +640,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                   lowerMemModule(memModule, topLevelModule, state);
               if (!loweredMod)
                 return failure();
-              state.oldToNewModuleMap[&op] = loweredMod;
-              state.newToOldModuleMap[loweredMod] = &op;
+              state.recordModuleMapping(&op, loweredMod);
               return success();
             })
             .Default([&](Operation *op) {
