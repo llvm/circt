@@ -8,9 +8,9 @@ for fsm in range(num_fsm):
 
     f = open(output_file, "w")
 
-    num_states = 10
+    num_states = np.random.randint(5, 20)
 
-    num_trans = 15
+    num_trans = np.random.randint(20, 50)
 
     num_const = 10
 
@@ -48,8 +48,8 @@ for fsm in range(num_fsm):
     for s in range(num_trans-len(rows)):
         print("from state ", str(np.random.randint(0, num_states)))
         print("to state ", str(np.random.randint(0, num_states)))
-        rows.append(s)
-        cols.append(s+1)
+        rows.append(np.random.randint(0, num_states))
+        cols.append(np.random.randint(0, num_states))
         guards.append(str(guard_type[np.random.randint(0, len(guard_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
         print ("guard: ", guards[-1])
         action.append(str(action_type[np.random.randint(0, len(action_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
@@ -66,7 +66,7 @@ for fsm in range(num_fsm):
         f.write("\n\n\tfsm.state @"+str(st)+" output {\n\t} transitions {")
         for i in range(len(rows)):
             if rows[i] == st:
-                f.write("\n\t\tfsm.transition @"+str(st+1)+" guard {")
+                f.write("\n\t\tfsm.transition @"+str(cols[i])+" guard {")
                 f.write("\n\t\t\t\t%tmp = "+guards[i]+" : i16")
                 f.write("\n\t\t\t\tfsm.return %tmp")
                 f.write("\n\t\t\t} action {")
