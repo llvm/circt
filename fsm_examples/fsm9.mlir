@@ -18,251 +18,235 @@ fsm.machine @fsm9() -> () {initialState = "0"} {
 	fsm.state @0 output {
 	} transitions {
 		fsm.transition @1 guard {
-				%tmp = comb.icmp slt 0 : i16
+				%tmp = comb.icmp eq 4 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add 4 : i16
+				%tmp = comb.mul 5 : i16
 				fsm.update x1, %tmp : i16
 			}
-		fsm.transition @0 guard {
-				%tmp = comb.icmp slt x0, 8 : i16
+		fsm.transition @4 guard {
+				%tmp = comb.icmp ne x3, 0 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.mul x2, 2 : i16
-				fsm.update x0, %tmp : i16
+				%tmp = comb.mul x0, 0 : i16
+				fsm.update x1, %tmp : i16
 			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp sle x3, 8 : i16
+		fsm.transition @5 guard {
+				%tmp = comb.icmp eq x3, 8 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.mul x0, 7 : i16
-				fsm.update x2, %tmp : i16
+				fsm.update x3, %tmp : i16
+			}
+		fsm.transition @0 guard {
+				%tmp = comb.icmp eq x1, 6 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x1, 4 : i16
+				fsm.update x1, %tmp : i16
 			}
 	}
 
 	fsm.state @1 output {
 	} transitions {
 		fsm.transition @2 guard {
-				%tmp = comb.icmp sle 4 : i16
+				%tmp = comb.icmp sle 0 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add 3 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @4 guard {
-				%tmp = comb.icmp slt x1, 9 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x0, 1 : i16
-				fsm.update x3, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp ne x2, 4 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x1, 5 : i16
+				%tmp = comb.add 6 : i16
 				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp eq x3, 1 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x1, 3 : i16
-				fsm.update x1, %tmp : i16
 			}
 		fsm.transition @1 guard {
-				%tmp = comb.icmp slt x0, 2 : i16
+				%tmp = comb.icmp ne x3, 6 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x1, 9 : i16
+				%tmp = comb.add x0, 0 : i16
 				fsm.update x0, %tmp : i16
+			}
+		fsm.transition @0 guard {
+				%tmp = comb.icmp eq x3, 3 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add x0, 8 : i16
+				fsm.update x3, %tmp : i16
 			}
 	}
 
 	fsm.state @2 output {
 	} transitions {
 		fsm.transition @3 guard {
-				%tmp = comb.icmp slt 6 : i16
+				%tmp = comb.icmp eq 1 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.mul 3 : i16
+				%tmp = comb.add 0 : i16
 				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp eq x1, 3 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x3, 1 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp eq x2, 8 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x3, 6 : i16
-				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp ne x3, 1 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x3, 0 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp sle x3, 5 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x2, 1 : i16
-				fsm.update x3, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp ne x1, 5 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x0, 5 : i16
-				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @0 guard {
-				%tmp = comb.icmp eq x0, 0 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x0, 3 : i16
-				fsm.update x3, %tmp : i16
-			}
-		fsm.transition @4 guard {
-				%tmp = comb.icmp eq x1, 1 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x1, 2 : i16
-				fsm.update x2, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp eq x3, 7 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x2, 7 : i16
-				fsm.update x2, %tmp : i16
-			}
-		fsm.transition @4 guard {
-				%tmp = comb.icmp slt x1, 2 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x3, 6 : i16
-				fsm.update x1, %tmp : i16
 			}
 	}
 
 	fsm.state @3 output {
 	} transitions {
 		fsm.transition @4 guard {
-				%tmp = comb.icmp eq 4 : i16
+				%tmp = comb.icmp slt 8 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add 0 : i16
+				%tmp = comb.add 9 : i16
 				fsm.update x3, %tmp : i16
 			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp sle x2, 5 : i16
+		fsm.transition @1 guard {
+				%tmp = comb.icmp sle x2, 9 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x2, 8 : i16
-				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @0 guard {
-				%tmp = comb.icmp slt x1, 4 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x0, 1 : i16
+				%tmp = comb.add x2, 1 : i16
 				fsm.update x2, %tmp : i16
 			}
-		fsm.transition @0 guard {
-				%tmp = comb.icmp slt x3, 4 : i16
+		fsm.transition @6 guard {
+				%tmp = comb.icmp ne x3, 0 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x2, 3 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp eq x1, 3 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x1, 1 : i16
-				fsm.update x3, %tmp : i16
-			}
-		fsm.transition @4 guard {
-				%tmp = comb.icmp eq x1, 9 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x0, 9 : i16
+				%tmp = comb.mul x0, 0 : i16
 				fsm.update x0, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp ne x1, 3 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x0, 1 : i16
-				fsm.update x2, %tmp : i16
 			}
 		fsm.transition @3 guard {
-				%tmp = comb.icmp ne x2, 6 : i16
+				%tmp = comb.icmp slt x2, 8 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x2, 9 : i16
-				fsm.update x3, %tmp : i16
-			}
-		fsm.transition @2 guard {
-				%tmp = comb.icmp eq x1, 5 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x1, 5 : i16
+				%tmp = comb.add x3, 5 : i16
 				fsm.update x2, %tmp : i16
 			}
-		fsm.transition @4 guard {
-				%tmp = comb.icmp eq x3, 2 : i16
+		fsm.transition @5 guard {
+				%tmp = comb.icmp slt x2, 9 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x2, 4 : i16
-				fsm.update x1, %tmp : i16
+				%tmp = comb.mul x2, 6 : i16
+				fsm.update x2, %tmp : i16
 			}
 	}
 
 	fsm.state @4 output {
 	} transitions {
+		fsm.transition @5 guard {
+				%tmp = comb.icmp ne 9 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul 8 : i16
+				fsm.update x2, %tmp : i16
+			}
 		fsm.transition @4 guard {
-				%tmp = comb.icmp eq x3, 2 : i16
+				%tmp = comb.icmp eq x3, 4 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.add x1, 2 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp ne x2, 4 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.mul x1, 2 : i16
-				fsm.update x1, %tmp : i16
-			}
-		fsm.transition @3 guard {
-				%tmp = comb.icmp slt x3, 3 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add x0, 1 : i16
+				%tmp = comb.mul x2, 2 : i16
 				fsm.update x0, %tmp : i16
 			}
 		fsm.transition @2 guard {
-				%tmp = comb.icmp sle x0, 4 : i16
+				%tmp = comb.icmp sle x0, 1 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.mul x0, 0 : i16
+				%tmp = comb.add x0, 4 : i16
+				fsm.update x2, %tmp : i16
+			}
+		fsm.transition @6 guard {
+				%tmp = comb.icmp slt x1, 5 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x0, 9 : i16
+				fsm.update x2, %tmp : i16
+			}
+	}
+
+	fsm.state @5 output {
+	} transitions {
+		fsm.transition @6 guard {
+				%tmp = comb.icmp eq 5 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul 6 : i16
 				fsm.update x1, %tmp : i16
 			}
 		fsm.transition @2 guard {
-				%tmp = comb.icmp eq x2, 2 : i16
+				%tmp = comb.icmp ne x1, 1 : i16
 				fsm.return %tmp
 			} action {
-				%tmp = comb.mul x3, 4 : i16
+				%tmp = comb.add x0, 4 : i16
 				fsm.update x1, %tmp : i16
+			}
+		fsm.transition @0 guard {
+				%tmp = comb.icmp slt x2, 7 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x0, 6 : i16
+				fsm.update x3, %tmp : i16
+			}
+	}
+
+	fsm.state @6 output {
+	} transitions {
+		fsm.transition @7 guard {
+				%tmp = comb.icmp sle 7 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add 2 : i16
+				fsm.update x2, %tmp : i16
+			}
+		fsm.transition @5 guard {
+				%tmp = comb.icmp ne x1, 7 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add x0, 5 : i16
+				fsm.update x1, %tmp : i16
+			}
+		fsm.transition @6 guard {
+				%tmp = comb.icmp slt x1, 0 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x3, 6 : i16
+				fsm.update x0, %tmp : i16
+			}
+		fsm.transition @4 guard {
+				%tmp = comb.icmp eq x2, 3 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x2, 3 : i16
+				fsm.update x1, %tmp : i16
+			}
+		fsm.transition @2 guard {
+				%tmp = comb.icmp slt x1, 2 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x2, 4 : i16
+				fsm.update x3, %tmp : i16
+			}
+		fsm.transition @3 guard {
+				%tmp = comb.icmp slt x3, 9 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.mul x0, 2 : i16
+				fsm.update x3, %tmp : i16
+			}
+	}
+
+	fsm.state @7 output {
+	} transitions {
+		fsm.transition @5 guard {
+				%tmp = comb.icmp ne x0, 3 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add x1, 3 : i16
+				fsm.update x0, %tmp : i16
+			}
+		fsm.transition @0 guard {
+				%tmp = comb.icmp ne x3, 1 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add x1, 6 : i16
+				fsm.update x1, %tmp : i16
+			}
+		fsm.transition @6 guard {
+				%tmp = comb.icmp ne x1, 8 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add x1, 5 : i16
+				fsm.update x3, %tmp : i16
 			}
 	}
 }

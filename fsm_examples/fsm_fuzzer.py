@@ -34,28 +34,34 @@ for fsm in range(num_fsm):
 
     # first add enough transitions to make the FSM connected
     for s in range(num_states-1):
-        print("from state ", s)
-        print("to state ", s+1)
         rows.append(s)
         cols.append(s+1)
         guards.append(str(guard_type[np.random.randint(0, len(guard_type))])+str(np.random.randint(0, num_const)))
-        print ("guard: ", guards[-1])
         action.append(str(action_type[np.random.randint(0, len(action_type))])+str(np.random.randint(0, num_const)))
-        print ("action: ", action[-1])
 
     # then add more transitions to make the FSM interesting
+        
+    print("row has ", len(rows))
+    print("col has ", len(cols))
 
     for s in range(num_trans-len(rows)):
-        print("from state ", str(np.random.randint(0, num_states)))
-        print("to state ", str(np.random.randint(0, num_states)))
-        rows.append(np.random.randint(0, num_states))
-        cols.append(np.random.randint(0, num_states))
-        guards.append(str(guard_type[np.random.randint(0, len(guard_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
-        print ("guard: ", guards[-1])
-        action.append(str(action_type[np.random.randint(0, len(action_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
-        print ("action: ", action[-1])
+        tmpr = np.random.randint(0, num_states)
+        tmpc = np.random.randint(0, num_states)
+        unique = True 
+        for i in range(len(rows)):
+            if rows[i] == tmpr and cols[i] == tmpc:
+                unique = False
+        if(unique):
+            rows.append(tmpr)
+            cols.append(tmpc)
+            guards.append(str(guard_type[np.random.randint(0, len(guard_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
+            action.append(str(action_type[np.random.randint(0, len(action_type))])+str(vars[np.random.randint(0, num_vars)])+", "+str(np.random.randint(0, num_const)))
 
     # output proper mlir fsm
+            
+    print("row has ", len(rows))
+    print("col has ", len(cols))
+
 
     f.write("fsm.machine @fsm"+str(fsm)+"() -> () {initialState = \"0\"} {\n")
     for v in vars:
