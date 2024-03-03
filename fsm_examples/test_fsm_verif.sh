@@ -1,4 +1,5 @@
 cd ../build
 
-make 
+make -j 
 
+bin/fsm-verification ../fsm_examples/fsm0.mlir

@@ -3,12 +3,13 @@
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
 #include <z3++.h>
+#include <iostream>
 #include <vector>
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/raw_ostream.h"
-#include "time.h"
+#include "chrono"
 
 #define VERBOSE 0
 
@@ -26,11 +27,21 @@ void printSolverAssertions(z3::solver& solver) {
   llvm::outs()<<solver.to_smt2()<<"\n";
 
   llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  const auto start{std::chrono::steady_clock::now()};
   llvm::outs()<<solver.check()<<"\n";
+  const auto end{std::chrono::steady_clock::now()};
+
+  const std::chrono::duration<double> elapsed_seconds{end - start};
+
+
   llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
   llvm::outs()<<solver.get_model().to_string()<<"\n";
   llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
+  auto outputfile = fopen("output.txt", "a");
+  fprintf(outputfile, "%f", elapsed_seconds.count());
+  fclose(outputfile);
 
 }
 
@@ -97,7 +108,6 @@ func_decl findMyFun(string s, MyStateInvMapFun *stateInvMap_fun){
  * @brief Returns expression from Comb dialect operator
 */
 expr manage_comb_exp(Operation &op, vector<expr>& vec, z3::context &c){
-
   if(auto add = dyn_cast<comb::AddOp>(op)){
     return to_expr(c, vec[0] + vec[1]);
   } 
@@ -109,6 +119,9 @@ expr manage_comb_exp(Operation &op, vector<expr>& vec, z3::context &c){
   }
   else if(auto or_op = dyn_cast<comb::OrOp>(op)){
     return expr(vec[0] | vec[1]);
+  }
+  else if(auto mul_op = dyn_cast<comb::MulOp>(op)){
+    return expr(vec[0]* vec[1]);
   }
   else if(auto icmp = dyn_cast<comb::ICmpOp>(op)){
     circt::comb::ICmpPredicate predicate = icmp.getPredicate();
@@ -592,8 +605,8 @@ void parse_fsm(string input_file){
   }
 
   // bounded checking 
-  body = implies((findMyFun("B", stateInvMap_fun)(solverVars->size(), solverVars->data()) && solverVars->at(0) > 10), false);
-  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+  // body = implies((findMyFun("B", stateInvMap_fun)(solverVars->size(), solverVars->data()) && solverVars->at(0) > 10), false);
+  // s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
 
 
 
@@ -607,6 +620,10 @@ int main(int argc, char **argv){
   string input = argv[1];
 
   cout << "input file: " << input << endl;
+
+  auto outputfile = fopen("output.txt", "a");
+  fprintf(outputfile, "%s", input);
+  fclose(outputfile);
 
   parse_fsm(input);
 
