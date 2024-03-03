@@ -268,6 +268,11 @@ struct CircuitLoweringState {
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
 
+  Operation *getOldModule(Operation *newModule) {
+    auto it = newToOldModuleMap.find(newModule);
+    return it != newToOldModuleMap.end() ? it->second : nullptr;
+  }
+
   // Process remaining annotations and emit warnings on unprocessed annotations
   // still remaining in the annoSet.
   void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
@@ -299,8 +304,11 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT or is
-  // instantiated under a bind.
+  // instantiated under a bind.  This will accept either an old FIRRTL module or
+  // a new HW module.
   bool isInDUT(igraph::ModuleOpInterface child) {
+    if (auto hwModule = dyn_cast<hw::HWModuleOp>(child.getOperation()))
+      child = cast<igraph::ModuleOpInterface>(getOldModule(hwModule));
     return dutModules.contains(child);
   }
 
@@ -330,14 +338,18 @@ private:
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
 
+  /// Mapping of FModuleOp to HWModuleOp
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
+
+  /// Mapping of HWModuleOp to FModuleOp
+  DenseMap<Operation *, Operation *> newToOldModuleMap;
 
   /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
   InstanceGraph &instanceGraph;
 
-  /// The set of modules that are instantiated under the DUT.  This is
-  /// precomputed as a module being under the DUT may rely on knowledge of
+  /// The set of old FIRRTL modules that are instantiated under the DUT.  This
+  /// is precomputed as a module being under the DUT may rely on knowledge of
   /// properties of the instance and is not suitable for querying in the
   /// parallel execution region of this pass when the backing instances may
   /// already be erased.
@@ -599,6 +611,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                 return failure();
 
               state.oldToNewModuleMap[&op] = loweredMod;
+              state.newToOldModuleMap[loweredMod] = &op;
               modulesToProcess.push_back(loweredMod);
               // Lower all the alias types.
               module.walk([&](Operation *op) {
@@ -616,6 +629,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
               state.oldToNewModuleMap[&op] = loweredMod;
+              state.newToOldModuleMap[loweredMod] = &op;
               return success();
             })
             .Case<FMemModuleOp>([&](auto memModule) {
@@ -624,6 +638,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
               state.oldToNewModuleMap[&op] = loweredMod;
+              state.newToOldModuleMap[loweredMod] = &op;
               return success();
             })
             .Default([&](Operation *op) {

@@ -1593,6 +1593,7 @@ firrtl.circuit "Directories" attributes {
   // CHECK:       hw.module private @BoundUnderDUT
   // CHECK-SAME:    output_file = #hw.output_file<"testbench{{/|\\\\}}"
   firrtl.module private @BoundUnderDUT() {}
+  // CHECK:       hw.module private @DUT
   firrtl.module private @DUT() attributes {
     annotations = [
       {
@@ -1601,7 +1602,28 @@ firrtl.circuit "Directories" attributes {
     ]
   } {
     firrtl.instance boundUnderDUT {lowerToBind} @BoundUnderDUT()
+    // Memories in the DUT shouldn't be moved into the testbench.
+    // See: https://github.com/llvm/circt/issues/6775
+    // CHECK:     seq.firmem
+    // CHECK-NOT:   output_file
+    %mem_r = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "mem",
+      portNames = ["r"],
+      prefix = "",
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %0 = firrtl.subfield %mem_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %0, %c0_clock : !firrtl.clock
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.subfield %mem_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %1, %c0_ui1 : !firrtl.uint<1>
+    %2 = firrtl.subfield %mem_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %2, %c0_ui1 : !firrtl.uint<1>
   }
+  // CHECK:       hw.module @Directories
   firrtl.module @Directories() {
     firrtl.instance dut @DUT()
     firrtl.instance dut_A @Directories_A()
