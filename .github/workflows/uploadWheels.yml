@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: error
 
   push_wheels:
-    name: Push wheels (Tag or Weekly)
+    name: Push wheels
     runs-on: ubuntu-20.04
     if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || ((github.event_name == 'workflow_dispatch') && inputs.upload-to-pypi))
     needs: build_wheels
