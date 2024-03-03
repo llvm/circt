@@ -33,14 +33,19 @@ struct StmtVisitor {
   // statements.
   LogicalResult visit(const slang::ast::StatementList &stmts) {
     for (auto *stmt : stmts.list)
-      if (failed(stmt->visit(*this)))
+      if (failed(context.convertStatement(*stmt)))
         return failure();
     return success();
   }
 
   // Inline `begin ... end` blocks into the parent.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
-    return stmt.body.visit(*this);
+    return context.convertStatement(stmt.body);
+  }
+
+  // Handle expression statements.
+  LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
+    return success(context.convertExpression(stmt.expr));
   }
 
   // Handle variable declarations.
@@ -52,8 +57,9 @@ struct StmtVisitor {
 
     Value initial;
     if (const auto *init = var.getInitializer()) {
-      return mlir::emitError(loc,
-                             "variable initializer expressions not supported");
+      initial = context.convertExpression(*init);
+      if (!initial)
+        return failure();
     }
 
     builder.create<moore::VariableOp>(loc, type,
@@ -82,9 +88,8 @@ struct StmtVisitor {
 };
 } // namespace
 
-LogicalResult
-Context::convertStatement(const slang::ast::Statement *statement) {
-  auto loc = convertLocation(statement->sourceRange.start());
-  return statement->visit(StmtVisitor(*this, loc));
+LogicalResult Context::convertStatement(const slang::ast::Statement &stmt) {
+  auto loc = convertLocation(stmt.sourceRange);
+  return stmt.visit(StmtVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)

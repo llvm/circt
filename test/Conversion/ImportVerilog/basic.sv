@@ -39,8 +39,12 @@ endmodule
 
 // CHECK-LABEL: moore.module @Basic
 module Basic;
-  // CHECK: %myVar = moore.variable
-  var myVar;
+  // CHECK: %v0 = moore.variable : !moore.logic
+  // CHECK: %v1 = moore.variable : !moore.int
+  // CHECK: %v2 = moore.variable %v1 : !moore.int
+  var v0;
+  int v1;
+  int v2 = v1;
 
   // CHECK: moore.procedure initial {
   // CHECK: }
@@ -72,4 +76,23 @@ module Basic;
   // CHECK: moore.procedure always_ff {
   // CHECK: }
   always_ff @* begin end
+
+  // CHECK: moore.assign %v1, %v2 : !moore.int
+  assign v1 = v2;
+endmodule
+
+// CHECK-LABEL: moore.module @Statements
+module Statements;
+  bit x, y, z;
+  initial begin
+    // CHECK: moore.blocking_assign %x, %y : !moore.bit
+    x = y;
+
+    // CHECK: moore.blocking_assign %y, %z : !moore.bit
+    // CHECK: moore.blocking_assign %x, %y : !moore.bit
+    x = (y = z);
+
+    // CHECK: moore.nonblocking_assign %x, %y : !moore.bit
+    x <= y;
+  end
 endmodule

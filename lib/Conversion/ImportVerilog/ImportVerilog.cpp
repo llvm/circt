@@ -64,6 +64,10 @@ Location Context::convertLocation(slang::SourceLocation loc) {
   return ::convertLocation(getContext(), sourceManager, bufferFilePaths, loc);
 }
 
+Location Context::convertLocation(slang::SourceRange range) {
+  return convertLocation(range.start());
+}
+
 namespace {
 /// A converter that can be plugged into a slang `DiagnosticEngine` as a client
 /// that will map slang diagnostics to their MLIR counterpart and emit them.

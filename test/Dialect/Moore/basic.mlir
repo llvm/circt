@@ -4,10 +4,11 @@
 moore.module @Foo {
   // CHECK: moore.instance "foo" @Foo
   moore.instance "foo" @Foo
-  // CHECK: %myVar = moore.variable : !moore.bit
-  %myVar = moore.variable : !moore.bit
-  // CHECK: [[TMP:%.+]] = moore.variable name "myVar" %myVar : !moore.bit
-  moore.variable name "myVar" %myVar : !moore.bit
+  // CHECK: %v1 = moore.variable : !moore.bit
+  %v1 = moore.variable : !moore.bit
+  %v2 = moore.variable : !moore.bit
+  // CHECK: [[TMP:%.+]] = moore.variable name "v1" %v2 : !moore.bit
+  moore.variable name "v1" %v2 : !moore.bit
 
   // CHECK: moore.procedure initial {
   // CHECK: moore.procedure final {
@@ -21,6 +22,16 @@ moore.module @Foo {
   moore.procedure always_comb {}
   moore.procedure always_latch {}
   moore.procedure always_ff {}
+
+  // CHECK: moore.assign %v1, %v2 : !moore.bit
+  moore.assign %v1, %v2 : !moore.bit
+
+  moore.procedure always {
+    // CHECK: moore.blocking_assign %v1, %v2 : !moore.bit
+    moore.blocking_assign %v1, %v2 : !moore.bit
+    // CHECK: moore.nonblocking_assign %v1, %v2 : !moore.bit
+    moore.nonblocking_assign %v1, %v2 : !moore.bit
+  }
 }
 
 // CHECK-LABEL: moore.module @Bar
