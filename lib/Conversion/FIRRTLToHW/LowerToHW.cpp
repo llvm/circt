@@ -690,13 +690,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   });
   // Attach the lowered form of these annotations.
   if (!dutHierarchyFiles.empty())
-    state.oldToNewModuleMap[state.getDut()]->setAttr(
-        moduleHierarchyFileAttrName,
-        ArrayAttr::get(&getContext(), dutHierarchyFiles));
+    state.getNewModule(state.getDut())
+        ->setAttr(moduleHierarchyFileAttrName,
+                  ArrayAttr::get(&getContext(), dutHierarchyFiles));
   if (!testHarnessHierarchyFiles.empty())
-    state.oldToNewModuleMap[state.getTestHarness()]->setAttr(
-        moduleHierarchyFileAttrName,
-        ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
+    state.getNewModule(state.getTestHarness())
+        ->setAttr(moduleHierarchyFileAttrName,
+                  ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
   // Finally, lower all operations.
   auto result = mlir::failableParallelForEachN(
