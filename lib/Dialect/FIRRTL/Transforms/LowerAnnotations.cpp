@@ -491,8 +491,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
-    {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
-    {dftClockDividerBypassAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
