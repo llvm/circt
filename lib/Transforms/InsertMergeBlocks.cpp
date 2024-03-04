@@ -328,8 +328,10 @@ struct FuncOpPattern : public OpConversionPattern<func::FuncOp> {
     rewriter.startOpModification(op);
 
     if (!op.isExternal())
-      if (failed(insertMergeBlocks(op.getRegion(), rewriter)))
+      if (failed(insertMergeBlocks(op.getRegion(), rewriter))) {
+        rewriter.cancelOpModification(op);
         return failure();
+      }
 
     rewriter.finalizeOpModification(op);
     rewrittenFuncs.insert(op);

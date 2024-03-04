@@ -133,7 +133,7 @@ public:
     remove(op);
   }
 
-  void notifyOperationRemoved(Operation *op) override { remove(op); }
+  void notifyOperationErased(Operation *op) override { remove(op); }
 
   void notifyOperationInserted(Operation *op,
                                mlir::IRRewriter::InsertPoint) override {
