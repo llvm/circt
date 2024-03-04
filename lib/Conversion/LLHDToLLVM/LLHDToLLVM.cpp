@@ -67,7 +67,7 @@ getOrInsertFunction(ModuleOp &module, ConversionPatternRewriter &rewriter,
     OpBuilder moduleBuilder(module.getBodyRegion());
     func = moduleBuilder.create<LLVM::LLVMFuncOp>(loc, name, signature);
     if (insertBodyAndTerminator) {
-      func.addEntryBlock();
+      func.addEntryBlock(moduleBuilder);
       OpBuilder b(func.getBody());
       b.create<LLVM::ReturnOp>(loc, ValueRange());
     }
