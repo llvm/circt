@@ -390,6 +390,10 @@ private:
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
 
+  /// The set of guard macros to emit declarations for.
+  SetVector<StringRef> guardMacroNames;
+  std::mutex guardMacroMutex;
+
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
 
@@ -716,6 +720,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
+
+  if (!state.guardMacroNames.empty()) {
+    ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), circuit);
+    for (auto name : state.guardMacroNames) {
+      b.create<sv::MacroDeclOp>(name);
+    }
+  }
 
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
@@ -4490,6 +4501,13 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       anyFailed = true;
       return;
     }
+
+    // Record the guard macro to emit a declaration for it.
+    {
+      std::unique_lock<std::mutex> lock(circuitState.guardMacroMutex);
+      circuitState.guardMacroNames.insert(guard.getValue());
+    }
+
     guards = guards.drop_front();
     addToIfDefBlock(guard.getValue(), emitWrapped);
   };
