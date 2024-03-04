@@ -710,7 +710,7 @@ def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
 // ConvertSimToSV
 //===----------------------------------------------------------------------===//
 
-def LowerSimToSV: Pass<"lower-sim-to-sv",  "hw::HWModuleOp"> {
+def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower simulator-specific `sim` ops to SV.";
   let constructor = "circt::createLowerSimToSVPass()";
   let dependentDialects = [
