@@ -2,14 +2,17 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{read-enable-mode=ignore})" %s | FileCheck %s --check-prefixes=COMMON,IGNORE
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{read-enable-mode=zero})" %s | FileCheck %s --check-prefixes=COMMON,ZERO
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-mux-pragmas})" %s | FileCheck %s --check-prefixes=COMMON,PRAMGAS
-// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_MEM
-// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG --implicit-check-not RANDOMIZE_MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization})" %s | FileCheck %s --check-prefix COMMON --check-prefix NO-RAND-MEM
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --check-prefix NO-RAND-REG
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefixes NO-RAND-MEM,NO-RAND-REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaround})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
 sv.macro.decl @RANDOM
+sv.macro.decl @ENABLE_INITIAL_MEM_
+sv.macro.decl @RANDOMIZE_REG_INIT
+sv.macro.decl @RANDOMIZE_MEM_INIT
 
 // COMMON-LABEL: @complex
 hw.module @complex(in %clock: i1, in %reset: i1, in %r0en: i1, in %mode: i1, in %data0: i16, out data1: i16, out data2: i16) {
@@ -76,6 +79,9 @@ hw.module @WriteOrderedDifferentClock(in %clock: i1, in %clock2: i1, in %w0_addr
 }
 
 hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4, in %ro_en_0: i1, in %ro_clock_0: i1, in %rw_addr_0: i4, in %rw_en_0: i1, in %rw_clock_0: i1, in %rw_wmode_0: i1, in %rw_wdata_0: i16, in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, in %wo_data_0: i16, out ro_data_0: i16, out rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
+
+// NO-RAND-MEM-NOT: sv.ifdef.procedural @RANDOMIZE_MEM
+// NO-RAND-REG-NOT: sv.ifdef.procedural @RANDOMIZE_REG
 
 //COMMON-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
 //CHECK-SAME:  attributes {comment = "VCS coverage exclude_file"}

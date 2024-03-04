@@ -390,8 +390,7 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
 }
 
 LogicalResult IfDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // TODO(nandor): Pending fixes to the pipeline, verify references.
-  return success();
+  return verifyMacroIdentSymbolUses(*this, getCond().getIdent(), symbolTable);
 }
 
 // If both thenRegion and elseRegion are empty, erase op.
@@ -464,8 +463,7 @@ LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
 
 LogicalResult
 IfDefProceduralOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // TODO(nandor): Pending fixes to the pipeline, verify references.
-  return success();
+  return verifyMacroIdentSymbolUses(*this, getCond().getIdent(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//

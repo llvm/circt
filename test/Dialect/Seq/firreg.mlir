@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | FileCheck %s --check-prefixes=CHECK,COMMON
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefix COMMON --implicit-check-not RANDOMIZE_REG
-// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes SEPARATE
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefixes=COMMON,DISABLED
+// RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes=SEPARATE
 
 // COMMON-LABEL: hw.module @lowering
 // SEPARATE-LABEL: hw.module @lowering
@@ -103,6 +103,7 @@ hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i3
   // SEPARATE-NEXT:   sv.passign %rNoSym, %in : i32
   // SEPARATE-NEXT: }
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef @FIRRTL_BEFORE_INITIAL {
@@ -183,6 +184,7 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   %1 = comb.mux bin %cond, %value, %count : i2
   %2 = comb.mux bin %reset, %c0_i2, %1 : i2
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK-NEXT: sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef @FIRRTL_BEFORE_INITIAL {
@@ -262,6 +264,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   %3 = comb.extract %2 from 1 : (i33) -> i32
   %4 = comb.mux bin %io_en, %io_d, %3 : i32
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // COMMON:       %reg = sv.reg sym @[[reg_sym:.+]] : !hw.inout<i32>
   // COMMON-NEXT:  %0 = sv.read_inout %reg : !hw.inout<i32>
   // COMMON-NEXT:  %reg2 = sv.reg sym @[[reg2_sym:.+]] : !hw.inout<i32>
@@ -339,6 +342,7 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
   %0 = comb.mux %cond, %value, %count : i42
   %1 = comb.mux %reset, %c0_i42, %0 : i42
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      %count = sv.reg sym @count : !hw.inout<i42>
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
@@ -385,6 +389,7 @@ hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, o
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>
   // CHECK-NEXT: }
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef @FIRRTL_BEFORE_INITIAL {
@@ -428,6 +433,7 @@ hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, o
 hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<1xi1>>, out b: !hw.array<1xarray<1xi1>>) {
   %r = seq.firreg %a clock %clock sym @__r__ : !hw.array<1xarray<1xi1>>
 
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      sv.always posedge %clock  {
   // CHECK-NEXT:   sv.passign %r, %a : !hw.array<1xarray<1xi1>>
   // CHECK-NEXT: }
@@ -471,6 +477,7 @@ hw.module private @initStruct(in %clock: !seq.clock) {
   %r = seq.firreg %r clock %clock sym @__r__ : !hw.struct<a: i1>
 
   // CHECK:      %r = sv.reg sym @[[r_sym:[_A-Za-z0-9]+]]
+  // DISABLED-NOT: sv.ifdef.procedural @RANDOMIZE_REG
   // CHECK:      sv.ifdef @ENABLE_INITIAL_REG_ {
   // CHECK-NEXT:   sv.ordered {
   // CHECK-NEXT:     sv.ifdef @FIRRTL_BEFORE_INITIAL {
