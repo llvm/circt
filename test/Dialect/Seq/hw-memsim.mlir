@@ -115,13 +115,13 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK-NEXT:      sv.passign %[[wslot]], %wo_data_0
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
-//CHECK-NEXT:  sv.ifdef "ENABLE_INITIAL_MEM_" {
-//CHECK-NEXT:    sv.ifdef "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:  sv.ifdef @ENABLE_INITIAL_MEM_ {
+//CHECK-NEXT:    sv.ifdef @RANDOMIZE_REG_INIT {
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %_RANDOM_MEM = sv.reg : !hw.inout<i32>
 //CHECK-NEXT:    sv.initial {
 //CHECK-NEXT:      sv.verbatim "`INIT_RANDOM_PROLOG_"
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_MEM_INIT" {
+//CHECK-NEXT:      sv.ifdef.procedural @RANDOMIZE_MEM_INIT {
 //CHECK:             sv.for %i = %c0_i4 to %c-6_i4 step %c1_i4 : i4 {
 //CHECK:               sv.for %j = %c0_i6 to %c-32_i6 step %c-32_i6_2 : i6 {
 //CHECK:                 %RANDOM = sv.macro.ref.se @RANDOM
@@ -134,7 +134,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4
 //CHECK:               sv.bpassign %[[MEM_INDEX]], %[[EXTRACT]] : i16
 //CHECK:             }
 //CHECK-NEXT:      }
-//CHECK-NEXT:      sv.ifdef.procedural "RANDOMIZE_REG_INIT" {
+//CHECK-NEXT:      sv.ifdef.procedural @RANDOMIZE_REG_INIT {
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
@@ -329,7 +329,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 hw.module.generated @PR2769, @FIRRTLMem(in %ro_addr_0: i4, in %ro_en_0: i1, in %ro_clock_0: i1, in %rw_addr_0: i4, in %rw_en_0: i1,  in %rw_clock_0: i1, in %rw_wmode_0: i1, in %rw_wdata_0: i16,  in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, in %wo_data_0: i16, out ro_data_0: i16, out rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 // COMMON-LABEL: hw.module private @RandomizeWeirdWidths
-// CHECK: sv.ifdef.procedural "RANDOMIZE_MEM_INIT"
+// CHECK: sv.ifdef.procedural @RANDOMIZE_MEM_INIT
 // CHECK: %[[INOUT:.+]] = sv.array_index_inout %Memory[%i]
 // CHECK: %[[EXTRACT:.+]] = comb.extract %{{.+}} from 0 : (i160) -> i145
 // CHECK-NEXT: sv.bpassign %[[INOUT]], %[[EXTRACT]] : i145

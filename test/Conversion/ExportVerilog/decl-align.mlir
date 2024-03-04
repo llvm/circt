@@ -6,7 +6,7 @@ hw.module @Decl() {
   %x = sv.wire : !hw.inout<i4>
   // CHECK: wire       y;
   %y = sv.wire : !hw.inout<i1>
-  sv.ifdef "foo" {
+  sv.ifdef @foo {
     // CHECK: wire [11:0][9:0][3:0] w;
     %w = sv.wire : !hw.inout<array<12 x array<10xi4>>>
   }

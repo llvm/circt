@@ -55,7 +55,7 @@ hw.module @sink_constants(in %clock :i1, out out : i1){
   %true = hw.constant true
 
   /// Simple constant sinking.
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.initial {
       // CHECK: [[FALSE:%.*]] = hw.constant false
       // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -68,7 +68,7 @@ hw.module @sink_constants(in %clock :i1, out out : i1){
   }
 
   /// Multiple uses in the same block should use the same constant.
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.initial {
       // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
@@ -131,7 +131,7 @@ hw.module @sink_expression(in %clock: i1, in %a: i1, in %a2: i1, in %a3: i1, in 
     // CHECK: [[XOR:%.*]] = comb.xor [[AND]], %a4 : i1
 
     // CHECK: sv.ifdef.procedural
-    sv.ifdef.procedural "SOMETHING"  {
+    sv.ifdef.procedural @SOMETHING {
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
       // CHECK: sv.if [[OR]]
       sv.if %0  {

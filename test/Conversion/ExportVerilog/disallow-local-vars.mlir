@@ -10,7 +10,7 @@ hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
 
   // CHECK: `ifdef FOO_MACRO
   // DISALLOW: `ifdef FOO_MACRO
-  sv.ifdef "FOO_MACRO" {
+  sv.ifdef @FOO_MACRO {
     // DISALLOW: logic logicOp;
     // DISALLOW: {{^    }}reg   [[SE_REG:[_A-Za-z0-9]+]];
 
@@ -180,7 +180,7 @@ hw.module @ReadInoutAggregate(in %clock: i1) {
 // DISALLOW-NEXT:     $error("error")
 
 hw.module @DefinedInDifferentBlock(in %a: i1, in %b: i1) {
-  sv.ifdef "DEF" {
+  sv.ifdef @DEF {
     %0 = comb.icmp eq %a, %b : i1
     sv.initial {
       sv.if %0 {

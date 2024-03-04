@@ -38,7 +38,7 @@ circuit PlusArgTest:
 
     ; CHECK:      [[RESULT_BAR_REG:%.+]] = sv.reg : !hw.inout<i32>
     ; CHECK-NEXT: [[FOUND_BAR_REG:%.+]] = sv.reg : !hw.inout<i1>
-    ; CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
+    ; CHECK-NEXT: sv.ifdef @SYNTHESIS {
     ; CHECK-NEXT:   %z_i32 = sv.constantZ : i32
     ; CHECK-NEXT:   sv.assign [[RESULT_BAR_REG]], %z_i32 {sv.attributes = [#sv.attribute<"This dummy assignment exists to avoid undriven lint warnings (e.g., Verilator UNDRIVEN).", emitAsComment>]} : i32
     ; CHECK-NEXT:   sv.assign [[FOUND_BAR_REG]], %false : i1

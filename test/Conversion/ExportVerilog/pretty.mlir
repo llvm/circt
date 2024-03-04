@@ -274,7 +274,7 @@ sv.macro.decl @TEST_COND
 // CHECK-NEXT:    `define TEST_COND 1
 // CHECK-NEXT:  `endif // TEST_COND_
 hw.module @TestCond() {
-  sv.ifdef "TEST_COND_" {
+  sv.ifdef @TEST_COND_ {
    sv.macro.def @TEST_COND "TEST_COND_"
   } else {
    sv.macro.def @TEST_COND "1"

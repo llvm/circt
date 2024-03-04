@@ -15,16 +15,20 @@ def MacroIdentAttr : AttrDef<SVDialect, "MacroIdent"> {
   let description = [{
     Represents a reference to a macro identifier.
   }];
-  let parameters = (ins "::mlir::StringAttr":$ident);
+  let parameters = (ins "::mlir::FlatSymbolRefAttr":$ident);
   let mnemonic = "macro.ident";
 
   let assemblyFormat = "$ident";
 
   let builders = [
     AttrBuilder<(ins "::llvm::StringRef":$ident), [{
-      return $_get($_ctxt, ::mlir::StringAttr::get($_ctxt, ident));
+      return get(::mlir::StringAttr::get($_ctxt, ident));
+    }]>,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$ident), [{
+      return $_get(ident.getContext(), ::mlir::FlatSymbolRefAttr::get(ident));
     }]>,
   ];
+
   let extraClassDeclaration = [{
     ::llvm::StringRef getName() { return getIdent().getValue(); }
   }];

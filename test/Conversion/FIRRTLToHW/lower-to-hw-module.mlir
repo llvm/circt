@@ -4,7 +4,7 @@
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.
-// CHECK:   sv.ifdef "PRINTF_COND" {
+// CHECK:   sv.ifdef @PRINTF_COND {
 // CHECK-NEXT:   sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
 // CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
@@ -90,7 +90,7 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @PortMadness(
-  // CHECK: in %inA : i4, in %inB : i4, in %inC : i4, 
+  // CHECK: in %inA : i4, in %inB : i4, in %inC : i4,
   // CHECK: out outA : i4, out outB : i4, out outC : i4, out outD : i4, in %inE : i3, out outE : i4) {
   firrtl.module private @PortMadness(in %inA: !firrtl.uint<4>,
                              in %inB: !firrtl.uint<4>,

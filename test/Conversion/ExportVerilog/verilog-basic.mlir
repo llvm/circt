@@ -31,10 +31,10 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [1:0]  orvout
 // CHECK-NEXT:  );
 
-hw.module @Expressions(in %in4: i4, in %clock: i1, 
-  out out1a: i1, out out1b: i1, out out1c: i1, 
+hw.module @Expressions(in %in4: i4, in %clock: i1,
+  out out1a: i1, out out1b: i1, out out1c: i1,
   out out1d: i1, out out1e: i1, out out1f: i1, out out1g: i1,
-   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16, 
+   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
    out sext17: i17, out orvout: i2) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
@@ -250,9 +250,9 @@ hw.module @Precedence(in %a: i4, in %b: i4, in %c: i4, out out1: i1, out out: i1
 
 // CHECK-LABEL: module CmpSign(
 hw.module @CmpSign(in %a: i4, in %b: i4, in %c: i4, in %d: i4,
-  out o0: i1, out o1: i1, out o2: i1, out o3: i1, 
+  out o0: i1, out o1: i1, out o2: i1, out o3: i1,
   out o4: i1, out o5: i1, out o6: i1, out o7: i1,
-  out o8: i1, out o9: i1, out o10: i1, out o11: i1, 
+  out o8: i1, out o9: i1, out o10: i1, out o11: i1,
   out o12: i1, out o13: i1, out o14: i1, out o15: i1) {
   // CHECK: assign o0 = a < b;
   %0 = comb.icmp ult %a, %b : i4
@@ -407,14 +407,14 @@ hw.module @InlineDeclAssignment(in %a: i1) {
 hw.module @ordered_region(in %a: i1) {
   sv.ordered {
     // CHECK-NEXT: `ifdef foo
-    sv.ifdef "foo" {
+    sv.ifdef @foo {
       // CHECK-NEXT: wire_0 = a;
       %wire = sv.wire : !hw.inout<i1>
       sv.assign %wire, %a : i1
     }
     // CHECK-NEXT: `endif
     // CHECK-NEXT: `ifdef bar
-    sv.ifdef "bar" {
+    sv.ifdef @bar {
       // CHECK-NEXT: wire_1 = a;
       %wire = sv.wire : !hw.inout<i1>
       sv.assign %wire, %a : i1
@@ -525,7 +525,7 @@ hw.module @Stop(in %clock: i1, in %reset: i1) {
   // CHECK:   `endif
   // CHECK: end // always @(posedge)
   sv.always posedge %clock  {
-    sv.ifdef.procedural "SYNTHESIS"  {
+    sv.ifdef.procedural @SYNTHESIS {
     } else  {
       %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
       %1 = comb.and %0, %reset : i1
