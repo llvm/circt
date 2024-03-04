@@ -8,9 +8,11 @@
 
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SCCIterator.h"
 #include "llvm/Support/Debug.h"
 
 using namespace circt;
@@ -19,37 +21,6 @@ using namespace seq;
 using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
-
-// Reimplemented from SliceAnalysis to use a worklist rather than recursion and
-// non-insert ordered set.
-static void
-getForwardSliceSimple(Operation *root,
-                      llvm::DenseSet<Operation *> &forwardSlice,
-                      llvm::function_ref<bool(Operation *)> filter = nullptr) {
-  SmallVector<Operation *> worklist({root});
-
-  while (!worklist.empty()) {
-    Operation *op = worklist.pop_back_val();
-
-    if (!op)
-      continue;
-
-    if (filter && !filter(op))
-      continue;
-
-    for (Region &region : op->getRegions())
-      for (Block &block : region)
-        for (Operation &blockOp : block)
-          if (forwardSlice.insert(&blockOp).second)
-            worklist.push_back(&blockOp);
-    for (Value result : op->getResults())
-      for (Operation *userOp : result.getUsers())
-        if (forwardSlice.insert(userOp).second)
-          worklist.push_back(userOp);
-
-    forwardSlice.insert(op);
-  }
-}
 
 void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
                                   const std::function<void()> &trueSide,
@@ -68,6 +39,19 @@ void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
     builder.setInsertionPointToEnd(op.getElseBlock());
     falseSide();
   }
+}
+
+FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
+                               hw::HWModuleOp module,
+                               bool disableRegRandomization,
+                               bool emitSeparateAlwaysBlocks)
+    : typeConverter(typeConverter), module(module),
+      disableRegRandomization(disableRegRandomization),
+      emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
+
+  scc = std::make_unique<FirRegSCC>(module, [&](Operation *op) {
+    return isa<sv::RegOp, hw::InstanceOp>(op);
+  });
 }
 
 void FirRegLowering::lower() {
@@ -350,10 +334,6 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   // want to create if/else structure for logic unrelated to the register's
   // enable.
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
-  DenseSet<Operation *> regMuxFanout;
-  getForwardSliceSimple(firReg, regMuxFanout, [&](Operation *op) {
-    return op == firReg || !isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
-  });
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
@@ -381,7 +361,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() && regMuxFanout.contains(mux)) {
+    if (mux && mux.getTwoState() && scc->isInSameSCC(mux, firReg)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
@@ -498,6 +478,7 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
   }
 
   reg.replaceAllUsesWith(regVal.getResult());
+  scc->erase(reg);
   reg.erase();
 
   return svReg;
