@@ -1,5 +1,8 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=explicitBitcast,maximumNumberOfTermsPerExpression=10,emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s
 
+sv.macro.decl @SYNTHESIS
+sv.macro.decl @VERILATOR
+
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
@@ -800,6 +803,8 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
 
   hw.output
 }
+
+sv.macro.decl @FUN_AND_GAMES
 
 // CHECK-LABEL: module issue720ifdef(
 hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
@@ -1656,6 +1661,9 @@ hw.module @IndexPartSelect(out a : i3) {
   %c = sv.indexed_part_select %c3_i18[%c3_i3 : 3] : i18,i4
   hw.output %c : i3
 }
+
+sv.macro.decl @FOO
+sv.macro.decl @BAR
 
 // CHECK-LABEL: module ConditionalComments(
 hw.module @ConditionalComments() {

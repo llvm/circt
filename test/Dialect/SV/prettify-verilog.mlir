@@ -39,6 +39,8 @@ hw.module @unary_ops(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %arg3: i1,
 // VERILOG: assign a = ~arg0 + arg1;
 // VERILOG: assign b = ~arg0 + arg2;
 
+// CHECK-LABEL: sv.macro.decl @FOO
+sv.macro.decl @FOO
 
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
@@ -116,6 +118,8 @@ hw.module @sinkReadInOut(in %clk: i1) {
 // VERILOG:  always_ff @(posedge clk)
 // VERILOG:    myreg[1'h0].a <= myreg[1'h0].b;
 
+// CHECK-LABEL: sv.macro.decl @SOMETHING
+sv.macro.decl @SOMETHING
 
 // CHECK-LABEL: @sink_expression
 // VERILOG-LABEL: sink_expression

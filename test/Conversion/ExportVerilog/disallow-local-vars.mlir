@@ -4,6 +4,8 @@
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.
 
+sv.macro.decl @FOO_MACRO
+
 // CHECK-LABEL: module side_effect_expr
 // DISALLOW-LABEL: module side_effect_expr
 hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
@@ -168,6 +170,8 @@ hw.module @ReadInoutAggregate(in %clock: i1) {
   // DISALLOW-NEXT:  register[1'h0].a <= {16'h0, register[1'h0].a[15:0]};
   hw.output
 }
+
+sv.macro.decl @DEF
 
 // CHECK-LABEL: DefinedInDifferentBlock
 // CHECK: `ifdef DEF

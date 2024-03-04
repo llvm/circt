@@ -56,6 +56,9 @@ func.func @if_dead_condition(%arg0: i1) {
   return
 }
 
+// CHECK-LABEL: sv.macro.decl @SYNTHESIS
+sv.macro.decl @SYNTHESIS
+
 // CHECK-LABEL: func @empy_op(%arg0: i1) {
 // CHECK-NOT:     sv.if
 // CHECK-NOT:     sv.ifdef

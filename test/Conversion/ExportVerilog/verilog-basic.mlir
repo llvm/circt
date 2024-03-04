@@ -1,5 +1,7 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
+sv.macro.decl @SYNTHESIS
+
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT:   input a,{{.*}}
 // CHECK-NEXT:         b
@@ -399,6 +401,9 @@ hw.module @InlineDeclAssignment(in %a: i1) {
   %c = sv.wire : !hw.inout<i1>
   sv.assign %c, %0 : i1
 }
+
+sv.macro.decl @foo
+sv.macro.decl @bar
 
 // CHECK-LABEL: module ordered_region
 // CHECK-NEXT: input a

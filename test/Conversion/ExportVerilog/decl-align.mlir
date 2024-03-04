@@ -1,5 +1,7 @@
 // RUN: circt-opt %s -export-verilog | FileCheck %s --strict-whitespace
 
+sv.macro.decl @foo
+
 // CHECK-LABEL: module Decl
 hw.module @Decl() {
   // CHECK: wire [3:0] x;

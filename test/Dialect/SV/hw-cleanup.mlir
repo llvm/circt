@@ -182,6 +182,11 @@ hw.module @ifdef_merge(in %arg0: i1) {
   hw.output
 }
 
+// CHECK-LABEL: sv.macro.decl @FOO
+sv.macro.decl @FOO
+// CHECK-LABEL: sv.macro.decl @BAR
+sv.macro.decl @BAR
+
 // CHECK-LABEL: hw.module @ifdef_proc_merge(in %arg0 : i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {

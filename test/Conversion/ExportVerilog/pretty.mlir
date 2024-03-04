@@ -266,6 +266,7 @@ hw.module @ForStatement(in %aaaaaaaaaaa: i5, in %xxxxxxxxxxxxxxx : i2, in %yyyyy
 // -----
 
 sv.macro.decl @TEST_COND
+sv.macro.decl @TEST_COND_
 
 // CHECK-LABEL:module TestCond{{.*}}
 // CHECK-NEXT:  `ifdef TEST_COND_{{.*}}

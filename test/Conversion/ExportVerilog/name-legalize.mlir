@@ -42,6 +42,8 @@ hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(in %p1: i8) {
   hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr.xor<#hw.param.verbatim<"wire">, true>>() -> ()
 }
 
+sv.macro.decl @SOMEMACRO
+
 // CHECK-LABEL: module useParametersNameConflict(
 hw.module @useParametersNameConflict(in %xxx: i8) {
   // CHECK: parametersNameConflict #(

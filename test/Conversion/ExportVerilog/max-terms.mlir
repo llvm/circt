@@ -1,5 +1,8 @@
 // RUN: circt-opt -test-apply-lowering-options='options=maximumNumberOfTermsPerExpression=4,disallowLocalVariables' --export-verilog %s | FileCheck %s
 
+sv.macro.decl @FOO
+sv.macro.decl @BAR
+
 // CHECK-LABEL: module large_use_in_procedural
 hw.module @large_use_in_procedural(in %clock: i1, in %a: i1) {
   // CHECK: wire [[GEN_1:long_concat]] = a + a + a + a + a;
