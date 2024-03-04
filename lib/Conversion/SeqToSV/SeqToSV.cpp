@@ -456,48 +456,69 @@ void SeqToSVPass::runOnOperation() {
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
     signalPassFailure();
 
+  bool needsMemRandomization = !memsByModule.empty();
+
+  auto loc = UnknownLoc::get(context);
+  auto b = ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBody());
+  if (needsRegRandomization || needsMemRandomization) {
+    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_REG_");
+    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_MEM_");
+    if (needsRegRandomization) {
+      b.create<sv::MacroDeclOp>("FIRRTL_BEFORE_INITIAL");
+      b.create<sv::MacroDeclOp>("FIRRTL_AFTER_INITIAL");
+    }
+    if (needsMemRandomization)
+      b.create<sv::MacroDeclOp>("RANDOMIZE_MEM_INIT");
+    b.create<sv::MacroDeclOp>("RANDOMIZE_REG_INIT");
+    b.create<sv::MacroDeclOp>("RANDOMIZE");
+    b.create<sv::MacroDeclOp>("RANDOMIZE_DELAY");
+    b.create<sv::MacroDeclOp>("RANDOM");
+    b.create<sv::MacroDeclOp>("INIT_RANDOM");
+    b.create<sv::MacroDeclOp>("INIT_RANDOM_PROLOG_");
+  }
+
   bool hasRegRandomization = needsRegRandomization && !disableRegRandomization;
-  bool hasMemRandomization = !memsByModule.empty() && !disableMemRandomization;
+  bool hasMemRandomization = needsMemRandomization && !disableMemRandomization;
   if (!hasRegRandomization && !hasMemRandomization)
     return;
 
   // Build macros for FIRRTL-style register and memory initialization.
   // Insert them at the start of the module, after any other verbatims.
-  auto loc = UnknownLoc::get(context);
-  auto b = ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBody());
   for (Operation &op : *circuit.getBody()) {
-    if (!isa<sv::VerbatimOp>(&op)) {
+    if (!isa<sv::VerbatimOp, sv::IfDefOp>(&op)) {
       b.setInsertionPoint(&op);
       break;
     }
   }
 
+  // Create SYNTHESIS/VERILATOR macros if other passes have not done so already.
+  {
+    StringSet<> symbols;
+    for (auto sym : circuit.getOps<sv::MacroDeclOp>())
+      symbols.insert(sym.getName());
+    if (!symbols.count("SYNTHESIS"))
+      b.create<sv::MacroDeclOp>("SYNTHESIS");
+    if (!symbols.count("VERILATOR"))
+      b.create<sv::MacroDeclOp>("VERILATOR");
+  }
+
   // TODO: We could have an operation for macros and uses of them, and
   // even turn them into symbols so we can DCE unused macro definitions.
-  StringSet<> emittedDecls;
-  auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
-    if (!emittedDecls.count(name)) {
-      emittedDecls.insert(name);
-      OpBuilder::InsertionGuard guard(b);
-      b.setInsertionPointToStart(circuit.getBody());
-      b.create<sv::MacroDeclOp>(name, args, StringAttr());
-    }
-    b.create<sv::MacroDefOp>(name, body);
-  };
   auto emitGuardedDefine = [&](StringRef guard, StringRef defName,
                                StringRef defineTrue = "",
                                StringRef defineFalse = StringRef()) {
     if (!defineFalse.data()) {
       assert(defineTrue.data() && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitDefine(defName, defineTrue); });
+      b.create<sv::IfDefOp>(
+          guard, [&]() { b.create<sv::MacroDefOp>(defName, defineTrue); });
     } else {
       b.create<sv::IfDefOp>(
           guard,
           [&]() {
             if (defineTrue.data())
-              emitDefine(defName, defineTrue);
+              b.create<sv::MacroDefOp>(defName, defineTrue);
           },
-          [&]() { emitDefine(defName, defineFalse); });
+          [&]() { b.create<sv::MacroDefOp>(defName, defineFalse); });
     }
   };
 
@@ -510,66 +531,57 @@ void SeqToSVPass::runOnOperation() {
   b.create<sv::VerbatimOp>("// Standard header to adapt well known macros for "
                            "register randomization.");
 
-  bool needsRandom = true;
-  if (hasMemRandomization) {
+  if (hasMemRandomization)
     emitGuard("RANDOMIZE",
               [&]() { emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE"); });
-    needsRandom = true;
-  }
 
-  if (hasRegRandomization) {
+  if (hasRegRandomization)
     emitGuard("RANDOMIZE",
               [&]() { emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE"); });
-    needsRandom = true;
-  }
 
-  if (needsRandom) {
-    b.create<sv::VerbatimOp>(
-        "\n// RANDOM may be set to an expression that produces a 32-bit "
-        "random unsigned value.");
-    emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
+  b.create<sv::VerbatimOp>(
+      "\n// RANDOM may be set to an expression that produces a 32-bit "
+      "random unsigned value.");
+  emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
 
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define INIT_RANDOM as general code that gets "
-        "injected "
-        "into the\n// initializer block for modules with registers.");
-    emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
+  b.create<sv::VerbatimOp>(
+      "\n// Users can define INIT_RANDOM as general code that gets "
+      "injected "
+      "into the\n// initializer block for modules with registers.");
+  emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
 
-    b.create<sv::VerbatimOp>(
-        "\n// If using random initialization, you can also define "
-        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
-        "is used.");
-    emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
-                      "0.002");
+  b.create<sv::VerbatimOp>(
+      "\n// If using random initialization, you can also define "
+      "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
+      "is used.");
+  emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(), "0.002");
 
-    b.create<sv::VerbatimOp>(
-        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
-      b.create<sv::IfDefOp>(
-          "RANDOMIZE",
-          [&]() {
-            emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
-                              "`INIT_RANDOM",
-                              "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-          },
-          [&]() { emitDefine("INIT_RANDOM_PROLOG_", ""); });
-    });
+  b.create<sv::VerbatimOp>(
+      "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+  emitGuard("INIT_RANDOM_PROLOG_", [&]() {
+    b.create<sv::IfDefOp>(
+        "RANDOMIZE",
+        [&]() {
+          emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_", "`INIT_RANDOM",
+                            "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+        },
+        [&]() { b.create<sv::MacroDefOp>("INIT_RANDOM_PROLOG_", ""); });
+  });
 
-    b.create<sv::VerbatimOp>("\n// Include register initializers in init "
-                             "blocks unless synthesis is set");
-    emitGuard("SYNTHESIS", [&] {
-      emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
-                        StringRef(), "");
-    });
+  b.create<sv::VerbatimOp>("\n// Include register initializers in init "
+                           "blocks unless synthesis is set");
+  emitGuard("SYNTHESIS", [&] {
+    emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_", StringRef(),
+                      "");
+  });
 
-    b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
-                             "blocks unless synthesis is set");
-    emitGuard("SYNTHESIS", [&] {
-      emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
-                        StringRef(), "");
-    });
-    b.create<sv::VerbatimOp>("");
-  }
+  b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
+                           "blocks unless synthesis is set");
+  emitGuard("SYNTHESIS", [&] {
+    emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_", StringRef(),
+                      "");
+  });
+  b.create<sv::VerbatimOp>("");
 }
 
 std::unique_ptr<Pass>

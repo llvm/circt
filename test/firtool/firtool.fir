@@ -44,14 +44,14 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; OMIROUT-NEXT:         "value": "OMString:hello"
 ; OMIROUT-NEXT:       }
 
-; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_MEM_
-; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_REG_
-; VERILOG-IR: sv.macro.decl @INIT_RANDOM_PROLOG_
-; VERILOG-IR: sv.macro.decl @RANDOMIZE_DELAY
-; VERILOG-IR: sv.macro.decl @INIT_RANDOM
-; VERILOG-IR: sv.macro.decl @RANDOM
-; VERILOG-IR: sv.macro.decl @RANDOMIZE
 ; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros for register randomization
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_REG_
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_MEM_
+; VERILOG-IR: sv.macro.decl @RANDOMIZE
+; VERILOG-IR: sv.macro.decl @RANDOMIZE_DELAY
+; VERILOG-IR: sv.macro.decl @RANDOM
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM_PROLOG_
 
   type V3 = UInt<1>[3]
   type V2 = UInt<1>[2]

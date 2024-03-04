@@ -1,5 +1,6 @@
 // RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
 // CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
+// CHECK-NEXT: sv.macro.decl @SYNTHESIS
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
@@ -33,6 +34,7 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
+  sv.macro.decl @SYNTHESIS
   hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
@@ -292,6 +294,8 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance1"
 
 module {
+  sv.macro.decl @SYNTHESIS
+
   hw.module private @Foo(in %a: i1, out b: i1) {
     hw.output %a : i1
   }
