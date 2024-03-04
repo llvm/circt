@@ -627,7 +627,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:     sv.assign %c1, %2 : i1
   // CHECK-NEXT:     sv.assign %c1, %1 : i1
   // CHECK-NEXT:    } else {
-  // CHECK-NEXT:     sv.ifdef @verilator {
+  // CHECK-NEXT:     sv.ifdef @VERILATOR {
   // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !hw.inout<i1>
@@ -730,7 +730,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   sv.assign %a, %1 : i1
     // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef @verilator {
+    // CHECK-NEXT:   sv.ifdef @VERILATOR {
     // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
     // CHECK-NEXT:   } else {
     // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !hw.inout<i1>, !hw.inout<i1>

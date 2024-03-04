@@ -210,6 +210,9 @@ struct CircuitLoweringState {
   std::atomic<bool> used_PRINTF_COND{false};
   std::atomic<bool> used_ASSERT_VERBOSE_COND{false};
   std::atomic<bool> used_STOP_COND{false};
+  std::atomic<bool> used_SYNTHESIS{false};
+  std::atomic<bool> used_VERILATOR{false};
+  std::atomic<bool> used_USE_PROPERTY_AS_CONSTRAINT{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
@@ -738,15 +741,22 @@ void FIRRTLModuleLowering::runOnOperation() {
 /// Emit the file header that defines a bunch of macros.
 void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                                            CircuitLoweringState &state) {
+  // Intentionally pass an UnknownLoc here so we don't get line number
+  // comments on the output of this boilerplate in generated Verilog.
+  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
+
+  if (state.used_SYNTHESIS)
+    b.create<sv::MacroDeclOp>("SYNTHESIS");
+  if (state.used_USE_PROPERTY_AS_CONSTRAINT)
+    b.create<sv::MacroDeclOp>("USE_PROPERTY_AS_CONSTRAINT");
+  if (state.used_VERILATOR)
+    b.create<sv::MacroDeclOp>("VERILATOR");
+
   // If none of the macros are needed, then don't emit any header at all, not
   // even the header comment.
   if (!state.used_PRINTF_COND && !state.used_ASSERT_VERBOSE_COND &&
       !state.used_STOP_COND)
     return;
-
-  // Intentionally pass an UnknownLoc here so we don't get line number
-  // comments on the output of this boilerplate in generated Verilog.
-  ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
 
   // TODO: We could have an operation for macros and uses of them, and
   // even turn them into symbols so we can DCE unused macro definitions.
@@ -793,6 +803,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     b.create<sv::VerbatimOp>(
         "\n// Users can define 'PRINTF_COND' to add an extra gate to "
         "prints.");
+    b.create<sv::MacroDeclOp>("PRINTF_COND");
     emitGuard("PRINTF_COND_", [&]() {
       emitGuardedDefine("PRINTF_COND", "PRINTF_COND_", "(`PRINTF_COND)", "1");
     });
@@ -802,6 +813,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     b.create<sv::VerbatimOp>(
         "\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
         "gate to assert error printing.");
+    b.create<sv::MacroDeclOp>("ASSERT_VERBOSE_COND");
     emitGuard("ASSERT_VERBOSE_COND_", [&]() {
       emitGuardedDefine("ASSERT_VERBOSE_COND", "ASSERT_VERBOSE_COND_",
                         "(`ASSERT_VERBOSE_COND)", "1");
@@ -812,6 +824,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     b.create<sv::VerbatimOp>(
         "\n// Users can define 'STOP_COND' to add an extra gate "
         "to stop conditions.");
+    b.create<sv::MacroDeclOp>("STOP_COND");
     emitGuard("STOP_COND_", [&]() {
       emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
     });
@@ -4135,6 +4148,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
     return op.emitError("destination isn't an inout type");
 
   // #ifndef SYNTHESIS
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
   });
@@ -4153,6 +4167,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(
@@ -4172,6 +4187,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(
@@ -4191,6 +4207,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(pred,
@@ -4206,6 +4223,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(pred,
@@ -4236,6 +4254,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       circuitState.used_PRINTF_COND = true;
@@ -4413,6 +4432,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
                    !circuitState.emitChiselAssertsAsSVA)) {
       predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+      circuitState.used_SYNTHESIS = true;
       addToIfDefBlock("SYNTHESIS", {}, [&]() {
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
@@ -4467,6 +4487,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       if (label)
         assumeLabel = StringAttr::get(builder.getContext(),
                                       "assume__" + label.getValue());
+      circuitState.used_USE_PROPERTY_AS_CONSTRAINT = true;
       addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
         if (!isUnrOnlyAssert) {
           builder.create<sv::AssumeConcurrentOp>(
@@ -4587,6 +4608,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
 
   // If the attach operands contain a port, then we can't do anything to
   // simplify the attach operation.
+  circuitState.used_SYNTHESIS = true;
   addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.
@@ -4604,8 +4626,9 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       // In the non-synthesis case, we emit a SystemVerilog alias
       // statement.
       [&]() {
+        circuitState.used_VERILATOR = true;
         builder.create<sv::IfDefOp>(
-            "verilator",
+            "VERILATOR",
             [&]() {
               builder.create<sv::VerbatimOp>(
                   "`error \"Verilator does not support alias and thus "
