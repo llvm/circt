@@ -736,18 +736,37 @@ hw.module @NestedSubaccess(in %clock: !seq.clock, in %en_0: i1, in %en_1: i1, in
 }
 
 // CHECK-LABEL: @with_preset
-hw.module @with_preset(in %clock: !seq.clock, in %reset: i1, in %next32: i32, in %next16: i16) {
+hw.module @with_preset(
+    in %clock: !seq.clock,
+    in %reset: i1,
+    in %next : i2,
+    in %next32: i32,
+    in %next16: i16,
+    in %next512: i512,
+    in %next_struct : !hw.struct<a: i16, b: i8>,
+    in %next_arr : !hw.array<5xi4>
+) {
+  %reg3 = seq.firreg %next clock %clock preset 3 : i2
+  %reg2 = seq.firreg %next clock %clock preset 2 : i2
   %preset_0 = seq.firreg %next32 clock %clock preset 0 : i32
   %preset_42 = seq.firreg %next16 clock %clock preset 42 : i16
+  %preset_512 = seq.firreg %next512 clock %clock preset 429496729642949672964294967296 : i512
+  %preset_struct = seq.firreg %next_struct clock %clock preset 123 : !hw.struct<a: i16, b: i8>
+  %preset_arr = seq.firreg %next_arr clock %clock preset 222 : !hw.array<5xi4>
 
-  // CHECK: %c42_i16 = hw.constant 42 : i16
-  // CHECK: %c0_i32 = hw.constant 0 : i32
-  // CHECK: sv.ordered {
-  // CHECK:   sv.initial {
-  // CHECK:     sv.bpassign %preset_0, %c0_i32 : i32
-  // CHECK:     sv.bpassign %preset_42, %c42_i16 : i16
-  // CHECK:   }
-  // CHECK: }
+  // CHECK:      sv.ordered {
+  // CHECK:        sv.initial {
+  // CHECK-NEXT:     sv.bpassign %reg3, %c-1_i2 : i2
+  // CHECK-NEXT:     sv.bpassign %reg2, %c-2_i2 : i2
+  // CHECK-NEXT:     sv.bpassign %preset_0, %c0_i32 : i32
+  // CHECK-NEXT:     sv.bpassign %preset_42, %c42_i16 : i16
+  // CHECK-NEXT:     sv.bpassign %preset_512, %c429496729642949672964294967296_i512 : i512
+  // CHECK-NEXT:     [[STRUCT_CAST:%.+]] = hw.bitcast %c123_i24 : (i24) -> !hw.struct<a: i16, b: i8>
+  // CHECK-NEXT:     sv.bpassign %preset_struct, [[STRUCT_CAST]] : !hw.struct<a: i16, b: i8>
+  // CHECK-NEXT:     [[ARR_CAST:%.+]] = hw.bitcast %c222_i20 : (i20) -> !hw.array<5xi4>
+  // CHECK-NEXT:     sv.bpassign %preset_arr, [[ARR_CAST]] : !hw.array<5xi4>
+  // CHECK-NEXT:   }
+  // CHECK:      }
 }
 
 // CHECK-LABEL: @reg_of_clock_type
