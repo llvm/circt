@@ -13,7 +13,7 @@ firrtl.circuit "ifElseFatalToSVA" {
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLK]], [[TMP2]] message "assert0"
-    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT: sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLK]], [[TMP2]]
     // CHECK-NEXT: }
   }

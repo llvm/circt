@@ -38,7 +38,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
   hw.module @issue1246(in %clock: i1) {
     sv.always posedge %clock  {
-      sv.ifdef.procedural "SYNTHESIS"  {
+      sv.ifdef.procedural @SYNTHESIS {
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
@@ -351,7 +351,7 @@ module {
 
   hw.module private @ShouldBeInlined2(in %clock: i1, in %in: i1) {
     %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
-    sv.ifdef "SYNTHESIS" {
+    sv.ifdef @SYNTHESIS {
     } else {
       sv.always posedge %clock {
         sv.if %bozo.b {

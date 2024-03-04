@@ -30,7 +30,7 @@ emit.file "some-file.sv" sym @SomeFile.sv {
   emit.verbatim "WithNewlines\nA\nB\n"
   emit.verbatim "WithEmptyNewlines\n\n\nX"
 
-  sv.ifdef "Macro" {
+  sv.ifdef @Macro {
     sv.macro.def @Macro "1"
   } else {
     sv.macro.def @Macro "2"

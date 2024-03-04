@@ -68,11 +68,11 @@ func.func @empy_op(%arg0: i1) {
   sv.initial {
     sv.if %arg0 {}
     sv.if %arg0 {} else {}
-    sv.ifdef.procedural "SYNTHESIS" {}
-    sv.ifdef.procedural "SYNTHESIS" {} else {}
+    sv.ifdef.procedural @SYNTHESIS {}
+    sv.ifdef.procedural @SYNTHESIS {} else {}
   }
-  sv.ifdef "SYNTHESIS" {}
-  sv.ifdef "SYNTHESIS" {} else {}
+  sv.ifdef @SYNTHESIS {}
+  sv.ifdef @SYNTHESIS {} else {}
   sv.always posedge %arg0 {}
   sv.initial {}
   return
@@ -106,7 +106,7 @@ func.func @invert_if(%arg0: i1, %arg1 : i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.initial  {
 // CHECK-NEXT:      sv.if %arg0  {
-// CHECK-NEXT:      } else {  
+// CHECK-NEXT:      } else {
 // CHECK-NEXT:        sv.fwrite [[FD]], "Foo"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
