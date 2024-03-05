@@ -377,6 +377,9 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAPath(result))
     return Path(result);
 
+  if (omEvaluatorValueIsAReference(result))
+    return omEvaluatorValueToPythonValue(omEvaluatorValueGetReference(result));
+
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omEvaluatorValueGetPrimitive(result);

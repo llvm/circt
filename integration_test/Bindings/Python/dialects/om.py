@@ -91,6 +91,28 @@ with Context() as ctx, Location.unknown():
       %3 = om.frozenpath_empty
       om.class.field @deleted, %3 : !om.frozenpath
     }
+
+    om.class @Class1(%input: !om.integer) {
+      %0 = om.constant #om.integer<1 : si3> : !om.integer
+      om.class.field @value, %0 : !om.integer
+      om.class.field @input, %input : !om.integer
+    }
+
+    om.class @Class2() {
+      %0 = om.constant #om.integer<2 : si3> : !om.integer
+      om.class.field @value, %0 : !om.integer
+    }
+
+    om.class @IntegerBinaryArithmeticObjectsDelayed() {
+      %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
+      %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+
+      %2 = om.object @Class2() : () -> !om.class.type<@Class2>
+      %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+
+      %5 = om.integer.add %1, %3 : !om.integer
+      om.class.field @result, %5 : !om.integer
+    }
   }
   """)
 
@@ -232,3 +254,8 @@ paths_fields = [
 ]
 for paths_field in paths_fields:
   assert isinstance(paths_field.value.type, om.PathType)
+
+delayed = evaluator.instantiate("IntegerBinaryArithmeticObjectsDelayed")
+
+# CHECK: 3
+print(delayed.result)
