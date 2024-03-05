@@ -236,6 +236,9 @@ MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGetInt(MlirAttribute attr);
 /// Get an om::IntegerAttr from mlir::IntegerAttr.
 MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGet(MlirAttribute attr);
 
+/// Get a string representation of an om::IntegerAttr.
+MLIR_CAPI_EXPORTED MlirStringRef omIntegerAttrToString(MlirAttribute attr);
+
 //===----------------------------------------------------------------------===//
 // ListAttr API
 //===----------------------------------------------------------------------===//

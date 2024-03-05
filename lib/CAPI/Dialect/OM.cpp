@@ -381,6 +381,16 @@ MlirAttribute omIntegerAttrGet(MlirAttribute attr) {
       circt::om::IntegerAttr::get(integerAttr.getContext(), integerAttr));
 }
 
+/// Get a string representation of an om::IntegerAttr.
+MlirStringRef omIntegerAttrToString(MlirAttribute attr) {
+  mlir::IntegerAttr integerAttr =
+      cast<circt::om::IntegerAttr>(unwrap(attr)).getValue();
+  SmallVector<char> str;
+  integerAttr.getValue().toString(
+      str, /*Radix=*/10, /*Signed=*/integerAttr.getType().isSignedInteger());
+  return wrap(StringAttr::get(integerAttr.getContext(), str).getValue());
+}
+
 //===----------------------------------------------------------------------===//
 // ListAttr API.
 //===----------------------------------------------------------------------===//
