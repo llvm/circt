@@ -24,9 +24,9 @@ module {
     //CHECK:   %true_3 = hw.constant true
     //CHECK:   %6 = comb.icmp bin eq %delay_, %true_3 : i1
     //CHECK:   %7 = comb.mux %6, %true_3, %5 : i1
-    //CHECK:   %delay_ = seq.compreg sym @delay_  %7, %clock reset %reset, %false_1 powerOn %false_1 : i1  
+    //CHECK:   %delay_ = seq.compreg sym @delay_  %7, %clock reset %4, %false_1 powerOn %false_1 : i1  
     //CHECK:   %false_4 = hw.constant false
-    //CHECK:   %antecedent_0 = seq.compreg sym @antecedent_0  %a, %clock reset %reset, %false_4 powerOn %false_4 : i1  
+    //CHECK:   %antecedent_0 = seq.compreg sym @antecedent_0  %a, %clock reset %4, %false_4 powerOn %false_4 : i1  
     //CHECK:   %8 = comb.icmp bin ult %delay_, %true_3 : i1
     //CHECK:   %true_5 = hw.constant true
     //CHECK:   %9 = comb.xor %antecedent_0, %true_5 : i1
@@ -40,7 +40,7 @@ module {
     %5 = comb.xor bin %4, %true {sv.namehint = "disable"} : i1
 
     //CHECK:  %11 = comb.or %8, %10 : i1
-    //CHECK:  %12 = comb.or %11, %reset : i1
+    //CHECK:  %12 = comb.or %11, %4 : i1
     //CHECK:  %13 = comb.or %4, %12 : i1
     %6 = ltl.disable %3 if %5 : !ltl.property
 
