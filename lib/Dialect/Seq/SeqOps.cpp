@@ -434,12 +434,14 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  std::optional<int64_t> presetValue;
+  std::optional<APInt> presetValue;
+  llvm::SMLoc presetValueLoc;
   if (succeeded(parser.parseOptionalKeyword("preset"))) {
-    int64_t presetInt;
-    if (parser.parseInteger(presetInt))
-      return failure();
-    presetValue = presetInt;
+    presetValueLoc = parser.getCurrentLocation();
+    OptionalParseResult presetIntResult =
+        parser.parseOptionalInteger(presetValue.emplace());
+    if (!presetIntResult.has_value() || failed(*presetIntResult))
+      return parser.emitError(loc, "expected integer value");
   }
 
   Type ty;
@@ -449,8 +451,25 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addTypes({ty});
 
   if (presetValue) {
-    result.addAttribute("preset",
-                        parser.getBuilder().getIntegerAttr(ty, *presetValue));
+    uint64_t width = 0;
+    if (hw::type_isa<seq::ClockType>(ty)) {
+      width = 1;
+    } else {
+      int64_t maybeWidth = hw::getBitWidth(ty);
+      if (maybeWidth < 0)
+        return parser.emitError(presetValueLoc,
+                                "cannot preset register of unknown width");
+      width = maybeWidth;
+    }
+
+    APInt presetResult = presetValue->sextOrTrunc(width);
+    if (presetResult.zextOrTrunc(presetValue->getBitWidth()) != *presetValue)
+      return parser.emitError(loc, "preset value too large");
+
+    auto builder = parser.getBuilder();
+    auto presetTy = builder.getIntegerType(width);
+    auto resultAttr = builder.getIntegerAttr(presetTy, presetResult);
+    result.addAttribute("preset", resultAttr);
   }
 
   setNameFromResult(parser, result);
@@ -509,8 +528,10 @@ LogicalResult FirRegOp::verify() {
       return emitOpError("register with no reset cannot be async");
   }
   if (auto preset = getPresetAttr()) {
-    if (preset.getType() != getType())
-      return emitOpError("preset type must match register type");
+    int64_t presetWidth = hw::getBitWidth(preset.getType());
+    int64_t width = hw::getBitWidth(getType());
+    if (preset.getType() != getType() && presetWidth != width)
+      return emitOpError("preset type width must match register type");
   }
   return success();
 }
