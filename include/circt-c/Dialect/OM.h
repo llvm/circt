@@ -207,6 +207,15 @@ omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue);
 
+/// Query if the EvaluatorValue is a Reference.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue);
+
+/// Dereference a Reference EvaluatorValue. Emits an error and returns null if
+/// the Reference cannot be dereferenced.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//
