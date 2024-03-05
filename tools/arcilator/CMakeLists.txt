@@ -1,4 +1,4 @@
-set(LLVM_LINK_COMPONENTS Support)
+set(LLVM_LINK_COMPONENTS Support native)
 
 add_circt_tool(arcilator arcilator.cpp)
 target_link_libraries(arcilator

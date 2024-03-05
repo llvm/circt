@@ -400,11 +400,15 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    auto invokeError = (*executionEngine)->invoke(runSimulation);
-    if (invokeError) {
-      llvm::errs() << "failed to run simulation: " << invokeError << "\n";
+    auto expectedFunc = (*executionEngine)->lookupPacked(runSimulation);
+    if (!expectedFunc) {
+      llvm::errs() << "failed to run simulation: " << expectedFunc.takeError()
+                   << "\n";
       return failure();
     }
+
+    void (*simulationFunc)(void **) = *expectedFunc;
+    (*simulationFunc)(nullptr);
 
     return success();
   }
@@ -540,10 +544,6 @@ static LogicalResult executeArcilator(MLIRContext &context) {
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
 
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmParser();
-  llvm::InitializeNativeTargetAsmPrinter();
-
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
   llvm::cl::HideUnrelatedOptions(mainCategory);
@@ -572,6 +572,11 @@ int main(int argc, char **argv) {
   // Parse pass names in main to ensure static initialization completed.
   llvm::cl::ParseCommandLineOptions(argc, argv,
                                     "MLIR-based circuit simulator\n");
+
+  if (!runSimulation.empty()) {
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+  }
 
   MLIRContext context;
   auto result = executeArcilator(context);
