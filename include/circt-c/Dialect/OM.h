@@ -214,7 +214,7 @@ omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue);
 /// Dereference a Reference EvaluatorValue. Emits an error and returns null if
 /// the Reference cannot be dereferenced.
 MLIR_CAPI_EXPORTED OMEvaluatorValue
-omEvaluatorValueGetReference(OMEvaluatorValue evaluatorValue);
+omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue);
 
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API

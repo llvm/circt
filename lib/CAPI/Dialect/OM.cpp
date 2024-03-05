@@ -332,7 +332,8 @@ bool omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue) {
 
 /// Dereference a Reference EvaluatorValue. Emits an error and returns null if
 /// the Reference cannot be dereferenced.
-OMEvaluatorValue omEvaluatorValueGetReference(OMEvaluatorValue evaluatorValue) {
+OMEvaluatorValue
+omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue) {
   // Assert the EvaluatorValue is a Reference.
   assert(omEvaluatorValueIsAReference(evaluatorValue));
 
