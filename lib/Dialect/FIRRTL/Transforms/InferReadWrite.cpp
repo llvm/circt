@@ -314,6 +314,69 @@ private:
     return {};
   }
 
+  // Try to extract the value assigned to each bit of `val`. This is a heuristic
+  // to determine if each bit of the `val` is assigned the same value.
+  // NOLINTNEXTLINE(misc-no-recursion)
+  bool getBitsOfVal(Value val, SmallVector<Value> &bits) {
+
+    auto size = getBitWidth(type_cast<FIRRTLBaseType>(val.getType()));
+    if (!size.has_value())
+      return false;
+    bits.resize_for_overwrite(size.value());
+    if (auto *defOp = val.getDefiningOp()) {
+
+      if (isa<CatPrimOp>(defOp)) {
+        long lastSize = 0;
+        for (auto operand : defOp->getOperands()) {
+          SmallVector<Value> opBits;
+          if (!getBitsOfVal(operand, opBits))
+            return false;
+          auto s =
+              getBitWidth(type_cast<FIRRTLBaseType>(operand.getType())).value();
+          for (long i = lastSize, e = lastSize + s; i != e; ++i)
+            bits[i] = opBits[i - lastSize];
+          lastSize = s;
+        }
+        return true;
+      }
+      if (auto bitsPrim = dyn_cast<BitsPrimOp>(defOp)) {
+        SmallVector<Value> opBits;
+        if (!getBitsOfVal(bitsPrim.getInput(), opBits))
+          return false;
+        for (size_t srcIndex = bitsPrim.getLo(), e = bitsPrim.getHi(), i = 0;
+             srcIndex <= e; ++srcIndex, ++i)
+          bits[i] = opBits[srcIndex];
+        return true;
+      }
+      if (auto constOp = dyn_cast<ConstantOp>(defOp)) {
+        auto constVal = constOp.getValue();
+        if (constVal.isAllOnes() || constVal.isZero()) {
+          for (auto &b : bits)
+            b = constOp;
+          return true;
+        }
+        return false;
+      }
+      if (auto wireOp = dyn_cast<WireOp>(defOp)) {
+        SmallVector<Value> wireBits;
+        if (auto src = getConnectSrc(wireOp.getResult())) {
+          if (getBitsOfVal(src, wireBits))
+            bits = wireBits;
+
+        } else {
+          for (auto &b : bits)
+            b = wireOp.getResult();
+        }
+        return true;
+      }
+    }
+    if (size.value() == 1) {
+      bits[0] = val;
+      return true;
+    }
+    return false;
+  }
+
   // Remove redundant dependence of wmode on the enable signal. wmode can assume
   // the enable signal be true.
   void simplifyWmode(MemOp &memOp) {
@@ -404,11 +467,13 @@ private:
             if (sf.getResult().getType().getBitWidthOrSentinel() == 1)
               continue;
             // Check what is the mask field directly connected to.
-            // If, a constant 1, then we can replace with unMasked memory.
-            if (auto maskVal = getConnectSrc(sf))
-              if (auto constVal = dyn_cast<ConstantOp>(maskVal.getDefiningOp()))
-                if (constVal.getValue().isAllOnes())
-                  isMasked = false;
+            // If we can infer that all the bits of the mask are always assigned
+            // the same value, then the memory is unmasked.
+            if (auto maskVal = getConnectSrc(sf)) {
+              SmallVector<Value> bits;
+              if (getBitsOfVal(maskVal, bits))
+                isMasked = !llvm::all_equal(bits);
+            }
           }
         }
     }
