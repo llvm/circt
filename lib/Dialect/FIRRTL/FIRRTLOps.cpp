@@ -3933,8 +3933,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     } else if (width < value.getBitWidth()) {
       // The parser can return an unnecessarily wide result with leading
       // zeros. This isn't a problem, but truncating off bits is bad.
-      if (value.getNumSignBits() < value.getBitWidth() - width)
-        return parser.emitError(loc, "constant too large for result type ")
+      unsigned neededBits = value.isNegative() ? value.getSignificantBits()
+                                               : value.getActiveBits();
+      if (width < neededBits)
+        return parser.emitError(loc, "constant out of range for result type ")
                << resultType;
       value = value.trunc(width);
     }
