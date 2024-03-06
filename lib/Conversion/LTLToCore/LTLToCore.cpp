@@ -76,8 +76,8 @@ struct BindingRecursivePatternMatcher
 
   using BaseMatcher =
       mlir::detail::RecursivePatternMatcher<OpType, OperandMatchers...>;
-  BindingRecursivePatternMatcher(OpType *_op, OperandMatchers... matchers)
-      : BaseMatcher(matchers...), opBind(_op) {}
+  BindingRecursivePatternMatcher(OpType *bop, OperandMatchers... matchers)
+      : BaseMatcher(matchers...), opBind(bop) {}
 
   bool match(Operation *op) {
     if (BaseMatcher::match(op)) {
