@@ -51,6 +51,50 @@ static sv::EventControl ltlToSVEventControl(ltl::ClockEdge ce) {
 
 namespace {
 
+// Custom pattern matchers
+
+// Matches and records a boolean attribute
+struct I1ValueMatcher {
+  Value *what;
+  I1ValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    if (!op.getType().isSignlessInteger(1))
+      return false;
+    *what = op;
+    return true;
+  }
+};
+
+static inline I1ValueMatcher m_Bool(Value *const val) {
+  return I1ValueMatcher(val);
+}
+
+// Matches and records an arbitrary op
+template <typename OpType, typename... OperandMatchers>
+struct BindingRecursivePatternMatcher
+    : mlir::detail::RecursivePatternMatcher<OpType, OperandMatchers...> {
+
+  using BaseMatcher =
+      mlir::detail::RecursivePatternMatcher<OpType, OperandMatchers...>;
+  BindingRecursivePatternMatcher(OpType *_op, OperandMatchers... matchers)
+      : BaseMatcher(matchers...), opBind(_op) {}
+
+  bool match(Operation *op) {
+    if (BaseMatcher::match(op)) {
+      *opBind = llvm::cast<OpType>(op);
+      return true;
+    }
+    return false;
+  }
+
+  OpType *opBind;
+};
+
+template <typename OpType, typename... Matchers>
+static inline auto m_OpWithBind(OpType *op, Matchers... matchers) {
+  return BindingRecursivePatternMatcher<OpType, Matchers...>(op, matchers...);
+}
+
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
@@ -123,10 +167,9 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   // for each cycle in delayN, as well as a register to count the
   // delay, e.g. a ##n true |-> b would have the following assertion:
   // assert(delay < n || (!a_n || b) || reset)
-
-  bool makeNonOverlappingImplication(ltl::ImplicationOp implop,
+  bool makeNonOverlappingImplication(Value antecedent, Value consequent,
                                      ltl::DelayOp delayN, ltl::ClockOp ltlclock,
-                                     ltl::ConcatOp concat, Value disableCond,
+                                     Value disableCond,
                                      ConversionPatternRewriter &rewriter,
                                      Value &res) const {
 
@@ -140,7 +183,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 
     // Build out the delay register: delay' = delay + 1; reset(delay, 0)
     // Generate the constant used to enegate the
-    Value constZero = rewriter.create<hw::ConstantOp>(concat.getLoc(), idrw, 0);
+    Value constZero = rewriter.create<hw::ConstantOp>(delayN.getLoc(), idrw, 0);
 
     // Create a constant to be used in the delay next statement
     Value constOneW = rewriter.create<hw::ConstantOp>(delayN.getLoc(), idrw, 1);
@@ -176,17 +219,16 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 
     // Previous register in the pipeline
     Value aI;
-    Value a = concat.getInputs().front();
 
     // Generate reset values
-    auto aType = a.getType();
+    auto aType = antecedent.getType();
     auto itype = isa<IntegerType>(aType)
                      ? aType
                      : IntegerType::get(getContext(), hw::getBitWidth(aType));
     Value resetVal = rewriter.create<hw::ConstantOp>(delayN.getLoc(), itype, 0);
 
     aI = rewriter.create<seq::CompRegOp>(
-        delayN.getLoc(), a, clock, disableCond, resetVal,
+        delayN.getLoc(), antecedent, clock, disableCond, resetVal,
         llvm::StringRef("antecedent_0"), resetVal);
 
     // Create a pipeline of delay registers
@@ -204,8 +246,8 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     Value constOneAi =
         rewriter.create<hw::ConstantOp>(delayN.getLoc(), aI.getType(), 1);
     Value notAi = rewriter.create<comb::XorOp>(delayN.getLoc(), aI, constOneAi);
-    Value implAiConsequent = rewriter.create<comb::OrOp>(
-        delayN.getLoc(), notAi, implop.getConsequent());
+    Value implAiConsequent =
+        rewriter.create<comb::OrOp>(delayN.getLoc(), notAi, consequent);
     Value condLhs =
         rewriter.create<comb::OrOp>(delayN.getLoc(), condMin, implAiConsequent);
 
@@ -214,225 +256,118 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     return true;
   }
 
-  // Special case : we want to detect the Non-overlapping implication
-  // pattern and reject everything else for now:
-  // antecedent : ltl::concatOp || immediate predicate
+  // Special case : we want to detect the Non-overlapping implication,
+  // Overlapping Implication or simply AssertProperty patterns and reject
+  // everything else for now: antecedent : ltl::concatOp || immediate predicate
   // consequent : any other non-sequence op
   // We want to support a ##n true |-> b and a |-> b
-  bool visit(ltl::ImplicationOp implop, ConversionPatternRewriter &rewriter,
-             ltl::ClockOp ltlclock, Value disableCond, Value &res) const {
-    // Sanity check: Make sure that a clock was found for the assertion that
-    // uses this implication
-    if (!ltlclock) {
-      implop->emitError("No clock was found associated to this sequence!");
-      return false;
-    }
-
-    // Figure out what pattern we are in
-    // a: Non-Overlapping Implication (NOI) or b: Overlapping Implication (OI)
-    Operation *antecedent = implop.getAntecedent().getDefiningOp();
-
-    // Check that the consequent is legal (non-property type)
-    // Conseuqent may also potentially be an input but not the antcedent
-    bool isConsequentLegal = true;
-    if (!isa<BlockArgument>(implop.getConsequent()))
-      isConsequentLegal =
-          llvm::TypeSwitch<Operation *, bool>(
-              implop.getConsequent().getDefiningOp())
-              .Case<ltl::AndOp, ltl::ClockOp, ltl::ConcatOp, ltl::DelayOp,
-                    ltl::DisableOp, ltl::EventuallyOp, ltl::ImplicationOp,
-                    ltl::NotOp, ltl::OrOp>([&](auto op) {
-                op->emitError(
-                    "Invalid consequent type, must be an immediate predicate!");
-                return false;
-              })
-              .Default([&](auto) { return true; });
-
-    bool isAntecedentLegal = true;
-    if (!isa<BlockArgument>(implop.getAntecedent()))
-      isAntecedentLegal =
-          llvm::TypeSwitch<Operation *, bool>(antecedent)
-              .Case<ltl::AndOp, ltl::ClockOp, ltl::DelayOp, ltl::DisableOp,
-                    ltl::EventuallyOp, ltl::ImplicationOp, ltl::NotOp,
-                    ltl::OrOp>([&](auto op) {
-                op->emitError("Invalid antecedent type, must be an immediate "
-                              "predicate or a concat op!");
-                return false;
-              })
-              .Default([&](auto) { return true; });
-
-    if (bool isLegal = !(isConsequentLegal && isAntecedentLegal))
-      return isLegal;
-
-    // Check for NOI case: If antecedent is an input, then we know that no delay
-    // is associated to the implication and thus it's an overlapping implication
-    if (!isa<BlockArgument>(implop.getAntecedent())) {
-      auto concat = dyn_cast<ltl::ConcatOp>(antecedent);
-      if (concat) {
-        // We are only supporting sequences of the type a ##n true
-        auto inputs = concat.getInputs();
-        auto nInputs = inputs.size();
-        if (nInputs > 2) {
-          concat->emitError("Antecedent must be of the form a ##n true");
-          return false;
-        }
-
-        // Figure out if we are in the NOI case of "a ##n true"
-        if (nInputs == 2) {
-          if (!isa<BlockArgument>(inputs.front())) {
-            if (dyn_cast<ltl::DelayOp>(inputs.front().getDefiningOp())) {
-              concat->emitError("Antecedent must be of the form a ##n true");
-              return false;
-            }
-          }
-          // Figure out what our NOI delay is
-          // Make sure that we aren't trying to case a block argument
-          ltl::DelayOp delayN;
-          if (!isa<BlockArgument>(inputs.back())) {
-            if ((delayN =
-                     dyn_cast<ltl::DelayOp>(inputs.back().getDefiningOp()))) {
-
-              // Make sure that you only allow for a ##n true |-> b
-              hw::ConstantOp hwconst;
-              if (!(hwconst = dyn_cast<hw::ConstantOp>(
-                        delayN.getInput().getDefiningOp()))) {
-                delayN->emitError("Only a ##n true |-> b is supported. RHS of "
-                                  "the concatenation must be true");
-                return false;
-              }
-              if (hwconst.getValue().isZero()) {
-                delayN->emitError("Only a ##n true |-> b is supported. RHS of "
-                                  "the concatenation must be true");
-                return false;
-              }
-
-              // NOI case: generate the hardware needed to encode the
-              // non-overlapping implication
-              if (!makeNonOverlappingImplication(implop, delayN, ltlclock,
-                                                 concat, disableCond, rewriter,
-                                                 res))
-                return false;
-
-              rewriter.eraseOp(delayN);
-            }
-          } else {
-            concat->emitError("Antecedent must be of the form a ##n true");
-            return false;
-          }
-        } else {
-          // OI case: simply generate an implication so
-          // (or (not antecedant) consequent)
-          res = makeImplication(implop.getLoc(), inputs.front(),
-                                implop.getConsequent(), rewriter);
-        }
-        rewriter.eraseOp(concat);
-      }
-    } else {
-      // OI case: simply generate an implication so
-      // (or (not antecedant) consequent)
-      res = makeImplication(implop.getLoc(), implop.getAntecedent(),
-                            implop.getConsequent(), rewriter);
-    }
-    rewriter.eraseOp(implop);
-    return true;
-  }
-
   LogicalResult
   matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Operation *curOp, *nextOp;
-    ltl::ClockOp ltlclock;
-    Value disableOp, disablecond, convimplop;
-    llvm::SmallVector<Operation *> defferlist;
+    Value ltlClock, disableCond, disableInput, antecedent, consequent,
+        disableVal;
+    ltl::ClockOp clockOp;
+    ltl::DelayOp delayOp;
+    ltl::DisableOp disableOp;
+    ltl::ImplicationOp implOp;
+    ltl::ConcatOp concatOp;
 
-    // Start with the assertion's operand
-    curOp = adaptor.getProperty().getDefiningOp();
+    // Look for the NOI pattern, i.e. a ##n true |-> b
+    bool matchedNOI = matchPattern(
+        op.getProperty(),
+        m_OpWithBind<ltl::ClockOp>(
+            &clockOp,
+            m_OpWithBind<ltl::DisableOp>(
+                &disableOp,
+                m_OpWithBind<ltl::ImplicationOp>(
+                    &implOp,
+                    m_OpWithBind<ltl::ConcatOp>(
+                        &concatOp, m_Bool(&antecedent),
+                        m_OpWithBind<ltl::DelayOp>(&delayOp, m_One())),
+                    m_Bool(&consequent)),
+                m_Bool(&disableCond)),
+            m_Bool(&ltlClock)));
 
-    // Walk backwards from the assertion and generate all of the operands first
-    while (curOp != nullptr) {
-      // TODO make this into a DFS aproach with a worklist (again)
-      bool isLegal =
-          llvm::TypeSwitch<Operation *, bool>(curOp)
-              .Case<ltl::ImplicationOp>([&](auto implop) {
-                if (!visit(implop, rewriter, ltlclock, disablecond,
-                           convimplop)) {
-                  implop->emitError(
-                      "Invalid implication format, only a ##n true |-> b or  a "
-                      "|-> b are supported!");
-                  return false;
-                }
-                nextOp = nullptr;
-                return true;
-              })
-              .Case<ltl::DisableOp>([&](auto disable) {
-                defferlist.push_back(disable);
-                disablecond = disable.getCondition();
-                nextOp = disable.getInput().getDefiningOp();
-                return true;
-              })
-              .Case<ltl::ClockOp>([&](auto clockop) {
-                // Simply register the clock that we just found and move onto
-                // the clocked operation
-                ltlclock = clockop;
-                nextOp = clockop.getInput().getDefiningOp();
-                return true;
-              })
-              .Case<mlir::UnrealizedConversionCastOp>([&](auto cast) {
-                // Simply forward the operand to be converted
-                nextOp = cast->getOperand(0).getDefiningOp();
-                return true;
-              })
-              .Default([&](auto e) {
-                nextOp = nullptr;
-                return true;
-              });
-      if (!isLegal)
-        return rewriter.notifyMatchFailure(op,
-                                           " Current operation is invalid!");
+    // Make sure that we matched a legal case
+    if (matchedNOI && delayOp.getLength() != 0)
+      return rewriter.notifyMatchFailure(delayOp,
+                                         " Delay must have a length of 0!");
 
-      // Go to the next operation
-      curOp = nextOp;
-    }
+    if (matchedNOI) {
+      // Generate the Non-overlapping Implication
+      if (!makeNonOverlappingImplication(antecedent, consequent, delayOp,
+                                         clockOp, disableCond, rewriter,
+                                         disableInput))
+        return rewriter.notifyMatchFailure(
+            implOp, "Failed to generate NOI from ltl::ImplicationOp");
 
-    // Convert the operations that have been deferred (only disables for now)
-    while (!defferlist.empty()) {
-      Operation *defferop = defferlist[defferlist.size() - 1];
-      defferlist.pop_back();
-      auto disable = dyn_cast<ltl::DisableOp>(defferop);
-      if (disable) {
-        // Check if the operand needed conversion (mostly for ltl::implications)
-        if (dyn_cast<ltl::ImplicationOp>(disable.getInput().getDefiningOp()))
-          disableOp = visit(disable, rewriter, convimplop);
-        else
-          disableOp = visit(disable, rewriter);
+    } else {
+      // Look for the OI pattern, i.e. a |-> b
+      bool matchedOI = matchPattern(
+          op.getProperty(),
+          m_OpWithBind<ltl::ClockOp>(
+              &clockOp,
+              m_OpWithBind<ltl::DisableOp>(
+                  &disableOp,
+                  m_OpWithBind<ltl::ImplicationOp>(&implOp, m_Bool(&antecedent),
+                                                   m_Bool(&consequent)),
+                  m_Bool(&disableCond)),
+              m_Bool(&ltlClock)));
+
+      // Generate an OI if needed
+      if (matchedOI) {
+        disableInput =
+            makeImplication(implOp.getLoc(), antecedent, consequent, rewriter);
+      } else {
+        // Look for the generic AssertProperty case
+        bool matched = matchPattern(
+            op.getProperty(),
+            m_OpWithBind<ltl::ClockOp>(
+                &clockOp,
+                m_OpWithBind<ltl::DisableOp>(&disableOp, m_Bool(&disableInput),
+                                             m_Bool(&disableCond)),
+                m_Bool(&ltlClock)));
+
+        if (!matched)
+          return rewriter.notifyMatchFailure(
+              op, "AssertProperty format is invalid!");
       }
     }
 
+    if (!disableOp)
+      return rewriter.notifyMatchFailure(op, " Assertion must be disabled!");
+
     // Sanity check, we should have found a clock
-    if (!ltlclock)
+    if (!clockOp)
       return rewriter.notifyMatchFailure(
           op, "verif.assert property is not associated to a clock! ");
 
-    if (!disableOp)
-      return rewriter.notifyMatchFailure(
-          op, "verif.assert property is not properly disabled! ");
+    // Then visit the disable op
+    disableVal = visit(disableOp, rewriter, disableInput);
 
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.create<sv::AlwaysOp>(
-        ltlclock.getLoc(), ltlToSVEventControl(ltlclock.getEdge()),
-        ltlclock.getClock(), [&] {
+        clockOp.getLoc(), ltlToSVEventControl(clockOp.getEdge()), ltlClock,
+        [&] {
           // Generate the sv assertion using the input to the
           // parenting clock
           rewriter.replaceOpWithNewOp<sv::AssertOp>(
-              op, disableOp,
+              op, disableVal,
               sv::DeferAssertAttr::get(getContext(),
                                        sv::DeferAssert::Immediate),
               op.getLabelAttr());
         });
 
-    rewriter.eraseOp(ltlclock);
+    // Erase Converted Ops
+    rewriter.eraseOp(clockOp);
+    if (implOp)
+      rewriter.eraseOp(implOp);
+    if (concatOp)
+      rewriter.eraseOp(concatOp);
+    if (delayOp)
+      rewriter.eraseOp(delayOp);
 
     return success();
   }
