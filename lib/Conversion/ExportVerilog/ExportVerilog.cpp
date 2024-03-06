@@ -6039,16 +6039,22 @@ class FileEmitter : public EmitterBase {
 public:
   explicit FileEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emit(emit::FileOp op);
+  void emit(emit::FileOp op) {
+    emit(op.getBody());
+    ps.eof();
+  }
+  void emit(emit::FragmentOp op) { emit(op.getBody()); }
   void emit(emit::FileListOp op);
 
 private:
+  void emit(Block *block);
+
   void emitOp(emit::RefOp op);
   void emitOp(emit::VerbatimOp op);
 };
 
-void FileEmitter::emit(emit::FileOp op) {
-  for (Operation &op : *op.getBody()) {
+void FileEmitter::emit(Block *block) {
+  for (Operation &op : *block) {
     TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
@@ -6057,7 +6063,6 @@ void FileEmitter::emit(emit::FileOp op) {
         .Default(
             [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
-  ps.eof();
 }
 
 void FileEmitter::emit(emit::FileListOp op) {
@@ -6218,6 +6223,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           fileMapping.try_emplace(file.getSymNameAttr(), file);
           separateFile(file, file.getFileName());
         })
+        .Case<emit::FragmentOp>([&](auto fragment) {
+          fragmentMapping.try_emplace(fragment.getSymNameAttr(), fragment);
+        })
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           auto sym = mod.getNameAttr();
@@ -6338,20 +6346,37 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
   size_t numReplicatedOps =
       file.emitReplicatedOps && !emitHeaderInclude ? replicatedOps.size() : 0;
 
-  thingsToEmit.reserve(thingsToEmit.size() + numReplicatedOps +
-                       file.ops.size());
-
   // Emit each operation in the file preceded by the replicated ops not yet
   // printed.
+  DenseSet<emit::FragmentOp> includedFragments;
   for (const auto &opInfo : file.ops) {
+    Operation *op = opInfo.op;
+
     // Emit the replicated per-file operations before the main operation's
     // position (if enabled).
     for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
          ++lastReplicatedOp)
       thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 
+    // Pull in the fragments that the op references. In one file, each
+    // fragment is emitted only once.
+    if (auto fragments = op->getAttrOfType<ArrayAttr>("emit.fragments")) {
+      for (auto sym : fragments.getAsRange<FlatSymbolRefAttr>()) {
+        auto it = fragmentMapping.find(sym.getAttr());
+        if (it == fragmentMapping.end()) {
+          encounteredError = true;
+          op->emitError("cannot find referenced fragment ") << sym;
+          continue;
+        }
+        emit::FragmentOp fragment = it->second;
+        if (includedFragments.insert(fragment).second) {
+          thingsToEmit.emplace_back(it->second);
+        }
+      }
+    }
+
     // Emit the operation itself.
-    thingsToEmit.emplace_back(opInfo.op);
+    thingsToEmit.emplace_back(op);
   }
 
   // Emit the replicated per-file operations after the last operation (if
@@ -6376,7 +6401,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
-      .Case<emit::FileOp, emit::FileListOp>(
+      .Case<emit::FileOp, emit::FileListOp, emit::FragmentOp>(
           [&](auto op) { FileEmitter(state).emit(op); })
       .Case<MacroDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })

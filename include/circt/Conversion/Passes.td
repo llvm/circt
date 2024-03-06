@@ -418,10 +418,17 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Lower a module of FIRRTL dialect to the HW dialect family.
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "seq::SeqDialect", "sv::SVDialect",
-                           "ltl::LTLDialect", "verif::VerifDialect",
-                           "sim::SimDialect"];
+
+  let dependentDialects = [
+    "comb::CombDialect",
+    "emit::EmitDialect",
+    "hw::HWDialect",
+    "ltl::LTLDialect",
+    "seq::SeqDialect",
+    "sim::SimDialect",
+    "sv::SVDialect",
+    "verif::VerifDialect",
+  ];
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
