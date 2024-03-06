@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SEQ_SEQENUMS_H
+#define CIRCT_DIALECT_SEQ_SEQENUMS_H
+
 namespace circt {
 namespace seq {
 
@@ -13,3 +16,5 @@ enum class ReadEnableMode { Zero, Ignore, Undefined };
 
 } // namespace seq
 } // namespace circt
+
+#endif // CIRCT_DIALECT_SEQ_SEQENUMS_H
