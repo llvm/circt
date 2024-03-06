@@ -65,7 +65,7 @@ struct I1ValueMatcher {
   }
 };
 
-static inline I1ValueMatcher m_Bool(Value *const val) {
+static inline I1ValueMatcher mBool(Value *const val) {
   return I1ValueMatcher(val);
 }
 
@@ -91,7 +91,7 @@ struct BindingRecursivePatternMatcher
 };
 
 template <typename OpType, typename... Matchers>
-static inline auto m_OpWithBind(OpType *op, Matchers... matchers) {
+static inline auto mOpWithBind(OpType *op, Matchers... matchers) {
   return BindingRecursivePatternMatcher<OpType, Matchers...>(op, matchers...);
 }
 
@@ -276,18 +276,18 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     // Look for the NOI pattern, i.e. a ##n true |-> b
     bool matchedNOI = matchPattern(
         op.getProperty(),
-        m_OpWithBind<ltl::ClockOp>(
+        mOpWithBind<ltl::ClockOp>(
             &clockOp,
-            m_OpWithBind<ltl::DisableOp>(
+            mOpWithBind<ltl::DisableOp>(
                 &disableOp,
-                m_OpWithBind<ltl::ImplicationOp>(
+                mOpWithBind<ltl::ImplicationOp>(
                     &implOp,
-                    m_OpWithBind<ltl::ConcatOp>(
-                        &concatOp, m_Bool(&antecedent),
-                        m_OpWithBind<ltl::DelayOp>(&delayOp, m_One())),
-                    m_Bool(&consequent)),
-                m_Bool(&disableCond)),
-            m_Bool(&ltlClock)));
+                    mOpWithBind<ltl::ConcatOp>(
+                        &concatOp, mBool(&antecedent),
+                        mOpWithBind<ltl::DelayOp>(&delayOp, m_One())),
+                    mBool(&consequent)),
+                mBool(&disableCond)),
+            mBool(&ltlClock)));
 
     // Make sure that we matched a legal case
     if (matchedNOI && delayOp.getLength() != 0)
@@ -306,14 +306,14 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
       // Look for the OI pattern, i.e. a |-> b
       bool matchedOI = matchPattern(
           op.getProperty(),
-          m_OpWithBind<ltl::ClockOp>(
+          mOpWithBind<ltl::ClockOp>(
               &clockOp,
-              m_OpWithBind<ltl::DisableOp>(
+              mOpWithBind<ltl::DisableOp>(
                   &disableOp,
-                  m_OpWithBind<ltl::ImplicationOp>(&implOp, m_Bool(&antecedent),
-                                                   m_Bool(&consequent)),
-                  m_Bool(&disableCond)),
-              m_Bool(&ltlClock)));
+                  mOpWithBind<ltl::ImplicationOp>(&implOp, mBool(&antecedent),
+                                                  mBool(&consequent)),
+                  mBool(&disableCond)),
+              mBool(&ltlClock)));
 
       // Generate an OI if needed
       if (matchedOI) {
@@ -323,11 +323,11 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
         // Look for the generic AssertProperty case
         bool matched = matchPattern(
             op.getProperty(),
-            m_OpWithBind<ltl::ClockOp>(
+            mOpWithBind<ltl::ClockOp>(
                 &clockOp,
-                m_OpWithBind<ltl::DisableOp>(&disableOp, m_Bool(&disableInput),
-                                             m_Bool(&disableCond)),
-                m_Bool(&ltlClock)));
+                mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
+                                            mBool(&disableCond)),
+                mBool(&ltlClock)));
 
         if (!matched)
           return rewriter.notifyMatchFailure(
