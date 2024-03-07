@@ -332,10 +332,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
       MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
       PreserveAggregate::PreserveMode memoryPreservationMode,
       SymbolTable &symTbl, const AttrCache &cache,
-      const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
+      const llvm::DenseMap<FModuleLike, Convention> &conventionTable, bool noModules = false)
       : context(context), aggregatePreservationMode(preserveAggregate),
         memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
-        cache(cache), conventionTable(conventionTable) {}
+        cache(cache), conventionTable(conventionTable), noModules(noModules) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
@@ -343,6 +343,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
   /// type lowering on all operations.
   void lowerModule(FModuleLike op);
+
+  void lowerModuleLocal(FModuleOp op);
 
   bool lowerArg(FModuleLike module, size_t argIndex, size_t argsRemoved,
                 SmallVectorImpl<PortInfoWithIP> &newArgs,
@@ -439,6 +441,9 @@ private:
   const AttrCache &cache;
 
   const llvm::DenseMap<FModuleLike, Convention> &conventionTable;
+
+  // Skip instances because we are skipping modules (e.g. local run).
+  bool noModules;
 
   // Set true if the lowering failed.
   bool encounteredError = false;
@@ -751,6 +756,16 @@ void TypeLoweringVisitor::lowerModule(FModuleLike op) {
     visitDecl(module);
   else if (auto extModule = llvm::dyn_cast<FExtModuleOp>(*op))
     visitDecl(extModule);
+}
+
+void TypeLoweringVisitor::lowerModuleLocal(FModuleOp module) {
+  auto *body = module.getBodyBlock();
+
+  ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
+  builder = &theBuilder;
+
+  // Lower the operations.
+  lowerBlock(body);
 }
 
 // Creates and returns a new block argument of the specified type to the
@@ -1423,6 +1438,9 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
+  if (noModules)
+    return false;
+
   PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
       cast<FModuleLike>(op.getReferencedOperation(symTbl)));
 
@@ -1615,6 +1633,17 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   }
   void runOnOperation() override;
 };
+
+struct LowerTypesLocalPass : public LowerFIRRTLTypesLocalBase<LowerTypesLocalPass> {
+  LowerTypesLocalPass(
+      circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
+      circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag) {
+    preserveAggregate = preserveAggregateFlag;
+    preserveMemories = preserveMemoriesFlag;
+  }
+  void runOnOperation() override;
+};
+
 } // end anonymous namespace
 
 // This is the main entrypoint for the lowering pass.
@@ -1649,9 +1678,37 @@ void LowerTypesPass::runOnOperation() {
     signalPassFailure();
 }
 
+// This is the main entrypoint for the lowering pass.
+void LowerTypesLocalPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
+
+  // Symbol Table
+  auto &symTbl = getAnalysis<SymbolTable>();
+  // Cached attr
+  AttrCache cache(&getContext());
+
+  DenseMap<FModuleLike, Convention> conventionTable;
+
+  auto mod = getOperation();
+
+  auto tl =
+        TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
+                            symTbl, cache, conventionTable);
+    tl.lowerModule(mod);
+
+  if (tl.isFailed())
+    signalPassFailure();
+}
+
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass(
     PreserveAggregate::PreserveMode mode,
     PreserveAggregate::PreserveMode memoryMode) {
   return std::make_unique<LowerTypesPass>(mode, memoryMode);
+}
+
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesLocalPass(
+    PreserveAggregate::PreserveMode mode,
+    PreserveAggregate::PreserveMode memoryMode) {
+  return std::make_unique<LowerTypesLocalPass>(mode, memoryMode);
 }

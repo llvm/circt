@@ -93,6 +93,44 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def LowerFIRRTLTypesLocal : Pass<"firrtl-lower-types-local", "firrtl::FModuleOp"> {
+  let summary = "Lower FIRRTL types to ground types";
+  let description = [{
+    Lower aggregate FIRRTL types to ground types.  Memories, wires, etc
+    are split apart by elements of aggregate types.  The only aggregate types
+    which exist after this pass are memory ports, though memory data types are
+    split.
+
+    Connect and expansion and canonicalization happen in this pass.
+
+    This local version does not modify ports or instances.
+  }];
+  let constructor = "circt::firrtl::createLowerFIRRTLTypesLocalPass()";
+  let options = [
+    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
+           "Concat all elements of the aggregate data into a single element.">,
+    Option<"preserveAggregate", "preserve-aggregate", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify aggregate preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>,
+    Option<"preserveMemories", "preserve-memories", "PreserveAggregate::PreserveMode",
+          "PreserveAggregate::None",
+          "Specify memory preservation mode",
+          [{::llvm::cl::values(
+            clEnumValN(PreserveAggregate::None, "none", "Preserve no aggregate"),
+            clEnumValN(PreserveAggregate::OneDimVec, "1d-vec", "Preserve 1d vectors"),
+            clEnumValN(PreserveAggregate::Vec, "vec", "Preserve vectors"),
+            clEnumValN(PreserveAggregate::All, "all", "Preserve vectors and bundles")
+          )}]>
+  ];
+  let dependentDialects = ["hw::HWDialect"];
+}
+
 def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL module signatures";
   let description = [{
