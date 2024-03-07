@@ -341,6 +341,14 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 }
 } // namespace detail
 
+LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
+                                         const FirtoolOptions &opt,
+                                         llvm::raw_ostream &os) {
+  pm.addPass(circt::createLowerLTLToCorePass());
+  pm.addPass(circt::createConvertHWToBTOR2Pass(os));
+  return success();
+}
+
 LogicalResult
 firtool::populateExportVerilog(mlir::PassManager &pm, const FirtoolOptions &opt,
                                std::unique_ptr<llvm::raw_ostream> os) {

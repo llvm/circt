@@ -5,6 +5,8 @@ add_circt_library(CIRCTFirtool
   CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
+  CIRCTLTLToCore
+  CIRCTHWToBTOR2
   CIRCTFIRRTLTransforms
   CIRCTHWTransforms
   CIRCTOMTransforms

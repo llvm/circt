@@ -13,6 +13,8 @@
 
 #include "circt/Firtool/Firtool.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/HWToBTOR2.h"
+#include "circt/Conversion/LTLToCore.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
@@ -164,9 +166,11 @@ enum OutputFormatKind {
   OutputParseOnly,
   OutputIRFir,
   OutputIRHW,
+  OutputIRCore,
   OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
+  OutputBTOR2,
   OutputSplitVerilog,
   OutputDisabled
 };
@@ -179,10 +183,13 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "annotation lowering"),
         clEnumValN(OutputIRFir, "ir-fir", "Emit FIR dialect after pipeline"),
         clEnumValN(OutputIRHW, "ir-hw", "Emit HW dialect"),
+        clEnumValN(OutputIRCore, "ir-core",
+                   "Emit HW dialect without LTL or Verif operations"),
         clEnumValN(OutputIRSV, "ir-sv", "Emit SV dialect"),
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+        clEnumValN(OutputBTOR2, "btor2", "Emit BTOR2"),
         clEnumValN(OutputSplitVerilog, "split-verilog",
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
@@ -401,8 +408,20 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Lower if we are going to verilog or if lowering was specifically requested.
-  if (outputFormat != OutputIRFir) {
+  // Add passes specific to btor2 emission
+  if (outputFormat == OutputBTOR2) {
+    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+      return failure();
+    if (!hwPassPlugin.empty())
+      if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+        return failure();
+    if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                          (*outputFile)->os())))
+      return failure();
+  }
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
+  else if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
     if (!hwPassPlugin.empty())

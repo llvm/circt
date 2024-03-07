@@ -365,6 +365,16 @@ circtFirtoolPopulateExportVerilog(MlirPassManager pm,
 }
 
 MlirLogicalResult
+circtFirtoolpopulateHWToBTOR2(MlirPassManager pm,
+                              CirctFirtoolFirtoolOptions options,
+                              MlirStringCallback callback, void *userData) {
+  auto stream =
+      std::make_unique<mlir::detail::CallbackOstream>(callback, userData);
+  return wrap(firtool::populateHWToBTOR2(*unwrap(pm), *unwrap(options),
+                                         *std::move(stream)));
+}
+
+MlirLogicalResult
 circtFirtoolPopulateExportSplitVerilog(MlirPassManager pm,
                                        CirctFirtoolFirtoolOptions options,
                                        MlirStringRef directory) {

@@ -26,6 +26,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/MathExtras.h"
 
@@ -392,6 +393,7 @@ void LowerLTLToCorePass::runOnOperation() {
   // Set target dialects: We don't want to see any ltl or verif that might come
   // from an AssertProperty left in the result
   ConversionTarget target(getContext());
+  target.addLegalDialect<mlir::BuiltinDialect>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<comb::CombDialect>();
   target.addLegalDialect<sv::SVDialect>();

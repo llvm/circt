@@ -410,6 +410,10 @@ LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
                                     const FirtoolOptions &opt);
 
+LogicalResult populateHWToBTOR2(mlir::PassManager &pm,
+                                const FirtoolOptions &opt,
+                                llvm::raw_ostream &os);
+
 LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
 
 LogicalResult populateExportVerilog(mlir::PassManager &pm,
