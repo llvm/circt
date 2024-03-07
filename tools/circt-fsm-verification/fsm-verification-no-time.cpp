@@ -10,9 +10,6 @@
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/raw_ostream.h"
 #include "chrono"
-#include "fstream"
-#include "iostream"
-
 
 #define VERBOSE 0
 
@@ -26,10 +23,10 @@ using namespace z3;
  * @brief Prints solver assertions
 */
 void printSolverAssertions(z3::solver& solver) {
-  // llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  // llvm::outs()<<solver.to_smt2()<<"\n";
+  llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
+  llvm::outs()<<solver.to_smt2()<<"\n";
 
-  // llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
   const auto start{std::chrono::steady_clock::now()};
   llvm::outs()<<solver.check()<<"\n";
   const auto end{std::chrono::steady_clock::now()};
@@ -42,10 +39,10 @@ void printSolverAssertions(z3::solver& solver) {
   llvm::outs()<<solver.get_model().to_string()<<"\n";
   llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
   llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
-	ofstream outfile;
-	outfile.open("output.txt", ios::app);
-	outfile << elapsed_seconds.count() << endl;
-	outfile.close();
+  FILE* outputfile = fopen("output.txt", "a");
+  fprintf(outputfile, "%f", elapsed_seconds.count());
+  fclose(outputfile);
+
 }
 
 /**
@@ -378,9 +375,6 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, MyStateI
                           vector<mlir::Value> to_update = actionsCounter(*trRegions[1]);
                           Region &r = *trRegions[1];
                           z3FunA a = [&r, vecVal, &c](vector<expr> vec) -> vector<expr> {
-                            vector<expr> vec_no_time = vec;
-                            expr time = vec_no_time[vec_no_time.size()-1];
-                            vec_no_time.pop_back();
                             MyExprMap expr_map_tmp;
                             for(auto [value, expr]: llvm::zip(*vecVal, vec)){
                               expr_map_tmp.exprs.push_back(expr);
@@ -389,8 +383,6 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, MyStateI
                             }
 
                             vector<expr> vec2 =getActionExpr(r, c, vecVal, expr_map_tmp); 
-
-                            vec2.push_back(time);
 
                             return vec2;
                           };
@@ -416,7 +408,7 @@ void populateST(Operation &mod, context &c, MyStateInvMap* stateInvMap, MyStateI
 expr nestedForall(vector<expr> solver_vars, expr body, int i){
 
 
-  if(i==solver_vars.size()-1){ // last element (time) is nested separately as a special case
+  if(i==solver_vars.size()){ // last element (time) is nested separately as a special case
     return body;
   } else {
     return forall(solver_vars[i], nestedForall(solver_vars, body, i+1));
@@ -482,10 +474,8 @@ void parse_fsm(string input_file){
 
   z3::context c;
 
-
   solver s(c);
 
-	s.set("logic", "HORN");
 
   MyStateInvMap *stateInvMap = new MyStateInvMap();
 
@@ -543,12 +533,6 @@ void parse_fsm(string input_file){
 
   populateInvInput(varMap, c, solverVars, invInput);
 
-  expr time = c.int_const("time");
-  z3::sort timeInv = c.int_sort();
-  
-  solverVars->push_back(time);
-  invInput->push_back(timeInv);
-
   populateStateInvMap(stateInvMap, c, invInput, stateInvMap_fun);
 
 
@@ -573,7 +557,7 @@ void parse_fsm(string input_file){
   // initial condition
   s.add(nestedForall(*solverVars, body, 0));
 
-  int time_bound = 20;
+  int time_bound = 5;
 
   vector<int> outputVec;
 
@@ -584,28 +568,32 @@ void parse_fsm(string input_file){
     }
     vector<expr> *solverVarsAfter = new vector<expr>;
 
+
     copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
     solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
 
     if(t.isGuard && t.isAction){
       expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+      s.add(nestedForall(*solverVars, body, 1));
     } 
     else if (t.isGuard){
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+      s.add(nestedForall(*solverVars, body, 1));
 
     } else if (t.isAction){
 
       expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+      s.add(nestedForall(*solverVars, body, 1));
 
     } else {
       expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-      s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 1))))));
+      s.add(nestedForall(*solverVars, body, 1));
 
     }
+
   }
+
+
 
   printSolverAssertions(s);
 
@@ -617,13 +605,13 @@ int main(int argc, char **argv){
 
   cout << "input file: " << input << endl;
 
-  ofstream outfile;
-  outfile.open("output.txt", ios::app);
-	outfile << input << endl;
-	outfile.close();
+  FILE* outputfile = fopen("output.txt", "a");
+  fprintf(outputfile, "%s", input);
+  fclose(outputfile);
 
   parse_fsm(input);
 
   return 0;
 
 }
+
