@@ -9,6 +9,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -75,9 +76,9 @@ void StripSVPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates\n");
 
-  // Remove OM dialect nodes.
+  // Remove OM and Emit dialect nodes.
   for (auto &op : llvm::make_early_inc_range(*mlirModule.getBody()))
-    if (isa<om::OMDialect>(op.getDialect()))
+    if (isa<emit::EmitDialect, om::OMDialect>(op.getDialect()))
       op.erase();
 
   // Remove `sv.*` operation attributes.
