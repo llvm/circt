@@ -19,6 +19,7 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ModelInfoExport.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
@@ -468,6 +469,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
   registry.insert<
     arc::ArcDialect,
     comb::CombDialect,
+    emit::EmitDialect,
     hw::HWDialect,
     mlir::LLVM::LLVMDialect,
     mlir::arith::ArithDialect,

@@ -8,6 +8,7 @@ target_link_libraries(arcilator
   CIRCTArcTransforms
   CIRCTCombToArith
   CIRCTConvertToArcs
+  CIRCTEmit
   CIRCTExportArc
   CIRCTOM
   CIRCTSeqToSV
