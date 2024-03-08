@@ -51,6 +51,7 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
@@ -346,6 +347,32 @@ static LogicalResult processBuffer(
   if (!module)
     return failure();
 
+#ifdef ARCILATOR_ENABLE_JIT
+  // Check JIT execution is valid.
+  if (!runSimulation.empty()) {
+    Operation *toCall = module->lookupSymbol(runSimulation);
+    if (!toCall) {
+      llvm::errs() << "entry point not found: '" << runSimulation << "'\n";
+      return failure();
+    }
+
+    if (!llvm::isa<LLVM::LLVMFuncOp, func::FuncOp>(toCall)) {
+      llvm::errs() << "entry point '" << runSimulation
+                   << "' was found but on an operation of type '"
+                   << toCall->getName() << "' while a function was expected\n";
+      llvm::errs() << "supported functions: 'func.func', 'llvm.func'\n";
+      return failure();
+    }
+
+    auto toCallFunc = llvm::cast<FunctionOpInterface>(toCall);
+    if (toCallFunc.getNumArguments() != 0) {
+      llvm::errs() << "entry point '" << runSimulation
+                   << "' must have no arguments\n";
+      return failure();
+    }
+  }
+#endif // ARCILATOR_ENABLE_JIT
+
   // Lower HwModule to Arc model.
   PassManager pmArc(&context);
   pmArc.enableVerifier(verifyPasses);
@@ -397,15 +424,17 @@ static LogicalResult processBuffer(
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
     if (!executionEngine) {
-      llvm::errs() << "failed to create execution engine: "
-                   << executionEngine.takeError() << "\n";
+      llvm::Error err = executionEngine.takeError();
+      llvm::errs() << "failed to create execution engine: " << err << "\n";
+      llvm::consumeError(std::move(err));
       return failure();
     }
 
     auto expectedFunc = (*executionEngine)->lookupPacked(runSimulation);
     if (!expectedFunc) {
-      llvm::errs() << "failed to run simulation: " << expectedFunc.takeError()
-                   << "\n";
+      llvm::Error err = expectedFunc.takeError();
+      llvm::errs() << "failed to run simulation: " << err << "\n";
+      llvm::consumeError(std::move(err));
       return failure();
     }
 
