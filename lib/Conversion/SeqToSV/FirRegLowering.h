@@ -18,6 +18,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/Visitors.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include <mlir/IR/ValueRange.h>
@@ -32,9 +33,9 @@ using namespace hw;
 // array_create and array_get. All other ops block the reachability.
 // This analysis is built lazily on every query.
 // The query: is a mux is reachable from a reg, results in a DFS traversal
-// of the IR rooted at the register. This traversal is completed and the result
-// is cached in a Map, for faster retrieval on any future query of any op in
-// this subgraph.
+// of the IR rooted at the register. This traversal is completed and the
+// result is cached in a Map, for faster retrieval on any future query of any
+// op in this subgraph.
 class ReachableMuxes {
 public:
   ReachableMuxes(HWModuleOp m) : module(m) {}
@@ -42,33 +43,39 @@ public:
   bool isMuxReachableFrom(seq::FirRegOp regOp, comb::MuxOp muxOp);
 
 private:
-  static inline bool opBlocksReachability(Operation *op) {
-    return (!isa<comb::MuxOp, ArrayGetOp, ArrayCreateOp>(op));
-  }
   void buildReachabilityFrom(Operation *startNode);
   HWModuleOp module;
   llvm::DenseMap<Operation *, llvm::SmallDenseSet<Operation *>> reachableMuxes;
   llvm::SmallPtrSet<Operation *, 16> visited;
+};
 
-  // The op and its users information that needs to be tracked on the stack
-  // for an iterative DFS traversal.
-  struct OpUserInfo {
-    Operation *op;
-    const mlir::ResultRange::user_range userRange;
-    mlir::ResultRange::user_iterator userIter;
+// The op and its users information that needs to be tracked on the stack
+// for an iterative DFS traversal.
+struct OpUserInfo {
+  Operation *op;
+  using ValidUsersIterator =
+      llvm::filter_iterator<Operation::user_iterator,
+                            std::function<bool(const Operation *)>>;
 
-    OpUserInfo(Operation *op)
-        : op(op), userRange(op->getUsers()), userIter(userRange.begin()) {}
+  ValidUsersIterator userIter, userEnd;
+  static std::function<bool(const Operation *op)> opAllowsReachability;
 
-    // Increments the itertor to the next valid user op and returns false if
-    // the iterator reaches the end of the range.
-    auto getNextValid(mlir::ResultRange::user_iterator &iter) const {
-      for (; iter != userRange.end(); ++iter)
-        if (!opBlocksReachability(*iter))
-          return true;
-      return false;
+  OpUserInfo(Operation *op)
+      : op(op), userIter(op->getUsers().begin(), op->getUsers().end(),
+                         opAllowsReachability),
+        userEnd(op->getUsers().end(), op->getUsers().end(),
+                opAllowsReachability) {}
+
+  bool getAndSetUnvisited() {
+    if (unvisited) {
+      unvisited = false;
+      return true;
     }
-  };
+    return false;
+  }
+
+private:
+  bool unvisited = true;
 };
 
 /// Lower FirRegOp to `sv.reg` and `sv.always`.
