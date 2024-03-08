@@ -639,6 +639,29 @@ if (NOT LLVM_ENABLE_IDE)
                            COMPONENT circt-headers)
 endif()
 
+
+# Custom target to install all CIRCT libraries
+add_custom_target(circt-libraries)
+set_target_properties(circt-libraries PROPERTIES FOLDER "Misc")
+
+if (NOT LLVM_ENABLE_IDE)
+  add_llvm_install_targets(install-circt-libraries
+                           DEPENDS circt-libraries
+                           COMPONENT circt-libraries)
+endif()
+
+get_property(CIRCT_LIBS GLOBAL PROPERTY CIRCT_ALL_LIBS)
+if(CIRCT_LIBS)
+  list(REMOVE_DUPLICATES CIRCT_LIBS)
+  foreach(lib ${CIRCT_LIBS})
+    add_dependencies(circt-libraries ${lib})
+    if(NOT LLVM_ENABLE_IDE)
+      add_dependencies(install-circt-libraries install-${lib})
+      add_dependencies(install-circt-libraries-stripped install-${lib}-stripped)
+    endif()
+  endforeach()
+endif()
+
 add_subdirectory(cmake/modules)
 
 # Set RPATH to $ORIGIN on all targets.
