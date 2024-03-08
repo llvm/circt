@@ -4668,6 +4668,11 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
   SmallPtrSet<StringAttr, 8> seenNames;
   SmallPtrSet<StringAttr, 8> seenRefs;
 
+  // Ref statements were removed in 4.0.0, check.
+  if (getToken().is(FIRToken::kw_ref) &&
+      removedFeature({4, 0, 0}, "ref statements"))
+    return failure();
+
   // Parse the ref statements.
   while (consumeIf(FIRToken::kw_ref)) {
     auto loc = getToken().getLoc();
