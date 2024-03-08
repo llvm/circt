@@ -447,9 +447,19 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
   assert(lhs && rhs &&
          "expected om::IntegerAttr for IntegerBinaryArithmeticOp operands");
 
+  // Extend values if necessary to match bitwidth. Most interesting arithmetic
+  // on APSInt asserts that both operands are the same bitwidth, but the
+  // IntegerAttrs we are working with may have used the smallest necessary
+  // bitwidth to represent the number they hold, and won't necessarily match.
+  APSInt lhsVal = lhs.getValue().getAPSInt();
+  APSInt rhsVal = rhs.getValue().getAPSInt();
+  if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
+    rhsVal = rhsVal.extend(lhsVal.getBitWidth());
+  else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
+    lhsVal = lhsVal.extend(rhsVal.getBitWidth());
+
   // Perform arbitrary precision signed integer binary arithmetic.
-  FailureOr<APSInt> result = op.evaluateIntegerOperation(
-      lhs.getValue().getAPSInt(), rhs.getValue().getAPSInt());
+  FailureOr<APSInt> result = op.evaluateIntegerOperation(lhsVal, rhsVal);
 
   if (failed(result))
     return op->emitError("failed to evaluate integer operation");
