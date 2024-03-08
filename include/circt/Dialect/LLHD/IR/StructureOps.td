@@ -125,7 +125,7 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictArrayAttr>:$res_attrs
   );
-  let regions = (region AnyRegion: $body);
+  let regions = (region MinSizedRegion<1>: $body);
 
   let extraClassDeclaration = [{
     /// Verify the type attribute of this function. Returns failure and emits
