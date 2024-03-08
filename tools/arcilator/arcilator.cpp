@@ -28,6 +28,7 @@
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -507,6 +508,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     arc::ArcDialect,
     comb::CombDialect,
     hw::HWDialect,
+    mlir::DLTIDialect,
     mlir::LLVM::LLVMDialect,
     mlir::arith::ArithDialect,
     mlir::cf::ControlFlowDialect,
