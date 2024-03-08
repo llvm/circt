@@ -414,7 +414,7 @@ static LogicalResult processBuffer(
 
     return success();
   }
-#endif
+#endif // ARCILATOR_ENABLE_JIT
 
   // Handle MLIR output.
   if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd ||
@@ -588,7 +588,7 @@ int main(int argc, char **argv) {
     llvm::errs() << "This can be achieved by building arcilator with the "
                     "host's LLVM target enabled.\n";
     exit(1);
-#endif
+#endif // ARCILATOR_ENABLE_JIT
   }
 
   MLIRContext context;
