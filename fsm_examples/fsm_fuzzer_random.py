@@ -1,3 +1,6 @@
+# generates FSMs with an arbitrary number of states
+# and an identical number of transitions, with a guard and an action each
+
 import numpy as np
 
 num_fsm = range(5, 100, 5)

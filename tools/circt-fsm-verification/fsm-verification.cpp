@@ -607,6 +607,11 @@ void parse_fsm(string input_file){
     }
   }
 
+  expr body = findMyFun(transitions->at(transitions->size()).from, stateInvMap_fun)(solverVarsInit->size(), solverVarsInit->data())
+
+  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), (implies(body, false) ))));
+
+
   printSolverAssertions(s);
 
 }
