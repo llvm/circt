@@ -12,6 +12,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Debug.h"
+#include <cassert>
 
 using namespace circt;
 using namespace hw;
@@ -20,10 +21,15 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 
+std::function<bool(const Operation *op)> OpUserInfo::opAllowsReachability =
+    [](const Operation *op) -> bool {
+  return (isa<comb::MuxOp, ArrayGetOp, ArrayCreateOp>(op));
+};
+
 bool ReachableMuxes::isMuxReachableFrom(seq::FirRegOp regOp,
                                         comb::MuxOp muxOp) {
   return llvm::any_of(regOp.getResult().getUsers(), [&](Operation *user) {
-    if (opBlocksReachability(user))
+    if (!OpUserInfo::opAllowsReachability(user))
       return false;
     buildReachabilityFrom(user);
     return reachableMuxes[user].contains(muxOp);
@@ -33,16 +39,16 @@ bool ReachableMuxes::isMuxReachableFrom(seq::FirRegOp regOp,
 void ReachableMuxes::buildReachabilityFrom(Operation *startNode) {
   // This is a backward dataflow analysis.
   // First build a graph rooted at the `startNode`. Every user of an operation
-  // that doesnot block the reachability is a child node. Then, the ops that
+  // that does not block the reachability is a child node. Then, the ops that
   // are reachable from a node is computed as the union of the Reachability of
   // all its child nodes.
   // The dataflow can be expressed as, for all child in the Children(node)
   // Reachability(node) = node + Union{Reachability(child)}
-  if (visited.find(startNode) != visited.end())
+  if (visited.contains(startNode))
     return;
+
   // The stack to record enough information for an iterative post-order
   // traversal.
-
   llvm::SmallVector<OpUserInfo> stk;
 
   stk.emplace_back(startNode);
@@ -52,29 +58,29 @@ void ReachableMuxes::buildReachabilityFrom(Operation *startNode) {
     Operation *currentNode = info.op;
 
     // Node is being visited for the first time.
-    if (info.userIter == info.userRange.begin())
+    if (info.getAndSetUnvisited())
       visited.insert(currentNode);
-    if (info.getNextValid(info.userIter)) {
+
+    if (info.userIter != info.userEnd) {
       Operation *child = *info.userIter;
       ++info.userIter;
-      if (visited.find(child) == visited.end())
+      if (!visited.contains(child))
         stk.emplace_back(child);
 
     } else { // All children of the node have been visited
       // Any op is reachable from itself.
       reachableMuxes[currentNode].insert(currentNode);
-      auto userIterator = info.userRange.begin();
-      while (info.getNextValid(userIterator)) {
-        Operation *childOp = *userIterator;
+
+      for (auto *childOp : llvm::make_filter_range(
+               info.op->getUsers(), OpUserInfo::opAllowsReachability)) {
         reachableMuxes[currentNode].insert(childOp);
         // Propagate the reachability backwards from m to currentNode.
         auto iter = reachableMuxes.find(childOp);
+        assert(iter != reachableMuxes.end());
 
-        if (iter != reachableMuxes.end())
-          reachableMuxes[currentNode].insert(iter->getSecond().begin(),
-                                             iter->getSecond().end());
-
-        ++userIterator;
+        // Add all the mux that was reachable from childOp, to currentNode.
+        reachableMuxes[currentNode].insert(iter->getSecond().begin(),
+                                           iter->getSecond().end());
       }
       stk.pop_back();
     }
