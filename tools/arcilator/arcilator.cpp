@@ -388,6 +388,7 @@ static LogicalResult processBuffer(
   if (failed(pmLlvm.run(module.get())))
     return failure();
 
+#ifdef ARCILATOR_ENABLE_JIT
   // Handle JIT execution.
   if (!runSimulation.empty()) {
     mlir::ExecutionEngineOptions engineOptions;
@@ -413,6 +414,7 @@ static LogicalResult processBuffer(
 
     return success();
   }
+#endif
 
   // Handle MLIR output.
   if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd ||
@@ -576,8 +578,17 @@ int main(int argc, char **argv) {
                                     "MLIR-based circuit simulator\n");
 
   if (!runSimulation.empty()) {
+#ifdef ARCILATOR_ENABLE_JIT
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
+#else
+    llvm::errs() << "This arcilator binary was not built with JIT support.\n";
+    llvm::errs() << "To enable JIT features, build arcilator with MLIR's "
+                    "execution engine.\n";
+    llvm::errs() << "This can be achieved by building arcilator with the "
+                    "host's LLVM target enabled.\n";
+    exit(1);
+#endif
   }
 
   MLIRContext context;
