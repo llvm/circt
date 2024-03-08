@@ -476,8 +476,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
                        [](py::object cls, MlirAttribute intVal) {
                          return cls(omIntegerAttrGet(intVal));
                        })
-      .def_property_readonly("integer", [](MlirAttribute self) {
-        return omIntegerAttrGetInt(self);
+      .def_property_readonly(
+          "integer",
+          [](MlirAttribute self) { return omIntegerAttrGetInt(self); })
+      .def("__str__", [](MlirAttribute self) {
+        MlirStringRef str = omIntegerAttrToString(self);
+        return std::string(str.data, str.length);
       });
 
   // Add the OMListAttr definition

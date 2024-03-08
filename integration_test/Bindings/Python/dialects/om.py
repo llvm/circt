@@ -3,7 +3,7 @@
 
 import circt
 from circt.dialects import om
-from circt.ir import Context, InsertionPoint, Location, Module
+from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType
 from circt.support import var_to_attribute
 
 from dataclasses import dataclass
@@ -259,3 +259,39 @@ delayed = evaluator.instantiate("IntegerBinaryArithmeticObjectsDelayed")
 
 # CHECK: 3
 print(delayed.result)
+
+with Context() as ctx:
+  circt.register_dialects(ctx)
+
+  # Signless
+  int_attr1 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signless(64), 42))
+  # CHECK: 42
+  print(str(int_attr1))
+
+  int_attr2 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signless(64), -42))
+  # CHECK: 18446744073709551574
+  print(str(int_attr2))
+
+  # Signed
+  int_attr3 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signed(64), 42))
+  # CHECK: 42
+  print(str(int_attr3))
+
+  int_attr4 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signed(64), -42))
+  # CHECK: -42
+  print(str(int_attr4))
+
+  # Unsigned
+  int_attr5 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_unsigned(64), 42))
+  # CHECK: 42
+  print(str(int_attr5))
+
+  int_attr6 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_unsigned(64), -42))
+  # CHECK: 18446744073709551574
+  print(str(int_attr6))

@@ -195,7 +195,7 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
-    return attribute_to_var(om.OMIntegerAttr(attr).integer)
+    return int(str(om.OMIntegerAttr(attr)))
   except ValueError:
     pass
   try:
