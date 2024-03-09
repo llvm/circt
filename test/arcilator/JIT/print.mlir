@@ -1,4 +1,5 @@
 // RUN: arcilator %s --run=basic | FileCheck %s
+// REQUIRES: arcilator-jit
 
 // CHECK: result = 4
 

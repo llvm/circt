@@ -588,6 +588,18 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 endif()
 
 #-------------------------------------------------------------------------------
+# Arcilator JIT
+#-------------------------------------------------------------------------------
+
+if(MLIR_ENABLE_EXECUTION_ENGINE)
+  set(ARCILATOR_JIT_ENABLED 1)
+else()
+  set(ARCILATOR_JIT_ENABLED 0)
+endif()
+
+message("arcilator JIT enabled" ${ARCILATOR_JIT_ENABLED})
+
+#-------------------------------------------------------------------------------
 # Directory setup
 #-------------------------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 // RUN: arcilator %s --run=main | FileCheck %s
+// REQUIRES: arcilator-jit
 
 // CHECK: counter_value = 0
 // CHECK-NEXT: counter_value = 1
