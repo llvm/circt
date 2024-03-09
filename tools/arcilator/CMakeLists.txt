@@ -1,5 +1,5 @@
 if(MLIR_ENABLE_EXECUTION_ENGINE)
-  add_compile_definitions(ARCILATOR_ENABLE_JIT)
+  add_compile_definitions(ARCILATOR_ENABLE_JIT=1)
   set(ARCILATOR_JIT_LLVM_COMPONENTS native)
   set(ARCILATOR_JIT_DEPS MLIRExecutionEngine)
 endif()
