@@ -597,8 +597,6 @@ else()
   set(ARCILATOR_JIT_ENABLED 0)
 endif()
 
-message("arcilator JIT enabled" ${ARCILATOR_JIT_ENABLED})
-
 #-------------------------------------------------------------------------------
 # Directory setup
 #-------------------------------------------------------------------------------
