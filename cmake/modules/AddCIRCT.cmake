@@ -111,3 +111,11 @@ function(add_circt_verification_library name)
   set_property(GLOBAL APPEND PROPERTY CIRCT_VERIFICATION_LIBS ${name})
   add_circt_library(${ARGV} DEPENDS circt-headers)
 endfunction()
+
+# Declare a CIRCT library which is part of the public C-API
+function(add_circt_public_c_api_library name)
+  # Just wrap the upstream MLIR helper, but ensure the library is included in
+  # the CIRCT_ALL_LIBS property.
+  add_mlir_public_c_api_library(${name} ${ARGN})
+  set_property(GLOBAL APPEND PROPERTY CIRCT_ALL_LIBS ${name})
+endfunction()
