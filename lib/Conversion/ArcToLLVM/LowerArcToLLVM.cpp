@@ -29,9 +29,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
-#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/APInt.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
