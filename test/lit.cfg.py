@@ -89,8 +89,4 @@ if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
 
-# Add arcilator JIT if MLIR's execution engine is enabled.
-if config.arcilator_jit_enabled:
-  config.available_features.add('arcilator-jit')
-
 llvm_config.add_tool_substitutions(tools, tool_dirs)
