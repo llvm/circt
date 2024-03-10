@@ -26,19 +26,22 @@ def BitVectorAttr : AttrDef<SMTDialect, "BitVector", [
     described in the [SMT bit-vector
     theory](https://smtlib.cs.uiowa.edu/theories-FixedSizeBitVectors.shtml).
 
-    The constant is parsed and printed as #bX (binary) or #xX (hexadecimal)
+    The constant is as #bX (binary) or #xX (hexadecimal) in SMT-LIB
     where X is the value in the corresponding format without any further
-    prefixing just as in SMT-LIB. The number of digits determines the bit-width
-    of the bit-vector. This means, leading zeros are important!
+    prefixing. Here, the bit-vector constant is given as a regular integer
+    literal and the associated bit-vector type indicating the bit-width.
 
     Examples:
     ```mlir
-    #smt.bv<"#b0101"> : !smt.bv<4>
-    #smt.bv<"#x5c"> : !smt.bv<8>
+    #smt.bv<5> : !smt.bv<4>
+    #smt.bv<92> : !smt.bv<8>
     ```
-    The explicit type-suffix is optional.
 
-    The bit-width must be greater than zero (i.e., at least one digit as to be
+    The explicit type-suffix is mandatory to uniquely represent the attribute,
+    i.e., this attribute should always be used in the extended form (using the
+    `quantified` keyword in the operation assembly format string).
+
+    The bit-width must be greater than zero (i.e., at least one digit has to be
     present).
   }];
 

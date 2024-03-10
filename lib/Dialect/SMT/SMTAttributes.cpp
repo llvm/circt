@@ -70,10 +70,7 @@ parseBitVectorString(function_ref<InFlightDiagnostic()> emitError,
 }
 
 BitVectorAttr BitVectorAttr::get(MLIRContext *context, StringRef value) {
-  InFlightDiagnostic diag;
-  auto maybeValue =
-      parseBitVectorString([&]() { return std::move(diag); }, value);
-  diag.abandon();
+  auto maybeValue = parseBitVectorString(nullptr, value);
 
   assert(succeeded(maybeValue) && "string must have SMT-LIB format");
   return Base::get(context, *maybeValue);
@@ -98,42 +95,49 @@ BitVectorAttr
 BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
                           MLIRContext *context, unsigned value,
                           unsigned width) {
+  if ((~((1U << width) - 1U) & value) != 0U) {
+    emitError() << "value does not fit in a bit-vector of desired width";
+    return {};
+  }
   return Base::getChecked(emitError, context, APInt(width, value));
 }
 
 Attribute BitVectorAttr::parse(AsmParser &odsParser, Type odsType) {
   llvm::SMLoc loc = odsParser.getCurrentLocation();
 
-  std::string val;
-  if (odsParser.parseLess() || odsParser.parseString(&val))
+  APInt val;
+  if (odsParser.parseLess() || odsParser.parseInteger(val) ||
+      odsParser.parseGreater())
     return {};
 
-  auto maybeVal =
-      parseBitVectorString([&]() { return odsParser.emitError(loc); }, val);
-  if (failed(maybeVal))
-    return {};
-
-  if (odsParser.parseGreater())
-    return {};
-
-  // We implement the TypedAttr interface, i.e., the AsmParser allows an
-  // optional explicit type as suffix which is provided here as 'odsType'. We
-  // can always build the type from the constant itself, therefore, we can
-  // ignore this explicit type. However, to ensure consistency we should verify
-  // that the correct type is provided.
-  auto bv = BitVectorAttr::get(odsParser.getContext(), *maybeVal);
-  if (odsType && bv.getType() != odsType) {
-    odsParser.emitError(loc, "expected type for constant does not match "
-                             "explicitly provided attribute type, got ")
-        << odsType << ", expected " << bv.getType();
+  // Requires the use of `quantified(<attr>)` in operation assembly formats.
+  if (!odsType || !llvm::isa<BitVectorType>(odsType)) {
+    odsParser.emitError(loc) << "explicit bit-vector type required";
     return {};
   }
 
-  return bv;
+  unsigned width = llvm::cast<BitVectorType>(odsType).getWidth();
+  if (width > val.getBitWidth())
+    val = val.sext(width);
+
+  if (width < val.getBitWidth()) {
+    if ((val.isNegative() && val.getSignificantBits() > width) ||
+        val.getActiveBits() > width) {
+      odsParser.emitError(loc)
+          << "integer value out of range for given bit-vector type";
+      return {};
+    }
+    val = val.trunc(width);
+  }
+
+  return BitVectorAttr::get(odsParser.getContext(), val);
 }
 
 void BitVectorAttr::print(AsmPrinter &odsPrinter) const {
-  odsPrinter << "<\"" << getValueAsString() << "\">";
+  // This printer only works for the extended format where the MLIR
+  // infrastructure prints the type for us. This means, the attribute should
+  // never be used without `quantified` in an assembly format.
+  odsPrinter << "<" << getValue() << ">";
 }
 
 Type BitVectorAttr::getType() const {

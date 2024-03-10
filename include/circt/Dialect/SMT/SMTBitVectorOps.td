@@ -37,18 +37,28 @@ def BVConstantOp : SMTBVOp<"constant", [
 
     Examples:
     ```mlir
-    %bv_x5c = smt.bv.constant <"#x5c">
-    %bv_b0101 = smt.bv.constant <"#b0101">
+    %c92_bv8 = smt.bv.constant #smt.bv<92> : !smt.bv<8>
+    %c5_bv4 = smt.bv.constant #smt.bv<5> : !smt.bv<4>
     ```
   }];
 
   let arguments = (ins BitVectorAttr:$value);
   let results = (outs BitVectorType:$result);
 
-  let assemblyFormat = "$value attr-dict";
+  let assemblyFormat = "qualified($value) attr-dict";
+
+  let builders = [
+    OpBuilder<(ins "const llvm::APInt &":$value), [{
+      build($_builder, $_state,
+            BitVectorAttr::get($_builder.getContext(), value));
+    }]>,
+    OpBuilder<(ins "unsigned":$value, "unsigned":$width), [{
+      build($_builder, $_state,
+            BitVectorAttr::get($_builder.getContext(), value, width));
+    }]>,
+  ];
 
   let hasFolder = true;
-  let hasVerifier = true;
 }
 
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD

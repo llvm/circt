@@ -18,14 +18,6 @@ using namespace mlir;
 // BVConstantOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult BVConstantOp::verify() {
-  if (getValue().getType() != getType())
-    return emitError(
-        "smt.bv.constant attribute bitwidth doesn't match return type");
-
-  return success();
-}
-
 LogicalResult BVConstantOp::inferReturnTypes(
     mlir::MLIRContext *context, std::optional<mlir::Location> location,
     ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
@@ -40,7 +32,8 @@ void BVConstantOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   SmallVector<char, 128> specialNameBuffer;
   llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << "bv_" << getValue().getValueAsString(false);
+  specialName << "c" << getValue().getValue() << "_bv"
+              << getValue().getValue().getBitWidth();
   setNameFn(getResult(), specialName.str());
 }
 
