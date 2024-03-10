@@ -4898,8 +4898,15 @@ FIRRTLType impl::inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
     return {};
 
-  if (lhsWidth != -1 && rhsWidth != -1)
+  if (lhsWidth != -1 && rhsWidth != -1) {
     resultWidth = std::max(lhsWidth, rhsWidth);
+    if (lhsWidth == resultWidth && lhs.isConst() == isConstResult &&
+        isa<UIntType>(lhs))
+      return lhs;
+    if (rhsWidth == resultWidth && rhs.isConst() == isConstResult &&
+        isa<UIntType>(rhs))
+      return rhs;
+  }
   return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
@@ -5083,6 +5090,8 @@ FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
+  if (isa<UIntType>(inputi))
+    return inputi;
   return UIntType::get(input.getContext(), inputi.getWidthOrSentinel(),
                        inputi.isConst());
 }
