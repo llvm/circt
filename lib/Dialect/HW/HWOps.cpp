@@ -1077,14 +1077,6 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
 
   auto moduleType = module.getHWModuleType();
 
-  auto argLocs = module.getInputLocs();
-  if (argLocs.size() != moduleType.getNumInputs())
-    return module->emitOpError("incorrect number of argument locations");
-
-  auto resultLocs = module.getOutputLocs();
-  if (resultLocs.size() != moduleType.getNumOutputs())
-    return module->emitOpError("incorrect number of result locations");
-
   SmallPtrSet<Attribute, 4> paramNames;
 
   // Check parameter default values are sensible.
@@ -1205,6 +1197,7 @@ static SmallVector<Location> getAllPortLocs(ModTy module) {
   auto locs = module.getPortLocs();
   if (locs) {
     SmallVector<Location> retval;
+    retval.reserve(locs->size());
     for (auto l : *locs)
       retval.push_back(cast<Location>(l));
     // Either we have a length of 0 or the correct length
