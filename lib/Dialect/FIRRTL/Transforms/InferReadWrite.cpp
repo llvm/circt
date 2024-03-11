@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -318,6 +319,13 @@ private:
   // to determine if each bit of the `val` is assigned the same value.
   // NOLINTNEXTLINE(misc-no-recursion)
   bool getBitsOfVal(Value val, SmallVector<Value> &bits) {
+    SmallVector<Value> stack;
+    llvm::DenseMap<Value, SmallVector<Value>> valueBitsSrc;
+    stack.push_back(val);
+
+    while (!stack.empty()) {
+      auto currentNode = stack.back();
+    }
 
     auto size = getBitWidth(type_cast<FIRRTLBaseType>(val.getType()));
     if (!size.has_value())
