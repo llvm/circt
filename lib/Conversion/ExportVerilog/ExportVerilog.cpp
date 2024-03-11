@@ -6048,7 +6048,7 @@ private:
 };
 
 void FileEmitter::emit(emit::FileOp op) {
-  for (Operation &op : *op.getBodyBlock()) {
+  for (Operation &op : *op.getBody()) {
     TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(

@@ -35,14 +35,14 @@ def FileOp : EmitOp<"file", [
     filename through an optional symbol.
   }];
 
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins
     StrAttr:$file_name,
     OptionalAttr<SymbolNameAttr>:$sym_name
   );
   let results = (outs);
 
-  let assemblyFormat = "$file_name (`sym` $sym_name^)? $body attr-dict";
+  let assemblyFormat = "$file_name (`sym` $sym_name^)? $bodyRegion attr-dict";
 
   let skipDefaultBuilders = 1;
   let builders = [
@@ -61,9 +61,6 @@ def FileOp : EmitOp<"file", [
   let extraClassDeclaration = [{
     // SymbolOpInterface
     static bool isOptionalSymbol() { return true; }
-
-    // Utilities
-    Block *getBodyBlock() { return &getBodyRegion().front(); }
   }];
 }
 
