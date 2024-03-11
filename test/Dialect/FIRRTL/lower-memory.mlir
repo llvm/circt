@@ -68,15 +68,12 @@ firrtl.module @Dedup() {
   %mem0_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   %mem1_write = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
   // CHECK: firrtl.instance mem0  @mem0(
-  // CHECK: firrtl.instance mem1  @mem1(
+  // CHECK: firrtl.instance mem1  @mem0(
 }
 // CHECK: firrtl.module private @mem0
 // CHECK-NEXT: firrtl.instance mem0_ext  @mem0_ext
 
 // CHECK: firrtl.memmodule private @mem0_ext
-
-// CHECK: firrtl.module private @mem1
-// CHECK-NEXT: firrtl.instance mem0_ext @mem0_ext
 }
 
 // Test that memories in the testharness are not deduped with other memories in
@@ -240,9 +237,9 @@ firrtl.module @Annotations() attributes {annotations = [{class = "sifive.enterpr
 // CHECK-LABEL: firrtl.circuit "NonLocalAnnotation"
 firrtl.circuit "NonLocalAnnotation" {
 
-// CHECK:  hw.hierpath private @[[nla_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@[[MEM0:.+]], @mem0]
+// CHECK:  hw.hierpath private @[[nla0_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@[[MEM0:.+]], @mem0]
 hw.hierpath private @nla0 [@NonLocalAnnotation::@dut, @DUT::@mem0]
-// CHECK:  hw.hierpath private @[[nla_1:.+]] [@NonLocalAnnotation::@dut, @DUT::@[[MEM1:.+]], @mem1]
+// CHECK:  hw.hierpath private @[[nla1_0:.+]] [@NonLocalAnnotation::@dut, @DUT::@[[MEM1:.+]], @mem0]
 hw.hierpath private @nla1 [@NonLocalAnnotation::@dut, @DUT]
 
 // CHECK: firrtl.module @NonLocalAnnotation()
@@ -256,7 +253,7 @@ firrtl.module @DUT() {
   %mem0_write = firrtl.mem sym @mem0 Undefined {annotations = [{circt.nonlocal = @nla0, class = "test0"}], depth = 12 : i64, name = "mem0", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 
   // This memory does not have a symbol already attached.
-  // CHECK: firrtl.instance mem1 sym @[[MEM1]] @mem1
+  // CHECK: firrtl.instance mem1 sym @[[MEM1]] @mem0
   %mem1_write = firrtl.mem Undefined {annotations = [{circt.nonlocal = @nla1, class = "test1"}], depth = 12 : i64, name = "mem1", portNames = ["write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 
 // LowerMemory should ignore MemOps that are not seqmems. The following memory is a combmem with readLatency=0.
@@ -266,12 +263,7 @@ firrtl.module @DUT() {
 
 // CHECK: firrtl.module private @mem0
 // CHECK:   firrtl.instance mem0_ext sym @mem0_ext
-// CHECK-SAME: {annotations = [{circt.nonlocal = @[[nla_0]], class = "test0"}]}
+// CHECK-SAME: {annotations = [{circt.nonlocal = @[[nla0_0]], class = "test0"}, {circt.nonlocal = @[[nla1_0]], class = "test1"}]}
 // CHECK-SAME:  @mem0_ext(
 // CHECK: }
-
-// CHECK: firrtl.module private @mem1
-// CHECK:   firrtl.instance mem0_ext sym @mem0_ext
-// CHECK-SAME:  {annotations = [{circt.nonlocal = @[[nla_1]], class = "test1"}]}
-// CHECK-SAME:  @mem0_ext(
 }
