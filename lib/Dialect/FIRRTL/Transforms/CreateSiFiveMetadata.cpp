@@ -849,9 +849,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       failed(emitSitestBlackboxMetadata(omir)) ||
       failed(emitMemoryMetadata(omir)))
     return signalPassFailure();
-
-  if (FModuleOp topMod =
-          dyn_cast<FModuleOp>(instanceGraph.getTopLevelNode()->getModule()))
+  auto *node = instanceGraph.getTopLevelNode();
+  if (FModuleOp topMod = dyn_cast<FModuleOp>(*node->getModule()))
     if (auto objectOp = omir.instantiateSifiveMetadata(topMod)) {
       SmallVector<std::pair<unsigned, PortInfo>> ports = {
           {topMod.getNumPorts(),
