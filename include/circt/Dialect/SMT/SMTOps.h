@@ -14,6 +14,7 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/SMT/SMTAttributes.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/SMT/SMTTypes.h"
 

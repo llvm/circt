@@ -11,8 +11,10 @@
 
 include "mlir/IR/OpBase.td"
 
+include "circt/Dialect/SMT/SMTAttributes.td"
 include "circt/Dialect/SMT/SMTDialect.td"
 include "circt/Dialect/SMT/SMTTypes.td"
 include "circt/Dialect/SMT/SMTOps.td"
+include "circt/Dialect/SMT/SMTBitVectorOps.td"
 
 #endif // CIRCT_DIALECT_SMT_SMT_TD

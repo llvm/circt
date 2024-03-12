@@ -19,4 +19,20 @@ def BoolType : SMTTypeDef<"Bool"> {
   let assemblyFormat = "";
 }
 
+def BitVectorType : SMTTypeDef<"BitVector"> {
+  let mnemonic = "bv";
+  let description = [{
+    This type represents the `(_ BitVec width)` sort as described in the
+    [SMT bit-vector
+    theory](https://smtlib.cs.uiowa.edu/theories-FixedSizeBitVectors.shtml).
+
+    The bit-width must be strictly greater than zero.
+  }];
+
+  let parameters = (ins "unsigned":$width);
+  let assemblyFormat = "`<` $width `>`";
+
+  let genVerifyDecl = true;
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTTYPES_TD

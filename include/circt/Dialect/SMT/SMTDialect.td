@@ -16,9 +16,13 @@ def SMTDialect : Dialect {
   let summary = "a dialect that models satisfiability modulo theories";
   let cppNamespace = "circt::smt";
 
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
 
+  let hasConstantMaterializer = 1;
+
   let extraClassDeclaration = [{
+    void registerAttributes();
     void registerTypes();
   }];
 }
