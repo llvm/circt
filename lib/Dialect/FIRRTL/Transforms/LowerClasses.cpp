@@ -54,7 +54,10 @@ struct PathInfo {
 };
 
 /// Maps a FIRRTL path id to the lowered PathInfo.
-using PathInfoTable = DenseMap<DistinctAttr, PathInfo>;
+struct PathInfoTable {
+  // The table mapping DistinctAttrs to PathInfo structs.
+  DenseMap<DistinctAttr, PathInfo> table;
+};
 
 /// The suffix to append to lowered module names.
 static constexpr StringRef kClassNameSuffix = "_Class";
@@ -216,7 +219,7 @@ LogicalResult LowerClassesPass::processPaths(
         }
       }
 
-      auto [it, inserted] = pathInfoTable.try_emplace(id);
+      auto [it, inserted] = pathInfoTable.table.try_emplace(id);
       auto &pathInfo = it->second;
       if (!inserted) {
         auto diag =
@@ -1036,7 +1039,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto *context = op->getContext();
     auto pathType = om::PathType::get(context);
-    auto pathInfo = pathInfoTable.lookup(op.getTarget());
+    auto pathInfo = pathInfoTable.table.lookup(op.getTarget());
 
     // The 0'th argument is the base path.
     auto basePath = op->getBlock()->getArgument(0);
