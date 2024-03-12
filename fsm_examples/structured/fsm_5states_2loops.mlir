@@ -1,7 +1,7 @@
 fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
-	%c2 = hw.constant 2 : i16
-	%c5 = hw.constant 5 : i16
-	%c7 = hw.constant 7 : i16
+	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
+	%c3 = hw.constant 3 : i16
+	%c6 = hw.constant 6 : i16
 	%c1 = hw.constant 1 : i16
 
 
@@ -27,7 +27,7 @@ fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
 	} transitions {
 		fsm.transition @_3
 			guard {
-				%tmp = comb.icmp uge %x0, %c2 : i16
+				%tmp = comb.icmp uge %x0, %c3 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -35,7 +35,7 @@ fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
 			}
 		fsm.transition @_0
 			guard {
-				%tmp = comb.icmp ult %x0, %c2 : i16
+				%tmp = comb.icmp ult %x0, %c3 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -46,18 +46,7 @@ fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
 	fsm.state @_3 output {
 	} transitions {
 		fsm.transition @_4
-			guard {
-				%tmp = comb.icmp uge %x0, %c5 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @_0
-			guard {
-				%tmp = comb.icmp ult %x0, %c5 : i16
-				fsm.return %tmp
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -67,15 +56,15 @@ fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
 	} transitions {
 		fsm.transition @_5
 			guard {
-				%tmp = comb.icmp uge %x0, %c7 : i16
+				%tmp = comb.icmp uge %x0, %c6 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
-		fsm.transition @_2
+		fsm.transition @_0
 			guard {
-				%tmp = comb.icmp ult %x0, %c7 : i16
+				%tmp = comb.icmp ult %x0, %c6 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -83,8 +72,7 @@ fsm.machine @fsm5() -> () attributes {initialState = "_0"} {
 			}
 	}
 
-	fsm.state @_nr output {
+	fsm.state @_5 output {
 	} transitions {
-		fsm.transition @_0
 	}
 }

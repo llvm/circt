@@ -1,7 +1,7 @@
-fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
-	%c12 = hw.constant 12 : i16
-	%c30 = hw.constant 30 : i16
-	%c27 = hw.constant 27 : i16
+fsm.machine @fsm35() -> () attributes {initialState = "_0"} {
+	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
+	%c16 = hw.constant 16 : i16
+	%c17 = hw.constant 17 : i16
 	%c1 = hw.constant 1 : i16
 
 
@@ -108,15 +108,15 @@ fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
 	} transitions {
 		fsm.transition @_12
 			guard {
-				%tmp = comb.icmp uge %x0, %c12 : i16
+				%tmp = comb.icmp uge %x0, %c16 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
-		fsm.transition @_8
+		fsm.transition @_1
 			guard {
-				%tmp = comb.icmp ult %x0, %c12 : i16
+				%tmp = comb.icmp ult %x0, %c16 : i16
 				fsm.return %tmp
 			} action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -154,7 +154,18 @@ fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
 	fsm.state @_15 output {
 	} transitions {
 		fsm.transition @_16
-		action {
+			guard {
+				%tmp = comb.icmp uge %x0, %c17 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+		fsm.transition @_6
+			guard {
+				%tmp = comb.icmp ult %x0, %c17 : i16
+				fsm.return %tmp
+			} action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -199,18 +210,7 @@ fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
 	fsm.state @_20 output {
 	} transitions {
 		fsm.transition @_21
-			guard {
-				%tmp = comb.icmp uge %x0, %c30 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @_14
-			guard {
-				%tmp = comb.icmp ult %x0, %c30 : i16
-				fsm.return %tmp
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -237,18 +237,7 @@ fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
 	fsm.state @_23 output {
 	} transitions {
 		fsm.transition @_24
-			guard {
-				%tmp = comb.icmp uge %x0, %c27 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @_11
-			guard {
-				%tmp = comb.icmp ult %x0, %c27 : i16
-				fsm.return %tmp
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -308,8 +297,52 @@ fsm.machine @fsm30() -> () attributes {initialState = "_0"} {
 			}
 	}
 
-	fsm.state @_nr output {
+	fsm.state @_30 output {
 	} transitions {
-		fsm.transition @_0
+		fsm.transition @_31
+		action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+	}
+
+	fsm.state @_31 output {
+	} transitions {
+		fsm.transition @_32
+		action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+	}
+
+	fsm.state @_32 output {
+	} transitions {
+		fsm.transition @_33
+		action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+	}
+
+	fsm.state @_33 output {
+	} transitions {
+		fsm.transition @_34
+		action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+	}
+
+	fsm.state @_34 output {
+	} transitions {
+		fsm.transition @_35
+		action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+	}
+
+	fsm.state @_35 output {
+	} transitions {
 	}
 }
