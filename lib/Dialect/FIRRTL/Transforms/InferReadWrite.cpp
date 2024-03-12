@@ -18,7 +18,6 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -340,12 +339,21 @@ private:
 
   // Try to extract the value assigned to each bit of `val`. This is a heuristic
   // to determine if each bit of the `val` is assigned the same value.
+  // Common pattern that this heuristic detects,
+  // mask = {{w1,w1},{w2,w2}}}
+  // w1 = w[0]
+  // w2 = w[0]
   bool areBitsDrivenBySameSource(Value val) {
     SmallVector<Value> stack;
     stack.push_back(val);
 
     while (!stack.empty()) {
       auto val = stack.back();
+      if (valueBitsSrc.contains(val)) {
+        stack.pop_back();
+        continue;
+      }
+
       auto size = getBitWidth(type_cast<FIRRTLBaseType>(val.getType()));
       // Cannot analyze aggregate types.
       if (!size.has_value())
