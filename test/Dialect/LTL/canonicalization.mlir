@@ -5,12 +5,16 @@ func.func private @Seq(%arg0: !ltl.sequence)
 func.func private @Prop(%arg0: !ltl.property)
 
 // CHECK-LABEL: @DelayFolds
-func.func @DelayFolds(%arg0: !ltl.sequence) {
-  // TODO: This can't happen because the fold changes type, need to be able to cast i1 to sequence
+func.func @DelayFolds(%arg0: !ltl.sequence, %arg1: i1) {
   // delay(s, 0, 0) -> s
-  // COM: CHECK-NEXT: call @Seq(%arg0)
-  //%0 = ltl.delay %arg0, 0, 0 : !ltl.sequence
-  //call @Seq(%0) : (!ltl.sequence) -> ()
+  // delay(i, 0, 0) -> delay(i, 0, 0)
+  // CHECK-NEXT: ltl.delay %arg1, 0, 0 : i1
+  // CHECK-NEXT: call @Seq(%arg0)
+  // CHECK-NEXT: call @Seq({{%.+}})
+  %0 = ltl.delay %arg0, 0, 0 : !ltl.sequence
+  %n0 = ltl.delay %arg1, 0, 0 : i1
+  call @Seq(%0) : (!ltl.sequence) -> ()
+  call @Seq(%n0) : (!ltl.sequence) -> ()
 
   // delay(delay(s, 1), 2) -> delay(s, 3)
   // CHECK-NEXT: ltl.delay %arg0, 3 :
@@ -92,6 +96,43 @@ func.func @ConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %arg2: !ltl.s
   %6 = ltl.concat %arg0, %arg1 : !ltl.sequence, !ltl.sequence
   %7 = ltl.delay %6, 2, 3 : !ltl.sequence
   call @Seq(%7) : (!ltl.sequence) -> ()
+  return
+}
+
+// CHECK-LABEL: @RepeatFolds
+func.func @RepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
+  return
+}
+
+// CHECK-LABEL: @NextFolds
+func.func @NextFolds(%arg0: !ltl.property, %arg1: !ltl.sequence, %arg2: i1) {
+  // next(p, 0) -> p
+  // next(s, 0) -> next(s, 0)
+  // next(i, 0) -> next(i, 0)
+  // CHECK-NEXT: ltl.next %arg1, 0 : !ltl.sequence 
+  // CHECK-NEXT: ltl.next %arg2, 0 : i1 
+  // CHECK-NEXT: call @Prop(%arg0)
+  // CHECK-NEXT: call @Prop({{%.+}})
+  // CHECK-NEXT: call @Prop({{%.+}})
+  %0 = ltl.next %arg0, 0: !ltl.property
+  %1 = ltl.next %arg1, 0: !ltl.sequence
+  %2 = ltl.next %arg2, 0: i1
+  call @Prop(%0) : (!ltl.property) -> ()
+  call @Prop(%1) : (!ltl.property) -> ()
+  call @Prop(%2) : (!ltl.property) -> ()
+
+  // next(next(p, 1), 2) -> next(next(p, 3))
+  // CHECK-NEXT: ltl.next %arg0, 3 : !ltl.property
+  // CHECK-NEXT: call @Prop({{%.+}})
+  %3 = ltl.next %arg0, 1: !ltl.property
+  %4 = ltl.next %3, 2: !ltl.property
+  call @Prop(%4) : (!ltl.property) -> ()
+
   return
 }
 

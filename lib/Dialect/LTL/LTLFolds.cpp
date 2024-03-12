@@ -62,7 +62,7 @@ namespace patterns {
 OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
   // delay(s, 0, 0) -> s
   if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
-      !isa<SequenceType>(getResult().getType()))
+      isa<SequenceType>(getInput().getType()))
     return getInput();
 
   return {};
@@ -89,6 +89,36 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 void ConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add<patterns::FlattenConcats>(results.getContext());
+}
+
+//===----------------------------------------------------------------------===//
+// RepeatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RepeatOp::fold(FoldAdaptor adaptor) {
+  // repeat(s, 1, 0) -> s
+  if (adaptor.getBase() == 1 && adaptor.getMore() == 0 &&
+      isa<SequenceType>(getInput().getType()))
+    return getInput();
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// NextOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult NextOp::fold(FoldAdaptor adaptor) {
+  // next(p, 0) -> p
+  if (adaptor.getTime() == 0 && isa<PropertyType>(getInput().getType()))
+    return getInput();
+
+  return {};
+}
+
+void NextOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.add<patterns::NestedNexts>(results.getContext());
 }
 
 //===----------------------------------------------------------------------===//
