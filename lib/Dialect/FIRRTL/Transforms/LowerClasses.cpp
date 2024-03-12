@@ -109,6 +109,9 @@ private:
   LogicalResult dialectConversion(
       Operation *op, const PathInfoTable &pathInfoTable,
       const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
+
+  // State to memoize repeated calls to shouldCreateClass.
+  DenseMap<FModuleLike, bool> shouldCreateClassMemo;
 };
 
 } // namespace
@@ -437,29 +440,45 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 
 // Predicate to check if a module-like needs a Class to be created.
 bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
-  if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
+  // Memoize calls using the extra state.
+  auto it = shouldCreateClassMemo.find(moduleLike);
+  if (it != shouldCreateClassMemo.end())
+    return it->second;
+
+  if (isa<firrtl::ClassLike>(moduleLike.getOperation())) {
+    shouldCreateClassMemo.insert({moduleLike, true});
     return true;
+  }
 
   // Always create a class for public modules.
-  if (moduleLike.isPublic())
+  if (moduleLike.isPublic()) {
+    shouldCreateClassMemo.insert({moduleLike, true});
     return true;
+  }
 
   // Create a class for modules with property ports.
   bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
     return isa<PropertyType>(port.type);
   });
 
-  if (hasClassPorts)
+  if (hasClassPorts) {
+    shouldCreateClassMemo.insert({moduleLike, true});
     return true;
+  }
 
   // Create a class for modules that instantiate classes or modules with
   // property ports.
   for (auto op :
-       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>())
-    for (auto result : op->getResults())
-      if (type_isa<PropertyType>(result.getType()))
+       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>()) {
+    for (auto result : op->getResults()) {
+      if (type_isa<PropertyType>(result.getType())) {
+        shouldCreateClassMemo.insert({moduleLike, true});
         return true;
+      }
+    }
+  }
 
+  shouldCreateClassMemo.insert({moduleLike, false});
   return false;
 }
 
