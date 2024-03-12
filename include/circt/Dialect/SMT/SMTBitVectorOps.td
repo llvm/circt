@@ -61,4 +61,50 @@ def BVConstantOp : SMTBVOp<"constant", [
   let hasFolder = true;
 }
 
+class BVArithmeticOrBitwiseOp<string mnemonic, string desc> :
+    SMTBVOp<mnemonic, [Pure, SameOperandsAndResultType]> {
+  let summary = "equivalent to bv" # mnemonic # " in SMT-LIB";
+  let description = "This operation performs " # desc # [{. The semantics are
+    equivalent to the `bv}] # mnemonic # [{` operator defined in the SMT-LIB 2.6
+    standard. More precisely in the [theory of FixedSizeBitVectors](https://smtlib.cs.uiowa.edu/Theories/FixedSizeBitVectors.smt2)
+    and the [QF_BV logic](https://smtlib.cs.uiowa.edu/Logics/QF_BV.smt2)
+    describing closed quantifier-free formulas over the theory of fixed-size
+    bit-vectors.
+  }];
+
+  let results = (outs BitVectorType:$result);
+}
+
+class BinaryBVOp<string mnemonic, string desc> :
+     BVArithmeticOrBitwiseOp<mnemonic, desc> {
+  let arguments = (ins BitVectorType:$lhs, BitVectorType:$rhs);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($result))";
+}
+
+class UnaryBVOp<string mnemonic, string desc> :
+    BVArithmeticOrBitwiseOp<mnemonic, desc> {
+  let arguments = (ins BitVectorType:$input);
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
+}
+
+def BVNotOp  : UnaryBVOp<"not", "bitwise negation">;
+def BVNegOp  : UnaryBVOp<"neg", "two's complement unary minus">;
+
+def BVAndOp  : BinaryBVOp<"and", "bitwise AND">;
+def BVOrOp   : BinaryBVOp<"or", "bitwise OR">;
+def BVXOrOp  : BinaryBVOp<"xor", "bitwise exclusive OR">;
+
+def BVAddOp  : BinaryBVOp<"add", "addition">;
+def BVMulOp  : BinaryBVOp<"mul", "multiplication">;
+def BVUDivOp : BinaryBVOp<"udiv", "unsigned division (rounded towards zero)">;
+def BVSDivOp : BinaryBVOp<"sdiv", "two's complement signed division">;
+def BVURemOp : BinaryBVOp<"urem", "unsigned remainder">;
+def BVSRemOp : BinaryBVOp<"srem",
+  "two's complement signed remainder (sign follows dividend)">;
+def BVSModOp : BinaryBVOp<"smod",
+  "two's complement signed remainder (sign follows divisor)">;
+def BVShlOp  : BinaryBVOp<"shl", "shift left">;
+def BVLShrOp : BinaryBVOp<"lshr", "logical shift right">;
+def BVAShrOp : BinaryBVOp<"ashr", "arithmetic shift right">;
+
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD
