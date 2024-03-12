@@ -368,6 +368,10 @@ static LogicalResult processBuffer(
   pmLlvm.enableTiming(ts);
   if (failed(applyPassManagerCLOptions(pmLlvm)))
     return failure();
+  if (verbosePassExecutions)
+    pmLlvm.addInstrumentation(
+        std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+            "arcilator"));
   populateArcToLLVMPipeline(pmLlvm);
 
   if (printDebugInfo && outputFormat == OutputLLVM)
