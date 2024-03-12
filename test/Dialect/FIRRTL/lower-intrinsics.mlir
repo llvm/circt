@@ -124,8 +124,12 @@ firrtl.circuit "Foo" {
   // CHECK-NOT: LTLDelay1
   // CHECK-NOT: LTLDelay2
   // CHECK-NOT: LTLConcat
+  // CHECK-NOT: LTLRepeat1
+  // CHECK-NOT: LTLRepeat2
   // CHECK-NOT: LTLNot
   // CHECK-NOT: LTLImplication
+  // CHECK-NOT: LTLNext
+  // CHECK-NOT: LTLUntil
   // CHECK-NOT: LTLEventually
   // CHECK-NOT: LTLClock
   // CHECK-NOT: LTLDisable
@@ -134,8 +138,12 @@ firrtl.circuit "Foo" {
   firrtl.intmodule @LTLDelay1<delay: i64 = 42>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.delay"}
   firrtl.intmodule @LTLDelay2<delay: i64 = 42, length: i64 = 1337>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.delay"}
   firrtl.intmodule @LTLConcat(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.concat"}
+  firrtl.intmodule @LTLRepeat1<base: i64 = 42>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.repeat"}
+  firrtl.intmodule @LTLRepeat2<base: i64 = 42, more: i64 = 1337>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.repeat"}
   firrtl.intmodule @LTLNot(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.not"}
   firrtl.intmodule @LTLImplication(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.implication"}
+  firrtl.intmodule @LTLNext<time: i64 = 42>(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.next"}
+  firrtl.intmodule @LTLUntil(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.until"}
   firrtl.intmodule @LTLEventually(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.eventually"}
   firrtl.intmodule @LTLClock(in in: !firrtl.uint<1>, in clock: !firrtl.clock, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.clock"}
   firrtl.intmodule @LTLDisable(in in: !firrtl.uint<1>, in condition: !firrtl.uint<1>, out out: !firrtl.uint<1>) attributes {intrinsic = "circt.ltl.disable"}
@@ -157,16 +165,30 @@ firrtl.circuit "Foo" {
     %delay2.in, %delay2.out = firrtl.instance "delay2" @LTLDelay2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
 
     // CHECK-NOT: LTLConcat
+    // CHECK: firrtl.int.ltl.concat {{%.+}}, {{%.+}} :
+    %concat.lhs, %concat.rhs, %concat.out = firrtl.instance "concat" @LTLConcat(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
+    // CHECH-NOT: LTLRepeat1
+    // CHECH-NOT: LTLRepeat2
+    // CHECK: firrtl.int.ltl.repeat {{%.+}}, 42 :
+    // CHECK: firrtl.int.ltl.repeat {{%.+}}, 42, 1337 :
+    %repeat1.in, %repeat1.out = firrtl.instance "repeat1" @LTLRepeat1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %repeat2.in, %repeat2.out = firrtl.instance "repeat2" @LTLRepeat2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+
     // CHECK-NOT: LTLNot
     // CHECK-NOT: LTLImplication
+    // CHECK-NOT: LTLNext
+    // CHECK-NOT: LTLUntil
     // CHECK-NOT: LTLEventually
-    // CHECK: firrtl.int.ltl.concat {{%.+}}, {{%.+}} :
     // CHECK: firrtl.int.ltl.not {{%.+}} :
     // CHECK: firrtl.int.ltl.implication {{%.+}}, {{%.+}} :
+    // CHECK: firrtl.int.ltl.next {{%.+}}, 42 :
+    // CHECK: firrtl.int.ltl.until {{%.+}}, {{%.+}} :
     // CHECK: firrtl.int.ltl.eventually {{%.+}} :
-    %concat.lhs, %concat.rhs, %concat.out = firrtl.instance "concat" @LTLConcat(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     %not.in, %not.out = firrtl.instance "not" @LTLNot(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     %implication.lhs, %implication.rhs, %implication.out = firrtl.instance "implication" @LTLImplication(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %next.in, %next.out = firrtl.instance "next" @LTLNext(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
+    %until.lhs, %until.rhs, %until.out = firrtl.instance "until" @LTLUntil(in lhs: !firrtl.uint<1>, in rhs: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     %eventually.in, %eventually.out = firrtl.instance "eventually" @LTLEventually(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
 
     // CHECK-NOT: LTLClock

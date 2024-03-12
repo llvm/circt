@@ -378,6 +378,51 @@ public:
   }
 };
 
+class CirctLTLRepeatConverter : public IntrinsicConverter {
+public:
+  CirctLTLRepeatConverter(StringRef name, FModuleLike mod)
+      : IntrinsicConverter(name, mod) {
+    auto getI64Attr = [&](int64_t value) {
+      return IntegerAttr::get(IntegerType::get(mod.getContext(), 64), value);
+    };
+
+    auto params = mod.getParameters();
+    base = getI64Attr(params[0]
+                          .cast<ParamDeclAttr>()
+                          .getValue()
+                          .cast<IntegerAttr>()
+                          .getValue()
+                          .getZExtValue());
+
+    if (params.size() >= 2)
+      if (auto moreDecl = cast<ParamDeclAttr>(params[1]))
+        more = getI64Attr(
+            cast<IntegerAttr>(moreDecl.getValue()).getValue().getZExtValue());
+  }
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           sizedPort<UIntType>(0, 1) || sizedPort<UIntType>(1, 1) ||
+           hasNParam(1, 2) || namedIntParam("base") ||
+           namedIntParam("more", true);
+  }
+
+  LogicalResult convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    auto out =
+        builder.create<LTLRepeatIntrinsicOp>(in.getType(), in, base, more);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+    return success();
+  }
+
+private:
+  IntegerAttr base;
+  IntegerAttr more;
+};
+
 class CirctLTLNotConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -419,6 +464,67 @@ public:
     inst.getResult(1).replaceAllUsesWith(rhs);
     auto out =
         builder.create<LTLImplicationIntrinsicOp>(lhs.getType(), lhs, rhs);
+    inst.getResult(2).replaceAllUsesWith(out);
+    inst.erase();
+    return success();
+  }
+};
+
+class CirctLTLNextConverter : public IntrinsicConverter {
+public:
+  CirctLTLNextConverter(StringRef name, FModuleLike mod)
+      : IntrinsicConverter(name, mod) {
+    auto getI64Attr = [&](int64_t value) {
+      return IntegerAttr::get(IntegerType::get(mod.getContext(), 64), value);
+    };
+
+    auto params = mod.getParameters();
+    time = getI64Attr(params[0]
+                          .cast<ParamDeclAttr>()
+                          .getValue()
+                          .cast<IntegerAttr>()
+                          .getValue()
+                          .getZExtValue());
+  }
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           sizedPort<UIntType>(0, 1) || sizedPort<UIntType>(1, 1) ||
+           hasNParam(1) || namedIntParam("time");
+  }
+
+  LogicalResult convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    auto out = builder.create<LTLNextIntrinsicOp>(in.getType(), in, time);
+    inst.getResult(1).replaceAllUsesWith(out);
+    inst.erase();
+    return success();
+  }
+
+private:
+  IntegerAttr time;
+};
+
+class CirctLTLUntilConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return hasNPorts(3) || namedPort(0, "lhs") || namedPort(1, "rhs") ||
+           namedPort(2, "out") || sizedPort<UIntType>(0, 1) ||
+           sizedPort<UIntType>(1, 1) || sizedPort<UIntType>(2, 1) ||
+           hasNParam(0);
+  }
+
+  LogicalResult convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto lhs = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    auto rhs = builder.create<WireOp>(inst.getResult(1).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(lhs);
+    inst.getResult(1).replaceAllUsesWith(rhs);
+    auto out = builder.create<LTLUntilIntrinsicOp>(lhs.getType(), lhs, rhs);
     inst.getResult(2).replaceAllUsesWith(out);
     inst.erase();
     return success();
@@ -730,9 +836,12 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
   lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
   lowering.add<CirctLTLConcatConverter>("circt.ltl.concat", "circt_ltl_concat");
+  lowering.add<CirctLTLRepeatConverter>("circt.ltl.repeat", "circt_ltl_repeat");
   lowering.add<CirctLTLNotConverter>("circt.ltl.not", "circt_ltl_not");
   lowering.add<CirctLTLImplicationConverter>("circt.ltl.implication",
                                              "circt_ltl_implication");
+  lowering.add<CirctLTLNextConverter>("circt.ltl.next", "circt_ltl_next");
+  lowering.add<CirctLTLUntilConverter>("circt.ltl.until", "circt_ltl_until");
   lowering.add<CirctLTLEventuallyConverter>("circt.ltl.eventually",
                                             "circt_ltl_eventually");
   lowering.add<CirctLTLClockConverter>("circt.ltl.clock", "circt_ltl_clock");
