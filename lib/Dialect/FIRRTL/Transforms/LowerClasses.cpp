@@ -25,6 +25,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -39,7 +40,9 @@ namespace {
 /// to the targeted operation.
 struct PathInfo {
   PathInfo() = default;
-  PathInfo(Operation *op, FlatSymbolRefAttr symRef) : op(op), symRef(symRef) {
+  PathInfo(Operation *op, FlatSymbolRefAttr symRef,
+           StringAttr altBasePathModule)
+      : op(op), symRef(symRef), altBasePathModule(altBasePathModule) {
     assert(op && "op must not be null");
     assert(symRef && "symRef must not be null");
   }
@@ -51,12 +54,84 @@ struct PathInfo {
 
   /// A reference to the hierarchical path targeting the op.
   FlatSymbolRefAttr symRef = nullptr;
+
+  /// The module name of the root module from which we take an alternative base
+  /// path.
+  StringAttr altBasePathModule = nullptr;
 };
 
 /// Maps a FIRRTL path id to the lowered PathInfo.
 struct PathInfoTable {
+  // Add an alternative base path root module. The default base path from this
+  // module will be passed through to where it is needed.
+  void addAltBasePathRoot(StringAttr rootModuleName) {
+    altBasePathRoots.insert(rootModuleName);
+  }
+
+  // Add a passthrough module for a given root module. The default base path
+  // from the root module will be passed through the passthrough module.
+  void addAltBasePathPassthrough(StringAttr passthroughModuleName,
+                                 StringAttr rootModuleName) {
+    auto &rootSequence = altBasePathsPassthroughs[passthroughModuleName];
+    rootSequence.push_back(rootModuleName);
+  }
+
+  // Get an iterator range over the alternative base path root module names.
+  llvm::iterator_range<SmallPtrSetImpl<StringAttr>::iterator>
+  getAltBasePathRoots() const {
+    return llvm::make_range(altBasePathRoots.begin(), altBasePathRoots.end());
+  }
+
+  // Get the number of alternative base paths passing through the given
+  // passthrough module.
+  size_t getNumAltBasePaths(StringAttr passthroughModuleName) const {
+    return altBasePathsPassthroughs.lookup(passthroughModuleName).size();
+  }
+
+  // Get the root modules that are passing an alternative base path through the
+  // given passthrough module.
+  llvm::iterator_range<const StringAttr *>
+  getRootsForPassthrough(StringAttr passthroughModuleName) const {
+    auto it = altBasePathsPassthroughs.find(passthroughModuleName);
+    assert(it != altBasePathsPassthroughs.end() &&
+           "expected passthrough module to already exist");
+    return llvm::make_range(it->second.begin(), it->second.end());
+  }
+
+  // Collect alternative base paths passing through `instance`, by looking up
+  // its associated `moduleNameAttr`. The results are collected in `result`.
+  void collectAltBasePaths(Operation *instance, StringAttr moduleNameAttr,
+                           SmallVectorImpl<Value> &result) const {
+    auto altBasePaths = altBasePathsPassthroughs.lookup(moduleNameAttr);
+    auto parent = instance->getParentOfType<om::ClassOp>();
+
+    // Handle each alternative base path for instances of this module-like.
+    for (auto [i, altBasePath] : llvm::enumerate(altBasePaths)) {
+      if (parent.getName().starts_with(altBasePath)) {
+        // If we are passing down from the root, take the root base path.
+        result.push_back(instance->getBlock()->getArgument(0));
+      } else {
+        // Otherwise, pass through the appropriate base path from above.
+        // + 1 to skip default base path
+        auto basePath = instance->getBlock()->getArgument(1 + i);
+        assert(isa<om::BasePathType>(basePath.getType()) &&
+               "expected a passthrough base path");
+        result.push_back(basePath);
+      }
+    }
+  }
+
   // The table mapping DistinctAttrs to PathInfo structs.
   DenseMap<DistinctAttr, PathInfo> table;
+
+private:
+  // Module name attributes indicating modules whose base path input should
+  // be used as alternate base paths.
+  SmallPtrSet<StringAttr, 16> altBasePathRoots;
+
+  // Module name attributes mapping from modules who pass through alternative
+  // base paths from their parents to a sequence of the parents' module names.
+  DenseMap<StringAttr, SmallVector<StringAttr>> altBasePathsPassthroughs;
 };
 
 /// The suffix to append to lowered module names.
@@ -94,16 +169,20 @@ private:
   bool shouldCreateClass(FModuleLike moduleLike);
 
   // Create an OM Class op from a FIRRTL Class op.
-  om::ClassLike createClass(FModuleLike moduleLike);
+  om::ClassLike createClass(FModuleLike moduleLike,
+                            const PathInfoTable &pathInfoTable);
 
   // Lower the FIRRTL Class to OM Class.
-  void lowerClassLike(FModuleLike moduleLike, om::ClassLike classLike);
-  void lowerClass(om::ClassOp classOp, FModuleLike moduleLike);
+  void lowerClassLike(FModuleLike moduleLike, om::ClassLike classLike,
+                      const PathInfoTable &pathInfoTable);
+  void lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
+                  const PathInfoTable &pathInfoTable);
   void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
   LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
-                                const LoweringState &state);
+                                const LoweringState &state,
+                                const PathInfoTable &pathInfoTable);
 
   // Convert to OM ops and types in Classes or Modules.
   LogicalResult dialectConversion(
@@ -269,18 +348,19 @@ LogicalResult LowerClassesPass::processPaths(
 
       // Copy the leading part of the hierarchical path from the owning module
       // to the start of the annotation's NLA.
+      bool needsAltBasePath = false;
       auto *node = instanceGraph.lookup(moduleName);
       while (true) {
         // If the path is rooted at the owning module, we're done.
         if (node->getModule() == owningModule)
           break;
         // If there are no more parents, then the path op lives in a different
-        // hierarchy than the HW object it references, which is an error.
+        // hierarchy than the HW object it references, which needs to handled
+        // specially. Flag this, so we know to create an alternative base path
+        // below.
         if (node->noUses()) {
-          op->emitError() << "unable to resolve path relative to owning module "
-                          << owningModule.getModuleNameAttr();
-          error = true;
-          return false;
+          needsAltBasePath = true;
+          break;
         }
         // If there is more than one instance of this module, then the path
         // operation is ambiguous, which is an error.
@@ -300,8 +380,16 @@ LogicalResult LowerClassesPass::processPaths(
       std::reverse(path.begin(), path.end());
       auto pathAttr = ArrayAttr::get(context, path);
 
+      // If we need an alternative base path, save the top module from the path.
+      // We will plumb in the basepath from this module.
+      StringAttr altBasePathModule;
+      if (needsAltBasePath) {
+        altBasePathModule = cast<hw::InnerRefAttr>(path.front()).getModule();
+        pathInfoTable.addAltBasePathRoot(altBasePathModule);
+      }
+
       // Record the path operation associated with the path op.
-      pathInfo = {op, cache.getRefFor(pathAttr)};
+      pathInfo = {op, cache.getRefFor(pathAttr), altBasePathModule};
 
       // Remove this annotation from the operation.
       return true;
@@ -330,6 +418,44 @@ LogicalResult LowerClassesPass::processPaths(
     if (result.wasInterrupted())
       return failure();
   }
+
+  // For each module that will be passing through a base path, compute its
+  // descendants that need this base path passed through.
+  for (auto rootModule : pathInfoTable.getAltBasePathRoots()) {
+    InstanceGraphNode *node = instanceGraph.lookup(rootModule);
+
+    // Do a depth first traversal of the instance graph from rootModule, looking
+    // for descendants that need to be passed through.
+    auto start = llvm::df_begin(node);
+    auto end = llvm::df_end(node);
+    auto it = start;
+    while (it != end) {
+      // Nothing to do for the root module.
+      if (it == start) {
+        ++it;
+        continue;
+      }
+
+      // If we aren't creating a class for this child, skip this hierarchy.
+      if (!shouldCreateClass(it->getModule<FModuleLike>())) {
+        it = it.skipChildren();
+        continue;
+      }
+
+      // If we are at a leaf, nothing to do.
+      if (std::distance(it->begin(), it->end()) == 0) {
+        ++it;
+        continue;
+      }
+
+      // Track state for this passthrough.
+      StringAttr passthroughModule = it->getModule().getModuleNameAttr();
+      pathInfoTable.addAltBasePathPassthrough(passthroughModule, rootModule);
+
+      ++it;
+    }
+  }
+
   return success();
 }
 
@@ -361,7 +487,7 @@ void LowerClassesPass::runOnOperation() {
   DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
   for (auto moduleLike : circuit.getOps<FModuleLike>()) {
     if (shouldCreateClass(moduleLike)) {
-      auto omClass = createClass(moduleLike);
+      auto omClass = createClass(moduleLike, pathInfoTable);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
       classLoweringState.moduleLike = moduleLike;
 
@@ -394,9 +520,10 @@ void LowerClassesPass::runOnOperation() {
 
   // Move ops from FIRRTL Class to OM Class in parallel.
   mlir::parallelForEach(ctx, loweringState.classLoweringStateTable,
-                        [this](auto &entry) {
+                        [this, &pathInfoTable](auto &entry) {
                           const auto &[classLike, state] = entry;
-                          lowerClassLike(state.moduleLike, classLike);
+                          lowerClassLike(state.moduleLike, classLike,
+                                         pathInfoTable);
                         });
 
   // Completely erase Class module-likes, and remove from the InstanceGraph.
@@ -419,7 +546,8 @@ void LowerClassesPass::runOnOperation() {
   // Update Object creation ops in Classes or Modules in parallel.
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
-            return updateInstances(op, instanceGraph, loweringState);
+            return updateInstances(op, instanceGraph, loweringState,
+                                   pathInfoTable);
           })))
     return signalPassFailure();
 
@@ -483,11 +611,21 @@ bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
-om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike) {
+om::ClassLike
+LowerClassesPass::createClass(FModuleLike moduleLike,
+                              const PathInfoTable &pathInfoTable) {
   // Collect the parameter names from input properties.
   SmallVector<StringRef> formalParamNames;
   // Every class gets a base path as its first parameter.
   formalParamNames.emplace_back("basepath");
+
+  // If this class is passing through base paths from above, add those.
+  size_t nAltBasePaths =
+      pathInfoTable.getNumAltBasePaths(moduleLike.getModuleNameAttr());
+  for (size_t i = 0; i < nAltBasePaths; ++i)
+    formalParamNames.push_back(StringAttr::get(
+        moduleLike->getContext(), "alt_basepath_" + llvm::Twine(i)));
+
   for (auto [index, port] : llvm::enumerate(moduleLike.getPorts()))
     if (port.isInput() && isa<PropertyType>(port.type))
       formalParamNames.push_back(port.name);
@@ -520,10 +658,11 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike) {
 }
 
 void LowerClassesPass::lowerClassLike(FModuleLike moduleLike,
-                                      om::ClassLike classLike) {
+                                      om::ClassLike classLike,
+                                      const PathInfoTable &pathInfoTable) {
 
   if (auto classOp = dyn_cast<om::ClassOp>(classLike.getOperation())) {
-    return lowerClass(classOp, moduleLike);
+    return lowerClass(classOp, moduleLike, pathInfoTable);
   }
   if (auto classExternOp =
           dyn_cast<om::ClassExternOp>(classLike.getOperation())) {
@@ -532,7 +671,8 @@ void LowerClassesPass::lowerClassLike(FModuleLike moduleLike,
   llvm_unreachable("unhandled class-like op");
 }
 
-void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike) {
+void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
+                                  const PathInfoTable &pathInfoTable) {
   // Map from Values in the FIRRTL Class to Values in the OM Class.
   IRMapping mapping;
 
@@ -556,8 +696,16 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike) {
   // updating the mapping to map from the input property to the block argument.
   Block *classBody = &classOp->getRegion(0).emplaceBlock();
   // Every class created from a module gets a base path as its first parameter.
-  classBody->addArgument(BasePathType::get(&getContext()),
-                         UnknownLoc::get(&getContext()));
+  auto basePathType = BasePathType::get(&getContext());
+  auto unknownLoc = UnknownLoc::get(&getContext());
+  classBody->addArgument(basePathType, unknownLoc);
+
+  // If this class is passing through base paths from above, add those.
+  size_t nAltBasePaths =
+      pathInfoTable.getNumAltBasePaths(moduleLike.getModuleNameAttr());
+  for (size_t i = 0; i < nAltBasePaths; ++i)
+    classBody->addArgument(basePathType, unknownLoc);
+
   for (auto inputProperty : inputProperties) {
     BlockArgument parameterValue =
         classBody->addArgument(inputProperty.type, inputProperty.loc);
@@ -661,6 +809,7 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
 // converted to OM Object instances.
 static LogicalResult
 updateObjectInClass(firrtl::ObjectOp firrtlObject,
+                    const PathInfoTable &pathInfoTable,
                     SmallVectorImpl<Operation *> &opsToErase) {
   // The 0'th argument is the base path.
   auto basePath = firrtlObject->getBlock()->getArgument(0);
@@ -671,7 +820,13 @@ updateObjectInClass(firrtl::ObjectOp firrtlObject,
   llvm::SmallVector<unsigned> argIndexTable;
   argIndexTable.resize(numElements);
 
-  unsigned nextArgIndex = 1;
+  // Get any alternative base paths passing through this module.
+  SmallVector<Value> altBasePaths;
+  pathInfoTable.collectAltBasePaths(
+      firrtlObject, firrtlClassType.getNameAttr().getAttr(), altBasePaths);
+
+  // Account for the default base path and any alternatives.
+  unsigned nextArgIndex = 1 + altBasePaths.size();
 
   for (unsigned i = 0; i < numElements; ++i) {
     auto direction = firrtlClassType.getElement(i).direction;
@@ -685,6 +840,10 @@ updateObjectInClass(firrtl::ObjectOp firrtlObject,
   llvm::SmallVector<Value> args;
   args.resize(nextArgIndex);
   args[0] = basePath;
+
+  // Collect any alternative base paths passing through.
+  for (auto [i, altBasePath] : llvm::enumerate(altBasePaths))
+    args[1 + i] = altBasePath; // + 1 to skip default base path
 
   for (auto *user : llvm::make_early_inc_range(firrtlObject->getUsers())) {
     if (auto subfield = dyn_cast<ObjectSubfieldOp>(user)) {
@@ -751,6 +910,7 @@ updateObjectInClass(firrtl::ObjectOp firrtlObject,
 static LogicalResult
 updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
                       InstanceGraph &instanceGraph,
+                      const PathInfoTable &pathInfoTable,
                       SmallVectorImpl<Operation *> &opsToErase) {
 
   // Set the insertion point right before the instance op.
@@ -767,6 +927,12 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
       firrtlInstance->getLoc(), basePath, symRef);
 
   actualParameters.push_back(rebasedPath);
+
+  // Add any alternative base paths passing through this instance.
+  pathInfoTable.collectAltBasePaths(
+      firrtlInstance, firrtlInstance.getModuleNameAttr().getAttr(),
+      actualParameters);
+
   for (auto result : firrtlInstance.getResults()) {
     // If the port is an output, continue.
     if (firrtlInstance.getPortDirection(result.getResultNumber()) ==
@@ -886,17 +1052,18 @@ updateInstancesInModule(FModuleOp moduleOp, InstanceGraph &instanceGraph,
 
 static LogicalResult updateObjectsAndInstancesInClass(
     om::ClassOp classOp, InstanceGraph &instanceGraph,
-    const LoweringState &state, SmallVectorImpl<Operation *> &opsToErase) {
+    const LoweringState &state, const PathInfoTable &pathInfoTable,
+    SmallVectorImpl<Operation *> &opsToErase) {
   OpBuilder builder(classOp);
   auto &classState = state.classLoweringStateTable.at(classOp);
   auto it = classState.paths.begin();
   for (auto &op : classOp->getRegion(0).getOps()) {
     if (auto objectOp = dyn_cast<firrtl::ObjectOp>(op)) {
-      if (failed(updateObjectInClass(objectOp, opsToErase)))
+      if (failed(updateObjectInClass(objectOp, pathInfoTable, opsToErase)))
         return failure();
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       if (failed(updateInstanceInClass(instanceOp, *it++, instanceGraph,
-                                       opsToErase)))
+                                       pathInfoTable, opsToErase)))
         return failure();
     }
   }
@@ -904,9 +1071,10 @@ static LogicalResult updateObjectsAndInstancesInClass(
 }
 
 // Update Object or Module instantiations in a FIRRTL Module or OM Class.
-LogicalResult LowerClassesPass::updateInstances(Operation *op,
-                                                InstanceGraph &instanceGraph,
-                                                const LoweringState &state) {
+LogicalResult
+LowerClassesPass::updateInstances(Operation *op, InstanceGraph &instanceGraph,
+                                  const LoweringState &state,
+                                  const PathInfoTable &pathInfoTable) {
 
   // Track ops to erase at the end. We can't do this eagerly, since we want to
   // loop over each op in the container's body, and we may end up removing some
@@ -923,8 +1091,8 @@ LogicalResult LowerClassesPass::updateInstances(Operation *op,
           .Case([&](om::ClassOp classOp) {
             // Convert FIRRTL Module instance within a Class to OM
             // Object instance.
-            return updateObjectsAndInstancesInClass(classOp, instanceGraph,
-                                                    state, opsToErase);
+            return updateObjectsAndInstancesInClass(
+                classOp, instanceGraph, state, pathInfoTable, opsToErase);
           })
           .Default([](auto *op) { return success(); });
   if (failed(result))
@@ -1060,7 +1228,7 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
     auto pathType = om::PathType::get(context);
     auto pathInfo = pathInfoTable.table.lookup(op.getTarget());
 
-    // The 0'th argument is the base path.
+    // The 0'th argument is the base path by default.
     auto basePath = op->getBlock()->getArgument(0);
 
     // If the target was optimized away, then replace the path operation with
@@ -1100,6 +1268,35 @@ struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
       else
         targetKind = om::TargetKind::MemberReference;
       break;
+    }
+
+    // If we are using an alternative base path for this path, get it from the
+    // passthrough port on the enclosing class.
+    if (auto altBasePathModule = pathInfo.altBasePathModule) {
+      // Get the original name of the parent. At this point both FIRRTL classes
+      // and modules have been converted to OM classes, but we need to look up
+      // based on the parent's original name.
+      auto parent = op->getParentOfType<om::ClassOp>();
+      auto parentName = parent.getName();
+      if (parentName.ends_with(kClassNameSuffix))
+        parentName = parentName.drop_back(kClassNameSuffix.size());
+      auto originalParentName = StringAttr::get(op->getContext(), parentName);
+
+      // Get the base paths passing through the parent.
+      auto altBasePaths =
+          pathInfoTable.getRootsForPassthrough(originalParentName);
+      assert(!altBasePaths.empty() && "expected passthrough base paths");
+
+      // Find the base path passthrough that was associated with this path.
+      for (auto [i, altBasePath] : llvm::enumerate(altBasePaths)) {
+        if (altBasePathModule == altBasePath) {
+          // + 1 to skip default base path
+          auto basePathArg = op->getBlock()->getArgument(1 + i);
+          assert(isa<om::BasePathType>(basePathArg.getType()) &&
+                 "expected a passthrough base path");
+          basePath = basePathArg;
+        }
+      }
     }
 
     rewriter.replaceOpWithNewOp<om::PathCreateOp>(
