@@ -99,7 +99,7 @@ struct PathInfoTable {
   }
 
   // Collect alternative base paths passing through `instance`, by looking up
-  // its associated `moduleNameAttr`. The results are colelcted in `result`.
+  // its associated `moduleNameAttr`. The results are collected in `result`.
   void collectAltBasePaths(Operation *instance, StringAttr moduleNameAttr,
                            SmallVectorImpl<Value> &result) const {
     auto altBasePaths = altBasePathsPassthroughs.lookup(moduleNameAttr);
