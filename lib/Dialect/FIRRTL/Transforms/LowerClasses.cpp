@@ -269,17 +269,8 @@ LogicalResult LowerClassesPass::processPaths(
         if (node->getModule() == owningModule)
           break;
         // If there are no more parents, then the path op lives in a different
-        // hierarchy than the HW object it references, which is an error if the
-        // reference is hierarchical. We allow local targets in this case
-        // because we intentionally extract some things out of the owning module
-        // for legacy reasons, and expect to target them with local targets.
-        // Once that is fixed, we can restore the invariant that the path op
-        // lives in the same hierarchy as the HW object it references.
+        // hierarchy than the HW object it references, which is an error.
         if (node->noUses()) {
-          // Local target temporary special case.
-          if (!hierPathOp)
-            break;
-
           op->emitError() << "unable to resolve path relative to owning module "
                           << owningModule.getModuleNameAttr();
           error = true;

@@ -154,17 +154,12 @@ firrtl.circuit "Component" {
 
 // CHECK-LABEL: firrtl.circuit "PathModule"
 firrtl.circuit "PathModule" {
-  // CHECK: hw.hierpath private [[LOCAL_PATH_NOT_OWNED:@.+]] [@NotOwned::@wire]
   // CHECK: hw.hierpath private [[PORT_PATH:@.+]] [@PathModule::[[PORT_SYM:@.+]]]
   // CHECK: hw.hierpath private [[WIRE_PATH:@.+]] [@PathModule::[[WIRE_SYM:@.+]]]
   // CHECK: hw.hierpath private [[VECTOR_PATH:@.+]] [@PathModule::[[VECTOR_SYM:@.+]]]
   // CHECK: hw.hierpath private [[INST_PATH:@.+]] [@PathModule::@child]
   // CHECK: hw.hierpath private [[MODULE_PATH:@.+]] [@Child]
   // CHECK: hw.hierpath private [[NONLOCAL_PATH:@.+]] [@PathModule::@child, @Child::[[NONLOCAL_SYM:@.+]]]
-
-  firrtl.module @NotOwned() {
-    %wire = firrtl.wire sym @wire {annotations = [{class = "circt.tracker", id = distinct[6]<>}]} : !firrtl.uint<1>
-  }
 
   // CHECK: firrtl.module @PathModule(in %in: !firrtl.uint<1> sym [[PORT_SYM]]) {
   firrtl.module @PathModule(in %in : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]) {
@@ -216,9 +211,6 @@ firrtl.circuit "PathModule" {
 
     // CHECK: om.path_create reference %basepath [[MODULE_PATH]]
     %module_path = firrtl.path reference distinct[5]<>
-
-    // CHECK: om.path_create reference %basepath [[LOCAL_PATH_NOT_OWNED]]
-    %local_path_not_owned = firrtl.path reference distinct[6]<>
   }
   firrtl.module @ListCreate(in %propIn: !firrtl.integer, out %propOut: !firrtl.list<integer>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.integer 123
