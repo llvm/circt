@@ -63,7 +63,7 @@ struct PathInfo {
 /// Maps a FIRRTL path id to the lowered PathInfo.
 struct PathInfoTable {
   // Add an alternative base path root module. The default base path from this
-  // module with be passed through to where it is needed.
+  // module will be passed through to where it is needed.
   void addAltBasePathRoot(StringAttr rootModuleName) {
     altBasePathRoots.insert(rootModuleName);
   }
