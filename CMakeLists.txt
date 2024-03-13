@@ -591,7 +591,15 @@ endif()
 # Arcilator JIT
 #-------------------------------------------------------------------------------
 
-if(MLIR_ENABLE_EXECUTION_ENGINE)
+# If building as part of a unified build, whether or not MLIR's execution engine
+# is enabled must be fetched from its subdirectory scope.
+if(NOT (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR))
+  get_directory_property(FETCHED_MLIR_ENABLE_EXECUTION_ENGINE
+      DIRECTORY "${CMAKE_SOURCE_DIR}/../mlir"
+      DEFINITION MLIR_ENABLE_EXECUTION_ENGINE)
+endif()
+
+if(MLIR_ENABLE_EXECUTION_ENGINE OR FETCHED_MLIR_ENABLE_EXECUTION_ENGINE)
   set(ARCILATOR_JIT_ENABLED 1)
 else()
   set(ARCILATOR_JIT_ENABLED 0)
