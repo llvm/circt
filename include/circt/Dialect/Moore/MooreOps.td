@@ -468,7 +468,7 @@ class ShiftOpBase<string mnemonic> : MooreOp<mnemonic, [
   let description = [{
     Shifts the `value` to the left or right by `amount` number of bits. The
     result has the same type as the input value. The amount is always treated as
-    an unsigned number and has no effect on the signedness off the result. X or
+    an unsigned number and has no effect on the signedness of the result. X or
     Z bits in the input value are simply shifted left or right the same way 0 or
     1 bits are. If the amount contains X or Z bits, all result bits are X.
 
