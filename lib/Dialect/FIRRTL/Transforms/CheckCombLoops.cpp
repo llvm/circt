@@ -37,6 +37,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -63,9 +64,11 @@ public:
   DiscoverLoops(
       FModuleOp module, InstanceGraph &instanceGraph,
       const DenseMap<FModuleLike, DrivenBysMapType> &otherModulePortPaths,
-      DrivenBysMapType &thisModulePortPaths)
+      DrivenBysMapType &thisModulePortPaths, SymbolTable &symtbl,
+      hw::InnerSymbolTableCollection &istc)
       : module(module), instanceGraph(instanceGraph),
-        modulePortPaths(otherModulePortPaths), portPaths(thisModulePortPaths) {}
+        modulePortPaths(otherModulePortPaths),
+        portPaths(thisModulePortPaths), irn{symtbl, istc} {}
 
   LogicalResult processModule() {
     LLVM_DEBUG(llvm::dbgs() << "\n processing module :" << module.getName());
@@ -102,6 +105,19 @@ public:
             // Record dataflow from data to the probe.
             recordDataflow(ref, data);
             recordProbe(data, ref);
+          })
+          .Case<RWProbeOp>([&](RWProbeOp rwProbe) {
+            hw::InnerSymTarget refTarget = irn.lookup(rwProbe.getTarget());
+            if (!refTarget) {
+              rwProbe->emitWarning("cannot resolve target innerRef");
+              return;
+            }
+            FieldRef ref = getRefForIST(refTarget);
+            if (!ref)
+              return;
+            auto data = rwProbe.getResult();
+            addDrivenBy({data, 0}, ref);
+            recordProbe({data, 0}, ref);
           })
           .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
@@ -329,8 +345,7 @@ public:
     auto iter = rwProbeRefersTo.find(*leader);
 
     // This should be found, but for now may not be due to needing
-    // RWProbeOp support.  May cause missed loops involving force for now.
-    // https://github.com/llvm/circt/issues/6820
+    // RWProbeOp support.
     if (iter == rwProbeRefersTo.end())
       return;
 
@@ -388,8 +403,8 @@ public:
         FieldRef srcPort(inst.getResult(srcArgNum),
                          modSrcPortField.getFieldID());
         bool srcPortIsForceable = false;
-        if (auto refResultType =
-                type_dyn_cast<RefType>(inst.getResult(srcArgNum).getType()))
+        auto srcArgType = inst.getResult(srcArgNum).getType();
+        if (auto refResultType = type_dyn_cast<RefType>(srcArgType))
           srcPortIsForceable = refResultType.getForceable();
         // RWProbes can potentially refer to the same base value. Such ports
         // have a path from each other, a false loop, detect such cases.
@@ -421,6 +436,9 @@ public:
               continue;
             }
         }
+        if (!type_isa<RefType>(srcArgType) && sinkPortIsForceable)
+          recordProbe(srcPort, sinkPort);
+
         addDrivenBy(sinkPort, srcPort);
       }
       if (setOfEquivalentRWProbes.empty())
@@ -615,6 +633,9 @@ public:
   void dumpMap() {
     LLVM_DEBUG({
       llvm::dbgs() << "\n Connectivity Graph ==>";
+      for (auto &[x, y] : nodes) {
+        llvm::dbgs() << "\n node : " << getName(x) << " => ID: " << y;
+      }
       for (const auto &[index, i] : llvm::enumerate(drivenBy)) {
         llvm::dbgs() << "\n ===>dst:" << getName(i.first)
                      << "::" << i.first.getValue();
@@ -661,6 +682,12 @@ public:
     rwProbeRefersTo[rwProbeClasses.getOrInsertLeaderValue(refNode)] = dataNode;
   }
 
+  void recordProbe(FieldRef data, FieldRef ref) {
+    auto refNode = getOrAddNode(ref);
+    auto dataNode = getOrAddNode(data);
+    rwProbeRefersTo[rwProbeClasses.getOrInsertLeaderValue(refNode)] = dataNode;
+  }
+
   // Add both the probes to the same equivalence class, to record that they
   // refer to the same data value.
   void probesReferToSameData(Value probe1, Value probe2) {
@@ -694,6 +721,24 @@ public:
       }
   }
 
+  /// Get FieldRef pointing to the specified inner symbol target, which must be
+  /// valid. Returns null FieldRef if target points to something with no value,
+  /// such as a port of an external module.
+  static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
+    if (ist.isPort()) {
+      return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+          .Case<FModuleOp>([&](auto fmod) {
+            return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+          })
+          .Default({});
+    }
+
+    auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+    assert(symOp && symOp.getTargetResultIndex() &&
+           (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+    return FieldRef(symOp.getTargetResult(), ist.getField());
+  }
+
 private:
   FModuleOp module;
   InstanceGraph &instanceGraph;
@@ -723,6 +768,9 @@ private:
 
   /// An eqv class of all the RWProbes that refer to the same base value.
   llvm::EquivalenceClasses<unsigned> rwProbeClasses;
+
+  /// Full design inner symbol information.
+  hw::InnerRefNamespace irn;
 };
 
 /// This pass constructs a local graph for each module to detect
@@ -734,6 +782,8 @@ public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     DenseMap<FModuleLike, DrivenBysMapType> modulePortPaths;
+    auto symTbl = getAnalysis<SymbolTable>();
+    auto &instc = getAnalysis<hw::InnerSymbolTableCollection>();
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in
@@ -741,7 +791,7 @@ public:
     for (auto *igNode : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(*igNode->getModule())) {
         DiscoverLoops rdf(module, instanceGraph, modulePortPaths,
-                          modulePortPaths[module]);
+                          modulePortPaths[module], symTbl, instc);
         if (rdf.processModule().failed()) {
           return signalPassFailure();
         }
