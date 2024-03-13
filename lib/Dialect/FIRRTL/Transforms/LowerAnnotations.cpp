@@ -858,7 +858,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // Otherwise they must be identical or FIRRTL type-equivalent
       // (connectable).
       if (sourceFType != sinkFType &&
-          !areTypesEquivalent(sourceFType, sinkFType)) {
+          !areTypesEquivalent(sinkFType, sourceFType)) {
         auto diag = mlir::emitError(source.getLoc())
                     << "Wiring Problem source type " << sourceType
                     << " does not match sink type " << sinkType;
