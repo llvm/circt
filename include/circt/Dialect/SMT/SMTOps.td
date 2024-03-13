@@ -47,6 +47,12 @@ def DeclareConstOp : SMTOp<"declare_const", [
   let assemblyFormat = [{
     ($namePrefix^)? attr-dict `:` qualified(type($result))
   }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Type":$type), [{
+      build($_builder, $_state, type, nullptr);
+    }]>
+  ];
 }
 
 def BoolConstantOp : SMTOp<"constant", [
