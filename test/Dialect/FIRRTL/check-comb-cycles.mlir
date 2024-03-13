@@ -1129,3 +1129,42 @@ firrtl.circuit "Issue6820_1" {
     firrtl.ref.force %clock, %c1_ui1, %clockProbe, %foo_y : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Check simple RWProbeOp + force loop.
+firrtl.circuit "RWProbeOpLoop" {
+  firrtl.module private @Foo(in %clock: !firrtl.clock sym @sym,
+                             out %clockout: !firrtl.clock,
+                             out %clockProbe_bore: !firrtl.rwprobe<clock>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<clock>
+    firrtl.ref.define %clockProbe_bore, %0 : !firrtl.rwprobe<clock>
+    firrtl.strictconnect %clockout, %clock : !firrtl.clock
+  }
+
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpLoop.{foo.clock <- foo.clockout <- foo.clock}}}
+  firrtl.module @RWProbeOpLoop(in %clock: !firrtl.clock, out %clockProbe: !firrtl.rwprobe<clock>) {
+    %foo_clock, %foo_clockout, %foo_clockProbe_bore = firrtl.instance foo @Foo(in clock: !firrtl.clock, out clockout: !firrtl.clock, out clockProbe_bore: !firrtl.rwprobe<clock>)
+    firrtl.strictconnect %foo_clock, %clock : !firrtl.clock
+    firrtl.ref.define %clockProbe, %foo_clockProbe_bore : !firrtl.rwprobe<clock>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %foo_clockout : !firrtl.clock, !firrtl.uint<1>, !firrtl.clock
+  }
+}
+
+// -----
+
+// Check simple RWProbeOp + read loop.
+firrtl.circuit "RWProbeOpReadLoop" {
+  firrtl.module private @Foo(in %clock: !firrtl.clock sym @sym,
+                             out %clockProbe_bore: !firrtl.rwprobe<clock>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<clock>
+    firrtl.ref.define %clockProbe_bore, %0 : !firrtl.rwprobe<clock>
+  }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RWProbeOpReadLoop.{foo.clock <- ... <- foo.clockProbe_bore <- foo.clock}}}
+  firrtl.module @RWProbeOpReadLoop() {
+    %foo_clock, %foo_clockProbe_bore = firrtl.instance foo @Foo(in clock: !firrtl.clock,out clockProbe_bore: !firrtl.rwprobe<clock>)
+    %read = firrtl.ref.resolve %foo_clockProbe_bore : !firrtl.rwprobe<clock>
+    firrtl.strictconnect %foo_clock, %read : !firrtl.clock
+  }
+}
