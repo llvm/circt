@@ -76,3 +76,13 @@ module Foo;
     release a;
   end
 endmodule
+
+// -----
+
+module Foo;
+  logic x;
+  // expected-error @below {{literals with X or Z bits not supported}}
+  initial x = 'x;
+  // expected-error @below {{literals with X or Z bits not supported}}
+  initial x = 'z;
+endmodule
