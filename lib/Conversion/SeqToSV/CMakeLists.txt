@@ -11,5 +11,6 @@ add_circt_conversion_library(CIRCTSeqToSV
   Core
 
   LINK_LIBS PUBLIC
+  CIRCTEmit
   CIRCTSeq
 )
