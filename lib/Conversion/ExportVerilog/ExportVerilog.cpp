@@ -814,21 +814,31 @@ static bool isExpressionUnableToInline(Operation *op,
 
     // Handle option disallowing expressions in event control.
     if (!options.allowExprInEventControl) {
-      // "disable iff" condition shouldn't be inlined.
-      if (auto disableOp = dyn_cast<ltl::DisableOp>(user);
-          disableOp && disableOp.getCondition().getDefiningOp() == op)
-        return true;
 
-      // Always blocks must have a name in their sensitivity list, not an expr.
-      if (isa<AlwaysOp, AlwaysFFOp>(user)) {
-        // Anything other than a read of a wire must be out of line.
-        auto read = dyn_cast<ReadInOutOp>(op);
-        if (!read)
+      // Check operations used for event control, anything other than
+      // a read of a wire must be out of line.
+      auto usedInExprControl = [user, op]() {
+        // "disable iff" condition must be a name.
+        if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
+          return disableOp.getCondition().getDefiningOp() == op;
+        // LTL Clock up's clock operand must be a name.
+        if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
+          return clockOp.getClock().getDefiningOp() == op;
+        // Always blocks must have a name in their sensitivity list.
+        if (isa<AlwaysOp, AlwaysFFOp>(user))
           return true;
-        if (!isa_and_nonnull<sv::WireOp, RegOp>(
-                read.getInput().getDefiningOp()))
-          return true;
-      }
+        return false;
+      };
+
+      if (!usedInExprControl())
+        continue;
+
+      // Otherwise, this can only be inlined if is (already) a read of a wire.
+      auto read = dyn_cast<ReadInOutOp>(op);
+      if (!read)
+        return true;
+      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+        return true;
     }
   }
   return false;
