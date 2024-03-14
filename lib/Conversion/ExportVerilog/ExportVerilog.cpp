@@ -812,14 +812,20 @@ static bool isExpressionUnableToInline(Operation *op,
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
-    // Always blocks must have a name in their sensitivity list, not an expr.
-    if (!options.allowExprInEventControl && isa<AlwaysOp, AlwaysFFOp>(user)) {
-      // Anything other than a read of a wire must be out of line.
-      if (auto read = dyn_cast<ReadInOutOp>(op))
-        if (read.getInput().getDefiningOp<sv::WireOp>() ||
-            read.getInput().getDefiningOp<RegOp>())
-          continue;
-      return true;
+    // Handle option disallowing expressions in event control.
+    if (!options.allowExprInEventControl) {
+      // "disable iff" condition shouldn't be inlined.
+      if (auto disableOp = dyn_cast<ltl::DisableOp>(user);
+          disableOp && disableOp.getCondition().getDefiningOp() == op)
+        return true;
+
+      // Always blocks must have a name in their sensitivity list, not an expr.
+      if (isa<AlwaysOp, AlwaysFFOp>(user))
+        // Anything other than a read of a wire must be out of line.
+        if (auto read = dyn_cast<ReadInOutOp>(op);
+            !read || !isa_and_nonnull<sv::WireOp, RegOp>(
+                         read.getInput().getDefiningOp()))
+          return true;
     }
   }
   return false;
