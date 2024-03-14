@@ -27,7 +27,7 @@ using namespace z3;
 */
 void printSolverAssertions(z3::solver& solver) {
   llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  llvm::outs()<<solver.to_smt2()<<"\n";
+  // llvm::outs()<<solver.to_smt2()<<"\n";
 
   llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
   const auto start{std::chrono::steady_clock::now()};
@@ -576,7 +576,7 @@ void parse_fsm(string input_file, int time_bound){
   // initial condition
   s.add(nestedForall(*solverVars, body, 0));
 
-  llvm::outs()<<s.to_smt2()<<"\n";
+  // llvm::outs()<<s.to_smt2()<<"\n";
 
   vector<int> outputVec;
 
@@ -613,9 +613,12 @@ void parse_fsm(string input_file, int time_bound){
 
   }
   
-  body = (findMyFun(transitions->at(3).from, stateInvMap_fun)(solverVars->size(), solverVars->data())==false);
+  body = !(findMyFun(transitions->at(3).from, stateInvMap_fun)(solverVars->size(), solverVars->data()));
 
-  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), (body))));
+  // llvm::outs()<<"AOOOO "<<(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0)))).to_string();
+
+
+  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0))));
 
   // llvm::outs()<<"Additional expr: "<< (not(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), (implies(body, false) ))))).to_string()<<"\n";
 
