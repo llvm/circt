@@ -819,8 +819,8 @@ static bool isExpressionUnableToInline(Operation *op,
       // Check operations used for event control, anything other than
       // a read of a wire must be out of line.
 
-      // Helper to determine if the user "uses" this operation via an operand
-      // that becomes part of the "event control" portion.
+      // Helper to determine if the use will be part of "event control",
+      // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
         // "disable iff" condition must be a name.
         if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
