@@ -820,12 +820,15 @@ static bool isExpressionUnableToInline(Operation *op,
         return true;
 
       // Always blocks must have a name in their sensitivity list, not an expr.
-      if (isa<AlwaysOp, AlwaysFFOp>(user))
+      if (isa<AlwaysOp, AlwaysFFOp>(user)) {
         // Anything other than a read of a wire must be out of line.
-        if (auto read = dyn_cast<ReadInOutOp>(op);
-            !read || !isa_and_nonnull<sv::WireOp, RegOp>(
-                         read.getInput().getDefiningOp()))
+        auto read = dyn_cast<ReadInOutOp>(op);
+        if (!read)
           return true;
+        if (!isa_and_nonnull<sv::WireOp, RegOp>(
+                read.getInput().getDefiningOp()))
+          return true;
+      }
     }
   }
   return false;
