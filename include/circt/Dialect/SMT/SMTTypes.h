@@ -15,4 +15,13 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SMT/SMTTypes.h.inc"
 
+namespace circt {
+namespace smt {
+
+/// Returns whether the given type is an SMT value type.
+bool isAnySMTValueType(mlir::Type type);
+
+} // namespace smt
+} // namespace circt
+
 #endif // CIRCT_DIALECT_SMT_SMTTYPES_H
