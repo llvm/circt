@@ -45,6 +45,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     for (MemOp memOp : llvm::make_early_inc_range(
              getOperation().getBodyBlock()->getOps<MemOp>())) {
       inferUnmasked(memOp, opsToErase);
+      simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
       memOp.getNumPorts(nReads, nWrites, nRWs, nDbgs);
       // Run the analysis only for Seq memories (latency=1) and a single read
@@ -209,6 +210,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             opsToErase.push_back(sf);
           }
       }
+      simplifyWmode(rwMem);
       // All uses for all results of mem removed, now erase the memOp.
       opsToErase.push_back(memOp);
     }
@@ -310,6 +312,73 @@ private:
       }
 
     return {};
+  }
+
+  // Remove redundant dependence of wmode on the enable signal. wmode can assume
+  // the enable signal be true.
+  void simplifyWmode(MemOp &memOp) {
+
+    // Iterate over all results, and find the enable and wmode fields of the RW
+    // port.
+    for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
+      auto portKind = memOp.getPortKind(portIt.index());
+      if (portKind != MemOp::PortKind::ReadWrite)
+        continue;
+      Value enableDriver, wmodeDriver;
+      Value portVal = portIt.value();
+      // Iterate over all users of the rw port.
+      for (Operation *u : portVal.getUsers())
+        if (auto sf = dyn_cast<SubfieldOp>(u)) {
+          // Get the field name.
+          auto fName =
+              sf.getInput().getType().base().getElementName(sf.getFieldIndex());
+          // Record the enable and wmode fields.
+          if (fName.contains("en"))
+            enableDriver = getConnectSrc(sf.getResult());
+          if (fName.contains("wmode"))
+            wmodeDriver = getConnectSrc(sf.getResult());
+        }
+
+      if (enableDriver && wmodeDriver) {
+        ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
+        auto constOne = builder.create<ConstantOp>(
+            UIntType::get(builder.getContext(), 1), APInt(1, 1));
+        setEnable(enableDriver, wmodeDriver, constOne);
+      }
+    }
+  }
+
+  // Replace any occurence of enable on the expression tree of wmode with a
+  // constant one.
+  void setEnable(Value enableDriver, Value wmodeDriver, Value constOne) {
+    auto getDriverOp = [&](Value dst) -> Operation * {
+      // Look through one level of wire to get the driver op.
+      auto *defOp = dst.getDefiningOp();
+      if (defOp) {
+        if (isa<WireOp>(defOp))
+          dst = getConnectSrc(dst);
+        if (dst)
+          defOp = dst.getDefiningOp();
+      }
+      return defOp;
+    };
+    SmallVector<Value> stack;
+    llvm::SmallDenseSet<Value> visited;
+    stack.push_back(wmodeDriver);
+    while (!stack.empty()) {
+      auto driver = stack.pop_back_val();
+      if (!visited.insert(driver).second)
+        continue;
+      auto *defOp = getDriverOp(driver);
+      if (!defOp)
+        continue;
+      for (auto operand : llvm::enumerate(defOp->getOperands())) {
+        if (operand.value() == enableDriver)
+          defOp->setOperand(operand.index(), constOne);
+        else
+          stack.push_back(operand.value());
+      }
+    }
   }
 
   void inferUnmasked(MemOp &memOp, SmallVector<Operation *> &opsToErase) {
