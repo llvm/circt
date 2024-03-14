@@ -830,9 +830,7 @@ static bool isExpressionUnableToInline(Operation *op,
           return clockOp.getClock() == use.get();
         // Always blocks must have a name in their sensitivity list.
         // (all operands)
-        if (isa<AlwaysOp, AlwaysFFOp>(user))
-          return true;
-        return false;
+        return isa<AlwaysOp, AlwaysFFOp>(user);
       };
 
       if (!usedInExprControl())
