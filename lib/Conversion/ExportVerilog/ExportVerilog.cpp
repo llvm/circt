@@ -798,7 +798,9 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
-  for (auto *user : op->getUsers()) {
+  for (auto &use : op->getUses()) {
+    auto *user = use.getOwner();
+
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //
@@ -808,18 +810,38 @@ static bool isExpressionUnableToInline(Operation *op,
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
             UnionExtractOp, IndexedPartSelectOp>(user))
-      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
-          !isOkToBitSelectFrom(op->getResult(0)))
+      if (use.getOperandNumber() == 0 && // ignore index operands.
+          !isOkToBitSelectFrom(use.get()))
         return true;
 
-    // Always blocks must have a name in their sensitivity list, not an expr.
-    if (!options.allowExprInEventControl && isa<AlwaysOp, AlwaysFFOp>(user)) {
-      // Anything other than a read of a wire must be out of line.
-      if (auto read = dyn_cast<ReadInOutOp>(op))
-        if (read.getInput().getDefiningOp<sv::WireOp>() ||
-            read.getInput().getDefiningOp<RegOp>())
-          continue;
-      return true;
+    // Handle option disallowing expressions in event control.
+    if (!options.allowExprInEventControl) {
+      // Check operations used for event control, anything other than
+      // a read of a wire must be out of line.
+
+      // Helper to determine if the use will be part of "event control",
+      // based on what the operation using it is and as which operand.
+      auto usedInExprControl = [user, &use]() {
+        // "disable iff" condition must be a name.
+        if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
+          return disableOp.getCondition() == use.get();
+        // LTL Clock up's clock operand must be a name.
+        if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
+          return clockOp.getClock() == use.get();
+        // Always blocks must have a name in their sensitivity list.
+        // (all operands)
+        return isa<AlwaysOp, AlwaysFFOp>(user);
+      };
+
+      if (!usedInExprControl())
+        continue;
+
+      // Otherwise, this can only be inlined if is (already) a read of a wire.
+      auto read = dyn_cast<ReadInOutOp>(op);
+      if (!read)
+        return true;
+      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+        return true;
     }
   }
   return false;
