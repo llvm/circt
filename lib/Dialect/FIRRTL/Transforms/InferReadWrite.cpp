@@ -363,9 +363,12 @@ private:
       return defOp;
     };
     SmallVector<Value> stack;
+    llvm::SmallDenseSet<Value> visited;
     stack.push_back(wmodeDriver);
     while (!stack.empty()) {
       auto driver = stack.pop_back_val();
+      if (!visited.insert(driver).second)
+        continue;
       auto *defOp = getDriverOp(driver);
       if (!defOp)
         continue;
