@@ -13,7 +13,7 @@
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container.outer @B {
+ibis.container @B {
   %this = ibis.this @B 
   %in = ibis.port.input @in : i1 {"inputAttr"}
   %out = ibis.port.output @out : i1 {"outputAttr"}
@@ -23,14 +23,14 @@ ibis.container.outer @B {
   ibis.port.write %out, %v : !ibis.portref<out i1>
 }
 
-ibis.container.outer @AccessSibling {
+ibis.container @AccessSibling {
   %this = ibis.this @AccessSibling 
   %p_b_out = ibis.port.input @p_b_out : i1
   %p_b_in = ibis.port.output @p_b_in : i1
   ibis.port.write %p_b_in, %p_b_out.val : !ibis.portref<out i1>
   %p_b_out.val = ibis.port.read %p_b_out : !ibis.portref<in i1>
 }
-ibis.container.outer @Parent {
+ibis.container @Parent {
   %this = ibis.this @Parent 
   %a = ibis.container.instance @a, @AccessSibling 
   %a.p_b_out.ref = ibis.get_port %a, @p_b_out : !ibis.scoperef<@AccessSibling> -> !ibis.portref<in i1>
@@ -56,7 +56,7 @@ ibis.container.outer @Parent {
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container.outer @C {
+ibis.container @C {
   %this = ibis.this @C
   %in = ibis.port.input @in : i1
   %out = ibis.port.output @out : i1
@@ -88,13 +88,13 @@ hw.module @Top() {
 // CHECK:           hw.output
 // CHECK:         }
 
-ibis.container.outer @Inst {
+ibis.container @Inst {
   %this = ibis.this @Inst
   %out = ibis.port.output @out : i1
   %true = hw.constant 1 : i1
   ibis.port.write %out, %true : !ibis.portref<out i1>
 }
-ibis.container.outer @Top {
+ibis.container @Top {
   %this = ibis.this @Top
   %myInst = ibis.container.instance @myInst, @Inst
   %true = hw.constant 1 : i1

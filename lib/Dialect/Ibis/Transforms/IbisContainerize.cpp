@@ -22,14 +22,14 @@ using namespace ibis;
 
 namespace {
 
-struct OutlineContainerPattern : public OpConversionPattern<InnerContainerOp> {
+struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
   OutlineContainerPattern(MLIRContext *context, Namespace &ns)
-      : OpConversionPattern<InnerContainerOp>(context), ns(ns) {}
+      : OpConversionPattern<ContainerOp>(context), ns(ns) {}
 
-  using OpAdaptor = typename OpConversionPattern<InnerContainerOp>::OpAdaptor;
+  using OpAdaptor = typename OpConversionPattern<ContainerOp>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(InnerContainerOp op, OpAdaptor adaptor,
+  matchAndRewrite(ContainerOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Outline the container into the module scope, by prefixing it with the
     // parent class name.
@@ -40,9 +40,9 @@ struct OutlineContainerPattern : public OpConversionPattern<InnerContainerOp> {
 
     rewriter.setInsertionPoint(parentClass);
     StringAttr newContainerName = rewriter.getStringAttr(
-        ns.newName(parentClass.getName() + "_" + op.getModuleName()));
+        ns.newName(parentClass.getName() + "_" + op.getName()));
     auto newContainer =
-        rewriter.create<OuterContainerOp>(op.getLoc(), newContainerName);
+        rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
 
@@ -74,7 +74,7 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<OuterContainerOp>(op.getLoc(), op.getNameAttr());
+        rewriter.create<ContainerOp>(op.getLoc(), op.getNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();
@@ -112,7 +112,7 @@ LogicalResult ContainerizePass::outlineContainers() {
   auto *context = &getContext();
   ConversionTarget target(*context);
   target.addLegalDialect<IbisDialect>();
-  target.addDynamicallyLegalOp<InnerContainerOp>(
+  target.addDynamicallyLegalOp<ContainerOp>(
       [&](auto *op) { return !isa<ibis::ClassOp>(op->getParentOp()); });
   RewritePatternSet patterns(context);
 
