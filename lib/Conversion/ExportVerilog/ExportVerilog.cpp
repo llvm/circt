@@ -798,7 +798,9 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
-  for (auto *user : op->getUsers()) {
+  for (auto &use : op->getUses()) {
+    auto user = use.getOwner();
+
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //
@@ -808,23 +810,26 @@ static bool isExpressionUnableToInline(Operation *op,
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
             UnionExtractOp, IndexedPartSelectOp>(user))
-      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
-          !isOkToBitSelectFrom(op->getResult(0)))
+      if (use.getOperandNumber() == 0 && // ignore index operands.
+          !isOkToBitSelectFrom(use.get()))
         return true;
 
     // Handle option disallowing expressions in event control.
     if (!options.allowExprInEventControl) {
-
       // Check operations used for event control, anything other than
       // a read of a wire must be out of line.
-      auto usedInExprControl = [user, op]() {
+
+      // Helper to determine if the user "uses" this operation via an operand
+      // that becomes part of the "event control" portion.
+      auto usedInExprControl = [user, &use]() {
         // "disable iff" condition must be a name.
         if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
-          return disableOp.getCondition().getDefiningOp() == op;
+          return disableOp.getCondition() == use.get();
         // LTL Clock up's clock operand must be a name.
         if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
-          return clockOp.getClock().getDefiningOp() == op;
+          return clockOp.getClock() == use.get();
         // Always blocks must have a name in their sensitivity list.
+        // (all operands)
         if (isa<AlwaysOp, AlwaysFFOp>(user))
           return true;
         return false;
