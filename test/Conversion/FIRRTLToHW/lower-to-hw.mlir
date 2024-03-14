@@ -6,28 +6,34 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
   // Headers
-  // CHECK:      sv.ifdef @PRINTF_COND_ {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef @PRINTF_COND {
-  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
+  // CHECK:      emit.fragment @PRINTF_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @PRINTF_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @PRINTF_COND {
+  // CHECK-NEXT:       sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @PRINTF_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK:      sv.ifdef @ASSERT_VERBOSE_COND_ {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef @ASSERT_VERBOSE_COND {
-  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
+  // CHECK:      emit.fragment @ASSERT_VERBOSE_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @ASSERT_VERBOSE_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @ASSERT_VERBOSE_COND {
+  // CHECK-NEXT:       sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @ASSERT_VERBOSE_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK:      sv.ifdef @STOP_COND_ {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef @STOP_COND {
-  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "(`STOP_COND)"
+  // CHECK:      emit.fragment @STOP_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @STOP_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @STOP_COND {
+  // CHECK-NEXT:       sv.macro.def @STOP_COND_ "(`STOP_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @STOP_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
@@ -317,6 +323,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
 
   // CHECK-LABEL: hw.module private @Print
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
     // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
@@ -360,6 +367,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    stop(clock2, reset, 0)
 
   // CHECK-LABEL: hw.module private @Stop
+  // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT]}
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref @STOP_COND_
     // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
@@ -508,6 +516,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @VerificationAssertFormat
+  // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT, @ASSERT_VERBOSE_COND_FRAGMENT]}
   firrtl.module private @VerificationAssertFormat(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,

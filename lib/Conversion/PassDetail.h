@@ -100,6 +100,10 @@ namespace comb {
 class CombDialect;
 } // namespace comb
 
+namespace emit {
+class EmitDialect;
+} // namespace emit
+
 namespace hw {
 class HWDialect;
 class HWModuleOp;
