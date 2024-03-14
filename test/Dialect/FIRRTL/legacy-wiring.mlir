@@ -225,8 +225,6 @@ firrtl.circuit "Issue6819" attributes {
   ]} {
   firrtl.module private @Bar() {
     %y = firrtl.wire interesting_name : !firrtl.const.uint<4>
-    %invalid = firrtl.invalidvalue : !firrtl.const.uint<4>
-    firrtl.strictconnect %y, %invalid : !firrtl.const.uint<4>
   }
   // CHECK-LABEL: module @Issue6819
   firrtl.module @Issue6819() {
