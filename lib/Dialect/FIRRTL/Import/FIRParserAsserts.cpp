@@ -241,23 +241,6 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   auto opIt = std::next(printOp->getIterator());
   auto opEnd = thenBlock.end();
 
-  // optional `stop(clock, enable, ...)`
-  //
-  // FIXME: Currently, we can't detetct stopOp in the following IR:
-  //    when invCond:
-  //      printf(io.clock, UInt<1>(1), "assert: ..")
-  //      stop(io.clock, UInt<1>(1), 1)
-  // It is because `io.clock` will create another subfield op so StopOp is not
-  // the next operation. Also, we will have to modify `stopOp.clock() !=
-  // printOp.clock()` below since they are not CSEd.
-  if (opIt != opEnd) {
-    auto stopOp = dyn_cast<StopOp>(*opIt++);
-    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
-        stopOp.getCond() != printOp.getCond())
-      return success();
-    stopOp.erase();
-  }
-
   // Detect if we're dealing with a verification statement, and what flavor of
   // statement it is.
   auto fmt = printOp.getFormatString();
@@ -280,6 +263,23 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     flavor = VerifFlavor::ChiselAssert;
   else
     return success();
+
+  // optional `stop(clock, enable, ...)`
+  //
+  // FIXME: Currently, we can't detetct stopOp in the following IR:
+  //    when invCond:
+  //      printf(io.clock, UInt<1>(1), "assert: ..")
+  //      stop(io.clock, UInt<1>(1), 1)
+  // It is because `io.clock` will create another subfield op so StopOp is not
+  // the next operation. Also, we will have to modify `stopOp.clock() !=
+  // printOp.clock()` below since they are not CSEd.
+  if (opIt != opEnd) {
+    auto stopOp = dyn_cast<StopOp>(*opIt++);
+    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
+        stopOp.getCond() != printOp.getCond())
+      return success();
+    stopOp.erase();
+  }
 
   // Check if the condition of the `WhenOp` is a trivial inversion operation,
   // and remove any immediately preceding verification ops that ensure this
