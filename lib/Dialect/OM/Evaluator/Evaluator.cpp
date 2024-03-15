@@ -816,7 +816,7 @@ evaluator::PathValue evaluator::PathValue::getEmptyPath(Location loc) {
 StringAttr evaluator::PathValue::getAsString() const {
   // If the module is null, then this is a path to a deleted object.
   if (!targetKind)
-    return StringAttr::get(getContext(), "OMDeleted");
+    return StringAttr::get(getContext(), "OMDeleted:");
   SmallString<64> result;
   switch (targetKind.getValue()) {
   case TargetKind::DontTouch:
