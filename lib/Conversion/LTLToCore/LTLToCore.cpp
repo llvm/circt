@@ -273,70 +273,65 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     ltl::ImplicationOp implOp;
     ltl::ConcatOp concatOp;
 
-    // Look for the NOI pattern, i.e. a ##n true |-> b
-    bool matchedNOI = matchPattern(
-        op.getProperty(),
-        mOpWithBind<ltl::ClockOp>(
-            &clockOp,
-            mOpWithBind<ltl::DisableOp>(
-                &disableOp,
-                mOpWithBind<ltl::ImplicationOp>(
-                    &implOp,
-                    mOpWithBind<ltl::ConcatOp>(
-                        &concatOp, mBool(&antecedent),
-                        mOpWithBind<ltl::DelayOp>(&delayOp, m_One())),
-                    mBool(&consequent)),
-                mBool(&disableCond)),
-            mBool(&ltlClock)));
+    // Look for the Assert Property pattern
+    bool matchedProperty =
+        matchPattern(op.getProperty(),
+                     mOpWithBind<ltl::ClockOp>(&clockOp, m_Op<ltl::DisableOp>(),
+                                               mBool(&ltlClock)));
 
-    // Make sure that we matched a legal case
-    if (matchedNOI && delayOp.getLength() != 0)
-      return rewriter.notifyMatchFailure(delayOp,
-                                         " Delay must have a length of 0!");
+    if (!matchedProperty)
+      return rewriter.notifyMatchFailure(
+          op, " verif.assert used outside of an assert property!");
 
-    if (matchedNOI) {
-      // Generate the Non-overlapping Implication
-      if (!makeNonOverlappingImplication(antecedent, consequent, delayOp,
-                                         clockOp, disableCond, rewriter,
-                                         disableInput))
-        return rewriter.notifyMatchFailure(
-            implOp, "Failed to generate NOI from ltl::ImplicationOp");
+    // Look for the implication pattern
+    bool matchedimpl = matchPattern(
+        clockOp.getInput(),
+        mOpWithBind<ltl::DisableOp>(&disableOp, m_Op<ltl::ImplicationOp>(),
+                                    mBool(&disableCond)));
 
-    } else {
-      // Look for the OI pattern, i.e. a |-> b
-      bool matchedOI = matchPattern(
-          op.getProperty(),
-          mOpWithBind<ltl::ClockOp>(
-              &clockOp,
-              mOpWithBind<ltl::DisableOp>(
-                  &disableOp,
-                  mOpWithBind<ltl::ImplicationOp>(&implOp, mBool(&antecedent),
-                                                  mBool(&consequent)),
-                  mBool(&disableCond)),
-              mBool(&ltlClock)));
+    // Check for OI vs NOI
+    if (matchedimpl) {
+      bool matchedOI =
+          matchPattern(disableOp.getInput(),
+                       mOpWithBind<ltl::ImplicationOp>(
+                           &implOp, mBool(&antecedent), mBool(&consequent)));
 
-      // Generate an OI if needed
       if (matchedOI) {
         disableInput =
             makeImplication(implOp.getLoc(), antecedent, consequent, rewriter);
       } else {
-        // Look for the generic AssertProperty case
-        bool matched = matchPattern(
-            op.getProperty(),
-            mOpWithBind<ltl::ClockOp>(
-                &clockOp,
-                mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
-                                            mBool(&disableCond)),
-                mBool(&ltlClock)));
+        // Look for the NOI pattern, i.e. a ##n true |-> b
+        bool matchedNOI =
+            matchPattern(disableOp.getInput(),
+                         mOpWithBind<ltl::ImplicationOp>(
+                             &implOp,
+                             mOpWithBind<ltl::ConcatOp>(
+                                 &concatOp, mBool(&antecedent),
+                                 mOpWithBind<ltl::DelayOp>(&delayOp, m_One())),
+                             mBool(&consequent)));
 
-        if (!matched)
-          return rewriter.notifyMatchFailure(
-              op, "AssertProperty format is invalid!");
+        //  Make sure that we matched a legal case
+        if (matchedNOI && delayOp.getLength() != 0)
+          return rewriter.notifyMatchFailure(delayOp,
+                                             " Delay must have a length of 0!");
+
+        if (matchedNOI) {
+          // Generate the Non-overlapping Implication
+          if (!makeNonOverlappingImplication(antecedent, consequent, delayOp,
+                                             clockOp, disableCond, rewriter,
+                                             disableInput))
+            return rewriter.notifyMatchFailure(
+                implOp, "Failed to generate NOI from ltl::ImplicationOp");
+        }
       }
     }
 
-    if (!disableOp)
-      return rewriter.notifyMatchFailure(op, " Assertion must be disabled!");
+    if (!disableOp) {
+      // Try to retrieve the disable op if none of the patterns matched
+      disableOp = dyn_cast<ltl::DisableOp>(clockOp.getInput().getDefiningOp());
+      if (!disableOp)
+        return rewriter.notifyMatchFailure(op, " Assertion must be disabled!");
+    }
 
     // Sanity check, we should have found a clock
     if (!clockOp)
@@ -389,8 +384,8 @@ struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
 
-  // Set target dialects: We don't want to see any ltl or verif that might come
-  // from an AssertProperty left in the result
+  // Set target dialects: We don't want to see any ltl or verif that might
+  // come from an AssertProperty left in the result
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<comb::CombDialect>();
