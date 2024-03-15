@@ -39,7 +39,10 @@ bool fromOMIRJSON(llvm::json::Value &value,
                   SmallVectorImpl<Attribute> &annotations,
                   llvm::json::Path path, MLIRContext *context);
 
-ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
+/// Handle verif intent captured in printf + when's.  Returns failure if any
+/// encountered, otherwise bool indicates whether the printf was encoding verif
+/// intent. Mutates the IR, and will delete the PrintFOp when returns true.
+FailureOr<bool> foldWhenEncodedVerifOp(PrintFOp printOp);
 
 } // namespace firrtl
 } // namespace circt

@@ -3,6 +3,7 @@
 ; - test/scala/firrtl/extractverif/ExtractAssumesSpec.scala
 
 circuit Foo:
+  ; expected-warning @below {{module contains 8 printf-encoded verification operation(s), which are deprecated and will be removed in the future}}
   module Foo:
     input clock : Clock
     input reset : AsyncReset
@@ -21,6 +22,7 @@ circuit Foo:
     ; assume with predicate only
     ; CHECK: {{assume__verif_library.*}}: assume property (@(posedge clock) ~enable | predicate1 | reset)
     ; CHECK-SAME:   else $error("Assumption does not hold (verification library): ");
+    ; expected-note @+2 {{example printf here, will just be a printf in the future}}
     when not(or(predicate1, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"baseMsg\":\"Assumption does not hold (verification library): \"}</extraction-summary> bar")
       stop(clock, enable, 1)
