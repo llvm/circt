@@ -43,6 +43,7 @@ target_link_libraries(circt-opt
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHandshakeTransforms
+  CIRCTLECTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTHWToLLVM
