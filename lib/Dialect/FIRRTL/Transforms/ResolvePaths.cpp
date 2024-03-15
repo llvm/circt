@@ -107,7 +107,7 @@ struct PathResolver {
     // OMDeleted nodes do not have a target, so it is impossible to resolve
     // them to a real path.  We create a special constant for these path
     // values.
-    if (target.consume_front("OMDeleted")) {
+    if (target.consume_front("OMDeleted:")) {
       if (!target.empty())
         return emitError(loc, "OMDeleted references can not have targets");
       // Deleted targets are turned into OMReference targets with a dangling

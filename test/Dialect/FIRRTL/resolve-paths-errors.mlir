@@ -12,7 +12,7 @@ firrtl.module @BadTargetKind() {
 firrtl.circuit "BadPathString" {
 firrtl.module @BadPathString() {
     // expected-error @below {{OMDeleted references can not have targets}}
-    %0 = firrtl.unresolved_path "OMDeleted:"
+    %0 = firrtl.unresolved_path "OMDeleted:~Foo|Bar>baz"
 }
 }
 
