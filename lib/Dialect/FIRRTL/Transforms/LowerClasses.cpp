@@ -384,7 +384,11 @@ LogicalResult LowerClassesPass::processPaths(
       // We will plumb in the basepath from this module.
       StringAttr altBasePathModule;
       if (needsAltBasePath) {
-        altBasePathModule = cast<hw::InnerRefAttr>(path.front()).getModule();
+        altBasePathModule =
+            TypeSwitch<Attribute, StringAttr>(path.front())
+                .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+                .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+
         pathInfoTable.addAltBasePathRoot(altBasePathModule);
       }
 
