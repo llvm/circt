@@ -197,7 +197,7 @@ InnerSymbolTableCollection::populateAndVerifyTables(Operation *innerRefNSOp) {
 // InnerRefNamespace
 //===----------------------------------------------------------------------===//
 
-InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
+InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) const {
   auto *mod = symTable.lookup(inner.getModule());
   if (!mod)
     return {};
@@ -205,7 +205,7 @@ InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) {
   return innerSymTables.getInnerSymbolTable(mod).lookup(inner.getName());
 }
 
-Operation *InnerRefNamespace::lookupOp(hw::InnerRefAttr inner) {
+Operation *InnerRefNamespace::lookupOp(hw::InnerRefAttr inner) const {
   auto *mod = symTable.lookup(inner.getModule());
   if (!mod)
     return nullptr;

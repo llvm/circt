@@ -24,10 +24,10 @@ using namespace ibis;
 
 /// Build indexes to make lookups faster. Create the new argument types as well.
 struct CallPrepPrecomputed {
-  CallPrepPrecomputed(ModuleOp mod);
+  CallPrepPrecomputed(DesignOp);
 
   // Lookup a class from its symbol.
-  DenseMap<StringAttr, ClassOp> classSymbols;
+  DenseMap<hw::InnerRefAttr, ClassOp> classSymbols;
 
   // Mapping of method to argument type.
   DenseMap<SymbolRefAttr, std::pair<hw::StructType, Location>> argTypes;
@@ -49,21 +49,25 @@ struct CallPrepPrecomputed {
 
   // Utility function to create a symbolref to a method.
   static SymbolRefAttr getSymbol(MethodOp method) {
-    ClassOp cls = method.getParentOp();
-    return SymbolRefAttr::get(
-        cls.getSymNameAttr(),
-        {FlatSymbolRefAttr::get(method.getContext(), *method.getInnerName())});
+    assert(false && "Not implemented for new IR format");
+    // ClassOp cls = method.getParentOp();
+    // return SymbolRefAttr::get(
+    //     cls.getSymNameAttr(),
+    //     {FlatSymbolRefAttr::get(method.getContext(),
+    //     *method.getInnerName())});
   }
 };
 
-CallPrepPrecomputed::CallPrepPrecomputed(ModuleOp mod) {
-  auto *ctxt = mod.getContext();
+CallPrepPrecomputed::CallPrepPrecomputed(DesignOp design) {
+  auto *ctxt = design.getContext();
+  StringAttr modName = design.getNameAttr();
 
   // Populate the class-symbol lookup table.
-  for (auto cls : mod.getOps<ClassOp>())
-    classSymbols[cls.getSymNameAttr()] = cls;
+  for (auto cls : design.getOps<ClassOp>())
+    classSymbols[hw::InnerRefAttr::get(
+        modName, cls.getInnerSymAttr().getSymName())] = cls;
 
-  for (auto cls : mod.getOps<ClassOp>()) {
+  for (auto cls : design.getOps<ClassOp>()) {
     // Compute new argument types for each method.
     for (auto method : cls.getOps<MethodOp>()) {
 
@@ -94,7 +98,7 @@ CallPrepPrecomputed::CallPrepPrecomputed(ModuleOp mod) {
 
     // Populate the instances table.
     for (auto inst : cls.getOps<InstanceOp>()) {
-      auto clsEntry = classSymbols.find(inst.getTargetNameAttr().getAttr());
+      auto clsEntry = classSymbols.find(inst.getTargetNameAttr());
       assert(clsEntry != classSymbols.end() &&
              "class being instantiated doesn't exist");
       instanceMap[std::make_pair(cls, inst.getInnerSym().getSymName())] =
@@ -123,8 +127,9 @@ CallPrepPrecomputed::resolveInstancePath(Operation *scope,
   }
 
   // The last one is the function symbol.
-  return SymbolRefAttr::get(cls.getSymNameAttr(),
-                            {FlatSymbolRefAttr::get(path.getLeafReference())});
+  assert(false && "Not implemented for new IR format");
+  // return SymbolRefAttr::get(cls.getSymNameAttr(),
+  //                           {FlatSymbolRefAttr::get(path.getLeafReference())});
 }
 
 namespace {

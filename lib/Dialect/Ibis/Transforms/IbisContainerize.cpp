@@ -35,12 +35,15 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     // parent class name.
     auto parentClass =
         dyn_cast_or_null<ClassOp>(op.getOperation()->getParentOp());
-    assert(parentClass && "This pattern should never be called on a container "
+    assert(parentClass && "This pattern should never be called on a container"
                           "that is not nested within a class.");
+    auto design = parentClass.getParentOp<DesignOp>();
+    assert(design && "Parent class should be nested within a design.");
 
     rewriter.setInsertionPoint(parentClass);
     StringAttr newContainerName = rewriter.getStringAttr(
-        ns.newName(parentClass.getName() + "_" + op.getName()));
+        ns.newName(parentClass.getInnerNameAttr().strref() + "_" +
+                   op.getInnerNameAttr().strref()));
     auto newContainer =
         rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
 
@@ -52,13 +55,14 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
                          .getThis()
                          .getDefiningOp());
     rewriter.setInsertionPoint(thisOp);
-    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, newContainer.getNameAttr());
+    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, design.getSymNameAttr(),
+                                        newContainer.getInnerSymAttr());
 
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
     rewriter.create<ContainerInstanceOp>(
         parentClass.getLoc(), hw::InnerSymAttr::get(newContainerName),
-        newContainer.getNameAttr());
+        newContainer.getInnerRef());
     rewriter.eraseOp(op);
     return success();
   }
@@ -74,26 +78,26 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getNameAttr());
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();
   }
 };
 
-struct InstanceToContainerInstancePattern
-    : public OpConversionPattern<InstanceOp> {
-  using OpConversionPattern<InstanceOp>::OpConversionPattern;
+// struct InstanceToContainerInstancePattern
+//     : public OpConversionPattern<InstanceOp> {
+//   using OpConversionPattern<InstanceOp>::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Replace the instance by a container instance of the same name.
-    rewriter.replaceOpWithNewOp<ContainerInstanceOp>(
-        op, op.getInnerSym(), op.getTargetNameAttr().getAttr());
-    return success();
-  }
-};
+//   LogicalResult
+//   matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
+//                   ConversionPatternRewriter &rewriter) const override {
+//     // Replace the instance by a container instance of the same name.
+//     rewriter.replaceOpWithNewOp<ContainerInstanceOp>(
+//         op, op.getInnerSym(), op.getTargetNameAttr().getAttr());
+//     return success();
+//   }
+// };
 
 /// Run all the physical lowerings.
 struct ContainerizePass : public IbisContainerizeBase<ContainerizePass> {
@@ -121,7 +125,7 @@ LogicalResult ContainerizePass::outlineContainers() {
   Namespace ns;
   symCache.addDefinitions(getOperation());
   ns.add(symCache);
-  patterns.insert<OutlineContainerPattern>(context, ns);
+  // patterns.insert<OutlineContainerPattern>(context, ns);
   return applyPartialConversion(getOperation(), target, std::move(patterns));
 }
 
@@ -131,7 +135,8 @@ LogicalResult ContainerizePass::containerizeClasses() {
   target.addLegalDialect<IbisDialect>();
   target.addIllegalOp<ClassOp, InstanceOp>();
   RewritePatternSet patterns(context);
-  patterns.insert<ClassToContainerPattern, InstanceToContainerInstancePattern>(
+  patterns.insert<
+      ClassToContainerPattern /*, InstanceToContainerInstancePattern */>(
       context);
   return applyPartialConversion(getOperation(), target, std::move(patterns));
 }

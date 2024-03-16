@@ -38,7 +38,7 @@ struct DataflowMethodOpConversion
     // Create mandatory %this
     // TODO @mortbopet: this will most likely already be present at the
     // method.df level soon...
-    rewriter.create<ThisOp>(op.getLoc(), newContainer.getSymNameAttr());
+    rewriter.create<ThisOp>(op.getLoc(), newContainer.getInnerRef());
 
     // Create in- and output ports.
     llvm::SmallVector<Value> argValues;

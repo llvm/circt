@@ -11,7 +11,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def IbisCallPrep : Pass<"ibis-call-prep", "ModuleOp"> {
+def IbisCallPrep : Pass<"ibis-call-prep", "DesignOp"> {
   let summary = "Convert ibis method calls to use `dc.value`";
 
   let constructor = "circt::ibis::createCallPrepPass()";
@@ -19,7 +19,7 @@ def IbisCallPrep : Pass<"ibis-call-prep", "ModuleOp"> {
     "circt::hw::HWDialect", "circt::dc::DCDialect"];
 }
 
-def IbisContainerize : Pass<"ibis-containerize", "ModuleOp"> {
+def IbisContainerize : Pass<"ibis-containerize", "DesignOp"> {
   let summary = "Ibis containerization pass";
   let description = [{
     Convert Ibis classes to containers, and outlines containers inside classes.
@@ -27,7 +27,7 @@ def IbisContainerize : Pass<"ibis-containerize", "ModuleOp"> {
   let constructor = "circt::ibis::createContainerizePass()";
 }
 
-def IbisTunneling : Pass<"ibis-tunneling", "mlir::ModuleOp"> {
+def IbisTunneling : Pass<"ibis-tunneling", "DesignOp"> {
   let summary = "Ibis tunneling pass";
   let description = [{
     Tunnels relative `get_port` ops through the module hierarchy, based on
@@ -80,7 +80,7 @@ def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
   let constructor = "circt::ibis::createPortrefLoweringPass()";
 }
 
-def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "mlir::ModuleOp"> {
+def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "DesignOp"> {
   let summary = "Ibis clean selfdrivers pass";
   let description = [{
     - Removes `ibis.port.input`s which are driven by operations within the same

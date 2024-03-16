@@ -1,6 +1,6 @@
-// XFAIL: *
-// See https://github.com/llvm/circt/issues/6658
 // RUN: circt-opt %s | circt-opt | FileCheck %s
+
+ibis.design @foo {
 
 // CHECK-LABEL:  ibis.class @HighLevel {
 // CHECK-NEXT:    %this = ibis.this @HighLevel 
@@ -24,6 +24,7 @@
 // CHECK-NEXT:      ibis.return %0 : none
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
+
 
 ibis.class @HighLevel {
   %this = ibis.this @HighLevel
@@ -127,6 +128,8 @@ ibis.class @LowLevel {
     // Test hw.instance ops inside a container (symbol table usage)
     hw.instance "foo" @externModule() -> ()
   }
+}
+
 }
 
 hw.module.extern @externModule()
