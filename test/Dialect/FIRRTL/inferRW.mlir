@@ -285,6 +285,10 @@ firrtl.circuit "TLRAM" {
 
     // CHECK-LABEL: firrtl.module @SimplifyWMODE
     firrtl.module @SimplifyWMODE(in %rwPort_enable: !firrtl.uint<1>, in %rwPort_isWrite: !firrtl.uint<1>) attributes {} {
+      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      %18 = firrtl.mux(%rwPort_enable, %rwPort_isWrite, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // CHECK: %[[c1_ui1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+      // CHECK: %[[v7:.+]] = firrtl.mux(%[[c1_ui1]], %rwPort_isWrite, %c0_ui1)
       %mem_rwPort_readData_rw = firrtl.mem Undefined {depth = 64 : i64, name = "t", portNames = ["rw"], prefix = "", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
       %mem_rwPort_readData_rw_wmode = firrtl.wire : !firrtl.uint<1>
       %0 = firrtl.subfield %mem_rwPort_readData_rw[addr] : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
@@ -296,10 +300,6 @@ firrtl.circuit "TLRAM" {
       firrtl.strictconnect %6, %mem_rwPort_readData_rw_wmode : !firrtl.uint<1>
       %7 = firrtl.subfield %mem_rwPort_readData_rw[wdata] : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
       %9 = firrtl.subfield %mem_rwPort_readData_rw[wmask] : !firrtl.bundle<addr: uint<6>, en: uint<1>, clk: clock, rdata flip: uint<10>, wmode: uint<1>, wdata: uint<10>, wmask: uint<5>>
-      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> 
-      %18 = firrtl.mux(%rwPort_enable, %rwPort_isWrite, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // CHECK: %[[c1_ui1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-      // CHECK: %[[v7:.+]] = firrtl.mux(%[[c1_ui1]], %rwPort_isWrite, %c0_ui1)
       firrtl.strictconnect %mem_rwPort_readData_rw_wmode, %18 : !firrtl.uint<1>
     }
 
