@@ -1,13 +1,14 @@
 // RUN: circt-opt %s --convert-comb-to-smt | FileCheck %s
 
 // CHECK-LABEL: func @test
-// CHECK-SAME: ([[A0:%.+]]: !smt.bv<32>, [[A1:%.+]]: !smt.bv<32>, [[A2:%.+]]: !smt.bv<32>, [[A3:%.+]]: !smt.bv<32>, [[A4:%.+]]: !smt.bv<1>)
-func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.bv<32>, %a4: !smt.bv<1>) {
+// CHECK-SAME: ([[A0:%.+]]: !smt.bv<32>, [[A1:%.+]]: !smt.bv<32>, [[A2:%.+]]: !smt.bv<32>, [[A3:%.+]]: !smt.bv<32>, [[A4:%.+]]: !smt.bv<1>, [[ARG5:%.+]]: !smt.bv<4>)
+func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.bv<32>, %a4: !smt.bv<1>, %a5: !smt.bv<4>) {
   %arg0 = builtin.unrealized_conversion_cast %a0 : !smt.bv<32> to i32
   %arg1 = builtin.unrealized_conversion_cast %a1 : !smt.bv<32> to i32
   %arg2 = builtin.unrealized_conversion_cast %a2 : !smt.bv<32> to i32
   %arg3 = builtin.unrealized_conversion_cast %a3 : !smt.bv<32> to i32
   %arg4 = builtin.unrealized_conversion_cast %a4 : !smt.bv<1> to i1
+  %arg5 = builtin.unrealized_conversion_cast %a5 : !smt.bv<4> to i4
 
   // CHECK: smt.bv.sdiv [[A0]], [[A1]] : !smt.bv<32>
   %0 = comb.divs %arg0, %arg1 : i32
@@ -87,6 +88,15 @@ func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.
   // a `hw.constant` operation.
   // CHECK-NEXT: smt.bv.constant #smt.bv<-1> : !smt.bv<1>
   %35 = comb.icmp eq %arg0, %arg0 : i32
+
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.extract [[ARG5]] from 0 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V1:%.+]] = smt.bv.extract [[ARG5]] from 1 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V2:%.+]] = smt.bv.xor [[V0]], [[V1]] : !smt.bv<1>
+  // CHECK-NEXT: [[V3:%.+]] = smt.bv.extract [[ARG5]] from 2 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V4:%.+]] = smt.bv.xor [[V2]], [[V3]] : !smt.bv<1>
+  // CHECK-NEXT: [[V5:%.+]] = smt.bv.extract [[ARG5]] from 3 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: smt.bv.xor [[V4]], [[V5]] : !smt.bv<1>
+  %36 = comb.parity %arg5 : i4
 
   return
 }

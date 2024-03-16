@@ -146,6 +146,33 @@ struct SubOpConversion : OpConversionPattern<SubOp> {
   }
 };
 
+/// Lower a comb::ParityOp operation to a chain of smt::Extract + XOr ops
+struct ParityOpConversion : OpConversionPattern<ParityOp> {
+  using OpConversionPattern<ParityOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ParityOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    unsigned bitwidth =
+        cast<smt::BitVectorType>(adaptor.getInput().getType()).getWidth();
+
+    // Note: the SMT bitvector type does not support 0 bitwidth vectors and thus
+    // the type conversion should already fail.
+    Type oneBitTy = smt::BitVectorType::get(getContext(), 1);
+    Value runner =
+        rewriter.create<smt::ExtractOp>(loc, oneBitTy, 0, adaptor.getInput());
+    for (unsigned i = 1; i < bitwidth; ++i) {
+      Value ext =
+          rewriter.create<smt::ExtractOp>(loc, oneBitTy, i, adaptor.getInput());
+      runner = rewriter.create<smt::BVXOrOp>(loc, runner, ext);
+    }
+
+    rewriter.replaceOp(op, runner);
+    return success();
+  }
+};
+
 /// Lower the SourceOp to the TargetOp one-to-one.
 template <typename SourceOp, typename TargetOp>
 struct OneToOneOpConversion : OpConversionPattern<SourceOp> {
@@ -205,7 +232,7 @@ struct ConvertCombToSMTPass
 void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
                                                 RewritePatternSet &patterns) {
   patterns.add<CombReplicateOpConversion, IcmpOpConversion, ExtractOpConversion,
-               SubOpConversion, MuxOpConversion,
+               SubOpConversion, MuxOpConversion, ParityOpConversion,
                OneToOneOpConversion<ShlOp, smt::BVShlOp>,
                OneToOneOpConversion<ShrUOp, smt::BVLShrOp>,
                OneToOneOpConversion<ShrSOp, smt::BVAShrOp>,
