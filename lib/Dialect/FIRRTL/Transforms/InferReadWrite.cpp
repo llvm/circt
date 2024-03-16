@@ -438,6 +438,8 @@ private:
 
       if (enableDriver && wmodeDriver) {
         ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
+        builder.setInsertionPointToStart(
+            memOp->getParentOfType<FModuleOp>().getBodyBlock());
         auto constOne = builder.create<ConstantOp>(
             UIntType::get(builder.getContext(), 1), APInt(1, 1));
         setEnable(enableDriver, wmodeDriver, constOne);
