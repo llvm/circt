@@ -425,17 +425,21 @@ static LogicalResult processBuffer(
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
     if (!executionEngine) {
-      llvm::Error err = executionEngine.takeError();
-      llvm::errs() << "failed to create execution engine: " << err << "\n";
-      llvm::consumeError(std::move(err));
+      llvm::handleAllErrors(
+          executionEngine.takeError(), [](const llvm::ErrorInfoBase &info) {
+            llvm::errs() << "failed to create execution engine: "
+                         << info.message() << "\n";
+          });
       return failure();
     }
 
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {
-      llvm::Error err = expectedFunc.takeError();
-      llvm::errs() << "failed to run simulation: " << err << "\n";
-      llvm::consumeError(std::move(err));
+      llvm::handleAllErrors(
+          expectedFunc.takeError(), [](const llvm::ErrorInfoBase &info) {
+            llvm::errs() << "failed to run simulation: " << info.message()
+                         << "\n";
+          });
       return failure();
     }
 
