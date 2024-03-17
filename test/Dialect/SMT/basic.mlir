@@ -12,6 +12,11 @@ func.func @core(%in: i8) {
   // CHECK: smt.declare_const {smt.some_attr} : !smt.bv<32>
   %b = smt.declare_const {smt.some_attr} : !smt.bv<32>
 
+  // CHECK: smt.constant true {smt.some_attr}
+  %true = smt.constant true {smt.some_attr}
+  // CHECK: smt.constant false {smt.some_attr}
+  %false = smt.constant false {smt.some_attr}
+
   // CHECK: smt.assert %a {smt.some_attr}
   smt.assert %a {smt.some_attr}
 

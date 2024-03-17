@@ -49,6 +49,25 @@ def DeclareConstOp : SMTOp<"declare_const", [
   }];
 }
 
+def BoolConstantOp : SMTOp<"constant", [
+  Pure,
+  ConstantLike,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+]> {
+  let summary = "Produce a constant boolean";
+  let description = [{
+    Produces the constant expressions 'true' and 'false' as described in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2) of the SMT-LIB
+    Standard 2.6.
+  }];
+
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs BoolType:$result);
+  let assemblyFormat = "$value attr-dict";
+
+  let hasFolder = true;
+}
+
 def SolverOp : SMTOp<"solver", [
   IsolatedFromAbove,
   SingleBlockImplicitTerminator<"smt::YieldOp">,
