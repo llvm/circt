@@ -148,7 +148,7 @@ else()
   # If building as part of a unified build, whether or not MLIR's execution engine
   # is enabled must be fetched from its subdirectory scope.
   get_directory_property(MLIR_ENABLE_EXECUTION_ENGINE
-      DIRECTORY MLIR_MAIN_SRC_DIR
+      DIRECTORY ${MLIR_MAIN_SRC_DIR}
       DEFINITION MLIR_ENABLE_EXECUTION_ENGINE)
 
   set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
