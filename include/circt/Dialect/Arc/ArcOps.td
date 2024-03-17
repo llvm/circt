@@ -800,4 +800,21 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
 }
 
+def AssertOp : ArcOp<"assert"> {
+  let summary = "assert that a properity holds.";
+  let description = [{
+    Asserts that an operation holds at runtime, it takes a single boolean
+    as an input, and an error message.
+    If the property holds (= `true`) the operation has no effect. Otherwise, the
+    execution aborts and provide an error message to the user.
+    ```mlir
+    assert %proberty, "Some error message in case of failure!"
+    ```
+  }];
+  // I thought of making the string message optional.
+  // Also should it take clock as parameters?
+  let arguments = (ins I1: $property, StrAttr:$msg);
+  let assemblyFormat = "$property `,` $msg attr-dict";
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD

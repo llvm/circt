@@ -19,6 +19,7 @@
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+ #include "mlir/Conversion/LLVMCommon/PrintCallHelper.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -161,6 +162,34 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
         op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
         adaptor.getStorage(), offset);
     rewriter.replaceOp(op, ptr);
+    return success();
+  }
+};
+
+struct AssertOpLowering : public OpConversionPattern<arc::AssertOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto condition = adaptor.getProperty();
+    auto module = op->getParentOfType<ModuleOp>();
+    rewriter.replaceOpWithNewOp<scf::IfOp>(
+        op, condition, [&](auto &builder, auto loc) {
+          // If condition holds then print the message and abort
+
+          // Any hint about how to implement this??!!
+          // LLVM::createPrintStrCall(rewriter, loc, module, "assert_msg", op.getMsg(),
+          //                    *getTypeConverter(), /*addNewLine=*/false,
+          //                    /*runtimeFunctionName=*/"puts");
+          auto abortFunc = module.lookupSymbol<LLVM::LLVMFuncOp>("abort");
+          // If abort is not exist create one
+          if(!abortFunc) {
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(module.getBody());
+            builder.template create<LLVM::LLVMFuncOp>(loc, "abort", builder.getNoneType());
+          }
+          builder.template create<LLVM::CallOp>(loc, abortFunc, std::nullopt);
+        });
     return success();
   }
 };

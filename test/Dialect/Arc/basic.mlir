@@ -347,3 +347,10 @@ hw.module @vectorize_both_sides_lowered(in %in0: i1, in %in1: i1, in %in2: i1, i
 //       CHECK: [[V8:%.+]] = vector.extract [[V7]][0]
 //       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
 //       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :
+
+// -----
+
+hw.module @assert(in %in0: i1) {
+  arc.assert %in0, "Oops, failed"
+  hw.output
+}

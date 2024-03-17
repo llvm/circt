@@ -222,3 +222,8 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
   arc.state_write %arg0 = %arg1 : <!hw.array<4xi1>>
   return
 }
+
+func.func @assert(%arg: i1) {
+  arc.assert %arg, "Oops, failed"
+  return
+}
