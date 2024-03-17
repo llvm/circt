@@ -1,4 +1,4 @@
-// RUN: arcilator %s --run=main | FileCheck %s
+// RUN: arcilator %s --run --jit-entry=main | FileCheck %s
 // REQUIRES: arcilator-jit
 
 // CHECK: counter_value = 0
@@ -25,26 +25,26 @@ hw.module @counter(in %clk: i1, out o: i8) {
 }
 
 func.func @main() {
-    %zero = arith.constant 0 : i1
-    %one = arith.constant 1 : i1
-    %lb = arith.constant 0 : index
-    %ub = arith.constant 10 : index
-    %step = arith.constant 1 : index
+  %zero = arith.constant 0 : i1
+  %one = arith.constant 1 : i1
+  %lb = arith.constant 0 : index
+  %ub = arith.constant 10 : index
+  %step = arith.constant 1 : index
 
-    arc.sim.instantiate @counter as %model {
-        %init_val = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@counter>
-        arc.sim.emit "counter_value", %init_val : i8
+  arc.sim.instantiate @counter as %model {
+    %init_val = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@counter>
+    arc.sim.emit "counter_value", %init_val : i8
 
-        scf.for %i = %lb to %ub step %step {
-            arc.sim.set_input %model, "clk" = %one : i1, !arc.sim.instance<@counter>
-            arc.sim.step %model : !arc.sim.instance<@counter>
-            arc.sim.set_input %model, "clk" = %zero : i1, !arc.sim.instance<@counter>
-            arc.sim.step %model : !arc.sim.instance<@counter>
+    scf.for %i = %lb to %ub step %step {
+      arc.sim.set_input %model, "clk" = %one : i1, !arc.sim.instance<@counter>
+      arc.sim.step %model : !arc.sim.instance<@counter>
+      arc.sim.set_input %model, "clk" = %zero : i1, !arc.sim.instance<@counter>
+      arc.sim.step %model : !arc.sim.instance<@counter>
 
-            %counter_val = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@counter>
-            arc.sim.emit "counter_value", %counter_val : i8
-        }
+      %counter_val = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@counter>
+      arc.sim.emit "counter_value", %counter_val : i8
     }
+  }
 
-    return
+  return
 }

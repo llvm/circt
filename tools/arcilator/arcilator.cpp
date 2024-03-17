@@ -35,6 +35,7 @@
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
+#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OperationSupport.h"
@@ -188,19 +189,22 @@ static llvm::cl::opt<Until> runUntilAfter(
     runUntilValues, llvm::cl::init(UntilEnd), llvm::cl::cat(mainCategory));
 
 // Options to control the output format.
-enum OutputFormat { OutputMLIR, OutputLLVM, OutputDisabled };
+enum OutputFormat { OutputMLIR, OutputLLVM, OutputRunJIT, OutputDisabled };
 static llvm::cl::opt<OutputFormat> outputFormat(
     llvm::cl::desc("Specify output format"),
     llvm::cl::values(clEnumValN(OutputMLIR, "emit-mlir", "Emit MLIR dialects"),
                      clEnumValN(OutputLLVM, "emit-llvm", "Emit LLVM"),
+                     clEnumValN(OutputRunJIT, "run",
+                                "Run the simulation and emit its output"),
                      clEnumValN(OutputDisabled, "disable-output",
                                 "Do not output anything")),
     llvm::cl::init(OutputLLVM), llvm::cl::cat(mainCategory));
 
-static llvm::cl::opt<std::string> runSimulation(
-    "run",
-    llvm::cl::desc("Name of the function to run containing the simulation"),
-    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+static llvm::cl::opt<std::string>
+    jitEntryPoint("jit-entry",
+                  llvm::cl::desc("Name of the function containing the "
+                                 "simulation to run when output is set to run"),
+                  llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -346,32 +350,6 @@ static LogicalResult processBuffer(
   if (!module)
     return failure();
 
-#ifdef ARCILATOR_ENABLE_JIT
-  // Check JIT execution is valid.
-  if (!runSimulation.empty()) {
-    Operation *toCall = module->lookupSymbol(runSimulation);
-    if (!toCall) {
-      llvm::errs() << "entry point not found: '" << runSimulation << "'\n";
-      return failure();
-    }
-
-    if (!llvm::isa<LLVM::LLVMFuncOp, func::FuncOp>(toCall)) {
-      llvm::errs() << "entry point '" << runSimulation
-                   << "' was found but on an operation of type '"
-                   << toCall->getName() << "' while a function was expected\n";
-      llvm::errs() << "supported functions: 'func.func', 'llvm.func'\n";
-      return failure();
-    }
-
-    auto toCallFunc = llvm::cast<FunctionOpInterface>(toCall);
-    if (toCallFunc.getNumArguments() != 0) {
-      llvm::errs() << "entry point '" << runSimulation
-                   << "' must have no arguments\n";
-      return failure();
-    }
-  }
-#endif // ARCILATOR_ENABLE_JIT
-
   // Lower HwModule to Arc model.
   PassManager pmArc(&context);
   pmArc.enableVerifier(verifyPasses);
@@ -416,9 +394,33 @@ static LogicalResult processBuffer(
 
 #ifdef ARCILATOR_ENABLE_JIT
   // Handle JIT execution.
-  if (!runSimulation.empty()) {
+  if (outputFormat == OutputRunJIT) {
+    Operation *toCall = module->lookupSymbol(jitEntryPoint);
+    if (!toCall) {
+      llvm::errs() << "entry point not found: '" << jitEntryPoint << "'\n";
+      return failure();
+    }
+
+    auto toCallFunc = llvm::dyn_cast<LLVM::LLVMFuncOp>(toCall);
+    if (!toCallFunc) {
+      llvm::errs() << "entry point '" << jitEntryPoint
+                   << "' was found but on an operation of type '"
+                   << toCall->getName()
+                   << "' while an LLVM function was expected\n";
+      return failure();
+    }
+
+    if (toCallFunc.getNumArguments() != 0) {
+      llvm::errs() << "entry point '" << jitEntryPoint
+                   << "' must have no arguments\n";
+      return failure();
+    }
+
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
+    engineOptions.transformer = mlir::makeOptimizingTransformer(
+        /*optLevel=*/3, /*sizeLevel=*/0,
+        /*targetMachine=*/nullptr);
 
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
@@ -429,7 +431,7 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    auto expectedFunc = (*executionEngine)->lookupPacked(runSimulation);
+    auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {
       llvm::Error err = expectedFunc.takeError();
       llvm::errs() << "failed to run simulation: " << err << "\n";
@@ -605,7 +607,7 @@ int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv,
                                     "MLIR-based circuit simulator\n");
 
-  if (!runSimulation.empty()) {
+  if (outputFormat == OutputRunJIT) {
 #ifdef ARCILATOR_ENABLE_JIT
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();

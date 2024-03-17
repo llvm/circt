@@ -1,9 +1,6 @@
-// RUN: ! (arcilator %s --run=main 2> %t) && (cat %t | FileCheck %s)
+// RUN: ! (arcilator %s --run --jit-entry=foo 2> %t) && FileCheck --input-file=%t %s
 // REQUIRES: arcilator-jit
 
-// CHECK: entry point 'main' was found but on an operation of type 'hw.module' while a function was expected
-// CHECK: supported functions: 'func.func', 'llvm.func'
+// CHECK: entry point 'foo' was found but on an operation of type 'llvm.mlir.global' while an LLVM function was expected
 
-hw.module @main() {
-    hw.output
-}
+llvm.mlir.global @foo(0 : i32) : i32
