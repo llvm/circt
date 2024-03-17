@@ -107,4 +107,43 @@ def BVShlOp  : BinaryBVOp<"shl", "shift left">;
 def BVLShrOp : BinaryBVOp<"lshr", "logical shift right">;
 def BVAShrOp : BinaryBVOp<"ashr", "arithmetic shift right">;
 
+def PredicateSLT : I64EnumAttrCase<"slt", 0>;
+def PredicateSLE : I64EnumAttrCase<"sle", 1>;
+def PredicateSGT : I64EnumAttrCase<"sgt", 2>;
+def PredicateSGE : I64EnumAttrCase<"sge", 3>;
+def PredicateULT : I64EnumAttrCase<"ult", 4>;
+def PredicateULE : I64EnumAttrCase<"ule", 5>;
+def PredicateUGT : I64EnumAttrCase<"ugt", 6>;
+def PredicateUGE : I64EnumAttrCase<"uge", 7>;
+let cppNamespace = "circt::smt" in
+def BVCmpPredicate : I64EnumAttr<
+    "BVCmpPredicate",
+    "smt bit-vector comparison predicate",
+    [PredicateSLT, PredicateSLE, PredicateSGT, PredicateSGE,
+     PredicateULT, PredicateULE, PredicateUGT, PredicateUGE]>;
+
+def BVCmpOp : SMTBVOp<"cmp", [Pure, SameTypeOperands]> {
+  let summary = "compare bit-vectors interpreted as signed or unsigned";
+  let description = [{
+    This operation compares bit-vector values, interpreting them as signed or
+    unsigned values depending on the predicate. The semantics are equivalent to
+    the `bvslt`, `bvsle`, `bvsgt`, `bvsge`, `bvult`, `bvule`, `bvugt`, or
+    `bvuge` operator defined in the SMT-LIB 2.6 standard depending on the
+    specified predicate. More precisely in the
+    [theory of FixedSizeBitVectors](https://smtlib.cs.uiowa.edu/Theories/FixedSizeBitVectors.smt2)
+    and the [QF_BV logic](https://smtlib.cs.uiowa.edu/Logics/QF_BV.smt2)
+    describing closed quantifier-free formulas over the theory of fixed-size
+    bit-vectors.
+  }];
+
+  let arguments = (ins BVCmpPredicate:$pred,
+                       BitVectorType:$lhs,
+                       BitVectorType:$rhs);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = [{
+    $pred $lhs `,` $rhs attr-dict `:` qualified(type($lhs))
+  }];
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD

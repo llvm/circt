@@ -44,5 +44,22 @@ func.func @bitvectors() {
   // CHECK: %{{.*}} = smt.bv.xor [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
   %16 = smt.bv.xor %c, %c {smt.some_attr} : !smt.bv<32>
 
+  // CHECK: %{{.*}} = smt.bv.cmp slt [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %17 = smt.bv.cmp slt %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp sle [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %18 = smt.bv.cmp sle %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp sgt [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %19 = smt.bv.cmp sgt %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp sge [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %20 = smt.bv.cmp sge %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp ult [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %21 = smt.bv.cmp ult %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp ule [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %22 = smt.bv.cmp ule %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp ugt [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %23 = smt.bv.cmp ugt %c, %c {smt.some_attr} : !smt.bv<32>
+  // CHECK: %{{.*}} = smt.bv.cmp uge [[C0]], [[C0]] {smt.some_attr} : !smt.bv<32>
+  %24 = smt.bv.cmp uge %c, %c {smt.some_attr} : !smt.bv<32>
+
   return
 }
