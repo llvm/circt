@@ -61,5 +61,19 @@ func.func @core(%in: i8) {
   // CHECK: %{{.*}} = smt.distinct %{{.*}}, %{{.*}}, %{{.*}} : !smt.bool
   %4 = smt.distinct %a, %a, %a : !smt.bool
 
+  // CHECK: %{{.*}} = smt.ite %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr} : !smt.bv<32>
+  %5 = smt.ite %a, %b, %b {smt.some_attr} : !smt.bv<32>
+
+  // CEHCK: %{{.*}} = smt.not %{{.*}} {smt.some_attr}
+  %6 = smt.not %a {smt.some_attr}
+  // CHECK: %{{.*}} = smt.and %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr}
+  %7 = smt.and %a, %a, %a {smt.some_attr}
+  // CHECK: %{{.*}} = smt.or %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr}
+  %8 = smt.or %a, %a, %a {smt.some_attr}
+  // CHECK: %{{.*}} = smt.xor %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr}
+  %9 = smt.xor %a, %a, %a {smt.some_attr}
+  // CHECK: %{{.*}} = smt.implies %{{.*}}, %{{.*}} {smt.some_attr}
+  %10 = smt.implies %a, %a {smt.some_attr}
+
   return
 }

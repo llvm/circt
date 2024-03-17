@@ -222,4 +222,76 @@ def DistinctOp : SMTOp<"distinct", [Pure, SameTypeOperands]> {
   let hasVerifier = true;
 }
 
+def IteOp : SMTOp<"ite", [
+  Pure,
+  AllTypesMatch<["thenValue", "elseValue", "result"]>
+]> {
+  let summary = "an if-then-else function";
+  let description = [{
+    This operation returns its second operand or its third operand depending on
+    whether its first operand is true or not. The semantics are equivalent to
+    the `ite` operator defined in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2) of the SMT-LIB
+    2.6 standard.
+  }];
+
+  let arguments = (ins BoolType:$cond,
+                       AnySMTType:$thenValue,
+                       AnySMTType:$elseValue);
+  let results = (outs AnySMTType:$result);
+
+  let assemblyFormat = [{
+    $cond `,` $thenValue `,` $elseValue attr-dict `:` qualified(type($result))
+  }];
+}
+
+def NotOp : SMTOp<"not", [Pure]> {
+  let summary = "a boolean negation";
+  let description = [{
+    This operation performs a boolean negation. The semantics are equivalent to
+    the 'not' operator in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2) of the SMT-LIB
+    Standard 2.6.
+  }];
+
+  let arguments = (ins BoolType:$input);
+  let results = (outs BoolType:$result);
+  let assemblyFormat = "$input attr-dict";
+}
+
+class VariadicBoolOp<string mnemonic, string desc> : SMTOp<mnemonic, [Pure]> {
+  let summary = desc;
+  let description = "This operation performs " # desc # [{.
+    The semantics are equivalent to the '}] # mnemonic # [{' operator in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2).
+    of the SMT-LIB Standard 2.6.
+
+    It supports a variadic number of operands, but requires at least two.
+    This is because the operator is annotated with the `:left-assoc` attribute
+    which means that `op a b c` is equivalent to `(op (op a b) c)`.
+  }];
+
+  let arguments = (ins Variadic<BoolType>:$inputs);
+  let results = (outs BoolType:$result);
+  let assemblyFormat = "$inputs attr-dict";
+}
+
+def AndOp : VariadicBoolOp<"and", "a boolean conjunction">;
+def OrOp  : VariadicBoolOp<"or", "a boolean disjunction">;
+def XOrOp : VariadicBoolOp<"xor", "a boolean exclusive OR">;
+
+def ImpliesOp : SMTOp<"implies", [Pure]> {
+  let summary = "boolean implication";
+  let description = [{
+    This operation performs a boolean implication. The semantics are equivalent
+    to the '=>' operator in the
+    [Core theory](https://smtlib.cs.uiowa.edu/Theories/Core.smt2) of the SMT-LIB
+    Standard 2.6.
+  }];
+
+  let arguments = (ins BoolType:$lhs, BoolType:$rhs);
+  let results = (outs BoolType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTOPS_TD
