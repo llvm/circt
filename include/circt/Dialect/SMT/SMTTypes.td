@@ -29,7 +29,7 @@ def BitVectorType : SMTTypeDef<"BitVector"> {
     The bit-width must be strictly greater than zero.
   }];
 
-  let parameters = (ins "unsigned":$width);
+  let parameters = (ins "uint64_t":$width);
   let assemblyFormat = "`<` $width `>`";
 
   let genVerifyDecl = true;

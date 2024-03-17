@@ -146,4 +146,96 @@ def BVCmpOp : SMTBVOp<"cmp", [Pure, SameTypeOperands]> {
   }];
 }
 
+def ConcatOp : SMTBVOp<"concat", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "bit-vector concatenation";
+  let description = [{
+    This operation concatenates bit-vector values with semantics equivalent to
+    the `concat` operator defined in the SMT-LIB 2.6 standard. More precisely in
+    the [theory of FixedSizeBitVectors](https://smtlib.cs.uiowa.edu/Theories/FixedSizeBitVectors.smt2)
+    and the [QF_BV logic](https://smtlib.cs.uiowa.edu/Logics/QF_BV.smt2)
+    describing closed quantifier-free formulas over the theory of fixed-size
+    bit-vectors.
+
+    Note that the following equivalences hold:
+    * `smt.bv.concat %a, %b : !smt.bv<4>, !smt.bv<4>` is equivalent to
+      `(concat a b)` in SMT-LIB
+    * `(= (concat #xf #x0) #xf0)`
+  }];
+
+  let arguments = (ins BitVectorType:$lhs, BitVectorType:$rhs);
+  let results = (outs BitVectorType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type(operands))";
+}
+
+def ExtractOp : SMTBVOp<"extract", [Pure]> {
+  let summary = "bit-vector extraction";
+  let description = [{
+    This operation extracts the range of bits starting at the 'lowBit' index
+    (inclusive) up to the 'lowBit' + result-width index (exclusive). The
+    semantics are equivalent to the `extract` operator defined in the SMT-LIB
+    2.6 standard. More precisely in the
+    [theory of FixedSizeBitVectors](https://smtlib.cs.uiowa.edu/Theories/FixedSizeBitVectors.smt2)
+    and the [QF_BV logic](https://smtlib.cs.uiowa.edu/Logics/QF_BV.smt2)
+    describing closed quantifier-free formulas over the theory of fixed-size
+    bit-vectors.
+
+    Note that `smt.bv.extract %bv from 2 : (!smt.bv<32>) -> !smt.bv<16>` is
+    equivalent to `((_ extract 17 2) bv)`, i.e., the SMT-LIB operator takes the
+    low and high indices where both are inclusive. The following equivalence
+    holds: `(= ((_ extract 3 0) #x0f) #xf)`
+  }];
+
+  let arguments = (ins I32Attr:$lowBit, BitVectorType:$input);
+  let results = (outs BitVectorType:$result);
+
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
+  }];
+
+  let hasVerifier = true;
+}
+
+def RepeatOp : SMTBVOp<"repeat", [Pure]> {
+  let summary = "repeated bit-vector concatenation of one value";
+  let description = [{
+    This operation is a shorthand for repeated concatenation of the same
+    bit-vector value, i.e.,
+    ```mlir
+    smt.bv.repeat 5 times %a : !smt.bv<4>
+    // is the same as
+    %0 = smt.bv.repeat 4 times %a : !smt.bv<4>
+    smt.bv.concat %a, %0 : !smt.bv<4>, !smt.bv<16>
+    // or also 
+    %0 = smt.bv.repeat 4 times %a : !smt.bv<4>
+    smt.bv.concat %0, %a : !smt.bv<16>, !smt.bv<4>
+    ```
+    
+    The semantics are equivalent to the `repeat` operator defined in the SMT-LIB
+    2.6 standard. More precisely in the
+    [theory of FixedSizeBitVectors](https://smtlib.cs.uiowa.edu/Theories/FixedSizeBitVectors.smt2)
+    and the [QF_BV logic](https://smtlib.cs.uiowa.edu/Logics/QF_BV.smt2)
+    describing closed quantifier-free formulas over the theory of fixed-size
+    bit-vectors.
+  }];
+
+  let arguments = (ins BitVectorType:$input);
+  let results = (outs BitVectorType:$result);
+
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
+
+  let builders = [
+    OpBuilder<(ins "unsigned":$count, "mlir::Value":$input)>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Get the number of times the input operand is repeated.
+    unsigned getCount();
+  }];
+}
+
 #endif // CIRCT_DIALECT_SMT_SMTBITVECTOROPS_TD
