@@ -61,6 +61,16 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
     return smt::BitVectorType::get(type.getContext(), type.getWidth());
   });
 
+  // Default target materialization to convert from illegal types to legal
+  // types, e.g., at the boundary of an inlined child block.
+  converter.addTargetMaterialization([&](OpBuilder &builder, Type resultType,
+                                         ValueRange inputs,
+                                         Location loc) -> std::optional<Value> {
+    return builder
+        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+        ->getResult(0);
+  });
+
   // Convert a 'smt.bool'-typed value to a 'smt.bv<N>'-typed value
   converter.addTargetMaterialization(
       [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
@@ -91,6 +101,16 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
         return builder.create<smt::EqOp>(loc, inputs[0], constOne);
       });
+
+  // Default source materialization to convert from illegal types to legal
+  // types, e.g., at the boundary of an inlined child block.
+  converter.addSourceMaterialization([&](OpBuilder &builder, Type resultType,
+                                         ValueRange inputs,
+                                         Location loc) -> std::optional<Value> {
+    return builder
+        .create<mlir::UnrealizedConversionCastOp>(loc, resultType, inputs)
+        ->getResult(0);
+  });
 }
 
 void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,

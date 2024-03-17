@@ -33,5 +33,6 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTSeqToSV
   CIRCTSimToSV
   CIRCTCFToHandshake
+  CIRCTVerifToSMT
   CIRCTVerifToSV
 )
