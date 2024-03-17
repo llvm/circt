@@ -42,5 +42,48 @@ OpFoldResult BVConstantOp::fold(FoldAdaptor adaptor) {
   return getValueAttr();
 }
 
+//===----------------------------------------------------------------------===//
+// DeclareConstOp
+//===----------------------------------------------------------------------===//
+
+void DeclareConstOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getResult(), getNamePrefix().has_value() ? *getNamePrefix() : "");
+}
+
+//===----------------------------------------------------------------------===//
+// SolverOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SolverOp::verifyRegions() {
+  if (getBody()->getTerminator()->getOperands().getTypes() != getResultTypes())
+    return emitOpError() << "types of yielded values must match return values";
+  if (getBody()->getArgumentTypes() != getInputs().getTypes())
+    return emitOpError()
+           << "block argument types must match the types of the 'inputs'";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CheckOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult CheckOp::verifyRegions() {
+  if (getSatRegion().front().getTerminator()->getOperands().getTypes() !=
+      getResultTypes())
+    return emitOpError() << "types of yielded values in 'sat' region must "
+                            "match return values";
+  if (getUnknownRegion().front().getTerminator()->getOperands().getTypes() !=
+      getResultTypes())
+    return emitOpError() << "types of yielded values in 'unknown' region must "
+                            "match return values";
+  if (getUnsatRegion().front().getTerminator()->getOperands().getTypes() !=
+      getResultTypes())
+    return emitOpError() << "types of yielded values in 'unsat' region must "
+                            "match return values";
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"

@@ -52,5 +52,6 @@ def ArrayType : SMTTypeDef<"Array"> {
 
 def AnySMTType : Type<CPred<"smt::isAnySMTValueType($_self)">,
                       "any SMT value type">;
+def AnyNonSMTType : Type<Neg<AnySMTType.predicate>, "any non-smt type">;
 
 #endif // CIRCT_DIALECT_SMT_SMTTYPES_TD
