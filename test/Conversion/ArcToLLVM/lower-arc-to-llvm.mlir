@@ -222,3 +222,57 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
   arc.state_write %arg0 = %arg1 : <!hw.array<4xi1>>
   return
 }
+
+func.func @assert_with_cond() {
+  // CHECK-LABEL: @assert_with_cond(
+  // CHECK-NEXT:  [[COND:%.+]] = llvm.mlir.constant(false) : i1
+  // CHECK-NEXT:  [[CONST:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT:  [[XOR:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT:  llvm.cond_br [[XOR]], ^[[TRUE_BRANCH:[[:alnum:]]+]], ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[TRUE_BRANCH]]:
+  // CHECK-NEXT:     llvm.call @abort() : () -> ()
+  // CHECK-NEXT:     llvm.br ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[END]]:
+  // CHECK-NEXT:     llvm.return
+  // CHECK-NEXT:  }
+
+  %cond = hw.constant 0 : i1
+  arc.assert %cond
+  return
+}
+
+func.func @assert_with_cond_clock(%cond: i1, %clk: !seq.clock) {
+  // CHECK-LABEL: @assert_with_cond_clock(
+  // CHECK-SAME: %arg0: i1
+  // CHECK-SAME: %arg1: i1
+  // CHECK-NEXT: [[CONST:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT: [[XOR:%.+]] = llvm.xor %arg0, [[CONST]]  : i1
+  // CHECK-NEXT:  llvm.cond_br [[XOR]], ^[[TRUE_BRANCH:[[:alnum:]]+]], ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[TRUE_BRANCH]]:
+  // CHECK-NEXT:     llvm.call @abort() : () -> ()
+  // CHECK-NEXT:     llvm.br ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[END]]:
+  // CHECK-NEXT:     llvm.return
+  // CHECK-NEXT:  }
+  arc.assert %cond, %clk
+  return
+}
+
+func.func @assert_with_cond_clock_msg(%cond: i1, %clk: !seq.clock) {
+  // CHECK-LABEL: @assert_with_cond_clock_msg(
+  // CHECK-SAME: %arg0: i1
+  // CHECK-SAME: %arg1: i1
+  // CHECK-NEXT: [[CONST:%.+]] = llvm.mlir.constant(true) : i1
+  // CHECK-NEXT: [[XOR:%.+]] = llvm.xor %arg0, [[CONST]]  : i1
+  // CHECK-NEXT:  llvm.cond_br [[XOR]], ^[[TRUE_BRANCH:[[:alnum:]]+]], ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[TRUE_BRANCH]]:
+  // CHECK-NEXT:     [[ADDRESS_OF:%.+]] = llvm.mlir.addressof @"Arc_Assert_Op_Msg: Oops" : !llvm.ptr
+  // CHECK-NEXT:     llvm.call @puts([[ADDRESS_OF]]) : (!llvm.ptr) -> ()
+  // CHECK-NEXT:     llvm.call @abort() : () -> ()
+  // CHECK-NEXT:     llvm.br ^[[END:[[:alnum:]]+]]
+  // CHECK-NEXT:   ^[[END]]:
+  // CHECK-NEXT:     llvm.return
+  // CHECK-NEXT:  }
+  arc.assert %cond, %clk, "Oops"
+  return
+}
