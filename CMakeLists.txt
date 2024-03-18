@@ -597,7 +597,8 @@ endif()
 # Arcilator JIT
 #-------------------------------------------------------------------------------
 
-if(MLIR_ENABLE_EXECUTION_ENGINE)
+# TODO: find why MSVC cannot build the JIT
+if(MLIR_ENABLE_EXECUTION_ENGINE AND NOT WIN32)
   set(ARCILATOR_JIT_ENABLED 1)
 else()
   set(ARCILATOR_JIT_ENABLED 0)
