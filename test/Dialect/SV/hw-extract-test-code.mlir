@@ -1,13 +1,16 @@
 // RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
 // CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
 // CHECK-NEXT: sv.macro.decl @SYNTHESIS
+// CHECK-NEXT: emit.fragment @some_fragment {
+// CHECK-NEXT:   sv.verbatim "foo"
+// CHECK-NEXT: }
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", emit.fragments = [@some_fragment], output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -15,12 +18,16 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module private @issue1246_assume(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
+// CHECK-SAME: comment = "VCS coverage exclude_file"
+// CHECK-SAME: emit.fragments = [@some_fragment]
+// CEHCK-SAME: }
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module private @issue1246_cover(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK: hw.module private @issue1246_cover(in %clock : i1) attributes {
+// CHECK-SAME: comment = "VCS coverage exclude_file"
+// CHECK-SAME: emit.fragments = [@some_fragment]
+// CEHCK-SAME: }
 // CHECK: sv.cover
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246
@@ -35,10 +42,13 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
   sv.macro.decl @SYNTHESIS
+  emit.fragment @some_fragment {
+    sv.verbatim "foo"
+  }
   hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
-  hw.module @issue1246(in %clock: i1) {
+  hw.module @issue1246(in %clock: i1) attributes {emit.fragments = [@some_fragment]} {
     sv.always posedge %clock  {
       sv.ifdef.procedural @SYNTHESIS {
       } else  {
