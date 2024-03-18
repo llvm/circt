@@ -2,7 +2,7 @@
 
 import numpy as np
 
-num_fsm = range(5, 50, 5)
+num_fsm = range(5, 500, 25)
 
 guard_type = ["comb.icmp ult %", "comb.icmp uge %"]
 
@@ -14,7 +14,7 @@ for n in num_fsm:
 
     const = []
 
-    nl = 2# np.random.randint(2, n-1)
+    nl = 0# np.random.randint(2, n-1)
 
     print("num loops: "+str(nl))
 
@@ -24,7 +24,7 @@ for n in num_fsm:
             loops.append(tmp)
 
 
-    output_file = "structured/fsm_"+str(n)+"states_"+str(nl)+"loops.mlir"
+    output_file = "linear/fsm_"+str(n)+"states_"+str(nl)+"loops.mlir"
     f = open(output_file, "w")
 
 

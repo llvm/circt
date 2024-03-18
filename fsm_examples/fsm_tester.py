@@ -4,9 +4,14 @@ import os
 
 reps = 10
 
-for file in os.listdir("structured/"):
+time = 500
+
+for file in os.listdir("linear/"):
+    to_check = int(file.split("_")[1].split("s")[0])-2
+    if to_check > time:
+        to_check = time - 2
     print(file)
-    command = "../build/bin/fsm-verification ../fsm_examples/structured/"+file+" 40"
+    command = "../build/bin/fsm-verification ../fsm_examples/linear/"+file+" "+str(time)+" "+str(to_check)
     print(command)
     for i in range(reps):
         print("rep "+ str(i)+" file "+file)

@@ -24,11 +24,11 @@ using namespace z3;
 
 /**
  * @brief Prints solver assertions
+ 
 */
 void printSolverAssertions(z3::solver& solver) {
   llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
   // llvm::outs()<<solver.to_smt2()<<"\n";
-
   llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
   const auto start{std::chrono::steady_clock::now()};
   llvm::outs()<<solver.check()<<"\n";
@@ -419,7 +419,7 @@ expr nestedForall(vector<expr> solver_vars, expr body, int i){
   if(i==solver_vars.size()-1){ // last element (time) is nested separately as a special case
     return body;
   } else {
-    return forall(solver_vars[i], implies(solver_vars[i]>=0 && solver_vars[i]<100, nestedForall(solver_vars, body, i+1)));
+    return forall(solver_vars[i], implies(solver_vars[i]>=0, nestedForall(solver_vars, body, i+1)));
   }
 }
 
@@ -458,7 +458,7 @@ void populateInvInput(MyExprMap *varMap, context &c, vector<expr> *solverVars, v
 
 }
 
-void parse_fsm(string input_file, int time_bound){
+void parse_fsm(string input_file, int time_bound, int to_check){
 
   DialectRegistry registry;
   // clang-format off
@@ -613,7 +613,7 @@ void parse_fsm(string input_file, int time_bound){
 
   }
   
-  body = !(findMyFun(transitions->at(3).from, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+  body = !(findMyFun(transitions->at(to_check).from, stateInvMap_fun)(solverVars->size(), solverVars->data()));
 
   // llvm::outs()<<"AOOOO "<<(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0)))).to_string();
 
@@ -632,6 +632,8 @@ int main(int argc, char **argv){
 
   int time = stoi(argv[2]);
 
+  int state_to_check = stoi(argv[3]);
+
   cout << "input file: " << input << endl;
 
   ofstream outfile;
@@ -639,7 +641,7 @@ int main(int argc, char **argv){
 	outfile << input << endl;
 	outfile.close();
 
-  parse_fsm(input, time);
+  parse_fsm(input, time, state_to_check);
 
   return 0;
 
