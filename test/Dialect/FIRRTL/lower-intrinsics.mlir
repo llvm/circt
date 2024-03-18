@@ -260,6 +260,15 @@ firrtl.circuit "Foo" {
   // CHECK-NOT: VerifAssume
   // CHECK-NOT: VerifCover
 // TODO:
+  firrtl.intmodule private @AssertFormat<format: none = "message: %d",
+                                               label: none = "label for assert with format string",
+                                               guards: none = "MACRO_GUARD;ASDF">(
+                                                 in clock: !firrtl.clock,
+                                                 in predicate: !firrtl.uint<1>,
+                                                 in enable: !firrtl.uint<1>,
+                                                 in val: !firrtl.uint<1>
+                                               ) attributes {intrinsic = "circt.chisel_assert"}
+
   firrtl.intmodule private @AssertAssume<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert_assume"}
   firrtl.intmodule private @AssertAssumeFormat<format: none = "message: %d",
                                                label: none = "label for assert with format string",
@@ -299,6 +308,19 @@ firrtl.circuit "Foo" {
   firrtl.module @ChiselVerif(in %clock: !firrtl.clock,
                              in %cond: !firrtl.uint<1>,
                              in %enable: !firrtl.uint<1>) {
+
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "message: %d"(
+    // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for assert with format string"
+    // CHECK-NOT: with_companion_assume
+    %assertOnlyFormat_clock, %assertOnlyFormat_predicate, %assertOnlyFormat_enable, %assertOnlyFormat_val = firrtl.instance assertOnlyFormat interesting_name @AssertFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %assertOnlyFormat_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assertOnlyFormat_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assertOnlyFormat_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %assertOnlyFormat_val, %cond : !firrtl.uint<1>
+
     // CHECK-NOT: firrtl.instance
     // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "testing" :
     // CHECK-SAME: isConcurrent = true
@@ -311,6 +333,7 @@ firrtl.circuit "Foo" {
     // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
     // CHECK-SAME: isConcurrent = true
     // CHECK-SAME: name = "label for assert with format string"
+    // CHECK-SAME: with_companion_assume
     %assertFormat_clock, %assertFormat_predicate, %assertFormat_enable, %assertFormat_val = firrtl.instance assertFormat interesting_name @AssertAssumeFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
     firrtl.strictconnect %assertFormat_clock, %clock : !firrtl.clock
     firrtl.strictconnect %assertFormat_predicate, %cond : !firrtl.uint<1>
@@ -322,6 +345,8 @@ firrtl.circuit "Foo" {
     // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
     // CHECK-SAME: isConcurrent = true
     // CHECK-SAME: name = "label for ifelsefatal assert"
+    // CHECK-SAME: with_companion_assume
+
     %ief_clock, %ief_predicate, %ief_enable, %ief_val = firrtl.instance ief interesting_name @IfElseFatalFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
     firrtl.strictconnect %ief_clock, %clock : !firrtl.clock
     firrtl.strictconnect %ief_predicate, %cond : !firrtl.uint<1>

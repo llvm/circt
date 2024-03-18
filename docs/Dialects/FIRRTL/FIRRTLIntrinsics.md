@@ -95,6 +95,28 @@ The enable input is sampled at the rising edge of the input clock; any changes o
 | en   | input     | UInt<1>  | enable for the output clock |
 | out  | output    | Clock    | gated output clock          |
 
+### circt.chisel_assert
+
+Generate a clocked SV assertion, with optional formatted error message.
+
+| Parameter | Type   | Description                                                                         |
+| --------- | ------ | ----------------------------------------------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| label     | string | Label for assert.  Optional.                                                 |
+| guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
+
+| Port      | Direction | Type     | Description                |
+| --------- | --------- | -------- | -------------------------- |
+| clock     | input     | Clock    | input clock                |
+| predicate | input     | UInt<1>  | predicate to assert/assume |
+| enable    | input     | UInt<1>  | enable signal              |
+| ...       | input     | Signals  | arguments to format string |
+
+Example output:
+```systemverilog
+assert__label: assume property (@(posedge clock) ~enable | cond) else $error("message");	
+```
+
 ### circt.chisel_assert_assume
 
 Generate a clocked SV assertion with companion assume statement.

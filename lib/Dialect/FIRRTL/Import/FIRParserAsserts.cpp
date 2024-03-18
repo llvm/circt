@@ -430,10 +430,12 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       printOp.emitWarning()
           << "printf-encoded assertion has format string arguments which may "
              "cause lint warnings";
-    if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX)
-      builder.create<AssertOp>(printOp.getClock(), predicate, printOp.getCond(),
-                               message, args, label, true);
-    else if (flavor == VerifFlavor::Assume)
+    if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX) {
+      auto assertOp = builder.create<AssertOp>(printOp.getClock(), predicate,
+                                               printOp.getCond(), message, args,
+                                               label, true);
+      assertOp->setAttr("with_companion_assume", UnitAttr::get(context));
+    } else if (flavor == VerifFlavor::Assume)
       builder.create<AssumeOp>(printOp.getClock(), predicate, printOp.getCond(),
                                message, args, label, true);
     else // VerifFlavor::Cover
@@ -450,6 +452,7 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
         printOp.getCond(), fmt, printOp.getSubstitutions(), "chisel3_builtin",
         true);
     op->setAttr("format", StringAttr::get(context, "ifElseFatal"));
+    op->setAttr("with_companion_assume", UnitAttr::get(context));
     printOp.erase();
     break;
   }
@@ -591,11 +594,12 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     Operation *op;
     // TODO: The "ifElseFatal" variant isn't actually a concurrent assertion,
     // but downstream logic assumes that isConcurrent is set.
-    if (flavor == VerifFlavor::VerifLibAssert)
+    if (flavor == VerifFlavor::VerifLibAssert) {
       op = builder.create<AssertOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);
-    else if (flavor == VerifFlavor::VerifLibAssume)
+      op->setAttr("with_companion_assume", builder.getUnitAttr());
+    } else if (flavor == VerifFlavor::VerifLibAssume)
       op = builder.create<AssumeOp>(printOp.getClock(), predicate,
                                     printOp.getCond(), message,
                                     printOp.getSubstitutions(), label, true);

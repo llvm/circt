@@ -604,7 +604,8 @@ static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
 
 namespace {
 
-template <class OpTy, bool ifElseFatal = false>
+template <class OpTy, bool ifElseFatal = false,
+          bool withCompanionAssume = false>
 class CirctAssertAssumeConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -649,6 +650,9 @@ public:
 
     if constexpr (ifElseFatal)
       op->setAttr("format", builder.getStringAttr("ifElseFatal"));
+
+    if constexpr (withCompanionAssume)
+      op->setAttr("with_companion_assume", builder.getUnitAttr());
 
     inst.erase();
     return success();
@@ -750,9 +754,14 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctHasBeenResetConverter>("circt.has_been_reset",
                                            "circt_has_been_reset");
   lowering.add<CirctProbeConverter>("circt.fpga_probe", "circt_fpga_probe");
-  lowering.add<CirctAssertAssumeConverter<AssertOp>>(
+  lowering.add<CirctAssertAssumeConverter<AssertOp, /*ifElseFatal=*/false,
+                                          /*withCompanionAssume=*/true>>(
       "circt.chisel_assert_assume", "circt_chisel_assert_assume");
-  lowering.add<CirctAssertAssumeConverter<AssertOp, /*ifElseFatal=*/true>>(
+  lowering.add<CirctAssertAssumeConverter<AssertOp, /*ifElseFatal=*/false,
+                                          /*withCompanionAssume=*/false>>(
+      "circt.chisel_assert", "circt_chisel_assert");
+  lowering.add<CirctAssertAssumeConverter<AssertOp, /*ifElseFatal=*/true,
+                                          /*withCompanionAssume=*/true>>(
       "circt.chisel_ifelsefatal", "circt_chisel_ifelsefatal");
   lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
                                                      "circt_chisel_assume");

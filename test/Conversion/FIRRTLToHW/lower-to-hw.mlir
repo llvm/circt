@@ -401,9 +401,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
     in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
-    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
-    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0"}
-    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, with_companion_assume}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0", with_companion_assume}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true, with_companion_assume}
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
@@ -490,7 +490,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>
   ) {
-    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"], with_companion_assume}
     firrtl.assume %clock, %cond, %enable, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
     firrtl.cover %clock, %cond, %enable, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
 
@@ -524,7 +524,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %value: !firrtl.uint<42>,
     in %i0: !firrtl.uint<0>
   ) {
-    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
+    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva", with_companion_assume}
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true

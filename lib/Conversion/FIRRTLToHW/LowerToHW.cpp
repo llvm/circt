@@ -4482,7 +4482,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
     // Assertions gain a companion `assume` behind a
     // `USE_PROPERTY_AS_CONSTRAINT` guard.
-    if (isAssert) {
+    if (isAssert && op->hasAttrOfType<UnitAttr>("with_companion_assume")) {
       StringAttr assumeLabel;
       if (label)
         assumeLabel = StringAttr::get(builder.getContext(),

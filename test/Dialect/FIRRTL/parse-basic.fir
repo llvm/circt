@@ -949,7 +949,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "assert:foo 0", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true}
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, with_companion_assume}
 
     when cond:
       printf(clock, enable, "assume:foo 1", value)
@@ -963,7 +963,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "assert:foo_0:", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "foo_0"}
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "foo_0", with_companion_assume}
 
     when cond:
       printf(clock, enable, "assume:foo_1:", value)
@@ -977,7 +977,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when cond:
       printf(clock, enable, "assert:custom label 0:foo 3", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "custom label 0"}
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, name = "custom label 0", with_companion_assume}
 
     when cond:
       printf(clock, enable, "assume:custom label 1:foo 4", value)
@@ -1042,6 +1042,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-SAME: format = "sva"
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
+    ; CHECK-SAME: with_companion_assume
 
     ; Predicate modifier `trueOrIsX`
     when cond:
@@ -1055,6 +1056,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-SAME: format = "sva"
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
+    ; CHECK-SAME: with_companion_assume
 
     ; Verification Library Assumptions
 
@@ -1116,7 +1118,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
         printf(clock, not(enable), "assert: bar")
     ; CHECK: [[NOT_ENABLE:%.+]] = firrtl.not %enable
     ; CHECK-NEXT: [[NOT_COND:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]], " bar" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true}
+    ; CHECK-NEXT: firrtl.assert %clock, [[NOT_COND]], [[NOT_ENABLE]], " bar" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = true, with_companion_assume}
 
     ; Verification Library Covers
 

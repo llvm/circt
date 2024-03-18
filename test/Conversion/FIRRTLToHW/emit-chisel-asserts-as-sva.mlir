@@ -7,7 +7,7 @@ firrtl.circuit "ifElseFatalToSVA" {
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>
   ) {
-    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
+    firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal", with_companion_assume}
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
