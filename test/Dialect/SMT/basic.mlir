@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: func @types
-// CHECK-SAME:  (%{{.*}}: !smt.bool, %{{.*}}: !smt.bv<32>)
-func.func @types(%arg0: !smt.bool, %arg1: !smt.bv<32>) {
+// CHECK-SAME:  (%{{.*}}: !smt.bool, %{{.*}}: !smt.bv<32>, %{{.*}}: !smt.int)
+func.func @types(%arg0: !smt.bool, %arg1: !smt.bv<32>, %arg2: !smt.int) {
   return
 }
 
@@ -11,6 +11,8 @@ func.func @core(%in: i8) {
   %a = smt.declare_const "a" {smt.some_attr} : !smt.bool
   // CHECK: smt.declare_const {smt.some_attr} : !smt.bv<32>
   %b = smt.declare_const {smt.some_attr} : !smt.bv<32>
+  // CHECK: smt.declare_const {smt.some_attr} : !smt.int
+  %c = smt.declare_const {smt.some_attr} : !smt.int
 
   // CHECK: smt.constant true {smt.some_attr}
   %true = smt.constant true {smt.some_attr}

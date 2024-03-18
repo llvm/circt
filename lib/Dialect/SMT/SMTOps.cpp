@@ -9,6 +9,7 @@
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/APSInt.h"
 
 using namespace circt;
 using namespace smt;
@@ -273,6 +274,43 @@ void BoolConstantOp::getAsmResultNames(
 OpFoldResult BoolConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// IntConstantOp
+//===----------------------------------------------------------------------===//
+
+void IntConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "c" << getValue();
+  setNameFn(getResult(), specialName.str());
+}
+
+OpFoldResult IntConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
+void IntConstantOp::print(OpAsmPrinter &p) {
+  p << " " << getValue();
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+ParseResult IntConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  APInt value;
+  if (parser.parseInteger(value))
+    return failure();
+
+  result.getOrAddProperties<Properties>().setValue(
+      IntegerAttr::get(parser.getContext(), APSInt(value)));
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(smt::IntType::get(parser.getContext()));
+  return success();
 }
 
 #define GET_OP_CLASSES
