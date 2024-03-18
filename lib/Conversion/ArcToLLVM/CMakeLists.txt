@@ -16,6 +16,8 @@ add_circt_conversion_library(CIRCTArcToLLVM
   MLIRArithToLLVM
   MLIRControlFlowToLLVM
   MLIRFuncToLLVM
+  MLIRIndexToLLVM
+  MLIRMemRefToLLVM
   MLIRLLVMCommonConversion
   MLIRSCFToControlFlow
   MLIRTransforms
