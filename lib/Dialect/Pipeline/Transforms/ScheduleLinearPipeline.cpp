@@ -24,6 +24,7 @@
 
 using namespace mlir;
 using namespace circt;
+using namespace circt::scheduling;
 using namespace pipeline;
 
 namespace {
