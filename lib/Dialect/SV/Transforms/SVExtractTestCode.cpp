@@ -222,6 +222,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
+  if (auto fragments = op->getAttr("emit.fragments"))
+    newMod->setAttr("emit.fragments", fragments);
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
   newMod.setPrivate();
 
