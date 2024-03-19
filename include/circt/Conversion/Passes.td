@@ -724,7 +724,11 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::createLowerSeqToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
            "Disable emission of register randomization code">,
