@@ -416,7 +416,8 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<hw::PortInfo, 16> ports;
   auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
   hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.getSymNameAttr(), ports);
-  hwModuleOp->setAttr("emit.fragments", b.getArrayAttr({headerName}));
+  hwModuleOp->setAttr(emit::getFragmentsAttrName(),
+                      b.getArrayAttr({headerName}));
   b.setInsertionPointToStart(hwModuleOp.getBodyBlock());
 
   // Replace all uses of the machine arguments with the arguments of the

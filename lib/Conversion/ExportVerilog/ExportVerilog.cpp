@@ -6388,7 +6388,8 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 
     // Pull in the fragments that the op references. In one file, each
     // fragment is emitted only once.
-    if (auto fragments = op->getAttrOfType<ArrayAttr>("emit.fragments")) {
+    if (auto fragments =
+            op->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName())) {
       for (auto sym : fragments.getAsRange<FlatSymbolRefAttr>()) {
         auto it = fragmentMapping.find(sym.getAttr());
         if (it == fragmentMapping.end()) {

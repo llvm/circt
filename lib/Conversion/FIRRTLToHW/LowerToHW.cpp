@@ -1876,7 +1876,7 @@ LogicalResult FIRRTLLowering::run() {
     return failure();
 
   if (!fragments.empty())
-    theModule->setAttr("emit.fragments",
+    theModule->setAttr(emit::getFragmentsAttrName(),
                        builder.getArrayAttr(fragments.getArrayRef()));
 
   return backedgeBuilder.clearOrEmitError();

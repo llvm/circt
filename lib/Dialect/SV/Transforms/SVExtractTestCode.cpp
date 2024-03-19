@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -222,8 +223,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
-  if (auto fragments = op->getAttr("emit.fragments"))
-    newMod->setAttr("emit.fragments", fragments);
+  if (auto fragments = op->getAttr(emit::getFragmentsAttrName()))
+    newMod->setAttr(emit::getFragmentsAttrName(), fragments);
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
   newMod.setPrivate();
 
