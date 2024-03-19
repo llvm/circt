@@ -145,7 +145,7 @@ endmodule
 // CHECK-LABEL: moore.module @UnpackedAssocDim
 module UnpackedAssocDim;
   // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<assoc<logic, int>>
-  // CEECK-NEXT: %d1 = moore.variable : !moore.unpacked<assoc<logic, logic>>
+  // CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<assoc<logic, logic>>
   logic d0 [int];
   logic d1 [logic];
 endmodule
