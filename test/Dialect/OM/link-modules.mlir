@@ -61,17 +61,86 @@ module {
 
 // -----
 
-// Check that OM ops are deleted.  Make the "delete-me" op a landmine that will
-// cause a symbol collision if it is _not_ deleted.
+// Check that all conflicting classes are updated.
 module {
   module {
-    // CHECK-NOT: delete-me
-    "delete-me"() {sym_name = "Bar"} : () -> ()
-    om.class @Foo() {
-   }
+    // CHECK: hw.module @Conflict
+    hw.module @Conflict () {}
   }
   module {
-    om.class @Bar() {
-   }
+    // CHECK: om.class @Conflict_module_1
+    om.class @Conflict(){}
+  }
+}
+
+// -----
+
+// Check for linking of multiple modules.
+module {
+  module {
+    // CHECK: hw.module private @nla_0() {
+    hw.module private @nla() {}
+    // CHECK: hw.module private @M2_0
+    hw.module private @M2() {}
+  }
+  module {
+    // CHECK: hw.module private @nla_1() {
+    hw.module private @nla() {}
+    // CHECK: hw.module private @M2_1
+    hw.module private @M2() {}
+  }
+  module {
+    hw.module @top() {}
+    // CHECK: hw.hierpath private @nla_2 [@M1::@s1, @M2_2]
+    hw.hierpath private @nla [@M1::@s1, @M2]
+    // CHECK: hw.hierpath private @xmr [@M1::@s1, @M2_2]
+    hw.hierpath private @xmr [@M1::@s1, @M2]
+    // CHECK: hw.module private @M2_2()
+    hw.module private @M2() {}
+    hw.module @M1(in %a: i1) {
+      hw.instance "" sym @s1 @M2() -> ()
+    }
+    om.class @PathTest(%basepath : !om.basepath) {
+      // CHECK: %0 = om.path_create reference %basepath @nla_2
+      %0 = om.path_create reference %basepath @nla
+    }
+  }
+}
+
+// -----
+
+// Check that symbol users are updated in nested regions.
+module {
+  module {
+    hw.module private @M2() {}
+    hw.module private @C2() {}
+    hw.module private @C1() {}
+  }
+  module {
+    hw.module private @M2() {}
+    hw.module private @C2() {}
+    hw.module private @C1() {}
+    hw.module private @M3() {}
+  }
+  module {
+    // CHECK: om.class @C2_module_2() {
+    om.class @C2() {
+    }
+    // CHECK: om.class @C1_module_2() {
+    om.class @C1() {
+    }
+    hw.module private @M2() {}
+    // CHECK: hw.module private @M3_1() {
+    hw.module private @M3() {}
+    hw.module @M1(in %a: i1) {
+      // CHECK:  %1 = "r3"() {symRefName = @M2_2, symRefName2 = @M3_1} : () -> !om.class.type<@C2_module_2>
+      %x = "r1"() ({
+        "r2"() ({
+          %b = "r3"() {symRefName = @M2, symRefName2 = @M3} : () -> !om.class.type<@C2>
+        }, {
+        }) : () -> ()
+      // CHECK:  {ref = @C1_module_2} : () -> !om.class.type<@C2_module_2>
+      }) {ref = @C1 } : () -> !om.class.type<@C2>
+    }
   }
 }
