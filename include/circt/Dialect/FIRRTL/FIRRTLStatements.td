@@ -348,20 +348,6 @@ def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let hasCanonicalizer = 1;
 }
 
-def XMRRefOp : FIRRTLOp<"xmr.ref"> {
-  let summary = "FIRRTL XMR operation, targetable by ref ops.";
-  let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
-  let results = (outs RefType:$dest);
-  let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
-}
-
-def XMRDerefOp : FIRRTLOp<"xmr.deref"> {
-  let summary = "FIRRTL XMR operation, reading an XMR target.";
-  let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
-  let results = (outs PassiveType:$dest);
-  let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
-}
-
 //===----------------------------------------------------------------------===//
 // Verif Dialect Intrinsics
 //===----------------------------------------------------------------------===//
