@@ -21,13 +21,13 @@
 // CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
 // CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: emit.fragments = [@some_fragment]
-// CEHCK-SAME: }
+// CHECK-SAME: }
 // CHECK: sv.assume
 // CHECK: foo_assume
 // CHECK: hw.module private @issue1246_cover(in %clock : i1) attributes {
 // CHECK-SAME: comment = "VCS coverage exclude_file"
 // CHECK-SAME: emit.fragments = [@some_fragment]
-// CEHCK-SAME: }
+// CHECK-SAME: }
 // CHECK: sv.cover
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246

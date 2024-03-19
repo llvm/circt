@@ -71,7 +71,7 @@ func.func @core(%in: i8) {
   // CHECK: %{{.*}} = smt.ite %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr} : !smt.bv<32>
   %5 = smt.ite %a, %b, %b {smt.some_attr} : !smt.bv<32>
 
-  // CEHCK: %{{.*}} = smt.not %{{.*}} {smt.some_attr}
+  // CHECK: %{{.*}} = smt.not %{{.*}} {smt.some_attr}
   %6 = smt.not %a {smt.some_attr}
   // CHECK: %{{.*}} = smt.and %{{.*}}, %{{.*}}, %{{.*}} {smt.some_attr}
   %7 = smt.and %a, %a, %a {smt.some_attr}
