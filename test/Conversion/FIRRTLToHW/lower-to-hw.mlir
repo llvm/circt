@@ -326,30 +326,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
-    // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
-    // CHECK: [[ADD:%.+]] = comb.add
 
-    // CHECK:      sv.ifdef @SYNTHESIS {
-    // CHECK-NEXT: } else  {
-    // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
-    // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
-    // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
-    // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
-   firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: [[PRINTF_COND_0:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK: [[COND_0:%.+]] = comb.and bin [[PRINTF_COND_0]], %reset : i1
+    // CHECK: sim.print %clock, [[COND_0]], "No operands!\0A"
+    firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
 
+    // CHECK: [[ADD:%.+]] = comb.add bin %1, %2 : i5
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
+    // CHECK: [[PRINTF_COND_1:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK: [[COND_1:%.+]] = comb.and bin [[PRINTF_COND_1]], %reset : i1
+    // CHECK: sim.print %clock, [[COND_1]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>
 
     firrtl.skip

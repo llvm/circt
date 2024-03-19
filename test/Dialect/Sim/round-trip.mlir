@@ -16,3 +16,9 @@ hw.module @stop_finish(in %clock : !seq.clock, in %cond : i1) {
   // CHECK: sim.fatal %clock, %cond
   sim.fatal %clock, %cond
 }
+
+// CHECK-LABEL: hw.module @print
+hw.module @print(in %clock : !seq.clock, in %cond : i1, in %val : i32) {
+  // CHECK: sim.print %clock, %cond, "print %d"(%val) : i32
+  sim.print %clock, %cond, "print %d"(%val) : i32
+}

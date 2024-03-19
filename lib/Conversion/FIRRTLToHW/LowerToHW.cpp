@@ -4225,7 +4225,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 // Printf is a macro op that lowers to an sv.ifdef.procedural, an sv.if,
 // and an sv.fwrite all nested together.
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto clock = getLoweredValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
@@ -4242,27 +4242,15 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     }
   }
 
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    addToAlwaysBlock(clock, [&]() {
-      circuitState.usedPrintfCond = true;
-      fragments.insert(FlatSymbolRefAttr::get(
-          builder.getStringAttr("PRINTF_COND_FRAGMENT")));
-
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond =
-          builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
-
-      addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite, writing to stderr by default.
-        Value fdStderr = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
-        builder.create<sv::FWriteOp>(fdStderr, op.getFormatString(), operands);
-      });
-    });
-  });
-
+  circuitState.usedPrintfCond = true;
+  fragments.insert(
+      FlatSymbolRefAttr::get(builder.getStringAttr("PRINTF_COND_FRAGMENT")));
+  Value printfCondMacro =
+      builder.create<sv::MacroRefExprOp>(cond.getType(), "PRINTF_COND_");
+  Value printCond =
+      builder.createOrFold<comb::AndOp>(printfCondMacro, cond, true);
+  builder.create<sim::PrintOp>(clock, printCond, op.getFormatString(),
+                               operands);
   return success();
 }
 

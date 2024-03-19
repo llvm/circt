@@ -44,8 +44,6 @@ struct SimConversionPattern : public OpConversionPattern<T> {
   SimConversionState &state;
 };
 
-} // namespace
-
 // Lower `sim.plusargs.test` to a standard SV implementation.
 //
 class PlusArgsTestLowering : public SimConversionPattern<PlusArgsTestOp> {
@@ -157,6 +155,41 @@ public:
   }
 };
 
+class PrintLowering : public SimConversionPattern<PrintOp> {
+public:
+  using SimConversionPattern<PrintOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(PrintOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    auto loc = op.getLoc();
+
+    Value clockCast = rewriter.create<seq::FromClockOp>(loc, adaptor.getClk());
+
+    this->state.usedSynthesisMacro = true;
+    rewriter.create<sv::IfDefOp>(
+        loc, "SYNTHESIS", [&] {},
+        [&] {
+          rewriter.create<sv::AlwaysOp>(
+              loc, sv::EventControl::AtPosEdge, clockCast, [&] {
+                rewriter.create<sv::IfOp>(loc, adaptor.getCond(), [&] {
+                  Value fdStderr = rewriter.create<hw::ConstantOp>(
+                      loc, APInt(32, 0x80000002));
+                  rewriter.create<sv::FWriteOp>(loc, fdStderr,
+                                                op.getFormatString(),
+                                                adaptor.getSubstitutions());
+                });
+              });
+        });
+    rewriter.eraseOp(op);
+
+    return success();
+  }
+};
+
+} // namespace
+
 namespace {
 struct SimToSVPass : public LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
@@ -175,6 +208,7 @@ struct SimToSVPass : public LowerSimToSVBase<SimToSVPass> {
       RewritePatternSet patterns(context);
       patterns.add<PlusArgsTestLowering>(context, state);
       patterns.add<PlusArgsValueLowering>(context, state);
+      patterns.add<PrintLowering>(context, state);
       patterns.add<SimulatorStopLowering<sim::FinishOp, sv::FinishOp>>(context,
                                                                        state);
       patterns.add<SimulatorStopLowering<sim::FatalOp, sv::FatalOp>>(context,

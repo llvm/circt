@@ -50,7 +50,6 @@ firrtl.circuit "Simple" {
   firrtl.module private @TestInstance(in %u2: !firrtl.uint<2>, in %s8: !firrtl.sint<8>,
                               in %clock: !firrtl.clock,
                               in %reset: !firrtl.uint<1>) {
-    // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: %c0_i2 = hw.constant
     // CHECK-NEXT: %xyz.out4 = hw.instance "xyz" @Simple(in1: [[ARG1:%.+]]: i4, in2: %u2: i2, in3: %s8: i8) -> (out4: i4)
     %xyz:4 = firrtl.instance xyz @Simple(in in1: !firrtl.uint<4>, in in2: !firrtl.uint<2>, in in3: !firrtl.sint<8>, out out4: !firrtl.uint<4>)
@@ -63,6 +62,9 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
+    // CHECK: [[PRINTF_COND_0:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK: [[COND_0:%.+]] = comb.and bin [[PRINTF_COND_0]], %reset : i1
+    // CHECK: sim.print %clock, [[COND_0]], "%x"(%xyz.out4) : i4
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
 
     // Parameterized module reference.
@@ -71,10 +73,9 @@ firrtl.circuit "Simple" {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %reset: i1) -> (out: i8)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
-    // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
-    // CHECK: sv.fwrite [[FD]], "%x"(%xyz.out4) : i4
-    // CHECK: sv.fwrite [[FD]], "Something interesting! %x"(%myext.out) : i8
-
+    // CHECK: [[PRINTF_COND_1:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK: [[COND_1:%.+]] = comb.and bin [[PRINTF_COND_1]], %reset : i1
+    // CHECK: sim.print %clock, [[COND_1]], "Something interesting! %x"(%myext.out) : i8
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>

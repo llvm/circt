@@ -52,6 +52,29 @@ def FatalOp : SimOp<"fatal"> {
   let results = (outs);
 
   let assemblyFormat = "$clk `,` $cond attr-dict";
+
+}
+
+def PrintOp : SimOp<"print"> {
+  let summary = "Prints a formatted string to `stderr`";
+
+  let description = [{
+    Prints a formatted string, using standard SystemVerilog placeholders,
+    to `stderr` on the rising edge of `clk` when `cond` is high.
+  }];
+
+  let arguments = (ins
+    ClockType:$clk,
+    I1:$cond,
+    StrAttr:$format_string,
+    Variadic<AnyType>:$substitutions
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $clk `,` $cond `,` $format_string attr-dict (`(` $substitutions^ `)`
+      `:` qualified(type($substitutions)))?
+  }];
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
