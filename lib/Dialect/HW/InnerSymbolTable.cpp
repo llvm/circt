@@ -235,9 +235,21 @@ LogicalResult verifyInnerRefNamespace(Operation *op) {
       return WalkResult(user.verifyInnerRefs(ns));
     return WalkResult::advance();
   };
+
+  SmallVector<Operation *> topLevelOps;
+  for (auto &op : op->getRegion(0).front()) {
+    // Gather operations with regions for parallel processing.
+    if (op.getNumRegions() != 0) {
+      topLevelOps.push_back(&op);
+      continue;
+    }
+    // Otherwise, handle right now -- not worth the cost.
+    if (verifySymbolUserFn(&op).wasInterrupted())
+      return failure();
+  }
   return mlir::failableParallelForEach(
-      op->getContext(), op->getRegion(0).front(), [&](auto &op) {
-        return success(!op.walk(verifySymbolUserFn).wasInterrupted());
+      op->getContext(), topLevelOps, [&](Operation *op) {
+        return success(!op->walk(verifySymbolUserFn).wasInterrupted());
       });
 }
 
