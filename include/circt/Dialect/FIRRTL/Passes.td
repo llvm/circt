@@ -671,17 +671,28 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   ];
 }
 
-def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
-  let summary = "Lower intrinsics";
+def IntrinsicInstancesToOps : Pass<"firrtl-intrinsic-instances-to-ops", "firrtl::CircuitOp"> {
+  let summary = "Lower instances instances of intrinsic modules to ops.";
   let description = [{
-    This pass lowers intrinsics encoded as extmodule with annotation and
-    intmodule to their implementation or op.
+    This pass replaces instances of intrinsic modules (intmodule) with 
+    `firrtl.int.generic` operations, and removes the intmodule's from
+    the circuit.
+ 
+    Use this before running LowerIntrinsics.
   }];
-  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let constructor = "circt::firrtl::createIntrinsicInstancesToOpsPass()";
   let options = [
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,
   ];
+}
+
+def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
+  let summary = "Lower intrinsics";
+  let description = [{
+    This pass lowers generic intrinsic ops to their implementation or op.
+  }];
+  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {

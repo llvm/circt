@@ -7,57 +7,34 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
 using namespace firrtl;
 
-IntrinsicConverter::~IntrinsicConverter() = default;
-
-ParseResult IntrinsicConverter::hasNPorts(unsigned n) {
-  if (mod.getPorts().size() != n) {
-    mod.emitError(name) << " has " << mod.getPorts().size()
-                        << " ports instead of " << n;
-    return failure();
-  }
+ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
+  if (op.getNumOperands() != n)
+    return emitError() << " has " << op.getNumOperands()
+                       << " inputs instead of " << n;
   return success();
 }
 
-ParseResult IntrinsicConverter::namedPort(unsigned n, StringRef portName) {
-  auto ports = mod.getPorts();
-  if (n >= ports.size()) {
-    mod.emitError(name) << " missing port " << n;
-    return failure();
-  }
-  if (!ports[n].getName().equals(portName)) {
-    mod.emitError(name) << " port " << n << " named '" << ports[n].getName()
-                        << "' instead of '" << portName << "'";
-    return failure();
-  }
+ParseResult GenericIntrinsic::hasNOutputElements(unsigned n) {
+  auto b = getOutputBundle();
+  if (!b)
+    return emitError() << " missing output bundle";
+  if (b.getType().getNumElements() != n)
+    return emitError() << " has " << b.getType().getNumElements()
+                       << " output elements instead of " << n;
   return success();
 }
 
-ParseResult IntrinsicConverter::resetPort(unsigned n) {
-  auto ports = mod.getPorts();
-  if (n >= ports.size()) {
-    mod.emitError(name) << " missing port " << n;
-    return failure();
-  }
-  if (isa<ResetType, AsyncResetType>(ports[n].type))
-    return success();
-  if (auto uintType = dyn_cast<UIntType>(ports[n].type))
-    if (uintType.getWidth() == 1)
-      return success();
-  mod.emitError(name) << " port " << n << " not of correct type";
-  return failure();
-}
-
-ParseResult IntrinsicConverter::hasNParam(unsigned n, unsigned c) {
+ParseResult GenericIntrinsic::hasNParam(unsigned n, unsigned c) {
   unsigned num = 0;
-  if (mod.getParameters())
-    num = mod.getParameters().size();
+  if (op.getParameters())
+    num = op.getParameters().size();
   if (num < n || num > n + c) {
-    auto d = mod.emitError(name) << " has " << num << " parameters instead of ";
+    auto d = emitError() << " has " << num << " parameters instead of ";
     if (c == 0)
       d << n;
     else
@@ -67,91 +44,86 @@ ParseResult IntrinsicConverter::hasNParam(unsigned n, unsigned c) {
   return success();
 }
 
-ParseResult IntrinsicConverter::namedParam(StringRef paramName, bool optional) {
-  for (auto a : mod.getParameters()) {
+ParseResult GenericIntrinsic::namedParam(StringRef paramName, bool optional) {
+  for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
     if (param.getName().getValue().equals(paramName)) {
       if (isa<StringAttr>(param.getValue()))
         return success();
 
-      mod.emitError(name) << " has parameter '" << param.getName()
-                          << "' which should be a string but is not";
-      return failure();
+      return emitError() << " has parameter '" << param.getName()
+                         << "' which should be a string but is not";
     }
   }
   if (optional)
     return success();
-  mod.emitError(name) << " is missing parameter " << paramName;
-  return failure();
+  return emitError() << " is missing parameter " << paramName;
 }
 
-ParseResult IntrinsicConverter::namedIntParam(StringRef paramName,
-                                              bool optional) {
-  for (auto a : mod.getParameters()) {
+ParseResult GenericIntrinsic::namedIntParam(StringRef paramName,
+                                            bool optional) {
+  for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
     if (param.getName().getValue().equals(paramName)) {
       if (isa<IntegerAttr>(param.getValue()))
         return success();
 
-      mod.emitError(name) << " has parameter '" << param.getName()
-                          << "' which should be an integer but is not";
-      return failure();
+      return emitError() << " has parameter '" << param.getName()
+                         << "' which should be an integer but is not";
     }
   }
   if (optional)
     return success();
-  mod.emitError(name) << " is missing parameter " << paramName;
-  return failure();
+  return emitError() << " is missing parameter " << paramName;
 }
 
-LogicalResult IntrinsicLowerings::doLowering(FModuleLike mod,
-                                             IntrinsicConverter &conv) {
-  if (conv.check())
-    return failure();
-  for (auto *use : graph.lookup(mod)->uses())
-    if (failed(conv.convert(use->getInstance<InstanceOp>())))
+/// Conversion pattern adaptor dispatching via generic intrinsic name.
+class IntrinsicOpConversion final
+    : public OpConversionPattern<GenericIntrinsicOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
+
+  IntrinsicOpConversion(MLIRContext *context,
+                        const ConversionMapTy &conversions)
+      : OpConversionPattern(context), conversions(conversions) {}
+
+  LogicalResult
+  matchAndRewrite(GenericIntrinsicOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto it = conversions.find(op.getIntrinsicAttr());
+    if (it == conversions.end())
       return failure();
-  return success();
-}
 
-LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
-                                        bool allowUnknownIntrinsics) {
-  unsigned numFailures = 0;
-  for (auto op : llvm::make_early_inc_range(circuit.getOps<FModuleLike>())) {
-    if (auto extMod = dyn_cast<FExtModuleOp>(*op)) {
-      // Special-case some extmodules, identifying them by name.
-      auto it = extmods.find(extMod.getDefnameAttr());
-      if (it != extmods.end()) {
-        if (succeeded(it->second(op))) {
-          op.erase();
-          ++numConverted;
-        } else {
-          ++numFailures;
-        }
-      }
-      continue;
-    }
-
-    auto intMod = dyn_cast<FIntModuleOp>(*op);
-    if (!intMod)
-      continue;
-
-    auto intname = intMod.getIntrinsicAttr();
-
-    // Find the converter and apply it.
-    auto it = intmods.find(intname);
-    if (it == intmods.end()) {
-      if (allowUnknownIntrinsics)
-        continue;
-      return op.emitError() << "intrinsic not recognized";
-    }
-    if (failed(it->second(op))) {
-      ++numFailures;
-      continue;
-    }
-    ++numConverted;
-    op.erase();
+    auto &conv = *it->second;
+    if (conv.check(GenericIntrinsic(op)))
+      return failure();
+    conv.convert(GenericIntrinsic(op), adaptor, rewriter);
+    return success();
   }
 
-  return success(numFailures == 0);
+private:
+  const ConversionMapTy &conversions;
+};
+
+LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
+                                        bool allowUnknownIntrinsics) {
+
+  ConversionTarget target(*context);
+
+  target.addLegalDialect<FIRRTLDialect>();
+  if (allowUnknownIntrinsics)
+    target.addDynamicallyLegalOp<GenericIntrinsicOp>(
+        [this](GenericIntrinsicOp op) {
+          return !conversions.count(op.getIntrinsicAttr());
+        });
+  else
+    target.addIllegalOp<GenericIntrinsicOp>();
+
+  RewritePatternSet patterns(context);
+  patterns.add<IntrinsicOpConversion>(context, conversions);
+
+  return mlir::applyPartialConversion(mod, target, std::move(patterns));
 }
