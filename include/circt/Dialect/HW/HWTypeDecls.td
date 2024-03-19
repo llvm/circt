@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_HW_HWTYPEDECLS_TD
 #define CIRCT_DIALECT_HW_HWTYPEDECLS_TD
 
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Dialect/HW/HWDialect.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -20,8 +21,14 @@ include "mlir/IR/SymbolInterfaces.td"
 // Declaration operations
 //===----------------------------------------------------------------------===//
 
-def TypeScopeOp : HWOp<"type_scope",
-      [Symbol, SymbolTable, SingleBlock, NoTerminator, NoRegionArguments]> {
+def TypeScopeOp : HWOp<"type_scope", [
+    Emittable,
+    Symbol,
+    SymbolTable,
+    SingleBlock,
+    NoTerminator,
+    NoRegionArguments
+]> {
   let summary = "Type declaration wrapper.";
   let description = [{
     An operation whose one body block contains type declarations. This op

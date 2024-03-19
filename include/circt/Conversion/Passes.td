@@ -404,8 +404,13 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert FSM to SV and HW";
   let constructor = "circt::createConvertFSMToSVPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
-                           "circt::seq::SeqDialect", "circt::sv::SVDialect"];
+  let dependentDialects = [
+      "circt::comb::CombDialect",
+      "circt::emit::EmitDialect",
+      "circt::hw::HWDialect",
+      "circt::seq::SeqDialect",
+      "circt::sv::SVDialect",
+  ];
 }
 
 //===----------------------------------------------------------------------===//

@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTFSMToSV
     LINK_LIBS PUBLIC
     CIRCTComb
     CIRCTHW
+    CIRCTEmit
     CIRCTFSM
     CIRCTSeq
     CIRCTSV

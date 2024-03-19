@@ -6082,6 +6082,9 @@ void FileEmitter::emit(Block *block) {
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
+        .Case<TypeScopeOp>([&](auto typedecls) {
+          ModuleEmitter(state).emitStatement(typedecls);
+        })
         .Default(
             [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
@@ -6113,6 +6116,9 @@ void FileEmitter::emitOp(emit::RefOp op) {
   TypeSwitch<Operation *>(targetOp)
       .Case<hw::HWModuleOp>(
           [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
+      .Case<TypeScopeOp>([&](auto typedecls) {
+        ModuleEmitter(state).emitStatement(typedecls);
+      })
       .Default(
           [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
 }
