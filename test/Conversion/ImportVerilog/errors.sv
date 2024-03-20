@@ -81,8 +81,12 @@ endmodule
 
 module Foo;
   bit x, y;
-  // expected-error @below {{match patterns in if conditions not supported}}
-  initial if (x matches 42) x = y;
+// expected-error @below {{match patterns in if conditions not supported}}
+  initial begin
+    if (x == 42) begin
+      x = y;
+    end
+  end
 endmodule
 
 // -----
