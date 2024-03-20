@@ -90,6 +90,12 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
+
+  /// A stack of assignment left-hand side values. Each assignment will push its
+  /// lowered left-hand side onto this stack before lowering its right-hand
+  /// side. This allows expressions to resolve the opaque
+  /// `LValueReferenceExpression`s in the AST.
+  SmallVector<Value> lvalueStack;
 };
 
 } // namespace ImportVerilog

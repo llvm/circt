@@ -190,7 +190,7 @@ module Statements;
     x = y;
 
     // CHECK: moore.blocking_assign %y, %z : !moore.bit
-    // CHECK: moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: moore.blocking_assign %x, %z : !moore.bit
     x = (y = z);
 
     // CHECK: moore.nonblocking_assign %x, %y : !moore.bit
@@ -262,6 +262,30 @@ module Expressions;
     // CHECK: [[TMP:%.+]] = moore.bool_cast %a : !moore.int -> !moore.bit
     // CHECK: moore.not [[TMP]] : !moore.bit
     x = !a;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.add [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[PRE]]
+    c = a++;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.sub [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[PRE]]
+    c = a--;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.add [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[POST]]
+    c = ++a;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.sub [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[POST]]
+    c = --a;
 
     //===------------------------------------------------------------------===//
     // Binary operators
@@ -359,6 +383,70 @@ module Expressions;
     c = a >>> b;
     // CHECK: moore.shr %u, %b : !moore.int<unsigned>, !moore.int
     c = u >>> b;
+
+    //===------------------------------------------------------------------===//
+    // Assign operators
+
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.add [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a += b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.sub [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a -= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.mul [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a *= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
+    // CHECK: [[TMP2:%.+]] = moore.div [[TMP1]], %d
+    // CHECK: moore.blocking_assign %f, [[TMP2]]
+    f /= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
+    // CHECK: [[TMP2:%.+]] = moore.mod [[TMP1]], %d
+    // CHECK: moore.blocking_assign %f, [[TMP2]]
+    f %= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.and [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a &= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.or [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a |= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.xor [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a ^= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shl [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a <<= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shl [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a <<<= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shr [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a >>= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.ashr [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a >>>= b;
+
+    // CHECK: [[A_ADD:%.+]] = moore.read_lvalue %a
+    // CHECK: [[A_MUL:%.+]] = moore.read_lvalue %a
+    // CHECK: [[A_DEC:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP1:%.+]] = moore.constant 1
+    // CHECK: [[TMP2:%.+]] = moore.sub [[A_DEC]], [[TMP1]]
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    // CHECK: [[TMP1:%.+]] = moore.mul [[A_MUL]], [[A_DEC]]
+    // CHECK: moore.blocking_assign %a, [[TMP1]]
+    // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a += (a *= a--);
   end
 endmodule
 
