@@ -5005,6 +5005,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
+  StringRef intName;
   ArrayAttr layers;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
@@ -5013,15 +5014,11 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
   if (parseId(name, "expected intmodule name") ||
       parseOptionalEnabledLayers(layers) ||
       parseToken(FIRToken::colon, "expected ':' in intmodule definition") ||
-      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent) ||
+      parseToken(FIRToken::kw_intrinsic, "expected 'intrinsic'") ||
+      parseToken(FIRToken::equal, "expected '=' in intrinsic") ||
+      parseId(intName, "expected intrinsic name"))
     return failure();
-
-  StringRef intName;
-  if (consumeIf(FIRToken::kw_intrinsic)) {
-    if (parseToken(FIRToken::equal, "expected '=' in intrinsic") ||
-        parseId(intName, "expected intrinsic name"))
-      return failure();
-  }
 
   ArrayAttr parameters;
   ArrayAttr internalPaths;

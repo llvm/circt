@@ -137,11 +137,6 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
       continue;
 
     auto intname = intMod.getIntrinsicAttr();
-    if (!intname) {
-      op.emitError("intrinsic module with no intrinsic name");
-      ++numFailures;
-      continue;
-    }
 
     // Find the converter and apply it.
     auto it = intmods.find(intname);

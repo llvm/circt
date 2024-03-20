@@ -1382,3 +1382,16 @@ FIRRTL version 4.0.0
 circuit PrivateMainModule:
   ; expected-error @below {{private main modules were removed in FIRRTL 4.0.0}}
   module PrivateMainModule:
+
+;// -----
+circuit IntModuleNoIntrinsic:
+  intmodule test:
+  ; expected-error @below {{expected 'intrinsic'}}
+  module IntModule:
+
+;// -----
+circuit IntModuleBadIntrinsic:
+  intmodule test:
+    ; expected-error @below {{expected intrinsic name}}
+    intrinsic = 0
+  module IntModule:
