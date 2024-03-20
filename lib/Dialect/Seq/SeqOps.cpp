@@ -441,7 +441,10 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
     OptionalParseResult presetIntResult =
         parser.parseOptionalInteger(presetValue.emplace());
     if (!presetIntResult.has_value() || failed(*presetIntResult))
-      return parser.emitError(loc, "expected integer value");
+      return parser.emitError(presetValueLoc, "expected integer value");
+    if (presetValue->isNegative())
+      return parser.emitError(presetValueLoc,
+                              "preset value must not be negative");
   }
 
   Type ty;
@@ -464,7 +467,7 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
     APInt presetResult = presetValue->sextOrTrunc(width);
     if (presetResult.zextOrTrunc(presetValue->getBitWidth()) != *presetValue)
-      return parser.emitError(loc, "preset value too large");
+      return parser.emitError(presetValueLoc, "preset value too large");
 
     auto builder = parser.getBuilder();
     auto presetTy = builder.getIntegerType(width);
@@ -508,7 +511,12 @@ void FirRegOp::print(::mlir::OpAsmPrinter &p) {
   }
 
   if (auto preset = getPresetAttr()) {
-    p << " preset " << preset.getValue();
+    p << " preset ";
+    const auto &presetVal = preset.getValue();
+    if (presetVal.isNonNegative())
+      p << presetVal;
+    else
+      p << presetVal.zext(presetVal.getBitWidth() + 1);
   }
 
   if (canElideName(p, *this))
