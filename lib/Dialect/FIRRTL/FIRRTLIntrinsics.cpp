@@ -129,19 +129,8 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
         } else {
           ++numFailures;
         }
-        continue;
       }
-
-      // Otherwise, find extmodules which have an intrinsic annotation.
-      auto anno = AnnotationSet(&*op).getAnnotation("circt.Intrinsic");
-      if (!anno)
-        continue;
-      intname = anno.getMember<StringAttr>("intrinsic");
-      if (!intname) {
-        op.emitError("intrinsic annotation with no intrinsic name");
-        ++numFailures;
-        continue;
-      }
+      continue;
     } else if (auto intMod = dyn_cast<FIntModuleOp>(*op)) {
       intname = intMod.getIntrinsicAttr();
       if (!intname) {
