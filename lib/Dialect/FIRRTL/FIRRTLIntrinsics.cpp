@@ -118,7 +118,6 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
                                         bool allowUnknownIntrinsics) {
   unsigned numFailures = 0;
   for (auto op : llvm::make_early_inc_range(circuit.getOps<FModuleLike>())) {
-    StringAttr intname;
     if (auto extMod = dyn_cast<FExtModuleOp>(*op)) {
       // Special-case some extmodules, identifying them by name.
       auto it = extmods.find(extMod.getDefnameAttr());
@@ -131,14 +130,16 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
         }
       }
       continue;
-    } else if (auto intMod = dyn_cast<FIntModuleOp>(*op)) {
-      intname = intMod.getIntrinsicAttr();
-      if (!intname) {
-        op.emitError("intrinsic module with no intrinsic name");
-        ++numFailures;
-        continue;
-      }
-    } else {
+    }
+
+    auto intMod = dyn_cast<FIntModuleOp>(*op);
+    if (!intMod)
+      continue;
+
+    auto intname = intMod.getIntrinsicAttr();
+    if (!intname) {
+      op.emitError("intrinsic module with no intrinsic name");
+      ++numFailures;
       continue;
     }
 
