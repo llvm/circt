@@ -740,30 +740,35 @@ hw.module @SiFive_MulDiv(in %clock: i1, in %reset: i1, out io_req_ready: i1) {
   // CHECK-NEXT: );
 }
 
-sv.bind.interface <@BindInterface::@__Interface__> {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
+emit.file "BindTest/BindInterface.sv" {
+  sv.bind.interface <@BindInterface::@__Interface__>
+}
+
 sv.interface @Interface {
   sv.interface.signal @a : i1
   sv.interface.signal @b : i1
 }
 
-  hw.module.extern @W422_Bar(out clock: i1, out reset: i1)
-  hw.module.extern @W422_Baz(out q: i1)
+hw.module.extern @W422_Bar(out clock: i1, out reset: i1)
+
+hw.module.extern @W422_Baz(out q: i1)
+
 // CHECK-LABEL: module W422_Foo
 // CHECK-NOT: GEN
-  hw.module @W422_Foo() {
-    %false = hw.constant false
-    %bar.clock, %bar.reset = hw.instance "bar" @W422_Bar() -> (clock: i1, reset: i1)
-    %baz.q = hw.instance "baz" @W422_Baz() -> (q: i1)
-    %q = sv.reg sym @__q__  : !hw.inout<i1>
-    sv.always posedge %bar.clock, posedge %bar.reset {
-      sv.if %bar.reset {
-        sv.passign %q, %false : i1
-      } else {
-        sv.passign %q, %baz.q : i1
-      }
+hw.module @W422_Foo() {
+  %false = hw.constant false
+  %bar.clock, %bar.reset = hw.instance "bar" @W422_Bar() -> (clock: i1, reset: i1)
+  %baz.q = hw.instance "baz" @W422_Baz() -> (q: i1)
+  %q = sv.reg sym @__q__  : !hw.inout<i1>
+  sv.always posedge %bar.clock, posedge %bar.reset {
+    sv.if %bar.reset {
+      sv.passign %q, %false : i1
+    } else {
+      sv.passign %q, %baz.q : i1
     }
-    hw.output
   }
+  hw.output
+}
 
 hw.module @BindInterface() {
   %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
