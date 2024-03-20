@@ -1028,11 +1028,11 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
-                         StringRef intrinsicNameAttr, ArrayAttr annotations,
+                         StringRef intrinsicNameStr, ArrayAttr annotations,
                          ArrayAttr parameters, ArrayAttr internalPaths,
                          ArrayAttr layers) {
   buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameAttr));
+  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameStr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
   result.addAttribute(getParametersAttrName(result.name), parameters);

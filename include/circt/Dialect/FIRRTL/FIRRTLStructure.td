@@ -225,7 +225,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
   let arguments = (ins
-                   OptionalAttr<StrAttr>:$intrinsic,
+                   StrAttr:$intrinsic,
                    ArrayRefAttr:$portLocations,
                    ParamDeclArrayAttr:$parameters,
                    DefaultValuedAttr<AnnotationArrayAttr,
@@ -240,7 +240,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<PortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$intrinsicNameAttr,
+                      "StringRef":$intrinsicNameStr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                       CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
                       CArg<"ArrayAttr", "ArrayAttr()">:$internalPaths,
