@@ -94,7 +94,7 @@ circt::ibis::detail::getThisFromScope(Operation *op) {
   if (std::next(thisOps.begin()) != thisOps.end())
     return op->emitOpError("must contain only one 'ibis.this' operation");
 
-  return {*thisOps.begin()};
+  return (*thisOps.begin()).getThisRef();
 }
 
 LogicalResult circt::ibis::detail::verifyScopeOpInterface(Operation *op) {

@@ -55,6 +55,7 @@ struct CallPrepPrecomputed {
     //     cls.getSymNameAttr(),
     //     {FlatSymbolRefAttr::get(method.getContext(),
     //     *method.getInnerName())});
+    return SymbolRefAttr();
   }
 };
 
@@ -130,6 +131,7 @@ CallPrepPrecomputed::resolveInstancePath(Operation *scope,
   assert(false && "Not implemented for new IR format");
   // return SymbolRefAttr::get(cls.getSymNameAttr(),
   //                           {FlatSymbolRefAttr::get(path.getLeafReference())});
+  return SymbolRefAttr();
 }
 
 namespace {
