@@ -47,14 +47,14 @@ namespace {
 // conversion from YAML.  The LLVM YAML infrastructure doesn't provide the
 // ability to differentitate this and we don't need it for the purposes of
 // Grand Central.
-static std::string noDefault(StringRef clazz) {
+[[maybe_unused]] static std::string noDefault(StringRef clazz) {
   return ("default '" + clazz +
           "' construction is an intentionally *NOT* implemented "
           "YAML feature (you should never be using this)")
       .str();
 }
 
-static std::string deNorm(StringRef clazz) {
+[[maybe_unused]] static std::string deNorm(StringRef clazz) {
   return ("conversion from YAML to a '" + clazz +
           "' is intentionally *NOT* implemented (you should not be "
           "converting from YAML to an interface)")
