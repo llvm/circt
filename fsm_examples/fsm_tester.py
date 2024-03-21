@@ -4,7 +4,7 @@ import os
 
 reps = 10
 
-time = 20
+time =400
 
 for file in os.listdir("linear/"):
     to_check = int(file.split("_")[1].split("s")[0])-2
