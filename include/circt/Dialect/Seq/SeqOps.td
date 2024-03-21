@@ -520,6 +520,8 @@ def FirMemOp : SeqOp<"firmem", [
     $readLatency `,` $writeLatency `,` $ruw `,` $wuw
     attr-dict `:` type($memory)
   }];
+
+  let hasCanonicalizeMethod = true;
 }
 
 class AddressMatchesFirMem<string memoryValue, string addressValue> :
