@@ -411,6 +411,16 @@ private:
     return llvm::all_equal(valueBitsSrc[val]);
   }
 
+  // Temporary wires can be used to drive the enable signal, get a set of all
+  // such Values that can potentially drive the enable signal.
+  // For the following example, {wire1, wire2, enableDriver}  are the drivers.
+  // wire1 = firrtl.wire
+  // wire2 = firrtl.wire
+  // connect wire1, wire2
+  // connect wire2, enableDriver
+  // connect enable, wire1
+  //
+  // Note: circt passes can introduce such temporary wires.
   void getEnableDrivers(Value enable, llvm::SmallDenseSet<Value> &enableSet) {
     while (auto src = getConnectSrc(enable)) {
       if (!enableSet.insert(src).second)
