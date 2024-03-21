@@ -58,11 +58,11 @@ a visual overview.
 <p align="center"><img src="/includes/img/smt_based_formal_verification_infra.svg"/></p>
 
 The overall flow will insert an explicit operation to specify the verification
-problem (e.g., `verif.lec`, `verif.bmc`). This operation can then be lowered to
-an encoding in SMT, an interactive theorem prover, a BDD, or potentially being
-exported to existing tools (currently only SMT is supported). Each of those
-might have their own different backend paths as well. E.g., an encoding in SMT
-can be exported to SMT-LIB or lowered to LLVM IR that calls the Z3 solver.
+problem (e.g., `verif.lec`, `verif.bmc`). This operation could then be lowered
+to an encoding in SMT, an interactive theorem prover, a BDD, or potentially
+being exported to existing tools (currently only SMT is supported). Each of
+those might have their own different backend paths as well. E.g., an encoding in
+SMT can be exported to SMT-LIB or lowered to LLVM IR that calls the Z3 solver.
 
 In the following sections we are going to explain this lowering hierarchy in
 more detail by looking at an example of SMT based LEC.
@@ -70,8 +70,7 @@ more detail by looking at an example of SMT based LEC.
 ### Building a custom LEC tool
 
 Let's suppose we want to implement our own custom LEC tool for our novel HDL
-language which lowers to a CIRCT/MLIR based IR. There are two ways to implement
-this:
+which lowers to a CIRCT/MLIR based IR. There are two ways to implement this:
 1. Lower this IR to the CIRCT core representation (HW, Comb, Seq) and just use
 the same pipeline as `circt-lec`. This has the advantage that we don't need to
 think about SMT encodings and we might already compile to those dialects anyway
