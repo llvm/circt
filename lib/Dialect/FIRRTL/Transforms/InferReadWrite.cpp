@@ -411,6 +411,16 @@ private:
     return llvm::all_equal(valueBitsSrc[val]);
   }
 
+  void getEnableDrivers(Value enable, llvm::SmallDenseSet<Value> &enableSet) {
+    while (auto src = getConnectSrc(enable)) {
+      if (!enableSet.insert(src).second)
+        return;
+      if (!isa_and_nonnull<WireOp>(src.getDefiningOp()))
+        return;
+      enable = src;
+    }
+  }
+
   // Remove redundant dependence of wmode on the enable signal. wmode can assume
   // the enable signal be true.
   void simplifyWmode(MemOp &memOp) {
@@ -421,7 +431,8 @@ private:
       auto portKind = memOp.getPortKind(portIt.index());
       if (portKind != MemOp::PortKind::ReadWrite)
         continue;
-      Value enableDriver, wmodeDriver;
+      Value wmodeDriver;
+      llvm::SmallDenseSet<Value> enableDrivers;
       Value portVal = portIt.value();
       // Iterate over all users of the rw port.
       for (Operation *u : portVal.getUsers())
@@ -430,26 +441,28 @@ private:
           auto fName =
               sf.getInput().getType().base().getElementName(sf.getFieldIndex());
           // Record the enable and wmode fields.
-          if (fName.contains("en"))
-            enableDriver = getConnectSrc(sf.getResult());
+          if (fName.contains("en")) {
+            getEnableDrivers(sf.getResult(), enableDrivers);
+          }
           if (fName.contains("wmode"))
             wmodeDriver = getConnectSrc(sf.getResult());
         }
 
-      if (enableDriver && wmodeDriver) {
+      if (!enableDrivers.empty() && wmodeDriver) {
         ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
         builder.setInsertionPointToStart(
             memOp->getParentOfType<FModuleOp>().getBodyBlock());
         auto constOne = builder.create<ConstantOp>(
             UIntType::get(builder.getContext(), 1), APInt(1, 1));
-        setEnable(enableDriver, wmodeDriver, constOne);
+        setEnable(enableDrivers, wmodeDriver, constOne);
       }
     }
   }
 
   // Replace any occurence of enable on the expression tree of wmode with a
   // constant one.
-  void setEnable(Value enableDriver, Value wmodeDriver, Value constOne) {
+  void setEnable(llvm::SmallDenseSet<Value> &enableDrivers, Value wmodeDriver,
+                 Value constOne) {
     auto getDriverOp = [&](Value dst) -> Operation * {
       // Look through one level of wire to get the driver op.
       auto *defOp = dst.getDefiningOp();
@@ -472,7 +485,7 @@ private:
       if (!defOp)
         continue;
       for (auto operand : llvm::enumerate(defOp->getOperands())) {
-        if (operand.value() == enableDriver)
+        if (enableDrivers.contains(operand.value()))
           defOp->setOperand(operand.index(), constOne);
         else
           stack.push_back(operand.value());
