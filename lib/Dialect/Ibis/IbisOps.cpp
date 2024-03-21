@@ -249,6 +249,8 @@ LogicalResult ReturnOp::verify() {
 
 LogicalResult GetVarOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   assert(false && "Not implemented for new IR");
+  return failure();
+
   // TODO: Fix this code.
   // ScopeRefType parentType = getInstance().getType().cast<ScopeRefType>();
   // auto varOp = ns.lookupOp<VarOp>(hw::InnerRefAttr::get(

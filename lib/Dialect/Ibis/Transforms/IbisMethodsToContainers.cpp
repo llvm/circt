@@ -31,8 +31,8 @@ struct DataflowMethodOpConversion
   matchAndRewrite(DataflowMethodOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
-    auto newContainer = rewriter.create<ContainerOp>(
-        op.getLoc(), op.getInnerSym().getSymName(), false);
+    auto newContainer =
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSym(), false);
     rewriter.setInsertionPointToStart(newContainer.getBodyBlock());
 
     // Create mandatory %this

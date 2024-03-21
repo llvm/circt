@@ -612,16 +612,16 @@ def ContainerOp : IbisOp<"container", [
     $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins "StringAttr":$name, "bool":$isTopLevel), [{
-      auto region = $_state.addRegion();
-      region->push_back(new Block());
-      $_state.addAttribute(getInnerSymAttrName($_state.name), name);
-      if (isTopLevel)
-        $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
-    }]>
-  ];
+  // let skipDefaultBuilders = 1;
+  // let builders = [
+  //   OpBuilder<(ins "StringAttr":$name, "bool":$isTopLevel), [{
+  //     auto region = $_state.addRegion();
+  //     region->push_back(new Block());
+  //     $_state.addAttribute(getInnerSymAttrName($_state.name), name);
+  //     if (isTopLevel)
+  //       $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
+  //   }]>
+  // ];
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.

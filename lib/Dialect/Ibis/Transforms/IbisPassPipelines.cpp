@@ -31,10 +31,11 @@ void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
   // removed before we start tunneling - no reason to tunnel the same thing
   // twice.
   pm.addPass(mlir::createCSEPass());
-  pm.addPass(createTunnelingPass(IbisTunnelingOptions{"", ""}));
+  pm.nest<DesignOp>().addPass(
+      createTunnelingPass(IbisTunnelingOptions{"", ""}));
   pm.addPass(createPortrefLoweringPass());
   pm.addPass(createSimpleCanonicalizerPass());
-  pm.addPass(createCleanSelfdriversPass());
+  pm.nest<DesignOp>().addPass(createCleanSelfdriversPass());
   pm.addPass(createContainersToHWPass());
 }
 
