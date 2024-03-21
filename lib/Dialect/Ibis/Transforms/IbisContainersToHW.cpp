@@ -101,9 +101,16 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
     auto design = op->getParentOfType<DesignOp>();
     rewriter.setInsertionPoint(design);
 
+    // If the container is a top level container, ignore the design name.
+    StringAttr hwmodName;
+    if (op.getIsTopLevel())
+      hwmodName = op.getInnerNameAttr();
+    else
+      hwmodName = concatNames(op.getInnerRef());
+
     const ContainerPortInfo &cpi = portOrder.at(op.getInnerRef());
-    auto hwMod = rewriter.create<hw::HWModuleOp>(
-        op.getLoc(), concatNames(op.getInnerRef()), *cpi.hwPorts);
+    auto hwMod =
+        rewriter.create<hw::HWModuleOp>(op.getLoc(), hwmodName, *cpi.hwPorts);
     modSymMap[op.getInnerRef()] = hwMod.getSymNameAttr();
 
     hw::OutputOp outputOp =

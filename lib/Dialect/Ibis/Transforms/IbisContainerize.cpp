@@ -45,7 +45,7 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
         ns.newName(parentClass.getInnerNameAttr().strref() + "_" +
                    op.getInnerNameAttr().strref()));
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
+        rewriter.create<ContainerOp>(op.getLoc(), newContainerName, false);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
 
@@ -78,7 +78,7 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerNameAttr());
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerNameAttr(), false);
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();

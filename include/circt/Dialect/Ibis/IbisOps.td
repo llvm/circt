@@ -605,19 +605,21 @@ def ContainerOp : IbisOp<"container", [
     An ibis container describes a collection of logic nested within an Ibis class.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym);
+  let arguments = (ins InnerSymAttr:$inner_sym, UnitAttr:$isTopLevel);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $inner_sym attr-dict-with-keyword $body
+    $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name), [{
+    OpBuilder<(ins "StringAttr":$name, "bool":$isTopLevel), [{
       auto region = $_state.addRegion();
       region->push_back(new Block());
       $_state.addAttribute(getInnerSymAttrName($_state.name), name);
+      if (isTopLevel)
+        $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
     }]>
   ];
 

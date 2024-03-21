@@ -8,7 +8,7 @@ ibis.design @D {
 // CHECK:  hw.module @D_AccessSibling(in %p_b_out : i1, out p_b_in : i1) {
 // CHECK:    hw.output %p_b_out : i1
 // CHECK:  }
-// CHECK:  hw.module @D_Parent() {
+// CHECK:  hw.module @Parent() {
 // CHECK:    %a.p_b_in = hw.instance "a" @D_AccessSibling(p_b_out: %b.out: i1) -> (p_b_in: i1)
 // CHECK:    %b.out = hw.instance "b" @D_B(in: %a.p_b_in: i1) -> (out: i1)
 // CHECK:    hw.output
@@ -31,7 +31,7 @@ ibis.container @AccessSibling {
   ibis.port.write %p_b_in, %p_b_out.val : !ibis.portref<out i1>
   %p_b_out.val = ibis.port.read %p_b_out : !ibis.portref<in i1>
 }
-ibis.container @Parent {
+ibis.container @Parent top_level {
   %this = ibis.this <@D::@Parent>
   %a = ibis.container.instance @a, <@D::@AccessSibling>
   %a.p_b_out.ref = ibis.get_port %a, @p_b_out : !ibis.scoperef<@D::@AccessSibling> -> !ibis.portref<in i1>
