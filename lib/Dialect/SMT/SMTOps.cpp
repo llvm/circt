@@ -313,5 +313,156 @@ ParseResult IntConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// ForallOp
+//===----------------------------------------------------------------------===//
+
+template <typename QuantifierOp>
+static LogicalResult verifyQuantifierRegions(QuantifierOp op) {
+  if (op.getBoundVarNames() &&
+      op.getBody().getNumArguments() != op.getBoundVarNames()->size())
+    return op.emitOpError(
+        "number of bound variable names must match number of block arguments");
+  if (op.getBody().front().getTerminator()->getNumOperands() != 1)
+    return op.emitOpError("must have exactly one yielded value");
+  if (!isa<BoolType>(
+          op.getBody().front().getTerminator()->getOperand(0).getType()))
+    return op.emitOpError("yielded value must be of '!smt.bool' type");
+
+  for (auto regionWithIndex : llvm::enumerate(op.getPatterns())) {
+    unsigned i = regionWithIndex.index();
+    Region &region = regionWithIndex.value();
+
+    if (op.getBody().getArgumentTypes() != region.getArgumentTypes())
+      return op.emitOpError()
+             << "block argument number and types of the 'body' "
+                "and 'patterns' region #"
+             << i << " must match";
+    if (region.front().getTerminator()->getNumOperands() < 1)
+      return op.emitOpError() << "'patterns' region #" << i
+                              << " must have at least one yielded value";
+
+    // All operations in the 'patterns' region must be SMT operations.
+    auto result = region.walk([&](Operation *childOp) {
+      if (!isa<SMTDialect>(childOp->getDialect())) {
+        auto diag = op.emitOpError()
+                    << "the 'patterns' region #" << i
+                    << " may only contain SMT dialect operations";
+        diag.attachNote(childOp->getLoc()) << "first non-SMT operation here";
+        return WalkResult::interrupt();
+      }
+
+      // There may be no quantifier (or other variable binding) operations in
+      // the 'patterns' region.
+      if (isa<ForallOp, ExistsOp>(childOp)) {
+        auto diag = op.emitOpError() << "the 'patterns' region #" << i
+                                     << " must not contain "
+                                        "any variable binding operations";
+        diag.attachNote(childOp->getLoc()) << "first violating operation here";
+        return WalkResult::interrupt();
+      }
+
+      return WalkResult::advance();
+    });
+    if (result.wasInterrupted())
+      return failure();
+  }
+
+  return success();
+}
+
+template <typename Properties>
+static void buildQuantifier(
+    OpBuilder &odsBuilder, OperationState &odsState, TypeRange boundVarTypes,
+    function_ref<Value(OpBuilder &, Location, ValueRange)> bodyBuilder,
+    std::optional<ArrayRef<StringRef>> boundVarNames,
+    function_ref<ValueRange(OpBuilder &, Location, ValueRange)> patternBuilder,
+    uint32_t weight, bool noPattern) {
+  odsState.addTypes(BoolType::get(odsBuilder.getContext()));
+  if (weight != 0)
+    odsState.getOrAddProperties<Properties>().weight =
+        odsBuilder.getIntegerAttr(odsBuilder.getIntegerType(32), weight);
+  if (noPattern)
+    odsState.getOrAddProperties<Properties>().noPattern =
+        odsBuilder.getUnitAttr();
+  if (boundVarNames.has_value()) {
+    SmallVector<Attribute> boundVarNamesList;
+    for (StringRef str : *boundVarNames)
+      boundVarNamesList.emplace_back(odsBuilder.getStringAttr(str));
+    odsState.getOrAddProperties<Properties>().boundVarNames =
+        odsBuilder.getArrayAttr(boundVarNamesList);
+  }
+  {
+    OpBuilder::InsertionGuard guard(odsBuilder);
+    Region *region = odsState.addRegion();
+    Block *block = odsBuilder.createBlock(region);
+    block->addArguments(
+        boundVarTypes,
+        SmallVector<Location>(boundVarTypes.size(), odsState.location));
+    Value returnVal =
+        bodyBuilder(odsBuilder, odsState.location, block->getArguments());
+    odsBuilder.create<smt::YieldOp>(odsState.location, returnVal);
+  }
+  if (patternBuilder) {
+    Region *region = odsState.addRegion();
+    OpBuilder::InsertionGuard guard(odsBuilder);
+    Block *block = odsBuilder.createBlock(region);
+    block->addArguments(
+        boundVarTypes,
+        SmallVector<Location>(boundVarTypes.size(), odsState.location));
+    ValueRange returnVals =
+        patternBuilder(odsBuilder, odsState.location, block->getArguments());
+    odsBuilder.create<smt::YieldOp>(odsState.location, returnVals);
+  }
+}
+
+LogicalResult ForallOp::verify() {
+  if (!getPatterns().empty() && getNoPattern())
+    return emitOpError() << "patterns and the no_pattern attribute must not be "
+                            "specified at the same time";
+
+  return success();
+}
+
+LogicalResult ForallOp::verifyRegions() {
+  return verifyQuantifierRegions(*this);
+}
+
+void ForallOp::build(
+    OpBuilder &odsBuilder, OperationState &odsState, TypeRange boundVarTypes,
+    function_ref<Value(OpBuilder &, Location, ValueRange)> bodyBuilder,
+    std::optional<ArrayRef<StringRef>> boundVarNames,
+    function_ref<ValueRange(OpBuilder &, Location, ValueRange)> patternBuilder,
+    uint32_t weight, bool noPattern) {
+  buildQuantifier<Properties>(odsBuilder, odsState, boundVarTypes, bodyBuilder,
+                              boundVarNames, patternBuilder, weight, noPattern);
+}
+
+//===----------------------------------------------------------------------===//
+// ExistsOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ExistsOp::verify() {
+  if (!getPatterns().empty() && getNoPattern())
+    return emitOpError() << "patterns and the no_pattern attribute must not be "
+                            "specified at the same time";
+
+  return success();
+}
+
+LogicalResult ExistsOp::verifyRegions() {
+  return verifyQuantifierRegions(*this);
+}
+
+void ExistsOp::build(
+    OpBuilder &odsBuilder, OperationState &odsState, TypeRange boundVarTypes,
+    function_ref<Value(OpBuilder &, Location, ValueRange)> bodyBuilder,
+    std::optional<ArrayRef<StringRef>> boundVarNames,
+    function_ref<ValueRange(OpBuilder &, Location, ValueRange)> patternBuilder,
+    uint32_t weight, bool noPattern) {
+  buildQuantifier<Properties>(odsBuilder, odsState, boundVarTypes, bodyBuilder,
+                              boundVarNames, patternBuilder, weight, noPattern);
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/SMT/SMT.cpp.inc"
