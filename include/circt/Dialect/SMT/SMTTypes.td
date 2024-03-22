@@ -60,8 +60,86 @@ def ArrayType : SMTTypeDef<"Array"> {
   let genVerifyDecl = true;
 }
 
+def SMTFuncType : SMTTypeDef<"SMTFunc"> {
+  let mnemonic = "func";
+  let description = [{
+    This type represents the SMT function sort as described in the
+    [SMT-LIB 2.6 standard](https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2021-05-12.pdf).
+    It is part of the language itself rather than a theory or logic.
+
+    A function in SMT can have an arbitrary domain size, but always has exactly
+    one range sort.
+
+    Since SMT only supports first-order logic, it is not possible to nest
+    function types.
+
+    Example: `!smt.func<(!smt.bool, !smt.int) !smt.bool>` is equivalent to
+    `((Bool Int) Bool)` in SMT-LIB.
+  }];
+
+  let parameters = (ins
+    ArrayRefParameter<"mlir::Type", "domain types">:$domainTypes,
+    "mlir::Type":$rangeType
+  );
+
+  // Note: We are not printing the parentheses when no domain type is present
+  // because the default MLIR parser thinks it is a builtin function type
+  // otherwise.
+  let assemblyFormat = "`<` `(` $domainTypes `)` ` ` $rangeType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "llvm::ArrayRef<mlir::Type>":$domainTypes,
+      "mlir::Type":$rangeType), [{
+      return $_get(rangeType.getContext(), domainTypes, rangeType);
+    }]>,
+    TypeBuilderWithInferredContext<(ins "mlir::Type":$rangeType), [{
+      return $_get(rangeType.getContext(),
+                   llvm::ArrayRef<mlir::Type>{}, rangeType);
+    }]>
+  ];
+
+  let genVerifyDecl = true;
+}
+
+def SortType : SMTTypeDef<"Sort"> {
+  let mnemonic = "sort";
+  let description = [{
+    This type represents uninterpreted sorts. The usage of a type like
+    `!smt.sort<"sort_name"[!smt.bool, !smt.sort<"other_sort">]>` implies a
+    `declare-sort sort_name 2` and a `declare-sort other_sort 0` in SMT-LIB.
+    This type represents concrete use-sites of such declared sorts, in this
+    particular case it would be equivalent to `(sort_name Bool other_sort)` in
+    SMT-LIB. More details about the semantics can be found in the
+    [SMT-LIB 2.6 standard](https://smtlib.cs.uiowa.edu/papers/smt-lib-reference-v2.6-r2021-05-12.pdf).
+  }];
+
+  let parameters = (ins
+    "mlir::StringAttr":$identifier,
+    OptionalArrayRefParameter<"mlir::Type", "sort parameters">:$sortParams
+  );
+
+  let assemblyFormat = "`<` $identifier (`[` $sortParams^ `]`)? `>`";
+
+  let builders = [
+    TypeBuilder<(ins "llvm::StringRef":$identifier,
+                     "llvm::ArrayRef<mlir::Type>":$sortParams), [{
+      return $_get($_ctxt, mlir::StringAttr::get($_ctxt, identifier),
+                           sortParams);
+    }]>,
+    TypeBuilder<(ins "llvm::StringRef":$identifier), [{
+      return $_get($_ctxt, mlir::StringAttr::get($_ctxt, identifier),
+                    llvm::ArrayRef<mlir::Type>{});
+    }]>,
+  ];
+
+  let genVerifyDecl = true;
+}
+
 def AnySMTType : Type<CPred<"smt::isAnySMTValueType($_self)">,
                       "any SMT value type">;
+def AnyNonFuncSMTType : Type<CPred<"smt::isAnyNonFuncSMTValueType($_self)">,
+                             "any non-function SMT value type">;
 def AnyNonSMTType : Type<Neg<AnySMTType.predicate>, "any non-smt type">;
 
 #endif // CIRCT_DIALECT_SMT_SMTTYPES_TD

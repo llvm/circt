@@ -44,10 +44,10 @@ OpFoldResult BVConstantOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// DeclareConstOp
+// DeclareFunOp
 //===----------------------------------------------------------------------===//
 
-void DeclareConstOp::getAsmResultNames(
+void DeclareFunOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   setNameFn(getResult(), getNamePrefix().has_value() ? *getNamePrefix() : "");
 }
@@ -323,6 +323,10 @@ static LogicalResult verifyQuantifierRegions(QuantifierOp op) {
       op.getBody().getNumArguments() != op.getBoundVarNames()->size())
     return op.emitOpError(
         "number of bound variable names must match number of block arguments");
+  if (!llvm::all_of(op.getBody().getArgumentTypes(), isAnyNonFuncSMTValueType))
+    return op.emitOpError()
+           << "bound variables must by any non-function SMT value";
+
   if (op.getBody().front().getTerminator()->getNumOperands() != 1)
     return op.emitOpError("must have exactly one yielded value");
   if (!isa<BoolType>(

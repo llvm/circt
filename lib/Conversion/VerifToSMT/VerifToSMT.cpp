@@ -85,8 +85,7 @@ struct LogicEquivalenceCheckingOpConversion
     // Second, create the symbolic values we replace the block arguments with
     SmallVector<Value> inputs;
     for (auto arg : adaptor.getFirstCircuit().getArguments())
-      inputs.push_back(
-          rewriter.create<smt::DeclareConstOp>(loc, arg.getType()));
+      inputs.push_back(rewriter.create<smt::DeclareFunOp>(loc, arg.getType()));
 
     // Third, inline the blocks
     // Note: the argument value replacement does not happen immediately, but
