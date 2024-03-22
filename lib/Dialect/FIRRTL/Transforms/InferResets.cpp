@@ -1842,26 +1842,24 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     }
     
     if (dealWithInvalidates) {
-      // create a new wire as a reset value
-        // create a wire as wireOp = ...
-        auto wireOp = builder.create<WireOp>(regOp.getDataType());
+      auto resetValueWireOp = builder.create<WireOp>(regOp.getDataType());
       for (auto field: invFields) {
           if (!field.isInvalidOp) { // not invalid
-              auto dst = getValueByFieldID(builder, wireOp->getResult(0), field.dst);
-              auto src = field.src.getValue();
-              LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << src <<"\n dst: \n\t" << dst <<" \n\n");
+              auto dst = getValueByFieldID(builder, resetValueWireOp->getResult(0), field.dst);
+              auto src = field.dst.getValue();
+              // LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << src <<"\n dst: \n\t" << dst <<" \n\n");
               builder.create<StrictConnectOp>(src, dst);
           }
           else { // invalid
-              auto dstType = field.dst.getValue().getType();
+              auto dstType = field.dst.getValue().getType(); // UInt(8)
               auto dst_firrtl_type = type_dyn_cast<FIRRTLBaseType>(dstType);
-              auto dst = createZeroValue(builder, dst_firrtl_type);
-              auto src = field.src.getValue();
-              LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << src <<"\n dst: \n\t" << dst <<" \n\n");
-              builder.create<StrictConnectOp>(src, dst);
+              auto srcValue = createZeroValue(builder, dst_firrtl_type);
+              auto dstField = field.dst.getValue();
+              // LLVM_DEBUG(llvm::dbgs() << "src: \n\t" << srcValue <<"\n dst: \n\t" << dstField <<" \n\n");
+              builder.create<StrictConnectOp>(srcValue, dstField);
           }
       }
-      builder.create<StrictConnectOp>(regOp.getResult(), wireOp.getResult());
+      builder.create<StrictConnectOp>(regOp.getResult(), resetValueWireOp.getResult());
     }
     
     // If the register already has an async reset, leave it untouched.
