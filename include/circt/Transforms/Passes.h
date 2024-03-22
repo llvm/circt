@@ -31,6 +31,7 @@ std::unique_ptr<mlir::Pass> createStripDebugInfoWithPredPass(
     const std::function<bool(mlir::Location)> &pred);
 std::unique_ptr<mlir::Pass> createMaximizeSSAPass();
 std::unique_ptr<mlir::Pass> createInsertMergeBlocksPass();
+std::unique_ptr<mlir::Pass> createPrintOperationCountsPass();
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

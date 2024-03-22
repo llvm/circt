@@ -19,16 +19,18 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "circt/Transforms/Passes.h"
 
 using namespace llvm;
 using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
+  pm.addPass(circt::createPrintOperationCountsPass());
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
+  // pm.nest<firrtl::CircuitOp>().addPass(firrtl::createResolvePathsPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       opt.shouldDisableUnknownAnnotations(),
@@ -48,6 +50,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
+  pm.addPass(circt::createPrintOperationCountsPass());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -226,6 +229,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
 LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt) {
+    pm.addPass(circt::createPrintOperationCountsPass());
   // Remove TraceAnnotations and write their updated paths to an output
   // annotation file.
   pm.nest<firrtl::CircuitOp>().addPass(

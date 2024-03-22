@@ -100,4 +100,17 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
   let constructor = "circt::createMaximizeSSAPass()";
 }
 
+def PrintOperationCounts : Pass<"print-operation-counts", "::mlir::ModuleOp"> {
+  let summary = "Convert every function in the module into maximal SSA form";
+  let description = [{
+    Convert the region within every function into maximal SSA form. This
+    ensures that every value used within a block is also defined within the
+    block, making dataflow explicit and removing block dominance-based dataflow
+    semantics. The pass achieves this by adding block arguments wherever
+    necessary to forward values to the block(s) where they are used.
+  }];
+
+  let constructor = "circt::createPrintOperationCountsPass()";
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES

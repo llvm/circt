@@ -4241,6 +4241,8 @@ ParseResult FIRStmtParser::parseNode() {
 
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
+  return moduleContext.addSymbolEntry(id, initializer,
+                                      startTok.getLoc());
 
   bool forceable =
       !!firrtl::detail::getForceableResultType(true, initializer.getType());
