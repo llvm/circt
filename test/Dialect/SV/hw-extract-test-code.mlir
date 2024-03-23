@@ -594,7 +594,7 @@ module {
 
 // Check that verif ops are also extracted.
 
-// CHECK: hw.module private  @VerifOps_assert
+// CHECK: hw.module private @VerifOps_assert
 // CHECK: hw.module private @VerifOps_assume
 // CHECK: hw.module private @VerifOps_cover
 hw.module @VerifOps(in %a : i1, in %b : i1) {
