@@ -589,3 +589,18 @@ module {
     hw.output %2 : i1
   }
 }
+
+// -----
+
+// Check that verif ops are also extracted.
+
+// CHECK: hw.module private @VerifOps_assert
+// CHECK: hw.module private @VerifOps_assume
+// CHECK: hw.module private @VerifOps_cover
+hw.module @VerifOps(in %a : i1, in %b : i1) {
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.assume %true : i1
+  verif.cover %true : i1
+  hw.output
+}

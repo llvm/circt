@@ -30,6 +30,10 @@ class HWDialect;
 class HWModuleOp;
 } // namespace hw
 
+namespace verif {
+class VerifDialect;
+} // namespace verif
+
 namespace sv {
 
 #define GEN_PASS_CLASSES

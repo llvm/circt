@@ -23,6 +23,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
@@ -552,7 +553,8 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
     return false;
   }
 
-  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp>(op);
+  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
+             verif::AssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -562,7 +564,7 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
       if (mod->getAttr("firrtl.extract.cover.extra"))
         return true;
-  return isa<CoverOp, CoverConcurrentOp>(op);
+  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp>(op);
 }
 
 static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -573,7 +575,7 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
       if (mod->getAttr("firrtl.extract.assume.extra"))
         return true;
 
-  return isa<AssumeOp, AssumeConcurrentOp>(op);
+  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(op);
 }
 
 /// Return true if the operation belongs to the design.
