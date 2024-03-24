@@ -23,7 +23,7 @@ class EmitDialect;
 
 namespace comb {
 class CombDialect;
-}
+} // namespace comb
 
 namespace hw {
 class HWDialect;
