@@ -1210,6 +1210,7 @@ static SmallVector<Location> getAllPortLocs(ModTy module) {
 
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
   SmallVector<Location> portLocs;
+  portLocs.reserve(getNumPorts());
   auto resultLocs = getResultLocsAttr();
   unsigned inputCount = 0;
   auto modType = getModuleType();
