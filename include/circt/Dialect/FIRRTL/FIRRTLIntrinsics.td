@@ -135,4 +135,32 @@ def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
   let assemblyFormat = "$input attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// Verification Intrinsics
+//===----------------------------------------------------------------------===//
+
+def AssumeEdgedPredicateIntrinsicOp : FIRRTLOp<"int.assume.edged_predicate", []> {
+  let summary = "Special Assume Verification Statement to assume predicate ";
+
+  let description = [{
+    The `firrtl.int.assume.edged_predicate` intrinsic is a special assume statement
+    lowered into a SV concurrent assertion within always block that has the assumed
+    predicate in a sensitivity list.
+  }];
+  let arguments = (ins
+    UInt1Type:$predicate,
+    UInt1Type:$enable,
+    StrAttr:$message,
+    Variadic<AnyType>:$substitutions,
+    StrAttr:$name
+    // TODO: Need guards?
+  );
+
+  let assemblyFormat = [{
+    $predicate `,` $enable `,` $message (`(` $substitutions^ `)`)? `:`
+    type($predicate) `,` type($enable) (`,` qualified(type($substitutions))^)?
+    custom<VerifAttrs>(attr-dict)
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
