@@ -41,7 +41,7 @@ struct ExportYosysPass : public impl::ExportYosysBase<ExportYosysPass> {
   void runOnOperation() override;
 };
 
-const std::string &getEscapedName(StringRef name) {
+std::string getEscapedName(StringRef name) {
   return RTLIL::escape_id(name.str());
 }
 
@@ -50,15 +50,23 @@ struct RTLILConverter {};
 using ResultTy = FailureOr<RTLIL::SigSpec *>;
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, ResultTy>,
+      // public hw::StmtVisitor<ModuleConverter, ResultTy>,
       public comb::CombinationalVisitor<ModuleConverter, ResultTy> {
   using hw::TypeOpVisitor<ModuleConverter, ResultTy>::visitTypeOp;
   using comb::CombinationalVisitor<ModuleConverter, ResultTy>::visitComb;
-
   ResultTy getValue(Value value) {
+    auto it = mapping.find(value);
+    if (it != mapping.end())
+      return it->second;
     if (isa<OpResult>(value)) {
       // TODO: If it's instance like ...
       auto *op = value.getDefiningOp();
-      return visit(op);
+      auto result = visit(op);
+      if(failed(result))
+        return result;
+
+      setLowering(op->getResult(0), result.value());
+      return result;
     }
     // TODO: Convert ports.
     return failure();
@@ -89,7 +97,7 @@ struct ModuleConverter
   }
 
   // Comb.
-  ResultTy visitComb(MuxOp op);
+  // ResultTy visitComb(MuxOp op);
   template <typename BinaryFn>
   ResultTy emitVariadicOp(Operation *op, BinaryFn fn) {
     // Construct n-1 binary op (currently linear) chains.
@@ -100,9 +108,12 @@ struct ModuleConverter
       if (failed(result))
         return result;
       if (cur) {
-        auto *resultWire = rtlilModule->addWire(getNewName());
-        cur = allocateSigSpec(
-            fn(getNewName(), *cur, *result.value(), resultWire));
+        auto *resultWire = rtlilModule->addWire(
+            getNewName(), hw::getBitWidth(operand.getType()));
+
+        Cell *cell = fn(getNewName(), *cur, *result.value(), resultWire);
+        // assert(cell->connections().size() == 3);
+        cur = allocateSigSpec(resultWire);
       } else
         cur = result.value();
     }
@@ -123,6 +134,18 @@ struct ModuleConverter
       return rtlilModule->addSub(name, l, r, out);
     });
   }
+
+  LogicalResult visitStmt(OutputOp op) {
+    assert(op.getNumOperands() == outputs.size());
+    for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
+      auto result = getValue(op);
+      if (failed(result))
+        return result;
+      rtlilModule->connect(*allocateSigSpec(wire), *result.value());
+    }
+    return success();
+  }
+
   ResultTy visitComb(MulOp op) {}
   ResultTy visitComb(DivUOp op) {}
   ResultTy visitComb(DivSOp op) {}
@@ -147,14 +170,58 @@ struct ModuleConverter
   // regardless of the operands."
   ResultTy visitComb(ParityOp op) {}
 
-  ResultTy visitComb(ReplicateOp op);
-  ResultTy visitComb(ConcatOp op);
-  ResultTy visitComb(ExtractOp op);
-  ResultTy visitComb(ICmpOp op);
+  // ResultTy visitComb(ReplicateOp op);
+  // ResultTy visitComb(ConcatOp op);
+  // ResultTy visitComb(ExtractOp op);
+  // ResultTy visitComb(ICmpOp op);
+
+  LogicalResult run() {
+    return LogicalResult::failure(
+        module
+            .walk<mlir::WalkOrder::PreOrder>([this](Operation *op) {
+              // Skip zero result operatins.
+              op->emitWarning() << "foo";
+              RTLIL_BACKEND::dump_design(std::cout, design, false);
+              if (module == op)
+                return WalkResult::advance();
+              if (auto out = dyn_cast<hw::OutputOp>(op))
+                return visitStmt(out), WalkResult::advance();
+              if (failed(visit(op)))
+                return WalkResult::interrupt();
+              return WalkResult::advance();
+            })
+            .wasInterrupted());
+  }
 
   ModuleConverter(Yosys::RTLIL::Design *design,
                   Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
-      : design(design), rtlilModule(rtlilModule), module(module) {}
+      : design(design), rtlilModule(rtlilModule), module(module) {
+    ModulePortInfo ports(module.getPortList());
+    size_t inputPos = 0;
+    for (auto [idx, port] : llvm::enumerate(ports)) {
+      auto *wire = rtlilModule->addWire(getEscapedName(port.getName()));
+      wire->port_id = idx;
+      auto bitWidth = hw::getBitWidth(port.type);
+      assert(bitWidth >= 0);
+      wire->width = bitWidth;
+      if (port.isOutput()) {
+        wire->port_output = true;
+        outputs.push_back(wire);
+      } else {
+        setLowering(module.getBodyBlock()->getArgument(inputPos++),
+                    allocateSigSpec(wire));
+        // TODO: Need to consider inout?
+        wire->port_input = true;
+      }
+    }
+  }
+
+  DenseMap<Value, SigSpec *> mapping;
+  SmallVector<RTLIL::Wire *> outputs;
+
+  LogicalResult setLowering(Value value, SigSpec *s) {
+    return LogicalResult::success(mapping.insert({value, s}).second);
+  }
 
   Yosys::RTLIL::Design *design;
   Yosys::RTLIL::Module *rtlilModule;
@@ -167,14 +234,26 @@ struct ModuleConverter
 
 void ExportYosysPass::runOnOperation() {
   auto *design = new Yosys::RTLIL::Design;
-  auto *mod = new Yosys::RTLIL::Module;
-  mod->name = "\\dog";
-  design->add(mod);
-  auto *wire = mod->addWire("\\cat");
+  // auto *mod = new Yosys::RTLIL::Module;
+  // mod->name = "\\dog";
+  // design->add(mod);
+  // auto *wire = mod->addWire("\\cat");
   // mod->addCell()
   // wire->port_id = 1;
   // wire->port_input = true;
   // design->addModule(Yosys::RTLIL::IdString("test"));
+  SmallVector<ModuleConverter> converter;
+  for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
+    llvm::errs() << op.getModuleName() << " "
+                 << getEscapedName(op.getModuleName());
+    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+    converter.emplace_back(design, newModule, op);
+  }
+  for (auto &c : converter)
+    c.run();
+
+  RTLIL_BACKEND::dump_design(std::cout, design, false);
+  Yosys::run_pass("opt", design);
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
