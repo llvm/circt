@@ -1541,7 +1541,7 @@ struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
                          hw::InnerSymbolNamespace &modNameSpace,
-                         SymbolTable &circuitSymTbl, FIRVersion version,
+                         const SymbolTable &circuitSymTbl, FIRVersion version,
                          SymbolRefAttr layerSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
@@ -1665,7 +1665,7 @@ private:
   // This is used to construct a nested symbol for a layer block operation.
   SymbolRefAttr layerSym;
 
-  SymbolTable &circuitSymTbl;
+  const SymbolTable &circuitSymTbl;
 };
 
 } // end anonymous namespace
@@ -4489,7 +4489,7 @@ private:
     unsigned indent;
   };
 
-  ParseResult parseModuleBody(SymbolTable &circuitSymTbl,
+  ParseResult parseModuleBody(const SymbolTable &circuitSymTbl,
                               DeferredModuleToParse &deferredModule);
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
@@ -5265,7 +5265,7 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
 
 // Parse the body of this module.
 ParseResult
-FIRCircuitParser::parseModuleBody(SymbolTable &circuitSymTbl,
+FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
                                   DeferredModuleToParse &deferredModule) {
   FModuleLike moduleOp = deferredModule.moduleOp;
   auto &body = moduleOp->getRegion(0).front();
