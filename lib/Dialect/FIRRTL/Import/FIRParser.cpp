@@ -1541,12 +1541,14 @@ struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext,
                          hw::InnerSymbolNamespace &modNameSpace,
-                         FIRVersion version, SymbolRefAttr layerSym = {})
+                         const SymbolTable &circuitSymTbl, FIRVersion version,
+                         SymbolRefAttr layerSym = {})
       : FIRParser(moduleContext.getConstants(), moduleContext.getLexer(),
                   version),
         builder(UnknownLoc::get(getContext()), getContext()),
         locationProcessor(this->builder), moduleContext(moduleContext),
-        modNameSpace(modNameSpace), layerSym(layerSym) {
+        modNameSpace(modNameSpace), layerSym(layerSym),
+        circuitSymTbl(circuitSymTbl) {
     builder.setInsertionPointToEnd(&blockToInsertInto);
   }
 
@@ -1662,6 +1664,8 @@ private:
   // An optional symbol that contains the current layer block that we are in.
   // This is used to construct a nested symbol for a layer block operation.
   SymbolRefAttr layerSym;
+
+  const SymbolTable &circuitSymTbl;
 };
 
 } // end anonymous namespace
@@ -2632,7 +2636,8 @@ ParseResult FIRStmtParser::parseSubBlock(Block &blockToInsertInto,
   // We parse the substatements into their own parser, so they get inserted
   // into the specified 'when' region.
   auto subParser = std::make_unique<FIRStmtParser>(
-      blockToInsertInto, moduleContext, modNameSpace, version, layerSym);
+      blockToInsertInto, moduleContext, modNameSpace, circuitSymTbl, version,
+      layerSym);
 
   // Figure out whether the body is a single statement or a nested one.
   auto stmtIndent = getIndentation();
@@ -2932,9 +2937,9 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
     // We create a sub parser for the else block.
-    auto subParser =
-        std::make_unique<FIRStmtParser>(whenStmt.getElseBlock(), moduleContext,
-                                        modNameSpace, version, layerSym);
+    auto subParser = std::make_unique<FIRStmtParser>(
+        whenStmt.getElseBlock(), moduleContext, modNameSpace, circuitSymTbl,
+        version, layerSym);
 
     return subParser->parseSimpleStmt(whenIndent);
   }
@@ -3072,8 +3077,9 @@ ParseResult FIRStmtParser::parseMatch(unsigned matchIndent) {
       return failure();
 
     // Parse a block of statements that are indented more than the case.
-    auto subParser = std::make_unique<FIRStmtParser>(
-        *caseBlock, moduleContext, modNameSpace, version, layerSym);
+    auto subParser =
+        std::make_unique<FIRStmtParser>(*caseBlock, moduleContext, modNameSpace,
+                                        circuitSymTbl, version, layerSym);
     if (subParser->parseSimpleStmtBlock(*caseIndent))
       return failure();
   }
@@ -3942,10 +3948,7 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
 
 FModuleLike FIRStmtParser::getReferencedModule(SMLoc loc,
                                                StringRef moduleName) {
-  auto circuit =
-      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule =
-      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
+  auto referencedModule = circuitSymTbl.lookup<FModuleLike>(moduleName);
   if (!referencedModule) {
     emitError(loc,
               "use of undefined module name '" + moduleName + "' in instance");
@@ -4486,7 +4489,8 @@ private:
     unsigned indent;
   };
 
-  ParseResult parseModuleBody(DeferredModuleToParse &deferredModule);
+  ParseResult parseModuleBody(const SymbolTable &circuitSymTbl,
+                              DeferredModuleToParse &deferredModule);
 
   SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
@@ -5261,7 +5265,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
 
 // Parse the body of this module.
 ParseResult
-FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
+FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
+                                  DeferredModuleToParse &deferredModule) {
   FModuleLike moduleOp = deferredModule.moduleOp;
   auto &body = moduleOp->getRegion(0).front();
   auto &portLocs = deferredModule.portLocs;
@@ -5289,7 +5294,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   }
 
   hw::InnerSymbolNamespace modNameSpace(moduleOp);
-  FIRStmtParser stmtParser(body, moduleContext, modNameSpace, version);
+  FIRStmtParser stmtParser(body, moduleContext, modNameSpace, circuitSymTbl,
+                           version);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -5453,10 +5459,36 @@ DoneParsing:
   // proactively touch it to make sure that it is always already created.
   (void)getLexer().translateLocation(info.getFIRLoc());
 
+  // Pre-verify symbol table, so we can construct it next.  Ideally, we would do
+  // this verification through the trait.
+  { // Memory is tight in parsing.
+    // Check that all symbols are uniquely named within child regions.
+    DenseMap<Attribute, Location> nameToOrigLoc;
+    for (auto &op : *circuit.getBodyBlock()) {
+      // Check for a symbol name attribute.
+      auto nameAttr =
+          op.getAttrOfType<StringAttr>(mlir::SymbolTable::getSymbolAttrName());
+      if (!nameAttr)
+        continue;
+
+      // Try to insert this symbol into the table.
+      auto it = nameToOrigLoc.try_emplace(nameAttr, op.getLoc());
+      if (!it.second) {
+        op.emitError()
+            .append("redefinition of symbol named '", nameAttr.getValue(), "'")
+            .attachNote(it.first->second)
+            .append("see existing symbol definition here");
+        return failure();
+      }
+    }
+  }
+
+  SymbolTable circuitSymTbl(circuit);
+
   // Next, parse all the module bodies.
   auto anyFailed = mlir::failableParallelForEachN(
       getContext(), 0, deferredModules.size(), [&](size_t index) {
-        if (parseModuleBody(deferredModules[index]))
+        if (parseModuleBody(circuitSymTbl, deferredModules[index]))
           return failure();
         return success();
       });
@@ -5491,7 +5523,8 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
 
   // This is the result module we are parsing into.
   mlir::OwningOpRef<mlir::ModuleOp> module(ModuleOp::create(
-      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
+      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(),
+                          /*line=*/0,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
