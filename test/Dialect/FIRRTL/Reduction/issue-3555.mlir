@@ -1,6 +1,6 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
-// RUN: circt-reduce %s --test /bin/sh --test-arg -c --test-arg 'firtool "$0" 2>&1 | grep -q "error: sink \"x1.x\" not fully initialized"' --keep-best=0 --include root-port-pruner | FileCheck %s
+// RUN: circt-reduce %s --test /bin/sh --test-arg -c --test-arg 'firtool "$0" 2>&1 | grep -q "error: Wire is not initialized"' --keep-best=0 --include root-port-pruner | FileCheck %s
 
 // https://github.com/llvm/circt/issues/3555
 firrtl.circuit "Foo"  {

@@ -972,18 +972,6 @@ bool ModuleType::isOutput(size_t idx) {
   return p.dir == ModulePort::Direction::Output;
 }
 
-FunctionType ModuleType::getFuncType() {
-  SmallVector<Type> inputs, outputs;
-  for (auto p : getPorts())
-    if (p.dir == ModulePort::Input)
-      inputs.push_back(p.type);
-    else if (p.dir == ModulePort::InOut)
-      inputs.push_back(InOutType::get(p.type));
-    else
-      outputs.push_back(p.type);
-  return FunctionType::get(getContext(), inputs, outputs);
-}
-
 FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
                                                          LocationAttr loc,
                                                          bool emitErrors) {

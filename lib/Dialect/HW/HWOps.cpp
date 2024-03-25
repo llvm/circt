@@ -510,24 +510,6 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
   return isa<HWModuleLike, InstanceOp>(moduleOrInstance);
 }
 
-/// Return the signature for a module as a function type from the module itself
-/// or from an hw::InstanceOp.
-FunctionType hw::getModuleType(Operation *moduleOrInstance) {
-  return TypeSwitch<Operation *, FunctionType>(moduleOrInstance)
-      .Case<InstanceOp, InstanceChoiceOp>([](auto instance) {
-        SmallVector<Type> inputs(instance->getOperandTypes());
-        SmallVector<Type> results(instance->getResultTypes());
-        return FunctionType::get(instance->getContext(), inputs, results);
-      })
-      .Case<HWModuleLike>(
-          [](auto mod) { return mod.getHWModuleType().getFuncType(); })
-      .Default([](Operation *op) {
-        return cast<mlir::FunctionOpInterface>(op)
-            .getFunctionType()
-            .cast<FunctionType>();
-      });
-}
-
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
@@ -1007,14 +989,6 @@ ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
   return parseHWModuleOp<HWModuleGeneratedOp>(parser, result);
 }
 
-FunctionType getHWModuleOpType(Operation *op) {
-  if (auto mod = dyn_cast<HWModuleLike>(op))
-    return mod.getHWModuleType().getFuncType();
-  return cast<mlir::FunctionOpInterface>(op)
-      .getFunctionType()
-      .cast<FunctionType>();
-}
-
 template <typename ModuleTy>
 static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   p << ' ';
@@ -1473,8 +1447,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       parameters, result.location, /*emitErrors=*/false);
   if (succeeded(resolvedModType))
     modType = *resolvedModType;
-  FunctionType funcType = resolvedModType->getFuncType();
-  build(builder, result, funcType.getResults(), name,
+  build(builder, result, modType.getOutputTypes(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
 }

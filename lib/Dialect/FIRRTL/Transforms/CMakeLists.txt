@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
   CheckCombLoops.cpp
+  CheckInit.cpp
   CreateSiFiveMetadata.cpp
   Dedup.cpp
   DropConst.cpp

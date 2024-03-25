@@ -25,6 +25,10 @@ using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
+
+  pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
+      firrtl::createCheckInitPass());
+
   // Legalize away "open" aggregates to hw-only versions.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerOpenAggsPass());
 

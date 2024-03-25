@@ -26,3 +26,10 @@ circuit Bar :
     ; https://github.com/llvm/circt/issues/2718
     wire w: {flip a: UInt<1>, b: Analog<1>}[1]
     ; CHECK: %w = firrtl.wire interesting_name : !firrtl.vector<bundle<a flip: uint<1>, b: analog<1>>, 1>
+
+
+    ; make this legal
+    flip is invalid
+    analog is invalid
+    w is invalid
+    

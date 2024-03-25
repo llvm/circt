@@ -34,5 +34,6 @@ circuit Top : %[[
 
     wire sink : {a : UInt<2>, b: UInt<2>}
     tap <= sink
+    sink is invalid
 
 
