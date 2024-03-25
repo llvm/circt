@@ -129,10 +129,15 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     the module.
   }];
   let arguments =
-            (ins ConventionAttr:$convention,
-                 ArrayRefAttr:$portLocations,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                 DefaultValuedAttr<LayerArrayAttr, "{}">:$layers);
+      (ins ConventionAttr:$convention,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSyms,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+      );
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -185,16 +190,19 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
     into the external module, to be used for generating XMRs. Each RefType
     port must be removed by LowerXMR pass.
   }];
-  let arguments = (ins
-                   OptionalAttr<StrAttr>:$defname,
-                   ConventionAttr:$convention,
-                   ArrayRefAttr:$portLocations,
-                   ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<
-                    AnnotationArrayAttr, "{}">:$annotations,
-                   DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-                   OptionalAttr<InternalPathArrayAttr>:$internalPaths
-                  );
+  let arguments = 
+      (ins OptionalAttr<StrAttr>:$defname,
+           ParamDeclArrayAttr:$parameters,
+           ConventionAttr:$convention,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSyms,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
+           OptionalAttr<InternalPathArrayAttr>:$internalPaths
+      );
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -224,15 +232,18 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   let description = [{
     The "firrtl.intmodule" operation represents a compiler intrinsic.
   }];
-  let arguments = (ins
-                   StrAttr:$intrinsic,
-                   ArrayRefAttr:$portLocations,
-                   ParamDeclArrayAttr:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr,
-                   "ArrayAttr()">:$annotations,
-                   OptionalAttr<InternalPathArrayAttr>:$internalPaths,
-                   DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
-                  );
+  let arguments = 
+      (ins StrAttr:$intrinsic,
+           ParamDeclArrayAttr:$parameters,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSyms,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           DefaultValuedAttr<AnnotationArrayAttr, "ArrayAttr()">:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
+           OptionalAttr<InternalPathArrayAttr>:$internalPaths
+      );
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -267,13 +278,19 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
     are not directly lowered to registers by the compiler.
   }];
   let arguments =
-    (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
-         UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
-         UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
-         ArrayAttr:$extraPorts,
-         ArrayRefAttr:$portLocations,
-         AnnotationArrayAttr:$annotations,
-         DefaultValuedAttr<LayerArrayAttr, "{}">:$layers);
+      (ins UI32Attr:$numReadPorts, UI32Attr:$numWritePorts,
+           UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
+           UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
+           ArrayAttr:$extraPorts,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSyms,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           AnnotationArrayAttr:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+      );
+      
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
