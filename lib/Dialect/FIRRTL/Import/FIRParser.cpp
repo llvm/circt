@@ -5461,8 +5461,27 @@ DoneParsing:
 
   // Pre-verify symbol table, so we can construct it next.  Ideally, we would do
   // this verification through the trait.
-  if (failed(mlir::detail::verifySymbolTable(circuit)))
-    return failure();
+  { // Memory is tight in parsing.
+    // Check that all symbols are uniquely named within child regions.
+    DenseMap<Attribute, Location> nameToOrigLoc;
+    for (auto &op : *circuit.getBodyBlock()) {
+      // Check for a symbol name attribute.
+      auto nameAttr =
+          op.getAttrOfType<StringAttr>(mlir::SymbolTable::getSymbolAttrName());
+      if (!nameAttr)
+        continue;
+
+      // Try to insert this symbol into the table.
+      auto it = nameToOrigLoc.try_emplace(nameAttr, op.getLoc());
+      if (!it.second) {
+        op.emitError()
+            .append("redefinition of symbol named '", nameAttr.getValue(), "'")
+            .attachNote(it.first->second)
+            .append("see existing symbol definition here");
+        return failure();
+      }
+    }
+  }
 
   SymbolTable circuitSymTbl(circuit);
 
@@ -5504,7 +5523,8 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
 
   // This is the result module we are parsing into.
   mlir::OwningOpRef<mlir::ModuleOp> module(ModuleOp::create(
-      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
+      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(),
+                          /*line=*/0,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
