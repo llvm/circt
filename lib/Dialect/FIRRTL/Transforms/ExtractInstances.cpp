@@ -1025,7 +1025,7 @@ void ExtractInstancesPass::createTraceFiles() {
     };
 
     auto file = getOrCreateFile(fileName);
-    auto builder = OpBuilder::atBlockEnd(file.getBodyBlock());
+    auto builder = OpBuilder::atBlockEnd(file.getBody());
     for (auto inst : insts) {
       StringRef prefix(instPrefices[inst]);
       if (prefix.empty()) {

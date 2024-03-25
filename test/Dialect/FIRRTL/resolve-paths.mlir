@@ -4,7 +4,7 @@
 firrtl.circuit "Deleted" {
 firrtl.module @Deleted() {
     // CHECK: %0 = firrtl.path reference distinct[0]<>
-    %0 = firrtl.unresolved_path "OMDeleted"
+    %0 = firrtl.unresolved_path "OMDeleted:"
 }
 }
 
@@ -15,7 +15,7 @@ firrtl.circuit "Deleted" {
 firrtl.module @Deleted(out %path : !firrtl.path) {
     // CHECK: %0 = firrtl.path reference distinct[0]<>
     // CHECK: propassign %path, %0 : !firrtl.path
-    %0 = firrtl.unresolved_path "OMDeleted"
+    %0 = firrtl.unresolved_path "OMDeleted:"
     firrtl.propassign %path, %0 : !firrtl.path
 }
 }

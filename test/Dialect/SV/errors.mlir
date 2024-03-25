@@ -113,7 +113,7 @@ hw.module @Initial() {
 hw.module @IfDef() {
   sv.initial {
     // expected-error @+1 {{sv.ifdef should be in a non-procedural region}}
-    sv.ifdef "SYNTHESIS" {}
+    sv.ifdef @SYNTHESIS {}
   }
 }
 

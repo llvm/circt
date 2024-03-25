@@ -135,7 +135,7 @@ hw.module @alwaysff_different_reset(in %arg0: i1, in %arg1: i1) {
 
 //CHECK-LABEL: hw.module @alwaysff_ifdef(in %arg0 : i1) {
 //CHECK-NEXT:  [[FD:%.*]] = hw.constant -2147483646 : i32
-//CHECK-NEXT:  sv.ifdef "FOO" {
+//CHECK-NEXT:  sv.ifdef @FOO {
 //CHECK-NEXT:     sv.alwaysff(posedge %arg0)  {
 //CHECK-NEXT:       sv.fwrite [[FD]], "A1"
 //CHECK-NEXT:       sv.fwrite [[FD]], "B1"
@@ -147,7 +147,7 @@ hw.module @alwaysff_different_reset(in %arg0: i1, in %arg1: i1) {
 hw.module @alwaysff_ifdef(in %arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
 
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.alwaysff(posedge %arg0) {
       sv.fwrite %fd, "A1"
     }
@@ -160,7 +160,7 @@ hw.module @alwaysff_ifdef(in %arg0: i1) {
 
 // CHECK-LABEL: hw.module @ifdef_merge(in %arg0 : i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
-// CHECK-NEXT:    sv.ifdef "FOO"  {
+// CHECK-NEXT:    sv.ifdef @FOO {
 // CHECK-NEXT:      sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
 // CHECK-NEXT:        sv.fwrite [[FD]], "B1"
@@ -169,12 +169,12 @@ hw.module @alwaysff_ifdef(in %arg0: i1) {
 hw.module @ifdef_merge(in %arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
 
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.alwaysff(posedge %arg0) {
       sv.fwrite %fd, "A1"
     }
   }
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.alwaysff(posedge %arg0) {
       sv.fwrite %fd, "B1"
     }
@@ -182,16 +182,21 @@ hw.module @ifdef_merge(in %arg0: i1) {
   hw.output
 }
 
+// CHECK-LABEL: sv.macro.decl @FOO
+sv.macro.decl @FOO
+// CHECK-LABEL: sv.macro.decl @BAR
+sv.macro.decl @BAR
+
 // CHECK-LABEL: hw.module @ifdef_proc_merge(in %arg0 : i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %true = hw.constant true
 // CHECK-NEXT:      [[XOR:%.*]] = comb.xor %arg0, %true : i1
-// CHECK-NEXT:      sv.ifdef.procedural "FOO"  {
+// CHECK-NEXT:      sv.ifdef.procedural @FOO  {
 // CHECK-NEXT:        sv.fwrite [[FD]], "A1"
 // CHECK-NEXT:        sv.fwrite [[FD]], "%x"([[XOR]]) : i1
 // CHECK-NEXT:      }
-// CHECK-NEXT:      sv.ifdef.procedural "BAR"  {
+// CHECK-NEXT:      sv.ifdef.procedural @BAR {
 // CHECK-NEXT:        sv.fwrite [[FD]], "B1"
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
@@ -199,15 +204,15 @@ hw.module @ifdef_proc_merge(in %arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
 
   sv.alwaysff(posedge %arg0) {
-    sv.ifdef.procedural "FOO" {
+    sv.ifdef.procedural @FOO {
       sv.fwrite %fd, "A1"
     }
     %true = hw.constant true
     %0 = comb.xor %arg0, %true : i1
-    sv.ifdef.procedural "FOO" {
+    sv.ifdef.procedural @FOO {
        sv.fwrite %fd, "%x"(%0) : i1
     }
-     sv.ifdef.procedural "BAR" {
+    sv.ifdef.procedural @BAR {
        sv.fwrite %fd, "B1"
     }
   }
@@ -322,13 +327,19 @@ hw.module @always_basic(in %arg0: i1, in %arg1: i1) {
   hw.output
 }
 
+// CHECK-LABEL: sv.macro.decl @L1
+sv.macro.decl @L1
+// CHECK-LABEL: sv.macro.decl @L2
+sv.macro.decl @L2
+// CHECK-LABEL: sv.macro.decl @L3
+sv.macro.decl @L3
 
 // CHECK-LABEL: hw.module @nested_regions(
 // CHECK-NEXT:  [[FD:%.*]] = hw.constant -2147483646 : i32
 // CHECK-NEXT:  sv.initial  {
-// CHECK-NEXT:    sv.ifdef.procedural "L1"  {
-// CHECK-NEXT:      sv.ifdef.procedural "L2"  {
-// CHECK-NEXT:        sv.ifdef.procedural "L3"  {
+// CHECK-NEXT:    sv.ifdef.procedural @L1 {
+// CHECK-NEXT:      sv.ifdef.procedural @L2 {
+// CHECK-NEXT:        sv.ifdef.procedural @L3 {
 // CHECK-NEXT:          sv.fwrite [[FD]], "A"
 // CHECK-NEXT:          sv.fwrite [[FD]], "B"
 // CHECK-NEXT:        }
@@ -339,18 +350,18 @@ hw.module @nested_regions() {
   %fd = hw.constant 0x80000002 : i32
 
   sv.initial {
-    sv.ifdef.procedural "L1" {
-      sv.ifdef.procedural "L2" {
-        sv.ifdef.procedural "L3" {
+    sv.ifdef.procedural @L1 {
+      sv.ifdef.procedural @L2 {
+        sv.ifdef.procedural @L3 {
           sv.fwrite %fd, "A"
         }
       }
     }
   }
   sv.initial {
-    sv.ifdef.procedural "L1" {
-      sv.ifdef.procedural "L2" {
-        sv.ifdef.procedural "L3" {
+    sv.ifdef.procedural @L1 {
+      sv.ifdef.procedural @L2 {
+        sv.ifdef.procedural @L3 {
           sv.fwrite %fd, "B"
         }
       }

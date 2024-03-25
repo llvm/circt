@@ -152,7 +152,10 @@ public:
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
     auto out = builder.create<ClockInverterIntrinsicOp>(in);
-    inst.getResult(1).replaceAllUsesWith(out);
+    auto name = inst.getInstanceName();
+    Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
+    builder.create<StrictConnectOp>(outWire, out);
+    inst.getResult(1).replaceAllUsesWith(outWire);
     inst.erase();
     return success();
   }

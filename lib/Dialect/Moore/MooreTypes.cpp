@@ -446,13 +446,23 @@ unsigned IntType::getBitSize(Kind kind) {
   llvm_unreachable("all kinds should be handled");
 }
 
+IntType::Kind IntType::getAtomForDomain(Domain domain) {
+  switch (domain) {
+  case Domain::TwoValued:
+    return IntType::Bit;
+  case Domain::FourValued:
+    return IntType::Logic;
+  }
+  llvm_unreachable("all domains should be handled");
+}
+
 std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
                                                                unsigned size) {
+  if (size == 1)
+    return getAtomForDomain(domain);
   switch (domain) {
   case Domain::TwoValued:
     switch (size) {
-    case 1:
-      return IntType::Bit;
     case 8:
       return IntType::Byte;
     case 16:
@@ -466,8 +476,6 @@ std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
     }
   case Domain::FourValued:
     switch (size) {
-    case 1:
-      return IntType::Logic;
     case 32:
       return IntType::Integer;
     default:

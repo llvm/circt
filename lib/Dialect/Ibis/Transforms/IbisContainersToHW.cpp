@@ -273,7 +273,12 @@ struct ContainerInstanceOpConversionPattern
       auto outputReadIt = outputReadsToReplace.find(output.name);
       if (outputReadIt == outputReadsToReplace.end())
         continue;
-      rewriter.replaceAllUsesWith(outputReadIt->second.getResult(), value);
+      // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+      // DialectConversion. Using it may lead to assertions about mutating
+      // replaced/erased ops. For now, do this RAUW directly, until
+      // ConversionPatternRewriter properly supports RAUW.
+      // See https://github.com/llvm/circt/issues/6795.
+      outputReadIt->second.getResult().replaceAllUsesWith(value);
       rewriter.eraseOp(outputReadIt->second);
     }
 

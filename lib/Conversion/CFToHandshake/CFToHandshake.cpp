@@ -81,13 +81,15 @@ public:
 ///
 /// A partial lowering function may only replace a subset of the operations
 /// within the funcOp currently being lowered. However, the dialect conversion
-/// scheme requires the matched root operation to be replaced/updated, if the
-/// match was successful. To facilitate this, rewriter.modifyOpInPlace
-/// wraps the partial update function.
-/// Next, the function operation is expected to go from illegal to legalized,
-/// after matchAndRewrite returned true. To work around this,
-/// LowerFuncOpTarget::loweredFuncs is used to communicate between the target
-/// and the conversion, to indicate that the partial lowering was completed.
+/// scheme requires the matched root operation to be replaced/updated/erased. It
+/// is the partial update function's responsibility to ensure this. The parital
+/// update function may only mutate the IR through the provided
+/// ConversionPatternRewriter, like any other ConversionPattern.
+/// Next, the function operation is expected to go
+/// from illegal to legalized, after matchAndRewrite returned true. To work
+/// around this, LowerFuncOpTarget::loweredFuncs is used to communicate between
+/// the target and the conversion, to indicate that the partial lowering was
+/// completed.
 template <typename TOp>
 struct PartialLowerOp : public ConversionPattern {
   using PartialLoweringFunc =
@@ -103,8 +105,7 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
     assert(isa<TOp>(op));
-    rewriter.modifyOpInPlace(
-        op, [&] { loweringRes = fun(dyn_cast<TOp>(op), rewriter); });
+    loweringRes = fun(dyn_cast<TOp>(op), rewriter);
     target.loweredOps[op] = true;
     return loweringRes;
   };

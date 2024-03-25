@@ -13,6 +13,7 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -207,9 +208,10 @@ struct FIRRTLModuleLowering;
 
 /// This is state shared across the parallel module lowering logic.
 struct CircuitLoweringState {
-  std::atomic<bool> used_PRINTF_COND{false};
-  std::atomic<bool> used_ASSERT_VERBOSE_COND{false};
-  std::atomic<bool> used_STOP_COND{false};
+  // Flags indicating whether the circuit uses certain header fragments.
+  std::atomic<bool> usedPrintfCond{false};
+  std::atomic<bool> usedAssertVerboseCond{false};
+  std::atomic<bool> usedStopCond{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        bool emitChiselAssertsAsSVA,
@@ -268,6 +270,16 @@ struct CircuitLoweringState {
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
 
+  Operation *getOldModule(Operation *newModule) {
+    auto it = newToOldModuleMap.find(newModule);
+    return it != newToOldModuleMap.end() ? it->second : nullptr;
+  }
+
+  void recordModuleMapping(Operation *oldFMod, Operation *newHWMod) {
+    oldToNewModuleMap[oldFMod] = newHWMod;
+    newToOldModuleMap[newHWMod] = oldFMod;
+  }
+
   // Process remaining annotations and emit warnings on unprocessed annotations
   // still remaining in the annoSet.
   void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
@@ -299,8 +311,11 @@ struct CircuitLoweringState {
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT or is
-  // instantiated under a bind.
+  // instantiated under a bind.  This will accept either an old FIRRTL module or
+  // a new HW module.
   bool isInDUT(igraph::ModuleOpInterface child) {
+    if (auto hwModule = dyn_cast<hw::HWModuleOp>(child.getOperation()))
+      child = cast<igraph::ModuleOpInterface>(getOldModule(hwModule));
     return dutModules.contains(child);
   }
 
@@ -330,14 +345,18 @@ private:
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
 
+  /// Mapping of FModuleOp to HWModuleOp
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
+
+  /// Mapping of HWModuleOp to FModuleOp
+  DenseMap<Operation *, Operation *> newToOldModuleMap;
 
   /// Cache of module symbols.  We need to test hirarchy-based properties to
   /// lower annotaitons.
   InstanceGraph &instanceGraph;
 
-  /// The set of modules that are instantiated under the DUT.  This is
-  /// precomputed as a module being under the DUT may rely on knowledge of
+  /// The set of old FIRRTL modules that are instantiated under the DUT.  This
+  /// is precomputed as a module being under the DUT may rely on knowledge of
   /// properties of the instance and is not suitable for querying in the
   /// parallel execution region of this pass when the backing instances may
   /// already be erased.
@@ -372,6 +391,15 @@ private:
   /// A mapping of instances to their forced instantiation names (if
   /// applicable).
   DenseMap<std::pair<Attribute, Attribute>, Attribute> instanceForceNames;
+
+  /// The set of guard macros to emit declarations for.
+  SetVector<StringAttr> macroDeclNames;
+  std::mutex macroDeclMutex;
+
+  void addMacroDecl(StringAttr name) {
+    std::unique_lock<std::mutex> lock(macroDeclMutex);
+    macroDeclNames.insert(name);
+  }
 
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
@@ -598,7 +626,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               if (!loweredMod)
                 return failure();
 
-              state.oldToNewModuleMap[&op] = loweredMod;
+              state.recordModuleMapping(&op, loweredMod);
               modulesToProcess.push_back(loweredMod);
               // Lower all the alias types.
               module.walk([&](Operation *op) {
@@ -615,7 +643,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                   lowerExtModule(extModule, topLevelModule, state);
               if (!loweredMod)
                 return failure();
-              state.oldToNewModuleMap[&op] = loweredMod;
+              state.recordModuleMapping(&op, loweredMod);
               return success();
             })
             .Case<FMemModuleOp>([&](auto memModule) {
@@ -623,7 +651,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                   lowerMemModule(memModule, topLevelModule, state);
               if (!loweredMod)
                 return failure();
-              state.oldToNewModuleMap[&op] = loweredMod;
+              state.recordModuleMapping(&op, loweredMod);
               return success();
             })
             .Default([&](Operation *op) {
@@ -673,13 +701,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   });
   // Attach the lowered form of these annotations.
   if (!dutHierarchyFiles.empty())
-    state.oldToNewModuleMap[state.getDut()]->setAttr(
-        moduleHierarchyFileAttrName,
-        ArrayAttr::get(&getContext(), dutHierarchyFiles));
+    state.getNewModule(state.getDut())
+        ->setAttr(moduleHierarchyFileAttrName,
+                  ArrayAttr::get(&getContext(), dutHierarchyFiles));
   if (!testHarnessHierarchyFiles.empty())
-    state.oldToNewModuleMap[state.getTestHarness()]->setAttr(
-        moduleHierarchyFileAttrName,
-        ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
+    state.getNewModule(state.getTestHarness())
+        ->setAttr(moduleHierarchyFileAttrName,
+                  ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
   // Finally, lower all operations.
   auto result = mlir::failableParallelForEachN(
@@ -700,6 +728,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
+  if (!state.macroDeclNames.empty()) {
+    ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), circuit);
+    for (auto name : state.macroDeclNames) {
+      b.create<sv::MacroDeclOp>(name);
+    }
+  }
+
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
 
@@ -710,28 +745,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 /// Emit the file header that defines a bunch of macros.
 void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                                            CircuitLoweringState &state) {
-  // If none of the macros are needed, then don't emit any header at all, not
-  // even the header comment.
-  if (!state.used_PRINTF_COND && !state.used_ASSERT_VERBOSE_COND &&
-      !state.used_STOP_COND)
-    return;
-
   // Intentionally pass an UnknownLoc here so we don't get line number
   // comments on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
-
-  // TODO: We could have an operation for macros and uses of them, and
-  // even turn them into symbols so we can DCE unused macro definitions.
-  StringSet<> emittedDecls;
-  auto emitDefine = [&](StringRef name, StringRef body, ArrayAttr args = {}) {
-    if (!emittedDecls.count(name)) {
-      emittedDecls.insert(name);
-      OpBuilder::InsertionGuard guard(b);
-      b.setInsertionPointAfter(op);
-      b.create<sv::MacroDeclOp>(name, args, StringAttr());
-    }
-    b.create<sv::MacroDefOp>(name, body);
-  };
 
   // Helper function to emit a "#ifdef guard" with a `define in the then and
   // optionally in the else branch.
@@ -740,15 +756,16 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                                StringRef defineFalse = StringRef()) {
     if (!defineFalse.data()) {
       assert(defineTrue.data() && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitDefine(defName, defineTrue); });
+      b.create<sv::IfDefOp>(
+          guard, [&]() { b.create<sv::MacroDefOp>(defName, defineTrue); });
     } else {
       b.create<sv::IfDefOp>(
           guard,
           [&]() {
             if (defineTrue.data())
-              emitDefine(defName, defineTrue);
+              b.create<sv::MacroDefOp>(defName, defineTrue);
           },
-          [&]() { emitDefine(defName, defineFalse); });
+          [&]() { b.create<sv::MacroDefOp>(defName, defineFalse); });
     }
   };
 
@@ -758,39 +775,45 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         guard, []() {}, body);
   };
 
-  b.create<sv::VerbatimOp>("// Standard header to adapt well known macros for "
-                           "prints and assertions.");
-
-  if (state.used_PRINTF_COND) {
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define 'PRINTF_COND' to add an extra gate to "
-        "prints.");
-    emitGuard("PRINTF_COND_", [&]() {
-      emitGuardedDefine("PRINTF_COND", "PRINTF_COND_", "(`PRINTF_COND)", "1");
+  if (state.usedPrintfCond) {
+    b.create<sv::MacroDeclOp>("PRINTF_COND");
+    b.create<sv::MacroDeclOp>("PRINTF_COND_");
+    b.create<emit::FragmentOp>("PRINTF_COND_FRAGMENT", [&] {
+      b.create<sv::VerbatimOp>(
+          "\n// Users can define 'PRINTF_COND' to add an extra gate to "
+          "prints.");
+      emitGuard("PRINTF_COND_", [&]() {
+        emitGuardedDefine("PRINTF_COND", "PRINTF_COND_", "(`PRINTF_COND)", "1");
+      });
     });
   }
 
-  if (state.used_ASSERT_VERBOSE_COND) {
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
-        "gate to assert error printing.");
-    emitGuard("ASSERT_VERBOSE_COND_", [&]() {
-      emitGuardedDefine("ASSERT_VERBOSE_COND", "ASSERT_VERBOSE_COND_",
-                        "(`ASSERT_VERBOSE_COND)", "1");
+  if (state.usedAssertVerboseCond) {
+    b.create<sv::MacroDeclOp>("ASSERT_VERBOSE_COND");
+    b.create<sv::MacroDeclOp>("ASSERT_VERBOSE_COND_");
+    b.create<emit::FragmentOp>("ASSERT_VERBOSE_COND_FRAGMENT", [&] {
+      b.create<sv::VerbatimOp>(
+          "\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
+          "gate to assert error printing.");
+      emitGuard("ASSERT_VERBOSE_COND_", [&]() {
+        emitGuardedDefine("ASSERT_VERBOSE_COND", "ASSERT_VERBOSE_COND_",
+                          "(`ASSERT_VERBOSE_COND)", "1");
+      });
     });
   }
 
-  if (state.used_STOP_COND) {
-    b.create<sv::VerbatimOp>(
-        "\n// Users can define 'STOP_COND' to add an extra gate "
-        "to stop conditions.");
-    emitGuard("STOP_COND_", [&]() {
-      emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
+  if (state.usedStopCond) {
+    b.create<sv::MacroDeclOp>("STOP_COND");
+    b.create<sv::MacroDeclOp>("STOP_COND_");
+    b.create<emit::FragmentOp>("STOP_COND_FRAGMENT", [&] {
+      b.create<sv::VerbatimOp>(
+          "\n// Users can define 'STOP_COND' to add an extra gate "
+          "to stop conditions.");
+      emitGuard("STOP_COND_", [&]() {
+        emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
+      });
     });
   }
-
-  // Blank line to separate the header from the modules.
-  b.create<sv::VerbatimOp>("");
 }
 
 LogicalResult
@@ -1717,6 +1740,9 @@ private:
   /// the LTL ops, which were necessary to go from the def-before-use FIRRTL
   /// dialect to the graph-like HW dialect.
   SetVector<Operation *> ltlOpFixupWorklist;
+
+  /// The list of fragments on which the module relies.
+  SetVector<Attribute> fragments;
 };
 } // end anonymous namespace
 
@@ -1848,6 +1874,10 @@ LogicalResult FIRRTLLowering::run() {
   // intermediate wires among them.
   if (failed(fixupLTLOps()))
     return failure();
+
+  if (!fragments.empty())
+    theModule->setAttr(emit::getFragmentsAttrName(),
+                       builder.getArrayAttr(fragments.getArrayRef()));
 
   return backedgeBuilder.clearOrEmitError();
 }
@@ -4107,6 +4137,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
     return op.emitError("destination isn't an inout type");
 
   // #ifndef SYNTHESIS
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
   });
@@ -4125,6 +4156,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(
@@ -4144,6 +4176,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(
@@ -4163,6 +4196,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(pred,
@@ -4178,6 +4212,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
     return failure();
 
   // #ifndef SYNTHESIS
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       addIfProceduralBlock(pred,
@@ -4208,9 +4243,12 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
-      circuitState.used_PRINTF_COND = true;
+      circuitState.usedPrintfCond = true;
+      fragments.insert(FlatSymbolRefAttr::get(
+          builder.getStringAttr("PRINTF_COND_FRAGMENT")));
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
@@ -4236,7 +4274,9 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   if (!clock || !cond)
     return failure();
 
-  circuitState.used_STOP_COND = true;
+  circuitState.usedStopCond = true;
+  fragments.insert(
+      FlatSymbolRefAttr::get(builder.getStringAttr("STOP_COND_FRAGMENT")));
 
   Value stopCond =
       builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
@@ -4385,11 +4425,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
                    !circuitState.emitChiselAssertsAsSVA)) {
       predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+
+      circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
       addToIfDefBlock("SYNTHESIS", {}, [&]() {
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
-            circuitState.used_ASSERT_VERBOSE_COND = true;
-            circuitState.used_STOP_COND = true;
+            circuitState.usedStopCond = true;
+            fragments.insert(FlatSymbolRefAttr::get(
+                builder.getStringAttr("STOP_COND_FRAGMENT")));
+
+            circuitState.usedAssertVerboseCond = true;
+            fragments.insert(FlatSymbolRefAttr::get(
+                builder.getStringAttr("ASSERT_VERBOSE_COND_FRAGMENT")));
+
             addIfProceduralBlock(
                 builder.create<sv::MacroRefExprOp>(boolType,
                                                    "ASSERT_VERBOSE_COND_"),
@@ -4439,6 +4487,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       if (label)
         assumeLabel = StringAttr::get(builder.getContext(),
                                       "assume__" + label.getValue());
+
+      circuitState.addMacroDecl(
+          builder.getStringAttr("USE_PROPERTY_AS_CONSTRAINT"));
       addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
         if (!isUnrOnlyAssert) {
           builder.create<sv::AssumeConcurrentOp>(
@@ -4473,6 +4524,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       anyFailed = true;
       return;
     }
+
+    // Record the guard macro to emit a declaration for it.
+    circuitState.addMacroDecl(builder.getStringAttr(guard.getValue()));
     guards = guards.drop_front();
     addToIfDefBlock(guard.getValue(), emitWrapped);
   };
@@ -4552,6 +4606,8 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
 
   // If the attach operands contain a port, then we can't do anything to
   // simplify the attach operation.
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
+  circuitState.addMacroDecl(builder.getStringAttr("VERILATOR"));
   addToIfDefBlock(
       "SYNTHESIS",
       // If we're doing synthesis, we emit an all-pairs assign complex.
@@ -4570,7 +4626,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       // statement.
       [&]() {
         builder.create<sv::IfDefOp>(
-            "verilator",
+            "VERILATOR",
             [&]() {
               builder.create<sv::VerbatimOp>(
                   "`error \"Verilator does not support alias and thus "

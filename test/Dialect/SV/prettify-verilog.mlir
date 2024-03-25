@@ -39,6 +39,8 @@ hw.module @unary_ops(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %arg3: i1,
 // VERILOG: assign a = ~arg0 + arg1;
 // VERILOG: assign b = ~arg0 + arg2;
 
+// CHECK-LABEL: sv.macro.decl @FOO
+sv.macro.decl @FOO
 
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
@@ -55,7 +57,7 @@ hw.module @sink_constants(in %clock :i1, out out : i1){
   %true = hw.constant true
 
   /// Simple constant sinking.
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.initial {
       // CHECK: [[FALSE:%.*]] = hw.constant false
       // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -68,7 +70,7 @@ hw.module @sink_constants(in %clock :i1, out out : i1){
   }
 
   /// Multiple uses in the same block should use the same constant.
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.initial {
       // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
       // CHECK: [[TRUE:%.*]] = hw.constant true
@@ -116,6 +118,8 @@ hw.module @sinkReadInOut(in %clk: i1) {
 // VERILOG:  always_ff @(posedge clk)
 // VERILOG:    myreg[1'h0].a <= myreg[1'h0].b;
 
+// CHECK-LABEL: sv.macro.decl @SOMETHING
+sv.macro.decl @SOMETHING
 
 // CHECK-LABEL: @sink_expression
 // VERILOG-LABEL: sink_expression
@@ -131,7 +135,7 @@ hw.module @sink_expression(in %clock: i1, in %a: i1, in %a2: i1, in %a3: i1, in 
     // CHECK: [[XOR:%.*]] = comb.xor [[AND]], %a4 : i1
 
     // CHECK: sv.ifdef.procedural
-    sv.ifdef.procedural "SOMETHING"  {
+    sv.ifdef.procedural @SOMETHING {
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
       // CHECK: sv.if [[OR]]
       sv.if %0  {

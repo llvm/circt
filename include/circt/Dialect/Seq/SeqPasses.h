@@ -13,13 +13,12 @@
 #ifndef CIRCT_DIALECT_SEQ_SEQPASSES_H
 #define CIRCT_DIALECT_SEQ_SEQPASSES_H
 
+#include "circt/Dialect/Seq/SeqEnums.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace seq {
-
-enum class ReadEnableMode { Zero, Ignore, Undefined };
 
 #define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
 #define GEN_PASS_DECL_HWMEMSIMIMPL

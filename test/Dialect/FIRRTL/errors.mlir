@@ -139,7 +139,7 @@ firrtl.module @Foo() {
 
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
-  // expected-error @+1 {{constant too large for result type}}
+  // expected-error @+1 {{constant out of range for result type}}
   firrtl.constant 100 : !firrtl.uint<4>
 }
 }
@@ -148,8 +148,17 @@ firrtl.module @Foo() {
 
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
-  // expected-error @+1 {{constant too large for result type}}
+  // expected-error @+1 {{constant out of range for result type}}
   firrtl.constant -100 : !firrtl.sint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant out of range for result type}}
+  firrtl.constant -2 : !firrtl.sint<1>
 }
 }
 

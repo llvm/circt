@@ -43,15 +43,15 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
         firrtl::createMaterializeDebugInfoPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createLowerIntrinsicsPass(opt.shouldFixupEICGWrapper()));
+
   return success();
 }
 
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt,
                                                   StringRef inputFilename) {
-  pm.nest<firrtl::CircuitOp>().addPass(
-      firrtl::createLowerIntrinsicsPass(opt.shouldFixupEICGWrapper()));
-
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignaturesPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
@@ -104,9 +104,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
-
-  if (opt.shouldRunWireDFT())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createWireDFTPass());
 
   if (opt.shouldConvertVecOfBundle()) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
@@ -273,7 +270,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
         opt.shouldEtcDisableModuleInlining()));
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
-  pm.addNestedPass<hw::HWModuleOp>(circt::createLowerSimToSVPass());
+  pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Reg),
@@ -487,13 +484,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> runWireDFT{
-      "run-wire-dft",
-      llvm::cl::desc("Run the now-deprecated WireDFT transform"),
-      llvm::cl::init(false),
-      llvm::cl::Hidden,
-  };
-
   llvm::cl::opt<firrtl::CompanionMode> companionMode{
       "grand-central-companion-mode",
       llvm::cl::desc("Specifies the handling of Grand Central companions"),
@@ -695,8 +685,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
-      vbToBV(false), noDedup(false), runWireDFT(false),
-      companionMode(firrtl::CompanionMode::Bind),
+      vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
       disableAggressiveMergeConnections(false),
       disableHoistingHWPassthrough(true), emitOMIR(true), omirOutFile(""),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
@@ -726,7 +715,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   chiselInterfaceOutDirectory = clOptions->chiselInterfaceOutDirectory;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
-  runWireDFT = clOptions->runWireDFT;
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;

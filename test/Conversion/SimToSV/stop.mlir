@@ -3,7 +3,7 @@
 // CHECK-LABEL: hw.module @finish
 hw.module @finish(in %clock : !seq.clock, in %cond : i1) {
   // CHECK:      [[CLK_SV:%.+]] = seq.from_clock %clock
-  // CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
+  // CHECK-NEXT: sv.ifdef @SYNTHESIS {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.always posedge [[CLK_SV]] {
   // CHECK-NEXT:     sv.if %cond {
@@ -17,7 +17,7 @@ hw.module @finish(in %clock : !seq.clock, in %cond : i1) {
 // CHECK-LABEL: hw.module @fatal
 hw.module @fatal(in %clock : !seq.clock, in %cond : i1) {
   // CHECK:      [[CLK_SV:%.+]] = seq.from_clock %clock
-  // CHECK-NEXT: sv.ifdef  "SYNTHESIS" {
+  // CHECK-NEXT: sv.ifdef @SYNTHESIS {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   sv.always posedge [[CLK_SV]] {
   // CHECK-NEXT:     sv.if %cond {

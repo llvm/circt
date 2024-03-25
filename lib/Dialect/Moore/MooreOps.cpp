@@ -46,6 +46,94 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+void ConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttributeWithoutType(getValueAttr());
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
+  p << " : ";
+  p.printType(getType());
+}
+
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the constant value without bit width.
+  APInt value;
+  auto valueLoc = parser.getCurrentLocation();
+
+  if (parser.parseInteger(value) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+    return failure();
+
+  // Parse the result type..
+  UnpackedType type;
+  auto typeLoc = parser.getCurrentLocation();
+  if (parser.parseType(type))
+    return failure();
+
+  // Ensure that the result type is a simple bit vector type.
+  auto sbvt = type.getSimpleBitVectorOrNull();
+  if (!sbvt)
+    return parser.emitError(typeLoc, "expected simple bit vector type");
+
+  // Extend or truncate the constant value to match the size of the type.
+  if (sbvt.size > value.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the
+    // top bits if it is a positive number.
+    value = value.sext(sbvt.size);
+  } else if (sbvt.size < value.getBitWidth()) {
+    // The parser can return an unnecessarily wide result with leading
+    // zeros. This isn't a problem, but truncating off bits is bad.
+    unsigned neededBits =
+        value.isNegative() ? value.getSignificantBits() : value.getActiveBits();
+    if (sbvt.size < neededBits)
+      return parser.emitError(valueLoc,
+                              "constant out of range for result type ")
+             << type;
+    value = value.trunc(sbvt.size);
+  }
+
+  // Build the attribute and op.
+  auto attrType = IntegerType::get(parser.getContext(), sbvt.size);
+  auto attrValue = IntegerAttr::get(attrType, value);
+
+  result.addAttribute("value", attrValue);
+  result.addTypes(type);
+  return success();
+}
+
+LogicalResult ConstantOp::verify() {
+  auto sbvt = getType().getSimpleBitVector();
+  auto width = getValue().getBitWidth();
+  if (width != sbvt.size)
+    return emitError("attribute width ")
+           << width << " does not match return type's width " << sbvt.size;
+  return success();
+}
+
+void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
+                       const APInt &value) {
+  auto sbvt = type.cast<UnpackedType>().getSimpleBitVector();
+  assert(sbvt.size == value.getBitWidth() &&
+         "APInt width must match simple bit vector's bit width");
+  build(builder, result, type,
+        builder.getIntegerAttr(builder.getIntegerType(sbvt.size), value));
+}
+
+/// This builder allows construction of small signed integers like 0, 1, -1
+/// matching a specified MLIR type. This shouldn't be used for general constant
+/// folding because it only works with values that can be expressed in an
+/// `int64_t`.
+void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
+                       int64_t value) {
+  auto sbvt = type.cast<UnpackedType>().getSimpleBitVector();
+  build(builder, result, type,
+        APInt(sbvt.size, (uint64_t)value, /*isSigned=*/true));
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
@@ -64,6 +152,28 @@ LogicalResult ConcatOp::inferReturnTypes(
   results.push_back(
       SimpleBitVectorType(domain, Sign::Unsigned, size).getType(context));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConversionOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
+  // Fold away no-op casts.
+  if (getInput().getType() == getResult().getType())
+    return getInput();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// BoolCastOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult BoolCastOp::fold(FoldAdaptor adaptor) {
+  // Fold away no-op casts.
+  if (getInput().getType() == getResult().getType())
+    return getInput();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

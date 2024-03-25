@@ -45,6 +45,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     for (MemOp memOp : llvm::make_early_inc_range(
              getOperation().getBodyBlock()->getOps<MemOp>())) {
       inferUnmasked(memOp, opsToErase);
+      simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
       memOp.getNumPorts(nReads, nWrites, nRWs, nDbgs);
       // Run the analysis only for Seq memories (latency=1) and a single read
@@ -209,6 +210,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             opsToErase.push_back(sf);
           }
       }
+      simplifyWmode(rwMem);
       // All uses for all results of mem removed, now erase the memOp.
       opsToErase.push_back(memOp);
     }
@@ -312,6 +314,172 @@ private:
     return {};
   }
 
+  void handleCatPrimOp(CatPrimOp defOp, SmallVectorImpl<Value> &bits) {
+
+    long lastSize = 0;
+    // Cat the bits of both the operands.
+    for (auto operand : defOp->getOperands()) {
+      SmallVectorImpl<Value> &opBits = valueBitsSrc[operand];
+      size_t s =
+          getBitWidth(type_cast<FIRRTLBaseType>(operand.getType())).value();
+      assert(opBits.size() == s);
+      for (long i = lastSize, e = lastSize + s; i != e; ++i)
+        bits[i] = opBits[i - lastSize];
+      lastSize = s;
+    }
+  }
+
+  void handleBitsPrimOp(BitsPrimOp bitsPrim, SmallVectorImpl<Value> &bits) {
+
+    SmallVectorImpl<Value> &opBits = valueBitsSrc[bitsPrim.getInput()];
+    for (size_t srcIndex = bitsPrim.getLo(), e = bitsPrim.getHi(), i = 0;
+         srcIndex <= e; ++srcIndex, ++i)
+      bits[i] = opBits[srcIndex];
+  }
+
+  // Try to extract the value assigned to each bit of `val`. This is a heuristic
+  // to determine if each bit of the `val` is assigned the same value.
+  // Common pattern that this heuristic detects,
+  // mask = {{w1,w1},{w2,w2}}}
+  // w1 = w[0]
+  // w2 = w[0]
+  bool areBitsDrivenBySameSource(Value val) {
+    SmallVector<Value> stack;
+    stack.push_back(val);
+
+    while (!stack.empty()) {
+      auto val = stack.back();
+      if (valueBitsSrc.contains(val)) {
+        stack.pop_back();
+        continue;
+      }
+
+      auto size = getBitWidth(type_cast<FIRRTLBaseType>(val.getType()));
+      // Cannot analyze aggregate types.
+      if (!size.has_value())
+        return false;
+
+      auto bitsSize = size.value();
+      if (auto *defOp = val.getDefiningOp()) {
+        if (isa<CatPrimOp>(defOp)) {
+          bool operandsDone = true;
+          // If the value is a cat of other values, compute the bits of the
+          // operands.
+          for (auto operand : defOp->getOperands()) {
+            if (valueBitsSrc.contains(operand))
+              continue;
+            stack.push_back(operand);
+            operandsDone = false;
+          }
+          if (!operandsDone)
+            continue;
+
+          valueBitsSrc[val].resize_for_overwrite(bitsSize);
+          handleCatPrimOp(cast<CatPrimOp>(defOp), valueBitsSrc[val]);
+        } else if (auto bitsPrim = dyn_cast<BitsPrimOp>(defOp)) {
+          auto input = bitsPrim.getInput();
+          if (!valueBitsSrc.contains(input)) {
+            stack.push_back(input);
+            continue;
+          }
+          valueBitsSrc[val].resize_for_overwrite(bitsSize);
+          handleBitsPrimOp(bitsPrim, valueBitsSrc[val]);
+        } else if (auto constOp = dyn_cast<ConstantOp>(defOp)) {
+          auto constVal = constOp.getValue();
+          valueBitsSrc[val].resize_for_overwrite(bitsSize);
+          if (constVal.isAllOnes() || constVal.isZero()) {
+            for (auto &b : valueBitsSrc[val])
+              b = constOp;
+          } else
+            return false;
+        } else if (auto wireOp = dyn_cast<WireOp>(defOp)) {
+          if (bitsSize != 1)
+            return false;
+          valueBitsSrc[val].resize_for_overwrite(bitsSize);
+          if (auto src = getConnectSrc(wireOp.getResult())) {
+            valueBitsSrc[val][0] = src;
+          } else
+            valueBitsSrc[val][0] = wireOp.getResult();
+        } else
+          return false;
+      } else
+        return false;
+      stack.pop_back();
+    }
+    if (!valueBitsSrc.contains(val))
+      return false;
+    return llvm::all_equal(valueBitsSrc[val]);
+  }
+
+  // Remove redundant dependence of wmode on the enable signal. wmode can assume
+  // the enable signal be true.
+  void simplifyWmode(MemOp &memOp) {
+
+    // Iterate over all results, and find the enable and wmode fields of the RW
+    // port.
+    for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
+      auto portKind = memOp.getPortKind(portIt.index());
+      if (portKind != MemOp::PortKind::ReadWrite)
+        continue;
+      Value enableDriver, wmodeDriver;
+      Value portVal = portIt.value();
+      // Iterate over all users of the rw port.
+      for (Operation *u : portVal.getUsers())
+        if (auto sf = dyn_cast<SubfieldOp>(u)) {
+          // Get the field name.
+          auto fName =
+              sf.getInput().getType().base().getElementName(sf.getFieldIndex());
+          // Record the enable and wmode fields.
+          if (fName.contains("en"))
+            enableDriver = getConnectSrc(sf.getResult());
+          if (fName.contains("wmode"))
+            wmodeDriver = getConnectSrc(sf.getResult());
+        }
+
+      if (enableDriver && wmodeDriver) {
+        ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
+        builder.setInsertionPointToStart(
+            memOp->getParentOfType<FModuleOp>().getBodyBlock());
+        auto constOne = builder.create<ConstantOp>(
+            UIntType::get(builder.getContext(), 1), APInt(1, 1));
+        setEnable(enableDriver, wmodeDriver, constOne);
+      }
+    }
+  }
+
+  // Replace any occurence of enable on the expression tree of wmode with a
+  // constant one.
+  void setEnable(Value enableDriver, Value wmodeDriver, Value constOne) {
+    auto getDriverOp = [&](Value dst) -> Operation * {
+      // Look through one level of wire to get the driver op.
+      auto *defOp = dst.getDefiningOp();
+      if (defOp) {
+        if (isa<WireOp>(defOp))
+          dst = getConnectSrc(dst);
+        if (dst)
+          defOp = dst.getDefiningOp();
+      }
+      return defOp;
+    };
+    SmallVector<Value> stack;
+    llvm::SmallDenseSet<Value> visited;
+    stack.push_back(wmodeDriver);
+    while (!stack.empty()) {
+      auto driver = stack.pop_back_val();
+      if (!visited.insert(driver).second)
+        continue;
+      auto *defOp = getDriverOp(driver);
+      if (!defOp)
+        continue;
+      for (auto operand : llvm::enumerate(defOp->getOperands())) {
+        if (operand.value() == enableDriver)
+          defOp->setOperand(operand.index(), constOne);
+        else
+          stack.push_back(operand.value());
+      }
+    }
+  }
+
   void inferUnmasked(MemOp &memOp, SmallVector<Operation *> &opsToErase) {
     bool isMasked = true;
 
@@ -335,11 +503,11 @@ private:
             if (sf.getResult().getType().getBitWidthOrSentinel() == 1)
               continue;
             // Check what is the mask field directly connected to.
-            // If, a constant 1, then we can replace with unMasked memory.
+            // If we can infer that all the bits of the mask are always assigned
+            // the same value, then the memory is unmasked.
             if (auto maskVal = getConnectSrc(sf))
-              if (auto constVal = dyn_cast<ConstantOp>(maskVal.getDefiningOp()))
-                if (constVal.getValue().isAllOnes())
-                  isMasked = false;
+              if (areBitsDrivenBySameSource(maskVal))
+                isMasked = false;
           }
         }
     }
@@ -398,6 +566,10 @@ private:
       memOp = newMem;
     }
   }
+
+  // Record of what are the source values that drive each bit of a value. Used
+  // to check if each bit of a value is being driven by the same source.
+  llvm::DenseMap<Value, SmallVector<Value>> valueBitsSrc;
 };
 } // end anonymous namespace
 

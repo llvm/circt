@@ -83,20 +83,39 @@ void StripDebugInfoWithPred::runOnOperation() {
     return;
   }
 
-  parallelForEach(
-      &getContext(), getOperation().getOps(), [&](Operation &toplevelOp) {
-        toplevelOp.walk([&](Operation *op) {
-          updateLocIfChanged(op, getStrippedLoc(op->getLoc()));
-          updateLocArray(op, "arg_locs");
-          updateLocArray(op, "result_locs");
-          updateLocArray(op, "port_locs");
-          // Strip block arguments debug info.
-          for (Region &region : op->getRegions())
-            for (Block &block : region.getBlocks())
-              for (BlockArgument &arg : block.getArguments())
-                updateLocIfChanged(&arg, getStrippedLoc(arg.getLoc()));
-        });
-      });
+  auto stripLocsOnOp = [this](Operation *op) {
+    updateLocIfChanged(op, getStrippedLoc(op->getLoc()));
+    updateLocArray(op, "arg_locs");
+    updateLocArray(op, "result_locs");
+    updateLocArray(op, "port_locs");
+  };
+
+  // Handle operations sequentially if they have no regions,
+  // and parallelize walking over the remainder.
+  // If not for this special sequential-vs-parallel handling, would instead
+  // only do a simple walk and defer to pass scheduling for parallelism.
+  SmallVector<Operation *> topLevelOpsToWalk;
+  for (auto &op : getOperation().getOps()) {
+    // Gather operations with regions for parallel processing.
+    if (op.getNumRegions() != 0) {
+      topLevelOpsToWalk.push_back(&op);
+      continue;
+    }
+
+    // Otherwise, handle right now -- not worth the cost.
+    stripLocsOnOp(&op);
+  }
+
+  parallelForEach(&getContext(), topLevelOpsToWalk, [&](Operation *toplevelOp) {
+    toplevelOp->walk([&](Operation *op) {
+      stripLocsOnOp(op);
+      // Strip block arguments debug info.
+      for (Region &region : op->getRegions())
+        for (Block &block : region.getBlocks())
+          for (BlockArgument &arg : block.getArguments())
+            updateLocIfChanged(&arg, getStrippedLoc(arg.getLoc()));
+    });
+  });
 }
 
 namespace circt {

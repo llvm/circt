@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: "name": "Foo"
 // CHECK-DAG: "numStateBytes": 5724
-arc.model "Foo" {
+arc.model @Foo io !hw.modty<input a : i19, output b : i42> {
 ^bb0(%arg0: !arc.storage<5724>):
   // CHECK:      "name": "a"
   // CHECK-NEXT: "offset": 0
@@ -19,7 +19,7 @@ arc.model "Foo" {
 
 // CHECK-LABEL: "name": "Bar"
 // CHECK-DAG: "numStateBytes": 9001
-arc.model "Bar" {
+arc.model @Bar io !hw.modty<> {
 ^bb0(%arg0: !arc.storage<9001>):
   // CHECK-NOT: "offset": "420"
   arc.alloc_state %arg0 {offset = 420} : (!arc.storage<9001>) -> !arc.state<i11>

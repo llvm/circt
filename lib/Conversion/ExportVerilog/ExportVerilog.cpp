@@ -798,7 +798,9 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
-  for (auto *user : op->getUsers()) {
+  for (auto &use : op->getUses()) {
+    auto *user = use.getOwner();
+
     // Verilog bit selection is required by the standard to be:
     // "a vector, packed array, packed structure, parameter or concatenation".
     //
@@ -808,18 +810,38 @@ static bool isExpressionUnableToInline(Operation *op,
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, StructExtractOp,
             UnionExtractOp, IndexedPartSelectOp>(user))
-      if (op->getResult(0) == user->getOperand(0) && // ignore index operands.
-          !isOkToBitSelectFrom(op->getResult(0)))
+      if (use.getOperandNumber() == 0 && // ignore index operands.
+          !isOkToBitSelectFrom(use.get()))
         return true;
 
-    // Always blocks must have a name in their sensitivity list, not an expr.
-    if (!options.allowExprInEventControl && isa<AlwaysOp, AlwaysFFOp>(user)) {
-      // Anything other than a read of a wire must be out of line.
-      if (auto read = dyn_cast<ReadInOutOp>(op))
-        if (read.getInput().getDefiningOp<sv::WireOp>() ||
-            read.getInput().getDefiningOp<RegOp>())
-          continue;
-      return true;
+    // Handle option disallowing expressions in event control.
+    if (!options.allowExprInEventControl) {
+      // Check operations used for event control, anything other than
+      // a read of a wire must be out of line.
+
+      // Helper to determine if the use will be part of "event control",
+      // based on what the operation using it is and as which operand.
+      auto usedInExprControl = [user, &use]() {
+        // "disable iff" condition must be a name.
+        if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
+          return disableOp.getCondition() == use.get();
+        // LTL Clock up's clock operand must be a name.
+        if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
+          return clockOp.getClock() == use.get();
+        // Always blocks must have a name in their sensitivity list.
+        // (all operands)
+        return isa<AlwaysOp, AlwaysFFOp>(user);
+      };
+
+      if (!usedInExprControl())
+        continue;
+
+      // Otherwise, this can only be inlined if is (already) a read of a wire.
+      auto read = dyn_cast<ReadInOutOp>(op);
+      if (!read)
+        return true;
+      if (!isa_and_nonnull<sv::WireOp, RegOp>(read.getInput().getDefiningOp()))
+        return true;
     }
   }
   return false;
@@ -6039,25 +6061,35 @@ class FileEmitter : public EmitterBase {
 public:
   explicit FileEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emit(emit::FileOp op);
+  void emit(emit::FileOp op) {
+    emit(op.getBody());
+    ps.eof();
+  }
+  void emit(emit::FragmentOp op) { emit(op.getBody()); }
   void emit(emit::FileListOp op);
 
 private:
+  void emit(Block *block);
+
   void emitOp(emit::RefOp op);
   void emitOp(emit::VerbatimOp op);
 };
 
-void FileEmitter::emit(emit::FileOp op) {
-  for (Operation &op : *op.getBodyBlock()) {
+void FileEmitter::emit(Block *block) {
+  for (Operation &op : *block) {
     TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
+        .Case<BindInterfaceOp>(
+            [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
+        .Case<TypeScopeOp>([&](auto typedecls) {
+          ModuleEmitter(state).emitStatement(typedecls);
+        })
         .Default(
             [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
-  ps.eof();
 }
 
 void FileEmitter::emit(emit::FileListOp op) {
@@ -6086,6 +6118,9 @@ void FileEmitter::emitOp(emit::RefOp op) {
   TypeSwitch<Operation *>(targetOp)
       .Case<hw::HWModuleOp>(
           [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
+      .Case<TypeScopeOp>([&](auto typedecls) {
+        ModuleEmitter(state).emitStatement(typedecls);
+      })
       .Default(
           [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
 }
@@ -6218,6 +6253,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           fileMapping.try_emplace(file.getSymNameAttr(), file);
           separateFile(file, file.getFileName());
         })
+        .Case<emit::FragmentOp>([&](auto fragment) {
+          fragmentMapping.try_emplace(fragment.getSymNameAttr(), fragment);
+        })
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           auto sym = mod.getNameAttr();
@@ -6290,7 +6328,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<BindOp, BindInterfaceOp>([&](auto op) {
+        .Case<BindOp>([&](auto op) {
           if (!attr) {
             separateFile(op, "bindfile.sv");
           } else {
@@ -6338,20 +6376,38 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
   size_t numReplicatedOps =
       file.emitReplicatedOps && !emitHeaderInclude ? replicatedOps.size() : 0;
 
-  thingsToEmit.reserve(thingsToEmit.size() + numReplicatedOps +
-                       file.ops.size());
-
   // Emit each operation in the file preceded by the replicated ops not yet
   // printed.
+  DenseSet<emit::FragmentOp> includedFragments;
   for (const auto &opInfo : file.ops) {
+    Operation *op = opInfo.op;
+
     // Emit the replicated per-file operations before the main operation's
     // position (if enabled).
     for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
          ++lastReplicatedOp)
       thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 
+    // Pull in the fragments that the op references. In one file, each
+    // fragment is emitted only once.
+    if (auto fragments =
+            op->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName())) {
+      for (auto sym : fragments.getAsRange<FlatSymbolRefAttr>()) {
+        auto it = fragmentMapping.find(sym.getAttr());
+        if (it == fragmentMapping.end()) {
+          encounteredError = true;
+          op->emitError("cannot find referenced fragment ") << sym;
+          continue;
+        }
+        emit::FragmentOp fragment = it->second;
+        if (includedFragments.insert(fragment).second) {
+          thingsToEmit.emplace_back(it->second);
+        }
+      }
+    }
+
     // Emit the operation itself.
-    thingsToEmit.emplace_back(opInfo.op);
+    thingsToEmit.emplace_back(op);
   }
 
   // Emit the replicated per-file operations after the last operation (if
@@ -6369,14 +6425,12 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<BindInterfaceOp>(
-          [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
         ModuleEmitter(state).emitStatement(typedecls);
       })
-      .Case<emit::FileOp, emit::FileListOp>(
+      .Case<emit::FileOp, emit::FileListOp, emit::FragmentOp>(
           [&](auto op) { FileEmitter(state).emit(op); })
       .Case<MacroDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })

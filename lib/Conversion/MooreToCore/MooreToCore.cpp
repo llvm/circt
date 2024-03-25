@@ -186,24 +186,30 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
   matchAndRewrite(ShrOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    bool hasSignedResultType = op.getResult()
-                                   .getType()
-                                   .cast<UnpackedType>()
-                                   .castToSimpleBitVector()
-                                   .isSigned();
 
     // Comb shift operations require the same bit-width for value and amount
     Value amount =
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
-
-    if (adaptor.getArithmetic() && hasSignedResultType) {
-      rewriter.replaceOpWithNewOp<comb::ShrSOp>(
-          op, resultType, adaptor.getValue(), amount, false);
-      return success();
-    }
-
     rewriter.replaceOpWithNewOp<comb::ShrUOp>(
+        op, resultType, adaptor.getValue(), amount, false);
+    return success();
+  }
+};
+
+struct AShrOpConversion : public OpConversionPattern<AShrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(AShrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+
+    // Comb shift operations require the same bit-width for value and amount
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.getAmount(),
+                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+    rewriter.replaceOpWithNewOp<comb::ShrSOp>(
         op, resultType, adaptor.getValue(), amount, false);
     return success();
   }
@@ -215,9 +221,7 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
-static bool isMooreType(Type type) {
-  return type.isa<UnpackedType>() || type.isa<IntType>();
-}
+static bool isMooreType(Type type) { return type.isa<UnpackedType>(); }
 
 static bool hasMooreType(TypeRange types) {
   return llvm::any_of(types, isMooreType);
@@ -287,6 +291,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CallOpConversion,
     ShlOpConversion,
     ShrOpConversion,
+    AShrOpConversion,
     UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on

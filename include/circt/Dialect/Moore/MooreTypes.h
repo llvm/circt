@@ -157,6 +157,15 @@ struct SimpleBitVectorType {
   /// Get the range of the type.
   Range getRange() const { return Range(size, RangeDir::Down, 0); }
 
+  /// Get a single bit version of this type by setting its size to 1.
+  SimpleBitVectorType toSingleBit() const {
+    auto type = *this;
+    type.size = 1;
+    type.explicitSize = false;
+    type.usedAtom = false;
+    return type;
+  }
+
   /// Check whether this type is equivalent to another.
   bool isEquivalent(const SimpleBitVectorType &other) const {
     return domain == other.domain && sign == other.sign && size == other.size;
@@ -544,6 +553,8 @@ public:
   static Domain getDomain(Kind kind);
   /// Get the size of one of the integer types.
   static unsigned getBitSize(Kind kind);
+  /// Get the integer type that corresponds to a single bit of the given domain.
+  static Kind getAtomForDomain(Domain domain);
   /// Get the integer type that corresponds to a domain and bit size. For
   /// example, returns `int` for `(TwoValued, 32)`.
   static std::optional<Kind> getKindFromDomainAndSize(Domain domain,

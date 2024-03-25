@@ -9,6 +9,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTCalyxNative
   CIRCTCombToArith
   CIRCTCombToLLVM
+  CIRCTCombToSMT
   CIRCTConvertToArcs
   CIRCTDCToHW
   CIRCTExportChiselInterface
@@ -21,6 +22,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTHWToLLHD
   CIRCTHWToLLVM
   CIRCTHWToBTOR2
+  CIRCTHWToSMT
   CIRCTHWToSV
   CIRCTHWToSystemC
   CIRCTLLHDToLLVM
@@ -31,5 +33,6 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTSeqToSV
   CIRCTSimToSV
   CIRCTCFToHandshake
+  CIRCTVerifToSMT
   CIRCTVerifToSV
 )

@@ -76,8 +76,6 @@ std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                mlir::StringRef replSeqMemFile = "");
 
-std::unique_ptr<mlir::Pass> createWireDFTPass();
-
 std::unique_ptr<mlir::Pass> createVBToBVPass();
 
 std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();

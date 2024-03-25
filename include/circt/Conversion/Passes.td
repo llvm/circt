@@ -404,8 +404,13 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert FSM to SV and HW";
   let constructor = "circt::createConvertFSMToSVPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
-                           "circt::seq::SeqDialect", "circt::sv::SVDialect"];
+  let dependentDialects = [
+      "circt::comb::CombDialect",
+      "circt::emit::EmitDialect",
+      "circt::hw::HWDialect",
+      "circt::seq::SeqDialect",
+      "circt::sv::SVDialect",
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -418,10 +423,17 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Lower a module of FIRRTL dialect to the HW dialect family.
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "seq::SeqDialect", "sv::SVDialect",
-                           "ltl::LTLDialect", "verif::VerifDialect",
-                           "sim::SimDialect"];
+
+  let dependentDialects = [
+    "comb::CombDialect",
+    "emit::EmitDialect",
+    "hw::HWDialect",
+    "ltl::LTLDialect",
+    "seq::SeqDialect",
+    "sim::SimDialect",
+    "sv::SVDialect",
+    "verif::VerifDialect",
+  ];
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
@@ -661,6 +673,35 @@ def ConvertCombToArith : Pass<"convert-comb-to-arith", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertCombToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert combinational ops and constants to SMT ops";
+  // Need to depend on HWDialect because some 'comb' canonicalization patterns
+  // build 'hw.constant' operations.
+  let dependentDialects = ["smt::SMTDialect", "hw::HWDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertHWToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert HW ops and constants to SMT ops";
+  let dependentDialects = ["smt::SMTDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertVerifToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertVerifToSMT : Pass<"convert-verif-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert Verif ops to SMT ops";
+  let dependentDialects = ["smt::SMTDialect", "mlir::arith::ArithDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // ConvertArcToLLVM
 //===----------------------------------------------------------------------===//
 
@@ -683,7 +724,11 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::createLowerSeqToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
            "Disable emission of register randomization code">,
@@ -710,7 +755,7 @@ def LowerFirMem : Pass<"lower-seq-firmem", "mlir::ModuleOp"> {
 // ConvertSimToSV
 //===----------------------------------------------------------------------===//
 
-def LowerSimToSV: Pass<"lower-sim-to-sv",  "hw::HWModuleOp"> {
+def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower simulator-specific `sim` ops to SV.";
   let constructor = "circt::createLowerSimToSVPass()";
   let dependentDialects = [

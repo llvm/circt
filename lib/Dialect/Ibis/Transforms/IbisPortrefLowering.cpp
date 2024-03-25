@@ -83,7 +83,12 @@ public:
       // References to outputs becomes inputs (read from this container)
       auto rawInput = rewriter.create<InputPortOp>(op.getLoc(),
                                                    op.getInnerSym(), innerType);
-      rewriter.replaceAllUsesWith(portUnwrapper.getResult(), rawInput);
+      // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+      // DialectConversion. Using it may lead to assertions about mutating
+      // replaced/erased ops. For now, do this RAUW directly, until
+      // ConversionPatternRewriter properly supports RAUW.
+      // See https://github.com/llvm/circt/issues/6795.
+      portUnwrapper.getResult().replaceAllUsesWith(rawInput);
 
       // Replace all ibis.port.read ops with a read of the new input.
       for (auto *portUser :
@@ -297,7 +302,12 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
                   rewriter.getStringAttr(portName.strref() + "_fw")),
               innerType);
 
-          rewriter.replaceAllUsesWith(getPortUnwrapper, forwardedInputPort);
+          // TODO: RewriterBase::replaceAllUsesWith is not currently supported
+          // by DialectConversion. Using it may lead to assertions about
+          // mutating replaced/erased ops. For now, do this RAUW directly, until
+          // ConversionPatternRewriter properly supports RAUW.
+          // See https://github.com/llvm/circt/issues/6795.
+          getPortUnwrapper.getResult().replaceAllUsesWith(forwardedInputPort);
           portDriverValue = rewriter.create<PortReadOp>(
               op.getLoc(), forwardedInputPort.getPort());
         } else {
@@ -329,7 +339,13 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         auto rawPort =
             rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
                                        innerType, Direction::Output);
-        rewriter.replaceAllUsesWith(getPortUnwrapper, rawPort);
+
+        // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+        // DialectConversion. Using it may lead to assertions about mutating
+        // replaced/erased ops. For now, do this RAUW directly, until
+        // ConversionPatternRewriter properly supports RAUW.
+        // See https://github.com/llvm/circt/issues/6795.
+        getPortUnwrapper.getResult().replaceAllUsesWith(rawPort);
       }
     }
 

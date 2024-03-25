@@ -100,6 +100,10 @@ namespace comb {
 class CombDialect;
 } // namespace comb
 
+namespace emit {
+class EmitDialect;
+} // namespace emit
+
 namespace hw {
 class HWDialect;
 class HWModuleOp;
@@ -128,6 +132,10 @@ class SVDialect;
 namespace fsm {
 class FSMDialect;
 } // namespace fsm
+
+namespace smt {
+class SMTDialect;
+} // namespace smt
 
 namespace systemc {
 class SystemCDialect;

@@ -497,6 +497,14 @@ circuit ConnectWrongType:
     b <= a ; expected-error {{cannot connect non-equivalent type}}
 
 ;// -----
+FIRRTL version 4.0.0
+
+circuit RefStatementDeprecated:
+  extmodule RefStatementDeprecated:
+    output p : Probe<UInt<1>>
+    ref p is "x.y" ; expected-error {{ref statements were removed in FIRRTL 4.0.0, but the specified FIRRTL version was 4.0.0}}
+
+;// -----
 
 FIRRTL version 3.0.0
 circuit ConnectAlternateWrongType:
@@ -1374,3 +1382,16 @@ FIRRTL version 4.0.0
 circuit PrivateMainModule:
   ; expected-error @below {{private main modules were removed in FIRRTL 4.0.0}}
   module PrivateMainModule:
+
+;// -----
+circuit IntModuleNoIntrinsic:
+  intmodule test:
+  ; expected-error @below {{expected 'intrinsic'}}
+  module IntModule:
+
+;// -----
+circuit IntModuleBadIntrinsic:
+  intmodule test:
+    ; expected-error @below {{expected intrinsic name}}
+    intrinsic = 0
+  module IntModule:

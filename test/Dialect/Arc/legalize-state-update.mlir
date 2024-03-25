@@ -164,8 +164,8 @@ func.func @InnerWriteFunc(%arg0: !arc.state<i4>, %arg1: i4) {
 }
 
 // State legalization should not happen across clock trees and passthrough ops.
-// CHECK-LABEL: arc.model "DontLeakThroughClockTreeOrPassthrough"
-arc.model "DontLeakThroughClockTreeOrPassthrough" {
+// CHECK-LABEL: arc.model @DontLeakThroughClockTreeOrPassthrough
+arc.model @DontLeakThroughClockTreeOrPassthrough io !hw.modty<input a : i1, output b : i1> {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
   %in_a = arc.root_input "a", %arg0 : (!arc.storage) -> !arc.state<i1>
@@ -187,8 +187,8 @@ arc.model "DontLeakThroughClockTreeOrPassthrough" {
   }
 }
 
-// CHECK-LABEL: arc.model "Memory"
-arc.model "Memory" {
+// CHECK-LABEL: arc.model @Memory
+arc.model @Memory io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
   // CHECK: arc.clock_tree %false attributes {ct1}

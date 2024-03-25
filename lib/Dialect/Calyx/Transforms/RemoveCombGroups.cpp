@@ -119,9 +119,10 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
                                 PatternRewriter &rewriter) const override {
 
     auto component = combGroup->getParentOfType<ComponentOp>();
-    auto group = rewriter.replaceOpWithNewOp<calyx::GroupOp>(
-        combGroup, combGroup.getName());
+    auto group = rewriter.create<calyx::GroupOp>(combGroup.getLoc(),
+                                                 combGroup.getName());
     rewriter.mergeBlocks(combGroup.getBodyBlock(), group.getBodyBlock());
+    rewriter.replaceOp(combGroup, group);
 
     // Determine which cell results are read from the control schedule.
     SetVector<Operation *> cellsAssigned;

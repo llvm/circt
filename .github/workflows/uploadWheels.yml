@@ -4,6 +4,12 @@ on:
   release:
     types: [created]
   workflow_dispatch:
+    inputs:
+      upload-to-pypi:
+        description: 'Upload wheels to PyPi'
+        required: true
+        default: false
+        type: boolean
   schedule:
     - cron: 0 12 * * 1
 
@@ -59,9 +65,9 @@ jobs:
           if-no-files-found: error
 
   push_wheels:
-    name: Push wheels (Tag or Weekly)
+    name: Push wheels
     runs-on: ubuntu-20.04
-    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || ((github.event_name == 'workflow_dispatch') && inputs.upload-to-pypi))
     needs: build_wheels
     environment:
       name: pypi

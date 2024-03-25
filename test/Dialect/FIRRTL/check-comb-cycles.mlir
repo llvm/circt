@@ -1086,3 +1086,23 @@ firrtl.circuit "OutsideDialectSource" {
     firrtl.strictconnect %b, %a : !firrtl.uint<32>
   }
 }
+
+// -----
+
+// Check RWProbeOp + force doesn't crash.
+// No loop here.
+firrtl.circuit "Issue6820" {
+  firrtl.module private @Foo(in %clock: !firrtl.clock sym @sym, out %clockProbe_bore: !firrtl.rwprobe<clock>) {
+    %0 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<clock>
+    firrtl.ref.define %clockProbe_bore, %0 : !firrtl.rwprobe<clock>
+  }
+  firrtl.module @Issue6820(in %clock: !firrtl.clock, out %clockProbe: !firrtl.rwprobe<clock>) attributes {convention = #firrtl<convention scalarized>} {
+    %foo_clock, %foo_clockProbe_bore = firrtl.instance foo @Foo(in clock: !firrtl.clock, out clockProbe_bore: !firrtl.rwprobe<clock>)
+    firrtl.strictconnect %foo_clock, %clock : !firrtl.clock
+    firrtl.ref.define %clockProbe, %foo_clockProbe_bore : !firrtl.rwprobe<clock>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.clock
+  }
+}

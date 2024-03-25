@@ -694,9 +694,8 @@ LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
   if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
     return success();
 
-  // TODO: This check is duplicated multiple places, e.g., in
-  // WireDFT.  This should be factored out as part of the annotation
-  // lowering pass.
+  // TODO: This check is duplicated multiple places. This should be factored
+  // out as part of the annotation lowering pass.
   if (dut) {
     auto diag = emitError(mod->getLoc())
                 << "is marked with a '" << dutAnnoClass << "', but '"

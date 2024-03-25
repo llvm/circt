@@ -21,10 +21,10 @@ hw.module @level1(in %arg0 : i32, in %in : !Struct1, in %arg1: i32, out out0 : i
 }
 
 // BASIC-LABEL: hw.module @level2(in %in.aa.a : i1, in %in.aa.b : i2, in %in.bb.a : i1, in %in.bb.b : i2, out out.aa.a : i1, out out.aa.b : i2, out out.bb.a : i1, out out.bb.b : i2) {
-// BASIC-NEXT:    %0 = hw.struct_create (%in.aa.a, %in.aa.b) : !hw.struct<a: i1, b: i2>
-// BASIC-NEXT:    %1 = hw.struct_create (%in.bb.a, %in.bb.b) : !hw.struct<a: i1, b: i2>
-// BASIC-NEXT:    %2 = hw.struct_create (%0, %1) : !hw.struct<aa: !hw.struct<a: i1, b: i2>, bb: !hw.struct<a: i1, b: i2>>
-// BASIC-NEXT:    %aa, %bb = hw.struct_explode %2 : !hw.struct<aa: !hw.struct<a: i1, b: i2>, bb: !hw.struct<a: i1, b: i2>>
+// BASIC-NEXT:    %[[v1:.+]] = hw.struct_create (%in.bb.a, %in.bb.b) : !hw.struct<a: i1, b: i2>
+// BASIC-NEXT:    %[[v0:.+]] = hw.struct_create (%in.aa.a, %in.aa.b) : !hw.struct<a: i1, b: i2>
+// BASIC-NEXT:    %[[v2:.+]] = hw.struct_create (%[[v0]], %[[v1]]) : !hw.struct<aa: !hw.struct<a: i1, b: i2>, bb: !hw.struct<a: i1, b: i2>>
+// BASIC-NEXT:    %aa, %bb = hw.struct_explode %[[v2]] : !hw.struct<aa: !hw.struct<a: i1, b: i2>, bb: !hw.struct<a: i1, b: i2>>
 // BASIC-NEXT:    %a, %b = hw.struct_explode %aa : !hw.struct<a: i1, b: i2>
 // BASIC-NEXT:    %a_0, %b_1 = hw.struct_explode %bb : !hw.struct<a: i1, b: i2>
 // BASIC-NEXT:    hw.output %a, %b, %a_0, %b_1 : i1, i2, i1, i2

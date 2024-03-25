@@ -118,7 +118,6 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
                                         bool allowUnknownIntrinsics) {
   unsigned numFailures = 0;
   for (auto op : llvm::make_early_inc_range(circuit.getOps<FModuleLike>())) {
-    StringAttr intname;
     if (auto extMod = dyn_cast<FExtModuleOp>(*op)) {
       // Special-case some extmodules, identifying them by name.
       auto it = extmods.find(extMod.getDefnameAttr());
@@ -129,29 +128,15 @@ LogicalResult IntrinsicLowerings::lower(CircuitOp circuit,
         } else {
           ++numFailures;
         }
-        continue;
       }
-
-      // Otherwise, find extmodules which have an intrinsic annotation.
-      auto anno = AnnotationSet(&*op).getAnnotation("circt.Intrinsic");
-      if (!anno)
-        continue;
-      intname = anno.getMember<StringAttr>("intrinsic");
-      if (!intname) {
-        op.emitError("intrinsic annotation with no intrinsic name");
-        ++numFailures;
-        continue;
-      }
-    } else if (auto intMod = dyn_cast<FIntModuleOp>(*op)) {
-      intname = intMod.getIntrinsicAttr();
-      if (!intname) {
-        op.emitError("intrinsic module with no intrinsic name");
-        ++numFailures;
-        continue;
-      }
-    } else {
       continue;
     }
+
+    auto intMod = dyn_cast<FIntModuleOp>(*op);
+    if (!intMod)
+      continue;
+
+    auto intname = intMod.getIntrinsicAttr();
 
     // Find the converter and apply it.
     auto it = intmods.find(intname);

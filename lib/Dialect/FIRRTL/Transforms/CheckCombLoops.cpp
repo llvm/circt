@@ -327,6 +327,13 @@ public:
     if (leader == rwProbeClasses.member_end())
       return;
     auto iter = rwProbeRefersTo.find(*leader);
+
+    // This should be found, but for now may not be due to needing
+    // RWProbeOp support.  May cause missed loops involving force for now.
+    // https://github.com/llvm/circt/issues/6820
+    if (iter == rwProbeRefersTo.end())
+      return;
+
     assert(iter != rwProbeRefersTo.end());
     if (iter->second != dstNode)
       drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));

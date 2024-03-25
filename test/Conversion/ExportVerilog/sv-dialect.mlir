@@ -1,5 +1,8 @@
 // RUN: circt-opt %s -test-apply-lowering-options='options=explicitBitcast,maximumNumberOfTermsPerExpression=10,emitBindComments' -export-verilog -verify-diagnostics | FileCheck %s
 
+sv.macro.decl @SYNTHESIS
+sv.macro.decl @VERILATOR
+
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
@@ -35,7 +38,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
 
     sv.bpassign %logic_op_procedural, %val: i8
   // CHECK-NEXT:   `ifndef SYNTHESIS
-    sv.ifdef.procedural "SYNTHESIS" {
+    sv.ifdef.procedural @SYNTHESIS {
     } else {
   // CHECK-NEXT:     if ((`PRINTF_COND_) & 1'bx & 1'bz & 1'bz & cond & forceWire)
       %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
@@ -294,7 +297,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     // CHECK-NEXT: wire42 = `THING;
     sv.bpassign %wire42, %thing : i42
 
-    sv.ifdef.procedural "FOO" {
+    sv.ifdef.procedural @FOO {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
       sv.fwrite %fd, "%d" (%c1) : i1
@@ -428,7 +431,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     } // CHECK-NEXT: endcase
   }// CHECK-NEXT:   {{end // initial$}}
 
-  sv.ifdef "VERILATOR"  {          // CHECK-NEXT: `ifdef VERILATOR
+  sv.ifdef @VERILATOR  {           // CHECK-NEXT: `ifdef VERILATOR
     sv.verbatim "`define Thing2"   // CHECK-NEXT:   `define Thing2
   } else  {                        // CHECK-NEXT: `else
     sv.verbatim "`define Thing1"   // CHECK-NEXT:   `define Thing1
@@ -440,7 +443,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   sv.verbatim "`define STUFF \"{{0}} ({{1}})\"" (%wire42, %add) : !hw.inout<i42>, i8
 
   // CHECK-NEXT: `ifdef FOO
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
 
     // CHECK-NEXT: initial begin
@@ -536,12 +539,12 @@ hw.module @reg_1(in %in4: i4, in %in8: i8, out a : i3, out b : i5) {
 }
 
 // CHECK-LABEL: module regWithInit(
-// CHECK:     reg        reg1 = 1'h0; 
+// CHECK:     reg        reg1 = 1'h0;
 // CHECK:     reg [31:0] reg2 = 32'(arg + arg);
 hw.module @regWithInit(in %arg : i32) {
   %c0_i1 = hw.constant 0 : i1
   %reg1 = sv.reg init %c0_i1 : !hw.inout<i1>
-  
+
   %init = comb.add %arg, %arg : i32
   %reg2 = sv.reg init %init : !hw.inout<i32>
 }
@@ -801,6 +804,8 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
   hw.output
 }
 
+sv.macro.decl @FUN_AND_GAMES
+
 // CHECK-LABEL: module issue720ifdef(
 hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
   // CHECK: always @(posedge clock) begin
@@ -816,7 +821,7 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
     }
 
     // CHECK:    `ifdef FUN_AND_GAMES
-     sv.ifdef.procedural "FUN_AND_GAMES" {
+     sv.ifdef.procedural @FUN_AND_GAMES {
       // This forces a common subexpression to be output out-of-line
       // CHECK:      _GEN = arg1 & arg2;
       // CHECK:      if (_GEN)
@@ -874,7 +879,7 @@ hw.module @issue728ifdef(in %clock: i1, in %asdfasdfasdfasdfafa: i1, in %gasfdas
   // CHECK-NEXT: end // always @(posedge)
   sv.always posedge %clock  {
      sv.fwrite %fd, "force output"
-     sv.ifdef.procedural "FUN_AND_GAMES" {
+     sv.ifdef.procedural @FUN_AND_GAMES {
        %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
        sv.if %cond  {
          sv.fwrite %fd, "this cond is split"
@@ -938,7 +943,7 @@ hw.module @ifdef_beginend(in %clock: i1, in %cond: i1, in %val: i8) {
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
     // CHECK-NEXT: `ifndef SYNTHESIS
-    sv.ifdef.procedural "SYNTHESIS"  {
+    sv.ifdef.procedural @SYNTHESIS  {
     } // CHECK-NEXT: `endif
   } // CHECK-NEXT: end
 } // CHECK-NEXT: endmodule
@@ -1160,7 +1165,7 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
     // CHECK: regValue = 42'([[GEN_1]] + b);
 
     // CHECK: `ifdef FOO
-    sv.ifdef.procedural "FOO" {
+    sv.ifdef.procedural @FOO {
       // CHECK: [[GEN_2]] = 42'(a + a);
       // tmp is multi-use so it needs a temporary, but cannot be emitted inline
       // because it is in an ifdef.
@@ -1215,8 +1220,8 @@ hw.module @InlineAutomaticLogicInit(in %a : i42, in %b: i42, in %really_really_l
     sv.bpassign %regValue, %manyThing : i42
 
     // CHECK: `ifdef FOO
-    sv.ifdef.procedural "FOO" {
-      sv.ifdef.procedural "BAR" {
+    sv.ifdef.procedural @FOO {
+      sv.ifdef.procedural @BAR {
         // Check that the temporary is inserted at the right level, not at the
         // level of the #ifdef.
         %manyMixed = comb.xor %thing, %thing, %thing, %thing, %thing, %thing,
@@ -1551,7 +1556,7 @@ hw.module @ProhibitReuseOfExistingInOut(in %a: i1, out out1: i1) {
   // CHECK-NEXT: assign out1 = [[GEN]];
   %0 = comb.or %a, %a : i1
   %mywire = sv.wire  : !hw.inout<i1>
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     sv.assign %mywire, %0 : i1
   }
   hw.output %0 : i1
@@ -1657,15 +1662,18 @@ hw.module @IndexPartSelect(out a : i3) {
   hw.output %c : i3
 }
 
+sv.macro.decl @FOO
+sv.macro.decl @BAR
+
 // CHECK-LABEL: module ConditionalComments(
 hw.module @ConditionalComments() {
-  sv.ifdef "FOO"  {             // CHECK-NEXT: `ifdef FOO
+  sv.ifdef @FOO  {             // CHECK-NEXT: `ifdef FOO
     sv.verbatim "`define FOO_A" // CHECK-NEXT:   `define FOO_A
   } else  {                     // CHECK-NEXT: `else  // FOO
     sv.verbatim "`define FOO_B" // CHECK-NEXT:   `define FOO_B
   }                             // CHECK-NEXT: `endif // FOO
 
-  sv.ifdef "BAR"  {             // CHECK-NEXT: `ifndef BAR
+  sv.ifdef @BAR  {             // CHECK-NEXT: `ifndef BAR
   } else  {
     sv.verbatim "`define X"     // CHECK-NEXT:   `define X
   }                             // CHECK-NEXT: `endif // not def BAR

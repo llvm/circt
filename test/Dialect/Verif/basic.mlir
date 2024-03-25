@@ -57,3 +57,29 @@ hw.module @HasBeenReset(in %clock: i1, in %reset: i1) {
   %hbr0 = verif.has_been_reset %clock, async %reset
   %hbr1 = verif.has_been_reset %clock, sync %reset
 }
+
+//===----------------------------------------------------------------------===//
+// Logical Equivalence Checking related operations
+//===----------------------------------------------------------------------===//
+
+// CHECK: verif.lec first {
+// CHECK: } second {
+// CHECK: }
+verif.lec first {
+} second {
+}
+
+// CHECK: verif.lec {verif.some_attr} first {
+// CHECK: ^bb0(%{{.*}}: i32, %{{.*}}: i32):
+// CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32 {verif.some_attr}
+// CHECK: } second {
+// CHECK: ^bb0(%{{.*}}: i32, %{{.*}}: i32):
+// CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32 {verif.some_attr}
+// CHECK: }
+verif.lec {verif.some_attr} first {
+^bb0(%arg0: i32, %arg1: i32):
+  verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
+} second {
+^bb0(%arg0: i32, %arg1: i32):
+  verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
+}

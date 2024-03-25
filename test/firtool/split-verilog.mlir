@@ -10,7 +10,8 @@
 // RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
 sv.verbatim "// I'm everywhere"
-sv.ifdef "VERILATOR" {
+sv.macro.decl @VERILATOR
+sv.ifdef @VERILATOR {
   sv.verbatim "// Hello"
 } else {
   sv.verbatim "// World"

@@ -18,7 +18,7 @@ hw.module @plusargs_test(out test: i1) {
 hw.module @plusargs_value(out test: i1, out value: i5) {
   // CHECK-NEXT: [[BAR_VALUE_DECL:%.*]] = sv.reg : !hw.inout<i5>
   // CHECK-NEXT: [[BAR_FOUND_DECL:%.*]] = sv.reg : !hw.inout<i1>
-  // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
+  // CHECK-NEXT: sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:   %false = hw.constant false
   // CHECK-NEXT:   %z_i5 = sv.constantZ : i5
   // CHECK-NEXT:   sv.assign [[BAR_VALUE_DECL]], %z_i5

@@ -3981,12 +3981,12 @@ ParseResult FIRStmtParser::parseObject() {
   locationProcessor.setLoc(startTok.getLoc());
 
   // Look up the class that is being referenced.
-  auto circuit =
-      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedClass = circuit.lookupSymbol<ClassLike>(className);
-  if (!referencedClass)
+  const auto &classMap = getConstants().classMap;
+  auto lookup = classMap.find(className);
+  if (lookup == classMap.end())
     return emitError(startTok.getLoc(), "use of undefined class name '" +
                                             className + "' in object");
+  auto referencedClass = lookup->getSecond();
   auto result = builder.create<ObjectOp>(referencedClass, id);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -4668,6 +4668,11 @@ ParseResult FIRCircuitParser::parseRefList(ArrayRef<PortInfo> portList,
   SmallPtrSet<StringAttr, 8> seenNames;
   SmallPtrSet<StringAttr, 8> seenRefs;
 
+  // Ref statements were removed in 4.0.0, check.
+  if (getToken().is(FIRToken::kw_ref) &&
+      removedFeature({4, 0, 0}, "ref statements"))
+    return failure();
+
   // Parse the ref statements.
   while (consumeIf(FIRToken::kw_ref)) {
     auto loc = getToken().getLoc();
@@ -5000,6 +5005,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
 ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
+  StringRef intName;
   ArrayAttr layers;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
@@ -5008,15 +5014,11 @@ ParseResult FIRCircuitParser::parseIntModule(CircuitOp circuit,
   if (parseId(name, "expected intmodule name") ||
       parseOptionalEnabledLayers(layers) ||
       parseToken(FIRToken::colon, "expected ':' in intmodule definition") ||
-      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
+      info.parseOptionalInfo() || parsePortList(portList, portLocs, indent) ||
+      parseToken(FIRToken::kw_intrinsic, "expected 'intrinsic'") ||
+      parseToken(FIRToken::equal, "expected '=' in intrinsic") ||
+      parseId(intName, "expected intrinsic name"))
     return failure();
-
-  StringRef intName;
-  if (consumeIf(FIRToken::kw_intrinsic)) {
-    if (parseToken(FIRToken::equal, "expected '=' in intrinsic") ||
-        parseId(intName, "expected intrinsic name"))
-      return failure();
-  }
 
   ArrayAttr parameters;
   ArrayAttr internalPaths;
