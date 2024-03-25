@@ -226,11 +226,11 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
   auto modResultNames =
       ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
-  ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
+  SmallVector<Type> resolvedModInputTypesRef = mod.getInputTypes();
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getInputs(),
+            instance->getLoc(), parameters, resolvedModInputTypesRef,
             resolvedModInputTypes, emitError)))
       return failure();
     resolvedModInputTypesRef = resolvedModInputTypes;
@@ -241,11 +241,11 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   // Check that result types are consistent with the referenced module.
-  ArrayRef<Type> resolvedModResultTypesRef = getModuleType(module).getResults();
+  SmallVector<Type> resolvedModResultTypesRef = mod.getOutputTypes();
   SmallVector<Type> resolvedModResultTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
-            instance->getLoc(), parameters, getModuleType(module).getResults(),
+            instance->getLoc(), parameters, resolvedModResultTypesRef,
             resolvedModResultTypes, emitError)))
       return failure();
     resolvedModResultTypesRef = resolvedModResultTypes;
@@ -341,7 +341,18 @@ void instance_like_impl::getAsmResultNames(OpAsmSetValueNameFn setNameFn,
 }
 
 SmallVector<PortInfo> instance_like_impl::getPortList(Operation *instanceOp) {
-  auto moduleTy = getModuleType(instanceOp);
+  auto moduleTy =
+      TypeSwitch<Operation *, FunctionType>(instanceOp)
+          .Case<InstanceOp, InstanceChoiceOp>([](auto instance) {
+            SmallVector<Type> inputs(instance->getOperandTypes());
+            SmallVector<Type> results(instance->getResultTypes());
+            return FunctionType::get(instance->getContext(), inputs, results);
+          })
+          .Default([](Operation *op) {
+            return cast<mlir::FunctionOpInterface>(op)
+                .getFunctionType()
+                .cast<FunctionType>();
+          });
 
   SmallVector<PortInfo> ports;
   auto emptyDict = DictionaryAttr::get(instanceOp->getContext());

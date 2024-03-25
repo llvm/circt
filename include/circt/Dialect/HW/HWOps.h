@@ -45,9 +45,6 @@ ModulePort::Direction flip(ModulePort::Direction direction);
 /// Return true if isAnyModule or instance.
 bool isAnyModuleOrInstance(Operation *module);
 
-/// Return the signature for the specified module as a function type.
-FunctionType getModuleType(Operation *module);
-
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);
