@@ -166,7 +166,7 @@ void CheckInitPass::emitInitError(Value decl, size_t fieldID) {
 }
 
 // Check (recursively) that decl at fieldID, whose type at fieldID is t, has a
-// bit set in vals
+// bit set in vals.
 // Pending improvement is to check children of an aggregate and if all of them
 // are uninitialized, then emit the error at that point instead of for each
 // field.
