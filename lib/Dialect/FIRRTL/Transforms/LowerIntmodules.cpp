@@ -1,4 +1,4 @@
-//===- IntrinsicInstancesToOps.cpp - Intmodule instance to ops --*- C++ -*-===//
+//===- LowerIntmodules.cpp - Lower intmodules to ops ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the IntrinsicInstancesToOps pass.  This pass processes
+// This file defines the LowerIntmodules pass.  This pass processes
 // FIRRTL intmodules and replaces all instances with generic intrinsic ops.
 //
 //===----------------------------------------------------------------------===//
@@ -25,10 +25,9 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct IntrinsicInstancesToOpsPass
-    : public IntrinsicInstancesToOpsBase<IntrinsicInstancesToOpsPass> {
+struct LowerIntmodulesPass : public LowerIntmodulesBase<LowerIntmodulesPass> {
   void runOnOperation() override;
-  using IntrinsicInstancesToOpsBase::fixupEICGWrapper;
+  using LowerIntmodulesBase::fixupEICGWrapper;
 };
 } // namespace
 
@@ -48,7 +47,7 @@ static LogicalResult checkInstForAnnotations(FInstanceLike inst,
 }
 
 // This is the main entrypoint for the conversion pass.
-void IntrinsicInstancesToOpsPass::runOnOperation() {
+void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
 
   // Convert to int ops.
@@ -182,8 +181,8 @@ void IntrinsicInstancesToOpsPass::runOnOperation() {
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createIntrinsicInstancesToOpsPass(bool fixupEICGWrapper) {
-  auto pass = std::make_unique<IntrinsicInstancesToOpsPass>();
+circt::firrtl::createLowerIntmodulesPass(bool fixupEICGWrapper) {
+  auto pass = std::make_unique<LowerIntmodulesPass>();
   pass->fixupEICGWrapper = fixupEICGWrapper;
   return pass;
 }

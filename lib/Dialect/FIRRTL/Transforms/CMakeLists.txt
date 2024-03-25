@@ -20,7 +20,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferWidths.cpp
   InjectDUTHierarchy.cpp
   InnerSymbolDCE.cpp
-  IntrinsicInstancesToOps.cpp
   LegacyWiring.cpp
   Lint.cpp
   LayerMerge.cpp
@@ -28,6 +27,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerClasses.cpp
+  LowerIntmodules.cpp
   LowerIntrinsics.cpp
   LowerLayers.cpp
   LowerMatches.cpp

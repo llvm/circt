@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK
 
 // CHECK-LABEL: "BasicIntmoduleInstances"
 firrtl.circuit "BasicIntmoduleInstances" {

@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops{fixup-eicg-wrapper}))' --split-input-file --verify-diagnostics %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules{fixup-eicg-wrapper}))' --split-input-file --verify-diagnostics %s
 
 firrtl.circuit "EICGWithInstAnno" {
   firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}

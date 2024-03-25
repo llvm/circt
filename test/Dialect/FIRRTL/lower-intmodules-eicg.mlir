@@ -1,5 +1,5 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops{fixup-eicg-wrapper}))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules{fixup-eicg-wrapper}))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
 
 // CHECK-LABEL: "FixupEICGWrapper"
 firrtl.circuit "FixupEICGWrapper" {

@@ -671,7 +671,7 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   ];
 }
 
-def IntrinsicInstancesToOps : Pass<"firrtl-intrinsic-instances-to-ops", "firrtl::CircuitOp"> {
+def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
   let summary = "Lower instances instances of intrinsic modules to ops.";
   let description = [{
     This pass replaces instances of intrinsic modules (intmodule) with 
@@ -680,7 +680,7 @@ def IntrinsicInstancesToOps : Pass<"firrtl-intrinsic-instances-to-ops", "firrtl:
  
     Use this before running LowerIntrinsics.
   }];
-  let constructor = "circt::firrtl::createIntrinsicInstancesToOpsPass()";
+  let constructor = "circt::firrtl::createLowerIntmodulesPass()";
   let options = [
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,

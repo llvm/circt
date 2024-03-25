@@ -1,6 +1,6 @@
 // Test intmodule -> ops + LowerIntrinsics combined, to start with.
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops,firrtl.module(firrtl-lower-intrinsics)))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-intrinsic-instances-to-ops{fixup-eicg-wrapper},firrtl.module(firrtl-lower-intrinsics)))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules,firrtl.module(firrtl-lower-intrinsics)))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules{fixup-eicg-wrapper},firrtl.module(firrtl-lower-intrinsics)))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
 
 // CHECK-LABEL: "Foo"
 firrtl.circuit "Foo" {
