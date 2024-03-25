@@ -68,14 +68,24 @@ struct ModuleConverter
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
     // TODO: Figure out who has to free constants and sigspec.
-    return new RTLIL::SigSpec(new RTLIL::Const(op.getValue().getZExtValue()));
+    return allocateSigSpec(new RTLIL::Const(op.getValue().getZExtValue()));
   }
+
   ResultTy visit(Operation *op) { return dispatchCombinationalVisitor(op); }
   ResultTy visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
   ResultTy visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
   ResultTy visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
   ResultTy visitUnhandledExpr(Operation *op) {
     return op->emitError() << " is unsupported";
+  }
+
+  // TODO: Consider BumpAllocator instead of many allocations with unique
+  // pointers.
+  llvm::SmallVector<std::unique_ptr<SigSpec>> sigSpecs;
+  template <typename... Params> SigSpec *allocateSigSpec(Params &&...params) {
+    sigSpecs.push_back(
+        std::make_unique<SigSpec>(std::forward<Params>(params)...));
+    return sigSpecs.back().get();
   }
 
   // Comb.
@@ -91,7 +101,7 @@ struct ModuleConverter
         return result;
       if (cur) {
         auto *resultWire = rtlilModule->addWire(getNewName());
-        cur = new RTLIL::SigSpec(
+        cur = allocateSigSpec(
             fn(getNewName(), *cur, *result.value(), resultWire));
       } else
         cur = result.value();
@@ -121,8 +131,16 @@ struct ModuleConverter
   ResultTy visitComb(ShlOp op) {}
   ResultTy visitComb(ShrUOp op) {}
   ResultTy visitComb(ShrSOp op) {}
-  ResultTy visitComb(AndOp op) {}
-  ResultTy visitComb(OrOp op) {}
+  ResultTy visitComb(AndOp op) {
+    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
+      return rtlilModule->addAnd(name, l, r, out);
+    });
+  }
+  ResultTy visitComb(OrOp op) {
+    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
+      return rtlilModule->addOr(name, l, r, out);
+    });
+  }
   ResultTy visitComb(XorOp op) {}
 
   // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
