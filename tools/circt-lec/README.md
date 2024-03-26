@@ -29,7 +29,7 @@ be selected.
 - `-debug-only=<component list>` only prints debug information for the specified
   components (among `lec-exporter`, `lec-solver`, `lec-circuit`)
 
-#### Developement
+#### Development
 ##### Regression testing
 The tool can be tested by running the following command from the circt directory
 when built with the default paths:
