@@ -3172,6 +3172,11 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add(canonicalizeImmediateVerifOp<AssumeOp>);
 }
 
+void AssumeEdgedPredicateIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<AssumeEdgedPredicateIntrinsicOp>);
+}
+
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<CoverOp, /* EraseIfZero = */ true>);

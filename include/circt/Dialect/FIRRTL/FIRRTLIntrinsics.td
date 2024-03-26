@@ -161,6 +161,8 @@ def AssumeEdgedPredicateIntrinsicOp : FIRRTLOp<"int.assume.edged_predicate", []>
     type($predicate) `,` type($enable) (`,` qualified(type($substitutions))^)?
     custom<VerifAttrs>(attr-dict)
   }];
+
+  let hasCanonicalizer = 1;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
