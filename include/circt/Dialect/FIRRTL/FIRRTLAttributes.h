@@ -49,13 +49,13 @@ static inline StringRef toString(bool direction) {
   return toString(get(direction));
 }
 
-/// Return a \p DenseBoolArrayAttr containing the packed representation of an array
-/// of directions.
+/// Return a \p DenseBoolArrayAttr containing the packed representation of an
+/// array of directions.
 mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
                                        ArrayRef<Direction> directions);
 
-/// Return a \p DenseBoolArrayAttr containing the packed representation of an array
-/// of directions.
+/// Return a \p DenseBoolArrayAttr containing the packed representation of an
+/// array of directions.
 mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
                                        ArrayRef<bool> directions);
 
