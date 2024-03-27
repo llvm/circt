@@ -4,16 +4,15 @@ import os
 
 reps = 10
 
-time =400
+time = 100
 
-for file in os.listdir("linear/"):
-    to_check = int(file.split("_")[1].split("s")[0])-2
-    if(to_check<150):
-        # if to_check > time:
-        #     to_check = time - 2
-        print(file)
-        command = "../build/bin/fsm-verification ../fsm_examples/linear/"+file+" "+str(time)+" "+str(time-1)
-        print(command)
+for file in os.listdir("selfloop/"):
+    to_check = int(file.split("_")[3].split(".")[0])
+    states = int(file.split("_")[1].split("s")[0])
+    time = to_check + 6
+    command = "../build/bin/fsm-verification ../fsm_examples/selfloop/"+file+" "+str(time)+" "+str(to_check)+" "+str(to_check+3)
+    print(command)
+    if states <150:
         for i in range(reps):
             print("rep "+ str(i)+" file "+file)
             process = subprocess.run([command], shell=True)

@@ -1,25 +1,13 @@
 from z3 import *
 import numpy as np
 
-s = Solver ()
 
-array = [12, 45, 66, 34]
 
-A = Array ('A', IntSort(), IntSort())
-B = Array ('B', IntSort(), IntSort())
-cnt = Array ('cnt', IntSort(), IntSort())
+# reachability unsat
+# body = !(findMyFun(transitions->at(to_check).from, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+# s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0))));
 
-i = 0
-for elem in array:
-  A = Store(A, i, elem)
-  i = i + 1
+# reachability sat
+# body = (findMyFun(transitions->at(to_check).from, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+# s.add(exists(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0))));
 
-x = Int ('x')
-s.add(x >= 0)
-s.add(x < len(array))
-s.add(Select(A, x) == 66)
-
-if s.check() == sat:
-  print s.model()
-else:
-  print "Not found!"
