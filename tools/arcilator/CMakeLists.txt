@@ -24,8 +24,10 @@ target_link_libraries(arcilator
   MLIRBuiltinToLLVMIRTranslation
   MLIRDLTIDialect
   MLIRFuncInlinerExtension
+  MLIRIndexDialect
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
+  MLIRMemRefDialect
   MLIRParser
   MLIRTargetLLVMIRExport
 

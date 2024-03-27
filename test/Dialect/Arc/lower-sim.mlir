@@ -62,4 +62,31 @@ module attributes { dlti.dl_spec = #dlti.dl_spec<
     arc.sim.emit "result", %v : i32
     return
   }
+
+  // The following memref-focused test ensures the arcilator pipeline successfully
+  // lowers memref used in the context of simulations.
+
+  // CHECK-LABEL: llvm.func @use_memref
+  // CHECK-SAME: (%[[state:[^:]*]]: !llvm.ptr,
+  func.func @use_memref(%model: !arc.sim.instance<@id>, %mem: memref<i8>) {
+    // CHECK: %[[loaded:.*]] = llvm.load
+    %data = memref.load %mem[] : memref<i8>
+    // CHECK-NEXT: llvm.store %[[loaded]], %[[state]] : i8
+    arc.sim.set_input %model, "i" = %data : i8, !arc.sim.instance<@id>
+    return
+  }
+
+  // CHECK: llvm.func @with_memref
+  func.func @with_memref() {
+    %c = arith.constant 12 : i8
+    // CHECK: %[[alloca:.*]] = llvm.alloca
+    %memref = memref.alloca() : memref<i8>
+    // CHECK: llvm.store %{{.*}}, %[[alloca]]
+    memref.store %c, %memref[] : memref<i8>
+    arc.sim.instantiate @id as %model {
+      // CHECK: llvm.call @use_memref
+      func.call @use_memref(%model, %memref) : (!arc.sim.instance<@id>, memref<i8>) -> ()
+    }
+    return
+  }
 }
