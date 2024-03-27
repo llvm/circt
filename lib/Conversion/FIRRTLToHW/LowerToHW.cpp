@@ -43,6 +43,7 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/Mutex.h"
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "lower-to-hw"
@@ -401,6 +402,17 @@ private:
     macroDeclNames.insert(name);
   }
 
+  /// The list of fragments on which the modules rely. Must be set outside the
+  /// parallelized module lowering since module type reads access it.
+  DenseMap<hw::HWModuleOp, SetVector<Attribute>> fragments;
+  llvm::sys::SmartMutex<true> fragmentsMutex;
+
+  void addFragment(hw::HWModuleOp module, StringRef fragment) {
+    llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
+    fragments[module].insert(
+        FlatSymbolRefAttr::get(circuitOp.getContext(), fragment));
+  }
+
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
 
@@ -723,6 +735,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
+
+  // Fix up fragment attributes.
+  for (auto &[module, fragments] : state.fragments)
+    module->setAttr(emit::getFragmentsAttrName(),
+                    ArrayAttr::get(&getContext(), fragments.getArrayRef()));
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -1740,9 +1757,6 @@ private:
   /// the LTL ops, which were necessary to go from the def-before-use FIRRTL
   /// dialect to the graph-like HW dialect.
   SetVector<Operation *> ltlOpFixupWorklist;
-
-  /// The list of fragments on which the module relies.
-  SetVector<Attribute> fragments;
 };
 } // end anonymous namespace
 
@@ -1874,10 +1888,6 @@ LogicalResult FIRRTLLowering::run() {
   // intermediate wires among them.
   if (failed(fixupLTLOps()))
     return failure();
-
-  if (!fragments.empty())
-    theModule->setAttr(emit::getFragmentsAttrName(),
-                       builder.getArrayAttr(fragments.getArrayRef()));
 
   return backedgeBuilder.clearOrEmitError();
 }
@@ -4247,8 +4257,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       circuitState.usedPrintfCond = true;
-      fragments.insert(FlatSymbolRefAttr::get(
-          builder.getStringAttr("PRINTF_COND_FRAGMENT")));
+      circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
@@ -4275,8 +4284,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
     return failure();
 
   circuitState.usedStopCond = true;
-  fragments.insert(
-      FlatSymbolRefAttr::get(builder.getStringAttr("STOP_COND_FRAGMENT")));
+  circuitState.addFragment(theModule, "STOP_COND_FRAGMENT");
 
   Value stopCond =
       builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
@@ -4431,12 +4439,10 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
             circuitState.usedStopCond = true;
-            fragments.insert(FlatSymbolRefAttr::get(
-                builder.getStringAttr("STOP_COND_FRAGMENT")));
+            circuitState.addFragment(theModule, "STOP_COND_FRAGMENT");
 
             circuitState.usedAssertVerboseCond = true;
-            fragments.insert(FlatSymbolRefAttr::get(
-                builder.getStringAttr("ASSERT_VERBOSE_COND_FRAGMENT")));
+            circuitState.addFragment(theModule, "ASSERT_VERBOSE_COND_FRAGMENT");
 
             addIfProceduralBlock(
                 builder.create<sv::MacroRefExprOp>(boolType,
