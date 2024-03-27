@@ -51,11 +51,13 @@ static inline StringRef toString(bool direction) {
 
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
-mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context, ArrayRef<Direction> directions);
+mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
+                                       ArrayRef<Direction> directions);
 
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
-mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context, ArrayRef<bool> directions);
+mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
+                                       ArrayRef<bool> directions);
 
 /// Turn a packed representation of port attributes into a vector that can
 /// be worked with.
