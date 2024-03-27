@@ -53,15 +53,13 @@ public:
             LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLNotIntrinsicOp,
             LTLImplicationIntrinsicOp, LTLEventuallyIntrinsicOp,
             LTLClockIntrinsicOp, LTLDisableIntrinsicOp, Mux2CellIntrinsicOp,
-            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp,
-            GenericIntrinsicOp,
+            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
-            mlir::UnrealizedConversionCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
@@ -181,8 +179,6 @@ public:
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
   HANDLE(HasBeenResetIntrinsicOp, Unhandled);
-  HANDLE(FPGAProbeIntrinsicOp, Unhandled);
-  HANDLE(GenericIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -205,7 +201,6 @@ public:
   HANDLE(HWStructCastOp, Unhandled);
   HANDLE(UninferredResetCastOp, Unhandled);
   HANDLE(ConstCastOp, Unhandled);
-  HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
 
@@ -228,12 +223,13 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<
-            AttachOp, ConnectOp, StrictConnectOp, RefDefineOp, ForceOp,
-            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
-            RefReleaseInitialOp, VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-            UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp, LayerBlockOp>(
+        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
+                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
+                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
+                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+                       FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
+                       VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
+                       VerifCoverIntrinsicOp, LayerBlockOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -276,6 +272,7 @@ public:
   HANDLE(RefForceInitialOp);
   HANDLE(RefReleaseOp);
   HANDLE(RefReleaseInitialOp);
+  HANDLE(FPGAProbeIntrinsicOp);
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
@@ -347,6 +344,13 @@ public:
   /// This is the main entrypoint for the FIRRTLVisitor.
   ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
     return this->dispatchExprVisitor(op, args...);
+  }
+
+  /// Special handling for generic intrinsic op which aren't quite expressions
+  /// nor statements in the usual FIRRTL sense.
+  /// Refactor into specific visitor instead of adding more here.
+  ResultType visitIntrinsicOp(GenericIntrinsicOp *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 
   // Chain from each visitor onto the next one.

@@ -1503,7 +1503,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
-  LogicalResult visitInvalidOp(Operation *op) { return failure(); }
+  LogicalResult visitInvalidOp(Operation *op) {
+    if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      return visitUnrealizedConversionCast(castOp);
+    return failure();
+  }
 
   // Declarations.
   LogicalResult visitDecl(WireOp op);
@@ -1523,7 +1527,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   LogicalResult visitExpr(HWStructCastOp op);
   LogicalResult visitExpr(BitCastOp op);
-  LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
+  LogicalResult
+  visitUnrealizedConversionCast(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -1600,11 +1605,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ModSOp, comb::ModUOp>(op);
   }
 
-  // Verif Operations
+  // Intrinsic Operations
   LogicalResult visitExpr(IsXIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
-  LogicalResult visitExpr(FPGAProbeIntrinsicOp op);
+  LogicalResult visitStmt(FPGAProbeIntrinsicOp op);
   LogicalResult visitExpr(ClockInverterIntrinsicOp op);
   LogicalResult visitExpr(ClockDividerIntrinsicOp op);
   LogicalResult visitExpr(SizeOfIntrinsicOp op);
@@ -3314,7 +3319,8 @@ LogicalResult FIRRTLLowering::visitExpr(AsClockPrimOp op) {
   return setLoweringTo<seq::ToClockOp>(op, getLoweredValue(op.getInput()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
+LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
+    mlir::UnrealizedConversionCastOp op) {
   // General lowering for non-unary casts.
   if (op.getNumOperands() != 1 || op.getNumResults() != 1)
     return failure();
@@ -3626,7 +3632,7 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(FPGAProbeIntrinsicOp op) {
+LogicalResult FIRRTLLowering::visitStmt(FPGAProbeIntrinsicOp op) {
   auto operand = getLoweredValue(op.getInput());
   builder.create<hw::WireOp>(operand);
   return success();
