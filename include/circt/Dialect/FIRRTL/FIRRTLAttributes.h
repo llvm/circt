@@ -49,7 +49,7 @@ static inline StringRef toString(bool direction) {
   return toString(get(direction));
 }
 
-/// Return a \p IntegerAttr containing the packed representation of an array
+/// Return a \p DenseBoolArrayAttr containing the packed representation of an array
 /// of directions.
 mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
                                        ArrayRef<Direction> directions);
