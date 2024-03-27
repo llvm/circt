@@ -21,6 +21,17 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-NEXT: firrtl.int.clock_gate %clock, %ui1, %ui1
   %cg0 = firrtl.int.clock_gate %clock, %ui1
   %cg1 = firrtl.int.clock_gate %clock, %ui1, %ui1
+
+  // CHECK-NEXT: firrtl.int.generic "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>)
+  // CHECK-NEXT: firrtl.int.generic "noargs" : () -> !firrtl.uint<32>
+  // CHECK-NEXT: firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> !firrtl.bundle<x: uint<1>>
+  // CHECK-NEXT: firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  // CHECK-NEXT: firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
+  %cg2 = firrtl.int.generic "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
+  %noargs = firrtl.int.generic "noargs" : () -> !firrtl.uint<32>
+  %p = firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> !firrtl.bundle<x: uint<1>>
+  %po = firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
 }
 
 // CHECK-LABEL: firrtl.module @FPGAProbe

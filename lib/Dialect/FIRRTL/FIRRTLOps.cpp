@@ -1255,7 +1255,8 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 }
 
 /// Print a paramter list for a module or instance.
-static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
+static void printParameterList(OpAsmPrinter &p, Operation *op,
+                               ArrayAttr parameters) {
   if (!parameters || parameters.empty())
     return;
 
@@ -1283,7 +1284,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p.printSymbolName(op.getModuleName());
 
   // Print the parameter list (if non-empty).
-  printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
+  printParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
 
   // Both modules and external modules have a body, but it is always empty for
   // external modules.
@@ -1370,6 +1371,18 @@ parseOptionalParameters(OpAsmParser &parser,
             builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
+}
+
+/// Shim to use with assemblyFormat, custom<ParameterList>.
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      ArrayAttr &parameters) {
+  SmallVector<Attribute> parseParameters;
+  if (failed(parseOptionalParameters(parser, parseParameters)))
+    return failure();
+
+  parameters = ArrayAttr::get(parser.getContext(), parseParameters);
+
+  return success();
 }
 
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
@@ -5762,6 +5775,9 @@ void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void GenericIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
