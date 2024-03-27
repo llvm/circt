@@ -1073,13 +1073,11 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
 /// values.  If there is a reason the printed SSA values can't match the true
 /// port name, then this function will return true.  When this happens, the
 /// caller should print the port names as a part of the `attr-dict`.
-static bool printModulePorts(OpAsmPrinter &p, Block *block,
-                             ArrayRef<Direction> portDirections,
-                             ArrayRef<Attribute> portNames,
-                             ArrayRef<Attribute> portTypes,
-                             ArrayRef<Attribute> portAnnotations,
-                             ArrayRef<Attribute> portSyms,
-                             ArrayRef<Attribute> portLocs) {
+static bool
+printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
+                 ArrayRef<Attribute> portNames, ArrayRef<Attribute> portTypes,
+                 ArrayRef<Attribute> portAnnotations,
+                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
@@ -1095,7 +1093,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
       p << ", ";
 
     // Print the port direction.
-    p << portDirections[i] << " ";
+    p << direction::get(portDirections[i]) << " ";
 
     // Print the port name.  If there is a valid block, we print it as a block
     // argument.
@@ -1288,10 +1286,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (!op->getRegion(0).empty())
     body = &op->getRegion(0).front();
 
-  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
-
   auto needPortNamesAttr = printModulePorts(
-      p, body, portDirections, op.getPortNames(), op.getPortTypes(),
+      p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
   SmallVector<StringRef, 12> omittedAttrs = {
@@ -1875,11 +1871,9 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
   if (!region.empty())
     body = &region.front();
 
-  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
-
   auto needPortNamesAttr = printModulePorts(
-      p, body, portDirections, op.getPortNames(), op.getPortTypes(), {},
-      op.getPortSymbols(), op.getPortLocations());
+      p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
+      {}, op.getPortSymbols(), op.getPortLocations());
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
@@ -2353,8 +2347,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
+  printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
                    getPortAnnotations().getValue(), {}, {});
 }
@@ -2539,8 +2532,7 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
+  printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
                    getPortAnnotations().getValue(), {}, {});
 }
