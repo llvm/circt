@@ -36,23 +36,6 @@ endmodule
 
 // -----
 
-module Foo(
-  // expected-error @below {{unsupported module port}}
-  input a
-);
-endmodule
-
-// -----
-
-// expected-error @below {{unsupported construct}}
-package Foo;
-endpackage
-
-module Bar;
-endmodule
-
-// -----
-
 module Foo;
   int x;
   // expected-error @below {{delayed assignments not supported}}
