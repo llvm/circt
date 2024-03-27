@@ -33,22 +33,35 @@ namespace direction {
 
 /// Return an output direction if \p isOutput is true, otherwise return an
 /// input direction.
-inline Direction get(bool isOutput) { return (Direction)isOutput; }
+static inline Direction get(bool isOutput) { return (Direction)isOutput; }
+
+/// Convert from Direction to bool.  The opposite of get;
+static inline bool unGet(Direction dir) { return (bool)dir; }
 
 /// Flip a port direction.
 Direction flip(Direction direction);
 
-inline StringRef toString(Direction direction) {
+static inline StringRef toString(Direction direction) {
   return direction == Direction::In ? "in" : "out";
 }
 
-/// Return a \p IntegerAttr containing the packed representation of an array
-/// of directions.
-IntegerAttr packAttribute(MLIRContext *context, ArrayRef<Direction> directions);
+static inline StringRef toString(bool direction) {
+  return toString(get(direction));
+}
+
+/// Return a \p DenseBoolArrayAttr containing the packed representation of an
+/// array of directions.
+mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
+                                       ArrayRef<Direction> directions);
+
+/// Return a \p DenseBoolArrayAttr containing the packed representation of an
+/// array of directions.
+mlir::DenseBoolArrayAttr packAttribute(MLIRContext *context,
+                                       ArrayRef<bool> directions);
 
 /// Turn a packed representation of port attributes into a vector that can
 /// be worked with.
-SmallVector<Direction> unpackAttribute(IntegerAttr directions);
+SmallVector<Direction> unpackAttribute(mlir::DenseBoolArrayAttr directions);
 
 } // namespace direction
 } // namespace firrtl

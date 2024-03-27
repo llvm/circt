@@ -221,7 +221,8 @@ static void emitZeroWidthIndexingValue(PPS &os) {
 
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
-  return cast<HWModuleLike>(module).getPort(portArgNum).getVerilogName();
+  auto hml = cast<HWModuleLike>(module);
+  return hml.getPort(portArgNum).getVerilogName();
 }
 
 /// Return the verilog name of the port for the module.

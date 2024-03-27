@@ -527,16 +527,15 @@ struct Equivalence {
     return success();
   }
 
-  LogicalResult check(InFlightDiagnostic &diag, Operation *a, IntegerAttr aAttr,
-                      Operation *b, IntegerAttr bAttr) {
+  LogicalResult check(InFlightDiagnostic &diag, Operation *a,
+                      mlir::DenseBoolArrayAttr aAttr, Operation *b,
+                      mlir::DenseBoolArrayAttr bAttr) {
     if (aAttr == bAttr)
       return success();
-    auto aDirections = direction::unpackAttribute(aAttr);
-    auto bDirections = direction::unpackAttribute(bAttr);
     auto portNames = a->getAttrOfType<ArrayAttr>("portNames");
-    for (unsigned i = 0, e = aDirections.size(); i < e; ++i) {
-      auto aDirection = aDirections[i];
-      auto bDirection = bDirections[i];
+    for (unsigned i = 0, e = aAttr.size(); i < e; ++i) {
+      auto aDirection = aAttr[i];
+      auto bDirection = bAttr[i];
       if (aDirection != bDirection) {
         auto &note = diag.attachNote(a->getLoc()) << "module port ";
         if (portNames)
@@ -606,8 +605,8 @@ struct Equivalence {
       } else if (attrName == portDirectionsAttr) {
         // Special handling for the port directions attribute for better
         // error messages.
-        if (failed(check(diag, a, cast<IntegerAttr>(aAttr), b,
-                         cast<IntegerAttr>(bAttr))))
+        if (failed(check(diag, a, cast<mlir::DenseBoolArrayAttr>(aAttr), b,
+                         cast<mlir::DenseBoolArrayAttr>(bAttr))))
           return failure();
       } else if (isa<DistinctAttr>(aAttr) && isa<DistinctAttr>(bAttr)) {
         // TODO: properly handle DistinctAttr, including its use in paths.

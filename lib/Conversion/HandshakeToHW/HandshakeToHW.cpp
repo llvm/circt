@@ -290,7 +290,6 @@ portToFieldInfo(llvm::ArrayRef<hw::PortInfo> portInfo) {
 // Convert any handshake.extmemory operations and the top-level I/O
 // associated with these.
 static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
-  auto ports = mod.getPortList();
   auto *ctx = mod.getContext();
 
   // Gather memref ports to be converted.

@@ -1294,7 +1294,6 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
 
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<hw::PortInfo> hwPorts = newModule.getPortList();
   assert(oldModule.getBody().getNumArguments() == firrtlPorts.size() &&
          "port count mismatch");
 
@@ -1365,7 +1364,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
-      if (auto sym = hwPorts[hwPortIndex].getSym()) {
+      if (auto sym = newModule.getPort(hwPortIndex).getSym()) {
         newArg.setInnerSymAttr(sym);
         newModule.setPortSymbolAttr(hwPortIndex, {});
       }

@@ -55,8 +55,8 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
                     << " but got " << numResults);
   }
   auto portDirections =
-      instanceOp->getAttrOfType<IntegerAttr>("portDirections");
-  if (portDirections.getValue().getBitWidth() != numExpected)
+      instanceOp->getAttrOfType<mlir::DenseBoolArrayAttr>("portDirections");
+  if (portDirections.size() != numExpected)
     return emitNote(
         instanceOp->emitOpError("the number of port directions should be "
                                 "equal to the number of results"));
@@ -111,21 +111,20 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
     // We know there is an error, try to figure out whats wrong.
     auto moduleDirectionAttr = referencedModule.getPortDirectionsAttr();
     // First compare the sizes:
-    auto expectedWidth = moduleDirectionAttr.getValue().getBitWidth();
-    auto actualWidth = portDirections.getValue().getBitWidth();
+    auto expectedWidth = moduleDirectionAttr.size();
+    auto actualWidth = portDirections.size();
     if (expectedWidth != actualWidth) {
       return emitNote(instanceOp->emitOpError()
                       << "has a wrong number of directions; expected "
                       << expectedWidth << " but got " << actualWidth);
     }
     // Next check the values.
-    auto instanceDirs = direction::unpackAttribute(portDirections);
-    auto moduleDirs = direction::unpackAttribute(moduleDirectionAttr);
+    auto instanceDirs = portDirections;
     for (size_t i = 0; i != numResults; ++i) {
-      if (instanceDirs[i] != moduleDirs[i]) {
+      if (instanceDirs[i] != moduleDirectionAttr[i]) {
         return emitNote(instanceOp->emitOpError()
                         << "direction for " << portNames[i] << " must be \""
-                        << direction::toString(moduleDirs[i])
+                        << direction::toString(moduleDirectionAttr[i])
                         << "\", but got \""
                         << direction::toString(instanceDirs[i]) << "\"");
       }

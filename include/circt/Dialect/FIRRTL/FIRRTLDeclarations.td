@@ -59,7 +59,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
@@ -188,7 +188,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let arguments = (ins FlatSymbolRefArrayAttr:$moduleNames,
                        SymbolRefArrayAttr:$caseNames,
                        StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
