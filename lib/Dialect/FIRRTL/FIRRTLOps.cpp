@@ -180,16 +180,13 @@ constexpr const char *toString(Flow flow) {
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> Flow {
-    return swapFlow(accumulatedFlow);
-  };
 
   if (auto blockArg = dyn_cast<BlockArgument>(val)) {
     auto *op = val.getParentBlock()->getParentOp();
     if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
       auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
       if (direction == Direction::Out)
-        return swap();
+        return swapFlow(accumulatedFlow);
     }
     return accumulatedFlow;
   }
@@ -198,8 +195,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
-        return foldFlow(op.getInput(),
-                        op.isFieldFlipped() ? swap() : accumulatedFlow);
+        return foldFlow(op.getInput(), op.isFieldFlipped()
+                                           ? swapFlow(accumulatedFlow)
+                                           : accumulatedFlow);
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
@@ -210,13 +208,13 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         auto resultNo = cast<OpResult>(val).getResultNumber();
         if (inst.getPortDirection(resultNo) == Direction::Out)
           return accumulatedFlow;
-        return swap();
+        return swapFlow(accumulatedFlow);
       })
       .Case<MemOp>([&](auto op) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        return swap();
+        return swapFlow(accumulatedFlow);
       })
       .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
         auto input = op.getInput();
@@ -719,8 +717,7 @@ static void insertPorts(FModuleLike op,
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
-  SmallVector<Direction> existingDirections =
-      direction::unpackAttribute(op.getPortDirectionsAttr());
+  auto existingDirections = op.getPortDirectionsAttr();
   ArrayRef<Attribute> existingNames = op.getPortNames();
   ArrayRef<Attribute> existingTypes = op.getPortTypes();
   ArrayRef<Attribute> existingLocs = op.getPortLocations();
@@ -738,7 +735,7 @@ static void insertPorts(FModuleLike op,
     assert(internalPaths.size() == oldNumArgs);
   }
 
-  SmallVector<Direction> newDirections;
+  SmallVector<bool> newDirections;
   SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
       newInternalPaths;
   newDirections.reserve(newNumArgs);
@@ -769,7 +766,7 @@ static void insertPorts(FModuleLike op,
     auto idx = pair.value().first;
     auto &port = pair.value().second;
     migrateOldPorts(idx);
-    newDirections.push_back(port.direction);
+    newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
     newTypes.push_back(TypeAttr::get(port.type));
     auto annos = port.annotations.getArrayAttr();

@@ -54,14 +54,14 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     //===------------------------------------------------------------------===//
 
     InterfaceMethod<"Get the port directions attribute",
-    "IntegerAttr", "getPortDirectionsAttr", (ins), [{}],
+    "mlir::DenseBoolArrayAttr", "getPortDirectionsAttr", (ins), [{}],
     /*defaultImplementation=*/[{
       return $_op->template
-        getAttrOfType<IntegerAttr>(FModuleLike::getPortDirectionsAttrName());
+        getAttrOfType<mlir::DenseBoolArrayAttr>(FModuleLike::getPortDirectionsAttrName());
     }]>,
 
     InterfaceMethod<"Get the port directions",
-    "APInt", "getPortDirections", (ins), [{}],
+    "ArrayRef<bool>", "getPortDirections", (ins), [{}],
     /*defaultImplementation=*/[{
       return $_op.getPortDirectionsAttr().getValue();
     }]>,

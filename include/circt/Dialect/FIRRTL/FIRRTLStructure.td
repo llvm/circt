@@ -130,6 +130,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
   }];
   let arguments =
       (ins ConventionAttr:$convention,
+           DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
            ArrayRefAttr:$portSyms,
@@ -194,6 +195,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       (ins OptionalAttr<StrAttr>:$defname,
            ParamDeclArrayAttr:$parameters,
            ConventionAttr:$convention,
+           DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
            ArrayRefAttr:$portSyms,
@@ -235,6 +237,7 @@ def FIntModuleOp : FIRRTLModuleLike<"intmodule"> {
   let arguments = 
       (ins StrAttr:$intrinsic,
            ParamDeclArrayAttr:$parameters,
+           DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
            ArrayRefAttr:$portSyms,
@@ -282,6 +285,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
            UI32Attr:$numReadWritePorts, UI32Attr:$dataWidth, UI32Attr:$maskBits,
            UI32Attr:$readLatency, UI32Attr:$writeLatency, UI64Attr:$depth,
            ArrayAttr:$extraPorts,
+           DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
            ArrayRefAttr:$portSyms,
@@ -334,7 +338,8 @@ def ClassOp : FIRRTLModuleLike<"class", [
     A class may only have property ports, and its body may only be ops that act
     on properties, such as propassign ops.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$portDirections,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
   let results = (outs);
@@ -394,7 +399,8 @@ def ExtClassOp : FIRRTLModuleLike<"extclass", [
     firrtl.extclass @MyImportedClass(in in_str: !firrtl.string, out out_str: !firrtl.string)
     ```
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$portDirections,
+  let arguments = (ins SymbolNameAttr:$sym_name, 
+                       DenseBoolArrayAttr:$portDirections,
                        ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
                        ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
   let results = (outs);

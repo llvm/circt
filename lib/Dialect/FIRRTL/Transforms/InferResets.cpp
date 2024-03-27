@@ -857,7 +857,6 @@ void InferResetsPass::traceResets(InstanceOp inst) {
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
 
   // Establish a connection between the instance ports and module ports.
-  auto dirs = module.getPortDirections();
   for (const auto &it : llvm::enumerate(inst.getResults())) {
     auto dir = module.getPortDirection(it.index());
     Value dstPort = module.getArgument(it.index());
