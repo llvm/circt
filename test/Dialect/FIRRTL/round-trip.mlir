@@ -24,11 +24,13 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
 
   // CHECK-NEXT: firrtl.int.generic "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>)
   // CHECK-NEXT: firrtl.int.generic "noargs" : () -> i32
-  // CHECK-NEXT: firrtl.int.generic "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]} : () -> i32
+  // CHECK-NEXT: firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> i32
+  // CHECK-NEXT: firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> i64
   // CHECK-NEXT: firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
   %cg2 = firrtl.int.generic "clock_gate" %clock, %ui1 : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
-  %cg3 = firrtl.int.generic "noargs" : () -> i32
-  %p = firrtl.int.generic "params" attributes {parameters = [#firrtl.param.decl<"FORMAT": none = "foobar">]} : () -> i32
+  %noargs = firrtl.int.generic "noargs" : () -> i32
+  %p = firrtl.int.generic "params" <FORMAT: none = "foobar"> : () -> i32
+  %po = firrtl.int.generic "params_and_operand" <X: i64 = 123> %ui1 : (!firrtl.uint<1>) -> i64
   firrtl.int.generic "inputs" %clock, %ui1, %clock : (!firrtl.clock, !firrtl.uint<1>, !firrtl.clock) -> ()
 }
 

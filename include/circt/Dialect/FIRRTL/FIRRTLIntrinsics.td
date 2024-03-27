@@ -30,7 +30,7 @@ def GenericIntrinsicOp : FIRRTLOp<"int.generic",
   );
 
   let results = (outs Optional<AnyType>:$result);
-  let assemblyFormat = "$intrinsic ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
+  let assemblyFormat = "$intrinsic custom<ParameterList>($parameters) ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
 }
 
 //===----------------------------------------------------------------------===//
