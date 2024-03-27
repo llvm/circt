@@ -25,11 +25,11 @@ def GenericIntrinsicOp : FIRRTLOp<"int.generic",
 
   let arguments = (
     ins StrAttr:$intrinsic,
-    Variadic<AnyType>:$operands,
+    Variadic<PassiveType>:$operands,
     DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
 
-  let results = (outs Optional<AnyType>:$result);
+  let results = (outs Optional<PassiveType>:$result);
   let assemblyFormat = "$intrinsic custom<ParameterList>($parameters) ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
 }
 
