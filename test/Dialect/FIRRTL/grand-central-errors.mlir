@@ -375,3 +375,36 @@ firrtl.circuit "CompanionWithOutputs"
     firrtl.instance dut @DUT()
   }
 }
+
+// -----
+
+firrtl.circuit "UnexpectedLayer"
+  attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "Bar",
+        elements = [],
+        name = "bar"}],
+     id = 0 : i64,
+     name = "MyView"}]}  {
+  firrtl.layer @A bind {}
+  firrtl.module private @MyView_companion()
+    attributes {annotations = [{
+      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+      id = 0 : i64,
+      name = "MyView"}]} {}
+  firrtl.module private @Foo() {}
+  firrtl.module private @DUT() {
+    firrtl.instance MyView_companion  @MyView_companion()
+    // expected-note @below {{the 'firrtl.layerblock' op is here}}
+    firrtl.layerblock @A {
+      // expected-error @below {{'firrtl.instance' op is instantiated under a 'firrtl.layerblock' op}}
+      firrtl.instance foo @Foo()
+    }
+  }
+  firrtl.module @UnexpectedLayer() {
+    firrtl.instance dut @DUT()
+  }
+}

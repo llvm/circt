@@ -4,6 +4,7 @@ add_circt_translation_library(CIRCTExportVerilog
   ExportVerilog.cpp
   LegalizeAnonEnums.cpp
   LegalizeNames.cpp
+  HWLowerInstanceChoices.cpp
   PrepareForEmission.cpp
   PruneZeroValuedLogic.cpp
 
@@ -17,6 +18,8 @@ add_circt_translation_library(CIRCTExportVerilog
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTDebug
+  CIRCTEmit
   CIRCTHW
   CIRCTLTL
   CIRCTOM

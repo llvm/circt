@@ -195,8 +195,8 @@ firrtl.circuit "ManySymbols" {
   // CHECK-SAME: <@b,7,public>
   firrtl.extmodule @ManySymbols2(
     out mixed: !firrtl.openbundle<a: uint<1>,
-                                   x flip: openvector<openbundle<refsonly : openbundle<p: probe<bundle<a: uint<1>,
-                                                                                                       b: vector<uint<1>, 2>>>>,
+                                   x flip: openvector<openbundle<refsonly : openbundle<p flip: probe<bundle<a: uint<1>,
+                                                                                                            b: vector<uint<1>, 2>>>>,
                                                                  data flip: uint<1>
                                                       >, 2>,
                                    b: vector<uint<1>, 2>>
@@ -304,8 +304,8 @@ firrtl.circuit "WireProbes" {
 firrtl.circuit "WireSymbols" {
   // CHECK-LABEL: module{{.*}} @WireSymbols
   firrtl.module @WireSymbols() {
-    // CHECk-NEXT: %a = firrtl.wire sym [<@sym_a_c, 1, public>] : !firrtl.bundle<c: uint<1>>
-    // CHECk-NEXT: %a_b = firrtl.wire : !firrtl.string
+    // CHECK-NEXT: %a = firrtl.wire sym [<@sym_a_c,1,public>] : !firrtl.bundle<c: uint<1>>
+    // CHECK-NEXT: %a_b = firrtl.wire : !firrtl.string
     %a = firrtl.wire sym [<@sym_a_c, 2, public>] : !firrtl.openbundle<b: string, c: uint<1>>
   }
 }

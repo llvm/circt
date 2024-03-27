@@ -45,14 +45,14 @@ firrtl.circuit "ExtractClockGatesMultigrouping" attributes {annotations = [{clas
     firrtl.connect %dut_bar_en, %bar_en : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %dut_foo_en, %foo_en : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: sv.verbatim "
-  // CHECK-SAME{LITERAL}: clock_gate_1 -> {{0}}.{{1}}.{{2}}\0A
-  // CHECK-SAME{LITERAL}: clock_gate_0 -> {{0}}.{{1}}.{{3}}\0A
-  // CHECK-SAME: output_file = #hw.output_file<"ClockGates.txt", excludeFromFileList>
-  // CHECK-SAME: symbols = [
-  // CHECK-SAME: @DUTModule
-  // CHECK-SAME: #hw.innerNameRef<@DUTModule::[[INJMOD_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@InjectedSubmodule::[[INST0_SYM]]>
-  // CHECK-SAME: #hw.innerNameRef<@InjectedSubmodule::[[INST1_SYM]]>
-  // CHECK-SAME: ]
+  // CHECK: emit.file "ClockGates.txt" {
+  // CHECK-NEXT:          sv.verbatim
+  // CHECK-SAME{LITERAL}:   clock_gate_1 -> {{0}}.{{1}}.{{2}}\0A
+  // CHECK-SAME{LITERAL}:   clock_gate_0 -> {{0}}.{{1}}.{{3}}\0A
+  // CHECK-SAME:            symbols = [
+  // CHECK-SAME:              @DUTModule
+  // CHECK-SAME:              #hw.innerNameRef<@DUTModule::[[INJMOD_SYM]]>
+  // CHECK-SAME:              #hw.innerNameRef<@InjectedSubmodule::[[INST0_SYM]]>
+  // CHECK-SAME:              #hw.innerNameRef<@InjectedSubmodule::[[INST1_SYM]]>
+  // CHECK-SAME:            ]
 }

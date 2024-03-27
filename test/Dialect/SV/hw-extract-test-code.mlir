@@ -1,12 +1,16 @@
 // RUN:  circt-opt --sv-extract-test-code --split-input-file %s | FileCheck %s
 // CHECK-LABEL: module attributes {firrtl.extract.assert = #hw.output_file<"dir3{{/|\\\\}}"
+// CHECK-NEXT: sv.macro.decl @SYNTHESIS
+// CHECK-NEXT: emit.fragment @some_fragment {
+// CHECK-NEXT:   sv.verbatim "foo"
+// CHECK-NEXT: }
 // CHECK-NEXT: hw.module.extern @foo_cover
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assume
 // CHECK-NOT: attributes
 // CHECK-NEXT: hw.module.extern @foo_assert
 // CHECK-NOT: attributes
-// CHECK: hw.module @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
+// CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", emit.fragments = [@some_fragment], output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
 // CHECK: sv.error "Assertion failed"
 // CHECK: sv.error "assert:"
@@ -14,12 +18,16 @@
 // CHECK: sv.error "check [verif-library-assert] is included"
 // CHECK: sv.fatal 1
 // CHECK: foo_assert
-// CHECK: hw.module @issue1246_assume(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
+// CHECK-SAME: comment = "VCS coverage exclude_file"
+// CHECK-SAME: emit.fragments = [@some_fragment]
+// CHECK-SAME: }
 // CHECK: sv.assume
 // CHECK: foo_assume
-// CHECK: hw.module @issue1246_cover(in %clock : i1)
-// CHECK-SAME: attributes {comment = "VCS coverage exclude_file"}
+// CHECK: hw.module private @issue1246_cover(in %clock : i1) attributes {
+// CHECK-SAME: comment = "VCS coverage exclude_file"
+// CHECK-SAME: emit.fragments = [@some_fragment]
+// CHECK-SAME: }
 // CHECK: sv.cover
 // CHECK: foo_cover
 // CHECK: hw.module @issue1246
@@ -33,12 +41,16 @@
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
 // CHECK: sv.bind <@issue1246::@__ETC_issue1246_cover>
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
+  sv.macro.decl @SYNTHESIS
+  emit.fragment @some_fragment {
+    sv.verbatim "foo"
+  }
   hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
-  hw.module @issue1246(in %clock: i1) {
+  hw.module @issue1246(in %clock: i1) attributes {emit.fragments = [@some_fragment]} {
     sv.always posedge %clock  {
-      sv.ifdef.procedural "SYNTHESIS"  {
+      sv.ifdef.procedural @SYNTHESIS {
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
@@ -85,7 +97,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
 
 // Check that we don't extract assertions from a module with "firrtl.extract.do_not_extract" attribute.
 //
-// CHECK-NOT:  hw.module @ModuleInTestHarness_assert
+// CHECK-NOT:  hw.module private @ModuleInTestHarness_assert
 // CHECK-NOT:  firrtl.extract.do_not_extract
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>} {
   hw.module @ModuleInTestHarness(in %clock: i1) attributes {"firrtl.extract.do_not_extract"} {
@@ -292,6 +304,8 @@ module {
 // CHECK: hw.instance "non_testcode_and_instance1"
 
 module {
+  sv.macro.decl @SYNTHESIS
+
   hw.module private @Foo(in %a: i1, out b: i1) {
     hw.output %a : i1
   }
@@ -351,7 +365,7 @@ module {
 
   hw.module private @ShouldBeInlined2(in %clock: i1, in %in: i1) {
     %bozo.b = hw.instance "bozo" @Bozo(a: %in: i1) -> (b: i1)
-    sv.ifdef "SYNTHESIS" {
+    sv.ifdef @SYNTHESIS {
     } else {
       sv.always posedge %clock {
         sv.if %bozo.b {
@@ -545,7 +559,7 @@ module {
     hw.instance "dut" @Foo(clock: %clock: !seq.clock, in: %in: i1) -> ()
     hw.output
   }
-  // CHECK: hw.module @Foo_cover(in %clock : !seq.clock, in %in : i1)
+  // CHECK: hw.module private @Foo_cover(in %clock : !seq.clock, in %in : i1)
   hw.module private @Foo(in %clock: !seq.clock, in %in: i1) {
     %0 = seq.from_clock %clock
     sv.cover.concurrent posedge %0, %in label "cover__hello"
@@ -563,7 +577,7 @@ module {
     %x = hw.instance "pF" @PortNameFoo(clock: %clock: !seq.clock, "": %in: i1) -> (o: i1)
     hw.output
   }
-  // CHECK-LABEL: hw.module @PortNameFoo_cover
+  // CHECK-LABEL: hw.module private @PortNameFoo_cover
   // CHECK-SAME: (in %clock : !seq.clock, in %port_1 : i1, in %port_2 : i1)
   hw.module private @PortNameFoo(in %clock: !seq.clock, in %1: i1, out o : i1) {
     // CHECK: hw.instance "PortNameFoo_cover"
@@ -574,4 +588,19 @@ module {
     sv.cover.concurrent posedge %0, %2 label "cover__hello2"
     hw.output %2 : i1
   }
+}
+
+// -----
+
+// Check that verif ops are also extracted.
+
+// CHECK: hw.module private @VerifOps_assert
+// CHECK: hw.module private @VerifOps_assume
+// CHECK: hw.module private @VerifOps_cover
+hw.module @VerifOps(in %a : i1, in %b : i1) {
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.assume %true : i1
+  verif.cover %true : i1
+  hw.output
 }

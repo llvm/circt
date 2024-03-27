@@ -1,9 +1,11 @@
 // RUN: circt-opt %s --arc-strip-sv --verify-diagnostics | FileCheck %s
 
 // CHECK-NOT: sv.verbatim
+// CHECK-NOT: sv.macro.decl
 // CHECK-NOT: sv.ifdef
 sv.verbatim "// Standard header to adapt well known macros to our needs." {symbols = []}
-sv.ifdef  "RANDOMIZE_REG_INIT" {
+sv.macro.decl @RANDOMIZE_REG_INIT
+sv.ifdef  @RANDOMIZE_REG_INIT {
   sv.verbatim "`define RANDOMIZE" {symbols = []}
 }
 

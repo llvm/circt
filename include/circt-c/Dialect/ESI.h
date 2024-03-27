@@ -1,10 +1,8 @@
-//===-- circt-c/Dialect/ESI.h - C API for ESI dialect -------------*- C -*-===//
+//===- ESI.h - C interface for the ESI dialect --------------------*- C -*-===//
 //
-// This header declares the C interface for registering and accessing the
-// Comb dialect. A dialect should be registered with a context to make it
-// available to users of the context. These users must load the dialect
-// before using any of its attributes, operations or types. Parser and pass
-// manager can load registered dialects automatically.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,10 +17,6 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ESI, esi);
 MLIR_CAPI_EXPORTED void registerESIPasses(void);
-MLIR_CAPI_EXPORTED void registerESITranslations(void);
-
-MLIR_CAPI_EXPORTED MlirLogicalResult
-circtESIExportCosimSchema(MlirModule, MlirStringCallback, void *userData);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner,
@@ -80,6 +74,8 @@ MLIR_CAPI_EXPORTED bool circtESIAttributeIsAnAppIDAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED
 MlirAttribute circtESIAppIDAttrGet(MlirContext, MlirStringRef name,
                                    uint64_t index);
+MLIR_CAPI_EXPORTED
+MlirAttribute circtESIAppIDAttrGetNoIdx(MlirContext ctxt, MlirStringRef name);
 MLIR_CAPI_EXPORTED MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr);
 MLIR_CAPI_EXPORTED bool circtESIAppIDAttrGetIndex(MlirAttribute attr,
                                                   uint64_t *index);

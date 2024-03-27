@@ -56,7 +56,6 @@ class PropertyType;
 class StringType;
 class FIntegerType;
 class ListType;
-class MapType;
 class PathType;
 class BoolType;
 class DoubleType;
@@ -204,6 +203,9 @@ bool isConst(Type type);
 /// guaranteed to be unchanging at circuit execution time
 bool containsConst(Type type);
 
+/// Return true if the type has zero bit width.
+bool hasZeroBitWidth(FIRRTLType type);
+
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
@@ -319,7 +321,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<AnyRefType, ClassType, StringType, FIntegerType, ListType,
-                     MapType, PathType, BoolType, DoubleType>(type);
+                     PathType, BoolType, DoubleType>(type);
   }
 
 protected:
@@ -613,7 +615,7 @@ public:
   // Support C++ implicit conversions to BaseTy.
   operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 
-  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+  BaseTy base() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
 } // namespace firrtl

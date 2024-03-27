@@ -121,6 +121,8 @@ void FirRegLowering::lower() {
   if (randomInit.empty() && presetInit.empty() && asyncResets.empty())
     return;
 
+  needsRandom = true;
+
   auto loc = module.getLoc();
   MLIRContext *context = module.getContext();
   auto randInitRef = sv::MacroIdentAttr::get(context, "RANDOMIZE_REG_INIT");
@@ -187,8 +189,16 @@ void FirRegLowering::lower() {
         if (!presetInit.empty()) {
           for (auto &svReg : presetInit) {
             auto loc = svReg.reg.getLoc();
+            auto elemTy = svReg.reg.getType().getElementType();
             auto cst = getOrCreateConstant(loc, svReg.preset.getValue());
-            builder.create<sv::BPAssignOp>(loc, svReg.reg, cst);
+
+            Value rhs;
+            if (cst.getType() == elemTy)
+              rhs = cst;
+            else
+              rhs = builder.create<hw::BitcastOp>(loc, elemTy, cst);
+
+            builder.create<sv::BPAssignOp>(loc, svReg.reg, rhs);
           }
         }
 

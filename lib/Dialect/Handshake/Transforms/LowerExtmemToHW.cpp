@@ -208,26 +208,26 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Load ports:
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, readPortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, readPortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, readPortInfo.type, readPortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
 
     // Store ports:
     for (unsigned i = 0; i < memType.storePorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, writePortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, writePortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, writePortInfo.type, writePortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
@@ -301,8 +301,8 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
 }
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
-                           const handshake::MemLoadInterface &ldif,
-                           Value loadData, MemRefType memrefType) {
+                           handshake::MemLoadInterface &ldif, Value loadData,
+                           MemRefType memrefType) {
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
   // generate a none-typed output to drive the load done.
@@ -321,8 +321,8 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
 }
 
 static Value plumbStorePort(Location loc, OpBuilder &b,
-                            const handshake::MemStoreInterface &stif,
-                            Value done, Type outType, MemRefType memrefType) {
+                            handshake::MemStoreInterface &stif, Value done,
+                            Type outType, MemRefType memrefType) {
   stif.doneOut.replaceAllUsesWith(done);
   // Return the store address and data to be fed to the top-level output.
   // Address is truncated to the width of the memory that is accessed.

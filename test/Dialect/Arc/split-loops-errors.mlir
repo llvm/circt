@@ -3,7 +3,7 @@
 hw.module @UnbreakableLoop(in %clock : !seq.clock, in %a : i4, out x : i4) {
   // expected-error @below {{loop splitting did not eliminate all loops; loop detected}}
   // expected-note @below {{through operand 1 here:}}
-  %0, %1 = arc.state @UnbreakableLoopArc(%a, %0) lat 0 : (i4, i4) -> (i4, i4)
+  %0, %1 = arc.call @UnbreakableLoopArc(%a, %0) : (i4, i4) -> (i4, i4)
   hw.output %1 : i4
 }
 

@@ -10,6 +10,7 @@
 #define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
@@ -325,6 +326,12 @@ private:
   size_t length;
 };
 
+/// Mapping from symbols to file operations.
+using FileMapping = DenseMap<StringAttr, Operation *>;
+
+/// Mapping from symbols to file operations.
+using FragmentMapping = DenseMap<StringAttr, emit::FragmentOp>;
+
 /// This class tracks the top-level state for the emitters, which is built and
 /// then shared across all per-file emissions that happen in parallel.
 struct SharedEmitterState {
@@ -362,6 +369,12 @@ struct SharedEmitterState {
 
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
+
+  /// Tracks the referenceable files through their symbol.
+  FileMapping fileMapping;
+
+  /// Tracks referenceable files through their symbol.
+  FragmentMapping fragmentMapping;
 
   explicit SharedEmitterState(ModuleOp designOp, const LoweringOptions &options,
                               GlobalNameTable globalNames)
@@ -425,6 +438,9 @@ bool isZeroBitType(Type type);
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 bool isExpressionEmittedInline(Operation *op, const LoweringOptions &options);
+
+/// Generates the macros used by instance choices.
+LogicalResult lowerHWInstanceChoices(mlir::ModuleOp module);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.

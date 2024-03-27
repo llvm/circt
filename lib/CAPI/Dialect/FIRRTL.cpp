@@ -1,17 +1,26 @@
-//===- FIRRTL.cpp - C Interface for the FIRRTL Dialect --------------------===//
+//===- FIRRTL.cpp - C interface for the FIRRTL dialect --------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/FIRRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/Import/FIRAnnotations.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
+#include "llvm/Support/JSON.h"
 
 using namespace circt;
 using namespace firrtl;
+
+namespace json = llvm::json;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -55,20 +64,103 @@ MlirType firrtlTypeGetVector(MlirContext ctx, MlirType element, size_t count) {
   return wrap(FVectorType::get(baseType, count));
 }
 
+bool firrtlTypeIsAOpenBundle(MlirType type) {
+  return unwrap(type).isa<OpenBundleType>();
+}
+
 MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
                              const FIRRTLBundleField *fields) {
-  SmallVector<BundleType::BundleElement, 4> bundleFields;
+  bool bundleCompatible = true;
+  SmallVector<OpenBundleType::BundleElement, 4> bundleFields;
+
   bundleFields.reserve(count);
 
   for (size_t i = 0; i < count; i++) {
     auto field = fields[i];
-
-    auto baseType = unwrap(field.type).dyn_cast<FIRRTLBaseType>();
-    assert(baseType && "field must be base type");
-
-    bundleFields.emplace_back(unwrap(field.name), field.isFlip, baseType);
+    auto type = unwrap(field.type).cast<FIRRTLType>();
+    bundleFields.emplace_back(unwrap(field.name), field.isFlip, type);
+    bundleCompatible &= isa<BundleType::ElementType>(type);
   }
-  return wrap(BundleType::get(unwrap(ctx), bundleFields));
+
+  // Try to emit base-only bundle.
+  if (bundleCompatible) {
+    auto bundleFieldsMapped = llvm::map_range(bundleFields, [](auto field) {
+      return BundleType::BundleElement{
+          field.name, field.isFlip, cast<BundleType::ElementType>(field.type)};
+    });
+    return wrap(
+        BundleType::get(unwrap(ctx), llvm::to_vector(bundleFieldsMapped)));
+  }
+  return wrap(OpenBundleType::get(unwrap(ctx), bundleFields));
+}
+
+unsigned firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName) {
+  std::optional<unsigned> fieldIndex;
+  if (auto bundleType = unwrap(type).dyn_cast<BundleType>()) {
+    fieldIndex = bundleType.getElementIndex(unwrap(fieldName));
+  } else if (auto bundleType = unwrap(type).dyn_cast<OpenBundleType>()) {
+    fieldIndex = bundleType.getElementIndex(unwrap(fieldName));
+  } else {
+    llvm_unreachable("must be a bundle type");
+  }
+  assert(fieldIndex.has_value() && "unknown field");
+  return fieldIndex.value();
+}
+
+MlirType firrtlTypeGetRef(MlirType target, bool forceable) {
+  auto baseType = unwrap(target).dyn_cast<FIRRTLBaseType>();
+  assert(baseType && "target must be base type");
+
+  return wrap(RefType::get(baseType, forceable));
+}
+
+MlirType firrtlTypeGetAnyRef(MlirContext ctx) {
+  return wrap(AnyRefType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetInteger(MlirContext ctx) {
+  return wrap(FIntegerType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetDouble(MlirContext ctx) {
+  return wrap(DoubleType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetString(MlirContext ctx) {
+  return wrap(StringType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetBoolean(MlirContext ctx) {
+  return wrap(BoolType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetPath(MlirContext ctx) {
+  return wrap(PathType::get(unwrap(ctx)));
+}
+
+MlirType firrtlTypeGetList(MlirContext ctx, MlirType elementType) {
+  auto type = unwrap(elementType).dyn_cast<PropertyType>();
+  assert(type && "element must be property type");
+
+  return wrap(ListType::get(unwrap(ctx), type));
+}
+
+MlirType firrtlTypeGetClass(MlirContext ctx, MlirAttribute name,
+                            size_t numberOfElements,
+                            const FIRRTLClassElement *elements) {
+  auto nameSymbol = unwrap(name).dyn_cast<FlatSymbolRefAttr>();
+  assert(nameSymbol && "name must be FlatSymbolRefAttr");
+
+  SmallVector<ClassElement, 4> classElements;
+  classElements.reserve(numberOfElements);
+
+  for (size_t i = 0; i < numberOfElements; i++) {
+    auto element = elements[i];
+    auto dir = element.direction == FIRRTL_DIRECTION_IN ? Direction::In
+                                                        : Direction::Out;
+    classElements.emplace_back(unwrap(element.name), unwrap(element.type), dir);
+  }
+  return wrap(ClassType::get(unwrap(ctx), nameSymbol, classElements));
 }
 
 //===----------------------------------------------------------------------===//
@@ -92,10 +184,10 @@ MlirAttribute firrtlAttrGetConvention(MlirContext ctx,
 }
 
 MlirAttribute firrtlAttrGetPortDirs(MlirContext ctx, size_t count,
-                                    const FIRRTLPortDir *dirs) {
-  static_assert(FIRRTLPortDir::FIRRTL_PORT_DIR_INPUT ==
+                                    const FIRRTLDirection *dirs) {
+  static_assert(FIRRTL_DIRECTION_IN ==
                 static_cast<std::underlying_type_t<Direction>>(Direction::In));
-  static_assert(FIRRTLPortDir::FIRRTL_PORT_DIR_OUTPUT ==
+  static_assert(FIRRTL_DIRECTION_OUT ==
                 static_cast<std::underlying_type_t<Direction>>(Direction::Out));
 
   // FIXME: The `reinterpret_cast` here may voilate strict aliasing rule. Is
@@ -187,4 +279,57 @@ MlirAttribute firrtlAttrGetEventControl(MlirContext ctx,
   }
 
   return wrap(EventControlAttr::get(unwrap(ctx), value));
+}
+
+FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
+  Flow flowValue;
+
+  switch (flow) {
+  case FIRRTL_VALUE_FLOW_NONE:
+    flowValue = Flow::None;
+    break;
+  case FIRRTL_VALUE_FLOW_SOURCE:
+    flowValue = Flow::Source;
+    break;
+  case FIRRTL_VALUE_FLOW_SINK:
+    flowValue = Flow::Sink;
+    break;
+  case FIRRTL_VALUE_FLOW_DUPLEX:
+    flowValue = Flow::Duplex;
+    break;
+  }
+
+  auto flowResult = firrtl::foldFlow(unwrap(value), flowValue);
+
+  switch (flowResult) {
+  case Flow::None:
+    return FIRRTL_VALUE_FLOW_NONE;
+  case Flow::Source:
+    return FIRRTL_VALUE_FLOW_SOURCE;
+  case Flow::Sink:
+    return FIRRTL_VALUE_FLOW_SINK;
+  case Flow::Duplex:
+    return FIRRTL_VALUE_FLOW_DUPLEX;
+  }
+}
+
+bool firrtlImportAnnotationsFromJSONRaw(
+    MlirContext ctx, MlirStringRef annotationsStr,
+    MlirAttribute *importedAnnotationsArray) {
+  auto annotations = json::parse(unwrap(annotationsStr));
+  if (!annotations) {
+    return false;
+  }
+
+  auto *ctxUnwrapped = unwrap(ctx);
+
+  json::Path::Root root;
+  SmallVector<Attribute> annos;
+  if (!importAnnotationsFromJSONRaw(annotations.get(), annos, root,
+                                    ctxUnwrapped)) {
+    return false;
+  }
+
+  *importedAnnotationsArray = wrap(ArrayAttr::get(ctxUnwrapped, annos));
+  return true;
 }

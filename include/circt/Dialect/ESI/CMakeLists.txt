@@ -31,6 +31,3 @@ add_circt_doc(ESIStructure Dialects/ESIStructure -gen-op-doc)
 
 add_circt_doc(ESIInterfaces Dialects/ESIInterfaces -gen-op-interface-docs)
 add_circt_doc(ESITypes Dialects/ESITypes -gen-typedef-doc)
-
-
-add_subdirectory(cosim)

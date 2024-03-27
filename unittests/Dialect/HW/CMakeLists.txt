@@ -8,4 +8,5 @@ add_circt_unittest(CIRCTHWTests
 target_link_libraries(CIRCTHWTests
   PRIVATE
   CIRCTHW
+  CIRCTCAPIHW
 )

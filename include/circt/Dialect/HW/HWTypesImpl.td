@@ -142,8 +142,8 @@ def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeIn
     using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
-    std::optional<unsigned> getFieldIndex(mlir::StringRef fieldName);
-    std::optional<unsigned> getFieldIndex(mlir::StringAttr fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
@@ -193,6 +193,8 @@ def UnionTypeImpl : HWType<"Union"> {
     FieldInfo getFieldInfo(::mlir::StringRef fieldName);
 
     ::mlir::Type getFieldType(::mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringRef fieldName);
+    std::optional<uint32_t> getFieldIndex(mlir::StringAttr fieldName);
   }];
 }
 
@@ -257,8 +259,7 @@ def ModuleTypeImpl : HWType<"Module"> {
     Type getPortType(size_t);
     Type getInputType(size_t);
     Type getOutputType(size_t);
-    SmallVector<StringAttr> getInputNamesStr();
-    SmallVector<StringAttr> getOutputNamesStr();
+    SmallVector<Attribute> getPortNames();
     SmallVector<Attribute> getInputNames();
     SmallVector<Attribute> getOutputNames();
     StringAttr getPortNameAttr(size_t);
@@ -273,6 +274,8 @@ def ModuleTypeImpl : HWType<"Module"> {
     size_t getOutputIdForPortId(size_t);
     size_t getPortIdForInputId(size_t);
     size_t getPortIdForOutputId(size_t);
+    FailureOr<ModuleType> resolveParametricTypes(
+      ArrayAttr parameters, LocationAttr loc, bool emitErrors);
   }];
 }
 

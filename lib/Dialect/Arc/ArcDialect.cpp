@@ -22,10 +22,6 @@ struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
 
   bool isLegalToInline(Operation *call, Operation *callable,
                        bool wouldBeCloned) const override {
-    if (auto stateOp = dyn_cast<StateOp>(call);
-        stateOp && stateOp.getLatency() == 0)
-      return true;
-
     return isa<CallOp>(call);
   }
   bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
@@ -39,7 +35,7 @@ struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
     return false;
   }
   void handleTerminator(Operation *op,
-                        ArrayRef<Value> valuesToRepl) const override {
+                        mlir::ValueRange valuesToRepl) const override {
     assert(isa<arc::OutputOp>(op)); // arc does not have another terminator op
     for (auto [from, to] : llvm::zip(valuesToRepl, op->getOperands()))
       from.replaceAllUsesWith(to);

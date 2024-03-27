@@ -1,0 +1,87 @@
+name: Publish ESI Runtime
+
+on:
+  push:
+    tags:
+      - ESIRuntime-*
+  schedule:
+    - cron: 0 12 * * 1
+  workflow_dispatch:
+
+jobs:
+  build_wheels:
+    name: Build wheels with ${{ matrix.config.cibw_build }}
+    runs-on: ${{ matrix.config.os }}
+    if: github.repository == 'llvm/circt'
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - os: ubuntu-20.04
+            cibw_build: cp38-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp39-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp310-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp311-manylinux_x86_64
+          - os: ubuntu-20.04
+            cibw_build: cp312-manylinux_x86_64
+          #- os: ubuntu-20.04
+          #  cibw_build: cp313-manylinux_x86_64
+
+    steps:
+      - name: Get CIRCT
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v3
+
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel==2.16.2
+
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
+        env:
+          CIBW_BUILD: ${{ matrix.config.cibw_build }}
+          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/circt/images/pycde-build
+          SETUPTOOLS_SCM_DEBUG: True
+
+      - name: Upload (stage) wheels as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/*.whl
+          retention-days: 7
+          if-no-files-found: error
+
+  push_wheels:
+    name: Push wheels (Tag or Weekly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    needs: build_wheels
+    environment:
+      name: pypi
+      url: https://pypi.org/p/esiaccel
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          name: python-wheels
+          path: ./wheelhouse/
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          verify-metadata: false

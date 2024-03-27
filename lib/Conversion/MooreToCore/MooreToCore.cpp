@@ -15,7 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/Moore/MIROps.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -85,35 +85,6 @@ struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
-
-struct VariableDeclOpConv : public OpConversionPattern<VariableDeclOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(VariableDeclOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.getResult().getType());
-    Value initVal =
-        rewriter.create<hw::ConstantOp>(op->getLoc(), op.getInitAttr());
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.getName(),
-                                             initVal);
-    return success();
-  }
-};
-
-struct AssignOpConv : public OpConversionPattern<AssignOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(AssignOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Value timeVal =
-        rewriter.create<llhd::ConstantTimeOp>(op->getLoc(), 0, "s", 0, 1);
-    rewriter.replaceOpWithNewOp<llhd::DrvOp>(
-        op, adaptor.getDest(), adaptor.getSrc(), timeVal, Value());
-    return success();
-  }
-};
 
 struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -215,24 +186,30 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
   matchAndRewrite(ShrOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    bool hasSignedResultType = op.getResult()
-                                   .getType()
-                                   .cast<UnpackedType>()
-                                   .castToSimpleBitVector()
-                                   .isSigned();
 
     // Comb shift operations require the same bit-width for value and amount
     Value amount =
         adjustIntegerWidth(rewriter, adaptor.getAmount(),
                            resultType.getIntOrFloatBitWidth(), op->getLoc());
-
-    if (adaptor.getArithmetic() && hasSignedResultType) {
-      rewriter.replaceOpWithNewOp<comb::ShrSOp>(
-          op, resultType, adaptor.getValue(), amount, false);
-      return success();
-    }
-
     rewriter.replaceOpWithNewOp<comb::ShrUOp>(
+        op, resultType, adaptor.getValue(), amount, false);
+    return success();
+  }
+};
+
+struct AShrOpConversion : public OpConversionPattern<AShrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(AShrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+
+    // Comb shift operations require the same bit-width for value and amount
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.getAmount(),
+                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+    rewriter.replaceOpWithNewOp<comb::ShrSOp>(
         op, resultType, adaptor.getValue(), amount, false);
     return success();
   }
@@ -244,10 +221,7 @@ struct ShrOpConversion : public OpConversionPattern<ShrOp> {
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
-static bool isMooreType(Type type) {
-  return type.isa<UnpackedType>() || type.isa<IntType>() ||
-         type.isa<LValueType>();
-}
+static bool isMooreType(Type type) { return type.isa<UnpackedType>(); }
 
 static bool hasMooreType(TypeRange types) {
   return llvm::any_of(types, isMooreType);
@@ -290,10 +264,6 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return mlir::IntegerType::get(type.getContext(), type.getBitSize());
   });
-  typeConverter.addConversion([&](LValueType type) {
-    auto inner = typeConverter.convertType(type.getNestedType());
-    return llhd::SigType::get(inner);
-  });
 
   // Directly map simple bit vector types to a compact integer type. This needs
   // to be added after all of the other conversions above, such that SBVs
@@ -315,14 +285,13 @@ static void populateOpConversion(RewritePatternSet &patterns,
   patterns.add<
     ConstantOpConv,
     ConcatOpConversion,
-    VariableDeclOpConv,
-    AssignOpConv,
     ReturnOpConversion,
     CondBranchOpConversion,
     BranchOpConversion,
     CallOpConversion,
     ShlOpConversion,
     ShrOpConversion,
+    AShrOpConversion,
     UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on

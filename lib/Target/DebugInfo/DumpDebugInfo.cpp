@@ -13,6 +13,8 @@
 using namespace mlir;
 using namespace circt;
 
+static void dump(DIModule &module, raw_indented_ostream &os);
+
 static void dump(DIVariable &variable, raw_indented_ostream &os) {
   os << "Variable " << variable.name;
   if (variable.loc)
@@ -38,6 +40,11 @@ static void dump(DIInstance &instance, raw_indented_ostream &os) {
   if (instance.op)
     os << " for " << instance.op->getName() << " at " << instance.op->getLoc();
   os << "\n";
+  if (instance.module->isInline) {
+    os.indent();
+    dump(*instance.module, os);
+    os.unindent();
+  }
 }
 
 static void dump(DIModule &module, raw_indented_ostream &os) {

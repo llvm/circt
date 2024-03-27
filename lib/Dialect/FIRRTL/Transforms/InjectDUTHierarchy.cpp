@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Support/Debug.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inject-dut-hier"
@@ -69,8 +70,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
 }
 
 void InjectDUTHierarchy::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running InjectDUTHierarchyPass "
-                             "-----------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
 
   CircuitOp circuit = getOperation();
 
@@ -191,10 +191,12 @@ void InjectDUTHierarchy::runOnOperation() {
   // Instantiate the wrapper inside the DUT and wire it up.
   b.setInsertionPointToStart(dut.getBodyBlock());
   hw::InnerSymbolNamespace dutNS(dut);
-  auto wrapperInst = b.create<InstanceOp>(
-      b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
-      NameKindEnum::DroppableName, ArrayRef<Attribute>{}, ArrayRef<Attribute>{},
-      false, b.getStringAttr(dutNS.newName(wrapper.getModuleName())));
+  auto wrapperInst =
+      b.create<InstanceOp>(b.getUnknownLoc(), wrapper, wrapper.getModuleName(),
+                           NameKindEnum::DroppableName, ArrayRef<Attribute>{},
+                           ArrayRef<Attribute>{}, false,
+                           hw::InnerSymAttr::get(b.getStringAttr(
+                               dutNS.newName(wrapper.getModuleName()))));
   for (const auto &pair : llvm::enumerate(wrapperInst.getResults())) {
     Value lhs = dut.getArgument(pair.index());
     Value rhs = pair.value();

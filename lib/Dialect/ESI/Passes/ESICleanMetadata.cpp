@@ -26,17 +26,11 @@ struct ESICleanMetadataPass
 void ESICleanMetadataPass::runOnOperation() {
   auto mod = getOperation();
 
-  // Track declarations which are still used so that the service impl reqs are
-  // still valid.
-  DenseSet<StringAttr> stillUsed;
-  mod.walk([&](ServiceImplementReqOp req) {
-    auto sym = req.getServiceSymbol();
-    if (sym.has_value())
-      stillUsed.insert(StringAttr::get(req.getContext(), *sym));
-  });
-  mod.walk([&](ServiceDeclOpInterface decl) {
-    if (!stillUsed.contains(SymbolTable::getSymbolName(decl)))
-      decl.getOperation()->erase();
+  mod.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<ServiceDeclOpInterface, ServiceImplRecordOp,
+              ServiceRequestRecordOp, AppIDHierRootOp, IsManifestData>(
+            [](Operation *op) { op->erase(); });
   });
 }
 

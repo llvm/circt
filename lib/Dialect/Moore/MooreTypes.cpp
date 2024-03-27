@@ -38,10 +38,12 @@ void MooreDialect::registerTypes() {
            PackedNamedType, PackedRefType, UnpackedNamedType, UnpackedRefType,
            PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
            UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
-           UnpackedQueueDim, EnumType, PackedStructType, UnpackedStructType,
+           UnpackedQueueDim, EnumType, PackedStructType, UnpackedStructType>();
+
+  addTypes<
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
-           >();
+      >();
 }
 
 //===----------------------------------------------------------------------===//
@@ -444,13 +446,23 @@ unsigned IntType::getBitSize(Kind kind) {
   llvm_unreachable("all kinds should be handled");
 }
 
+IntType::Kind IntType::getAtomForDomain(Domain domain) {
+  switch (domain) {
+  case Domain::TwoValued:
+    return IntType::Bit;
+  case Domain::FourValued:
+    return IntType::Logic;
+  }
+  llvm_unreachable("all domains should be handled");
+}
+
 std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
                                                                unsigned size) {
+  if (size == 1)
+    return getAtomForDomain(domain);
   switch (domain) {
   case Domain::TwoValued:
     switch (size) {
-    case 1:
-      return IntType::Bit;
     case 8:
       return IntType::Byte;
     case 16:
@@ -464,8 +476,6 @@ std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
     }
   case Domain::FourValued:
     switch (size) {
-    case 1:
-      return IntType::Logic;
     case 32:
       return IntType::Integer;
     default:
@@ -1562,12 +1572,11 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
-  OptionalParseResult result = generatedTypeParser(parser, &mnemonic, type);
-  if (result.has_value())
-    return result.value();
+  if (parser.parseKeyword(&mnemonic))
+    return failure();
 
-  result = customTypeParser(parser, mnemonic, subset, loc, type);
-  if (result.has_value())
+  if (auto result = customTypeParser(parser, mnemonic, subset, loc, type);
+      result.has_value())
     return result.value();
 
   parser.emitError(loc) << "unknown type `" << mnemonic
@@ -1578,8 +1587,6 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
 /// Print a type registered with this dialect.
 static void printMooreType(Type type, DialectAsmPrinter &printer,
                            Subset subset) {
-  if (succeeded(generatedTypePrinter(type, printer)))
-    return;
   if (succeeded(customTypePrinter(type, printer, subset)))
     return;
   assert(false && "no printer for unknown `moore` dialect type");

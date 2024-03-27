@@ -2,14 +2,15 @@ set(CIRCT_HW_Sources
   ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
   HWAttributes.cpp
+  HWEnums.cpp
   HWDialect.cpp
   HWInstanceGraph.cpp
+  HWInstanceImplementation.cpp
   HWModuleOpInterface.cpp
   HWOpInterfaces.cpp
   HWOps.cpp
   HWTypeInterfaces.cpp
   HWTypes.cpp
-  InstanceImplementation.cpp
   ModuleImplementation.cpp
   InnerSymbolTable.cpp
   PortConverter.cpp

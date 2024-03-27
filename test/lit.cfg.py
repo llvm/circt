@@ -57,8 +57,9 @@ tool_dirs = [
 ]
 tools = [
     'arcilator', 'circt-as', 'circt-capi-ir-test', 'circt-capi-om-test',
-    'circt-capi-firrtl-test', 'circt-dis', 'circt-opt', 'circt-reduce',
-    'circt-translate', 'firtool', 'hlstool', 'om-linker', 'ibistool'
+    'circt-capi-firrtl-test', 'circt-capi-firtool-test', 'circt-dis',
+    'circt-opt', 'circt-reduce', 'circt-translate', 'firtool', 'hlstool',
+    'om-linker', 'ibistool'
 ]
 
 # Enable Verilator if it has been detected.
@@ -71,6 +72,9 @@ if config.verilator_path != "":
 if config.esi_capnp != "":
   config.available_features.add('capnp')
 
+if config.zlib == "1":
+  config.available_features.add('zlib')
+
 # Enable tests for schedulers relying on an external solver from OR-Tools.
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')
@@ -79,5 +83,10 @@ if config.scheduling_or_tools != "":
 if config.llhd_sim_enabled:
   config.available_features.add('llhd-sim')
   tools.append('llhd-sim')
+
+# Add circt-verilog if the Slang frontend is enabled.
+if config.slang_frontend_enabled:
+  config.available_features.add('slang')
+  tools.append('circt-verilog')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

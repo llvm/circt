@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-lower-clocks-to-funcs --verify-diagnostics
 
-arc.model "NonConstExternalValue" {
+arc.model @NonConstExternalValue io !hw.modty<> {
 ^bb0(%arg0: !arc.storage<42>):
   %c0_i9001 = hw.constant 0 : i9001
   // expected-note @+1 {{external value defined here:}}

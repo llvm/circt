@@ -377,6 +377,10 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAPath(result))
     return Path(result);
 
+  if (omEvaluatorValueIsAReference(result))
+    return omEvaluatorValueToPythonValue(
+        omEvaluatorValueGetReferenceValue(result));
+
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omEvaluatorValueGetPrimitive(result);
@@ -472,8 +476,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
                        [](py::object cls, MlirAttribute intVal) {
                          return cls(omIntegerAttrGet(intVal));
                        })
-      .def_property_readonly("integer", [](MlirAttribute self) {
-        return omIntegerAttrGetInt(self);
+      .def_property_readonly(
+          "integer",
+          [](MlirAttribute self) { return omIntegerAttrGetInt(self); })
+      .def("__str__", [](MlirAttribute self) {
+        MlirStringRef str = omIntegerAttrToString(self);
+        return std::string(str.data, str.length);
       });
 
   // Add the OMListAttr definition
@@ -496,4 +504,12 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
         MlirStringRef name = mlirIdentifierStr(omClassTypeGetName(type));
         return std::string(name.data, name.length);
       });
+
+  // Add the BasePathType class definition.
+  mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
+                     omFrozenBasePathTypeGetTypeID);
+
+  // Add the PathType class definition.
+  mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
+                     omFrozenPathTypeGetTypeID);
 }

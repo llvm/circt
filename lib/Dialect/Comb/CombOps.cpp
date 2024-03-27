@@ -237,7 +237,7 @@ bool XorOp::isBinaryNot() {
 static unsigned getTotalWidth(ValueRange inputs) {
   unsigned resultWidth = 0;
   for (auto input : inputs) {
-    resultWidth += input.getType().cast<IntegerType>().getWidth();
+    resultWidth += hw::type_cast<IntegerType>(input.getType()).getWidth();
   }
   return resultWidth;
 }

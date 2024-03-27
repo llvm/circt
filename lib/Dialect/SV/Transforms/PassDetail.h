@@ -17,14 +17,22 @@
 
 namespace circt {
 
+namespace emit {
+class EmitDialect;
+} // namespace emit
+
 namespace comb {
 class CombDialect;
-}
+} // namespace comb
 
 namespace hw {
 class HWDialect;
 class HWModuleOp;
 } // namespace hw
+
+namespace verif {
+class VerifDialect;
+} // namespace verif
 
 namespace sv {
 

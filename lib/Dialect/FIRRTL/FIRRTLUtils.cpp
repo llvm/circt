@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -42,8 +43,20 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       if (dstFType != srcFType)
         src = builder.create<RefCastOp>(dstFType, src);
       builder.create<RefDefineOp>(dst, src);
-    } else // Other types, give up and leave a connect
+    } else if (type_isa<PropertyType>(dstFType) &&
+               type_isa<PropertyType>(srcFType)) {
+      // Properties use propassign.
+      builder.create<PropAssignOp>(dst, src);
+    } else {
+      // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
+    }
+    return;
+  }
+
+  // More special connects
+  if (isa<AnalogType>(dstType)) {
+    builder.create<AttachOp>(ArrayRef{dst, src});
     return;
   }
 
@@ -689,10 +702,10 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
 
 /// Walk leaf ground types in the `firrtlType` and apply the function `fn`.
 /// The first argument of `fn` is field ID, and the second argument is a
-/// leaf ground type.
+/// leaf ground type and the third argument is a bool to indicate flip.
 void circt::firrtl::walkGroundTypes(
     FIRRTLType firrtlType,
-    llvm::function_ref<void(uint64_t, FIRRTLBaseType)> fn) {
+    llvm::function_ref<void(uint64_t, FIRRTLBaseType, bool)> fn) {
   auto type = getBaseType(firrtlType);
 
   // If this is not a base type, return.
@@ -701,36 +714,37 @@ void circt::firrtl::walkGroundTypes(
 
   // If this is a ground type, don't call recursive functions.
   if (type.isGround())
-    return fn(0, type);
+    return fn(0, type, false);
 
   uint64_t fieldID = 0;
-  auto recurse = [&](auto &&f, FIRRTLBaseType type) -> void {
+  auto recurse = [&](auto &&f, FIRRTLBaseType type, bool isFlip) -> void {
     FIRRTLTypeSwitch<FIRRTLBaseType>(type)
         .Case<BundleType>([&](BundleType bundle) {
           for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, bundle.getElementType(i));
+            f(f, bundle.getElementType(i),
+              isFlip ^ bundle.getElement(i).isFlip);
           }
         })
         .template Case<FVectorType>([&](FVectorType vector) {
           for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, vector.getElementType());
+            f(f, vector.getElementType(), isFlip);
           }
         })
         .template Case<FEnumType>([&](FEnumType fenum) {
           for (size_t i = 0, e = fenum.getNumElements(); i < e; ++i) {
             fieldID++;
-            f(f, fenum.getElementType(i));
+            f(f, fenum.getElementType(i), isFlip);
           }
         })
         .Default([&](FIRRTLBaseType groundType) {
           assert(groundType.isGround() &&
                  "only ground types are expected here");
-          fn(fieldID, groundType);
+          fn(fieldID, groundType, isFlip);
         });
   };
-  recurse(recurse, type);
+  recurse(recurse, type, false);
 }
 
 /// Return the inner sym target for the specified value and fieldID.
@@ -829,7 +843,7 @@ circt::firrtl::maybeStringToLocation(StringRef spelling, bool skipParsing,
                                      FileLineColLoc &fileLineColLocCache,
                                      MLIRContext *context) {
   // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+  if (!spelling.starts_with("@[") || !spelling.ends_with("]"))
     return {false, std::nullopt};
 
   spelling = spelling.drop_front(2).drop_back(1);

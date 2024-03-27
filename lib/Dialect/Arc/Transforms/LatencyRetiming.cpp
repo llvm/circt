@@ -38,13 +38,14 @@ struct LatencyRetimingStatistics {
 
 /// Absorb the latencies from predecessor states to collapse shift registers and
 /// reduce the overall amount of latency units in the design.
-struct LatencyRetimingPattern : OpRewritePattern<StateOp> {
+struct LatencyRetimingPattern
+    : mlir::OpInterfaceRewritePattern<ClockedOpInterface> {
   LatencyRetimingPattern(MLIRContext *context, SymbolCache &symCache,
                          LatencyRetimingStatistics &statistics)
-      : OpRewritePattern<StateOp>(context), symCache(symCache),
-        statistics(statistics) {}
+      : OpInterfaceRewritePattern<ClockedOpInterface>(context),
+        symCache(symCache), statistics(statistics) {}
 
-  LogicalResult matchAndRewrite(StateOp op,
+  LogicalResult matchAndRewrite(ClockedOpInterface op,
                                 PatternRewriter &rewriter) const final;
 
 private:
@@ -55,61 +56,123 @@ private:
 } // namespace
 
 LogicalResult
-LatencyRetimingPattern::matchAndRewrite(StateOp op,
+LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
                                         PatternRewriter &rewriter) const {
-  unsigned minPrevLatency = UINT_MAX;
-  SetVector<StateOp> predecessors;
+  uint32_t minPrevLatency = UINT_MAX;
+  SetVector<ClockedOpInterface> predecessors;
+  Value clock;
 
-  if (op.getReset() || op.getEnable())
+  auto hasEnableOrReset = [](Operation *op) -> bool {
+    if (auto stateOp = dyn_cast<StateOp>(op))
+      if (stateOp.getReset() || stateOp.getEnable())
+        return true;
+    return false;
+  };
+
+  // Restrict this pattern to call and state ops only. In the future we could
+  // also add support for memory write operations.
+  if (!isa<CallOp, StateOp>(op.getOperation()))
     return failure();
 
-  for (auto input : op.getInputs()) {
-    auto predState = input.getDefiningOp<StateOp>();
-    if (!predState)
+  // In principle we could support enables and resets but would have to check
+  // that all involved states have the same.
+  if (hasEnableOrReset(op))
+    return failure();
+
+  assert(isa<mlir::CallOpInterface>(op.getOperation()) &&
+         "state and call operations call arcs and thus have to implement the "
+         "CallOpInterface");
+  auto callOp = cast<mlir::CallOpInterface>(op.getOperation());
+
+  for (auto input : callOp.getArgOperands()) {
+    auto predOp = input.getDefiningOp<ClockedOpInterface>();
+
+    // Only support call and state ops for the predecessors as well.
+    if (!predOp || !isa<CallOp, StateOp>(predOp.getOperation()))
       return failure();
 
-    if (predState->hasAttr("name") || predState->hasAttr("names"))
+    // Conditions for both StateOp and CallOp
+    if (predOp->hasAttr("name") || predOp->hasAttr("names"))
       return failure();
 
-    if (predState == op)
+    // Check for a use-def cycle since we can be in a graph region.
+    if (predOp == op)
       return failure();
 
-    if (predState.getLatency() != 0 && op.getLatency() != 0 &&
-        predState.getClock() != op.getClock())
+    if (predOp.getClock() && op.getClock() &&
+        predOp.getClock() != op.getClock())
       return failure();
 
-    if (predState.getEnable() || predState.getReset())
+    if (predOp->getParentRegion() != op->getParentRegion())
       return failure();
 
-    if (llvm::any_of(predState->getUsers(),
+    if (hasEnableOrReset(predOp))
+      return failure();
+
+    // Check that the predecessor state does not have another user since then
+    // we cannot change its latency attribute without also changing it for the
+    // other users. This is not supported yet and thus we just fail.
+    if (llvm::any_of(predOp->getUsers(),
                      [&](auto *user) { return user != op; }))
       return failure();
 
-    predecessors.insert(predState);
-    minPrevLatency = std::min(minPrevLatency, predState.getLatency());
+    // We check that all clocks are the same if present. Here we remember that
+    // clock. If none of the involved operations have a clock, they must have
+    // latency 0 and thus `minPrevLatency = 0` leading to early failure below.
+    if (!clock) {
+      if (predOp.getClock())
+        clock = predOp.getClock();
+      if (auto clockDomain = predOp->getParentOfType<ClockDomainOp>())
+        clock = clockDomain.getClock();
+    }
+
+    predecessors.insert(predOp);
+    minPrevLatency = std::min(minPrevLatency, predOp.getLatency());
   }
 
   if (minPrevLatency == 0 || minPrevLatency == UINT_MAX)
     return failure();
 
-  op.setLatency(op.getLatency() + minPrevLatency);
-  for (auto prevStateOp : predecessors) {
-    if (!op.getClock() && !op->getParentOfType<ClockDomainOp>())
-      op.getClockMutable().assign(prevStateOp.getClock());
+  auto setLatency = [&](Operation *op, uint64_t newLatency, Value clock) {
+    bool validOp = isa<StateOp, CallOp>(op);
+    assert(validOp && "must be a state or call op");
+    bool isInClockDomain = op->getParentOfType<ClockDomainOp>();
 
-    statistics.latencyUnitsSaved += minPrevLatency;
-    auto newLatency = prevStateOp.getLatency() - minPrevLatency;
-    prevStateOp.setLatency(newLatency);
+    if (auto stateOp = dyn_cast<StateOp>(op)) {
+      if (newLatency == 0) {
+        if (cast<DefineOp>(symCache.getDefinition(stateOp.getArcAttr()))
+                .isPassthrough()) {
+          rewriter.replaceOp(stateOp, stateOp.getInputs());
+          ++statistics.numOpsRemoved;
+          return;
+        }
+        rewriter.setInsertionPoint(op);
+        rewriter.replaceOpWithNewOp<CallOp>(op, stateOp.getOutputs().getTypes(),
+                                            stateOp.getArcAttr(),
+                                            stateOp.getInputs());
+        return;
+      }
 
-    if (newLatency > 0)
-      continue;
-
-    prevStateOp.getClockMutable().clear();
-    if (cast<DefineOp>(symCache.getDefinition(prevStateOp.getArcAttr()))
-            .isPassthrough()) {
-      rewriter.replaceOp(prevStateOp, prevStateOp.getInputs());
-      ++statistics.numOpsRemoved;
+      rewriter.modifyOpInPlace(op, [&]() {
+        stateOp.setLatency(newLatency);
+        if (!stateOp.getClock() && !isInClockDomain)
+          stateOp.getClockMutable().assign(clock);
+      });
+      return;
     }
+
+    if (auto callOp = dyn_cast<CallOp>(op); callOp && newLatency > 0)
+      rewriter.replaceOpWithNewOp<StateOp>(
+          op, callOp.getArcAttr(), callOp->getResultTypes(),
+          isInClockDomain ? Value{} : clock, Value{}, newLatency,
+          callOp.getInputs());
+  };
+
+  setLatency(op, op.getLatency() + minPrevLatency, clock);
+  for (auto prevOp : predecessors) {
+    statistics.latencyUnitsSaved += minPrevLatency;
+    auto newLatency = prevOp.getLatency() - minPrevLatency;
+    setLatency(prevOp, newLatency, {});
   }
   statistics.latencyUnitsSaved -= minPrevLatency;
 

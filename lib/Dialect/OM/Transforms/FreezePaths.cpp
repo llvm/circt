@@ -33,6 +33,7 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
+  LogicalResult process(ListCreateOp listCreateOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
@@ -68,6 +69,30 @@ static LogicalResult getAccessPath(Location loc, Type type, size_t fieldId,
   return success();
 }
 
+// Check if the element type of a potentially nested list includes path types.
+static bool hasPathType(Type type) {
+  bool isPathType = false;
+  type.walk([&](Type innerType) {
+    if (isa<BasePathType, PathType>(innerType))
+      isPathType = true;
+  });
+
+  return isPathType;
+}
+
+// Convert potentially nested lists of PathType or BasePathType to frozen lists.
+static Type processType(Type type) {
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement([](BasePathType innerType) {
+    return FrozenBasePathType::get(innerType.getContext());
+  });
+  replacer.addReplacement([](PathType innerType) {
+    return FrozenPathType::get(innerType.getContext());
+  });
+
+  return replacer.replace(type);
+}
+
 LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
                                        PathAttr &targetPath,
                                        StringAttr &bottomModule,
@@ -78,7 +103,23 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
   auto namepath = hierPathOp.getNamepathAttr().getValue();
   SmallVector<PathElement> modules;
 
-  // Process the final target first.
+  // Process the of the hierarchical path.
+  for (auto attr : namepath.drop_back()) {
+    auto innerRef = cast<hw::InnerRefAttr>(attr);
+    auto target = irn.lookup(innerRef);
+    assert(target.isOpOnly() && "can't target a port the middle of a namepath");
+    auto *op = target.getOp();
+    // Get the verilog name of the target.
+    auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!verilogName) {
+      auto diag = emitError(loc, "component does not have verilog name");
+      diag.attachNote(op->getLoc()) << "component here";
+      return diag;
+    }
+    modules.emplace_back(innerRef.getModule(), verilogName);
+  }
+
+  // Process the final target.
   auto &end = namepath.back();
   if (auto innerRef = dyn_cast<hw::InnerRefAttr>(end)) {
     auto target = irn.lookup(innerRef);
@@ -107,7 +148,11 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       // If this is our inner ref pair: [Foo::bar]
       // if "bar" is an instance, modules = [Foo::bar], bottomModule = Bar.
       // if "bar" is a wire, modules = [], bottomModule = Foo, component = bar.
-      if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
+      if (isa<hw::HWInstanceLike>(op)) {
+        // TODO: add support for instance choices.
+        auto inst = dyn_cast<hw::InstanceOp>(op);
+        if (!inst)
+          return op->emitError("unsupported instance operation");
         // We are targeting an instance.
         modules.emplace_back(currentModule, verilogName);
         bottomModule = inst.getReferencedModuleNameAttr();
@@ -132,66 +177,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     field = StringAttr::get(context, "");
   }
 
-  // Process the rest of the hierarchical path.
-  for (auto attr : llvm::reverse(namepath.drop_back())) {
-    auto innerRef = cast<hw::InnerRefAttr>(attr);
-    auto target = irn.lookup(innerRef);
-    assert(target.isOpOnly() && "can't target a port the middle of a namepath");
-    auto *op = target.getOp();
-    // Get the verilog name of the target.
-    auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!verilogName) {
-      auto diag = emitError(loc, "component does not have verilog name");
-      diag.attachNote(op->getLoc()) << "component here";
-      return diag;
-    }
-    modules.emplace_back(innerRef.getModule(), verilogName);
-  }
-
-  auto topRef = namepath.front();
-
-  auto topModule = isa<hw::InnerRefAttr>(topRef)
-                       ? cast<hw::InnerRefAttr>(topRef).getModule()
-                       : cast<FlatSymbolRefAttr>(topRef).getAttr();
-
-  // Handle the modules not present in the path.
-  auto *node = instanceGraph.lookup(topModule);
-  while (!node->noUses()) {
-    auto module = node->getModule<hw::HWModuleLike>();
-
-    // If the module is public, stop here.
-    if (module.isPublic())
-      break;
-
-    if (!node->hasOneUse()) {
-      auto diag = emitError(loc) << "unable to uniquely resolve target "
-                                    "due to multiple instantiation";
-      for (auto *use : node->uses()) {
-        if (auto *op = use->getInstance<Operation *>())
-          diag.attachNote(op->getLoc()) << "instance here";
-        else {
-          auto module = node->getModule();
-          diag.attachNote(module->getLoc()) << "module marked public";
-        }
-      }
-      return diag;
-    }
-    // Get the single instance of this module.
-    auto *record = *node->usesBegin();
-    auto *inst = record->getInstance<Operation *>();
-    // If the instance is external, just break here.
-    if (!inst)
-      break;
-    // Get the verilog name of the instance.
-    auto verilogName = inst->getAttrOfType<StringAttr>("hw.verilogName");
-    if (!verilogName)
-      return inst->emitError("component does not have verilog name");
-    node = record->getParent();
-    modules.emplace_back(node->getModule().getModuleNameAttr(), verilogName);
-  }
-
   // Create the target path.
-  targetPath = PathAttr::get(context, llvm::to_vector(llvm::reverse(modules)));
+  targetPath = PathAttr::get(context, modules);
   return success();
 }
 
@@ -251,14 +238,30 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
   return success();
 }
 
+/// Replace a ListCreateOp of path types with frozen path types.
+LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
+  ListType listType = listCreateOp.getResult().getType();
+
+  // Check if there are any path types in the list(s).
+  if (!hasPathType(listType))
+    return success();
+
+  // Create a new ListType with frozen path types.
+  auto newListType = processType(listType);
+
+  // Create a new op with the result type updated to replace path types.
+  OpBuilder builder(listCreateOp);
+  auto newListCreateOp = builder.create<ListCreateOp>(
+      listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
+  listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
+  listCreateOp->erase();
+  return success();
+}
+
 LogicalResult PathVisitor::run(ModuleOp module) {
-  auto frozenBasePathType = FrozenBasePathType::get(module.getContext());
-  auto frozenPathType = FrozenPathType::get(module.getContext());
   auto updatePathType = [&](Value value) {
-    if (isa<BasePathType>(value.getType()))
-      value.setType(frozenBasePathType);
-    if (isa<PathType>(value.getType()))
-      value.setType(frozenPathType);
+    if (hasPathType(value.getType()))
+      value.setType(processType(value.getType()));
   };
   for (auto classLike : module.getOps<ClassLike>()) {
     // Transform PathType block argument to FrozenPathType.
@@ -273,6 +276,9 @@ LogicalResult PathVisitor::run(ModuleOp module) {
           return WalkResult::interrupt();
       } else if (auto path = dyn_cast<EmptyPathOp>(op)) {
         if (failed(process(path)))
+          return WalkResult::interrupt();
+      } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
+        if (failed(process(listCreate)))
           return WalkResult::interrupt();
       }
       return WalkResult::advance();
@@ -292,6 +298,7 @@ struct FreezePathsPass : public FreezePathsBase<FreezePathsPass> {
 void FreezePathsPass::runOnOperation() {
   auto module = getOperation();
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
+  mlir::SymbolTableCollection symbolTableCollection;
   auto &symbolTable = getAnalysis<SymbolTable>();
   hw::InnerSymbolTableCollection collection(module);
   hw::InnerRefNamespace irn{symbolTable, collection};

@@ -41,6 +41,22 @@ OpFoldResult HasBeenResetOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// LogicalEquivalenceCheckingOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
+  if (getFirstCircuit().getArgumentTypes() !=
+      getSecondCircuit().getArgumentTypes())
+    return emitOpError() << "block argument types of both regions must match";
+  if (getFirstCircuit().front().getTerminator()->getOperandTypes() !=
+      getSecondCircuit().front().getTerminator()->getOperandTypes())
+    return emitOpError()
+           << "types of the yielded values of both regions must match";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Generated code
 //===----------------------------------------------------------------------===//
 

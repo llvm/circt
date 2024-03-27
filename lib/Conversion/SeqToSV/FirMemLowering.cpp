@@ -307,14 +307,15 @@ void FirMemLowering::lowerMemoriesInModule(
   LLVM_DEBUG(llvm::dbgs() << "Lowering " << mems.size() << " memories in "
                           << module.getName() << "\n");
 
-  hw::ConstantOp constOneOp;
+  DenseMap<unsigned, Value> constOneOps;
   auto constOne = [&](unsigned width = 1) {
-    if (!constOneOp) {
+    auto it = constOneOps.try_emplace(width, Value{});
+    if (it.second) {
       auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-      constOneOp = builder.create<hw::ConstantOp>(
+      it.first->second = builder.create<hw::ConstantOp>(
           module.getLoc(), builder.getIntegerType(width), 1);
     }
-    return constOneOp;
+    return it.first->second;
   };
   auto valueOrOne = [&](Value value, unsigned width = 1) {
     return value ? value : constOne(width);
@@ -335,7 +336,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addOutput(port.getData());
     }
 
@@ -346,7 +347,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addInput(port.getMode());
       addInput(port.getWriteData());
       addOutput(port.getReadData());
@@ -361,7 +362,7 @@ void FirMemLowering::lowerMemoriesInModule(
         continue;
       addInput(port.getAddress());
       addInput(valueOrOne(port.getEnable()));
-      addInput(port.getClock());
+      addInput(port.getClk());
       addInput(port.getData());
       if (config->maskBits > 1)
         addInput(valueOrOne(port.getMask(), config->maskBits));

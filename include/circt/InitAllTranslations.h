@@ -11,12 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Target/DebugInfo.h"
+#include "circt/Target/ExportSMTLIB.h"
 #include "circt/Target/ExportSystemC.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
@@ -29,10 +31,11 @@ namespace circt {
 // automatically.
 inline void registerAllTranslations() {
   static bool initOnce = []() {
-    esi::registerESITranslations();
+    arc::registerArcModelInfoTranslation();
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
     firrtl::registerToFIRFileTranslation();
+    ExportSMTLIB::registerExportSMTLIBTranslation();
     ExportSystemC::registerExportSystemCTranslation();
     debug::registerTranslations();
     return true;

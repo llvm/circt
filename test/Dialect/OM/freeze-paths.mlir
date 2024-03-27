@@ -4,9 +4,9 @@ hw.hierpath private @nla_0 [@PathModule::@sym_0]
 hw.hierpath private @nla_1 [@PathModule::@sym_1]
 hw.hierpath private @nla_2 [@PathModule::@sym_2]
 hw.hierpath private @nla_3 [@PathModule::@child]
-hw.hierpath private @nla_4 [@Child]
+hw.hierpath private @nla_4 [@PathModule::@child, @Child]
 hw.hierpath private @nla_5 [@PathModule::@child, @Child::@sym]
-hw.hierpath private @nla_6 [@PublicLeaf]
+hw.hierpath private @nla_6 [@PublicMiddle::@leaf, @PublicLeaf]
 hw.module @PathModule(in %in: i1 {hw.exportPort = #hw<innerSym@sym>}) {
   %wire = hw.wire %wire sym @sym_0 {hw.verilogName = "wire"} : i8
   %array = hw.wire %array sym [<@sym_1,1,public>] {hw.verilogName = "array"}: !hw.array<1xi8>
@@ -23,7 +23,7 @@ hw.module private @Child() {
 }
 
 hw.module @PublicMiddle() {
-  hw.instance "leaf" @PublicLeaf() -> () {hw.verilogName = "leaf"}
+  hw.instance "leaf" sym @leaf @PublicLeaf() -> () {hw.verilogName = "leaf"}
 }
 
 hw.module private @PublicLeaf() {}
@@ -68,4 +68,47 @@ om.class @PathTest(%basepath : !om.basepath, %path : !om.path) {
 
   // CHECK: om.frozenbasepath_create %basepath "PathModule/child"
   %13 = om.basepath_create %basepath @nla_3
+}
+
+// CHECK-LABEL om.class @ListCreateTest()
+om.class @ListCreateTest(%notpath: i1, %basepath : !om.basepath, %path : !om.path) {
+  // CHECK: [[NOT_PATH_LIST:%.+]] = om.list_create %notpath : i1
+  %0 = om.list_create %notpath : i1
+
+  // CHECK: [[BASE_PATH_LIST:%.+]] = om.list_create %basepath : !om.frozenbasepath
+  %1 = om.list_create %basepath : !om.basepath
+
+  // CHECK: [[PATH_LIST:%.+]] = om.list_create %path : !om.frozenpath
+  %2 = om.list_create %path : !om.path
+
+  // CHECK: [[NESTED_PATH_LIST:%.+]] = om.list_create [[PATH_LIST]] : !om.list<!om.frozenpath>
+  %3 = om.list_create %2 : !om.list<!om.path>
+
+  // CHECK: om.class.field @notpath, [[NOT_PATH_LIST]] : !om.list<i1>
+  om.class.field @notpath, %0 : !om.list<i1>
+
+  // CHECK: om.class.field @basepath, [[BASE_PATH_LIST]] : !om.list<!om.frozenbasepath>
+  om.class.field @basepath, %1 : !om.list<!om.basepath>
+
+  // CHECK: om.class.field @path, [[PATH_LIST]] : !om.list<!om.frozenpath>
+  om.class.field @path, %2 : !om.list<!om.path>
+
+  // CHECK: om.class.field @nestedpath, [[NESTED_PATH_LIST]] : !om.list<!om.list<!om.frozenpath>>
+  om.class.field @nestedpath, %3 : !om.list<!om.list<!om.path>>
+}
+
+// CHECK-LABEL om.class @PathListClass(%pathList: !om.list<!om.frozenpath>)
+om.class @PathListClass(%pathList : !om.list<!om.path>) {
+  om.class.field @pathList, %pathList : !om.list<!om.path>
+}
+
+// CHECK-LABEL om.class @PathListTest(%arg: !om.list<!om.frozenpath>)
+om.class @PathListTest(%arg : !om.list<!om.path>) {
+  // CHECK: om.object @PathListClass(%arg) : (!om.list<!om.frozenpath>)
+  om.object @PathListClass(%arg) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
+
+  // CHECK: [[RES:%.+]] = om.list_create
+  %0 = om.list_create : !om.path
+  // CHECK: om.object @PathListClass([[RES]]) : (!om.list<!om.frozenpath>)
+  om.object @PathListClass(%0) : (!om.list<!om.path>) -> !om.class.type<@PathListClass>
 }

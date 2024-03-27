@@ -2,7 +2,10 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from collections import OrderedDict
+from functools import singledispatchmethod
 
 from .support import get_user_loc
 
@@ -86,7 +89,9 @@ class Type:
 
   def __call__(self, obj, name: str = None) -> "Signal":
     """Create a Value of this type from a python object."""
-    assert not isinstance(obj, ir.Value)
+    assert not isinstance(
+        obj, ir.Value
+    ), "Not intended to be called on CIRCT Values, only Python objects."
     v = self._from_obj_or_sig(obj)
     if name is not None:
       v.name = name
@@ -235,7 +240,8 @@ class TypeAlias(Type):
       for (name, type) in TypeAlias.RegisteredAliases.items():
         declared_aliases = [
             op for op in type_scope.body.operations
-            if isinstance(op, hw.TypedeclOp) and op.sym_name.value == name
+            if isinstance(op, hw.TypedeclOp) and
+            ir.StringAttr(op.sym_name).value == name
         ]
         if len(declared_aliases) != 0:
           continue
@@ -326,8 +332,10 @@ class Array(Type):
 
 class StructType(Type):
 
-  def __new__(cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
-                                        typing.Dict[str, Type]]):
+  def __new__(
+      cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
+                                typing.Dict[str, Type]]
+  ) -> StructType:
     if isinstance(fields, dict):
       fields = list(fields.items())
     if not isinstance(fields, list):
@@ -569,7 +577,7 @@ class BundledChannel:
   """A named, directed channel for inclusion in a bundle."""
   name: str
   direction: ChannelDirection
-  channel: Channel
+  channel: Type
 
   def __repr__(self) -> str:
     return f"('{self.name}', {str(self.direction)}, {self.channel})"
@@ -578,9 +586,16 @@ class BundledChannel:
 class Bundle(Type):
   """A group of named, directed channels. Typically used in a service."""
 
-  def __new__(cls, channels: typing.List[BundledChannel]):
+  def __new__(cls, channels: typing.List[BundledChannel]) -> Bundle:
+
+    def wrap_in_channel(ty: Type):
+      if isinstance(ty, Channel):
+        return ty
+      return Channel(ty)
+
     type = esi.BundleType.get(
-        [(bc.name, bc.direction, bc.channel._type) for bc in channels], False)
+        [(bc.name, bc.direction, wrap_in_channel(bc.channel)._type)
+         for bc in channels], False)
     return super(Bundle, cls).__new__(cls, type)
 
   def _get_value_class(self):
@@ -594,8 +609,68 @@ class Bundle(Type):
         for (name, dir, type) in self._type.channels
     ]
 
+  def inverted(self) -> "Bundle":
+    """Return a new bundle with all the channels direction inverted."""
+    return Bundle([
+        BundledChannel(
+            name, ChannelDirection.TO
+            if dir == ChannelDirection.FROM else ChannelDirection.FROM,
+            _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
+    ])
+
+  # Easy accessor for channel types by name.
+  def __getattr__(self, attrname: str):
+    for channel in self.channels:
+      if channel.name == attrname:
+        return channel.channel
+    return super().__getattribute__(attrname)
+
   def __repr__(self):
     return f"Bundle<{self.channels}>"
+
+  class PackSignalResults:
+    """Access the FROM channels of a packed bundle in a convenient way."""
+
+    def __init__(self, results: typing.List[ChannelSignal],
+                 bundle_type: Bundle):
+      self.results = results
+      self.bundle_type = bundle_type
+
+      self.from_channels = {
+          name: result for (name, result) in zip([
+              c.name
+              for c in self.bundle_type.channels
+              if c.direction == ChannelDirection.FROM
+          ], results)
+      }
+
+      from_channels_idx = [
+          c.name
+          for c in self.bundle_type.channels
+          if c.direction == ChannelDirection.FROM
+      ]
+      self._from_channels_idx = {
+          name: idx for idx, name in enumerate(from_channels_idx)
+      }
+
+    @singledispatchmethod
+    def __getitem__(self, name: str) -> ChannelSignal:
+      return self.results[self._from_channels_idx[name]]
+
+    @__getitem__.register(int)
+    def __getitem_int(self, idx: int) -> ChannelSignal:
+      return self.results[idx]
+
+    def __getattr__(self, attrname: str):
+      if attrname in self._from_channels_idx:
+        return self.results[self._from_channels_idx[attrname]]
+      return super().__getattribute__(attrname)
+
+    def __iter__(self):
+      return iter(self.from_channels.items())
+
+    def __len__(self):
+      return len(self.from_channels)
 
   def pack(
       self, **kwargs: typing.Dict[str, "ChannelSignal"]
@@ -629,12 +704,8 @@ class Bundle(Type):
                                [bc.channel._type for bc in from_channels],
                                operands)
 
-    from_channels_results = pack_op.fromChannels
-    from_channels_ret = {
-        bc.name: _FromCirctValue(from_channels_results[idx])
-        for idx, bc in enumerate(from_channels)
-    }
-    return BundleSignal(pack_op.bundle, self), from_channels_ret
+    return BundleSignal(pack_op.bundle, self), Bundle.PackSignalResults(
+        [_FromCirctValue(c) for c in pack_op.fromChannels], self)
 
 
 class List(Type):

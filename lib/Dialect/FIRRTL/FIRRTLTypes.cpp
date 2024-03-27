@@ -105,11 +105,13 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
-      .Case<RefType>([&](auto refType) {
+      .Case<RefType>([&](RefType refType) {
         if (refType.getForceable())
           os << "rw";
         os << "probe<";
         printNestedType(refType.getType(), os);
+        if (auto layer = refType.getLayer())
+          os << ", " << layer;
         os << '>';
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
@@ -119,13 +121,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Case<ListType>([&](auto listType) {
         os << "list<";
         printNestedType(listType.getElementType(), os);
-        os << '>';
-      })
-      .Case<MapType>([&](auto mapType) {
-        os << "map<";
-        printNestedType(mapType.getKeyType(), os);
-        os << ", ";
-        printNestedType(mapType.getValueType(), os);
         os << '>';
       })
       .Case<PathType>([&](auto pathType) { os << "path"; })
@@ -336,31 +331,43 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   // For now, support both firrtl.ref and firrtl.probe.
   if (name.equals("ref") || name.equals("probe")) {
     FIRRTLBaseType type;
+    SymbolRefAttr layer;
     // Don't pass `isConst` to `parseNestedBaseType since `ref` can point to
     // either `const` or non-`const` types
-    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
-        parser.parseGreater())
+    if (parser.parseLess() || parseNestedBaseType(type, parser))
+      return failure();
+    if (parser.parseOptionalComma().succeeded())
+      if (parser.parseOptionalAttribute(layer).value())
+        return parser.emitError(parser.getNameLoc(),
+                                "expected symbol reference");
+    if (parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
             [&]() { return parser.emitError(parser.getNameLoc()); }, type,
-            false)))
+            false, layer)))
       return failure();
 
-    return result = RefType::get(type, false), success();
+    return result = RefType::get(type, false, layer), success();
   }
   if (name.equals("rwprobe")) {
     FIRRTLBaseType type;
-    if (parser.parseLess() || parseNestedBaseType(type, parser) ||
-        parser.parseGreater())
+    SymbolRefAttr layer;
+    if (parser.parseLess() || parseNestedBaseType(type, parser))
+      return failure();
+    if (parser.parseOptionalComma().succeeded())
+      if (parser.parseOptionalAttribute(layer).value())
+        return parser.emitError(parser.getNameLoc(),
+                                "expected symbol reference");
+    if (parser.parseGreater())
       return failure();
 
     if (failed(RefType::verify(
-            [&]() { return parser.emitError(parser.getNameLoc()); }, type,
-            true)))
+            [&]() { return parser.emitError(parser.getNameLoc()); }, type, true,
+            layer)))
       return failure();
 
-    return result = RefType::get(type, true), success();
+    return result = RefType::get(type, true, layer), success();
   }
   if (name.equals("class")) {
     if (isConst)
@@ -421,21 +428,6 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
         parser.parseGreater())
       return failure();
     result = parser.getChecked<ListType>(context, elementType);
-    if (!result)
-      return failure();
-    return success();
-  }
-  if (name.equals("map")) {
-    if (isConst) {
-      parser.emitError(parser.getNameLoc(), "maps cannot be const");
-      return failure();
-    }
-    PropertyType keyType, valueType;
-    if (parser.parseLess() || parseNestedPropertyType(keyType, parser) ||
-        parser.parseComma() || parseNestedPropertyType(valueType, parser) ||
-        parser.parseGreater())
-      return failure();
-    result = parser.getChecked<MapType>(context, keyType, valueType);
     if (!result)
       return failure();
     return success();
@@ -838,6 +830,30 @@ bool firrtl::containsConst(Type type) {
           [](auto base) { return base.containsConst(); })
       .Default(false);
 }
+
+// NOLINTBEGIN(misc-no-recursion)
+bool firrtl::hasZeroBitWidth(FIRRTLType type) {
+  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([&](auto bundle) {
+        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
+          auto elt = bundle.getElement(i);
+          if (hasZeroBitWidth(elt.type))
+            return true;
+        }
+        return bundle.getNumElements() == 0;
+      })
+      .Case<FVectorType>([&](auto vector) {
+        if (vector.getNumElements() == 0)
+          return true;
+        return hasZeroBitWidth(vector.getElementType());
+      })
+      .Case<FIRRTLBaseType>([](auto groundType) {
+        return firrtl::getBitWidth(groundType).value_or(0) == 0;
+      })
+      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
+      .Default([](auto) { return false; });
+}
+// NOLINTEND(misc-no-recursion)
 
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
@@ -2422,12 +2438,14 @@ BaseTypeAliasType::getIndexAndSubfieldID(uint64_t fieldID) const {
 // RefType
 //===----------------------------------------------------------------------===//
 
-auto RefType::get(FIRRTLBaseType type, bool forceable) -> RefType {
-  return Base::get(type.getContext(), type, forceable);
+auto RefType::get(FIRRTLBaseType type, bool forceable, SymbolRefAttr layer)
+    -> RefType {
+  return Base::get(type.getContext(), type, forceable, layer);
 }
 
 auto RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                     FIRRTLBaseType base, bool forceable) -> LogicalResult {
+                     FIRRTLBaseType base, bool forceable, SymbolRefAttr layer)
+    -> LogicalResult {
   if (!base.isPassive())
     return emitErrorFn() << "reference base type must be passive";
   if (forceable && base.containsConst())

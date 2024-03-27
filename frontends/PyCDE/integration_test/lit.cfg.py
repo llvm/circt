@@ -42,6 +42,11 @@ llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
 llvm_config.use_default_substitutions()
 
+llvm_config.with_environment('LIBRARY_PATH', [config.llvm_lib_dir],
+                             append_path=True)
+llvm_config.with_environment('LD_LIBRARY_PATH', [config.llvm_lib_dir],
+                             append_path=True)
+
 # Set the timeout, if requested.
 if config.timeout is not None and config.timeout != "":
   lit_config.maxIndividualTestTime = int(config.timeout)
@@ -144,16 +149,19 @@ if len(ieee_sims) > 1:
 if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
   config.available_features.add('ieee-sim-iverilog')
 
-# Enable ESI cosim tests if they have been built.
-if config.esi_cosim_path != "":
-  config.available_features.add('esi-cosim')
-  config.substitutions.append(
-      ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
-  config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
+# Enable ESI runtime tests.
+if config.esi_runtime == "ON":
+  config.available_features.add('esi-runtime')
 
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
-  config.substitutions.append(('%CAPNP_CMAKE_DIR%', config.capnp_path))
+  llvm_config.with_environment('PYTHONPATH',
+                               [f"{config.esi_runtime_path}/python/"],
+                               append_path=True)
+  tools.append("esi-cosim.py")
+  tool_dirs.append(f"{config.esi_runtime_path}/cosim")
+
+  # Enable ESI cosim tests if they have been built.
+  if config.esi_cosim_path != "":
+    config.available_features.add('esi-cosim')
+    tools.append('esi-cosim.py')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

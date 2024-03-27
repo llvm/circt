@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-group-resets-and-enables | FileCheck %s
 
-// CHECK-LABEL: arc.model "BasicResetGrouping"
-arc.model "BasicResetGrouping" {
+// CHECK-LABEL: arc.model @BasicResetGrouping
+arc.model @BasicResetGrouping io !hw.modty<input clock : i1, input i0 : i4, input i1 : i4, input reset0 : i1, input reset1 : i1> {
 ^bb0(%arg0: !arc.storage):
   %c0_i4 = hw.constant 0 : i4
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
@@ -153,8 +153,8 @@ arc.model "BasicResetGrouping" {
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
-// CHECK-LABEL: arc.model "BasicEnableGrouping"
-arc.model "BasicEnableGrouping" {
+// CHECK-LABEL: arc.model @BasicEnableGrouping
+arc.model @BasicEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, input i1 : i4, input en0 : i1, input en1 : i1> {
 ^bb0(%arg0: !arc.storage):
   %c0_i4 = hw.constant 0 : i4
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
@@ -210,8 +210,8 @@ arc.model "BasicEnableGrouping" {
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
-// CHECK-LABEL: arc.model "GroupAssignmentsInIfTesting"
-arc.model "GroupAssignmentsInIfTesting" {
+// CHECK-LABEL: arc.model @GroupAssignmentsInIfTesting
+arc.model @GroupAssignmentsInIfTesting io !hw.modty<input clock : i1, input i1 : i4, input i2 : i4, input cond0 : i1, input cond1 : i1> {
 ^bb0(%arg0: !arc.storage):
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>
   %in_i1 = arc.root_input "i1", %arg0 : (!arc.storage) -> !arc.state<i4>
@@ -287,8 +287,8 @@ arc.model "GroupAssignmentsInIfTesting" {
   %2 = arc.alloc_state %arg0 {name = "bar"} : (!arc.storage) -> !arc.state<i4>
 }
 
-// CHECK-LABEL: arc.model "ResetAndEnableGrouping"
-arc.model "ResetAndEnableGrouping" {
+// CHECK-LABEL: arc.model @ResetAndEnableGrouping
+arc.model @ResetAndEnableGrouping io !hw.modty<input clock : i1, input i0 : i4, input i1 : i4, input reset : i1, input en0 : i1, input en1 : i1> {
 ^bb0(%arg0: !arc.storage):
   %c0_i4 = hw.constant 0 : i4
   %in_clock = arc.root_input "clock", %arg0 : (!arc.storage) -> !arc.state<i1>

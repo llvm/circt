@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --arc-legalize-state-update --split-input-file --verify-diagnostics
 
-arc.model "Memory" {
+arc.model @Memory io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   %false = hw.constant false
   arc.clock_tree %false attributes {ct4} {

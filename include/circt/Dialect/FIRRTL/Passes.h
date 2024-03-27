@@ -60,7 +60,8 @@ std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
-std::unique_ptr<mlir::Pass> createLowerIntrinsicsPass();
+std::unique_ptr<mlir::Pass>
+createLowerIntrinsicsPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
@@ -75,8 +76,6 @@ std::unique_ptr<mlir::Pass>
 createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                mlir::StringRef replSeqMemFile = "");
 
-std::unique_ptr<mlir::Pass> createWireDFTPass();
-
 std::unique_ptr<mlir::Pass> createVBToBVPass();
 
 std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
@@ -87,6 +86,10 @@ std::unique_ptr<mlir::Pass>
 createEmitOMIRPass(mlir::StringRef outputFilename = "");
 
 std::unique_ptr<mlir::Pass> createLowerMatchesPass();
+
+std::unique_ptr<mlir::Pass> createLowerSignaturesPass();
+
+std::unique_ptr<mlir::Pass> createPassiveWiresPass();
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
@@ -183,9 +186,17 @@ std::unique_ptr<mlir::Pass> createFinalizeIRPass();
 
 std::unique_ptr<mlir::Pass> createLowerClassesPass();
 
-std::unique_ptr<mlir::Pass> createLowerGroupsPass();
+std::unique_ptr<mlir::Pass> createLowerLayersPass();
 
-std::unique_ptr<mlir::Pass> createGroupSinkPass();
+std::unique_ptr<mlir::Pass> createLayerMergePass();
+
+std::unique_ptr<mlir::Pass> createLayerSinkPass();
+
+std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
+
+std::unique_ptr<mlir::Pass> createLintingPass();
+
+std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

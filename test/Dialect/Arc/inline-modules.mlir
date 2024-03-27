@@ -33,21 +33,23 @@ hw.module @DontInlinePublicB(in %x: i4, out y: i4) {
   hw.output %0 : i4
 }
 
+sv.macro.decl @FOO
+sv.macro.decl @BAR
 
 // CHECK-LABEL: hw.module @NestedRegionsA
 hw.module @NestedRegionsA(in %x: i42) {
-  // CHECK-NEXT: sv.ifdef "FOO" {
-  // CHECK-NEXT:   sv.ifdef "BAR" {
+  // CHECK-NEXT: sv.ifdef @FOO {
+  // CHECK-NEXT:   sv.ifdef @BAR {
   // CHECK-NEXT:     comb.mul %x, %x : i42
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  sv.ifdef "FOO" {
+  sv.ifdef @FOO {
     hw.instance "b" @NestedRegionsB(y: %x: i42) -> ()
   }
 }
 // CHECK-NOT: hw.module private @NestedRegionsB
 hw.module private @NestedRegionsB(in %y: i42) {
-  sv.ifdef "BAR" {
+  sv.ifdef @BAR {
     %0 = comb.mul %y, %y : i42
   }
 }

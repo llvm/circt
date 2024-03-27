@@ -93,6 +93,24 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let dependentDialects = ["hw::HWDialect"];
 }
 
+def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
+  let summary = "Lower FIRRTL module signatures";
+  let description = [{
+    Lower aggregate FIRRTL types in Modules as indicated by the calling
+    convention.
+  }];
+  let constructor = "circt::firrtl::createLowerSignaturesPass()";
+}
+
+def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
+  let summary = "Make FIRRTL wires have passive type";
+  let description = [{
+    Eliminate flips from aggregate types on wires.
+  }];
+  let constructor = "circt::firrtl::createPassiveWiresPass()";
+}
+
+
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
   let description = [{
@@ -161,6 +179,7 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let constructor = "circt::firrtl::createInlinerPass()";
+  let dependentDialects = ["debug::DebugDialect"];
 }
 
 def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
@@ -174,7 +193,11 @@ def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
     the extra ports.
   }];
   let constructor = "circt::firrtl::createAddSeqMemPortsPass()";
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "sv::SVDialect",
+    "hw::HWDialect"
+  ];
   let statistics = [
     Statistic<"numAddedPorts", "num-added-ports", "Number of extra ports added">,
   ];
@@ -191,7 +214,12 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
     Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
       "File to which emit seq meme metadata">
   ];
-  let dependentDialects = ["hw::HWDialect", "om::OMDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "hw::HWDialect",
+      "om::OMDialect",
+      "sv::SVDialect",
+  ];
 }
 
 def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
@@ -219,19 +247,6 @@ def LowerMemory : Pass<"firrtl-lower-memory", "firrtl::CircuitOp"> {
     Statistic<"numLoweredMems", "num-lowered-mems",
       "Number of memories lowered">,
   ];
-}
-
-def WireDFT : Pass<"firrtl-dft", "firrtl::CircuitOp"> {
-  let summary = "Wires test enables to clock gates for DFT infrastructure";
-  let description = [{
-    This pass will take a 1-bit signal targeted by
-    `DFTTestModeEnableAnnotation` and wires it to the `test_en` port of every
-    module named `EICG_wrapper`. This will create ports in any intermediate
-    module on the path from the signal to the `EICG_wrapper` modules.  This
-    pass is used to enable the "Design For Testing" style of design when the
-    intermediate modules were not originally built with DFT in mind.
-  }];
-  let constructor = "circt::firrtl::createWireDFTPass()";
 }
 
 def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
@@ -263,7 +278,11 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createEmitOMIRPass()";
   let options = [Option<"outputFilename", "file", "std::string", "",
       "Output file for the JSON-serialized OMIR data">];
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "sv::SVDialect",
+      "hw::HWDialect"
+  ];
 }
 
 def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
@@ -410,7 +429,11 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "directory where the input file was located, to allow for annotations "
       "relative to the input file.">
   ];
-  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
+  let dependentDialects = [
+      "emit::EmitDialect",
+      "hw::HWDialect",
+      "sv::SVDialect"
+  ];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
@@ -557,7 +580,11 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
     - `ExtractClockGatesFileAnnotation`
   }];
   let constructor = "circt::firrtl::createExtractInstancesPass()";
-  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "sv::SVDialect",
+  ];
 }
 
 def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
@@ -638,7 +665,10 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
     This pass lowers RefType ops and ports to verbatim encoded XMRs.
   }];
   let constructor = "circt::firrtl::createLowerXMRPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "sv::SVDialect"
+  ];
 }
 
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
@@ -648,6 +678,10 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
     intmodule to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let options = [
+    Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
+      "Lower `EICG_wrapper` modules into clock gate intrinsics">,
+  ];
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
@@ -674,7 +708,7 @@ def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createResolveTracesPass()";
   let options = [Option<"outputAnnotationFilename", "file", "std::string", "",
       "Output file for the JSON-serialized Trace Annotations">];
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["emit::EmitDialect", "sv::SVDialect"];
 }
 
 def InnerSymbolDCE : Pass<"firrtl-inner-symbol-dce", "mlir::ModuleOp"> {
@@ -737,23 +771,34 @@ def LowerClasses : Pass<"firrtl-lower-classes", "firrtl::CircuitOp"> {
   let dependentDialects = ["om::OMDialect"];
 }
 
-def LowerGroups : Pass<"firrtl-lower-groups", "firrtl::CircuitOp"> {
-  let summary = "Lower optional groups to instances";
+def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
+  let summary = "Lower layers and layer blocks to instances";
   let description = [{
-    This pass converts FIRRTL optional groups to new modules and instantiations.
-    Referenced SSA values captured by a group are converted to ports of the
-    created module.
+    This pass lowers FIRRTL layers as defined by their convention.  After this
+    pass, all layer blocks and layers are removed.
   }];
-  let constructor = "circt::firrtl::createLowerGroupsPass()";
+  let constructor = "circt::firrtl::createLowerLayersPass()";
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def GroupSink : Pass<"firrtl-group-sink", "firrtl::FModuleOp"> {
-  let summary = "Sink operations into FIRRTL optional groups";
+def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
+  let summary = "Merge layer blocks";
+  let description = [{
+    Combine all layer blocks in a module which reference the same layer
+    definition.
+  }];
+  let constructor = "::circt::firrtl::createLayerMergePass()";
+  let statistics = [
+    Statistic<"numMerged", "num-merged", "Number of layers merged">,
+  ];
+}
+
+def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
+  let summary = "Sink operations into layer blocks";
   let description = [{
 
   }];
-  let constructor = "::circt::firrtl::createGroupSinkPass()";
+  let constructor = "::circt::firrtl::createLayerSinkPass()";
   let statistics = [
     Statistic<"numSunk", "num-sunk", "Number of operations sunk">,
   ];
@@ -790,6 +835,50 @@ def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
   let statistics = [
     Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
     Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
+  ];
+}
+
+def MaterializeDebugInfo :
+    Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
+  let summary = "Generate debug ops to track FIRRTL values";
+  let description = [{
+    This pass creates debug ops to track FIRRTL-level ports, nodes, wires,
+    registers, and instances throughout the pipeline. The `DebugInfo` analysis
+    can then be used at a later point in the pipeline to obtain a source
+    language view into the lowered IR.
+  }];
+  let constructor = "circt::firrtl::createMaterializeDebugInfoPass()";
+  let dependentDialects = ["debug::DebugDialect"];
+}
+
+def Lint :
+    Pass<"firrtl-lint", "firrtl::FModuleOp"> {
+  let summary = "An analysis pass to detect static simulation failures.";
+  let description = [{
+    This pass detects operations that will trivially fail any simulation.
+    Currently it detects assertions whose predicate condition can be statically
+    inferred to be false. The pass emits error on such failing ops.
+  }];
+  let constructor = "circt::firrtl::createLintingPass()";
+}
+
+def SpecializeOption :
+    Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
+  let summary = "Specialize a configurable design for a given option.";
+  let description = [{
+    If the design has option groups, instead of preserving the information
+    up to the emitted SystemVerilog, this pass specializes it early on for a
+    given choice.
+  }];
+  let constructor = "circt::firrtl::createSpecializeOptionPass()";
+
+  let options = [
+    ListOption<"select", "select", "std::string",
+               "Options to specialize, in option=case format">,
+  ];
+  let statistics = [
+    Statistic<"numInstances", "num-instances",
+      "Number of instances specialized">
   ];
 }
 

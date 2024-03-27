@@ -13,7 +13,7 @@
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container @B {
+ibis.container.outer @B {
   %this = ibis.this @B 
   %in = ibis.port.input @in : i1 {"inputAttr"}
   %out = ibis.port.output @out : i1 {"outputAttr"}
@@ -23,14 +23,14 @@ ibis.container @B {
   ibis.port.write %out, %v : !ibis.portref<out i1>
 }
 
-ibis.container @AccessSibling {
+ibis.container.outer @AccessSibling {
   %this = ibis.this @AccessSibling 
   %p_b_out = ibis.port.input @p_b_out : i1
   %p_b_in = ibis.port.output @p_b_in : i1
   ibis.port.write %p_b_in, %p_b_out.val : !ibis.portref<out i1>
   %p_b_out.val = ibis.port.read %p_b_out : !ibis.portref<in i1>
 }
-ibis.container @Parent {
+ibis.container.outer @Parent {
   %this = ibis.this @Parent 
   %a = ibis.container.instance @a, @AccessSibling 
   %a.p_b_out.ref = ibis.get_port %a, @p_b_out : !ibis.scoperef<@AccessSibling> -> !ibis.portref<in i1>
@@ -44,6 +44,8 @@ ibis.container @Parent {
   %b.in.ref = ibis.get_port %b, @in : !ibis.scoperef<@B> -> !ibis.portref<in i1>
 }
 
+// -----
+
 // Test that we can instantiate and get ports of a container from a hw.module.
 
 // CHECK:  hw.module @C(in %in : i1, out out : i1) {
@@ -54,7 +56,7 @@ ibis.container @Parent {
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container @C {
+ibis.container.outer @C {
   %this = ibis.this @C
   %in = ibis.port.input @in : i1
   %out = ibis.port.output @out : i1
@@ -68,4 +70,35 @@ hw.module @Top() {
   %out = ibis.get_port %c, @out : !ibis.scoperef<@C> -> !ibis.portref<out i1>
   %v = ibis.port.read %out : !ibis.portref<out i1>
   ibis.port.write %in, %v : !ibis.portref<in i1>
+}
+
+// -----
+
+// Test that we can also move non-ibis ops
+
+// CHECK-LABEL:   hw.module @Inst(out out : i1) {
+// CHECK:           %[[VAL_0:.*]] = hw.constant true
+// CHECK:           hw.output %[[VAL_0]] : i1
+// CHECK:         }
+
+// CHECK-LABEL:   hw.module @Top() {
+// CHECK:           %[[VAL_0:.*]] = hw.instance "myInst" @Inst() -> (out: i1)
+// CHECK:           %[[VAL_1:.*]] = hw.constant true
+// CHECK:           %[[VAL_2:.*]] = comb.and bin %[[VAL_1]], %[[VAL_0]] : i1
+// CHECK:           hw.output
+// CHECK:         }
+
+ibis.container.outer @Inst {
+  %this = ibis.this @Inst
+  %out = ibis.port.output @out : i1
+  %true = hw.constant 1 : i1
+  ibis.port.write %out, %true : !ibis.portref<out i1>
+}
+ibis.container.outer @Top {
+  %this = ibis.this @Top
+  %myInst = ibis.container.instance @myInst, @Inst
+  %true = hw.constant 1 : i1
+  %out.ref = ibis.get_port %myInst, @out : !ibis.scoperef<@Inst> -> !ibis.portref<out i1>
+  %out.v = ibis.port.read %out.ref : !ibis.portref<out i1>
+  %blake = comb.and bin %true, %out.v : i1
 }

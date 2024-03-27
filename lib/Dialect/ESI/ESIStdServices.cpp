@@ -29,13 +29,12 @@ static ServicePortInfo createReqResp(StringAttr sym, Twine name,
   auto *ctxt = reqType ? reqType.getContext() : respType.getContext();
   auto bundle = ChannelBundleType::get(
       ctxt,
-      {BundledChannel{StringAttr::get(ctxt, reqName), ChannelDirection::to,
+      {BundledChannel{StringAttr::get(ctxt, reqName), ChannelDirection::from,
                       ChannelType::get(ctxt, reqType)},
-       BundledChannel{StringAttr::get(ctxt, respName), ChannelDirection::from,
+       BundledChannel{StringAttr::get(ctxt, respName), ChannelDirection::to,
                       ChannelType::get(ctxt, respType)}},
       /*resettable=false*/ UnitAttr());
-  return {hw::InnerRefAttr::get(sym, StringAttr::get(ctxt, name)),
-          ServicePortInfo::Direction::toServer, bundle};
+  return {hw::InnerRefAttr::get(sym, StringAttr::get(ctxt, name)), bundle};
 }
 
 ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
@@ -64,4 +63,42 @@ void RandomAccessMemoryDeclOp::getPortList(
     SmallVectorImpl<ServicePortInfo> &ports) {
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
+}
+
+void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "call")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::to,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))},
+           BundledChannel{StringAttr::get(ctxt, "result"),
+                          ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
+}
+
+void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  // Read only port.
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "read")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+          /*resettable=*/UnitAttr())});
+  // Write only port.
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "write")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+          /*resettable=*/UnitAttr())});
 }

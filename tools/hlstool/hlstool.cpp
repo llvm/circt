@@ -12,7 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Conversion/Passes.h"
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -277,7 +278,7 @@ static void loadESILoweringPipeline(OpPassManager &pm) {
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMemPass());
-  pm.addPass(sv::createHWMemSimImplPass(false, false));
+  pm.addPass(seq::createHWMemSimImplPass());
   pm.addPass(circt::createLowerSeqToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
 

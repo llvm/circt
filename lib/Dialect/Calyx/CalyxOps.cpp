@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -472,7 +473,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
     StringRef name = port.ssaName.name;
-    if (name.startswith("%"))
+    if (name.starts_with("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
   };
@@ -643,19 +644,19 @@ ControlOp calyx::ComponentOp::getControlOp() {
 }
 
 Value calyx::ComponentOp::getGoPort() {
-  return getBlockArgumentWithName("go", *this);
+  return getBlockArgumentWithName(goPort, *this);
 }
 
 Value calyx::ComponentOp::getDonePort() {
-  return getBlockArgumentWithName("done", *this);
+  return getBlockArgumentWithName(donePort, *this);
 }
 
 Value calyx::ComponentOp::getClkPort() {
-  return getBlockArgumentWithName("clk", *this);
+  return getBlockArgumentWithName(clkPort, *this);
 }
 
 Value calyx::ComponentOp::getResetPort() {
-  return getBlockArgumentWithName("reset", *this);
+  return getBlockArgumentWithName(resetPort, *this);
 }
 
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
@@ -711,7 +712,7 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
   std::sort(identifiers.begin(), identifiers.end());
 
   llvm::SmallVector<StringRef, 4> intersection,
-      interfacePorts{"clk", "done", "go", "reset"};
+      interfacePorts{clkPort, donePort, goPort, resetPort};
   // Find the intersection between all identifiers and required ports.
   std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
                         identifiers.begin(), identifiers.end(),
@@ -1955,7 +1956,7 @@ void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 SmallVector<StringRef> RegisterOp::portNames() {
-  return {"in", "write_en", "clk", "reset", "out", "done"};
+  return {"in", "write_en", clkPort, resetPort, "out", donePort};
 }
 
 SmallVector<Direction> RegisterOp::portDirections() {
@@ -1966,10 +1967,10 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   MLIRContext *context = getContext();
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
   NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
-  clk.append("clk", isSet);
-  reset.append("reset", isSet);
-  done.append("done", isSet);
+  writeEn.append(goPort, isSet);
+  clk.append(clkPort, isSet);
+  reset.append(resetPort, isSet);
+  done.append(donePort, isSet);
   return {
       DictionaryAttr::get(context),   // In
       writeEn.getDictionary(context), // Write enable
@@ -1998,7 +1999,7 @@ SmallVector<StringRef> MemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "clk", "read_data", "done"});
+  portNames.append({"write_data", "write_en", clkPort, "read_data", donePort});
   return portNames;
 }
 
@@ -2019,9 +2020,9 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
   NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
-  clk.append("clk", isSet);
-  done.append("done", isSet);
+  writeEn.append(goPort, isSet);
+  clk.append(clkPort, isSet);
+  done.append(donePort, isSet);
   portAttributes.append({DictionaryAttr::get(context),   // In
                          writeEn.getDictionary(context), // Write enable
                          clk.getDictionary(context),     // Clk
@@ -2092,8 +2093,8 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data",
-                    "read_en", "read_done"});
+  portNames.append({clkPort, "reset", "content_en", "write_en", "write_data",
+                    "read_data", "done"});
   return portNames;
 }
 
@@ -2101,7 +2102,7 @@ SmallVector<Direction> SeqMemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
-  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
+  portDirections.append({Input, Input, Input, Input, Input, Output, Output});
   return portDirections;
 }
 
@@ -2115,19 +2116,18 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
   IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
-  NamedAttrList writeEn, writeDone, clk, reset, readEn, readDone;
-  writeEn.append("go", isSet);
-  writeDone.append("done", isSet);
-  clk.append("clk", isSet);
-  readEn.append("go", isTwo);
-  readDone.append("done", isTwo);
-  portAttributes.append({DictionaryAttr::get(context),     // Write Data
-                         writeEn.getDictionary(context),   // Write enable
-                         writeDone.getDictionary(context), // Write done
-                         clk.getDictionary(context),       // Clk
-                         DictionaryAttr::get(context),     // Out
-                         readEn.getDictionary(context),    // Read enable
-                         readDone.getDictionary(context)}  // Read done
+  NamedAttrList done, clk, reset, contentEn;
+  done.append(donePort, isSet);
+  clk.append(clkPort, isSet);
+  clk.append(resetPort, isSet);
+  contentEn.append(goPort, isTwo);
+  portAttributes.append({clk.getDictionary(context),       // Clk
+                         reset.getDictionary(context),     // Reset
+                         contentEn.getDictionary(context), // Content enable
+                         DictionaryAttr::get(context),     // Write enable
+                         DictionaryAttr::get(context),     // Write data
+                         DictionaryAttr::get(context),     // Read data
+                         done.getDictionary(context)}      // Done
   );
   return portAttributes;
 }
@@ -2143,13 +2143,13 @@ void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
   SmallVector<Type> types;
   for (int64_t size : addrSizes)
     types.push_back(builder.getIntegerType(size)); // Addresses
-  types.push_back(builder.getIntegerType(width));  // Write data
-  types.push_back(builder.getI1Type());            // Write enable
-  types.push_back(builder.getI1Type());            // Write done
   types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getI1Type());            // Reset
+  types.push_back(builder.getI1Type());            // Content enable
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getIntegerType(width));  // Write data
   types.push_back(builder.getIntegerType(width));  // Read data
-  types.push_back(builder.getI1Type());            // Read enable
-  types.push_back(builder.getI1Type());            // Read done
+  types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
 
@@ -2163,7 +2163,7 @@ LogicalResult SeqMemoryOp::verify() {
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts =
-      7; // write data/enable/done, clk, and read data/enable/done.
+      7; // write data/enable, clk, reset, read data, content enable, and done.
   if (getNumResults() != numAddrs + numExtraPorts)
     return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
@@ -2668,7 +2668,7 @@ Value InvokeOp::getInstGoValue() {
         auto portInfo = op.getReferencedComponent().getPortInfo();
         for (auto [portInfo, res] :
              llvm::zip(portInfo, operation->getResults())) {
-          if (portInfo.hasAttribute("go"))
+          if (portInfo.hasAttribute(goPort))
             ret = res;
         }
       })
@@ -2703,7 +2703,7 @@ Value InvokeOp::getInstDoneValue() {
         auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
         for (auto [portInfo, res] :
              llvm::zip(portInfo, operation->getResults())) {
-          if (portInfo.hasAttribute("done"))
+          if (portInfo.hasAttribute(donePort))
             ret = res;
         }
       })
@@ -2763,9 +2763,9 @@ LogicalResult InvokeOp::verify() {
       .Case<InstanceOp>([&](auto op) {
         auto portInfo = op.getReferencedComponent().getPortInfo();
         for (PortInfo info : portInfo) {
-          if (info.hasAttribute("go"))
+          if (info.hasAttribute(goPort))
             ++goPortNum;
-          if (info.hasAttribute("done"))
+          if (info.hasAttribute(donePort))
             ++donePortNum;
         }
       })
@@ -2852,7 +2852,7 @@ LogicalResult SliceLibOp::verify() {
 
 #define ImplBinPipeOpCellInterface(OpType, outName)                            \
   SmallVector<StringRef> OpType::portNames() {                                 \
-    return {"clk", "reset", "go", "left", "right", outName, "done"};           \
+    return {clkPort, resetPort, goPort, "left", "right", outName, donePort};   \
   }                                                                            \
                                                                                \
   SmallVector<Direction> OpType::portDirections() {                            \
@@ -2867,10 +2867,10 @@ LogicalResult SliceLibOp::verify() {
     MLIRContext *context = getContext();                                       \
     IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);     \
     NamedAttrList go, clk, reset, done;                                        \
-    go.append("go", isSet);                                                    \
-    clk.append("clk", isSet);                                                  \
-    reset.append("reset", isSet);                                              \
-    done.append("done", isSet);                                                \
+    go.append(goPort, isSet);                                                  \
+    clk.append(clkPort, isSet);                                                \
+    reset.append(resetPort, isSet);                                            \
+    done.append(donePort, isSet);                                              \
     return {                                                                   \
         clk.getDictionary(context),   /* Clk    */                             \
         reset.getDictionary(context), /* Reset  */                             \

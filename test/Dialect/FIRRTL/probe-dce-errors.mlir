@@ -13,20 +13,6 @@ firrtl.circuit "ExtPort" {
 }
 
 // -----
-// Diagnose input probe on public modules.
-
-firrtl.circuit "PublicMod" {
-  // expected-error @below {{input probe not allowed on public module}}
-  firrtl.module @Pub(in %in : !firrtl.probe<uint<1>>) { }
-  firrtl.module @PublicMod() {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %ref = firrtl.ref.send %zero : !firrtl.uint<1>
-    %in = firrtl.instance p @Pub(in in : !firrtl.probe<uint<1>>)
-    firrtl.ref.define %in, %ref : !firrtl.probe<uint<1>>
-  }
-}
-
-// -----
 // Diagnose use of input probe (upwards or n-turn).
 
 firrtl.circuit "Upwards" {

@@ -74,6 +74,8 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let options = [
     Option<"tapPorts", "tap-ports", "bool", "true",
       "Make memory ports observable">,
+    Option<"tapMemories", "tap-memories", "bool", "true",
+      "Make memory contents observable">,
   ];
 }
 
@@ -112,8 +114,21 @@ def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
 def InferStateProperties : Pass<"arc-infer-state-properties",
                                 "mlir::ModuleOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
-  let constructor = "circt::arc::createInferStatePropertiesPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let options = [
+    Option<"detectEnables", "enables", "bool", "true", "Infer enable signals">,
+    Option<"detectResets", "resets", "bool", "true", "Infer reset signals">,
+  ];
+  let statistics = [
+    Statistic<"addedEnables", "added-enables",
+      "Enables added explicitly to a StateOp">,
+    Statistic<"addedResets", "added-resets",
+      "Resets added explicitly to a StateOp">,
+    Statistic<"missedEnables", "missed-enables",
+      "Detected enables that could not be added explicitly to a StateOp">,
+    Statistic<"missedResets", "missed-resets",
+      "Detected resets that could not be added explicitly to a StateOp">,
+  ];
 }
 
 def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
@@ -251,15 +266,6 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let summary = "Convert muxes with large independent fan-ins to if-statements";
   let constructor = "circt::arc::createMuxToControlFlowPass()";
   let dependentDialects = ["mlir::scf::SCFDialect"];
-}
-
-def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
-  let summary = "Print the state storage layout in JSON format";
-  let constructor = "circt::arc::createPrintStateInfoPass()";
-  let options = [
-    Option<"stateFile", "state-file", "std::string", "",
-      "Emit file with state description">
-  ];
 }
 
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {

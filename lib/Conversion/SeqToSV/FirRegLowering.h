@@ -30,6 +30,8 @@ public:
 
   void lower();
 
+  bool needsRegRandomization() const { return needsRandom; }
+
   unsigned numSubaccessRestored = 0;
 
 private:
@@ -91,6 +93,8 @@ private:
 
   bool disableRegRandomization;
   bool emitSeparateAlwaysBlocks;
+
+  bool needsRandom = false;
 };
 } // namespace circt
 

@@ -29,6 +29,7 @@
 
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
 namespace esi {
@@ -42,6 +43,24 @@ namespace esi {
 namespace circt {
 namespace esi {
 namespace detail {
+
+/// Generic pattern for removing an op during pattern conversion.
+template <typename OpTy>
+struct RemoveOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+StringAttr getTypeID(Type t);
+uint64_t getWidth(Type t);
+
 /// Assist the lowering steps for conversions which need to create auxiliary IR.
 class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
@@ -50,11 +69,8 @@ public:
   ArrayAttr getStageParameterList(Attribute value);
 
   hw::HWModuleExternOp declareStage(Operation *symTable, PipelineStageOp);
-  // Will be unused when CAPNP is undefined
-  hw::HWModuleExternOp
-  declareCosimEndpointOp(Operation *symTable, Type sendType,
-                         Type recvType) LLVM_ATTRIBUTE_UNUSED;
-
+  hw::HWModuleExternOp declareCosimEndpointToHostModule(Operation *symTable);
+  hw::HWModuleExternOp declareCosimEndpointFromHostModule(Operation *symTable);
   sv::InterfaceOp getOrConstructInterface(ChannelType);
   sv::InterfaceOp constructInterface(ChannelType);
 
@@ -77,9 +93,9 @@ private:
 
   Type getClockType();
 
+  std::optional<hw::HWModuleExternOp> declaredCosimEndpointToHostModule;
+  std::optional<hw::HWModuleExternOp> declaredCosimEndpointFromHostModule;
   llvm::DenseMap<Type, hw::HWModuleExternOp> declaredStage;
-  llvm::DenseMap<std::pair<Type, Type>, hw::HWModuleExternOp>
-      declaredCosimEndpointOp;
   llvm::DenseMap<Type, sv::InterfaceOp> portTypeLookup;
 };
 } // namespace detail

@@ -39,8 +39,13 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
   ];
 }
 
-def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
-                             NonProceduralOp]> {
+def IfDefOp : SVOp<"ifdef", [
+    SingleBlock,
+    NoTerminator,
+    NoRegionArguments,
+    NonProceduralOp,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "'ifdef MACRO' block";
 
   let description = [{
@@ -65,6 +70,9 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
     OpBuilder<(ins "StringAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "FlatSymbolRefAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
@@ -86,9 +94,14 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 }
 
-def IfDefProceduralOp
-  : SVOp<"ifdef.procedural", [SingleBlock, NoTerminator, NoRegionArguments,
-                              ProceduralRegion, ProceduralOp]> {
+def IfDefProceduralOp : SVOp<"ifdef.procedural", [
+      SingleBlock,
+      NoTerminator,
+      NoRegionArguments,
+      ProceduralRegion,
+      ProceduralOp,
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
@@ -111,6 +124,9 @@ def IfDefProceduralOp
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "StringAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "FlatSymbolRefAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "MacroIdentAttr":$cond,
@@ -798,19 +814,27 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let summary = "System verilog macro declaration";
 
   let description = [{
-    The `sv.macro.def` declares a macro in System Verilog.  This is a 
-    declaration; the body of the macro, which produces a verilog macro 
+    The `sv.macro.def` declares a macro in System Verilog.  This is a
+    declaration; the body of the macro, which produces a verilog macro
     definition is created with a `macro.def` operation.
-   
+
     Lacking args will be a macro without "()".  An empty args will be an empty "()".
 
     The verilog name is the spelling of the macro when emitting verilog.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, 
+  let arguments = (ins SymbolNameAttr:$sym_name,
                        OptionalAttr<StrArrayAttr>:$args,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$name), [{
+      return build($_builder, $_state,
+                   ::mlir::StringAttr::get($_builder.getContext(), name),
+                   ::mlir::ArrayAttr{}, ::mlir::StringAttr{});
+    }]>
+  ];
 
   let assemblyFormat = [{
     $sym_name (`[` $verilogName^ `]`)? (`(` $args^ `)`)?  attr-dict
@@ -818,7 +842,7 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
 }
 
 
-def MacroDefOp : SVOp<"macro.def", 
+def MacroDefOp : SVOp<"macro.def",
     [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "System verilog macro definition";
 
@@ -829,14 +853,14 @@ def MacroDefOp : SVOp<"macro.def",
     This is modeled similarly to verbatim in that the contents of the macro are
     opaque (plain string).  Given the general power of macros, this op does not
     try to capture a return type.
-  
-    This operation produces a definition for the macro declaration referenced by 
+
+    This operation produces a definition for the macro declaration referenced by
     `sym_name`.  Argument lists are picked up from that operation.
 
     sv.macro.def allows operand substitutions with {{0}} syntax.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$macroName, 
+  let arguments = (ins FlatSymbolRefAttr:$macroName,
                        StrAttr:$format_string,
                        DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs);

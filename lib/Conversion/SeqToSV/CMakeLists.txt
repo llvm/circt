@@ -2,7 +2,6 @@ add_circt_conversion_library(CIRCTSeqToSV
   FirMemLowering.cpp
   FirRegLowering.cpp
   SeqToSV.cpp
-  SeqFIRRTLInitToSV.cpp
   LowerFirMem.cpp
 
   DEPENDS
@@ -12,5 +11,6 @@ add_circt_conversion_library(CIRCTSeqToSV
   Core
 
   LINK_LIBS PUBLIC
+  CIRCTEmit
   CIRCTSeq
 )

@@ -14,12 +14,13 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/HW/InstanceImplementation.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
@@ -65,17 +66,15 @@ bool hw::isCombinational(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
-static Value foldStructExtract(Operation *inputOp, StringRef field) {
+static Value foldStructExtract(Operation *inputOp, uint32_t fieldIndex) {
   // A struct extract of a struct create -> corresponding struct create operand.
   if (auto structCreate = dyn_cast_or_null<StructCreateOp>(inputOp)) {
-    auto ty = type_cast<StructType>(structCreate.getResult().getType());
-    if (auto idx = ty.getFieldIndex(field))
-      return structCreate.getOperand(*idx);
-    return {};
+    return structCreate.getOperand(fieldIndex);
   }
+
   // Extracting injected field -> corresponding field
   if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != field)
+    if (structInject.getFieldIndex() != fieldIndex)
       return {};
     return structInject.getNewValue();
   }
@@ -356,7 +355,7 @@ static bool hasAdditionalAttributes(Op op,
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
-  if (!nameAttr.getValue().empty())
+  if (nameAttr && !nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
@@ -382,14 +381,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
-  if (auto *inputOp = wire.getInput().getDefiningOp()) {
-    auto name = wire.getNameAttr();
-    if (!name || name.getValue().empty())
-      name = wire->getAttrOfType<StringAttr>("sv.namehint");
-    if (name)
-      rewriter.updateRootInPlace(
-          inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
-  }
+  if (auto *inputOp = wire.getInput().getDefiningOp())
+    if (auto name = chooseName(wire, inputOp))
+      rewriter.modifyOpInPlace(inputOp,
+                               [&] { inputOp->setAttr("sv.namehint", name); });
 
   rewriter.replaceOp(wire, wire.getInput());
   return success();
@@ -409,6 +404,11 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
+    if (structType.getElements().size() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size() << ") has wrong size for struct constant ("
+             << structType.getElements().size() << ")";
+
     for (auto [attr, fieldInfo] :
          llvm::zip(arrayAttr.getValue(), structType.getElements())) {
       if (failed(checkAttributes(op, attr, fieldInfo.type)))
@@ -419,6 +419,11 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
+    if (arrayType.getNumElements() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size() << ") has wrong size for array constant ("
+             << arrayType.getNumElements() << ")";
+
     auto elementType = arrayType.getElementType();
     for (auto attr : arrayAttr.getValue()) {
       if (failed(checkAttributes(op, attr, elementType)))
@@ -430,6 +435,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
     auto elementType = arrayType.getElementType();
+    if (arrayType.getNumElements() != arrayAttr.size())
+      return op->emitOpError("array attribute (")
+             << arrayAttr.size()
+             << ") has wrong size for unpacked array constant ("
+             << arrayType.getNumElements() << ")";
+
     for (auto attr : arrayAttr.getValue()) {
       if (failed(checkAttributes(op, attr, elementType)))
         return failure();
@@ -502,18 +513,19 @@ bool hw::isAnyModuleOrInstance(Operation *moduleOrInstance) {
 /// Return the signature for a module as a function type from the module itself
 /// or from an hw::InstanceOp.
 FunctionType hw::getModuleType(Operation *moduleOrInstance) {
-  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
-    SmallVector<Type> inputs(instance->getOperandTypes());
-    SmallVector<Type> results(instance->getResultTypes());
-    return FunctionType::get(instance->getContext(), inputs, results);
-  }
-
-  if (auto mod = dyn_cast<HWModuleLike>(moduleOrInstance))
-    return mod.getHWModuleType().getFuncType();
-
-  return cast<mlir::FunctionOpInterface>(moduleOrInstance)
-      .getFunctionType()
-      .cast<FunctionType>();
+  return TypeSwitch<Operation *, FunctionType>(moduleOrInstance)
+      .Case<InstanceOp, InstanceChoiceOp>([](auto instance) {
+        SmallVector<Type> inputs(instance->getOperandTypes());
+        SmallVector<Type> results(instance->getResultTypes());
+        return FunctionType::get(instance->getContext(), inputs, results);
+      })
+      .Case<HWModuleLike>(
+          [](auto mod) { return mod.getHWModuleType().getFuncType(); })
+      .Default([](Operation *op) {
+        return cast<mlir::FunctionOpInterface>(op)
+            .getFunctionType()
+            .cast<FunctionType>();
+      });
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -527,27 +539,21 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
-// Flag for parsing different module types
-enum ExternModKind { PlainMod, ExternMod, GenMod };
-
 template <typename ModuleTy>
 static void
 buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
             const ModulePortInfo &ports, ArrayAttr parameters,
             ArrayRef<NamedAttribute> attributes, StringAttr comment) {
   using namespace mlir::function_interface_impl;
-  LocationAttr unknownLoc = builder.getUnknownLoc();
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Attribute> perPortAttrs;
-  SmallVector<Attribute> portLocs;
   SmallVector<ModulePort> portTypes;
 
   for (auto elt : ports) {
     portTypes.push_back(elt);
-    portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
     llvm::SmallVector<NamedAttribute> portAttrs;
     if (elt.attrs)
       llvm::copy(elt.attrs, std::back_inserter(portAttrs));
@@ -562,7 +568,6 @@ buildModule(OpBuilder &builder, OperationState &result, StringAttr name,
   auto type = ModuleType::get(builder.getContext(), portTypes);
   result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name),
                       TypeAttr::get(type));
-  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
   result.addAttribute("per_port_attrs",
                       arrayOrEmpty(builder.getContext(), perPortAttrs));
   result.addAttribute("parameters", parameters);
@@ -667,11 +672,17 @@ static void modifyModuleArgs(
 /// the module in the same order as they were listed in the `insert*` array.
 ///
 /// The operation must be any of the module-like operations.
-void hw::modifyModulePorts(
-    Operation *op, ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-    ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-    ArrayRef<unsigned> removeInputs, ArrayRef<unsigned> removeOutputs,
-    Block *body) {
+///
+/// This is marked deprecated as it's only used from HandshakeToHW and
+/// PortConverter and is likely broken and not currently tested.  Users of this
+/// are still written dealing with input and output ports separately, which is
+/// an old and broken style.
+[[deprecated]] static void
+modifyModulePorts(Operation *op,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
+                  ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
+                  ArrayRef<unsigned> removeInputs,
+                  ArrayRef<unsigned> removeOutputs, Block *body = nullptr) {
   auto moduleOp = cast<HWModuleLike>(op);
   auto *context = moduleOp.getContext();
 
@@ -735,6 +746,13 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
     body->addArgument(type, loc);
   }
 
+  // Add result ports attribute.
+  auto unknownLocAttr = cast<LocationAttr>(unknownLoc);
+  SmallVector<Attribute> resultLocs;
+  for (auto port : ports.getOutputs())
+    resultLocs.push_back(port.loc ? port.loc : unknownLocAttr);
+  result.addAttribute("result_locs", builder.getArrayAttr(resultLocs));
+
   if (shouldEnsureTerminator)
     HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -769,8 +787,8 @@ void HWModuleOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -798,6 +816,13 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
   buildModule<HWModuleExternOp>(builder, result, name, ports, parameters,
                                 attributes, {});
 
+  // Add the port locations.
+  LocationAttr unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> portLocs;
+  for (auto elt : ports)
+    portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
+  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
+
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
@@ -814,8 +839,8 @@ void HWModuleExternOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleExternOp::appendOutputs(
@@ -828,6 +853,13 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 ArrayRef<NamedAttribute> attributes) {
   buildModule<HWModuleGeneratedOp>(builder, result, name, ports, parameters,
                                    attributes, {});
+  // Add the port locations.
+  LocationAttr unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> portLocs;
+  for (auto elt : ports)
+    portLocs.push_back(elt.loc ? elt.loc : unknownLoc);
+  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
+
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -846,8 +878,8 @@ void HWModuleGeneratedOp::modifyPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
     ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
     ArrayRef<unsigned> eraseInputs, ArrayRef<unsigned> eraseOutputs) {
-  hw::modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
-                        eraseOutputs);
+  modifyModulePorts(*this, insertInputs, insertOutputs, eraseInputs,
+                    eraseOutputs);
 }
 
 void HWModuleGeneratedOp::appendOutputs(
@@ -860,40 +892,12 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-static void
-addPortAttrsAndLocs(Builder &builder, OperationState &result,
-                    SmallVectorImpl<module_like_impl::PortParse> &ports,
-                    StringAttr portAttrsName, StringAttr portLocsName) {
-  auto unknownLoc = builder.getUnknownLoc();
-  auto nonEmptyAttrsFn = [](Attribute attr) {
-    return attr && !cast<DictionaryAttr>(attr).empty();
-  };
-  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
-    return attr && cast<Location>(attr) != unknownLoc;
-  };
-
-  // Convert the specified array of dictionary attrs (which may have null
-  // entries) to an ArrayAttr of dictionaries.
-  SmallVector<Attribute> attrs;
-  SmallVector<Attribute> locs;
-  for (auto &port : ports) {
-    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
-    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
-  }
-
-  // Add the attributes to the ports.
-  if (llvm::any_of(attrs, nonEmptyAttrsFn))
-    result.addAttribute(portAttrsName, builder.getArrayAttr(attrs));
-
-  if (llvm::any_of(locs, nonEmptyLocsFn))
-    result.addAttribute(portLocsName, builder.getArrayAttr(locs));
-}
-
 template <typename ModuleTy>
-static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
-                                   ExternModKind modKind = PlainMod) {
+static ParseResult parseHWModuleOp(OpAsmParser &parser,
+                                   OperationState &result) {
 
   using namespace mlir::function_interface_impl;
+  auto builder = parser.getBuilder();
   auto loc = parser.getCurrentLocation();
 
   // Parse the visibility attribute.
@@ -907,7 +911,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the generator information.
   FlatSymbolRefAttr kindAttr;
-  if (modKind == GenMod) {
+  if constexpr (std::is_same_v<ModuleTy, HWModuleGeneratedOp>) {
     if (parser.parseComma() ||
         parser.parseAttribute(kindAttr, "generatorKind", result.attributes)) {
       return failure();
@@ -935,10 +939,44 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   result.addAttribute("parameters", parameters);
   result.addAttribute(ModuleTy::getModuleTypeAttrName(result.name), modType);
-  addPortAttrsAndLocs(parser.getBuilder(), result, ports,
-                      ModuleTy::getPerPortAttrsAttrName(result.name),
-                      ModuleTy::getPortLocsAttrName(result.name));
 
+  // Convert the specified array of dictionary attrs (which may have null
+  // entries) to an ArrayAttr of dictionaries.
+  SmallVector<Attribute> attrs;
+  for (auto &port : ports)
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+  // Add the attributes to the ports.
+  auto nonEmptyAttrsFn = [](Attribute attr) {
+    return attr && !cast<DictionaryAttr>(attr).empty();
+  };
+  if (llvm::any_of(attrs, nonEmptyAttrsFn))
+    result.addAttribute(ModuleTy::getPerPortAttrsAttrName(result.name),
+                        builder.getArrayAttr(attrs));
+
+  // Add the port locations.
+  auto unknownLoc = builder.getUnknownLoc();
+  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
+    return attr && cast<Location>(attr) != unknownLoc;
+  };
+  SmallVector<Attribute> locs;
+  StringAttr portLocsAttrName;
+  if constexpr (std::is_same_v<ModuleTy, HWModuleOp>) {
+    // Plain modules only store the output port locations, as the input port
+    // locations will be stored in the basic block arguments.
+    portLocsAttrName = ModuleTy::getResultLocsAttrName(result.name);
+    for (auto &port : ports)
+      if (port.direction == ModulePort::Direction::Output)
+        locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
+  } else {
+    // All other modules store all port locations in a single array.
+    portLocsAttrName = ModuleTy::getPortLocsAttrName(result.name);
+    for (auto &port : ports)
+      locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
+  }
+  if (llvm::any_of(locs, nonEmptyLocsFn))
+    result.addAttribute(portLocsAttrName, builder.getArrayAttr(locs));
+
+  // Add the entry block arguments.
   SmallVector<OpAsmParser::Argument, 4> entryArgs;
   for (auto &port : ports)
     if (port.direction != ModulePort::Direction::Output)
@@ -946,7 +984,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (modKind == PlainMod) {
+  if (std::is_same_v<ModuleTy, HWModuleOp>) {
     if (parser.parseRegion(*body, entryArgs))
       return failure();
 
@@ -961,12 +999,12 @@ ParseResult HWModuleOp::parse(OpAsmParser &parser, OperationState &result) {
 
 ParseResult HWModuleExternOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
-  return parseHWModuleOp<HWModuleExternOp>(parser, result, ExternMod);
+  return parseHWModuleOp<HWModuleExternOp>(parser, result);
 }
 
 ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
                                        OperationState &result) {
-  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result, GenMod);
+  return parseHWModuleOp<HWModuleGeneratedOp>(parser, result);
 }
 
 FunctionType getHWModuleOpType(Operation *op) {
@@ -996,12 +1034,15 @@ static void printModuleOp(OpAsmPrinter &p, ModuleTy mod) {
   // Print the parameter list if present.
   printOptionalParameterList(p, mod.getOperation(), mod.getParameters());
 
-  module_like_impl::printModuleSignatureNew(p, mod.getOperation());
+  module_like_impl::printModuleSignatureNew(p, mod);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (isa<HWModuleGeneratedOp>(mod.getOperation()))
     omittedAttrs.push_back("generatorKind");
-  omittedAttrs.push_back(mod.getPortLocsAttrName());
+  if constexpr (std::is_same_v<ModuleTy, HWModuleOp>)
+    omittedAttrs.push_back(mod.getResultLocsAttrName());
+  else
+    omittedAttrs.push_back(mod.getPortLocsAttrName());
   omittedAttrs.push_back(mod.getModuleTypeAttrName());
   omittedAttrs.push_back(mod.getPerPortAttrsAttrName());
   omittedAttrs.push_back(mod.getParametersAttrName());
@@ -1035,14 +1076,6 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
          "verifier hook should only be called on modules");
 
   auto moduleType = module.getHWModuleType();
-
-  auto argLocs = module.getInputLocs();
-  if (argLocs.size() != moduleType.getNumInputs())
-    return module->emitOpError("incorrect number of argument locations");
-
-  auto resultLocs = module.getOutputLocs();
-  if (resultLocs.size() != moduleType.getNumOutputs())
-    return module->emitOpError("incorrect number of result locations");
 
   SmallPtrSet<Attribute, 4> paramNames;
 
@@ -1094,16 +1127,6 @@ LogicalResult HWModuleOp::verify() {
     return emitOpError("entry block must have")
            << numInputs << " arguments to match module signature";
 
-  // Verify that the block arguments match the op's attributes.
-  for (auto [arg, type, loc] : llvm::zip(getBodyBlock()->getArguments(),
-                                         getInputTypes(), getInputLocs())) {
-    if (arg.getType() != type)
-      return emitOpError("block argument types should match signature types");
-    if (arg.getLoc() != loc.cast<LocationAttr>())
-      return emitOpError(
-          "block argument locations should match signature locations");
-  }
-
   return success();
 }
 
@@ -1125,8 +1148,8 @@ HWModuleOp::insertInput(unsigned index, StringAttr name, Type ty) {
   port.name = nameAttr;
   port.dir = ModulePort::Direction::Input;
   port.type = ty;
-  hw::modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {},
-                        {}, body);
+  modifyModulePorts(getOperation(), {std::make_pair(index, port)}, {}, {}, {},
+                    body);
 
   // Add a new argument.
   return {nameAttr, body->getArgument(index)};
@@ -1147,8 +1170,8 @@ void HWModuleOp::insertOutputs(unsigned index,
     port.type = value.getType();
     indexedNewPorts.emplace_back(index, port);
   }
-  hw::modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
-                        getBodyBlock());
+  modifyModulePorts(getOperation(), {}, indexedNewPorts, {}, {},
+                    getBodyBlock());
 
   // Rewrite the output op.
   for (auto &[name, value] : outputs)
@@ -1171,19 +1194,42 @@ void HWModuleExternOp::getAsmBlockArgumentNames(
 
 template <typename ModTy>
 static SmallVector<Location> getAllPortLocs(ModTy module) {
-  SmallVector<Location> retval;
   auto locs = module.getPortLocs();
   if (locs) {
+    SmallVector<Location> retval;
+    retval.reserve(locs->size());
     for (auto l : *locs)
       retval.push_back(cast<Location>(l));
     // Either we have a length of 0 or the correct length
     assert(!locs->size() || locs->size() == module.getNumPorts());
+    return retval;
   }
-  return retval;
+  return SmallVector<Location>(module.getNumPorts(),
+                               UnknownLoc::get(module.getContext()));
 }
 
 SmallVector<Location> HWModuleOp::getAllPortLocs() {
-  return ::getAllPortLocs(*this);
+  SmallVector<Location> portLocs;
+  portLocs.reserve(getNumPorts());
+  auto resultLocs = getResultLocsAttr();
+  unsigned inputCount = 0;
+  auto modType = getModuleType();
+  auto unknownLoc = UnknownLoc::get(getContext());
+  auto *body = getBodyBlock();
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
+    if (modType.isOutput(i)) {
+      auto loc = resultLocs
+                     ? cast<Location>(
+                           resultLocs.getValue()[portLocs.size() - inputCount])
+                     : unknownLoc;
+      portLocs.push_back(loc);
+    } else {
+      auto loc = body ? body->getArgument(inputCount).getLoc() : unknownLoc;
+      portLocs.push_back(loc);
+      ++inputCount;
+    }
+  }
+  return portLocs;
 }
 
 SmallVector<Location> HWModuleExternOp::getAllPortLocs() {
@@ -1194,22 +1240,26 @@ SmallVector<Location> HWModuleGeneratedOp::getAllPortLocs() {
   return ::getAllPortLocs(*this);
 }
 
-template <typename ModTy>
-static void setAllPortLocs(ArrayRef<Location> locs, ModTy module) {
-  std::vector<Attribute> nLocs(locs.begin(), locs.end());
-  module.setPortLocsAttr(ArrayAttr::get(module.getContext(), nLocs));
+void HWModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  SmallVector<Attribute> resultLocs;
+  unsigned inputCount = 0;
+  auto modType = getModuleType();
+  auto *body = getBodyBlock();
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
+    if (modType.isOutput(i))
+      resultLocs.push_back(locs[i]);
+    else
+      body->getArgument(inputCount++).setLoc(cast<Location>(locs[i]));
+  }
+  setResultLocsAttr(ArrayAttr::get(getContext(), resultLocs));
 }
 
-void HWModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleExternOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
-void HWModuleExternOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
-}
-
-void HWModuleGeneratedOp::setAllPortLocs(ArrayRef<Location> locs) {
-  ::setAllPortLocs(locs, *this);
+void HWModuleGeneratedOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+  setPortLocsAttr(ArrayAttr::get(getContext(), locs));
 }
 
 template <typename ModTy>
@@ -1238,25 +1288,25 @@ void HWModuleGeneratedOp::setAllPortNames(ArrayRef<Attribute> names) {
   ::setAllPortNames(names, *this);
 }
 
-SmallVector<Attribute> HWModuleOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleExternOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleExternOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
-SmallVector<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
+ArrayRef<Attribute> HWModuleGeneratedOp::getAllPortAttrs() {
   auto attrs = getPerPortAttrs();
   if (attrs && !attrs->empty())
-    return {attrs->getValue().begin(), attrs->getValue().end()};
-  return SmallVector<Attribute>(getNumPorts());
+    return attrs->getValue();
+  return {};
 }
 
 void HWModuleOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
@@ -1369,8 +1419,9 @@ static SmallVector<PortInfo> getPortList(ModuleTy &mod) {
   auto modTy = mod.getHWModuleType();
   auto emptyDict = DictionaryAttr::get(mod.getContext());
   SmallVector<PortInfo> retval;
+  auto locs = mod.getAllPortLocs();
   for (unsigned i = 0, e = modTy.getNumPorts(); i < e; ++i) {
-    LocationAttr loc = mod.getPortLoc(i);
+    LocationAttr loc = locs[i];
     DictionaryAttr attrs =
         dyn_cast_or_null<DictionaryAttr>(mod.getPortAttrs(i));
     if (!attrs)
@@ -1413,8 +1464,17 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   auto mod = cast<hw::HWModuleLike>(module);
   auto argNames = builder.getArrayAttr(mod.getInputNames());
   auto resultNames = builder.getArrayAttr(mod.getOutputNames());
-  FunctionType modType = mod.getHWModuleType().getFuncType();
-  build(builder, result, modType.getResults(), name,
+
+  // Try to resolve the parameterized module type. If failed, use the module's
+  // parmeterized type. If the client doesn't fix this error, the verifier will
+  // fail.
+  ModuleType modType = mod.getHWModuleType();
+  FailureOr<ModuleType> resolvedModType = modType.resolveParametricTypes(
+      parameters, result.location, /*emitErrors=*/false);
+  if (succeeded(resolvedModType))
+    modType = *resolvedModType;
+  FunctionType funcType = resolvedModType->getFuncType();
+  build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         argNames, resultNames, parameters, innerSym);
 }
@@ -1422,10 +1482,6 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
   // Inner symbols on instance operations target the op not any result.
   return std::nullopt;
-}
-
-Operation *InstanceOp::getReferencedModuleSlow() {
-  return getReferencedModuleCached(/*cache=*/nullptr);
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -1514,103 +1570,152 @@ void InstanceOp::print(OpAsmPrinter &p) {
                        "argNames", "resultNames", "parameters"});
 }
 
-/// Return the name of the specified input port or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getArgumentName(size_t idx) {
-  return instance_like_impl::getName(getArgNames(), idx);
+//===----------------------------------------------------------------------===//
+// InstanceChoiceOp
+//===----------------------------------------------------------------------===//
+
+std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
 }
 
-/// Return the name of the specified result or null if it cannot be
-/// determined.
-StringAttr InstanceOp::getResultName(size_t idx) {
-  return instance_like_impl::getName(getResultNames(), idx);
-}
-
-/// Change the name of the specified input port.
-void InstanceOp::setArgumentName(size_t i, StringAttr name) {
-  setInputNames(instance_like_impl::updateName(getArgNames(), i, name));
-}
-
-/// Change the name of the specified output port.
-void InstanceOp::setResultName(size_t i, StringAttr name) {
-  setOutputNames(instance_like_impl::updateName(getResultNames(), i, name));
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  instance_like_impl::getAsmResultNames(setNameFn, getInstanceName(),
-                                        getResultNames(), getResults());
-}
-
-SmallVector<PortInfo> InstanceOp::getPortList() {
-  SmallVector<PortInfo> ports;
-  auto emptyDict = DictionaryAttr::get(getContext());
-  auto argNames = (*this)->getAttrOfType<ArrayAttr>("argNames");
-  auto argTypes = getModuleType(*this).getInputs();
-  auto argLocs = (*this)->getAttrOfType<ArrayAttr>("argLocs");
-
-  auto resultNames = (*this)->getAttrOfType<ArrayAttr>("resultNames");
-  auto resultTypes = getModuleType(*this).getResults();
-  auto resultLocs = (*this)->getAttrOfType<ArrayAttr>("resultLocs");
-
-  ports.reserve(argTypes.size() + resultTypes.size());
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto type = argTypes[i];
-    auto direction = ModulePort::Direction::Input;
-
-    if (auto inout = type.dyn_cast<InOutType>()) {
-      type = inout.getElementType();
-      direction = ModulePort::Direction::InOut;
+LogicalResult
+InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  for (Attribute name : getModuleNamesAttr()) {
+    if (failed(instance_like_impl::verifyInstanceOfHWModule(
+            *this, name.cast<FlatSymbolRefAttr>(), getInputs(),
+            getResultTypes(), getArgNames(), getResultNames(), getParameters(),
+            symbolTable))) {
+      return failure();
     }
+  }
+  return success();
+}
 
-    LocationAttr loc;
-    if (argLocs)
-      loc = argLocs[i].cast<LocationAttr>();
-    ports.push_back(
-        {{argNames[i].cast<StringAttr>(), type, direction}, i, emptyDict, loc});
+LogicalResult InstanceChoiceOp::verify() {
+  auto module = (*this)->getParentOfType<HWModuleOp>();
+  if (!module)
+    return success();
+
+  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        auto diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+  return instance_like_impl::verifyParameterStructure(
+      getParameters(), moduleParameters, emitError);
+}
+
+ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  StringAttr optionNameAttr;
+  StringAttr instanceNameAttr;
+  InnerSymAttr innerSym;
+  SmallVector<Attribute> moduleNames;
+  SmallVector<Attribute> caseNames;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
+  SmallVector<Type, 1> inputsTypes, allResultTypes;
+  ArrayAttr argNames, resultNames, parameters;
+  auto noneType = parser.getBuilder().getType<NoneType>();
+
+  if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                            result.attributes))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    // Parsing an optional symbol name doesn't fail, so no need to check the
+    // result.
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
   }
 
-  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    LocationAttr loc;
-    if (resultLocs)
-      loc = resultLocs[i].cast<LocationAttr>();
-    ports.push_back({{resultNames[i].cast<StringAttr>(), resultTypes[i],
-                      ModulePort::Direction::Output},
-                     i,
-                     emptyDict,
-                     loc});
+  if (parser.parseKeyword("option") ||
+      parser.parseAttribute(optionNameAttr, noneType, "optionName",
+                            result.attributes))
+    return failure();
+
+  FlatSymbolRefAttr defaultModuleName;
+  if (parser.parseAttribute(defaultModuleName))
+    return failure();
+  moduleNames.push_back(defaultModuleName);
+
+  while (succeeded(parser.parseOptionalKeyword("or"))) {
+    FlatSymbolRefAttr moduleName;
+    StringAttr targetName;
+    if (parser.parseAttribute(moduleName) ||
+        parser.parseOptionalKeyword("if") || parser.parseAttribute(targetName))
+      return failure();
+    moduleNames.push_back(moduleName);
+    caseNames.push_back(targetName);
   }
-  return ports;
+
+  llvm::SMLoc parametersLoc, inputsOperandsLoc;
+  if (parser.getCurrentLocation(&parametersLoc) ||
+      parseOptionalParameterList(parser, parameters) ||
+      parseInputPortList(parser, inputsOperands, inputsTypes, argNames) ||
+      parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands) ||
+      parser.parseArrow() ||
+      parseOutputPortList(parser, allResultTypes, resultNames) ||
+      parser.parseOptionalAttrDict(result.attributes)) {
+    return failure();
+  }
+
+  result.addAttribute("moduleNames",
+                      ArrayAttr::get(parser.getContext(), moduleNames));
+  result.addAttribute("caseNames",
+                      ArrayAttr::get(parser.getContext(), caseNames));
+  result.addAttribute("argNames", argNames);
+  result.addAttribute("resultNames", resultNames);
+  result.addAttribute("parameters", parameters);
+  result.addTypes(allResultTypes);
+  return success();
 }
 
-PortInfo InstanceOp::getPort(size_t idx) { return getPortList()[idx]; }
+void InstanceChoiceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  if (auto attr = getInnerSymAttr()) {
+    p << " sym ";
+    attr.print(p);
+  }
+  p << " option " << getOptionNameAttr() << ' ';
 
-size_t InstanceOp::getNumPorts() {
-  return getNumInputPorts() + getNumOutputPorts();
+  auto moduleNames = getModuleNamesAttr();
+  auto caseNames = getCaseNamesAttr();
+  assert(moduleNames.size() == caseNames.size() + 1);
+
+  p.printAttributeWithoutType(moduleNames[0]);
+  for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
+    p << " or ";
+    p.printAttributeWithoutType(moduleNames[i + 1]);
+    p << " if ";
+    p.printAttributeWithoutType(caseNames[i]);
+  }
+
+  printOptionalParameterList(p, *this, getParameters());
+  printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
+                     getArgNames());
+  p << " -> ";
+  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"instanceName",
+                       InnerSymbolTable::getInnerSymbolAttrName(),
+                       "moduleNames", "caseNames", "argNames", "resultNames",
+                       "parameters", "optionName"});
 }
 
-size_t InstanceOp::getNumInputPorts() { return getNumOperands(); }
-
-size_t InstanceOp::getNumOutputPorts() { return getNumResults(); }
-
-size_t InstanceOp::getPortIdForInputId(size_t idx) { return idx; }
-
-size_t InstanceOp::getPortIdForOutputId(size_t idx) {
-  return idx + getNumInputPorts();
-}
-
-void InstanceOp::getValues(SmallVectorImpl<Value> &values,
-                           const ModulePortInfo &mpi) {
-  size_t inputPort = 0, resultPort = 0;
-  values.resize(mpi.size());
-  auto results = getResults();
-  auto inputs = getInputs();
-  for (auto [idx, port] : llvm::enumerate(mpi))
-    if (mpi.at(idx).isOutput())
-      values[idx] = results[resultPort++];
-    else
-      values[idx] = inputs[inputPort++];
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  SmallVector<Attribute> moduleNames;
+  for (Attribute attr : getModuleNamesAttr()) {
+    moduleNames.push_back(attr.cast<FlatSymbolRefAttr>().getAttr());
+  }
+  return ArrayAttr::get(getContext(), moduleNames);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2313,9 +2418,10 @@ LogicalResult StructExplodeOp::canonicalize(StructExplodeOp op,
   auto *inputOp = op.getInput().getDefiningOp();
   auto elements = type_cast<StructType>(op.getInput().getType()).getElements();
   auto result = failure();
-  for (auto [element, res] : llvm::zip(elements, op.getResults())) {
-    if (auto foldResult = foldStructExtract(inputOp, element.name.str())) {
-      rewriter.replaceAllUsesWith(res, foldResult);
+  auto opResults = op.getResults();
+  for (uint32_t index = 0; index < elements.size(); index++) {
+    if (auto foldResult = foldStructExtract(inputOp, index)) {
+      rewriter.replaceAllUsesWith(opResults[index], foldResult);
       result = success();
     }
   }
@@ -2343,6 +2449,32 @@ void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 // StructExtractOp
 //===----------------------------------------------------------------------===//
 
+/// Ensure an aggregate op's field index is within the bounds of
+/// the aggregate type and the accessed field is of 'elementType'.
+template <typename AggregateOp, typename AggregateType>
+static LogicalResult verifyAggregateFieldIndexAndType(AggregateOp &op,
+                                                      AggregateType aggType,
+                                                      Type elementType) {
+  auto index = op.getFieldIndex();
+  if (index >= aggType.getElements().size())
+    return op.emitOpError() << "field index " << index
+                            << " exceeds element count of aggregate type";
+
+  if (getCanonicalType(elementType) !=
+      getCanonicalType(aggType.getElements()[index].type))
+    return op.emitOpError()
+           << "type " << aggType.getElements()[index].type
+           << " of accessed field in aggregate at index " << index
+           << " does not match expected type " << elementType;
+
+  return success();
+}
+
+LogicalResult StructExtractOp::verify() {
+  return verifyAggregateFieldIndexAndType<StructExtractOp, StructType>(
+      *this, getInput().getType(), getType());
+}
+
 /// Use the same parser for both struct_extract and union_extract since the
 /// syntax is identical.
 template <typename AggregateType>
@@ -2352,8 +2484,7 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
-      parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() ||
+      parser.parseAttribute(fieldName) || parser.parseRSquare() ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
@@ -2362,11 +2493,18 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getNameLoc(),
                             "invalid kind of type specified");
 
-  Type resultType = aggType.getFieldType(fieldName.getValue());
-  if (!resultType) {
-    parser.emitError(parser.getNameLoc(), "invalid field name specified");
+  auto fieldIndex = aggType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
+  Type resultType = aggType.getElements()[*fieldIndex].type;
   result.addTypes(resultType);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -2380,8 +2518,8 @@ template <typename AggType>
 static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << " ";
   printer.printOperand(op.getInput());
-  printer << "[\"" << op.getField() << "\"]";
-  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
+  printer << "[\"" << op.getFieldName() << "\"]";
+  printer.printOptionalAttrDict(op->getAttrs(), {"fieldIndex"});
   printer << " : " << op.getInput().getType();
 }
 
@@ -2396,27 +2534,30 @@ void StructExtractOp::print(OpAsmPrinter &printer) {
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
                             Value input, StructType::FieldInfo field) {
-  build(builder, odsState, field.type, input, field.name);
+  auto fieldIndex =
+      type_cast<StructType>(input.getType()).getFieldIndex(field.name);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, field.type, input, *fieldIndex);
 }
 
 void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
-                            Value input, StringAttr fieldAttr) {
+                            Value input, StringAttr fieldName) {
   auto structType = type_cast<StructType>(input.getType());
-  auto resultType = structType.getFieldType(fieldAttr);
-  build(builder, odsState, resultType, input, fieldAttr);
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  auto resultType = structType.getElements()[*fieldIndex].type;
+  build(builder, odsState, resultType, input, *fieldIndex);
 }
 
 OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
   if (auto constOperand = adaptor.getInput()) {
     // Fold extract from aggregate constant
-    auto operandType = type_cast<StructType>(getOperand().getType());
-    auto fieldIdx = operandType.getFieldIndex(getField());
     auto operandAttr = llvm::cast<ArrayAttr>(constOperand);
-    return operandAttr.getValue()[*fieldIdx];
+    return operandAttr.getValue()[getFieldIndex()];
   }
 
   if (auto foldResult =
-          foldStructExtract(getInput().getDefiningOp(), getField()))
+          foldStructExtract(getInput().getDefiningOp(), getFieldIndex()))
     return foldResult;
   return {};
 }
@@ -2427,9 +2568,9 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
 
   // b = extract(inject(x["a"], v0)["b"]) => extract(x, "b")
   if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
-    if (structInject.getField() != op.getField()) {
+    if (structInject.getFieldIndex() != op.getFieldIndex()) {
       rewriter.replaceOpWithNewOp<StructExtractOp>(
-          op, op.getType(), structInject.getInput(), op.getField());
+          op, op.getType(), structInject.getInput(), op.getFieldIndexAttr());
       return success();
     }
   }
@@ -2439,18 +2580,25 @@ LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
 
 void StructExtractOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  auto structType = type_cast<StructType>(getInput().getType());
-  for (auto field : structType.getElements()) {
-    if (field.name == getField()) {
-      setNameFn(getResult(), field.name.str());
-      return;
-    }
-  }
+  setNameFn(getResult(), getFieldName());
 }
 
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//
+
+void StructInjectOp::build(OpBuilder &builder, OperationState &odsState,
+                           Value input, StringAttr fieldName, Value newValue) {
+  auto structType = type_cast<StructType>(input.getType());
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, input, *fieldIndex, newValue);
+}
+
+LogicalResult StructInjectOp::verify() {
+  return verifyAggregateFieldIndexAndType<StructInjectOp, StructType>(
+      *this, getInput().getType(), getNewValue().getType());
+}
 
 ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
@@ -2459,9 +2607,8 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
-      parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() || parser.parseComma() ||
-      parser.parseOperand(val) ||
+      parser.parseAttribute(fieldName) || parser.parseRSquare() ||
+      parser.parseComma() || parser.parseOperand(val) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
@@ -2469,13 +2616,20 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
   if (!structType)
     return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
-  Type resultType = structType.getFieldType(fieldName.getValue());
-  if (!resultType) {
-    parser.emitError(inputOperandsLoc, "invalid field name specified");
+  auto fieldIndex = structType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
+    parser.emitError(parser.getNameLoc(), "field name '" +
+                                              fieldName.getValue() +
+                                              "' not found in aggregate type");
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
   result.addTypes(declType);
 
+  Type resultType = structType.getElements()[*fieldIndex].type;
   if (parser.resolveOperands({operand, val}, {declType, resultType},
                              inputOperandsLoc, result.operands))
     return failure();
@@ -2485,9 +2639,9 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
 void StructInjectOp::print(OpAsmPrinter &printer) {
   printer << " ";
   printer.printOperand(getInput());
-  printer << "[\"" << getField() << "\"], ";
+  printer << "[\"" << getFieldName() << "\"], ";
   printer.printOperand(getNewValue());
-  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"fieldIndex"});
   printer << " : " << getInput().getType();
 }
 
@@ -2498,9 +2652,7 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
     return {};
   SmallVector<Attribute> array;
   llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(array));
-  StructType structType = getInput().getType();
-  auto index = *structType.getFieldIndex(getField());
-  array[index] = newValue;
+  array[getFieldIndex()] = newValue;
   return ArrayAttr::get(getContext(), array);
 }
 
@@ -2517,7 +2669,7 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
     if (!injects.insert(inject).second)
       return failure();
 
-    fields.try_emplace(inject.getFieldAttr(), inject.getNewValue());
+    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
     input = inject.getInput();
     inject = dyn_cast_or_null<StructInjectOp>(input.getDefiningOp());
   } while (inject);
@@ -2543,11 +2695,11 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
     return failure();
 
   // Eliminate overwrites. The hash map contains the last write to each field.
-  for (const auto &field : elements) {
-    auto it = fields.find(field.name);
+  for (uint32_t fieldIndex = 0; fieldIndex < elements.size(); fieldIndex++) {
+    auto it = fields.find(elements[fieldIndex].name);
     if (it == fields.end())
       continue;
-    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, field.name,
+    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, fieldIndex,
                                             it->second);
   }
 
@@ -2559,14 +2711,26 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
 // UnionCreateOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult UnionCreateOp::verify() {
+  return verifyAggregateFieldIndexAndType<UnionCreateOp, UnionType>(
+      *this, getType(), getInput().getType());
+}
+
+void UnionCreateOp::build(OpBuilder &builder, OperationState &odsState,
+                          Type unionType, StringAttr fieldName, Value input) {
+  auto fieldIndex = type_cast<UnionType>(unionType).getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  build(builder, odsState, unionType, *fieldIndex, input);
+}
+
 ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   Type declOrAliasType;
-  StringAttr field;
+  StringAttr fieldName;
   OpAsmParser::UnresolvedOperand input;
   llvm::SMLoc fieldLoc = parser.getCurrentLocation();
 
-  if (parser.parseAttribute(field, "field", result.attributes) ||
-      parser.parseComma() || parser.parseOperand(input) ||
+  if (parser.parseAttribute(fieldName) || parser.parseComma() ||
+      parser.parseOperand(input) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declOrAliasType))
     return failure();
@@ -2576,12 +2740,17 @@ ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getNameLoc(),
                             "expected !hw.union type or alias");
 
-  Type inputType = declType.getFieldType(field.getValue());
-  if (!inputType) {
+  auto fieldIndex = declType.getFieldIndex(fieldName);
+  if (!fieldIndex) {
     parser.emitError(fieldLoc, "cannot find union field '")
-        << field.getValue() << '\'';
+        << fieldName.getValue() << '\'';
     return failure();
   }
+
+  auto indexAttr =
+      IntegerAttr::get(IntegerType::get(parser.getContext(), 32), *fieldIndex);
+  result.addAttribute("fieldIndex", indexAttr);
+  Type inputType = declType.getElements()[*fieldIndex].type;
 
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
@@ -2590,9 +2759,9 @@ ParseResult UnionCreateOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void UnionCreateOp::print(OpAsmPrinter &printer) {
-  printer << " \"" << getField() << "\", ";
+  printer << " \"" << getFieldName() << "\", ";
   printer.printOperand(getInput());
-  printer.printOptionalAttrDict((*this)->getAttrs(), {"field"});
+  printer.printOptionalAttrDict((*this)->getAttrs(), {"fieldIndex"});
   printer << " : " << getType();
 }
 
@@ -2612,9 +2781,27 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  results.push_back(cast<UnionType>(getCanonicalType(operands[0].getType()))
-                        .getFieldType(attrs.getAs<StringAttr>("field")));
+  auto unionElements =
+      hw::type_cast<UnionType>((operands[0].getType())).getElements();
+  unsigned fieldIndex =
+      attrs.getAs<IntegerAttr>("fieldIndex").getValue().getZExtValue();
+  if (fieldIndex >= unionElements.size()) {
+    if (loc)
+      mlir::emitError(*loc, "field index " + Twine(fieldIndex) +
+                                " exceeds element count of aggregate type");
+    return failure();
+  }
+  results.push_back(unionElements[fieldIndex].type);
   return success();
+}
+
+void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                           Value input, StringAttr fieldName) {
+  auto unionType = type_cast<UnionType>(input.getType());
+  auto fieldIndex = unionType.getFieldIndex(fieldName);
+  assert(fieldIndex.has_value() && "field name not found in aggregate type");
+  auto resultType = unionType.getElements()[*fieldIndex].type;
+  build(odsBuilder, odsState, resultType, input, *fieldIndex);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3022,7 +3209,27 @@ bool HierPathOp::isComponent() { return (bool)ref(); }
 // module port or a declaration inside the module.
 // 7. The last element of the namepath can also be a module symbol.
 LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  StringAttr expectedModuleName = {};
+  ArrayAttr expectedModuleNames = {};
+  auto checkExpectedModule = [&](Attribute name) -> LogicalResult {
+    if (!expectedModuleNames)
+      return success();
+    if (llvm::any_of(expectedModuleNames,
+                     [name](Attribute attr) { return attr == name; }))
+      return success();
+    auto diag = emitOpError() << "instance path is incorrect. Expected ";
+    size_t n = expectedModuleNames.size();
+    if (n != 1) {
+      diag << "one of ";
+    }
+    for (size_t i = 0; i < n; ++i) {
+      if (i != 0)
+        diag << ((i + 1 == n) ? " or " : ", ");
+      diag << expectedModuleNames[i].cast<StringAttr>();
+    }
+    diag << ". Instead found: " << name;
+    return diag;
+  };
+
   if (!getNamepath() || getNamepath().empty())
     return emitOpError() << "the instance path cannot be empty";
   for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
@@ -3032,17 +3239,17 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
              << "the instance path can only contain inner sym reference"
              << ", only the leaf can refer to a module symbol";
 
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+
     auto instOp = ns.lookupOp<igraph::InstanceOpInterface>(innerRef);
     if (!instOp)
       return emitOpError() << " module: " << innerRef.getModule()
                            << " does not contain any instance with symbol: "
                            << innerRef.getName();
-    expectedModuleName = instOp.getReferencedModuleNameAttr();
+    expectedModuleNames = instOp.getReferencedModuleNamesAttr();
   }
+
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
   if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
@@ -3050,17 +3257,11 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
-    if (expectedModuleName && expectedModuleName != innerRef.getModule())
-      return emitOpError() << "instance path is incorrect. Expected module: "
-                           << expectedModuleName
-                           << " instead found: " << innerRef.getModule();
-  } else if (expectedModuleName &&
-             expectedModuleName !=
-                 leafRef.cast<FlatSymbolRefAttr>().getAttr()) {
-    // This is the case when the nla is applied to a module.
-    return emitOpError() << "instance path is incorrect. Expected module: "
-                         << expectedModuleName << " instead found: "
-                         << leafRef.cast<FlatSymbolRefAttr>().getAttr();
+    if (failed(checkExpectedModule(innerRef.getModule())))
+      return failure();
+  } else if (failed(checkExpectedModule(
+                 leafRef.cast<FlatSymbolRefAttr>().getAttr()))) {
+    return failure();
   }
   return success();
 }

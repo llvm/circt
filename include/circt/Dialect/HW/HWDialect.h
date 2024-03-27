@@ -20,7 +20,4 @@
 // Pull in the dialect definition.
 #include "circt/Dialect/HW/HWDialect.h.inc"
 
-// Pull in all enum type definitions and utility function declarations.
-#include "circt/Dialect/HW/HWEnums.h.inc"
-
 #endif // CIRCT_DIALECT_HW_HWDIALECT_H

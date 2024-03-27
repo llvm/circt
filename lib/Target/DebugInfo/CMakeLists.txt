@@ -9,8 +9,10 @@ add_circt_translation_library(CIRCTTargetDebugInfo
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTDebug
-  CIRCTDebugInfoAnalysis
+  CIRCTDebugAnalysis
+  CIRCTEmit
   CIRCTHW
+  CIRCTOM
   CIRCTSeq
   CIRCTSupport
   CIRCTSV

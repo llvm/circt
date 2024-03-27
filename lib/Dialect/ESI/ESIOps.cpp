@@ -402,24 +402,12 @@ static LogicalResult checkTypeMatch(Operation *req,
   return success();
 }
 
-LogicalResult RequestToClientConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
+LogicalResult
+RequestConnectionOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
   if (failed(svcPort))
     return failure();
-  if (svcPort->direction != ServicePortInfo::Direction::toClient)
-    return emitOpError("Service port is not a to-client port");
   return checkTypeMatch(*this, svcPort->type, getToClient().getType(), false);
-}
-
-LogicalResult RequestToServerConnectionOp::verifySymbolUses(
-    SymbolTableCollection &symbolTable) {
-  auto svcPort = getServicePortInfo(*this, symbolTable, getServicePortAttr());
-  if (failed(svcPort))
-    return failure();
-  if (svcPort->direction != ServicePortInfo::Direction::toServer)
-    return emitOpError("Service port is not a to-server port");
-  return checkTypeMatch(*this, svcPort->type, getToServer().getType(), false);
 }
 
 LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
@@ -431,14 +419,10 @@ LogicalResult ServiceImplementConnReqOp::verifySymbolUses(
 }
 
 void CustomServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
-  for (auto toServer : getOps<ToServerOp>())
-    ports.push_back(ServicePortInfo{
-        hw::InnerRefAttr::get(getSymNameAttr(), toServer.getInnerSymAttr()),
-        ServicePortInfo::Direction::toServer, toServer.getToServerType()});
-  for (auto toClient : getOps<ToClientOp>())
+  for (auto toClient : getOps<ServiceDeclPortOp>())
     ports.push_back(ServicePortInfo{
         hw::InnerRefAttr::get(getSymNameAttr(), toClient.getInnerSymAttr()),
-        ServicePortInfo::Direction::toClient, toClient.getToClientType()});
+        toClient.getToClientType()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -614,7 +598,7 @@ SmallVector<Location> ESIPureModuleOp::getAllPortLocs() {
   return retval;
 }
 
-void ESIPureModuleOp::setAllPortLocs(ArrayRef<Location> locs) {
+void ESIPureModuleOp::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
   emitError("No ports for port locations");
 }
 
@@ -630,14 +614,80 @@ void ESIPureModuleOp::removeAllPortAttrs() {
   emitError("No ports for port attributes)");
 }
 
-SmallVector<Attribute> ESIPureModuleOp::getAllPortAttrs() {
-  SmallVector<Attribute> retval;
-  return retval;
-}
+ArrayRef<Attribute> ESIPureModuleOp::getAllPortAttrs() { return {}; }
 
 void ESIPureModuleOp::setHWModuleType(hw::ModuleType type) {
   emitError("No ports for port types");
 }
+
+//===----------------------------------------------------------------------===//
+// Manifest ops.
+//===----------------------------------------------------------------------===//
+
+StringRef ServiceImplRecordOp::getManifestClass() { return "service"; }
+
+void ServiceImplRecordOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  // AppID, optionally the service name, implementation name and details.
+  results.emplace_back(getAppIDAttrName(), getAppIDAttr());
+  if (getService())
+    results.emplace_back(getServiceAttrName(), getServiceAttr());
+  results.emplace_back(getServiceImplNameAttrName(), getServiceImplNameAttr());
+  // Don't add another level for the implementation details.
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
+
+  // All of the manifest data contained by this op.
+  SmallVector<Attribute, 8> reqDetails;
+  for (auto reqDetail : getReqDetails().front().getOps<IsManifestData>())
+    reqDetails.push_back(reqDetail.getDetailsAsDict());
+  results.emplace_back(StringAttr::get(ctxt, "client_details"),
+                       ArrayAttr::get(ctxt, reqDetails));
+}
+
+bool parseServiceImplRecordReqDetails(OpAsmParser &parser,
+                                      Region &reqDetailsRegion) {
+  parser.parseOptionalRegion(reqDetailsRegion);
+  if (reqDetailsRegion.empty())
+    reqDetailsRegion.emplaceBlock();
+  return false;
+}
+
+void printServiceImplRecordReqDetails(OpAsmPrinter &p, ServiceImplRecordOp,
+                                      Region &reqDetailsRegion) {
+  if (!reqDetailsRegion.empty() && !reqDetailsRegion.front().empty())
+    p.printRegion(reqDetailsRegion, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/false);
+}
+
+StringRef ServiceImplClientRecordOp::getManifestClass() {
+  return "service_client";
+}
+void ServiceImplClientRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  // Relative AppID path, service port, and implementation details. Don't add
+  // the bundle type since it is meaningless to the host and just clutters the
+  // output.
+  results.emplace_back(getRelAppIDPathAttrName(), getRelAppIDPathAttr());
+  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  // Don't add another level for the implementation details.
+  for (auto implDetail : getImplDetailsAttr().getValue())
+    results.push_back(implDetail);
+}
+
+StringRef ServiceRequestRecordOp::getManifestClass() { return "client_port"; }
+
+void ServiceRequestRecordOp::getDetails(
+    SmallVectorImpl<NamedAttribute> &results) {
+  auto *ctxt = getContext();
+  results.emplace_back(StringAttr::get(ctxt, "appID"), getRequestorAttr());
+  results.emplace_back(getBundleTypeAttrName(), getBundleTypeAttr());
+  results.emplace_back(getServicePortAttrName(), getServicePortAttr());
+  if (auto stdSvc = getStdServiceAttr())
+    results.emplace_back(getStdServiceAttrName(), getStdServiceAttr());
+}
+
+StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"

@@ -39,13 +39,13 @@ struct ContainerPortInfo {
   llvm::DenseMap<StringAttr, OutputPortOp> opOutputs;
 
   ContainerPortInfo() = default;
-  ContainerPortInfo(ContainerOp container) {
+  ContainerPortInfo(ContainerOpInterface container) {
     SmallVector<hw::PortInfo, 4> inputs, outputs;
 
     // Copies all attributes from a port, except for the port symbol and type.
     auto copyPortAttrs = [](auto port) {
       llvm::DenseSet<StringAttr> elidedAttrs;
-      elidedAttrs.insert(port.getSymNameAttrName());
+      elidedAttrs.insert(port.getInnerSymAttrName());
       elidedAttrs.insert(port.getTypeAttrName());
       llvm::SmallVector<NamedAttribute> attrs;
       for (NamedAttribute namedAttr : port->getAttrs()) {
@@ -58,10 +58,10 @@ struct ContainerPortInfo {
 
     // Gather in and output port ops.
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
-      opInputs[input.getSymNameAttr()] = input;
+      opInputs[input.getInnerSym().getSymName()] = input;
 
       hw::PortInfo portInfo;
-      portInfo.name = input.getSymNameAttr();
+      portInfo.name = input.getInnerSym().getSymName();
       portInfo.type = cast<PortOpInterface>(input.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Input;
       portInfo.attrs = copyPortAttrs(input);
@@ -69,10 +69,10 @@ struct ContainerPortInfo {
     }
 
     for (auto output : container.getBodyBlock()->getOps<OutputPortOp>()) {
-      opOutputs[output.getSymNameAttr()] = output;
+      opOutputs[output.getInnerSym().getSymName()] = output;
 
       hw::PortInfo portInfo;
-      portInfo.name = output.getSymNameAttr();
+      portInfo.name = output.getInnerSym().getSymName();
       portInfo.type =
           cast<PortOpInterface>(output.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Output;
@@ -85,13 +85,14 @@ struct ContainerPortInfo {
 
 using ContainerPortInfoMap = llvm::DenseMap<StringAttr, ContainerPortInfo>;
 
+template <typename ContainerOp>
 struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
   ContainerOpConversionPattern(MLIRContext *ctx,
                                ContainerPortInfoMap &portOrder)
       : OpConversionPattern<ContainerOp>(ctx), portOrder(portOrder) {}
 
   LogicalResult
-  matchAndRewrite(ContainerOp op, OpAdaptor adaptor,
+  matchAndRewrite(ContainerOp op, typename ContainerOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPoint(op);
 
@@ -261,8 +262,9 @@ struct ContainerInstanceOpConversionPattern
     // Create the hw.instance op.
     StringRef moduleName = getScopeRefModuleName(op.getType());
     auto hwInst = rewriter.create<hw::InstanceOp>(
-        op.getLoc(), retTypes, op.getSymName(), moduleName, operands,
-        rewriter.getArrayAttr(argNames), rewriter.getArrayAttr(resNames),
+        op.getLoc(), retTypes, op.getInnerSym().getSymName(), moduleName,
+        operands, rewriter.getArrayAttr(argNames),
+        rewriter.getArrayAttr(resNames),
         /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ nullptr);
 
     // Replace the reads of the output ports with the hw.instance results.
@@ -271,7 +273,12 @@ struct ContainerInstanceOpConversionPattern
       auto outputReadIt = outputReadsToReplace.find(output.name);
       if (outputReadIt == outputReadsToReplace.end())
         continue;
-      rewriter.replaceAllUsesWith(outputReadIt->second.getResult(), value);
+      // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+      // DialectConversion. Using it may lead to assertions about mutating
+      // replaced/erased ops. For now, do this RAUW directly, until
+      // ConversionPatternRewriter properly supports RAUW.
+      // See https://github.com/llvm/circt/issues/6795.
+      outputReadIt->second.getResult().replaceAllUsesWith(value);
       rewriter.eraseOp(outputReadIt->second);
     }
 
@@ -297,13 +304,14 @@ void ContainersToHWPass::runOnOperation() {
 
   // Generate module signatures.
   ContainerPortInfoMap portOrder;
-  for (auto container : getOperation().getOps<ContainerOp>())
+  for (auto container : getOperation().getOps<ContainerOpInterface>())
     portOrder.try_emplace(container.getSymNameAttr(),
                           ContainerPortInfo(container));
 
   ConversionTarget target(*ctx);
-  target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
-  target.addLegalDialect<hw::HWDialect>();
+  target.addIllegalOp<OuterContainerOp, InnerContainerOp, ContainerInstanceOp,
+                      ThisOp>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Parts of the conversion patterns will update operations in place, which in
   // turn requires the updated operations to be legalizeable. These in-place ops
@@ -312,9 +320,9 @@ void ContainersToHWPass::runOnOperation() {
   target.addLegalDialect<IbisDialect>();
 
   RewritePatternSet patterns(ctx);
-  patterns
-      .add<ContainerOpConversionPattern, ContainerInstanceOpConversionPattern>(
-          ctx, portOrder);
+  patterns.add<ContainerOpConversionPattern<OuterContainerOp>,
+               ContainerOpConversionPattern<InnerContainerOp>,
+               ContainerInstanceOpConversionPattern>(ctx, portOrder);
   patterns.add<ThisOpConversionPattern>(ctx);
 
   if (failed(

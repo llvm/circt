@@ -13,7 +13,13 @@
 #include <memory>
 
 namespace circt {
-std::unique_ptr<OperationPass<ModuleOp>> createConvertToArcsPass();
+
+#define GEN_PASS_DECL_CONVERTTOARCS
+#include "circt/Conversion/Passes.h.inc"
+
+std::unique_ptr<OperationPass<ModuleOp>>
+createConvertToArcsPass(const ConvertToArcsOptions &options = {});
+
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_CONVERTTOARCS_H

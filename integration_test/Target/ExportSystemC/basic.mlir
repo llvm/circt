@@ -74,12 +74,12 @@ systemc.module @emitcEmission () {
     %1 = emitc.apply "&"(%five) : (!emitc.opaque<"int">) -> !emitc.ptr<!emitc.opaque<"int">>
     %2 = emitc.apply "*"(%1) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
     %3 = emitc.cast %2: !emitc.opaque<"int"> to !emitc.opaque<"long">
-    emitc.call "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
+    emitc.call_opaque "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
 
     %idx = systemc.cpp.variable : index
 
     %4 = hw.constant 4 : i32
-    %5 = emitc.call "malloc" (%4) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
+    %5 = emitc.call_opaque "malloc" (%4) : (i32) -> !emitc.ptr<!emitc.opaque<"void">>
     %6 = emitc.cast %5 : !emitc.ptr<!emitc.opaque<"void">> to !emitc.ptr<!emitc.opaque<"int">>
     %somePtr = systemc.cpp.variable %6 : !emitc.ptr<!emitc.opaque<"int">>
   }

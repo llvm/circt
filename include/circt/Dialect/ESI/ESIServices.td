@@ -12,9 +12,9 @@
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-include "circt/Dialect/ESI/ESIAppID.td"
 include "circt/Dialect/ESI/ESIChannels.td"
 include "circt/Dialect/ESI/ESIInterfaces.td"
+include "circt/Dialect/ESI/ESIManifest.td"
 include "circt/Dialect/ESI/ESITypes.td"
 
 include "circt/Dialect/HW/HWAttributesNaming.td"
@@ -32,8 +32,8 @@ def CustomServiceDeclOp : ESI_Op<"service.decl",
 
     ```mlir
     esi.service.decl @HostComms {
-      esi.service.to_server send : !esi.channel<!esi.any>
-      esi.service.to_client recieve : !esi.channel<i8>
+      esi.service.port send : !esi.bundle<[!esi.any from "send"]>
+      esi.service.port recieve : !esi.channel<[i8 to "recv"]>
     }
     ```
   }];
@@ -46,18 +46,7 @@ def CustomServiceDeclOp : ESI_Op<"service.decl",
   }];
 }
 
-def ToServerOp : ESI_Op<"service.to_server",
-                        [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
-  let summary = "An ESI service bundle being sent to the service";
-
-  let arguments = (ins SymbolNameAttr:$inner_sym,
-                       TypeAttrOf<ChannelBundleType>:$toServerType);
-  let assemblyFormat = [{
-    $inner_sym attr-dict `:` $toServerType
-  }];
-}
-
-def ToClientOp : ESI_Op<"service.to_client",
+def ServiceDeclPortOp : ESI_Op<"service.port",
                         [HasParent<"::circt::esi::CustomServiceDeclOp">]> {
   let summary = "An ESI service bundle being received by the client";
 
@@ -83,7 +72,8 @@ def ESIAnyType : ESI_Type<"Any"> {
   }];
 }
 
-def ServiceInstanceOp : ESI_Op<"service.instance"> {
+def ServiceInstanceOp : ESI_Op<"service.instance", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Instantiate a server module";
   let description = [{
     Instantiate a service adhering to a service declaration interface.
@@ -105,18 +95,21 @@ def ServiceInstanceOp : ESI_Op<"service.instance"> {
     implementation to use for this service.
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
+  let arguments = (ins AppIDAttr:$appID,
+                       OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
   let assemblyFormat = [{
-    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
-      `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+    qualified($appID) (`svc` $service_symbol^)? `impl` `as` $impl_type
+      (`opts` $impl_opts^)? `(` $inputs `)`
+      attr-dict `:` functional-type($inputs, results)
   }];
 }
 
-def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
+def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
+        NoTerminator, DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
   let summary = "Request for a service to be implemented";
   let description = [{
     The connect services pass replaces `service.instance`s with this op. The
@@ -129,16 +122,19 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [NoTerminator]> {
     implementation.
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
+  let arguments = (ins AppIDAttr:$appID,
+                       OptionalAttr<FlatSymbolRefAttr>:$service_symbol,
                        StrAttr:$impl_type,
+                       OptionalAttr<StrAttr>:$stdService,
                        OptionalAttr<DictionaryAttr>:$impl_opts,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
   let regions = (region SizedRegion<1>:$portReqs);
 
   let assemblyFormat = [{
-    (`svc` $service_symbol^)? `impl` `as` $impl_type (`opts` $impl_opts^)?
-     `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+    qualified($appID) (`svc` $service_symbol^)? `impl` `as` $impl_type
+      (`std` $stdService^)? (`opts` $impl_opts^)? `(` $inputs `)`
+      attr-dict `:` functional-type($inputs, results)
       $portReqs
   }];
 }
@@ -160,20 +156,8 @@ def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
   }];
 }
 
-def RequestToServerConnectionOp : ESI_Op<"service.req.to_server", [
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Request a connection to send data";
-
-  let arguments = (ins InnerRefAttr:$servicePort,
-                       ChannelBundleType:$toServer,
-                       AppIDAttr:$appID);
-  let assemblyFormat = [{
-    $toServer `->` $servicePort `(` qualified($appID) `)`
-      attr-dict `:` qualified(type($toServer))
-  }];
-}
-
-def RequestToClientConnectionOp : ESI_Op<"service.req.to_client", [
+def RequestConnectionOp : ESI_Op<"service.req", [
+        DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
 

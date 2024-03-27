@@ -87,6 +87,8 @@ public:
   static IntBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "int_base"; }
 
+  static constexpr StringLiteral name = "systemc.int_base";
+
 protected:
   using Base::Base;
 };
@@ -102,6 +104,8 @@ public:
   static IntType get(MLIRContext *context, unsigned width);
   unsigned getWidth();
   static constexpr StringLiteral getMnemonic() { return "int"; }
+
+  static constexpr StringLiteral name = "systemc.int";
 
 protected:
   using Base::Base;
@@ -122,6 +126,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "uint_base"; }
 
+  static constexpr StringLiteral name = "systemc.uint_base";
+
 protected:
   using Base::Base;
 };
@@ -138,6 +144,8 @@ public:
   unsigned getWidth();
 
   static constexpr StringLiteral getMnemonic() { return "uint"; }
+
+  static constexpr StringLiteral name = "systemc.uint";
 
 protected:
   using Base::Base;
@@ -158,6 +166,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "signed"; }
 
+  static constexpr StringLiteral name = "systemc.signed";
+
 protected:
   using Base::Base;
 };
@@ -173,6 +183,8 @@ public:
   static BigIntType get(MLIRContext *context, unsigned width);
   unsigned getWidth();
   static constexpr StringLiteral getMnemonic() { return "bigint"; }
+
+  static constexpr StringLiteral name = "systemc.bigint";
 
 protected:
   using Base::Base;
@@ -193,6 +205,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "unsigned"; }
 
+  static constexpr StringLiteral name = "systemc.unsigned";
+
 protected:
   using Base::Base;
 };
@@ -210,6 +224,8 @@ public:
   unsigned getWidth();
 
   static constexpr StringLiteral getMnemonic() { return "biguint"; }
+
+  static constexpr StringLiteral name = "systemc.biguint";
 
 protected:
   using Base::Base;
@@ -232,6 +248,8 @@ public:
   static BitVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "bv_base"; }
 
+  static constexpr StringLiteral name = "systemc.bv_base";
+
 protected:
   using Base::Base;
 };
@@ -250,6 +268,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "bv"; }
 
+  static constexpr StringLiteral name = "systemc.bv";
+
 protected:
   using Base::Base;
 };
@@ -266,6 +286,8 @@ public:
   }
   static LogicVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "lv_base"; }
+
+  static constexpr StringLiteral name = "systemc.lv_base";
 
 protected:
   using Base::Base;
@@ -285,6 +307,8 @@ public:
   unsigned getWidth();
 
   static constexpr StringLiteral getMnemonic() { return "lv"; }
+
+  static constexpr StringLiteral name = "systemc.lv";
 
 protected:
   using Base::Base;

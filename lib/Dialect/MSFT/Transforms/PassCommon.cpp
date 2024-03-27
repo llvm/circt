@@ -74,12 +74,15 @@ void PassCommon::getAndSortModulesVisitor(
   modsSeen.insert(mod);
 
   mod.walk([&](igraph::InstanceOpInterface inst) {
-    Operation *modOp =
-        topLevelSyms.getDefinition(inst.getReferencedModuleNameAttr());
-    assert(modOp);
-    moduleInstantiations[modOp].push_back(inst);
-    if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))
-      getAndSortModulesVisitor(modLike, mods, modsSeen);
+    auto targetNameAttrs = inst.getReferencedModuleNamesAttr();
+    for (auto targetNameAttr : targetNameAttrs) {
+      Operation *modOp =
+          topLevelSyms.getDefinition(targetNameAttr.cast<StringAttr>());
+      assert(modOp);
+      moduleInstantiations[modOp].push_back(inst);
+      if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))
+        getAndSortModulesVisitor(modLike, mods, modsSeen);
+    }
   });
 
   mods.push_back(mod);

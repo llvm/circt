@@ -40,19 +40,28 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
              << req.getImplTypeAttr() << "'";
     return success();
   }
-  return genF->second(req, decl);
+
+  // Since we always need a record of generation, create it here then pass it to
+  // the generator for possible modification.
+  OpBuilder b(req);
+  auto implRecord = b.create<ServiceImplRecordOp>(
+      req.getLoc(), req.getAppID(), req.getServiceSymbolAttr(),
+      req.getStdServiceAttr(), req.getImplTypeAttr(), b.getDictionaryAttr({}));
+  implRecord.getReqDetails().emplaceBlock();
+
+  return genF->second(req, decl, implRecord);
 }
 
 /// The generator for the "cosim" impl_type.
-static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
-                                                 ServiceDeclOpInterface) {
+static LogicalResult
+instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
+                            ServiceDeclOpInterface,
+                            ServiceImplRecordOp implRecord) {
   auto *ctxt = implReq.getContext();
   OpBuilder b(implReq);
-  Type i1ch = ChannelType::get(ctxt, b.getIntegerType(1));
   Value clk = implReq.getOperand(0);
   Value rst = implReq.getOperand(1);
 
-  // Determine which EndpointID this generator should start with.
   if (implReq.getImplOpts()) {
     auto opts = implReq.getImplOpts()->getValue();
     for (auto nameAttr : opts) {
@@ -60,6 +69,9 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
              << nameAttr.getName();
     }
   }
+
+  Block &connImplBlock = implRecord.getReqDetails().front();
+  OpBuilder implRecords = OpBuilder::atBlockEnd(&connImplBlock);
 
   // Assemble the name to use for an endpoint.
   auto toStringAttr = [&](ArrayAttr strArr, StringAttr channelName) {
@@ -89,15 +101,17 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
     Location loc = req->getLoc();
     ChannelBundleType bundleType = req.getToClient().getType();
+    SmallVector<NamedAttribute, 8> channelAssignments;
 
     SmallVector<Value, 8> toServerValues;
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::to) {
-        auto nullSource = b.create<NullSourceOp>(loc, i1ch);
-        auto cosim = b.create<CosimEndpointOp>(
-            loc, ch.type, clk, rst, nullSource.getOut(),
+        auto cosim = b.create<CosimFromHostEndpointOp>(
+            loc, ch.type, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
-        toServerValues.push_back(cosim.getRecv());
+        toServerValues.push_back(cosim.getFromHost());
+        channelAssignments.push_back(
+            b.getNamedAttr(ch.name, cosim.getIdAttr()));
       }
     }
 
@@ -108,11 +122,20 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
 
     size_t chanIdx = 0;
     for (BundledChannel ch : bundleType.getChannels()) {
-      if (ch.direction == ChannelDirection::from)
-        b.create<CosimEndpointOp>(
-            loc, i1ch, clk, rst, pack.getFromChannels()[chanIdx++],
+      if (ch.direction == ChannelDirection::from) {
+        auto cosim = b.create<CosimToHostEndpointOp>(
+            loc, clk, rst, pack.getFromChannels()[chanIdx++],
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
+        channelAssignments.push_back(
+            b.getNamedAttr(ch.name, cosim.getIdAttr()));
+      }
     }
+
+    implRecords.create<ServiceImplClientRecordOp>(
+        req.getLoc(), req.getRelativeAppIDPathAttr(), req.getServicePortAttr(),
+        TypeAttr::get(bundleType),
+        b.getDictionaryAttr(b.getNamedAttr(
+            "channel_assignments", b.getDictionaryAttr(channelAssignments))));
   }
 
   // Erase the generation request.
@@ -124,7 +147,8 @@ static LogicalResult instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
 // array, hopefully inferred as a memory to the SV compiler.
 static LogicalResult
 instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
-                               ServiceDeclOpInterface decl) {
+                               ServiceDeclOpInterface decl,
+                               ServiceImplRecordOp) {
   if (!decl)
     return implReq.emitOpError(
         "Must specify a service declaration to use 'sv_mem'.");
@@ -297,13 +321,10 @@ struct ESIConnectServicesPass
 
   void runOnOperation() override;
 
-  /// Bundles allow us to convert to_server requests to to_client requests,
-  /// which is how the canonical implementation connection request is defined.
-  /// Convert both to_server and to_client requests into the canonical
-  /// implementation connection request. This simplifies the rest of the pass
-  /// and the service implementation code.
-  void convertReq(RequestToClientConnectionOp);
-  void convertReq(RequestToServerConnectionOp);
+  /// Convert connection requests to service implement connection requests,
+  /// which have a relative appid path instead of just an appid. Leave being a
+  /// record for the manifest of the original request.
+  void convertReq(RequestConnectionOp);
 
   /// "Bubble up" the specified requests to all of the instantiations of the
   /// module specified. Create and connect up ports to tunnel the ESI channels
@@ -320,6 +341,9 @@ struct ESIConnectServicesPass
   /// 'surfaceReqs' and/or 'replaceInst' as appropriate.
   LogicalResult process(hw::HWModuleLike);
 
+  /// If the servicePort is referring to a std service, return the name of it.
+  StringAttr getStdService(FlatSymbolRefAttr serviceSym);
+
 private:
   ServiceGeneratorDispatcher genDispatcher;
 };
@@ -329,12 +353,7 @@ void ESIConnectServicesPass::runOnOperation() {
   ModuleOp outerMod = getOperation();
   topLevelSyms.addDefinitions(outerMod);
 
-  outerMod.walk([&](Operation *op) {
-    if (auto req = dyn_cast<RequestToClientConnectionOp>(op))
-      convertReq(req);
-    else if (auto req = dyn_cast<RequestToServerConnectionOp>(op))
-      convertReq(req);
-  });
+  outerMod.walk([&](RequestConnectionOp req) { convertReq(req); });
 
   // Get a partially-ordered list of modules based on the instantiation DAG.
   // It's _very_ important that we process modules before their instantiations
@@ -353,60 +372,30 @@ void ESIConnectServicesPass::runOnOperation() {
   }
 }
 
-void ESIConnectServicesPass::convertReq(
-    RequestToClientConnectionOp toClientReq) {
-  OpBuilder b(toClientReq);
-  // to_client requests are already in the canonical form, just the wrong op.
-  auto newReq = b.create<ServiceImplementConnReqOp>(
-      toClientReq.getLoc(), toClientReq.getToClient().getType(),
-      toClientReq.getServicePortAttr(),
-      ArrayAttr::get(&getContext(), {toClientReq.getAppIDAttr()}));
-  newReq->setDialectAttrs(toClientReq->getDialectAttrs());
-  toClientReq.getToClient().replaceAllUsesWith(newReq.getToClient());
-
-  toClientReq.erase();
+// Get the std service name, if any.
+StringAttr ESIConnectServicesPass::getStdService(FlatSymbolRefAttr svcSym) {
+  if (!svcSym)
+    return {};
+  Operation *svcDecl = topLevelSyms.getDefinition(svcSym);
+  if (!isa<CustomServiceDeclOp>(svcDecl))
+    return svcDecl->getName().getIdentifier();
+  return {};
 }
 
-void ESIConnectServicesPass::convertReq(
-    RequestToServerConnectionOp toServerReq) {
-  OpBuilder b(toServerReq);
-  BackedgeBuilder beb(b, toServerReq.getLoc());
+void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
+  OpBuilder b(req);
+  auto newReq = b.create<ServiceImplementConnReqOp>(
+      req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
+      ArrayAttr::get(&getContext(), {req.getAppIDAttr()}));
+  newReq->setDialectAttrs(req->getDialectAttrs());
+  req.getToClient().replaceAllUsesWith(newReq.getToClient());
 
-  // to_server requests need to be converted to bundles with the opposite
-  // directions.
-  ChannelBundleType toClientType =
-      toServerReq.getToServer().getType().getReversed();
-
-  // Create the new canonical request. It's modeled in the to_client form.
-  auto toClientReq = b.create<ServiceImplementConnReqOp>(
-      toServerReq.getLoc(), toClientType, toServerReq.getServicePortAttr(),
-      ArrayAttr::get(&getContext(), {toServerReq.getAppIDAttr()}));
-  toClientReq->setDialectAttrs(toServerReq->getDialectAttrs());
-
-  // Unpack the bundle coming from the new request.
-  SmallVector<Value, 8> unpackToClientFromChannels;
-  SmallVector<Backedge, 8> unpackToClientFromChannelsBackedges;
-  for (BundledChannel ch : toClientType.getChannels()) {
-    if (ch.direction == ChannelDirection::to)
-      continue;
-    unpackToClientFromChannelsBackedges.push_back(beb.get(ch.type));
-    unpackToClientFromChannels.push_back(
-        unpackToClientFromChannelsBackedges.back());
-  }
-  auto unpackToClient =
-      b.create<UnpackBundleOp>(toServerReq.getLoc(), toClientReq.getToClient(),
-                               unpackToClientFromChannels);
-
-  // Convert the unpacked channels to the original request's bundle type with
-  // another unpack.
-  auto unpackToServer =
-      b.create<UnpackBundleOp>(toServerReq.getLoc(), toServerReq.getToServer(),
-                               unpackToClient.getToChannels());
-  for (auto [v, be] : llvm::zip_equal(unpackToServer.getToChannels(),
-                                      unpackToClientFromChannelsBackedges))
-    be.setValue(v);
-
-  toServerReq.erase();
+  // Emit a record of the original request.
+  b.create<ServiceRequestRecordOp>(
+      req.getLoc(), req.getAppID(), req.getServicePortAttr(),
+      getStdService(req.getServicePortAttr().getModuleRef()),
+      req.getToClient().getType());
+  req.erase();
 }
 
 LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
@@ -482,8 +471,9 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
   // Create the generation request op.
   OpBuilder b(instOp);
   auto implOp = b.create<ServiceImplementReqOp>(
-      instOp.getLoc(), resultTypes, instOp.getServiceSymbolAttr(),
-      instOp.getImplTypeAttr(), instOp.getImplOptsAttr(), instOp.getOperands());
+      instOp.getLoc(), resultTypes, instOp.getAppIDAttr(),
+      instOp.getServiceSymbolAttr(), instOp.getImplTypeAttr(),
+      getStdService(declSym), instOp.getImplOptsAttr(), instOp.getOperands());
   implOp->setDialectAttrs(instOp->getDialectAttrs());
   implOp.getPortReqs().push_back(portReqs);
 

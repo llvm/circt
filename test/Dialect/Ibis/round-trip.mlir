@@ -65,7 +65,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %out_wire = ibis.wire.output @out_wire, %true : i1
 // CHECK-NEXT:    %a = ibis.instance @a, @A 
-// CHECK-NEXT:    ibis.container @D {
+// CHECK-NEXT:    ibis.container.inner @D {
 // CHECK-NEXT:      %this_0 = ibis.this @D 
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@LowLevel>> : !ibis.scoperef<@LowLevel>]
 // CHECK-NEXT:      %parent.LowLevel_in.ref = ibis.get_port %parent, @LowLevel_in : !ibis.scoperef<@LowLevel> -> !ibis.portref<in i1>
@@ -78,6 +78,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:      %parent.a.out.ref = ibis.get_port %parent.a, @out : !ibis.scoperef<@A> -> !ibis.portref<out i1>
 // CHECK-NEXT:      ibis.port.write %parent.a.in.ref, %parent.LowLevel_out.ref.val : !ibis.portref<in i1>
 // CHECK-NEXT:      %parent.a.out.ref.val = ibis.port.read %parent.a.out.ref : !ibis.portref<out i1>
+// CHECK-NEXT:      hw.instance "foo" @externModule() -> ()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
@@ -99,7 +100,7 @@ ibis.class @LowLevel {
   // Instantiation
   %a = ibis.instance @a, @A
 
-  ibis.container @D {
+  ibis.container.inner @D {
     %this_d = ibis.this @D
     %parent_C = ibis.path [
       #ibis.step<parent : !ibis.scoperef<@LowLevel>>
@@ -120,5 +121,24 @@ ibis.class @LowLevel {
     %A.out_p = ibis.get_port %A.in_parent, @out : !ibis.scoperef<@A> -> !ibis.portref<out i1>
     ibis.port.write %A.in_p, %LowLevel_out : !ibis.portref<in i1>
     %A.out = ibis.port.read %A.out_p : !ibis.portref<out i1>
+
+    // Test hw.instance ops inside a container (symbol table usage)
+    hw.instance "foo" @externModule() -> ()
   }
 }
+
+// CHECK-LABEL:  ibis.container.outer @O {
+// CHECK-NEXT:     %this = ibis.this @O
+// CHECK-NEXT:     ibis.container.inner @I {
+// CHECK-NEXT:       %this_0 = ibis.this @I
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+
+ibis.container.outer @O {
+  %thisO = ibis.this @O
+  ibis.container.inner @I {
+    %thisI = ibis.this @I
+  }
+}
+
+hw.module.extern @externModule()

@@ -824,6 +824,58 @@ firrtl.circuit "CollidingSymbolsMultiInline" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "TrackInliningInDebugInfo"
+firrtl.circuit "TrackInliningInDebugInfo" {
+  // CHECK: firrtl.module @TrackInliningInDebugInfo
+  firrtl.module @TrackInliningInDebugInfo() {
+    // CHECK: [[SCOPE_FOO:%.+]] = dbg.scope "foo", "Foo"
+    // CHECK: [[SCOPE_BAR:%.+]] = dbg.scope "bar", "Bar" scope [[SCOPE_FOO]]
+    // CHECK: dbg.variable "a", {{%.+}} scope [[SCOPE_BAR]]
+    // CHECK: [[SCOPE_IMPL:%.+]] = dbg.scope "impl", "Bugu" scope [[SCOPE_BAR]]
+    // CHECK: dbg.variable "b", {{%.+}} scope [[SCOPE_IMPL]]
+    firrtl.instance foo @Foo()
+  }
+  // CHECK-NOT: @Foo
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance bar @Bar()
+  }
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %wire = firrtl.wire : !firrtl.uint<1>
+    dbg.variable "a", %wire : !firrtl.uint<1>
+    firrtl.when %wire : !firrtl.uint<1> {
+      %0 = dbg.scope "impl", "Bugu"
+      dbg.variable "b", %wire scope %0 : !firrtl.uint<1>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "TrackFlatteningInDebugInfo"
+firrtl.circuit "TrackFlatteningInDebugInfo" {
+  // CHECK: firrtl.module @TrackFlatteningInDebugInfo
+  firrtl.module @TrackFlatteningInDebugInfo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // CHECK: [[SCOPE_FOO:%.+]] = dbg.scope "foo", "Foo"
+    // CHECK: [[SCOPE_BAR:%.+]] = dbg.scope "bar", "Bar" scope [[SCOPE_FOO]]
+    // CHECK: dbg.variable "a", {{%.+}} scope [[SCOPE_BAR]]
+    // CHECK: [[SCOPE_IMPL:%.+]] = dbg.scope "impl", "Bugu" scope [[SCOPE_BAR]]
+    // CHECK: dbg.variable "b", {{%.+}} scope [[SCOPE_IMPL]]
+    firrtl.instance foo @Foo()
+  }
+  // CHECK-NOT: @Foo
+  firrtl.module private @Foo() {
+    firrtl.instance bar @Bar()
+  }
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() {
+    %wire = firrtl.wire : !firrtl.uint<1>
+    dbg.variable "a", %wire : !firrtl.uint<1>
+    firrtl.when %wire : !firrtl.uint<1> {
+      %0 = dbg.scope "impl", "Bugu"
+      dbg.variable "b", %wire scope %0 : !firrtl.uint<1>
+    }
+  }
+}
+
 // -----
 
 // Test proper hierarchical inlining of RefType
@@ -991,13 +1043,13 @@ firrtl.circuit "InlineInputProbe" {
     // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK: module private @Child
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>) {
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
   }
 }
@@ -1027,13 +1079,13 @@ firrtl.circuit "InlineInputProbe2" {
     // CHECK-NEXT: firrtl.ref.define %child_child__a, %child__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %xmr__a : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
   }
 }
@@ -1056,6 +1108,9 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     %c_a1, %c_a2  = firrtl.instance child @Child(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
+    %cn_a1, %cn_a2  = firrtl.instance child @ChildNoInline(in  _a1: !firrtl.probe<uint<1>>, in  _a2: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %cn_a1, %xmr : !firrtl.probe<uint<1>>
+    firrtl.ref.define %cn_a2, %xmr2 : !firrtl.probe<uint<1>>
     // CHECK:      %child__a1 = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %child__a2 = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %child_child__a = firrtl.wire : !firrtl.probe<uint<1>>
@@ -1070,8 +1125,24 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     // CHECK-NEXT: firrtl.ref.define %child__a1, %xmr__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a2, %0 : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
+    %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
+    %cw = firrtl.wire : !firrtl.uint<1>
+    firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
+  }
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
+    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
+    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
+  }
+  firrtl.module private @Child3(in  %_b: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+    %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
+  }
+  // CHECK: module private @ChildNoInline
+  firrtl.module private @ChildNoInline(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>) {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     // CHECK-NEXT: %child__a = firrtl.wire : !firrtl.probe<uint<1>>
     // CHECK-NEXT: %0 = firrtl.ref.resolve %child__a : !firrtl.probe<uint<1>>
@@ -1087,14 +1158,6 @@ firrtl.circuit "RecursiveInlineInputProbe" {
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
-  }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
-    %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
   }
 }
 
@@ -1137,20 +1200,20 @@ firrtl.circuit "FlattenProbe" {
     firrtl.ref.define %c_a1, %xmr : !firrtl.probe<uint<1>>
     firrtl.ref.define %c_a2, %xmr2 : !firrtl.probe<uint<1>>
   }
-  // CHECK: module @Child
-  firrtl.module @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
+  // CHECK-NOT: module private @Child
+  firrtl.module private @Child(in  %_a1: !firrtl.probe<uint<1>>, in  %_a2: !firrtl.probe<uint<1>>)  {
     %c_a = firrtl.instance child @Child2(in  _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a1 : !firrtl.probe<uint<1>>
     %0 = firrtl.ref.resolve %_a2 : !firrtl.probe<uint<1>>
     %cw = firrtl.wire : !firrtl.uint<1>
     firrtl.strictconnect %cw, %0 : !firrtl.uint<1>
   }
-  firrtl.module @Child2(in  %_a: !firrtl.probe<uint<1>>){
+  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %c_a = firrtl.instance child @Child3(in  _b: !firrtl.probe<uint<1>>)
     firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child3(in  %_b: !firrtl.probe<uint<1>>){
+  firrtl.module private @Child3(in  %_b: !firrtl.probe<uint<1>>){
     %0 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
   }
 }
@@ -1171,7 +1234,7 @@ firrtl.circuit "UTurn" {
     // CHECK-NEXT: firrtl.ref.define %child_o_a, %child_bar__a : !firrtl.probe<uint<1>>
     // CHECK-NEXT: firrtl.ref.define %child__a, %child_o_a : !firrtl.probe<uint<1>>
   }
-  firrtl.module @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
+  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>, out  %o_a: !firrtl.probe<uint<1>>)   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}{
     %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
     %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
     firrtl.ref.define %o_a, %bar_a : !firrtl.probe<uint<1>>
@@ -1405,4 +1468,33 @@ firrtl.circuit "PropertyUTurn" {
     firrtl.propassign %out, %str : !firrtl.string
   }
   firrtl.extmodule @Consume(in in : !firrtl.string)
+}
+
+// -----
+
+// Test that inlining and flattening compose with nla well.
+firrtl.circuit "compose_nla" {
+  hw.hierpath private @nla1 [@test1::@sym, @test2::@sym, @test3]
+// CHECK-NOT:  hw.hierpath private @nla1
+firrtl.module @compose_nla() {
+// CHECK-LABEL: firrtl.module @compose_nla() {
+  firrtl.instance test1 @test1()
+  firrtl.instance test2 @test2()
+  firrtl.instance test3 @test3()
+}
+firrtl.module private @test1() attributes {annotations =
+        [{class = "firrtl.transforms.FlattenAnnotation"},
+         {class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance test2 sym @sym @test2()
+  firrtl.instance test3 @test3()
+}
+firrtl.module private @test2() attributes {annotations =
+        [{class = "firrtl.passes.InlineAnnotation"}]} {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+  firrtl.instance test3 sym @sym @test3()
+}
+firrtl.module private @test3() {
+  %test_wire = firrtl.wire : !firrtl.uint<2>
+}
 }

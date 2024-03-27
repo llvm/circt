@@ -69,9 +69,9 @@ void NLATable::erase(hw::HierPathOp nla, SymbolTable *symbolTable) {
   symToOp.erase(nla.getSymNameAttr());
   for (auto ent : nla.getNamepath())
     if (auto mod = dyn_cast<FlatSymbolRefAttr>(ent))
-      llvm::erase_value(nodeMap[mod.getAttr()], nla);
+      llvm::erase(nodeMap[mod.getAttr()], nla);
     else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
-      llvm::erase_value(nodeMap[inr.getModule()], nla);
+      llvm::erase(nodeMap[inr.getModule()], nla);
   if (symbolTable)
     symbolTable->erase(nla);
 }

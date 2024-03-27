@@ -206,3 +206,32 @@ firrtl.circuit "IntWidths" attributes {
     firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
   }
 }
+
+// -----
+
+// Check direction of compatibility using const/non-const issue encountered (#6819).
+firrtl.circuit "Issue6819" attributes {
+ rawAnnotations = [
+  {
+    class = "firrtl.passes.wiring.SourceAnnotation",
+    target = "~Issue6819|Bar>y",
+    pin = "xyz"
+  },
+  {
+    class = "firrtl.passes.wiring.SinkAnnotation",
+    target = "~Issue6819|Issue6819>x",
+    pin = "xyz"
+  }
+  ]} {
+  firrtl.module private @Bar() {
+    %y = firrtl.wire interesting_name : !firrtl.const.uint<4>
+  }
+  // CHECK-LABEL: module @Issue6819
+  firrtl.module @Issue6819() {
+    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.const.uint<4>
+    firrtl.instance bar interesting_name @Bar()
+    %x = firrtl.wire interesting_name : !firrtl.uint
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint
+    firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
+  }
+}

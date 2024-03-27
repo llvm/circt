@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -521,7 +522,6 @@ LogicalResult circt::firrtl::applyOMIR(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 void EmitOMIRPass::runOnOperation() {
-  MLIRContext *context = &getContext();
   anyFailures = false;
   circuitNamespace = nullptr;
   instanceGraph = nullptr;
@@ -691,12 +691,11 @@ void EmitOMIRPass::runOnOperation() {
 
   // Emit the OMIR JSON as a verbatim op.
   auto builder = circuitOp.getBodyBuilder();
-  auto verbatimOp =
-      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer);
-  auto fileAttr = hw::OutputFileAttr::getFromFilename(
-      context, *outputFilename, /*excludeFromFilelist=*/true, false);
-  verbatimOp->setAttr("output_file", fileAttr);
-  verbatimOp.setSymbolsAttr(ArrayAttr::get(context, symbols));
+  auto loc = builder.getUnknownLoc();
+  builder.create<emit::FileOp>(loc, *outputFilename, [&] {
+    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer,
+                                   ValueRange{}, builder.getArrayAttr(symbols));
+  });
 
   markAnalysesPreserved<NLATable>();
 }
@@ -738,8 +737,12 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
                 << opName.getValue() << "`";
     diag.attachNote(tracker.op->getLoc())
         << "may refer to the following paths:";
-    for (auto path : paths)
-      path.print(diag.attachNote(tracker.op->getLoc()) << "- ");
+    for (auto path : paths) {
+      std::string pathStr;
+      llvm::raw_string_ostream os(pathStr);
+      os << "- " << path;
+      diag.attachNote(tracker.op->getLoc()) << pathStr;
+    }
     anyFailures = true;
     return;
   }
@@ -1288,7 +1291,8 @@ void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
           fieldID -= bundle.getFieldID(index);
           result.push_back('.');
           result.append(name.begin(), name.end());
-        });
+        })
+        .Default([](auto val) { llvm::report_fatal_error("invalid fieldID"); });
 }
 
 //===----------------------------------------------------------------------===//

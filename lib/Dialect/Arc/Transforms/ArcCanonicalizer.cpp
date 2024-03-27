@@ -38,6 +38,8 @@ using namespace arc;
 // Datastructures
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 /// A combination of SymbolCache and SymbolUserMap that also allows to add users
 /// and remove symbols on-demand.
 class SymbolHandler : public SymbolCache {
@@ -105,9 +107,80 @@ private:
   DenseMap<Operation *, SetVector<Operation *>> userMap;
 };
 
+/// A Listener keeping the provided SymbolHandler up-to-date. This is especially
+/// important for simplifications (e.g. DCE) the rewriter performs automatically
+/// that we cannot or do not want to turn off.
+class ArcListener : public mlir::RewriterBase::Listener {
+public:
+  explicit ArcListener(SymbolHandler *handler) : Listener(), handler(handler) {}
+
+  void notifyOperationReplaced(Operation *op, Operation *replacement) override {
+    // If, e.g., a DefineOp is replaced with another DefineOp but with the same
+    // symbol, we don't want to drop the list of users.
+    auto symOp = dyn_cast<mlir::SymbolOpInterface>(op);
+    auto symReplacement = dyn_cast<mlir::SymbolOpInterface>(replacement);
+    if (symOp && symReplacement &&
+        symOp.getNameAttr() == symReplacement.getNameAttr())
+      return;
+
+    remove(op);
+    // TODO: if an operation is inserted that defines a symbol and the symbol
+    // already has uses, those users are not added.
+    add(replacement);
+  }
+
+  void notifyOperationReplaced(Operation *op, ValueRange replacement) override {
+    remove(op);
+  }
+
+  void notifyOperationErased(Operation *op) override { remove(op); }
+
+  void notifyOperationInserted(Operation *op,
+                               mlir::IRRewriter::InsertPoint) override {
+    // TODO: if an operation is inserted that defines a symbol and the symbol
+    // already has uses, those users are not added.
+    add(op);
+  }
+
+private:
+  FailureOr<Operation *> maybeGetDefinition(Operation *op) {
+    if (auto callOp = dyn_cast<mlir::CallOpInterface>(op)) {
+      auto symAttr =
+          callOp.getCallableForCallee().dyn_cast<mlir::SymbolRefAttr>();
+      if (!symAttr)
+        return failure();
+      if (auto *def = handler->getDefinition(symAttr.getLeafReference()))
+        return def;
+    }
+    return failure();
+  }
+
+  void remove(Operation *op) {
+    auto maybeDef = maybeGetDefinition(op);
+    if (!failed(maybeDef))
+      handler->removeUser(*maybeDef, op);
+
+    if (isa<mlir::SymbolOpInterface>(op))
+      handler->removeDefinitionAndAllUsers(op);
+  }
+
+  void add(Operation *op) {
+    auto maybeDef = maybeGetDefinition(op);
+    if (!failed(maybeDef))
+      handler->addUser(*maybeDef, op);
+
+    if (auto defOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      handler->addDefinition(defOp.getNameAttr(), op);
+  }
+
+  SymbolHandler *handler;
+};
+
 struct PatternStatistics {
   unsigned removeUnusedArcArgumentsPatternNumArgsRemoved = 0;
 };
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Canonicalization patterns
@@ -152,12 +225,6 @@ private:
 struct CallPassthroughArc : public SymOpRewritePattern<CallOp> {
   using SymOpRewritePattern::SymOpRewritePattern;
   LogicalResult matchAndRewrite(CallOp op,
-                                PatternRewriter &rewriter) const final;
-};
-
-struct StatePassthroughArc : public SymOpRewritePattern<StateOp> {
-  using SymOpRewritePattern::SymOpRewritePattern;
-  LogicalResult matchAndRewrite(StateOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -230,7 +297,7 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
       if (arcMapping.count(defOp.getNameAttr())) {
         auto arcWithoutEnable = arcMapping[defOp.getNameAttr()];
         // Remove the enable attribute
-        rewriter.updateRootInPlace(op, [&]() {
+        rewriter.modifyOpInPlace(op, [&]() {
           op.setEnable(false);
           op.setArc(arcWithoutEnable.getValue());
         });
@@ -244,7 +311,7 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
       symbolCache.removeDefinitionAndAllUsers(defOp);
 
       // Remove the enable attribute
-      rewriter.updateRootInPlace(op, [&]() {
+      rewriter.modifyOpInPlace(op, [&]() {
         op.setEnable(false);
         op.setArc(newName);
       });
@@ -268,9 +335,9 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
 
       // Remove the enable output from the current arc
       auto *terminator = defOp.getBodyBlock().getTerminator();
-      rewriter.updateRootInPlace(
+      rewriter.modifyOpInPlace(
           terminator, [&]() { terminator->eraseOperand(op.getEnableIdx()); });
-      rewriter.updateRootInPlace(defOp, [&]() {
+      rewriter.modifyOpInPlace(defOp, [&]() {
         defOp.setName(newName);
         defOp.setFunctionType(
             rewriter.getFunctionType(defOp.getArgumentTypes(), newResultTypes));
@@ -294,14 +361,6 @@ LogicalResult
 CallPassthroughArc::matchAndRewrite(CallOp op,
                                     PatternRewriter &rewriter) const {
   return canonicalizePassthoughCall(op, symbolCache, rewriter);
-}
-
-LogicalResult
-StatePassthroughArc::matchAndRewrite(StateOp op,
-                                     PatternRewriter &rewriter) const {
-  if (op.getLatency() == 0)
-    return canonicalizePassthoughCall(op, symbolCache, rewriter);
-  return failure();
 }
 
 LogicalResult
@@ -478,7 +537,7 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
       else
         newInputs.push_back(value);
     }
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         callOp, [&]() { callOp.getArgOperandsMutable().assign(newInputs); });
     for (auto value : maybeUnusedValues)
       if (value.use_empty())
@@ -513,10 +572,12 @@ void ArcCanonicalizerPass::runOnOperation() {
   config.enableRegionSimplification = false;
   config.maxIterations = 10;
   config.useTopDownTraversal = true;
+  ArcListener listener(&cache);
+  config.listener = &listener;
 
   PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());
-  symbolPatterns.add<CallPassthroughArc, StatePassthroughArc, RemoveUnusedArcs,
+  symbolPatterns.add<CallPassthroughArc, RemoveUnusedArcs,
                      RemoveUnusedArcArgumentsPattern, SinkArcInputsPattern>(
       &getContext(), cache, names, statistics);
   symbolPatterns.add<MemWritePortEnableAndMaskCanonicalizer>(

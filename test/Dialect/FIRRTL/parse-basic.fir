@@ -308,7 +308,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node n4 = bits(i8, 4, 2)
 
     ; CHECK: firrtl.shl %i8, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
-    ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.shr %i8, 8 : (!firrtl.uint<8>) -> !firrtl.uint<0>
     node n5 = or(shl(i8, 4), shr(i8, 8))
 
     ; CHECK: firrtl.dshl %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<23>
@@ -436,10 +436,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     assert(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
+    ; CHECK: firrtl.assert %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assert_1"}
+    assert(clock, pred, en, "pred=%d, en=%d", pred, en) : assert_1
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
     assume(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
+    ; CHECK: firrtl.assume %clock, %pred, %en, "pred=%d, en=%d"(%pred, %en) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "assume_1"}
+    assume(clock, pred, en, "pred=%d, en=%d", pred, en) : assume_1
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
     cover(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
@@ -483,7 +487,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
   module oversize_shift :
     wire value : UInt<2>
-    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+    ; CHECK: firrtl.shr %value, 5 : (!firrtl.uint<2>) -> !firrtl.uint<0>
     node n = shr(value, 5)
 
   ; CHECK-LABEL: firrtl.module private @when_else_ambiguity(
@@ -1045,7 +1049,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
@@ -1069,7 +1073,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       stop(clock, enable, 1)
     ; CHECK: [[CONDINV:%.+]] = firrtl.not %cond
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr [[CONDINV]]
-    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
+    ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.isX [[TMP1]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.or [[CONDINV]], [[TMP2]]
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
@@ -1153,8 +1157,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
     ; CHECK: %0 = firrtl.enumcreate Some(%c0_ui8) : (!firrtl.const.uint<8>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
-    ; CHECK: %n = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
-    node n = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+    ; CHECK: %some = firrtl.node interesting_name %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node some = {|Some : UInt<8>, None|}(Some, UInt<8>(0))
+    ; CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.const.uint<0>
+    ; CHECK: %1 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.const.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    ; CHECK: %none = firrtl.node {{.*}} %1 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    node none = {|Some : UInt<8>, None|}(None)
 
     ; CHECK: firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
     match i:
@@ -1194,6 +1202,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %[[NODE_RWREF:.+]] = firrtl.ref.rwprobe <@RefsChild::@[[NODE_RW_SYM]]>
     ; CHECK-NEXT: ref.define %rw, %[[NODE_RWREF]]
     define rw = rwprobe(n)
+
+  ; CHECK-LABEL: module private @RefsChildOpenAgg(
+  ; CHECK-SAME: in %in: !firrtl.openbundle<a: uint<1>, rw flip: rwprobe<uint<1>>> sym [<@[[SYM:[^,]+]],1,
+  module RefsChildOpenAgg :
+    input in : { a : UInt<1>, flip rw: RWProbe<UInt<1>> }
+    ; CHECK-NEXT: %[[IN_RW:[^ ]+]] = firrtl.opensubfield %in[rw]
+    ; CHECK-NEXT: %[[RWPROBE_IN_A:[^ ]+]] = firrtl.ref.rwprobe <@RefsChildOpenAgg::@[[SYM]]>
+    ; CHECK-NEXT: firrtl.ref.define %[[IN_RW]], %[[RWPROBE_IN_A]]
+    define in.rw = rwprobe(in.a)
 
   ; CHECK-LABEL: module private @Refs(
   module Refs :
@@ -1275,6 +1292,30 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %[[AGG4_RW_0_b_x:.+]] = firrtl.ref.rwprobe <@Refs::@[[AGG4_0_b_x_SYM]]>
     ; CHECK-NEXT: firrtl.ref.define %field_rw, %[[AGG4_RW_0_b_x]]
     define field_rw = rwprobe(agg4[0].b.x)
+
+   ; CHECK: %inst_rw = firrtl.wire : !firrtl.rwprobe<uint<1>>
+   ; CHECK-NEXT: %inst_rw2 = firrtl.wire : !firrtl.rwprobe<uint<1>>
+   ; CHECK-NEXT: %rc2_in_bounce = firrtl.wire sym @[[RC2_IN_BOUNCE_SYM:[^ ]+]]
+   ; CHECK-NEXT: %rc2_in, %rc2_r, %rc2_rw = firrtl.instance rc2
+   ; CHECK-NEXT: firrtl.strictconnect %rc2_in, %rc2_in_bounce
+    wire inst_rw : RWProbe<UInt<1>>
+    wire inst_rw2 : RWProbe<UInt<1>>
+    inst rc2 of RefsChild
+
+    ; CHECK: %[[IN_CAST:[^ ]+]] = firrtl.constCast %in :
+    ; CHECK: firrtl.strictconnect %rc2_in_bounce, %[[IN_CAST]]
+    rc2.in <= in
+   ; CHECK-NEXT: firrtl.when %rc2_in_bounce :
+   ; CHECK-NEXT:   %[[RWPROBE_RC2_IN_BOUNCE_1:[^ ]+]] = firrtl.ref.rwprobe <@Refs::@[[RC2_IN_BOUNCE_SYM]]>
+   ; CHECK-NEXT:   firrtl.ref.define %inst_rw, %[[RWPROBE_RC2_IN_BOUNCE_1]]
+   ; CHECK-NEXT: }
+    when rc2.in:
+      define inst_rw = rwprobe(rc2.in)
+   ; CHECK-NEXT: firrtl.strictconnect %rc2_in_bounce,
+    rc2.in <= rc.in
+   ; CHECK-NEXT: %[[RWPROBE_RC2_IN_BOUNCE_2:[^ ]+]] = firrtl.ref.rwprobe <@Refs::@[[RC2_IN_BOUNCE_SYM]]>
+   ; CHECK-NEXT: firrtl.ref.define %inst_rw2, %[[RWPROBE_RC2_IN_BOUNCE_2]]
+    define inst_rw2 = rwprobe(rc2.in)
 
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
@@ -1616,60 +1657,64 @@ circuit Top:
 
 ;// -----
 
-; CHECK-LABEL: firrtl.circuit "Groups"
-FIRRTL version 3.2.0
-circuit Groups:
-  declgroup A, bind:
-    declgroup B, bind:
-      declgroup C, bind:
-      declgroup D, bind:
-        declgroup E, bind:
-    declgroup F, bind:
-    ; CHECK-NEXT: firrtl.declgroup @A bind {
-    ; CHECK-NEXT:   firrtl.declgroup @B bind {
-    ; CHECK-NEXT:     firrtl.declgroup @C bind {
+; CHECK-LABEL: firrtl.circuit "Layers"
+FIRRTL version 4.0.0
+circuit Layers:
+  layer A, bind:
+    layer B, bind:
+      layer C, bind:
+      layer D, bind:
+        layer E, bind:
+    layer F, bind:
+    ; CHECK-NEXT: firrtl.layer @A bind {
+    ; CHECK-NEXT:   firrtl.layer @B bind {
+    ; CHECK-NEXT:     firrtl.layer @C bind {
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.declgroup @D bind {
-    ; CHECK-NEXT:       firrtl.declgroup @E bind {
+    ; CHECK-NEXT:     firrtl.layer @D bind {
+    ; CHECK-NEXT:       firrtl.layer @E bind {
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.declgroup @F bind {
+    ; CHECK-NEXT:   firrtl.layer @F bind {
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
-  ; CHECK: firrtl.module @Groups
-  module Groups:
+  ; CHECK:      firrtl.module @Layers
+  ; CHECK-SAME:   out %b: !firrtl.probe<uint<1>, @A>
+  ; CHECK-SAME:   out %c: !firrtl.rwprobe<uint<1>, @A::@B>
+  public module Layers:
     input a: UInt<1>
+    output b: Probe<UInt<1>, A>
+    output c: RWProbe<UInt<1>, A.B>
 
-    group A:
+    layerblock A:
       node A_a = a
-      group B:
+      layerblock B:
         node B_a = a
-        group C:
+        layerblock C:
           node C_a = a
-        group D:
+        layerblock D:
           node D_a = a
-          group E:
+          layerblock E:
             node E_a = a
-      group F:
+      layerblock F:
         node F_a = a
 
-    ; CHECK-NEXT: firrtl.group @A {
+    ; CHECK-NEXT: firrtl.layerblock @A {
     ; CHECK-NEXT:   %A_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:   firrtl.group @A::@B {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@B {
     ; CHECK-NEXT:     %B_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:     firrtl.group @A::@B::@C {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@C {
     ; CHECK-NEXT:       %C_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:     }
-    ; CHECK-NEXT:     firrtl.group @A::@B::@D {
+    ; CHECK-NEXT:     firrtl.layerblock @A::@B::@D {
     ; CHECK-NEXT:       %D_a = firrtl.node{{.*}} %a
-    ; CHECK-NEXT:       firrtl.group @A::@B::@D::@E {
+    ; CHECK-NEXT:       firrtl.layerblock @A::@B::@D::@E {
     ; CHECK-NEXT:         %E_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }
-    ; CHECK-NEXT:   firrtl.group @A::@F {
+    ; CHECK-NEXT:   firrtl.layerblock @A::@F {
     ; CHECK-NEXT:     %F_a = firrtl.node{{.*}} %a
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
@@ -1808,43 +1853,29 @@ circuit BasicProps :
     ; CHECK-NEXT: firrtl.propassign %nested, %[[NESTED]]
     propassign nested, List<List<String>>(List<String>(), List<String>(String("test")), List<String>())
 
-  ; CHECK-LABEL: module private @Map
-  module Map :
-    ; CHECK-SAME: in %list: !firrtl.list<string>
-    input list : List<String>
-    ; CHECK-SAME: out %str2str: !firrtl.map<string, string>
-    ; CHECK-SAME: out %str2objs: !firrtl.map<string, class<@SimpleClass({{.*}})>>
-    ; CHECK-SAME: out %int2list: !firrtl.map<integer, list<string>>
-    ; CHECK-SAME: out %empty: !firrtl.map<integer, integer>
-    output str2str : Map<String, String>
-    output str2objs : Map<String, Inst<SimpleClass>>
-    output int2list : Map<Integer, List<String>>
-    output empty : Map<Integer, Integer>
+;// -----
+FIRRTL version 4.0.0
 
-    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
-    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
-    ; CHECK-NEXT: %[[STRINGS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[WORLD]]) : !firrtl.map<string, string>
-    ; CHECK-NEXT: firrtl.propassign %str2str, %[[STRINGS]] : !firrtl.map<string, string>
-    propassign str2str, Map<String, String>(String("hello") -> String("world"))
+; CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
+circuit IntegerArithmetic :
+  public module IntegerArithmetic :
+    input a : Integer
+    input b : Integer
+    output c : Integer
+    output d : Integer
+    output e : Integer
 
-    ; CHECK-NEXT: %[[OBJ:.+]] = firrtl.object
-    ; CHECK-NEXT: %[[HELLO:.+]] = firrtl.string "hello"
-    ; CHECK-NEXT: %[[WORLD:.+]] = firrtl.string "world"
-    ; CHECK-NEXT: %[[OBJS:.+]] = firrtl.map.create (%[[HELLO]] -> %[[OBJ]], %[[WORLD]] -> %[[OBJ]]) : !firrtl.map<string, class<@SimpleClass({{.*}})>>
-    ; CHECK-NEXT: firrtl.propassign %str2objs, %[[OBJS]] : !firrtl.map<string, class
-    object obj of SimpleClass
-    propassign str2objs, Map<String, Inst<SimpleClass>>(String("hello") -> obj, String("world") -> obj)
+    ; CHECK: [[C:%.+]] = firrtl.integer.add %a, %b
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, integer_add(a, b)
 
-    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
-    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.list.create : !firrtl.list<string>
-    ; CHECK-NEXT: %[[TEN:.+]] = firrtl.integer 10
-    ; CHECK-NEXT: %[[INTLISTMAP:.+]] = firrtl.map.create (%[[FIVE]] -> %[[EMPTY]], %[[TEN]] -> %list) : !firrtl.map<integer, list<string>>
-    ; CHECK-NEXT: firrtl.propassign %int2list, %[[INTLISTMAP]]
-    propassign int2list, Map<Integer, List<String>>(Integer(5) -> List<String>(), Integer(10) -> list)
+    ; CHECK: [[D:%.+]] = firrtl.integer.mul %a, %b
+    ; CHECK: firrtl.propassign %d, [[D]]
+    propassign d, integer_mul(a, b)
 
-    ; CHECK-NEXT: %[[EMPTY:.+]] = firrtl.map.create : !firrtl.map<integer, integer>
-    ; CHECK-NEXT: firrtl.propassign %empty, %[[EMPTY]]
-    propassign empty, Map<Integer, Integer>()
+    ; CHECK: [[E:%.+]] = firrtl.integer.shr %a, %b
+    ; CHECK: firrtl.propassign %e, [[E]]
+    propassign e, integer_shr(a, b)
 
 ;// -----
 FIRRTL version 3.1.0
@@ -1890,10 +1921,6 @@ circuit AnyRef:
     ; CHECK: !firrtl.anyref
     output listOfAny : List<AnyRef>
     ; CHECK: !firrtl.list<anyref>
-    output mapToAny : Map<Integer, AnyRef>
-    ; CHECK: !firrtl.map<integer, anyref>
-    output mapFromAny : Map<AnyRef, Integer>
-    ; CHECK: !firrtl.map<anyref, integer>
 
     object foo of Foo
     propassign y, foo
@@ -1906,13 +1933,150 @@ circuit AnyRef:
     ; CHECK-NEXT: %[[LIST:.+]] = firrtl.list.create %[[CAST]], %x
     ; CHECK-NEXT: propassign %listOfAny, %[[LIST]]
 
-    propassign mapToAny, Map<Integer, AnyRef>(Integer(2) -> foo)
-    ; CHECK-NEXT: %[[TWO:.+]] = firrtl.integer 2
-    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
-    ; CHECK-NEXT: %[[MAPTO:.+]] = firrtl.map.create (%[[TWO]] -> %[[CAST]])
-    ; CHECK-NEXT: propassign %mapToAny, %[[MAPTO]]
-    propassign mapFromAny, Map<AnyRef, Integer>(foo -> Integer(5))
-    ; CHECK-NEXT: %[[FIVE:.+]] = firrtl.integer 5
-    ; CHECK-NEXT: %[[CAST:.+]] = firrtl.object.anyref_cast %[[OBJ]]
-    ; CHECK-NEXT: %[[MAPFROM:.+]] = firrtl.map.create (%[[CAST]] -> %[[FIVE]])
-    ; CHECK-NEXT: propassign %mapFromAny, %[[MAPFROM]]
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "PublicModules"
+circuit PublicModules:
+  ; CHECK: firrtl.module @Foo
+  public module Foo:
+  ; CHECK: firrtl.module private @Bar
+  module Bar:
+  ; CHECK: firrtl.module @PublicModules
+  public module PublicModules:
+
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABEL: firrtl.circuit "LayerEnabledModule"
+circuit LayerEnabledModule:
+  layer A, bind:
+  layer B, bind:
+    layer C, bind:
+  ; CHECK: firrtl.module @LayerEnabledModule
+  ; CHECK-SAME: layers = [@A, @B::@C]
+  public module LayerEnabledModule enablelayer A enablelayer B.C:
+
+  ; CHECK: firrtl.module private @UserOfLayerEnabledModule
+  ; CHECK-SAME: layers = [@A, @B::@C]
+  module UserOfLayerEnabledModule enablelayer A enablelayer B.C:
+    ; CHECK: firrtl.instance i interesting_name {layers = [@A, @B::@C]} @LayerEnabledModule()
+    inst i of LayerEnabledModule
+
+;// -----
+
+FIRRTL version 3.3.0
+; CHECK-LABEL: circuit "StaticShiftRight"
+circuit StaticShiftRight:
+  ; CHECK: firrtl.module @StaticShiftRight
+  module StaticShiftRight:
+    input a : UInt<8>
+    input b : UInt<0>
+    input c : SInt<8>
+    input d : SInt<0>
+
+    wire w : UInt
+    connect w, a
+
+    wire x : SInt
+    connect x, c
+
+    ; CHECK: %0 = firrtl.shr %a, 1
+    ; CHECK: %1 = firrtl.pad %0, 1
+    ; CHECK: %a_1 = firrtl.node {{.*}} %1 : !firrtl.uint<7>
+    node a_1 = shr(a, 1)
+    ; CHECK: %2 = firrtl.shr %a, 8
+    ; CHECK: %3 = firrtl.pad %2, 1
+    ; CHECK: %a_2 = firrtl.node {{.*}} %3 : !firrtl.uint<1>
+    node a_2 = shr(a, 8)
+    ; CHECK: %4 = firrtl.shr %a, 10
+    ; CHECK: %5 = firrtl.pad %4, 1
+    ; CHECK: %a_3 = firrtl.node {{.*}} %5 : !firrtl.uint<1>
+    node a_3 = shr(a, 10)
+    ; CHECK: %6 = firrtl.shr %b, 0
+    ; CHECK: %7 = firrtl.pad %6, 1
+    ; CHECK: %b_1 = firrtl.node {{.*}} %7 : !firrtl.uint<1>
+    node b_1 = shr(b, 0)
+    ; CHECK: %8 = firrtl.shr %b, 1
+    ; CHECK: %9 = firrtl.pad %8, 1
+    ; CHECK: %b_2 = firrtl.node {{.*}} %9 : !firrtl.uint<1>
+    node b_2 = shr(b, 1)
+    ; CHECK: %10 = firrtl.shr %w, 10
+    ; CHECK: %11 = firrtl.pad %10, 1
+    ; CHECK: %w_1 = firrtl.node {{.*}} %11 : !firrtl.uint
+    node w_1 = shr(w, 10)
+
+    ; CHECK: %12 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %12 : !firrtl.sint<7>
+    node c_1 = shr(c, 1)
+    ; CHECK: %13 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %13 : !firrtl.sint<1>
+    node c_2 = shr(c, 8)
+    ; CHECK: %14 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %14 : !firrtl.sint<1>
+    node c_3 = shr(c, 10)
+    ; CHECK: %15 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %15 : !firrtl.sint<1>
+    node d_1 = shr(d, 0)
+    ; CHECK: %16 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %16 : !firrtl.sint<1>
+    node d_2 = shr(d, 1)
+    ; CHECK: %17 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %17 : !firrtl.sint
+    node x_1 = shr(x, 10)
+
+;// -----
+
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "StaticShiftRight"
+circuit StaticShiftRight:
+  ; CHECK: firrtl.module @StaticShiftRight
+  public module StaticShiftRight:
+    input a : UInt<8>
+    input b : UInt<0>
+    input c : SInt<8>
+    input d : SInt<0>
+
+    wire w : UInt
+    connect w, a
+
+    wire x : SInt
+    connect x, c
+
+    ; CHECK: %0 = firrtl.shr %a, 1
+    ; CHECK: %a_1 = firrtl.node {{.*}} %0 : !firrtl.uint<7>
+    node a_1 = shr(a, 1)
+    ; CHECK: %1 = firrtl.shr %a, 8
+    ; CHECK: %a_2 = firrtl.node {{.*}} %1 : !firrtl.uint<0>
+    node a_2 = shr(a, 8)
+    ; CHECK: %2 = firrtl.shr %a, 10
+    ; CHECK: %a_3 = firrtl.node {{.*}} %2 : !firrtl.uint<0>
+    node a_3 = shr(a, 10)
+    ; CHECK: %3 = firrtl.shr %b, 0
+    ; CHECK: %b_1 = firrtl.node {{.*}} %3 : !firrtl.uint<0>
+    node b_1 = shr(b, 0)
+    ; CHECK: %4 = firrtl.shr %b, 1
+    ; CHECK: %b_2 = firrtl.node {{.*}} %4 : !firrtl.uint<0>
+    node b_2 = shr(b, 1)
+    ; CHECK: %5 = firrtl.shr %w, 10
+    ; CHECK: %w_1 = firrtl.node {{.*}} %5 : !firrtl.uint
+    node w_1 = shr(w, 10)
+
+    ; CHECK: %6 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %6 : !firrtl.sint<7>
+    node c_1 = shr(c, 1)
+    ; CHECK: %7 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %7 : !firrtl.sint<1>
+    node c_2 = shr(c, 8)
+    ; CHECK: %8 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %8 : !firrtl.sint<1>
+    node c_3 = shr(c, 10)
+    ; CHECK: %9 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %9 : !firrtl.sint<1>
+    node d_1 = shr(d, 0)
+    ; CHECK: %10 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %10 : !firrtl.sint<1>
+    node d_2 = shr(d, 1)
+    ; CHECK: %11 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %11 : !firrtl.sint
+    node x_1 = shr(x, 10)

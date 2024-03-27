@@ -68,7 +68,7 @@ hw.module public @CrossReferences() {
 // CHECK-LABEL: hw.module @ClockAgg(in %c : !hw.struct<clock: i1>, out oc : !hw.struct<clock: i1>)
 // CHECK: [[CLOCK:%.+]] = hw.struct_extract %c["clock"] : !hw.struct<clock: i1>
 // CHECK: [[STRUCT:%.+]] = hw.struct_create ([[CLOCK]]) : !hw.struct<clock: i1>
-// CHECL: hw.output [[STRUCT]] : !hw.struct<clock: i1>
+// CHECK: hw.output [[STRUCT]] : !hw.struct<clock: i1>
 hw.module @ClockAgg(in %c: !hw.struct<clock: !seq.clock>, out oc: !hw.struct<clock: !seq.clock>) {
   %clock = hw.struct_extract %c["clock"] : !hw.struct<clock: !seq.clock>
   %0 = hw.struct_create (%clock) : !hw.struct<clock: !seq.clock>
@@ -84,4 +84,19 @@ hw.module @ClockArray(in %c: !hw.array<1x!seq.clock>, out oc: !hw.array<1x!seq.c
   %clock = hw.array_get %c[%idx] : !hw.array<1x!seq.clock>, i1
   %0 = hw.array_create %clock : !seq.clock
   hw.output %0 : !hw.array<1x!seq.clock>
+}
+
+hw.module.extern private @ClockSource(out clock : !seq.clock)
+hw.module.extern private @ClockSink(in %clock : !seq.clock)
+hw.module.extern private @WireSink(in %clock : i1)
+
+// CHECK-LABEL: hw.module @ClockCastUse
+hw.module @ClockCastUse() {
+  // CHECK: hw.instance "" @WireSink(clock: %clk.clock: i1) -> ()
+  // CHECK: hw.instance "" @ClockSink(clock: %clk.clock: i1) -> ()
+  // CHECK: %clk.clock = hw.instance "clk" @ClockSource() -> (clock: i1)
+  hw.instance "" @WireSink(clock : %wire : i1) -> ()
+  %wire = seq.from_clock %clk {sv.namehint = "X"}
+  hw.instance "" @ClockSink(clock : %clk : !seq.clock) -> ()
+  %clk = hw.instance "clk" @ClockSource() -> (clock : !seq.clock)
 }

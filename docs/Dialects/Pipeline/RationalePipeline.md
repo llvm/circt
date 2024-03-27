@@ -175,7 +175,7 @@ foo.bar %out_s4 : i32
 **Note:** the following is only valid for pipelines with a stall signal.
 
 An option of the Pipeline abstraction presented in this dialect is the ability
-to have _non-stallable stages_ (NS). NS stages are used whereever a pipeline
+to have _non-stallable stages_ (NS). NS stages are used wherever a pipeline
 access resources that are not able to stop on a dime, and thus require a fixed
 amount of cycles to complete. 
 

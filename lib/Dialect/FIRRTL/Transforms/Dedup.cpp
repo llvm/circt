@@ -84,6 +84,7 @@ struct StructuralHasherSharedConstants {
     moduleNameAttr = StringAttr::get(context, "moduleName");
     innerSymAttr = StringAttr::get(context, "inner_sym");
     portSymsAttr = StringAttr::get(context, "portSyms");
+    portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
     nonessentialAttributes.insert(StringAttr::get(context, "portAnnotations"));
@@ -103,6 +104,9 @@ struct StructuralHasherSharedConstants {
 
   // This is a cached "portSyms" string attr.
   StringAttr portSymsAttr;
+
+  // This is a cached "portNames" string attr.
+  StringAttr portNamesAttr;
 
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
@@ -159,6 +163,15 @@ private:
 
   void update(OpResult result) {
     record(result.getAsOpaquePointer());
+
+    // Like instance ops, don't use object ops' result types since they might be
+    // replaced by dedup. Record the class names and lazily combine their hashes
+    // using the same mechanism as instances and modules.
+    if (auto objectOp = dyn_cast<ObjectOp>(result.getOwner())) {
+      referredModuleNames.push_back(objectOp.getType().getNameAttr().getAttr());
+      return;
+    }
+
     update(result.getType());
   }
 
@@ -201,8 +214,11 @@ private:
     for (auto namedAttr : dict) {
       auto name = namedAttr.getName();
       auto value = namedAttr.getValue();
-      // Skip names and annotations.
-      if (constants.nonessentialAttributes.contains(name))
+      // Skip names and annotations, except in certain cases.
+      // Names of ports are load bearing for classes, so we do hash those.
+      bool isClassPortNames =
+          isa<ClassLike>(op) && name == constants.portNamesAttr;
+      if (constants.nonessentialAttributes.contains(name) && !isClassPortNames)
         continue;
 
       // Hash the port types.
@@ -246,6 +262,11 @@ private:
 
       // Hash the interned pointer.
       update(name.getAsOpaquePointer());
+
+      // TODO: properly handle DistinctAttr, including its use in paths.
+      // See https://github.com/llvm/circt/issues/6583.
+      if (isa<DistinctAttr>(value))
+        continue;
 
       // If this is an symbol reference, we need to perform name erasure.
       if (auto innerRef = dyn_cast<hw::InnerRefAttr>(value))
@@ -588,6 +609,9 @@ struct Equivalence {
         if (failed(check(diag, a, cast<IntegerAttr>(aAttr), b,
                          cast<IntegerAttr>(bAttr))))
           return failure();
+      } else if (isa<DistinctAttr>(aAttr) && isa<DistinctAttr>(bAttr)) {
+        // TODO: properly handle DistinctAttr, including its use in paths.
+        // See https://github.com/llvm/circt/issues/6583
       } else if (aAttr != bAttr) {
         diag.attachNote(a->getLoc())
             << "first operation has attribute '" << attrName.getValue()
@@ -617,23 +641,24 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, InstanceOp a, InstanceOp b) {
-    auto aName = a.getModuleNameAttr().getAttr();
-    auto bName = b.getModuleNameAttr().getAttr();
+  LogicalResult check(InFlightDiagnostic &diag, FInstanceLike a,
+                      FInstanceLike b) {
+    auto aName = a.getReferencedModuleNameAttr();
+    auto bName = b.getReferencedModuleNameAttr();
+    if (aName == bName)
+      return success();
+
     // If the modules instantiate are different we will want to know why the
     // sub module did not dedupliate. This code recursively checks the child
     // module.
-    if (aName != bName) {
-      auto aModule = instanceGraph.getReferencedModule(a);
-      auto bModule = instanceGraph.getReferencedModule(b);
-      // Create a new error for the submodule.
-      diag.attachNote(std::nullopt)
-          << "in instance " << a.getNameAttr() << " of " << aName
-          << ", and instance " << b.getNameAttr() << " of " << bName;
-      check(diag, aModule, bModule);
-      return failure();
-    }
-    return success();
+    auto aModule = instanceGraph.lookup(aName)->getModule();
+    auto bModule = instanceGraph.lookup(bName)->getModule();
+    // Create a new error for the submodule.
+    diag.attachNote(std::nullopt)
+        << "in instance " << a.getInstanceNameAttr() << " of " << aName
+        << ", and instance " << b.getInstanceNameAttr() << " of " << bName;
+    check(diag, aModule, bModule);
+    return failure();
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
@@ -648,8 +673,8 @@ struct Equivalence {
 
     // If its an instance operaiton, perform some checking and possibly
     // recurse.
-    if (auto aInst = dyn_cast<InstanceOp>(a)) {
-      auto bInst = cast<InstanceOp>(b);
+    if (auto aInst = dyn_cast<FInstanceLike>(a)) {
+      auto bInst = cast<FInstanceLike>(b);
       if (failed(check(diag, aInst, bInst)))
         return failure();
     }
@@ -800,7 +825,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
       // simply add all of the internal locations.
       for (auto loc : fusedLoc.getLocations()) {
         if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
-          if (fileLoc.getFilename().strref().endswith(".fir")) {
+          if (fileLoc.getFilename().strref().ends_with(".fir")) {
             ++seenFIR;
             if (seenFIR > 8)
               continue;
@@ -813,7 +838,7 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
 
     // Might need to skip this fir.
     if (FileLineColLoc fileLoc = dyn_cast<FileLineColLoc>(loc)) {
-      if (fileLoc.getFilename().strref().endswith(".fir")) {
+      if (fileLoc.getFilename().strref().ends_with(".fir")) {
         ++seenFIR;
         if (seenFIR > 8)
           continue;
@@ -940,9 +965,15 @@ private:
     auto *toNode = instanceGraph[toModule];
     auto toModuleRef = FlatSymbolRefAttr::get(toModule.getModuleNameAttr());
     for (auto *oldInstRec : llvm::make_early_inc_range(fromNode->uses())) {
-      auto inst = ::cast<InstanceOp>(*oldInstRec->getInstance());
-      inst.setModuleNameAttr(toModuleRef);
-      inst.setPortNamesAttr(toModule.getPortNamesAttr());
+      auto inst = oldInstRec->getInstance();
+      if (auto instOp = dyn_cast<InstanceOp>(*inst)) {
+        instOp.setModuleNameAttr(toModuleRef);
+        instOp.setPortNamesAttr(toModule.getPortNamesAttr());
+      } else if (auto objectOp = dyn_cast<ObjectOp>(*inst)) {
+        auto classLike = cast<ClassLike>(*toNode->getModule());
+        ClassType classType = detail::getInstanceTypeForClassLike(classLike);
+        objectOp.getResult().setType(classType);
+      }
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
     }
@@ -1360,6 +1391,72 @@ private:
 // Fixup
 //===----------------------------------------------------------------------===//
 
+/// This fixes up ClassLikes with ClassType ports, when the classes have
+/// deduped. For each ClassType port, if the object reference being assigned is
+/// a different type, update the port type. Returns true if the ClassOp was
+/// updated and the associated ObjectOps should be updated.
+bool fixupClassOp(ClassOp classOp) {
+  // New port type attributes, if necessary.
+  SmallVector<Attribute> newPortTypes;
+  bool anyDifferences = false;
+
+  // Check each port.
+  for (size_t i = 0, e = classOp.getNumPorts(); i < e; ++i) {
+    // Check if this port is a ClassType. If not, save the original type
+    // attribute in case we need to update port types.
+    auto portClassType = dyn_cast<ClassType>(classOp.getPortType(i));
+    if (!portClassType) {
+      newPortTypes.push_back(classOp.getPortTypeAttr(i));
+      continue;
+    }
+
+    // Check if this port is assigned a reference of a different ClassType.
+    Type newPortClassType;
+    BlockArgument portArg = classOp.getArgument(i);
+    for (auto &use : portArg.getUses()) {
+      if (auto propassign = dyn_cast<PropAssignOp>(use.getOwner())) {
+        Type sourceType = propassign.getSrc().getType();
+        if (propassign.getDest() == use.get() && sourceType != portClassType) {
+          // Double check that all references are the same new type.
+          if (newPortClassType) {
+            assert(newPortClassType == sourceType &&
+                   "expected all references to be of the same type");
+            continue;
+          }
+
+          newPortClassType = sourceType;
+        }
+      }
+    }
+
+    // If there was no difference, save the original type attribute in case we
+    // need to update port types and move along.
+    if (!newPortClassType) {
+      newPortTypes.push_back(classOp.getPortTypeAttr(i));
+      continue;
+    }
+
+    // The port type changed, so update the block argument, save the new port
+    // type attribute, and indicate there was a difference.
+    classOp.getArgument(i).setType(newPortClassType);
+    newPortTypes.push_back(TypeAttr::get(newPortClassType));
+    anyDifferences = true;
+  }
+
+  // If necessary, update port types.
+  if (anyDifferences)
+    classOp.setPortTypes(newPortTypes);
+
+  return anyDifferences;
+}
+
+/// This fixes up ObjectOps when the signature of their ClassOp changes. This
+/// amounts to updating the ObjectOp result type to match the newly updated
+/// ClassOp type.
+void fixupObjectOp(ObjectOp objectOp, ClassType newClassType) {
+  objectOp.getResult().setType(newClassType);
+}
+
 /// This fixes up connects when the field names of a bundle type changes.  It
 /// finds all fields which were previously bulk connected and legalizes it
 /// into a connect for each field.
@@ -1392,14 +1489,30 @@ void fixupConnect(ImplicitLocOpBuilder &builder, Value dst, Value src) {
 void fixupAllModules(InstanceGraph &instanceGraph) {
   for (auto *node : instanceGraph) {
     auto module = cast<FModuleLike>(*node->getModule());
+
+    // Handle class declarations here.
+    bool shouldFixupObjects = false;
+    auto classOp = dyn_cast<ClassOp>(module.getOperation());
+    if (classOp)
+      shouldFixupObjects = fixupClassOp(classOp);
+
     for (auto *instRec : node->uses()) {
+      // Handle object instantiations here.
+      if (classOp) {
+        if (shouldFixupObjects) {
+          fixupObjectOp(instRec->getInstance<ObjectOp>(),
+                        classOp.getInstanceType());
+        }
+        continue;
+      }
+
       auto inst = instRec->getInstance<InstanceOp>();
-      // Only handle module instantiations for now.
+      // Only handle module instantiations here.
       if (!inst)
         continue;
       ImplicitLocOpBuilder builder(inst.getLoc(), inst->getContext());
       builder.setInsertionPointAfter(inst);
-      for (unsigned i = 0, e = getNumPorts(module); i < e; ++i) {
+      for (size_t i = 0, e = getNumPorts(module); i < e; ++i) {
         auto result = inst.getResult(i);
         auto newType = module.getPortType(i);
         auto oldType = result.getType();
@@ -1523,14 +1636,8 @@ class DedupPass : public DedupBase<DedupPass> {
           // If module has symbol (name) that must be preserved even if unused,
           // skip it. All symbol uses must be supported, which is not true if
           // non-private.
-          if (!module.isPrivate() || !module.canDiscardOnUseEmpty()) {
-            return success();
-          }
-
-          // Explicitly skip class-like modules.  This is presently unreachable
-          // due to above and current implementation but check anyway as dedup
-          // code does not handle these or object operations.
-          if (isa<ClassLike>(*module)) {
+          if (!module.isPrivate() ||
+              (!module.canDiscardOnUseEmpty() && !isa<ClassLike>(*module))) {
             return success();
           }
 

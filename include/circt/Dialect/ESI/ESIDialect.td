@@ -30,7 +30,8 @@ def ESI_Dialect : Dialect {
   }];
 
   let dependentDialects = [
-    "circt::seq::SeqDialect"
+    "circt::seq::SeqDialect", "circt::hw::HWDialect", "circt::sv::SVDialect",
+    "circt::comb::CombDialect"
   ];
 }
 

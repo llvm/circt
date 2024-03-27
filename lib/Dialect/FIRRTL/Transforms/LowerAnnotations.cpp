@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -28,6 +29,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -412,7 +414,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {"circt.testLocalOnly", {stdResolve, applyWithoutTarget<>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<true>}},
-    {"circt.Intrinsic", {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     // Grand Central Views/Interfaces Annotations
     {extractGrandCentralClass, NoTargetAnnotation},
     {grandCentralHierarchyFileAnnoClass, NoTargetAnnotation},
@@ -489,8 +490,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
-    {dftTestModeEnableAnnoClass, {stdResolve, applyWithoutTarget<true>}},
-    {dftClockDividerBypassAnnoClass, {stdResolve, applyWithoutTarget<true>}},
     {runFIRRTLTransformAnnoClass, {noResolve, drop}},
     {mustDedupAnnoClass, NoTargetAnnotation},
     {addSeqMemPortAnnoClass, NoTargetAnnotation},
@@ -808,22 +807,16 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     while (!sources.empty() && !sinks.empty()) {
       if (sources.top() != sinks.top())
         break;
-      auto newLCA = sources.top();
-      lca = cast<FModuleOp>(instanceGraph.getReferencedModule(newLCA));
+      auto newLCA = cast<InstanceOp>(*sources.top());
+      lca = cast<FModuleOp>(newLCA.getReferencedModule(instanceGraph));
       sources = sources.dropFront();
       sinks = sinks.dropFront();
     }
 
     LLVM_DEBUG({
       llvm::dbgs() << "    LCA: " << lca.getModuleName() << "\n"
-                   << "    sourcePaths:\n";
-      for (auto inst : sourcePaths[0])
-        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
-                     << inst.getReferencedModuleName() << "\n";
-      llvm::dbgs() << "    sinkPaths:\n";
-      for (auto inst : sinkPaths[0])
-        llvm::dbgs() << "      - " << inst.getInstanceName() << " of "
-                     << inst.getReferencedModuleName() << "\n";
+                   << "    sourcePath: " << sourcePaths[0] << "\n"
+                   << "    sinkPaths:  " << sinkPaths[0] << "\n";
     });
 
     // Pre-populate the connectionMap of the module with the source and sink.
@@ -864,7 +857,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // Otherwise they must be identical or FIRRTL type-equivalent
       // (connectable).
       if (sourceFType != sinkFType &&
-          !areTypesEquivalent(sourceFType, sinkFType)) {
+          !areTypesEquivalent(sinkFType, sourceFType)) {
         auto diag = mlir::emitError(source.getLoc())
                     << "Wiring Problem source type " << sourceType
                     << " does not match sink type " << sinkType;
@@ -885,8 +878,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     auto addPorts = [&](igraph::InstancePath insts, Value val, Type tpe,
                         Direction dir) {
       StringRef name, instName;
-      for (auto inst : llvm::reverse(insts)) {
-        auto mod = instanceGraph.getReferencedModule<FModuleOp>(inst);
+      for (auto instNode : llvm::reverse(insts)) {
+        auto inst = cast<InstanceOp>(*instNode);
+        auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(
@@ -1009,8 +1003,7 @@ void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
 
-  LLVM_DEBUG(llvm::dbgs() << "===- Running LowerAnnotations Pass "
-                             "------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   // Grab the annotations from a non-standard attribute called "rawAnnotations".
   // This is a temporary location for all annotations that are earmarked for

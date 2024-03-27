@@ -43,6 +43,13 @@ void hw::PortInfo::setSym(InnerSymAttr sym, MLIRContext *ctx) {
   }
 }
 
+StringRef hw::PortInfo::getVerilogName() const {
+  if (attrs)
+    if (auto updatedName = attrs.get("hw.verilogName"))
+      return updatedName.cast<StringAttr>().getValue();
+  return name.getValue();
+}
+
 LogicalResult hw::verifyInnerSymAttr(InnerSymbolOpInterface op) {
   auto innerSym = op.getInnerSymAttr();
   // If does not have any inner sym then ignore.

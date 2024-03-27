@@ -21,27 +21,9 @@ firrtl.module @X(in %b : !firrtl.uint<32>, in %d : !firrtl.uint<16>, in %out : !
 
 // -----
 
-// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
-firrtl.circuit "MyCircuit" {
-
-firrtl.module @X() {}
-
-}
-
-// -----
-
 
 // expected-error @+1 {{'firrtl.module' op expects parent op 'firrtl.circuit'}}
 firrtl.module @X() {}
-
-// -----
-
-// expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'Foo'}}
-firrtl.circuit "Foo" {
-
-firrtl.module @Bar() {}
-
-}
 
 // -----
 
@@ -157,7 +139,7 @@ firrtl.module @Foo() {
 
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
-  // expected-error @+1 {{constant too large for result type}}
+  // expected-error @+1 {{constant out of range for result type}}
   firrtl.constant 100 : !firrtl.uint<4>
 }
 }
@@ -166,8 +148,17 @@ firrtl.module @Foo() {
 
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
-  // expected-error @+1 {{constant too large for result type}}
+  // expected-error @+1 {{constant out of range for result type}}
   firrtl.constant -100 : !firrtl.sint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant out of range for result type}}
+  firrtl.constant -2 : !firrtl.sint<1>
 }
 }
 
@@ -288,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
   firrtl.instance "" @Foo()
 }
 
@@ -366,6 +357,17 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
     // Not great diagnostic, but this should never happen so don't bother checking for it.
     // expected-error @below {{expected ')'}}
     %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1> sym @sym)
+  }
+}
+
+// -----
+
+firrtl.circuit "InstanceMissingLayers" {
+  // expected-note @below {{original module declared here}}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.module @InstanceMissingLayers() {
+    // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
+    %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
   }
 }
 
@@ -839,7 +841,7 @@ firrtl.circuit "NLATop" {
 // -----
 
 firrtl.circuit "NLATop1" {
-  // expected-error @+1 {{instance path is incorrect. Expected module: "Aardvark" instead found: "Zebra"}}
+  // expected-error @+1 {{instance path is incorrect. Expected "Aardvark". Instead found: "Zebra"}}
   hw.hierpath private @nla [@NLATop1::@test, @Zebra::@test,@Aardvark::@test]
   hw.hierpath private @nla_1 [@NLATop1::@test,@Aardvark::@test_1, @Zebra]
   firrtl.module @NLATop1() {
@@ -900,7 +902,7 @@ firrtl.circuit "Foo"   {
 firrtl.circuit "Top"   {
  // Legal nla would be:
 //hw.hierpath private @nla [@Top::@mid, @Mid::@leaf, @Leaf::@w]
-  // expected-error @+1 {{instance path is incorrect. Expected module: "Middle" instead found: "Leaf"}}
+  // expected-error @+1 {{instance path is incorrect. Expected "Middle". Instead found: "Leaf"}}
   hw.hierpath private @nla [@Top::@mid, @Leaf::@w]
   firrtl.module @Leaf() {
     %w = firrtl.wire sym @w  {annotations = [{circt.nonlocal = @nla, class = "fake1"}]} : !firrtl.uint<3>
@@ -982,13 +984,6 @@ firrtl.circuit "EnumNonExaustive" {
     // expected-error @+1 {{missing case for tag "a"}}
     "firrtl.match"(%enum) {tags = []} : (!firrtl.enum<a: uint<8>>) -> ()
   }
-}
-
-// -----
-
-// expected-error @+1 {{'firrtl.circuit' op main module 'private_main' must be public}}
-firrtl.circuit "private_main" {
-  firrtl.module private @private_main() {}
 }
 
 // -----
@@ -1076,10 +1071,11 @@ firrtl.circuit "DupSymField" {
 // Node ops cannot have reference type
 
 firrtl.circuit "NonRefNode" {
-firrtl.module @NonRefNode(in %in1 : !firrtl.probe<uint<8>>) {
+firrtl.module @NonRefNode() {
+  %w = firrtl.wire : !firrtl.uint<8>
+  %ref = firrtl.ref.send %w : !firrtl.uint<8>
   // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<8>>'}}
-  %n1 = firrtl.node %in1 : !firrtl.probe<uint<8>>
-  %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+  %n1 = firrtl.node %ref: !firrtl.probe<uint<8>>
 }
 }
 
@@ -1098,7 +1094,7 @@ firrtl.circuit "NonRefRegister" {
 
 firrtl.circuit "RefBundle" {
   // expected-error @+1 {{reference base type must be passive}}
-  firrtl.module @RefBundle(in %in1 : !firrtl.probe<bundle<valid flip : uint<1>>>) {
+  firrtl.module @RefBundle(out %out: !firrtl.probe<bundle<valid flip : uint<1>>>) {
   }
 }
 
@@ -1107,7 +1103,7 @@ firrtl.circuit "RefBundle" {
 
 firrtl.circuit "RefRef" {
   // expected-error @+1 {{expected base type, found '!firrtl.probe<uint<1>>'}}
-  firrtl.module @RefRef(in %in1 : !firrtl.probe<probe<uint<1>>>) {
+  firrtl.module @RefRef(out %out: !firrtl.probe<probe<uint<1>>>) {
   }
 }
 
@@ -1116,7 +1112,7 @@ firrtl.circuit "RefRef" {
 
 firrtl.circuit "RefField" {
   // expected-error @+1 {{expected base type, found '!firrtl.probe<uint<1>>'}}
-  firrtl.module @RefField(in %in1 : !firrtl.bundle<r: probe<uint<1>>>) {
+  firrtl.module @RefField(out %out: !firrtl.bundle<r: probe<uint<1>>>) {
   }
 }
 
@@ -1134,7 +1130,8 @@ firrtl.circuit "InvalidRef" {
 // Mux ref
 
 firrtl.circuit "MuxRef" {
-  firrtl.module @MuxRef(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
+  firrtl.module @MuxRef() {}
+  firrtl.module private @MuxRefPrivate(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
                           in %cond: !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
@@ -1145,7 +1142,8 @@ firrtl.circuit "MuxRef" {
 // Bitcast ref
 
 firrtl.circuit "BitcastRef" {
-  firrtl.module @BitcastRef(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.module @BitcastRef() {}
+  firrtl.module private @BitcastRefPrivate(in %a: !firrtl.probe<uint<1>>) {
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.probe<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.probe<uint<1>>) -> (!firrtl.probe<uint<1>>)
   }
@@ -1155,11 +1153,11 @@ firrtl.circuit "BitcastRef" {
 // Cannot connect ref types
 
 firrtl.circuit "Top" {
-  firrtl.module @Foo (in %in: !firrtl.probe<uint<2>>) {}
-  firrtl.module @Top (in %in: !firrtl.probe<uint<2>>) {
-    %foo_in = firrtl.instance foo @Foo(in in: !firrtl.probe<uint<2>>)
+  firrtl.module @Foo (out %out: !firrtl.probe<uint<2>>) {}
+  firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
+    %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %foo_in, %in : !firrtl.probe<uint<2>>
+    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1167,8 +1165,9 @@ firrtl.circuit "Top" {
 // Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
+  firrtl.module @Foo() {}
   // expected-note @+1 {{destination was defined here}}
-  firrtl.module @Foo(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.module private @InProbe(in  %_a: !firrtl.probe<uint<1>>) {
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
@@ -1333,15 +1332,6 @@ firrtl.circuit "ListOfHW" {
 }
 
 // -----
-// Property aggregates can only contain properties.
-// Check map.
-
-firrtl.circuit "MapOfHW" {
-  // expected-error @below {{expected property type, found '!firrtl.uint<4>'}}
-  firrtl.module @MapOfHW(in %in: !firrtl.map<string,uint<4>>) {}
-}
-
-// -----
 
 // Reject list.create with mixed element types.
 firrtl.circuit "MixedList" {
@@ -1357,35 +1347,6 @@ firrtl.circuit "MixedList" {
 
 // -----
 
-// Reject map.create with mixed key types.
-firrtl.circuit "MixedMapKeys" {
-  firrtl.module @MixedMapKeys(
-      in %s: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%s -> %int, %int -> %int) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
-// Reject map.create with mixed value types.
-firrtl.circuit "MixedMapValues" {
-  firrtl.module @MixedMapValues(
-      in %s1: !firrtl.string,
-      // expected-note @below {{prior use here}}
-      in %s2: !firrtl.string,
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%s2' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
-    firrtl.map.create (%s1 -> %int, %s2 -> %s2) : !firrtl.map<string, integer>
-  }
-}
-
-// -----
-
 // Reject list.create with elements of wrong type compared to result type.
 firrtl.circuit "ListCreateWrongType" {
   firrtl.module @ListCreateWrongType(
@@ -1394,19 +1355,6 @@ firrtl.circuit "ListCreateWrongType" {
       ) {
     // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
     firrtl.list.create %int : !firrtl.list<string>
-  }
-}
-
-// -----
-
-// Reject map.create with consistent but wrong key/value elements.
-firrtl.circuit "MapCreateWrongType" {
-  firrtl.module @MapCreateWrongType(
-      // expected-note @below {{prior use here}}
-      in %int: !firrtl.integer
-      ) {
-    // expected-error @below {{use of value '%int' expects different type than prior uses: '!firrtl.string' vs '!firrtl.integer'}}
-    firrtl.map.create (%int -> %int) : !firrtl.map<integer, string>
   }
 }
 
@@ -1862,14 +1810,6 @@ firrtl.circuit "NonEquivalenctStrictConnect" {
 }
 
 // -----
-// Classes cannot be the top module.
-
-// expected-error @below {{'firrtl.circuit' op must have a non-class top module}}
-firrtl.circuit "TopModuleIsClass" {
-  firrtl.class @TopModuleIsClass() {}
-}
-
-// -----
 // Classes cannot have hardware ports.
 
 firrtl.circuit "ClassCannotHaveHardwarePorts" {
@@ -1884,7 +1824,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.group, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -1901,77 +1841,62 @@ firrtl.circuit "ClassCannotHavePortSymbols" {
 
 // -----
 
-// A group definition, "@A::@B", is missing an outer nesting of a group
+// A layer block, "@A::@B", is missing an outer nesting of a layer block
 // definition with symbol "@A".
-firrtl.circuit "GroupMissingNesting" {
-  firrtl.declgroup @A bind {
-    firrtl.declgroup @B bind {}
+firrtl.circuit "LayerBlockMissingNesting" {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
   }
   // expected-note @below {{illegal parent op defined here}}
-  firrtl.module @GroupMissingNesting() {
-    // expected-error @below {{'firrtl.group' op has a nested group symbol, but does not have a 'firrtl.group' op as a parent}}
-    firrtl.group @A::@B {}
+  firrtl.module @LayerBlockMissingNesting() {
+    // expected-error @below {{'firrtl.layerblock' op has a nested layer symbol, but does not have a 'firrtl.layerblock' op as a parent}}
+    firrtl.layerblock @A::@B {}
   }
 }
 
 // -----
 
-// A group definition with a legal symbol, "@B", is illegaly nested under
-// another group with a legal symbol, "@B".
-firrtl.circuit "UnnestedGroup" {
-  firrtl.declgroup @A bind {}
-  firrtl.declgroup @B bind {}
-  firrtl.module @UnnestedGroup() {
+// A layer block with a legal symbol, "@B", is illegaly nested under another
+// layer block with a legal symbol, "@B".
+firrtl.circuit "UnnestedLayerBlock" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+  firrtl.module @UnnestedLayerBlock() {
     // expected-note @below {{illegal parent op defined here}}
-    firrtl.group @A {
-      // expected-error @below {{'firrtl.group' op has an un-nested group symbol, but does not have a 'firrtl.module' op as a parent}}
-      firrtl.group @B {}
+    firrtl.layerblock @A {
+      // expected-error @below {{'firrtl.layerblock' op has an un-nested layer symbol, but does not have a 'firrtl.module' op as a parent}}
+      firrtl.layerblock @B {}
     }
   }
 }
 
 // -----
 
-// A group definition, "@B::@C", is nested under the wrong group, "@A".
-firrtl.circuit "WrongGroupNesting" {
-  firrtl.declgroup @A bind {}
-  firrtl.declgroup @B bind {
-    firrtl.declgroup @C bind {}
+// A layer block, "@B::@C", is nested under the wrong layer block, "@A".
+firrtl.circuit "WrongLayerBlockNesting" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {
+    firrtl.layer @C bind {}
   }
-  firrtl.module @WrongGroupNesting() {
-    // expected-note @below {{illegal parent group defined here}}
-    firrtl.group @A {
-      // expected-error @below {{'firrtl.group' op is nested under an illegal group}}
-      firrtl.group @B::@C {}
+  firrtl.module @WrongLayerBlockNesting() {
+    // expected-note @below {{illegal parent layer block defined here}}
+    firrtl.layerblock @A {
+      // expected-error @below {{'firrtl.layerblock' op is nested under an illegal layer block}}
+      firrtl.layerblock @B::@C {}
     }
   }
 }
 
 // -----
 
-// A group captures a type which is not a FIRRTL base type.
-firrtl.circuit "NonBaseTypeCapture" {
-  firrtl.declgroup @A bind {}
-  // expected-note @below {{operand is defined here}}
-  firrtl.module @NonBaseTypeCapture(in %a: !firrtl.probe<uint<1>>) {
-    // expected-error @below {{'firrtl.group' op captures an operand which is not a FIRRTL base type}}
-    firrtl.group @A {
-      // expected-note @below {{operand is used here}}
-      %b = firrtl.ref.resolve %a : !firrtl.probe<uint<1>>
-    }
-  }
-}
-
-// -----
-
-// A group captures a non-passive type.
+// A layer block captures a non-passive type.
 firrtl.circuit "NonPassiveCapture" {
-  firrtl.declgroup @A bind {}
+  firrtl.layer @A bind {}
   firrtl.module @NonPassiveCapture() {
     // expected-note @below {{operand is defined here}}
     %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.group' op captures an operand which is not a passive type}}
-    firrtl.group @A {
+    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
+    firrtl.layerblock @A {
       %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
       // expected-note @below {{operand is used here}}
       firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
@@ -1981,22 +1906,95 @@ firrtl.circuit "NonPassiveCapture" {
 
 // -----
 
-// A group may not drive sinks outside the group.
-firrtl.circuit "GroupDrivesSinksOutside" {
-  firrtl.declgroup @A bind {}
-  firrtl.module @GroupDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
+// A layer block may not drive sinks outside the layer block.
+firrtl.circuit "LayerBlockDrivesSinksOutside" {
+  firrtl.layer @A bind {}
+  firrtl.module @LayerBlockDrivesSinksOutside(in %cond : !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
     // expected-note @below {{destination is defined here}}
     %b = firrtl.wire : !firrtl.bundle<c: uint<1>>
-    // expected-note @below {{enclosing group is defined here}}
-    firrtl.group @A {
+    // expected-note @below {{enclosing layer block is defined here}}
+    firrtl.layerblock @A {
       firrtl.when %cond : !firrtl.uint<1> {
         %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
-        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing group}}
+        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing layer block}}
         firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
       }
     }
   }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefResolve_NotInLayerBlock" {
+  firrtl.layer @A bind {
+  }
+  firrtl.module @IllegalRefResolve_NotInLayerBlock() {
+    %0 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    // expected-error @below {{'firrtl.ref.resolve' op ambient layers are insufficient to resolve reference}}
+    // expected-note  @below {{missing layer requirements: @A}}
+    %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>, @A>
+  }
+}
+
+// -----
+
+firrtl.circuit "IllegalRefResolve_IllegalLayer" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+  firrtl.module @IllegalRefResolve_IllegalLayer() {
+    %0 = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    firrtl.layerblock @B {
+      // expected-error @below {{'firrtl.ref.resolve' op ambient layers are insufficient to resolve reference}}
+      // expected-note  @below {{missing layer requirements: @A}}
+      %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationPort_SymbolDoesNotExist" {
+  // expected-error @below {{probe port 'a' is associated with layer '@B', but this layer was not defined}}
+  firrtl.module @InvalidProbeAssociationPort_SymbolDoesNotExist(out %a: !firrtl.probe<uint<1>, @B>) {
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationPort_SymbolIsNotALayer" {
+  // expected-note @below {{symbol refers to this op}}
+  firrtl.module @B() {}
+  // expected-error @below {{probe port 'a' is associated with layer '@B', but symbol '@B' does not refer to a 'firrtl.layer' op}}
+  firrtl.module @InvalidProbeAssociationPort_SymbolIsNotALayer(out %a: !firrtl.probe<uint<1>, @B>) {
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationWire_SymbolDoesNotExist" {
+  firrtl.module @InvalidProbeAssociationWire_SymbolDoesNotExist() {
+    // expected-error @below {{'firrtl.wire' op is associated with layer '@B', but this layer was not defined}}
+    %a = firrtl.wire : !firrtl.probe<uint<1>, @B>
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
+  // expected-note @below {{symbol refers to this op}}
+  firrtl.module @B() {}
+  firrtl.module @InvalidProbeAssociationWire_SymbolIsNotALayer() {
+    // expected-error @below {{'firrtl.wire' op is associated with layer '@B', but symbol '@B' does not refer to a 'firrtl.layer' op}}
+    %a = firrtl.wire : !firrtl.probe<uint<1>, @B>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownEnabledLayer" {
+  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 
 // -----
@@ -2274,3 +2272,190 @@ firrtl.circuit "InstanceOfClass" {
     firrtl.instance a @A()
   }
 }
+
+// -----
+
+firrtl.circuit "InputProbePublic" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.module @InputProbePublic(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
+firrtl.circuit "InputProbeExt" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
+}
+
+// -----
+
+firrtl.circuit "InputProbeExt" {
+  // expected-error @below {{input probe not allowed on public module}}
+  firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
+}
+
+// -----
+
+firrtl.circuit "InvalidOption" {
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidOption() {
+    // expected-error @below {{op option "Bad" does not exist}}
+    firrtl.instance_choice inst @Target alternatives @Bad { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidCase" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidCase() {
+    // expected-error @below {{op option "Platform" does not contain option case @Platform::@BAD}}
+    firrtl.instance_choice inst @Target alternatives @Platform { @BAD -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidDefaultTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidTarget() {
+    // expected-error @below {{op invalid symbol reference}}
+    firrtl.instance_choice inst @BadTarget alternatives @Platform { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidTarget() {
+    // expected-error @below {{op invalid symbol reference}}
+    firrtl.instance_choice inst @Target alternatives @Platform { @FPGA -> @BadTarget } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "InvalidCaseTarget" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @InvalidCaseTarget() {
+    // expected-error @below {{op option "BadPlatform" does not exist}}
+    firrtl.instance_choice inst @Target alternatives @BadPlatform { @FPGA -> @Target } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "NoCases" {
+  firrtl.module private @Target() {}
+
+  firrtl.module @NoCases() {
+    // expected-error @below {{'firrtl.instance_choice' op must have at least one case}}
+    "firrtl.instance_choice"() {
+      moduleNames = [@Target],
+      caseNames = [],
+      name = "inst",
+      nameKind = #firrtl<name_kind interesting_name>,
+      portDirections = 0 : i0,
+      portNames = [],
+      annotations = [],
+      portAnnotations = [],
+      layers = []
+    } : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "MismatchedCases" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.option @Perf {
+    firrtl.option_case @Fast
+    firrtl.option_case @Slow
+  }
+
+  firrtl.module private @Target() {}
+
+  firrtl.module @MismatchedCases() {
+    // expected-error @below {{op case @Perf::@Fast is not in the same option group as @Platform::@ASIC}}
+    "firrtl.instance_choice"() {
+      moduleNames = [@Target, @Target, @Target],
+      caseNames = [@Platform::@ASIC, @Perf::@Fast],
+      name = "inst",
+      nameKind = #firrtl<name_kind interesting_name>,
+      portDirections = 0 : i0,
+      portNames = [],
+      annotations = [],
+      portAnnotations = [],
+      layers = []
+    } : () -> ()
+  }
+}
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.option @O {
+    firrtl.option_case @C
+  }
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  firrtl.module @Bar() attributes {layers = [@A]} {}
+  firrtl.module @Top() {
+    // expected-error @below {{'firrtl.instance_choice' op layers must be [@A], but got []}}
+    firrtl.instance_choice foo @Foo alternatives @O {
+      @C -> @Bar
+    } ()
+  }
+}
+
+
+// -----
+
+firrtl.circuit "Top" {
+  firrtl.layer @A bind {}
+  firrtl.layer @B bind {}
+  firrtl.option @O {
+    firrtl.option_case @C
+  }
+  firrtl.module @Foo() attributes {layers = [@A]} {}
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Bar() attributes {layers = [@B]} {}
+  firrtl.module @Top() attributes {layers = [@A, @B]} {
+    // expected-error @below {{'firrtl.instance_choice' op layers must be [@B], but got [@A]}}
+    firrtl.instance_choice foo {layers = [@A]} @Foo alternatives @O {
+      @C -> @Bar
+    } ()
+  }
+}
+

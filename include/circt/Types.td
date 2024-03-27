@@ -36,6 +36,22 @@ def ArrayRefAttr :
   let convertFromStorage = [{ $_self.getValue() }];
 }
 
+// Similar to ArrayRefAttr, but requiring all elements are the same type.
+class TypedArrayRefAttrBase<Attr element, string summary>: ArrayAttrBase<
+    And<[
+      CPred<"::llvm::isa<::mlir::ArrayAttr>($_self)">,
+      Concat<"::llvm::all_of(::llvm::cast<::mlir::ArrayAttr>($_self), "
+                            "[&](::mlir::Attribute attr) { return attr && (",
+                               SubstLeaves<"$_self", "attr", element.predicate>,
+                            "); })">]>,
+    summary> {
+
+  Attr elementAttr = element;
+
+  let returnType = [{ ::llvm::ArrayRef<Attribute> }];
+  let convertFromStorage = [{ $_self.getValue() }];
+}
+
 def DistinctAttr : Attr<CPred<"$_self.isa<::mlir::DistinctAttr>()">,
                       "distinct attribute"> {
   let storageType = [{ ::mlir::DistinctAttr }];

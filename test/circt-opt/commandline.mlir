@@ -31,6 +31,7 @@
 // DIALECT-SAME: pipeline
 // DIALECT-SAME: scf
 // DIALECT-SAME: seq
+// DIALECT-SAME: smt
 // DIALECT-SAME: ssp
 // DIALECT-SAME: sv
 // DIALECT-SAME: systemc

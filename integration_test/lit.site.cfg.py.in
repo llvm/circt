@@ -48,12 +48,15 @@ config.questa_path = "@QUESTA_PATH@"
 config.iverilog_path = "@IVERILOG_PATH@"
 config.clang_tidy_path = "@CLANG_TIDY_PATH@"
 config.have_systemc = "@HAVE_SYSTEMC@"
-config.esi_capnp = "@ESI_CAPNP@"
 config.esi_runtime = "@ESI_RUNTIME@"
-config.esi_collateral_path = "@ESI_COLLATERAL_PATH@"
+config.esi_runtime_path = "@ESIRuntimePath@"
 config.bindings_python_enabled = @CIRCT_BINDINGS_PYTHON_ENABLED@
 config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
 config.lec_enabled = "@CIRCT_LEC_ENABLED@"
+config.z3_path = "@Z3_PATH@"
+config.slang_frontend_enabled = "@CIRCT_SLANG_FRONTEND_ENABLED@"
+config.arcilator_jit_enabled = @ARCILATOR_JIT_ENABLED@
+config.driver = "@CIRCT_SOURCE_DIR@/tools/circt-rtl-sim/driver.cpp"
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

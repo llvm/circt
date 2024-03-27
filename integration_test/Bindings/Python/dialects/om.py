@@ -3,10 +3,11 @@
 
 import circt
 from circt.dialects import om
-from circt.ir import Context, InsertionPoint, Location, Module
+from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType
 from circt.support import var_to_attribute
 
 from dataclasses import dataclass
+from typing import Dict
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -89,6 +90,28 @@ with Context() as ctx, Location.unknown():
 
       %3 = om.frozenpath_empty
       om.class.field @deleted, %3 : !om.frozenpath
+    }
+
+    om.class @Class1(%input: !om.integer) {
+      %0 = om.constant #om.integer<1 : si3> : !om.integer
+      om.class.field @value, %0 : !om.integer
+      om.class.field @input, %input : !om.integer
+    }
+
+    om.class @Class2() {
+      %0 = om.constant #om.integer<2 : si3> : !om.integer
+      om.class.field @value, %0 : !om.integer
+    }
+
+    om.class @IntegerBinaryArithmeticObjectsDelayed() {
+      %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
+      %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+
+      %2 = om.object @Class2() : () -> !om.class.type<@Class2>
+      %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+
+      %5 = om.integer.add %1, %3 : !om.integer
+      om.class.field @result, %5 : !om.integer
     }
   }
   """)
@@ -200,7 +223,7 @@ for k, v in obj.map_create.items():
   print(k, v)
 
 obj = evaluator.instantiate("Client")
-object_dict: dict[om.Object, str] = {}
+object_dict: Dict[om.Object, str] = {}
 for field_name, data in obj:
   if isinstance(data, om.Object):
     object_dict[data] = field_name
@@ -217,3 +240,58 @@ print(obj.path)
 
 print(obj.deleted)
 # CHECK: OMDeleted
+
+paths_class = [
+    cls for cls in module.body
+    if hasattr(cls, "sym_name") and cls.sym_name.value == "Paths"
+][0]
+base_path_type = paths_class.regions[0].blocks[0].arguments[0].type
+assert isinstance(base_path_type, om.BasePathType)
+
+paths_fields = [
+    op for op in paths_class.regions[0].blocks[0]
+    if isinstance(op, om.ClassFieldOp)
+]
+for paths_field in paths_fields:
+  assert isinstance(paths_field.value.type, om.PathType)
+
+delayed = evaluator.instantiate("IntegerBinaryArithmeticObjectsDelayed")
+
+# CHECK: 3
+print(delayed.result)
+
+with Context() as ctx:
+  circt.register_dialects(ctx)
+
+  # Signless
+  int_attr1 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signless(64), 42))
+  # CHECK: 42
+  print(str(int_attr1))
+
+  int_attr2 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signless(64), -42))
+  # CHECK: 18446744073709551574
+  print(str(int_attr2))
+
+  # Signed
+  int_attr3 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signed(64), 42))
+  # CHECK: 42
+  print(str(int_attr3))
+
+  int_attr4 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_signed(64), -42))
+  # CHECK: -42
+  print(str(int_attr4))
+
+  # Unsigned
+  int_attr5 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_unsigned(64), 42))
+  # CHECK: 42
+  print(str(int_attr5))
+
+  int_attr6 = om.OMIntegerAttr.get(
+      IntegerAttr.get(IntegerType.get_unsigned(64), -42))
+  # CHECK: 18446744073709551574
+  print(str(int_attr6))

@@ -66,7 +66,7 @@ public:
     if (d == Direction::Input) {
       // references to inputs becomes outputs (write from this container)
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getPortName(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType);
 
       // Replace writes to the unwrapped port with writes to the new port.
       for (auto *unwrappedPortUser :
@@ -82,8 +82,13 @@ public:
     } else {
       // References to outputs becomes inputs (read from this container)
       auto rawInput = rewriter.create<InputPortOp>(op.getLoc(),
-                                                   op.getPortName(), innerType);
-      rewriter.replaceAllUsesWith(portUnwrapper.getResult(), rawInput);
+                                                   op.getInnerSym(), innerType);
+      // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+      // DialectConversion. Using it may lead to assertions about mutating
+      // replaced/erased ops. For now, do this RAUW directly, until
+      // ConversionPatternRewriter properly supports RAUW.
+      // See https://github.com/llvm/circt/issues/6795.
+      portUnwrapper.getResult().replaceAllUsesWith(rawInput);
 
       // Replace all ibis.port.read ops with a read of the new input.
       for (auto *portUser :
@@ -142,7 +147,7 @@ public:
       // Create the raw input port and write the input port reference with a
       // read of the raw input port.
       auto rawInput = rewriter.create<InputPortOp>(op.getLoc(),
-                                                   op.getPortName(), innerType);
+                                                   op.getInnerSym(), innerType);
       rewriter.create<PortWriteOp>(
           op.getLoc(), portWrapper.getValue(),
           rewriter.create<PortReadOp>(op.getLoc(), rawInput));
@@ -150,7 +155,7 @@ public:
       // Outputs of outputs are outputs (external driver out of this container).
       // Create the raw output port and do a read of the input port reference.
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getPortName(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType);
       rewriter.create<PortWriteOp>(
           op.getLoc(), rawOutput,
           rewriter.create<PortReadOp>(op.getLoc(), portWrapper.getValue()));
@@ -292,10 +297,17 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
           // forwarding is resolved through reading/writing the intermediate
           // inputs.
           auto forwardedInputPort = rewriter.create<InputPortOp>(
-              op.getLoc(), rewriter.getStringAttr(portName.strref() + "_fw"),
+              op.getLoc(),
+              hw::InnerSymAttr::get(
+                  rewriter.getStringAttr(portName.strref() + "_fw")),
               innerType);
 
-          rewriter.replaceAllUsesWith(getPortUnwrapper, forwardedInputPort);
+          // TODO: RewriterBase::replaceAllUsesWith is not currently supported
+          // by DialectConversion. Using it may lead to assertions about
+          // mutating replaced/erased ops. For now, do this RAUW directly, until
+          // ConversionPatternRewriter properly supports RAUW.
+          // See https://github.com/llvm/circt/issues/6795.
+          getPortUnwrapper.getResult().replaceAllUsesWith(forwardedInputPort);
           portDriverValue = rewriter.create<PortReadOp>(
               op.getLoc(), forwardedInputPort.getPort());
         } else {
@@ -327,7 +339,13 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
         auto rawPort =
             rewriter.create<GetPortOp>(op.getLoc(), op.getInstance(), portName,
                                        innerType, Direction::Output);
-        rewriter.replaceAllUsesWith(getPortUnwrapper, rawPort);
+
+        // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
+        // DialectConversion. Using it may lead to assertions about mutating
+        // replaced/erased ops. For now, do this RAUW directly, until
+        // ConversionPatternRewriter properly supports RAUW.
+        // See https://github.com/llvm/circt/issues/6795.
+        getPortUnwrapper.getResult().replaceAllUsesWith(rawPort);
       }
     }
 

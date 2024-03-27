@@ -14,6 +14,9 @@
 #define CIRCT_DIALECT_MOORE_MOORETYPES
 
 include "circt/Dialect/Moore/MooreDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
+
 
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
@@ -30,23 +33,28 @@ def SimpleBitVectorType : MooreType<CPred<[{
     $_self.cast<moore::UnpackedType>().isSimpleBitVector()
   }]>, "simple bit vector type", "moore::UnpackedType">;
 
+/// A single bit type (`bit`, `logic`, `reg`).
+def AnySingleBitType : MooreType<CPred<[{
+    $_self.isa<moore::IntType>() &&
+    $_self.cast<moore::IntType>().getBitSize() == 1
+  }]>, "single bit type", "moore::IntType">;
+
+/// A `bit` type.
+def BitType : MooreType<CPred<[{
+    $_self.isa<moore::IntType>() &&
+    $_self.cast<moore::IntType>().getBitSize() == 1 &&
+    $_self.cast<moore::IntType>().getDomain() == moore::Domain::TwoValued
+  }]>, "`bit` type", "moore::IntType"> {
+  let builderCall = [{
+    $_builder.getType<moore::IntType>(IntType::Kind::Bit)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Integer atom types
 //===----------------------------------------------------------------------===//
 
 def MooreIntType : MooreType<CPred<"$_self.isa<moore::IntType>()">,
   "an SystemVerilog int", "moore::IntType">;
-
-//===----------------------------------------------------------------------===//
-// LValue / RValue predicates
-//===----------------------------------------------------------------------===//
-
-class MooreLValueTypeOf<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>,
-    CPred<"$_self.isa<moore::LValueType>()">,
-    "$_self.cast<moore::LValueType>().getNestedType()", "Moore LValue type">;
-
-def MooreLValueType : MooreLValueTypeOf<[AnyType]>;
-def MooreRValueType : AnyTypeOf<[MooreIntType]>;
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

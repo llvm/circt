@@ -206,10 +206,10 @@ void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
-                    Value rst, StringRef symName, llvm::ArrayRef<int64_t> shape,
+                    Value rst, StringRef name, llvm::ArrayRef<int64_t> shape,
                     Type elementType) {
   HLMemType t = HLMemType::get(builder.getContext(), shape, elementType);
-  HLMemOp::build(builder, result, t, clk, rst, symName);
+  HLMemOp::build(builder, result, t, clk, rst, name);
 }
 
 //===----------------------------------------------------------------------===//
@@ -299,12 +299,24 @@ void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *name);
 }
 
-std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
-
 LogicalResult CompRegOp::verify() {
   if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
     return emitOpError(
         "either reset and resetValue or neither must be specified");
+  return success();
+}
+
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
+template <typename TOp>
+LogicalResult verifyResets(TOp op) {
+  if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
+    return op->emitOpError(
+        "either reset and resetValue or neither must be specified");
+  bool hasReset = op.getReset() != nullptr;
+  if (hasReset && op.getResetValue().getType() != op.getInput().getType())
+    return op->emitOpError("reset value must be the same type as the input");
+
   return success();
 }
 
@@ -321,9 +333,26 @@ std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
 }
 
 LogicalResult CompRegClockEnabledOp::verify() {
-  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
-    return emitOpError(
-        "either reset and resetValue or neither must be specified");
+  if (failed(verifyResets(*this)))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ShiftRegOp
+//===----------------------------------------------------------------------===//
+
+void ShiftRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the wire has an optional 'name' attribute, use it.
+  if (auto name = getName())
+    setNameFn(getResult(), *name);
+}
+
+std::optional<size_t> ShiftRegOp::getTargetResultIndex() { return 0; }
+
+LogicalResult ShiftRegOp::verify() {
+  if (failed(verifyResets(*this)))
+    return failure();
   return success();
 }
 
@@ -405,19 +434,43 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  Type ty;
+  std::optional<APInt> presetValue;
+  llvm::SMLoc presetValueLoc;
   if (succeeded(parser.parseOptionalKeyword("preset"))) {
-    IntegerAttr preset;
-    if (parser.parseAttribute(preset, "preset", result.attributes) ||
-        parser.parseOptionalAttrDict(result.attributes))
-      return failure();
-    ty = preset.getType();
-  } else {
-    if (parser.parseOptionalAttrDict(result.attributes) ||
-        parser.parseColon() || parser.parseType(ty))
-      return failure();
+    presetValueLoc = parser.getCurrentLocation();
+    OptionalParseResult presetIntResult =
+        parser.parseOptionalInteger(presetValue.emplace());
+    if (!presetIntResult.has_value() || failed(*presetIntResult))
+      return parser.emitError(loc, "expected integer value");
   }
+
+  Type ty;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(ty))
+    return failure();
   result.addTypes({ty});
+
+  if (presetValue) {
+    uint64_t width = 0;
+    if (hw::type_isa<seq::ClockType>(ty)) {
+      width = 1;
+    } else {
+      int64_t maybeWidth = hw::getBitWidth(ty);
+      if (maybeWidth < 0)
+        return parser.emitError(presetValueLoc,
+                                "cannot preset register of unknown width");
+      width = maybeWidth;
+    }
+
+    APInt presetResult = presetValue->sextOrTrunc(width);
+    if (presetResult.zextOrTrunc(presetValue->getBitWidth()) != *presetValue)
+      return parser.emitError(loc, "preset value too large");
+
+    auto builder = parser.getBuilder();
+    auto presetTy = builder.getIntegerType(width);
+    auto resultAttr = builder.getIntegerAttr(presetTy, presetResult);
+    result.addAttribute("preset", resultAttr);
+  }
 
   setNameFromResult(parser, result);
 
@@ -475,8 +528,10 @@ LogicalResult FirRegOp::verify() {
       return emitOpError("register with no reset cannot be async");
   }
   if (auto preset = getPresetAttr()) {
-    if (preset.getType() != getType())
-      return emitOpError("preset type must match register type");
+    int64_t presetWidth = hw::getBitWidth(preset.getType());
+    int64_t width = hw::getBitWidth(getType());
+    if (preset.getType() != getType() && presetWidth != width)
+      return emitOpError("preset type width must match register type");
   }
   return success();
 }
@@ -673,8 +728,8 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   if (auto testEnable = op.getTestEnable()) {
     if (auto constOp = testEnable.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.updateRootInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+        rewriter.modifyOpInPlace(op,
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }
@@ -702,6 +757,25 @@ OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
+
+LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
+  // Do not change memories if symbols point to them.
+  if (op.getInnerSymAttr())
+    return failure();
+
+  // If the memory has no read ports, erase it.
+  for (auto *user : op->getUsers()) {
+    if (isa<FirMemReadOp, FirMemReadWriteOp>(user))
+      return failure();
+    assert(isa<FirMemWriteOp>(user) && "invalid seq.firmem user");
+  }
+
+  for (auto *user : llvm::make_early_inc_range(op->getUsers()))
+    rewriter.eraseOp(user);
+
+  rewriter.eraseOp(op);
+  return success();
+}
 
 void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
@@ -754,7 +828,7 @@ LogicalResult FirMemReadOp::canonicalize(FirMemReadOp op,
                                          PatternRewriter &rewriter) {
   // Remove the enable if it is constant true.
   if (isConstAllOnes(op.getEnable())) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     return success();
   }
   return failure();
@@ -764,7 +838,7 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
                                           PatternRewriter &rewriter) {
   // Remove the write port if it is trivially dead.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConstClock(op.getClock())) {
+      isConstClock(op.getClk())) {
     rewriter.eraseOp(op);
     return success();
   }
@@ -772,13 +846,13 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -790,11 +864,11 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
   // Replace the read-write port with a read port if the write behavior is
   // trivially disabled.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
-      isConstClock(op.getClock()) || isConstZero(op.getMode())) {
+      isConstClock(op.getClk()) || isConstZero(op.getMode())) {
     auto opAttrs = op->getAttrs();
     auto opAttrNames = op.getAttributeNames();
     auto newOp = rewriter.replaceOpWithNewOp<FirMemReadOp>(
-        op, op.getMemory(), op.getAddress(), op.getClock(), op.getEnable());
+        op, op.getMemory(), op.getAddress(), op.getClk(), op.getEnable());
     for (auto namedAttr : opAttrs)
       if (!llvm::is_contained(opAttrNames, namedAttr.getName()))
         newOp->setAttr(namedAttr.getName(), namedAttr.getValue());
@@ -804,13 +878,13 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -865,6 +939,50 @@ OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
     return IntegerAttr::get(ty, clockAttr.getValue() == ClockConst::High);
   }
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ClockInverterOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockInverterOp::fold(FoldAdaptor adaptor) {
+  if (auto chainedInv = getInput().getDefiningOp<ClockInverterOp>())
+    return chainedInv.getInput();
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
+    auto clockIn = clockAttr.getValue() == ClockConst::High;
+    return ClockConstAttr::get(getContext(),
+                               clockIn ? ClockConst::Low : ClockConst::High);
+  }
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// FIR memory helper
+//===----------------------------------------------------------------------===//
+
+FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
+  depth = op->getAttrOfType<IntegerAttr>("depth").getInt();
+  numReadPorts = op->getAttrOfType<IntegerAttr>("numReadPorts").getUInt();
+  numWritePorts = op->getAttrOfType<IntegerAttr>("numWritePorts").getUInt();
+  numReadWritePorts =
+      op->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt();
+  readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
+  writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
+  dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
+  if (op->hasAttrOfType<IntegerAttr>("maskGran"))
+    maskGran = op->getAttrOfType<IntegerAttr>("maskGran").getUInt();
+  else
+    maskGran = dataWidth;
+  readUnderWrite = op->getAttrOfType<seq::RUWAttr>("readUnderWrite").getValue();
+  writeUnderWrite =
+      op->getAttrOfType<seq::WUWAttr>("writeUnderWrite").getValue();
+  if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
+    for (auto clockID : clockIDsAttr)
+      writeClockIDs.push_back(
+          clockID.cast<IntegerAttr>().getValue().getZExtValue());
+  initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
+  initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
+  initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
 }
 
 //===----------------------------------------------------------------------===//

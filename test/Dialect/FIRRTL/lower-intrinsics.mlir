@@ -1,47 +1,9 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics))' %s   | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics{fixup-eicg-wrapper}))' %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
 
 // CHECK-LABEL: "Foo"
 firrtl.circuit "Foo" {
-  // CHECK-NOT: NameDoesNotMatter
-  firrtl.extmodule @NameDoesNotMatter(in i : !firrtl.clock, out size : !firrtl.uint<32>) attributes
-                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.sizeof"}]}
-  // CHECK-NOT: NameDoesNotMatter2
-  firrtl.extmodule @NameDoesNotMatter2(in i : !firrtl.clock, out found : !firrtl.uint<1>) attributes
-                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.isX"}]}
-  // CHECK-NOT: NameDoesNotMatter3
-  firrtl.extmodule @NameDoesNotMatter3<FORMAT: none = "foo">(out found : !firrtl.uint<1>) attributes
-                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.plusargs.test"}]}
-  // CHECK-NOT: NameDoesNotMatter4
-  firrtl.extmodule @NameDoesNotMatter4<FORMAT: none = "foo">(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>) attributes
-                                     {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.plusargs.value"}]}
-
-  // CHECK: Foo
-  firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
-    %i1, %size = firrtl.instance "" @NameDoesNotMatter(in i : !firrtl.clock, out size : !firrtl.uint<32>)
-    // CHECK-NOT: NameDoesNotMatter
-    // CHECK: firrtl.int.sizeof
-    firrtl.strictconnect %i1, %clk : !firrtl.clock
-    firrtl.strictconnect %s, %size : !firrtl.uint<32>
-
-    %i2, %found2 = firrtl.instance "" @NameDoesNotMatter2(in i : !firrtl.clock, out found : !firrtl.uint<1>)
-    // CHECK-NOT: NameDoesNotMatter2
-    // CHECK: firrtl.int.isX
-    firrtl.strictconnect %i2, %clk : !firrtl.clock
-    firrtl.strictconnect %io1, %found2 : !firrtl.uint<1>
-
-    %found3 = firrtl.instance "" @NameDoesNotMatter3(out found : !firrtl.uint<1>)
-    // CHECK-NOT: NameDoesNotMatter3
-    // CHECK: firrtl.int.plusargs.test "foo"
-    firrtl.strictconnect %io2, %found3 : !firrtl.uint<1>
-
-    %found4, %result1 = firrtl.instance "" @NameDoesNotMatter4(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>)
-    // CHECK-NOT: NameDoesNotMatter4
-    // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
-    firrtl.strictconnect %io3, %found4 : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
-  }
-
-  // CHECK-NOT: NameDoesNotMatte5
+  // CHECK-NOT: NameDoesNotMatter5
   firrtl.intmodule @NameDoesNotMatter5(in i : !firrtl.clock, out size : !firrtl.uint<32>) attributes
                                      {intrinsic = "circt.sizeof"}
   // CHECK-NOT: NameDoesNotMatter6
@@ -54,8 +16,8 @@ firrtl.circuit "Foo" {
   firrtl.intmodule @NameDoesNotMatter8<FORMAT: none = "foo">(out found : !firrtl.uint<1>, out result: !firrtl.uint<5>) attributes
                                      {intrinsic = "circt.plusargs.value"}
 
-  // CHECK: Bar
-  firrtl.module @Bar(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
+  // CHECK: Foo
+  firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     %i1, %size = firrtl.instance "" @NameDoesNotMatter5(in i : !firrtl.clock, out size : !firrtl.uint<32>)
     // CHECK-NOT: NameDoesNotMatter5
     // CHECK: firrtl.int.sizeof
@@ -80,24 +42,27 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %io4, %result1 : !firrtl.uint<5>
   }
 
-  // CHECK-NOT: ClockGate0
   // CHECK-NOT: ClockGate1
-  firrtl.extmodule @ClockGate0(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.clock_gate"}]}
   firrtl.intmodule @ClockGate1(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {intrinsic = "circt.clock_gate"}
 
   // CHECK: ClockGate
   firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // CHECK-NOT: ClockGate0
-    // CHECK: firrtl.int.clock_gate
-    %in1, %en1, %out1 = firrtl.instance "" @ClockGate0(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    firrtl.strictconnect %in1, %clk : !firrtl.clock
-    firrtl.strictconnect %en1, %en : !firrtl.uint<1>
-
     // CHECK-NOT: ClockGate1
     // CHECK: firrtl.int.clock_gate
     %in2, %en2, %out2 = firrtl.instance "" @ClockGate1(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.strictconnect %in2, %clk : !firrtl.clock
     firrtl.strictconnect %en2, %en : !firrtl.uint<1>
+  }
+
+  // CHECK-NOT: ClockInverter1
+  firrtl.intmodule @ClockInverter1(in in: !firrtl.clock, out out: !firrtl.clock) attributes {intrinsic = "circt.clock_inv"}
+
+  // CHECK: ClockInverter
+  firrtl.module @ClockInverter(in %clk: !firrtl.clock) {
+    // CHECK-NOT: ClockInverter1
+    // CHECK: firrtl.int.clock_inv
+    %in2, %out2 = firrtl.instance "" @ClockInverter1(in in: !firrtl.clock, out out: !firrtl.clock)
+    firrtl.strictconnect %in2, %clk : !firrtl.clock
   }
 
   // CHECK-NOT: LTLAnd
@@ -184,7 +149,7 @@ firrtl.circuit "Foo" {
     %cover.property = firrtl.instance "cover" @VerifCover(in property: !firrtl.uint<1>)
   }
 
-  firrtl.extmodule @Mux2Cell(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint) attributes {annotations = [{class = "circt.Intrinsic", intrinsic = "circt.mux2cell"}]}
+  firrtl.intmodule @Mux2Cell(in sel: !firrtl.uint<1>, in high: !firrtl.uint, in low: !firrtl.uint, out out: !firrtl.uint) attributes {intrinsic = "circt.mux2cell"}
   firrtl.intmodule @Mux4Cell(in sel: !firrtl.uint<2>, in v3: !firrtl.uint, in v2: !firrtl.uint, in v1: !firrtl.uint, in v0: !firrtl.uint, out out: !firrtl.uint) attributes {intrinsic = "circt.mux4cell"}
 
   // CHECK: firrtl.module @MuxCell()
@@ -219,5 +184,143 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %in_reset1, %reset1 : !firrtl.uint<1>
     firrtl.strictconnect %in_reset2, %reset2 : !firrtl.asyncreset
     firrtl.strictconnect %in_reset3, %reset3 : !firrtl.reset
+  }
+
+  // CHECK-NOEICG: LegacyClockGate
+  // CHECK-EICG-NOT: LegacyClockGate
+  firrtl.extmodule @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: FixupEICGWrapper
+  firrtl.module @FixupEICGWrapper(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    // CHECK-EICG: firrtl.int.clock_gate
+    %ckg_in, %ckg_test_en, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.strictconnect %ckg_test_en, %en : !firrtl.uint<1>
+    firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
+  }
+
+  // CHECK-NOT: CirctAssert1
+  // CHECK-NOT: CirctAssert2
+  // CHECK-NOT: VerifAssume
+  // CHECK-NOT: VerifCover
+// TODO:
+  firrtl.intmodule private @AssertAssume<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert_assume"}
+  firrtl.intmodule private @AssertAssumeFormat<format: none = "message: %d",
+                                               label: none = "label for assert with format string",
+                                               guards: none = "MACRO_GUARD;ASDF">(
+                                                 in clock: !firrtl.clock,
+                                                 in predicate: !firrtl.uint<1>,
+                                                 in enable: !firrtl.uint<1>,
+                                                 in val: !firrtl.uint<1>
+                                               ) attributes {intrinsic = "circt.chisel_assert_assume"}
+  firrtl.intmodule private @IfElseFatalFormat<format: none = "ief: %d",
+                                              label: none = "label for ifelsefatal assert",
+                                              guards: none = "MACRO_GUARD;ASDF">(
+                                                in clock: !firrtl.clock,
+                                                in predicate: !firrtl.uint<1>,
+                                                in enable: !firrtl.uint<1>,
+                                                in val: !firrtl.uint<1>
+                                              ) attributes {intrinsic = "circt.chisel_ifelsefatal"}
+  firrtl.intmodule private @Assume<format: none = "text: %d",
+                                   label: none = "label for assume">(
+                                     in clock: !firrtl.clock,
+                                     in predicate: !firrtl.uint<1>,
+                                     in enable: !firrtl.uint<1>,
+                                     in val: !firrtl.uint<1>
+                                   ) attributes {intrinsic = "circt.chisel_assume"}
+  firrtl.intmodule private @CoverLabel<label: none = "label for cover">(
+                                         in clock: !firrtl.clock,
+                                         in predicate: !firrtl.uint<1>,
+                                         in enable: !firrtl.uint<1>
+                                       ) attributes {intrinsic = "circt.chisel_cover"}
+  // CHECK-NOT: @AssertAssume
+  // CHECK-NOT: @AssertAssumeFormat
+  // CHECK-NOT: @IfElseFatalFormat
+  // CHECK-NOT: @Assume
+  // CHECK-NOT: @CoverLabel
+
+  // CHECK: firrtl.module @ChiselVerif(
+  firrtl.module @ChiselVerif(in %clock: !firrtl.clock,
+                             in %cond: !firrtl.uint<1>,
+                             in %enable: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "testing" :
+    // CHECK-SAME: isConcurrent = true
+    %assert_clock, %assert_predicate, %assert_enable = firrtl.instance assert interesting_name @AssertAssume(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
+    firrtl.strictconnect %assert_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assert_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assert_enable, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "message: %d"(
+    // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for assert with format string"
+    %assertFormat_clock, %assertFormat_predicate, %assertFormat_enable, %assertFormat_val = firrtl.instance assertFormat interesting_name @AssertAssumeFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %assertFormat_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assertFormat_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assertFormat_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %assertFormat_val, %cond : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "ief: %d"(
+    // CHECK-SAME: format = "ifElseFatal"
+    // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for ifelsefatal assert"
+    %ief_clock, %ief_predicate, %ief_enable, %ief_val = firrtl.instance ief interesting_name @IfElseFatalFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %ief_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %ief_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %ief_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %ief_val, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.assume %{{.+}}, %{{.+}}, %{{.+}}, "text: %d"(
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for assume"
+    %assume_clock, %assume_predicate, %assume_enable, %assume_val = firrtl.instance assume interesting_name @Assume(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    firrtl.strictconnect %assume_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %assume_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %assume_enable, %enable : !firrtl.uint<1>
+    firrtl.strictconnect %assume_val, %enable : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.cover %{{.+}}, %{{.+}}, %{{.+}}, "" :
+    // CHECK-SAME: isConcurrent = true
+    // CHECK-SAME: name = "label for cover"
+    %cover_clock, %cover_predicate, %cover_enable = firrtl.instance cover interesting_name @CoverLabel(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
+    firrtl.strictconnect %cover_clock, %clock : !firrtl.clock
+    firrtl.strictconnect %cover_predicate, %cond : !firrtl.uint<1>
+    firrtl.strictconnect %cover_enable, %enable : !firrtl.uint<1>
+  }
+
+  // CHECK-NOT: firrtl.intmodule private @FPGAProbeIntrinsic
+  firrtl.intmodule private @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock) attributes {intrinsic = "circt_fpga_probe"}
+
+  // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
+  firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
+    // CHECK:      [[DATA:%.+]] = firrtl.wire : !firrtl.uint
+    // CHECK-NEXT: [[CLOCK:%.+]] = firrtl.wire : !firrtl.clock
+    // CHECK-NEXT: firrtl.int.fpga_probe [[CLOCK]], [[DATA]] : !firrtl.uint
+    // CHECK-NEXT: firrtl.strictconnect [[CLOCK]], %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.connect [[DATA]], %data : !firrtl.uint, !firrtl.uint<32>
+    %mod_data, %mod_clock = firrtl.instance mod @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock)
+    firrtl.strictconnect %mod_clock, %clock : !firrtl.clock
+    firrtl.connect %mod_data, %data : !firrtl.uint, !firrtl.uint<32>
+  }
+}
+
+// CHECK-LABEL: "FixupEICGWrapper2"
+firrtl.circuit "FixupEICGWrapper2" {
+  // CHECK-NOEICG: LegacyClockGateNoTestEn
+  // CHECK-EICG-NOT: LegacyClockGateNoTestEn
+  firrtl.extmodule @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: FixupEICGWrapper2
+  firrtl.module @FixupEICGWrapper2(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    // CHECK-EICG: firrtl.int.clock_gate
+    %ckg_in, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+    firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>
   }
 }

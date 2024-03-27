@@ -96,7 +96,7 @@ class PolynomialSystem(Module):
     i32 = types.i32
     x = hw.ConstantOp(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example",
-                                                        appid=AppID("poly", 0),
+                                                        appid=AppID("poly"),
                                                         x=x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
@@ -109,7 +109,7 @@ class PolynomialSystem(Module):
     m.name = "pexternInst"
     w1.assign(0)
 
-    self._set_outputs(poly._outputs())
+    self._set_outputs(poly.outputs())
 
 
 poly = pycde.System([PolynomialSystem],

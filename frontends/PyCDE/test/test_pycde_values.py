@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde.dialects import comb, hw
-from pycde import dim, generator, types, Input, Output, Module
+from pycde import dim, generator, types, Clock, Input, Output, Module
 from pycde.signals import And, Or
 from pycde.testing import unittestmodule
 
@@ -64,9 +64,10 @@ def MyModule(SIZE: int):
   return Mod
 
 
-# CHECK-LABEL: hw.module @ArrayMod(in %inp : !hw.array<5xi1>)
+# CHECK-LABEL: hw.module @ArrayMod(in %clk : !seq.clock, in %inp : !hw.array<5xi1>)
 @unittestmodule()
 class ArrayMod(Module):
+  clk = Clock()
   inp = Input(dim(types.i1, 5))
 
   @generator
@@ -110,3 +111,9 @@ class ArrayMod(Module):
 
     # CHECK:  %16 = comb.and bin %12, %13, %14 : i1
     And(a, b, c)
+
+    # CHECK:  hw.bitcast %inp : (!hw.array<5xi1>) -> i5
+    ports.inp.bitcast(types.i5)
+
+    # CHECK:  seq.from_clock %clk
+    ports.clk.to_bit()

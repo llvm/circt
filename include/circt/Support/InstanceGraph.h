@@ -209,16 +209,11 @@ public:
   /// Lookup an InstanceGraphNode for a module.
   InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
 
-  /// Look up the referenced module from an InstanceOp. This will use a
-  /// hashtable lookup to find the module, where
-  /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  template <typename TTarget = ModuleOpInterface>
-  auto getReferencedModule(InstanceOpInterface op) {
-    return cast<TTarget>(getReferencedModuleImpl(op).getOperation());
-  }
-
   /// Check if child is instantiated by a parent.
-  bool isAncestor(ModuleOpInterface child, ModuleOpInterface parent);
+  bool isAncestor(
+      ModuleOpInterface child, ModuleOpInterface parent,
+      llvm::function_ref<bool(InstanceRecord *)> skipInstance =
+          [](InstanceRecord *_) { return false; });
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() { return nullptr; }
@@ -302,20 +297,18 @@ public:
 
   InstancePath dropFront() const { return InstancePath(path.drop_front()); }
 
+  InstancePath dropBack() const { return InstancePath(path.drop_back()); }
+
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
 
+  bool operator==(const InstancePath &that) const { return path == that.path; }
+
   /// Print the path to any stream-like object.
-  template <typename T>
-  void print(T &into) const {
-    into << "$root";
-    for (auto inst : path)
-      into << "/" << inst.getInstanceName() << ":"
-           << inst.getReferencedModuleName();
-  }
+  void print(llvm::raw_ostream &into) const;
 
 private:
   // Only the path cache is allowed to create paths.
@@ -325,13 +318,14 @@ private:
   ArrayRef<InstanceOpInterface> path;
 };
 
-template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  return path.print(os);
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const InstancePath &path) {
+  path.print(os);
+  return os;
 }
 
-/// A data structure that caches and provides absolute paths to module instances
-/// in the IR.
+/// A data structure that caches and provides absolute paths to module
+/// instances in the IR.
 struct InstancePathCache {
   /// The instance graph of the IR.
   InstanceGraph &instanceGraph;

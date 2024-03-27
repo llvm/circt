@@ -60,8 +60,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   // Additional class declarations to emit alongside the type inference.
   code firrtlExtraClassDeclaration = "";
 
-  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
-      parseValidatorDecl # [{
+  // Declaration of the InferTypeOpInterface method. This is a default
+  // implementation, using the inferType and inferTypeDecl machinery, but
+  // subclasses can override this to omit it or provide something else.
+  code inferReturnTypesDecl = [{
     /// Infer the return types of this operation. This is called by the
     /// `InferTypeOpInterface`. We simply forward to a narrower
     /// operation-specific implementation which is sufficient for FIRRTL ops.
@@ -75,7 +77,10 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
       return impl::inferReturnTypes(context, loc, operands, attrs, properties,
         regions, results, &inferReturnType);
     }
+  }];
 
+  let extraClassDeclaration = firrtlExtraClassDeclaration # inferTypeDecl #
+      parseValidatorDecl # inferReturnTypesDecl # [{
     /// Check that the parser has consumed the correct number of operands and
     /// constants, and infer the appropriate return type for the operation.
     static FIRRTLType validateAndInferReturnType(ValueRange operands,
@@ -233,7 +238,7 @@ def FEnumCreateOp : FIRRTLOp<"enumcreate"> {
   let extraClassDeclaration = [{
     /// Return the name attribute of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getResult().getType().get().getElementNameAttr(getFieldIndex());
+      return getResult().getType().base().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -337,7 +342,7 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().get().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInput().getType().base().getFieldID(getIndex()));
     }
     using InputType = FVectorType;
   }];
@@ -464,13 +469,13 @@ def SubtagOp : FIRRTLExprOp<"subtag"> {
   let firrtlExtraClassDeclaration = [{
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().get()
+      return FieldRef(getInput(), getInput().getType().base()
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringAttr getFieldNameAttr() {
-      return getInput().getType().get().getElementNameAttr(getFieldIndex());
+      return getInput().getType().base().getElementNameAttr(getFieldIndex());
     }
 
     /// Return the name of the accessed field.
@@ -866,60 +871,6 @@ def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Verif and SV specific
-//===----------------------------------------------------------------------===//
-
-def IsXIntrinsicOp : FIRRTLOp<"int.isX",
-    [HasCustomSSAName, Pure]> {
-  let summary = "Test for 'x";
-  let description = [{
-    The `int.isX` expression checks that the operand is not a verilog literal
-    'x.  FIRRTL doesn't have a notion of 'x per-se, but x can come in to the
-    system from external modules and from SV constructs.  Verification
-    constructs need to explicitly test for 'x.
-    }];
-
-  let arguments = (ins FIRRTLBaseType:$arg);
-  let results = (outs NonConstUInt1Type:$result);
-  let hasFolder = 1;
-  let assemblyFormat = "$arg attr-dict `:` type($arg)";
-}
-
-def PlusArgsTestIntrinsicOp : FIRRTLOp<"int.plusargs.test",
-    [HasCustomSSAName, Pure]> {
-  let summary = "SystemVerilog `$test$plusargs` call";
-
-  let arguments = (ins StrAttr:$formatString);
-  let results = (outs NonConstUInt1Type:$found);
-  let assemblyFormat = "$formatString attr-dict";
-}
-
-def PlusArgsValueIntrinsicOp : FIRRTLOp<"int.plusargs.value",
-    [HasCustomSSAName, Pure]> {
-  let summary = "SystemVerilog `$value$plusargs` call";
-
-  let arguments = (ins StrAttr:$formatString);
-  let results = (outs NonConstUInt1Type:$found, AnyType:$result);
-  let assemblyFormat = "$formatString attr-dict `:` type($result)";
-}
-
-def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
-  let summary = "Check that a proper reset has been seen.";
-  let description = [{
-    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
-    startup and after each power-cycle in a power-aware simulation. The result
-    remains 0 before and during reset and only switches to 1 after the reset is
-    deasserted again.
-
-    See the corresponding `verif.has_been_reset` operation.
-  }];
-  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
-  let results = (outs NonConstUInt1Type:$result);
-  let hasFolder = 1;
-  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
-}
-
-//===----------------------------------------------------------------------===//
 // Verbatim
 //===----------------------------------------------------------------------===//
 
@@ -995,7 +946,7 @@ def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
 //===----------------------------------------------------------------------===//
 
 // This assumes operands are ground types without explicitly checking
-class SameGroundTypeOperandConstness<string a, string b> 
+class SameGroundTypeOperandConstness<string a, string b>
   : PredOpTrait<
       "operand constness must match",
       CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
@@ -1198,24 +1149,6 @@ def ListCreateOp : FIRRTLOp<"list.create", [Pure, SameTypeOperands]> {
   let hasVerifier = 1;
 }
 
-def MapCreateOp : FIRRTLOp<"map.create", [Pure, SameVariadicOperandSize]> {
-  let summary = "Produce a map value";
-  let description = [{
-    Produces a value of map type containing the provided key/value elements.
-
-    Example:
-    ```mlir
-    %4 = firrtl.map.create (%0 -> %1, %2 -> %3) : !firrtl.map<string, integer>
-    ```
-  }];
-
-  let arguments = (ins Variadic<PropertyType>:$keys, Variadic<PropertyType>:$values);
-  let results = (outs MapType:$result);
-
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-}
-
 def BoolConstantOp : FIRRTLOp<"bool", [Pure, ConstantLike]> {
   let summary = "Produce a constant boolean value";
   let description = [{
@@ -1246,6 +1179,68 @@ def DoubleConstantOp : FIRRTLOp<"double", [Pure, ConstantLike]> {
   let results = (outs DoubleType:$result);
   let hasFolder = 1;
   let assemblyFormat = "$value attr-dict";
+}
+
+class IntegerBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
+   BinaryPrimOp<mnemonic, FIntegerType, FIntegerType, FIntegerType,
+                [Pure, SameOperandsAndResultType] # traits> {
+  // We use the standard inferReturnTypes from SameOperandsAndResultType.
+  let inferReturnTypesDecl = "";
+
+  // We use a static inferType that always returns FIntegerType.
+  let inferType = "getFIntegerType";
+
+  // Define the getFIntegerType inline in ODS.
+  let firrtlExtraClassDeclaration = [{
+    static FIntegerType getFIntegerType(FIRRTLType lhs,
+                                        FIRRTLType rhs,
+                                        std::optional<Location> loc) {
+      return FIntegerType::get(lhs.getContext());
+    }
+  }];
+}
+
+def IntegerAddOp : IntegerBinaryPrimOp<"integer.add", [Commutative]> {
+  let summary = "Add two FIntegerType values";
+  let description = [{
+    The add operation result is the arbitrary precision signed integer
+    arithmetic sum of the two operands.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
+def IntegerMulOp : IntegerBinaryPrimOp<"integer.mul", [Commutative]> {
+  let summary = "Multiply two FIntegerType values";
+  let description = [{
+    The multiply operation result is the arbitrary precision signed integer
+    arithmetic product of the two operands.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
+}
+
+def IntegerShrOp : IntegerBinaryPrimOp<"integer.shr"> {
+  let summary = "Shift an FIntegerType value right by an FIntegerType value";
+  let description = [{
+    The shift right operation result is the arbitrary precision signed integer
+    arithmetic shift right of the lhs operand by the rhs operand. The rhs
+    operand must be non-negative.
+
+    Example:
+    ```mlir
+    %2 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) ->
+                                         !firrtl.integer
+    ```
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -1292,6 +1287,7 @@ def RefCastOp : FIRRTLOp<"ref.cast",
   let results = (outs RefType:$result);
 
   let hasFolder = 1;
+  let hasVerifier = 1;
 
   let assemblyFormat =
      "$input attr-dict `:` functional-type($input, $result)";
@@ -1310,6 +1306,7 @@ def RefResolveOp: FIRRTLExprOp<"ref.resolve",
   let results = (outs FIRRTLBaseType:$result);
 
   let hasCanonicalizer = true;
+  let hasVerifier = 1;
 
   let assemblyFormat = "$ref attr-dict `:` qualified(type($ref))";
 }
@@ -1372,6 +1369,20 @@ def RWProbeOp : FIRRTLOp<"ref.rwprobe",
   let arguments = (ins InnerRefAttr:$target);
   let results = (outs RWProbeConcreteReset:$result);
   let assemblyFormat = "$target attr-dict `:` type($result)";
+}
+
+def XMRRefOp : FIRRTLOp<"xmr.ref"> {
+  let summary = "FIRRTL XMR operation, targetable by ref ops.";
+  let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
+  let results = (outs RefType:$dest);
+  let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
+}
+
+def XMRDerefOp : FIRRTLOp<"xmr.deref"> {
+  let summary = "FIRRTL XMR operation, reading an XMR target.";
+  let arguments = (ins FlatSymbolRefAttr:$ref, DefaultValuedAttr<StrAttr, "{}">:$verbatimSuffix);
+  let results = (outs PassiveType:$dest);
+  let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
 }
 
 //===----------------------------------------------------------------------===//

@@ -90,7 +90,7 @@ sequentially numbered in tag order from 0.  Enum tags are unsigned values.
 ### `union` Type
 
 Union types contain a single data element (which may be an aggregate).  They
-optionally have an offset per varient which allows non-SV layouts.
+optionally have an offset per variant which allows non-SV layouts.
 
 ## `hw.module` and `hw.instance`
 

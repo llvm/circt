@@ -46,7 +46,7 @@ struct FIRParserOptions {
   /// This, along with numOMIRFiles provides structure to the buffers in the
   /// source manager.
   unsigned numAnnotationFiles;
-  bool scalarizeTopModule = false;
+  bool scalarizePublicModules = false;
   bool scalarizeExtModules = false;
 };
 
@@ -108,7 +108,7 @@ struct FIRVersion {
 
 constexpr FIRVersion minimumFIRVersion(0, 2, 0);
 constexpr FIRVersion nextFIRVersion(3, 3, 0);
-constexpr FIRVersion exportFIRVersion = nextFIRVersion;
+constexpr FIRVersion exportFIRVersion(4, 0, 0);
 constexpr FIRVersion defaultFIRVersion(1, 0, 0);
 
 template <typename T>

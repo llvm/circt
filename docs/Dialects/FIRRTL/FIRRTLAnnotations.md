@@ -27,7 +27,7 @@ indicate to the compiler that a wire "foo" should not be optimized away.
 ```json
 {
   "class":"firrtl.transforms.DontTouchAnnotation",
-  "target""~MyCircuit|MyModule>foo"
+  "target":"~MyCircuit|MyModule>foo"
 }
 ```
 
@@ -99,7 +99,7 @@ circuit Foo:
 
 | Folded Module   | Unfolded Modules  |
 | --------------- | ----------------- |
-| <img title="Folded Modules" src="includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="includes/img/firrtl-unfolded-module.png"/> |
+| <img title="Folded Modules" src="../../includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="../../includes/img/firrtl-unfolded-module.png"/> |
 
 Using targets (or multiple targets), any specific module, instance, or
 combination of instances can be expressed. Some examples include:
@@ -212,7 +212,7 @@ although there may be further restrictions in the annotation.
 This annotation attaches SV attributes to a specified target. A reference
 target must be a wire, node, reg, or module. This annotation doesn't prevent
 optimizations so it's necessary to add dontTouch annotation if users want to
-preseve the target.
+preserve the target.
 
 Example:
 ```json
@@ -287,10 +287,10 @@ Example:
 
 ### [BlackBoxResourceFileNameAnno](https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxResourceFileNameAnno.html)
 
-| Property         | Type   | Description                              |
-| ----------       | ------ | -------------                            |
-| class            | string | `firrtl.transforms.BlackBoxFileNameAnno` |
-| resourceFileName | string | Output filename                          |
+| Property         | Type   | Description                                      |
+| ----------       | ------ | -------------                                    |
+| class            | string | `firrtl.transforms.BlackBoxResourceFileNameAnno` |
+| resourceFileName | string | Output filename                                  |
 
 Specifies the output file name for the list of black box source files that
 is generated as a collateral of the pass.
@@ -424,7 +424,7 @@ Example:
 This annotation attaches a comment to a specified target. A reference
 target must be a wire, node, reg, or module. This annotation doesn't prevent
 optimizations so it's necessary to add dontTouch annotation if users want to
-preseve the target.
+preserve the target.
 
 Example:
 ```json
@@ -807,7 +807,7 @@ containing the names of all modules annotated with the
 Example:
 ```json
 {
-  "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation",
+  "class": "sifive.enterprise.firrtl.RetimeModulesAnnotation",
   "filename": "retime_modules.json"
 }
 ```
@@ -858,19 +858,6 @@ Example:
 }
 ```
 
-### circt.Intrinsic
-
-| Property   | Type   | Description       |
-| ---------- | ------ | -------------     |
-| class      | string | `circt.Intrinsic` |
-| target     | string | Reference target  |
-| intrinsic  | string | Name of Intrinsic |
-
-Used to indicate an external module is really an intrinsic module.  This exists
-to allow a frontend to generate intrinsics without FIRRTL language support for
-intrinsics.  It is expected this will be deprecated as soon as the FIRRTL language
-supports intrinsics.  This annotation can only be local and applied to a module.
-
 ### SitestBlackBoxAnnotation
 
 | Property   | Type   | Description                                         |
@@ -893,10 +880,10 @@ Example:
 
 ### SitestTestHarnessBlackBoxAnnotation
 
-| Property   | Type   | Description                                                     |
-| ---------- | ------ | -------------                                                   |
-| class      | string | `sifive.enterprise.firrtl.SittestTestHarnessBlackBoxAnnotation` |
-| filename   | string | The file to write to                                            |
+| Property   | Type   | Description                                                    |
+| ---------- | ------ | -------------                                                  |
+| class      | string | `sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation` |
+| filename   | string | The file to write to                                           |
 
 This annotation triggers the creation of a file containing a JSON array of the
 names of all external modules in the test harness which are not imported or

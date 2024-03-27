@@ -3,6 +3,7 @@
 
 sv.macro.decl @RANDOM
 sv.macro.decl @PRINTF_COND_
+sv.macro.decl @SYNTHESIS
 
 // CHECK-LABEL: hw.module @test1(in %arg0 : i1, in %arg1 : i1, in %arg8 : i8) {
 hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
@@ -21,7 +22,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   //    end // always @(posedge)
 
   sv.always posedge  %arg0 {
-    sv.ifdef.procedural "SYNTHESIS" {
+    sv.ifdef.procedural @SYNTHESIS {
     } else {
       %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
       %tmpx = sv.constantX : i1
@@ -40,7 +41,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.always posedge %arg0 {
-  // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+  // CHECK-NEXT:   sv.ifdef.procedural @SYNTHESIS {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND
   // CHECK-NEXT:     %x_i1 = sv.constantX : i1
@@ -336,10 +337,15 @@ hw.module @XMR_src(in %a : i23) {
     hw.output %c, %d : i3, i5
 }
 
+// CHECK-LABEL: sv.macro.decl @foo
+sv.macro.decl @foo
+// CHECK-LABEL: sv.macro.decl @bar
+sv.macro.decl @bar
+
 // CHECK-LABEL: hw.module @nested_wire
 hw.module @nested_wire(in %a: i1) {
-  // CHECK: sv.ifdef "foo"
-  sv.ifdef "foo" {
+  // CHECK: sv.ifdef @foo
+  sv.ifdef @foo {
     // CHECK: sv.wire
     %wire = sv.wire : !hw.inout<i1>
     // CHECK: sv.assign
@@ -352,14 +358,14 @@ hw.module @nested_wire(in %a: i1) {
 hw.module @ordered_region(in %a: i1) {
   // CHECK: sv.ordered
   sv.ordered {
-    // CHECK: sv.ifdef "foo"
-    sv.ifdef "foo" {
+    // CHECK: sv.ifdef @foo
+    sv.ifdef @foo {
       // CHECK: sv.wire
       %wire = sv.wire : !hw.inout<i1>
       // CHECK: sv.assign
       sv.assign %wire, %a : i1
     }
-    sv.ifdef "bar" {
+    sv.ifdef @bar {
       // CHECK: sv.wire
       %wire = sv.wire : !hw.inout<i1>
       // CHECK: sv.assign

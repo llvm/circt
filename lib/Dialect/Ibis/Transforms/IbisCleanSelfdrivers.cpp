@@ -38,7 +38,7 @@ namespace {
 
 // Rewrites cases where an input port is being read in the instantiating module.
 // Replaces the input port read by the assignment value of the input port.
-static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
+static LogicalResult replaceReadsOfWrites(ContainerOpInterface containerOp) {
   // Partition out all of the get_port's wrt. their target port symbol.
   struct PortAccesses {
     GetPortOp getAsInput;
@@ -50,7 +50,7 @@ static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
                  /*portName*/ llvm::DenseMap<StringAttr, PortAccesses>>
       instancePortAccessMap;
 
-  for (auto getPortOp : containerOp.getOps<GetPortOp>()) {
+  for (auto getPortOp : containerOp.getBodyBlock()->getOps<GetPortOp>()) {
     PortAccesses &portAccesses =
         instancePortAccessMap[getPortOp.getInstance()]
                              [getPortOp.getPortSymbolAttr().getAttr()];
@@ -141,7 +141,7 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
 
     // Create a `hw.wire` to ensure that the input port name is maintained.
     auto wire = rewriter.create<hw::WireOp>(op.getLoc(), writer.getValue(),
-                                            op.getSymName());
+                                            op.getInnerSymAttrName());
 
     // Replace all reads of the input port with the wire.
     for (auto reader : readers)
@@ -165,7 +165,7 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
 
       if (anyOutsideReads) {
         auto outputPort = rewriter.create<OutputPortOp>(
-            op.getLoc(), op.getSymName(), op.getType());
+            op.getLoc(), op.getInnerSym(), op.getType());
         rewriter.create<PortWriteOp>(op.getLoc(), outputPort, wire);
       }
     }
@@ -190,7 +190,8 @@ struct CleanSelfdriversPass
 } // anonymous namespace
 
 LogicalResult CleanSelfdriversPass::cleanInstanceSide() {
-  for (ContainerOp containerOp : getOperation().getOps<ContainerOp>())
+  for (ContainerOpInterface containerOp :
+       getOperation().getOps<ContainerOpInterface>())
     if (failed(replaceReadsOfWrites(containerOp)))
       return failure();
 

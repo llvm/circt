@@ -1,12 +1,8 @@
-//===- OM.cpp - C Interface for the OM Dialect ----------------------------===//
+//===- OM.cpp - C interface for the OM dialect ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-//  Implements a C Interface for the OM Dialect
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,6 +38,26 @@ MlirTypeID omClassTypeGetTypeID() { return wrap(ClassType::getTypeID()); }
 /// Get the name for a ClassType.
 MlirIdentifier omClassTypeGetName(MlirType type) {
   return wrap(cast<ClassType>(unwrap(type)).getClassName().getAttr());
+}
+
+/// Is the Type a FrozenBasePathType.
+bool omTypeIsAFrozenBasePathType(MlirType type) {
+  return isa<FrozenBasePathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenBasePathType.
+MlirTypeID omFrozenBasePathTypeGetTypeID(void) {
+  return wrap(FrozenBasePathType::getTypeID());
+}
+
+/// Is the Type a FrozenPathType.
+bool omTypeIsAFrozenPathType(MlirType type) {
+  return isa<FrozenPathType>(unwrap(type));
+}
+
+/// Get the TypeID for a FrozenPathType.
+MlirTypeID omFrozenPathTypeGetTypeID(void) {
+  return wrap(FrozenPathType::getTypeID());
 }
 
 /// Is the Type a StringType.
@@ -309,6 +325,31 @@ MlirAttribute omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue) {
   return wrap((Attribute)path->getAsString());
 }
 
+/// Query if the EvaluatorValue is a Reference.
+bool omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue) {
+  return isa<evaluator::ReferenceValue>(unwrap(evaluatorValue).get());
+}
+
+/// Dereference a Reference EvaluatorValue. Emits an error and returns null if
+/// the Reference cannot be dereferenced.
+OMEvaluatorValue
+omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue) {
+  // Assert the EvaluatorValue is a Reference.
+  assert(omEvaluatorValueIsAReference(evaluatorValue));
+
+  // Attempt to get the final EvaluatorValue from the Reference.
+  auto result =
+      llvm::cast<evaluator::ReferenceValue>(unwrap(evaluatorValue).get())
+          ->getStrippedValue();
+
+  // If this failed, an error diagnostic has been emitted, and we return null.
+  if (failed(result))
+    return {};
+
+  // If this succeeded, wrap the EvaluatorValue and return it.
+  return wrap(result.value());
+}
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API.
 //===----------------------------------------------------------------------===//
@@ -338,6 +379,16 @@ MlirAttribute omIntegerAttrGet(MlirAttribute attr) {
   auto integerAttr = cast<mlir::IntegerAttr>(unwrap(attr));
   return wrap(
       circt::om::IntegerAttr::get(integerAttr.getContext(), integerAttr));
+}
+
+/// Get a string representation of an om::IntegerAttr.
+MlirStringRef omIntegerAttrToString(MlirAttribute attr) {
+  mlir::IntegerAttr integerAttr =
+      cast<circt::om::IntegerAttr>(unwrap(attr)).getValue();
+  SmallVector<char> str;
+  integerAttr.getValue().toString(
+      str, /*Radix=*/10, /*Signed=*/integerAttr.getType().isSignedInteger());
+  return wrap(StringAttr::get(integerAttr.getContext(), str).getValue());
 }
 
 //===----------------------------------------------------------------------===//

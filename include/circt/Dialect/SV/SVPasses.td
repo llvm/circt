@@ -88,35 +88,6 @@ def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
    ];
 }
 
-def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
-  let summary = "Implement FIRRTMMem memories nodes with simulation model";
-  let description = [{
-    This pass replaces generated module nodes of type FIRRTLMem with a model
-    suitable for simulation.
-  }];
-
-  let constructor = "circt::sv::createHWMemSimImplPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
-
-  let options = [
-    Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
-            "Disable emission of memory randomization code">,
-    Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
-            "Disable emission of register randomization code">,
-    Option<"replSeqMem", "repl-seq-mem", "bool",
-                "false", "Prepare seq mems for macro replacement">,
-    Option<"ignoreReadEnable", "ignore-read-enable", "bool",
-                "false",
-    "ignore the read enable signal, instead of assigning X on read disable">,
-    Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",
-            "Add mux pragmas to memory reads">,
-    Option<"addVivadoRAMAddressConflictSynthesisBugWorkaround",
-           "add-vivado-ram-address-conflict-synthesis-bug-workaround", "bool", "false",
-            "Add a vivado attribute to specify a ram style of an array register">
-
-   ];
-}
-
 def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let summary = "Extract simulation only constructs to modules and bind";
   let description = [{
@@ -126,7 +97,10 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   }];
 
   let constructor = "circt::sv::createSVExtractTestCodePass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
+  let dependentDialects = [
+    "circt::sv::SVDialect",
+    "circt::verif::VerifDialect"
+  ];
   let options = [
     Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
            "false", "Disable extracting instances only that feed test code">,
@@ -170,7 +144,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
   }];
 
   let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
+  let dependentDialects = ["circt::emit::EmitDialect", "circt::sv::SVDialect"];
 }
 
 def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",

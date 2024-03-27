@@ -1,17 +1,14 @@
-//===-- circt-c/Dialect/MSFT.h - C API for MSFT dialect -----------*- C -*-===//
+//===- MSFT.h - C interface for the MSFT dialect ------------------*- C -*-===//
 //
-// This header declares the C interface for registering and accessing the
-// MSFT dialect. A dialect should be registered with a context to make it
-// available to users of the context. These users must load the dialect
-// before using any of its attributes, operations or types. Parser and pass
-// manager can load registered dialects automatically.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_C_DIALECT_MSFT_H
 #define CIRCT_C_DIALECT_MSFT_H
 
-#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Pass.h"
 
@@ -89,8 +86,8 @@ typedef struct {
 
 enum CirctMSFTDirection { NONE = 0, ASC = 1, DESC = 2 };
 typedef struct {
-  CirctMSFTDirection columns;
-  CirctMSFTDirection rows;
+  enum CirctMSFTDirection columns;
+  enum CirctMSFTDirection rows;
 } CirctMSFTWalkOrder;
 
 MLIR_CAPI_EXPORTED CirctMSFTPlacementDB

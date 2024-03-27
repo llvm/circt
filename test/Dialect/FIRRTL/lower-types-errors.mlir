@@ -15,6 +15,6 @@ firrtl.circuit "InnerSym" {
 firrtl.circuit "InternalPath" {
   firrtl.extmodule @InternalPath(
   // expected-error @below {{cannot lower port with internal path}}
-      in x: !firrtl.probe<bundle<a: uint<5>, b: uint<3>>>
+      out x: !firrtl.probe<bundle<a: uint<5>, b: uint<3>>>
     ) attributes { internalPaths = [#firrtl.internalpath<"a.b.c">] }
 }

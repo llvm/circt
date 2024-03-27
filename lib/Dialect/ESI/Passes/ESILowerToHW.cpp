@@ -13,9 +13,11 @@
 #include "../PassDetails.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
@@ -25,10 +27,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
-
-#ifdef CAPNP
-#include "../capnp/ESICapnp.h"
-#endif
 
 using namespace circt;
 using namespace circt::esi;
@@ -88,8 +86,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   operands.push_back(unwrap.getRawOutput());
   operands.push_back(unwrap.getValid());
   operands.push_back(stageReady);
-  auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
-                                               operands, stageParams);
+  auto stageInst = rewriter.create<hw::InstanceOp>(
+      loc, stageModule, pipeStageName, operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from
@@ -155,6 +153,13 @@ public:
     WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
     UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
     if (wrap) {
+      if (wrap.getChanOutput().getUsers().empty()) {
+        auto c1 = rewriter.create<hw::ConstantOp>(wrap.getLoc(),
+                                                  rewriter.getI1Type(), 1);
+        rewriter.replaceOp(wrap, {nullptr, c1});
+        return success();
+      }
+
       if (!wrap.getChanOutput().hasOneUse() ||
           !(unwrap = dyn_cast<UnwrapValidReadyOp>(
                 wrap.getChanOutput().use_begin()->getOwner())))
@@ -306,15 +311,15 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
 namespace {
 /// Lower `CosimEndpointOp` ops to a SystemVerilog extern module and a Capnp
 /// gasket op.
-struct CosimLowering : public OpConversionPattern<CosimEndpointOp> {
+struct CosimToHostLowering : public OpConversionPattern<CosimToHostEndpointOp> {
 public:
-  CosimLowering(ESIHWBuilder &b)
+  CosimToHostLowering(ESIHWBuilder &b)
       : OpConversionPattern(b.getContext(), 1), builder(b) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CosimEndpointOp, OpAdaptor adaptor,
+  matchAndRewrite(CosimToHostEndpointOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
@@ -322,153 +327,310 @@ private:
 };
 } // anonymous namespace
 
-LogicalResult
-CosimLowering::matchAndRewrite(CosimEndpointOp ep, OpAdaptor adaptor,
-                               ConversionPatternRewriter &rewriter) const {
-#ifndef CAPNP
-  (void)builder;
-  return rewriter.notifyMatchFailure(
-      ep, "Cosim lowering requires the ESI capnp plugin, which was disabled.");
-#else
+LogicalResult CosimToHostLowering::matchAndRewrite(
+    CosimToHostEndpointOp ep, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
-  auto operands = adaptor.getOperands();
-  Value clk = operands[0];
-  Value rst = operands[1];
-  Value send = operands[2];
-
   circt::BackedgeBuilder bb(rewriter, loc);
-  Type ui64Type =
-      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
-  capnp::CapnpTypeSchema sendTypeSchema(send.getType());
-  if (!sendTypeSchema.isSupported())
-    return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
-  capnp::CapnpTypeSchema recvTypeSchema(ep.getRecv().getType());
-  if (!recvTypeSchema.isSupported())
-    return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
+
+  Value toHost = adaptor.getToHost();
+  Type type = toHost.getType();
+  uint64_t width = getWidth(type);
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
-  if (auto ext = ep->getAttrOfType<StringAttr>("name_ext"))
-    params.push_back(ParamDeclAttr::get("ENDPOINT_ID_EXT", ext));
-  else
-    params.push_back(
-        ParamDeclAttr::get("ENDPOINT_ID_EXT", StringAttr::get(ctxt, "")));
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
+  params.push_back(ParamDeclAttr::get("TO_HOST_TYPE_ID", getTypeID(type)));
   params.push_back(ParamDeclAttr::get(
-      "SEND_TYPE_ID", IntegerAttr::get(ui64Type, sendTypeSchema.typeID())));
-  params.push_back(
-      ParamDeclAttr::get("SEND_TYPE_SIZE_BITS",
-                         rewriter.getI32IntegerAttr(sendTypeSchema.size())));
-  params.push_back(ParamDeclAttr::get(
-      "RECV_TYPE_ID", IntegerAttr::get(ui64Type, recvTypeSchema.typeID())));
-  params.push_back(
-      ParamDeclAttr::get("RECV_TYPE_SIZE_BITS",
-                         rewriter.getI32IntegerAttr(recvTypeSchema.size())));
+      "TO_HOST_SIZE_BITS", rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
 
-  // Set up the egest route to drive the EP's send ports.
-  ArrayType egestBitArrayType =
-      ArrayType::get(rewriter.getI1Type(), sendTypeSchema.size());
+  // Set up the egest route to drive the EP's toHost ports.
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReadyOp unwrapSend =
-      rewriter.create<UnwrapValidReadyOp>(loc, send, sendReady);
-  auto encodeData = rewriter.create<CapnpEncodeOp>(loc, egestBitArrayType, clk,
-                                                   unwrapSend.getValid(),
-                                                   unwrapSend.getRawOutput());
-
-  // Get information necessary for injest path.
-  auto recvReady = bb.get(rewriter.getI1Type());
-  ArrayType ingestBitArrayType =
-      ArrayType::get(rewriter.getI1Type(), recvTypeSchema.size());
+      rewriter.create<UnwrapValidReadyOp>(loc, toHost, sendReady);
+  Value castedSendData;
+  if (width > 0)
+    castedSendData = rewriter.create<hw::BitcastOp>(
+        loc, rewriter.getIntegerType(width), unwrapSend.getRawOutput());
+  else
+    castedSendData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(1), rewriter.getBoolAttr(false));
 
   // Build or get the cached Cosim Endpoint module parameterization.
   Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
-  HWModuleExternOp endpoint = builder.declareCosimEndpointOp(
-      symTable, egestBitArrayType, ingestBitArrayType);
+  HWModuleExternOp endpoint =
+      builder.declareCosimEndpointToHostModule(symTable);
 
   // Create replacement Cosim_Endpoint instance.
-  StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
-  StringRef name = nameAttr ? nameAttr.getValue() : "CosimEndpointOp";
-  Value epInstInputs[] = {
-      clk, rst, recvReady, unwrapSend.getValid(), encodeData.getCapnpBits(),
+  Value operands[] = {
+      adaptor.getClk(),
+      adaptor.getRst(),
+      unwrapSend.getValid(),
+      castedSendData,
   };
+  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
+  sendReady.setValue(cosimEpModule.getResult(0));
 
-  auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, endpoint, name, epInstInputs, ArrayAttr::get(ctxt, params));
-  sendReady.setValue(cosimEpModule.getResult(2));
+  // Replace the CosimEndpointOp op.
+  rewriter.eraseOp(ep);
+
+  return success();
+}
+
+namespace {
+/// Lower `CosimEndpointOp` ops to a SystemVerilog extern module and a Capnp
+/// gasket op.
+struct CosimFromHostLowering
+    : public OpConversionPattern<CosimFromHostEndpointOp> {
+public:
+  CosimFromHostLowering(ESIHWBuilder &b)
+      : OpConversionPattern(b.getContext(), 1), builder(b) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CosimFromHostEndpointOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  ESIHWBuilder &builder;
+};
+} // anonymous namespace
+
+LogicalResult CosimFromHostLowering::matchAndRewrite(
+    CosimFromHostEndpointOp ep, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  auto loc = ep.getLoc();
+  auto *ctxt = rewriter.getContext();
+  circt::BackedgeBuilder bb(rewriter, loc);
+
+  ChannelType type = ep.getFromHost().getType();
+  uint64_t width = getWidth(type);
+
+  // Set all the parameters.
+  SmallVector<Attribute, 8> params;
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", ep.getIdAttr()));
+  params.push_back(ParamDeclAttr::get("FROM_HOST_TYPE_ID", getTypeID(type)));
+  params.push_back(
+      ParamDeclAttr::get("FROM_HOST_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(width > 0 ? width : 1)));
+
+  // Get information necessary for injest path.
+  auto recvReady = bb.get(rewriter.getI1Type());
+
+  // Build or get the cached Cosim Endpoint module parameterization.
+  Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
+  HWModuleExternOp endpoint =
+      builder.declareCosimEndpointFromHostModule(symTable);
+
+  // Create replacement Cosim_Endpoint instance.
+  Value operands[] = {adaptor.getClk(), adaptor.getRst(), recvReady};
+  auto cosimEpModule = rewriter.create<hw::InstanceOp>(
+      loc, endpoint, ep.getIdAttr(), operands, ArrayAttr::get(ctxt, params));
 
   // Set up the injest path.
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
-  auto decodeData =
-      rewriter.create<CapnpDecodeOp>(loc, recvTypeSchema.getType(), clk,
-                                     recvValidFromCosim, recvDataFromCosim);
+  Value castedRecvData;
+  if (width > 0)
+    castedRecvData =
+        rewriter.create<hw::BitcastOp>(loc, type.getInner(), recvDataFromCosim);
+  else
+    castedRecvData = rewriter.create<hw::ConstantOp>(
+        loc, rewriter.getIntegerType(0),
+        rewriter.getIntegerAttr(rewriter.getIntegerType(0), 0));
   WrapValidReadyOp wrapRecv = rewriter.create<WrapValidReadyOp>(
-      loc, decodeData.getDecodedData(), recvValidFromCosim);
+      loc, castedRecvData, recvValidFromCosim);
   recvReady.setValue(wrapRecv.getReady());
 
   // Replace the CosimEndpointOp op.
   rewriter.replaceOp(ep, wrapRecv.getChanOutput());
 
   return success();
-#endif // CAPNP
 }
 
 namespace {
-/// Lower the encode gasket to SV/HW.
-struct EncoderLowering : public OpConversionPattern<CapnpEncodeOp> {
+/// Lower `CompressedManifestOps` ops to a module containing an on-chip ROM.
+/// Said module has registered input and outputs, so it has two cycles latency
+/// between changing the address and the data being reflected on the output.
+struct ManifestRomLowering : public OpConversionPattern<CompressedManifestOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
+  constexpr static StringRef manifestRomName = "__ESI_Manifest_ROM";
 
   LogicalResult
-  matchAndRewrite(CapnpEncodeOp enc, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-#ifndef CAPNP
-    return rewriter.notifyMatchFailure(enc,
-                                       "encode.capnp lowering requires the ESI "
-                                       "capnp plugin, which was disabled.");
-#else
-    capnp::CapnpTypeSchema encodeType(enc.getDataToEncode().getType());
-    if (!encodeType.isSupported())
-      return rewriter.notifyMatchFailure(enc, "Type not supported yet");
-    auto operands = adaptor.getOperands();
-    Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0],
-                                                  operands[1], operands[2]);
-    assert(encoderOutput && "Error in TypeSchema.buildEncoder()");
-    rewriter.replaceOp(enc, encoderOutput);
-    return success();
-#endif
-  }
+  matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override;
+
+protected:
+  LogicalResult createRomModule(CompressedManifestOp op,
+                                ConversionPatternRewriter &rewriter) const;
 };
 } // anonymous namespace
 
+LogicalResult ManifestRomLowering::createRomModule(
+    CompressedManifestOp op, ConversionPatternRewriter &rewriter) const {
+  Location loc = op.getLoc();
+  auto mlirModBody = op->getParentOfType<mlir::ModuleOp>();
+  rewriter.setInsertionPointToStart(mlirModBody.getBody());
+
+  // Find possible existing module (which may have been created as a dummy
+  // module) and erase it.
+  if (Operation *existingExtern = mlirModBody.lookupSymbol(manifestRomName)) {
+    if (!isa<hw::HWModuleExternOp>(existingExtern))
+      return rewriter.notifyMatchFailure(
+          op,
+          "Found " + manifestRomName + " but it wasn't an HWModuleExternOp");
+    rewriter.eraseOp(existingExtern);
+  }
+
+  // Create the real module.
+  PortInfo ports[] = {
+      {{rewriter.getStringAttr("clk"), rewriter.getType<seq::ClockType>(),
+        ModulePort::Direction::Input}},
+      {{rewriter.getStringAttr("address"), rewriter.getIntegerType(30),
+        ModulePort::Direction::Input}},
+      {{rewriter.getStringAttr("data"), rewriter.getI32Type(),
+        ModulePort::Direction::Output}},
+  };
+  auto rom = rewriter.create<HWModuleOp>(
+      loc, rewriter.getStringAttr(manifestRomName), ports);
+  Block *romBody = rom.getBodyBlock();
+  rewriter.setInsertionPointToStart(romBody);
+  Value clk = romBody->getArgument(0);
+  Value inputAddress = romBody->getArgument(1);
+
+  // Manifest the compressed manifest into 32-bit words.
+  ArrayRef<uint8_t> maniBytes = op.getCompressedManifest().getData();
+  SmallVector<uint32_t> words;
+  words.push_back(maniBytes.size());
+
+  for (size_t i = 0; i < maniBytes.size() - 3; i += 4) {
+    uint32_t word = maniBytes[i] | (maniBytes[i + 1] << 8) |
+                    (maniBytes[i + 2] << 16) | (maniBytes[i + 3] << 24);
+    words.push_back(word);
+  }
+  size_t overHang = maniBytes.size() % 4;
+  if (overHang != 0) {
+    uint32_t word = 0;
+    for (size_t i = 0; i < overHang; ++i)
+      word |= maniBytes[maniBytes.size() - overHang + i] << (i * 8);
+    words.push_back(word);
+  }
+
+  // From the words, create an the register which will hold the manifest (and
+  // hopefully synthized to a ROM).
+  SmallVector<Attribute> wordAttrs;
+  for (uint32_t word : words)
+    wordAttrs.push_back(rewriter.getI32IntegerAttr(word));
+  auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+      loc, hw::UnpackedArrayType::get(rewriter.getI32Type(), words.size()),
+      rewriter.getArrayAttr(wordAttrs));
+  auto manifestReg =
+      rewriter.create<sv::RegOp>(loc, manifestConstant.getType());
+  rewriter.create<sv::AssignOp>(loc, manifestReg, manifestConstant);
+
+  // Slim down the address, register it, do the lookup, and register the output.
+  size_t addrBits = llvm::Log2_64_Ceil(words.size());
+  auto slimmedIdx =
+      rewriter.create<comb::ExtractOp>(loc, inputAddress, 0, addrBits);
+  Value inputAddresReg = rewriter.create<seq::CompRegOp>(loc, slimmedIdx, clk);
+  auto readIdx =
+      rewriter.create<sv::ArrayIndexInOutOp>(loc, manifestReg, inputAddresReg);
+  auto readData = rewriter.create<sv::ReadInOutOp>(loc, readIdx);
+  Value readDataReg = rewriter.create<seq::CompRegOp>(loc, readData, clk);
+  if (auto *term = romBody->getTerminator())
+    rewriter.eraseOp(term);
+  rewriter.create<hw::OutputOp>(loc, ValueRange{readDataReg});
+  return success();
+}
+
+LogicalResult ManifestRomLowering::matchAndRewrite(
+    CompressedManifestOp op, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  LogicalResult ret = createRomModule(op, rewriter);
+  rewriter.eraseOp(op);
+  return ret;
+}
+
 namespace {
-/// Lower the decode gasket to SV/HW.
-struct DecoderLowering : public OpConversionPattern<CapnpDecodeOp> {
+/// Lower `CompressedManifestOps` ops to a SystemVerilog module which sets the
+/// Cosim manifest using a DPI support module.
+struct CosimManifestLowering : public ManifestRomLowering {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  using ManifestRomLowering::ManifestRomLowering;
 
   LogicalResult
-  matchAndRewrite(CapnpDecodeOp dec, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-#ifndef CAPNP
-    return rewriter.notifyMatchFailure(dec,
-                                       "decode.capnp lowering requires the ESI "
-                                       "capnp plugin, which was disabled.");
-#else
-    capnp::CapnpTypeSchema decodeType(dec.getDecodedData().getType());
-    if (!decodeType.isSupported())
-      return rewriter.notifyMatchFailure(dec, "Type not supported yet");
-    auto operands = adaptor.getOperands();
-    Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0],
-                                                  operands[1], operands[2]);
-    assert(decoderOutput && "Error in TypeSchema.buildDecoder()");
-    rewriter.replaceOp(dec, decoderOutput);
-    return success();
-#endif
-  }
+  matchAndRewrite(CompressedManifestOp, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
 };
-} // namespace
+} // anonymous namespace
 
+LogicalResult CosimManifestLowering::matchAndRewrite(
+    CompressedManifestOp op, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  MLIRContext *ctxt = rewriter.getContext();
+  Location loc = op.getLoc();
+
+  // Cosim can optionally include a manifest simulation, so produce it in case
+  // the Cosim BSP wants it.
+  LogicalResult ret = createRomModule(op, rewriter);
+  if (failed(ret))
+    return ret;
+
+  // Declare external module.
+  Attribute params[] = {
+      ParamDeclAttr::get("COMPRESSED_MANIFEST_SIZE", rewriter.getI32Type())};
+  PortInfo ports[] = {
+      {{rewriter.getStringAttr("compressed_manifest"),
+        rewriter.getType<hw::ArrayType>(
+            rewriter.getI8Type(),
+            ParamDeclRefAttr::get(
+                rewriter.getStringAttr("COMPRESSED_MANIFEST_SIZE"),
+                rewriter.getI32Type())),
+        ModulePort::Direction::Input},
+       0},
+  };
+  rewriter.setInsertionPointToEnd(
+      op->getParentOfType<mlir::ModuleOp>().getBody());
+  auto cosimManifestExternModule = rewriter.create<HWModuleExternOp>(
+      loc, rewriter.getStringAttr("Cosim_Manifest"), ports, "Cosim_Manifest",
+      ArrayAttr::get(ctxt, params));
+
+  hw::ModulePortInfo portInfo({});
+  auto manifestMod = rewriter.create<hw::HWModuleOp>(
+      loc, rewriter.getStringAttr("__ESIManifest"), portInfo,
+      [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &) {
+        // Assemble the manifest data into a constant.
+        SmallVector<Attribute> bytes;
+        for (uint8_t b : op.getCompressedManifest().getData())
+          bytes.push_back(rewriter.getI8IntegerAttr(b));
+        auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
+            loc, hw::ArrayType::get(rewriter.getI8Type(), bytes.size()),
+            rewriter.getArrayAttr(bytes));
+        auto manifestLogic =
+            rewriter.create<sv::LogicOp>(loc, manifestConstant.getType());
+        rewriter.create<sv::AssignOp>(loc, manifestLogic, manifestConstant);
+        auto manifest = rewriter.create<sv::ReadInOutOp>(loc, manifestLogic);
+
+        // Then instantiate the external module.
+        rewriter.create<hw::InstanceOp>(
+            loc, cosimManifestExternModule, "__manifest",
+            ArrayRef<Value>({manifest}),
+            rewriter.getArrayAttr({ParamDeclAttr::get(
+                "COMPRESSED_MANIFEST_SIZE",
+                rewriter.getI32IntegerAttr(bytes.size()))}));
+      });
+
+  rewriter.setInsertionPoint(op);
+  rewriter.create<hw::InstanceOp>(loc, manifestMod, "__manifest",
+                                  ArrayRef<Value>({}));
+
+  rewriter.eraseOp(op);
+  return success();
+}
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -490,11 +652,12 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<comb::CombDialect>();
   pass1Target.addLegalDialect<HWDialect>();
   pass1Target.addLegalDialect<SVDialect>();
+  pass1Target.addLegalDialect<seq::SeqDialect>();
   pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp>();
-  pass1Target.addLegalOp<CapnpDecodeOp, CapnpEncodeOp>();
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
   pass1Target.addIllegalOp<PipelineStageOp>();
+  pass1Target.addIllegalOp<CompressedManifestOp>();
 
   // Add all the conversion patterns.
   ESIHWBuilder esiBuilder(top);
@@ -502,8 +665,16 @@ void ESItoHWPass::runOnOperation() {
   pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
   pass1Patterns.insert<WrapInterfaceLower>(ctxt);
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
-  pass1Patterns.insert<CosimLowering>(esiBuilder);
+  pass1Patterns.insert<CosimToHostLowering>(esiBuilder);
+  pass1Patterns.insert<CosimFromHostLowering>(esiBuilder);
   pass1Patterns.insert<NullSourceOpLowering>(ctxt);
+
+  if (platform == Platform::cosim)
+    pass1Patterns.insert<CosimManifestLowering>(ctxt);
+  else if (platform == Platform::fpga)
+    pass1Patterns.insert<ManifestRomLowering>(ctxt);
+  else
+    pass1Patterns.insert<RemoveOpLowering<CompressedManifestOp>>(ctxt);
 
   // Run the conversion.
   if (failed(
@@ -520,8 +691,6 @@ void ESItoHWPass::runOnOperation() {
   pass2Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
   pass2Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
   pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
-  pass2Patterns.insert<EncoderLowering>(ctxt);
-  pass2Patterns.insert<DecoderLowering>(ctxt);
   if (failed(
           applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();

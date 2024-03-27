@@ -91,6 +91,18 @@ static Operation *lookupSymbolInNested(Operation *symbolTableOp,
   return nullptr;
 }
 
+/// Verifies symbols referenced by macro identifiers.
+static LogicalResult
+verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
+                           SymbolTableCollection &symbolTable) {
+  auto *refOp = symbolTable.lookupNearestSymbolFrom(op, attr);
+  if (!refOp)
+    return op->emitError("references an undefined symbol: ") << attr;
+  if (!isa<MacroDeclOp>(refOp))
+    return op->emitError("must reference a macro declaration");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
@@ -105,7 +117,7 @@ getVerbatimExprAsmResultNames(Operation *op,
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
   auto name = op->getAttrOfType<StringAttr>("format_string").getValue();
   // Ignore a leading ` in macro name.
-  if (name.startswith("`"))
+  if (name.starts_with("`"))
     name = name.drop_front();
   name = name.take_while(isOkCharacter);
   if (!name.empty())
@@ -162,31 +174,21 @@ MacroDeclOp MacroDefOp::getReferencedMacro(const hw::HWSymbolCache *cache) {
   return ::getReferencedMacro(cache, *this, getMacroNameAttr());
 }
 
-/// Ensure that the symbol being instantiated exists and is a MacroDeclOp.
-static LogicalResult verifyMacroSymbolUse(Operation *op, StringAttr name,
-                                          SymbolTableCollection &symbolTable) {
-  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(op, name);
-  if (!macro)
-    return op->emitError("Referenced macro doesn't exist ") << name;
-
-  return success();
-}
-
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult
 MacroRefExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+  return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
 }
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult
 MacroRefExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+  return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
 }
 
 /// Ensure that the symbol being instantiated exists and is a MacroDefOp.
 LogicalResult MacroDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyMacroSymbolUse(*this, getMacroNameAttr().getAttr(), symbolTable);
+  return verifyMacroIdentSymbolUses(*this, getMacroNameAttr(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -357,6 +359,13 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
 void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
                     std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
+  build(builder, result, FlatSymbolRefAttr::get(builder.getContext(), cond),
+        std::move(thenCtor), std::move(elseCtor));
+}
+
+void IfDefOp::build(OpBuilder &builder, OperationState &result,
+                    FlatSymbolRefAttr cond, std::function<void()> thenCtor,
+                    std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
         std::move(thenCtor), std::move(elseCtor));
 }
@@ -378,6 +387,10 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
     builder.createBlock(elseRegion);
     elseCtor();
   }
+}
+
+LogicalResult IfDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroIdentSymbolUses(*this, getCond().getIdent(), symbolTable);
 }
 
 // If both thenRegion and elseRegion are empty, erase op.
@@ -411,6 +424,14 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
 void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
+  build(builder, result, FlatSymbolRefAttr::get(builder.getContext(), cond),
+        std::move(thenCtor), std::move(elseCtor));
+}
+
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              FlatSymbolRefAttr cond,
+                              std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
   build(builder, result, MacroIdentAttr::get(builder.getContext(), cond),
         std::move(thenCtor), std::move(elseCtor));
 }
@@ -438,6 +459,11 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
                                               PatternRewriter &rewriter) {
   return canonicalizeIfDefLike(op, rewriter);
+}
+
+LogicalResult
+IfDefProceduralOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyMacroIdentSymbolUses(*this, getCond().getIdent(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1018,14 +1044,14 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
 
   if (op.getCaseStyle() == CaseStmtType::CaseXStmt) {
     if (noXZ) {
-      rewriter.updateRootInPlace(op, [&]() {
+      rewriter.modifyOpInPlace(op, [&]() {
         op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
       });
       return success();
     }
     if (noX) {
-      rewriter.updateRootInPlace(op, [&]() {
+      rewriter.modifyOpInPlace(op, [&]() {
         op.setCaseStyleAttr(
             CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseZStmt));
       });
@@ -1034,7 +1060,7 @@ LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   }
 
   if (op.getCaseStyle() == CaseStmtType::CaseZStmt && noZ) {
-    rewriter.updateRootInPlace(op, [&]() {
+    rewriter.modifyOpInPlace(op, [&]() {
       op.setCaseStyleAttr(
           CaseStmtTypeAttr::get(op.getContext(), CaseStmtType::CaseStmt));
     });
@@ -1632,7 +1658,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // If the wire has a name attribute, propagate the name to the expression.
   if (auto *connectedOp = connected.getDefiningOp())
     if (!wire.getName().empty())
-      rewriter.updateRootInPlace(connectedOp, [&] {
+      rewriter.modifyOpInPlace(connectedOp, [&] {
         connectedOp->setAttr("sv.namehint", wire.getNameAttr());
       });
 

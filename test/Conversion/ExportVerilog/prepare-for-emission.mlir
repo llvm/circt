@@ -147,6 +147,45 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
 }
 
 // -----
+
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+  // CHECK-LABEL: @DisableIff(
+  hw.module @DisableIff(in %clk: i1, in %a: i1, in %b: i1) {
+    %b_xor_b = comb.xor %b, %b : i1
+
+    // CHECK: %[[XOR:.+]] = comb.xor
+    // CHECK: %[[WIRE:.+]] = sv.wire
+    // CHECK: sv.assign %[[WIRE]], %[[XOR]]
+    // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: ltl.disable %{{.+}} if %[[READ]]
+    %i0 = ltl.implication %a, %b : i1, i1
+    %k0 = ltl.clock %i0, posedge %clk : !ltl.property
+    %k5 = ltl.disable %k0 if %b_xor_b : !ltl.property
+
+    verif.assert %k5: !ltl.property
+  }
+}
+
+// -----
+
+module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
+  // CHECK-LABEL: @ClockExpr(
+  hw.module @ClockExpr(in %clk: i1, in %a: i1, in %b: i1) {
+    %clk_xor_b = comb.xor %clk, %b : i1
+
+    // CHECK: %[[XOR:.+]] = comb.xor
+    // CHECK: %[[WIRE:.+]] = sv.wire
+    // CHECK: sv.assign %[[WIRE]], %[[XOR]]
+    // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: ltl.clock %{{.+}} posedge %[[READ]]
+    %i0 = ltl.implication %a, %b : i1, i1
+    %k0 = ltl.clock %i0, posedge %clk_xor_b : !ltl.property
+
+    verif.assert %k0: !ltl.property
+  }
+}
+
+// -----
 module attributes {circt.loweringOptions =
                   "wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingNamehintTermLimit=3"} {
   // CHECK-LABEL: namehints
@@ -291,4 +330,36 @@ module attributes {circt.loweringOptions = "disallowLocalVariables"} {
     }
   }
   hw.hierpath @xmr [@Foo::@a]
+}
+
+
+// -----
+
+// CHECK-LABEL: @constantInitRegWithBackEdge
+hw.module @constantInitRegWithBackEdge() {
+  // CHECK: %reg = sv.reg init %false : !hw.inout<i1>
+  // CHECK-NEXT: %false = hw.constant false
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = comb.or %false, %[[VAL_0]] : i1
+  %false = hw.constant false
+  %0 = comb.or %false, %1 : i1
+  %reg = sv.reg init %false : !hw.inout<i1>
+  %1 = sv.read_inout %reg : !hw.inout<i1>
+}
+
+// -----
+
+// CHECK-LABEL: @temporaryWireForReg
+hw.module @temporaryWireForReg() {
+  // CHECK: %[[WIRE:.*]] = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_0:.*]] = sv.read_inout %[[WIRE]]  : !hw.inout<i1>
+  // CHECK-NEXT: %b = sv.reg init %[[VAL_0]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_1:.*]] = sv.read_inout %b : !hw.inout<i1>
+  // CHECK-NEXT: %a = sv.reg init %[[VAL_1]] : !hw.inout<i1>
+  // CHECK-NEXT: %[[VAL_2:.*]] = sv.read_inout %a : !hw.inout<i1>
+  // CHECK-NEXT: sv.assign %[[WIRE]], %[[VAL_2]] : i1
+  %0 = sv.read_inout %a : !hw.inout<i1>
+  %1 = sv.read_inout %b : !hw.inout<i1>
+  %b = sv.reg init %0 : !hw.inout<i1>
+  %a = sv.reg init %1 : !hw.inout<i1>
 }

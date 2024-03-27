@@ -28,6 +28,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -40,6 +41,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -99,31 +101,6 @@ static Type mapLoweredType(Type type, FIRRTLBaseType fieldType) {
     return type;
   return mapLoweredType(ftype, fieldType);
 }
-
-// NOLINTBEGIN(misc-no-recursion)
-/// Return true if the type has more than zero bitwidth.
-static bool hasZeroBitWidth(FIRRTLType type) {
-  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([&](auto bundle) {
-        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-          auto elt = bundle.getElement(i);
-          if (hasZeroBitWidth(elt.type))
-            return true;
-        }
-        return bundle.getNumElements() == 0;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        if (vector.getNumElements() == 0)
-          return true;
-        return hasZeroBitWidth(vector.getElementType());
-      })
-      .Case<FIRRTLBaseType>([](auto groundType) {
-        return firrtl::getBitWidth(groundType).value_or(0) == 0;
-      })
-      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
-      .Default([](auto) { return false; });
-}
-// NOLINTEND(misc-no-recursion)
 
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
@@ -232,7 +209,7 @@ static bool isNotSubAccess(Operation *op) {
     return true;
   ConstantOp arg =
       llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().get().getNumElements() != 0;
+  return arg && sao.getInput().getType().base().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -404,7 +381,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(StrictConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
-  bool visitStmt(GroupOp op);
+  bool visitStmt(LayerBlockOp op);
 
   bool isFailed() const { return encounteredError; }
 
@@ -964,8 +941,8 @@ bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   return false; // don't delete the when!
 }
 
-/// Lower any types declared in the group definition.
-bool TypeLoweringVisitor::visitStmt(GroupOp op) {
+/// Lower any types declared in layer blocks.
+bool TypeLoweringVisitor::visitStmt(LayerBlockOp op) {
   lowerBlock(op.getBody());
   return false;
 }
@@ -1334,6 +1311,10 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input)
         .getResult(0);
   };
+  // If the input to the cast is not a FIRRTL type, getSubWhatever cannot handle
+  // it, donot lower the op.
+  if (!type_isa<FIRRTLType>(op->getOperand(0).getType()))
+    return false;
   return lowerProducer(op, clone);
 }
 
@@ -1426,7 +1407,10 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder->create<RefCastOp>(RefType::get(field.type), input);
+    return builder->create<RefCastOp>(RefType::get(field.type,
+                                                   op.getType().getForceable(),
+                                                   op.getType().getLayer()),
+                                      input);
   };
   return lowerProducer(op, clone);
 }
@@ -1440,7 +1424,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
-      cast<FModuleLike>(op.getReferencedModule(symTbl)));
+      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1482,7 +1466,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
+      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
+      op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   // Copy over any attributes which have not already been copied over by
@@ -1634,9 +1619,7 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===- Running LowerTypes Pass "
-                      "------------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   std::vector<FModuleLike> ops;
   // Symbol Table
   auto &symTbl = getAnalysis<SymbolTable>();

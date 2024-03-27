@@ -81,13 +81,15 @@ public:
 ///
 /// A partial lowering function may only replace a subset of the operations
 /// within the funcOp currently being lowered. However, the dialect conversion
-/// scheme requires the matched root operation to be replaced/updated, if the
-/// match was successful. To facilitate this, rewriter.updateRootInPlace
-/// wraps the partial update function.
-/// Next, the function operation is expected to go from illegal to legalized,
-/// after matchAndRewrite returned true. To work around this,
-/// LowerFuncOpTarget::loweredFuncs is used to communicate between the target
-/// and the conversion, to indicate that the partial lowering was completed.
+/// scheme requires the matched root operation to be replaced/updated/erased. It
+/// is the partial update function's responsibility to ensure this. The parital
+/// update function may only mutate the IR through the provided
+/// ConversionPatternRewriter, like any other ConversionPattern.
+/// Next, the function operation is expected to go
+/// from illegal to legalized, after matchAndRewrite returned true. To work
+/// around this, LowerFuncOpTarget::loweredFuncs is used to communicate between
+/// the target and the conversion, to indicate that the partial lowering was
+/// completed.
 template <typename TOp>
 struct PartialLowerOp : public ConversionPattern {
   using PartialLoweringFunc =
@@ -103,8 +105,7 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
     assert(isa<TOp>(op));
-    rewriter.updateRootInPlace(
-        op, [&] { loweringRes = fun(dyn_cast<TOp>(op), rewriter); });
+    loweringRes = fun(dyn_cast<TOp>(op), rewriter);
     target.loweredOps[op] = true;
     return loweringRes;
   };
@@ -171,7 +172,7 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { loweringRes = fun(target.region, rewriter); });
 
     target.opLowered = true;
@@ -198,10 +199,6 @@ handshake::partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
       applyPartialConversion(op, target, std::move(patterns)).succeeded() &&
       partialLoweringSuccessfull.succeeded());
 }
-
-#define returnOnError(logicalResult)                                           \
-  if (failed(logicalResult))                                                   \
-    return failure();
 
 // ============================================================================
 // Start of lowering passes
@@ -1595,9 +1592,9 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
       // user-determined)
       bool control = true;
 
-      if (control)
-        returnOnError(
-            setJoinControlInputs(memory.second, newOp, ld_count, newInd));
+      if (control &&
+          setJoinControlInputs(memory.second, newOp, ld_count, newInd).failed())
+        return failure();
 
       // Set control-only inputs to each memory op
       // Ensure that op starts only after prior blocks have completed
@@ -1689,29 +1686,31 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  returnOnError(partiallyLowerOp<func::FuncOp>(
-      [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
-        auto noneType = rewriter.getNoneType();
-        resTypes.push_back(noneType);
-        argTypes.push_back(noneType);
-        auto func_type = rewriter.getFunctionType(argTypes, resTypes);
-        newFuncOp = rewriter.create<handshake::FuncOp>(
-            funcOp.getLoc(), funcOp.getName(), func_type, attributes);
-        rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
-                                    newFuncOp.end());
-        if (!newFuncOp.isExternal()) {
-          newFuncOp.getBodyBlock()->addArgument(rewriter.getNoneType(),
-                                                funcOp.getLoc());
-          newFuncOp.resolveArgAndResNames();
-        }
-        rewriter.eraseOp(funcOp);
-        return success();
-      },
-      ctx, funcOp));
+  if (partiallyLowerOp<func::FuncOp>(
+          [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
+            auto noneType = rewriter.getNoneType();
+            resTypes.push_back(noneType);
+            argTypes.push_back(noneType);
+            auto func_type = rewriter.getFunctionType(argTypes, resTypes);
+            newFuncOp = rewriter.create<handshake::FuncOp>(
+                funcOp.getLoc(), funcOp.getName(), func_type, attributes);
+            rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
+                                        newFuncOp.end());
+            if (!newFuncOp.isExternal()) {
+              newFuncOp.getBodyBlock()->addArgument(rewriter.getNoneType(),
+                                                    funcOp.getLoc());
+              newFuncOp.resolveArgAndResNames();
+            }
+            rewriter.eraseOp(funcOp);
+            return success();
+          },
+          ctx, funcOp)
+          .failed())
+    return failure();
 
   // Apply SSA maximization
-  returnOnError(
-      partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()));
+  if (partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()).failed())
+    return failure();
 
   if (!newFuncOp.isExternal()) {
     Block *bodyBlock = newFuncOp.getBodyBlock();

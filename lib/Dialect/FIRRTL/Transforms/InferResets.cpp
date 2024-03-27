@@ -17,7 +17,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/FieldRef.h"
+#include "circt/Support/InstanceGraph.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -30,6 +32,9 @@
 
 #define DEBUG_TYPE "infer-resets"
 
+using circt::igraph::InstanceOpInterface;
+using circt::igraph::InstancePath;
+using circt::igraph::InstancePathCache;
 using llvm::BumpPtrAllocator;
 using llvm::MapVector;
 using llvm::SmallDenseSet;
@@ -44,29 +49,6 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
-
-/// An absolute instance path.
-using InstanceLike = ::circt::igraph::InstanceOpInterface;
-using InstancePathRef = ArrayRef<InstanceLike>;
-using InstancePathVec = SmallVector<InstanceLike>;
-
-template <typename T>
-static T &operator<<(T &os, InstancePathRef path) {
-  os << "$root";
-  for (InstanceLike inst : path)
-    os << "/" << inst.getInstanceName() << ":"
-       << inst.getReferencedModuleName();
-  return os;
-}
-
-#ifndef NDEBUG
-static StringRef getTail(InstancePathRef path) {
-  if (path.empty())
-    return "$root";
-  auto last = path.back();
-  return last.getInstanceName();
-}
-#endif
 
 namespace {
 /// A reset domain.
@@ -453,7 +435,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
 
   LogicalResult buildDomains(CircuitOp circuit);
-  void buildDomains(FModuleOp module, const InstancePathVec &instPath,
+  void buildDomains(FModuleOp module, const InstancePath &instPath,
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
 
@@ -503,11 +485,14 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   /// The reset domain for a module. In case of conflicting domain membership,
   /// the vector for a module contains multiple elements.
-  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePathVec>, 1>>
+  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
       domains;
 
   /// Cache of modules symbols
   InstanceGraph *instanceGraph;
+
+  /// Cache of instance paths.
+  std::unique_ptr<InstancePathCache> instancePathCache;
 };
 } // namespace
 
@@ -517,11 +502,13 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
+  instancePathCache.reset(nullptr);
   markAnalysesPreserved<InstanceGraph>();
 }
 
 void InferResetsPass::runOnOperationInner() {
   instanceGraph = &getAnalysis<InstanceGraph>();
+  instancePathCache = std::make_unique<InstancePathCache>(*instanceGraph);
 
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
@@ -738,8 +725,10 @@ static bool typeContainsReset(Type type) {
 /// populated with the reset networks in the circuit, alongside information on
 /// drivers and their types that contribute to the reset.
 void InferResetsPass::traceResets(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Tracing uninferred resets -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Tracing uninferred resets") << "\n\n";
+  });
 
   SmallVector<std::pair<FModuleOp, SmallVector<Operation *>>> moduleToOps;
 
@@ -862,7 +851,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(inst));
+  auto module = inst.getReferencedModule<FModuleOp>(*instanceGraph);
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
@@ -992,7 +981,10 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
 //===----------------------------------------------------------------------===//
 
 LogicalResult InferResetsPass::inferAndUpdateResets() {
-  LLVM_DEBUG(llvm::dbgs() << "\n===----- Infer reset types -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Infer reset types") << "\n\n";
+  });
   for (auto it = resetClasses.begin(), end = resetClasses.end(); it != end;
        ++it) {
     if (!it->isLeader())
@@ -1114,8 +1106,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       if (auto blockArg = dyn_cast<BlockArgument>(value))
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       else if (auto instOp = value.getDefiningOp<InstanceOp>()) {
-        if (auto extmodule = dyn_cast<FExtModuleOp>(
-                *instanceGraph->getReferencedModule(instOp)))
+        if (auto extmodule =
+                instOp.getReferencedModule<FExtModuleOp>(*instanceGraph))
           extmoduleWorklist.insert({extmodule, instOp});
       } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
         uncast.replaceAllUsesWith(uncast.getInput());
@@ -1248,8 +1240,10 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Gather async reset annotations -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Gather async reset annotations") << "\n\n";
+  });
   SmallVector<std::pair<FModuleOp, std::optional<Value>>> results;
   for (auto module : circuit.getOps<FModuleOp>())
     results.push_back({module, {}});
@@ -1305,8 +1299,16 @@ InferResetsPass::collectAnnos(FModuleOp module) {
                                                    Annotation anno) {
     Value arg = module.getArgument(argNum);
     if (anno.isClass(fullAsyncResetAnnoClass)) {
+      if (!isa<AsyncResetType>(arg.getType())) {
+        mlir::emitError(arg.getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+                                      "target async reset, but targets ")
+            << arg.getType();
+        anyFailed = true;
+        return true;
+      }
       reset = arg;
       conflictingAnnos.insert({anno, reset.getLoc()});
+
       return true;
     }
     if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
@@ -1338,7 +1340,15 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 
       // At this point we know that we have a WireOp/NodeOp. Process the reset
       // annotations.
+      auto resultType = op->getResult(0).getType();
       if (anno.isClass(fullAsyncResetAnnoClass)) {
+        if (!isa<AsyncResetType>(resultType)) {
+          mlir::emitError(op->getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+                                        "target async reset, but targets ")
+              << resultType;
+          anyFailed = true;
+          return true;
+        }
         reset = op->getResult(0);
         conflictingAnnos.insert({anno, reset.getLoc()});
         return true;
@@ -1403,8 +1413,10 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 /// wrong in some cases, mainly when a module is instantiated multiple times
 /// within different reset domains.
 LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Build async reset domains -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Build async reset domains") << "\n\n";
+  });
 
   // Gather the domains.
   auto &instGraph = getAnalysis<InstanceGraph>();
@@ -1414,7 +1426,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
                << "Skipping circuit because main module is no `firrtl.module`");
     return success();
   }
-  buildDomains(module, InstancePathVec{}, Value{}, instGraph);
+  buildDomains(module, InstancePath{}, Value{}, instGraph);
 
   // Report any domain conflicts among the modules.
   bool anyFailed = false;
@@ -1431,8 +1443,8 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
                 << "' instantiated in different reset domains";
     for (auto &it : domainConflicts) {
       ResetDomain &domain = it.first;
-      InstancePathRef path = it.second;
-      auto inst = path.back();
+      const auto &path = it.second;
+      auto inst = path.leaf();
       auto loc = path.empty() ? module.getLoc() : inst.getLoc();
       auto &note = diag.attachNote(loc);
 
@@ -1442,7 +1454,8 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
       else {
         note << "instance '";
         llvm::interleave(
-            path, [&](InstanceLike inst) { note << inst.getInstanceName(); },
+            path,
+            [&](InstanceOpInterface inst) { note << inst.getInstanceName(); },
             [&]() { note << "/"; });
         note << "'";
       }
@@ -1469,12 +1482,17 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 }
 
 void InferResetsPass::buildDomains(FModuleOp module,
-                                   const InstancePathVec &instPath,
+                                   const InstancePath &instPath,
                                    Value parentReset, InstanceGraph &instGraph,
                                    unsigned indent) {
-  LLVM_DEBUG(llvm::dbgs().indent(indent * 2)
-             << "Visiting " << getTail(instPath) << " (" << module.getName()
-             << ")\n");
+  LLVM_DEBUG({
+    llvm::dbgs().indent(indent * 2) << "Visiting ";
+    if (instPath.empty())
+      llvm::dbgs() << "$root";
+    else
+      llvm::dbgs() << instPath.leaf().getInstanceName();
+    llvm::dbgs() << " (" << module.getName() << ")\n";
+  });
 
   // Assemble the domain for this module.
   ResetDomain domain(parentReset);
@@ -1493,21 +1511,22 @@ void InferResetsPass::buildDomains(FModuleOp module,
     entries.push_back({domain, instPath});
 
   // Traverse the child instances.
-  InstancePathVec childPath = instPath;
   for (auto *record : *instGraph[module]) {
     auto submodule = dyn_cast<FModuleOp>(*record->getTarget()->getModule());
     if (!submodule)
       continue;
-    childPath.push_back(cast<InstanceLike>(*record->getInstance()));
+    auto childPath =
+        instancePathCache->appendInstance(instPath, record->getInstance());
     buildDomains(submodule, childPath, domain.reset, instGraph, indent + 1);
-    childPath.pop_back();
   }
 }
 
 /// Determine how the reset for each module shall be implemented.
 void InferResetsPass::determineImpl() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "\n===----- Determine implementation -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Determine implementation") << "\n\n";
+  });
   for (auto &it : domains) {
     auto module = cast<FModuleOp>(it.first);
     auto &domain = it.second.back().first;
@@ -1600,7 +1619,10 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
 
 /// Implement the async resets gathered in the pass' `domains` map.
 LogicalResult InferResetsPass::implementAsyncReset() {
-  LLVM_DEBUG(llvm::dbgs() << "\n===----- Implement async resets -----===\n\n");
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Implement async resets") << "\n\n";
+  });
   for (auto &it : domains)
     if (failed(implementAsyncReset(cast<FModuleOp>(it.first),
                                    it.second.back().first)))
@@ -1742,8 +1764,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Lookup the reset domain of the instantiated module. If there is no
     // reset domain associated with that module, or the module is explicitly
     // marked as being in no domain, simply skip.
-    auto refModule =
-        dyn_cast<FModuleOp>(*instanceGraph->getReferencedModule(instOp));
+    auto refModule = instOp.getReferencedModule<FModuleOp>(*instanceGraph);
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);

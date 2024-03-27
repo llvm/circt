@@ -24,11 +24,19 @@ namespace circt {
 
 namespace hw {
 class HWDialect;
-}
+} // namespace hw
+
+namespace emit {
+class EmitDialect;
+} // namespace emit
 
 namespace sv {
 class SVDialect;
-}
+} // namespace sv
+
+namespace debug {
+class DebugDialect;
+} // namespace debug
 
 namespace firrtl {
 

@@ -3,7 +3,6 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWCleanup.cpp
   HWStubExternalModules.cpp
   HWLegalizeModules.cpp
-  HWMemSimImpl.cpp
   PrettifyVerilog.cpp
   SVExtractTestCode.cpp
   HWExportModuleHierarchy.cpp
@@ -15,10 +14,12 @@ add_circt_dialect_library(CIRCTSVTransforms
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTEmit
   CIRCTHW
   CIRCTSeq
   CIRCTSupport
   CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRTransformUtils

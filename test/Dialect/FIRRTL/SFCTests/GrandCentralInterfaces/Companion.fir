@@ -50,9 +50,10 @@ circuit Foo : %[[
 
   module Foo :
     input clock: Clock
+    input a_in: UInt<1>
 
     wire a: UInt<1>
-    a is invalid
+    a <= a_in
 
     inst companion of Companion
     companion.clock <= clock
@@ -68,7 +69,7 @@ circuit Foo : %[[
 
     ; DROP-NOT: module Companion
     ; DROP:     module Foo
-    ; DROP NOT: Companion
+    ; DROP-NOT: Companion
     ; DROP: endmodule
     ; DROP:     FILE "gct.yaml"
     ; DROP:     []

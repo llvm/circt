@@ -234,7 +234,7 @@ LogicalResult InstanceOp::verify() {
 
 void InstanceOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(getInstance(), getSymName());
+  setNameFn(getInstance(), getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -284,7 +284,6 @@ LogicalResult TriggerOp::verify() { return verifyCallerTypes(*this); }
 //===----------------------------------------------------------------------===//
 
 // InstanceOpInterface interface
-Operation *HWInstanceOp::getReferencedModuleSlow() { return getMachineOp(); }
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
 MachineOp HWInstanceOp::getMachineOp() {
@@ -302,11 +301,9 @@ SmallVector<hw::PortInfo> HWInstanceOp::getPortList() {
 StringRef HWInstanceOp::getModuleName() { return getMachine(); }
 FlatSymbolRefAttr HWInstanceOp::getModuleNameAttr() { return getMachineAttr(); }
 
-mlir::StringAttr HWInstanceOp::getInstanceNameAttr() {
-  return getSymNameAttr();
-}
+mlir::StringAttr HWInstanceOp::getInstanceNameAttr() { return getNameAttr(); }
 
-llvm::StringRef HWInstanceOp::getInstanceName() { return getSymName(); }
+llvm::StringRef HWInstanceOp::getInstanceName() { return getName(); }
 
 //===----------------------------------------------------------------------===//
 // StateOp

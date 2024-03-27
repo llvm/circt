@@ -169,10 +169,10 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   auto typeString =
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
-  if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<") || typeString.startswith("int<") ||
-      typeString.startswith("enum<")) {
+  if (typeString.starts_with("array<") || typeString.starts_with("inout<") ||
+      typeString.starts_with("uarray<") || typeString.starts_with("struct<") ||
+      typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
+      typeString.starts_with("enum<")) {
     llvm::StringRef mnemonic;
     auto parseResult = generatedTypeParser(p, &mnemonic, result);
     return parseResult.has_value() ? success() : failure();
@@ -311,7 +311,7 @@ Type StructType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringRef fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -319,7 +319,7 @@ std::optional<unsigned> StructType::getFieldIndex(mlir::StringRef fieldName) {
   return {};
 }
 
-std::optional<unsigned> StructType::getFieldIndex(mlir::StringAttr fieldName) {
+std::optional<uint32_t> StructType::getFieldIndex(mlir::StringAttr fieldName) {
   ArrayRef<hw::StructType::FieldInfo> elems = getElements();
   for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
     if (elems[idx].name == fieldName)
@@ -476,10 +476,21 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return result;
 }
 
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringAttr fieldName) {
+  ArrayRef<hw::UnionType::FieldInfo> elems = getElements();
+  for (size_t idx = 0, numElems = elems.size(); idx < numElems; ++idx)
+    if (elems[idx].name == fieldName)
+      return idx;
+  return {};
+}
+
+std::optional<uint32_t> UnionType::getFieldIndex(mlir::StringRef fieldName) {
+  return getFieldIndex(StringAttr::get(getContext(), fieldName));
+}
+
 UnionType::FieldInfo UnionType::getFieldInfo(::mlir::StringRef fieldName) {
-  for (const auto &field : getElements())
-    if (field.name == fieldName)
-      return field;
+  if (auto fieldIndex = getFieldIndex(fieldName))
+    return getElements()[*fieldIndex];
   return FieldInfo();
 }
 
@@ -668,7 +679,9 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 size_t UnpackedArrayType::getNumElements() const {
-  return getSizeAttr().cast<IntegerAttr>().getInt();
+  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+    return intAttr.getInt();
+  return -1;
 }
 
 uint64_t UnpackedArrayType::getMaxFieldID() const {
@@ -905,22 +918,6 @@ Type ModuleType::getOutputType(size_t idx) {
   return getPorts()[getPortIdForOutputId(idx)].type;
 }
 
-SmallVector<StringAttr> ModuleType::getInputNamesStr() {
-  SmallVector<StringAttr> retval;
-  for (auto &p : getPorts())
-    if (p.dir != ModulePort::Direction::Output)
-      retval.push_back(p.name);
-  return retval;
-}
-
-SmallVector<StringAttr> ModuleType::getOutputNamesStr() {
-  SmallVector<StringAttr> retval;
-  for (auto &p : getPorts())
-    if (p.dir == ModulePort::Direction::Output)
-      retval.push_back(p.name);
-  return retval;
-}
-
 SmallVector<Attribute> ModuleType::getInputNames() {
   SmallVector<Attribute> retval;
   for (auto &p : getPorts())
@@ -985,6 +982,21 @@ FunctionType ModuleType::getFuncType() {
     else
       outputs.push_back(p.type);
   return FunctionType::get(getContext(), inputs, outputs);
+}
+
+FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
+                                                         LocationAttr loc,
+                                                         bool emitErrors) {
+  SmallVector<ModulePort, 8> resolvedPorts;
+  for (ModulePort port : getPorts()) {
+    FailureOr<Type> resolvedType =
+        evaluateParametricType(loc, parameters, port.type, emitErrors);
+    if (failed(resolvedType))
+      return failure();
+    port.type = *resolvedType;
+    resolvedPorts.push_back(port);
+  }
+  return ModuleType::get(getContext(), resolvedPorts);
 }
 
 static StringRef dirToStr(ModulePort::Direction dir) {

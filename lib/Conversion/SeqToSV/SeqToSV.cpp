@@ -15,6 +15,7 @@
 #include "FirMemLowering.h"
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -22,6 +23,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -43,7 +45,9 @@ namespace {
 #include "circt/Conversion/Passes.h.inc"
 
 struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
+
   void runOnOperation() override;
+
   using LowerSeqToSVBase<SeqToSVPass>::lowerToAlwaysFF;
   using LowerSeqToSVBase<SeqToSVPass>::disableRegRandomization;
   using LowerSeqToSVBase<SeqToSVPass>::emitSeparateAlwaysBlocks;
@@ -173,10 +177,30 @@ public:
         });
 
     // Create the gated clock signal.
-    Value gclk = rewriter.create<comb::AndOp>(
-        loc, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
-    clockGate.replaceAllUsesWith(gclk);
-    rewriter.eraseOp(clockGate);
+    rewriter.replaceOpWithNewOp<comb::AndOp>(
+        clockGate, clk, rewriter.create<sv::ReadInOutOp>(loc, enableLatch));
+    return success();
+  }
+};
+
+// Lower seq.clock_inv to a regular inverter.
+//
+class ClockInverterLowering : public OpConversionPattern<ClockInverterOp> {
+public:
+  using OpConversionPattern<ClockInverterOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClockInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    Value clk = adaptor.getInput();
+
+    StringAttr name = op->getAttrOfType<StringAttr>("sv.namehint");
+    Value one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
+    auto newOp = rewriter.replaceOpWithNewOp<comb::XorOp>(op, clk, one);
+    if (name)
+      rewriter.modifyOpInPlace(newOp,
+                               [&] { newOp->setAttr("sv.namehint", name); });
     return success();
   }
 };
@@ -259,6 +283,13 @@ public:
   LogicalResult
   matchAndRewrite(T op, typename T::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    // If the cast had a better name than its input, propagate it.
+    if (Operation *inputOp = adaptor.getInput().getDefiningOp())
+      if (!isa<mlir::UnrealizedConversionCastOp>(inputOp))
+        if (auto name = chooseName(op, inputOp))
+          rewriter.modifyOpInPlace(
+              inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
+
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
@@ -282,13 +313,13 @@ public:
 
 /// Lower `seq.clock_div` to a behavioural clock divider
 ///
-class ClockDividerLowering : public OpConversionPattern<ClockDivider> {
+class ClockDividerLowering : public OpConversionPattern<ClockDividerOp> {
 public:
-  using OpConversionPattern<ClockDivider>::OpConversionPattern;
-  using OpConversionPattern<ClockDivider>::OpAdaptor;
+  using OpConversionPattern<ClockDividerOp>::OpConversionPattern;
+  using OpConversionPattern<ClockDividerOp>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(ClockDivider clockDiv, OpAdaptor adaptor,
+  matchAndRewrite(ClockDividerOp clockDiv, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = clockDiv.getLoc();
 
@@ -353,9 +384,10 @@ static bool isLegalType(Type ty) {
 
 static bool isLegalOp(Operation *op) {
   if (auto module = dyn_cast<hw::HWModuleLike>(op)) {
-    return llvm::all_of(module.getPortList(), [](hw::PortInfo port) {
-      return isLegalType(port.type);
-    });
+    for (auto port : module.getHWModuleType().getPorts())
+      if (!isLegalType(port.type))
+        return false;
+    return true;
   }
   bool allOperandsLowered = llvm::all_of(
       op->getOperands(), [](auto op) { return isLegalType(op.getType()); });
@@ -373,6 +405,32 @@ void SeqToSVPass::runOnOperation() {
 
   FirMemLowering memLowering(circuit);
 
+  auto randomInitFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_FRAGMENT");
+  auto randomInitRegFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_REG_FRAGMENT");
+  auto randomInitMemFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_MEM_FRAGMENT");
+
+  auto regFragments = ArrayAttr::get(
+      context, {randomInitFragmentName, randomInitRegFragmentName});
+  auto memFragments = ArrayAttr::get(
+      context, {randomInitFragmentName, randomInitMemFragmentName});
+
+  auto addFragments = [&](HWModuleOp module, ArrayAttr fragments) {
+    ArrayAttr newFragments;
+    if (auto others =
+            module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName())) {
+      SmallVector<Attribute> attributes = llvm::to_vector(others);
+      for (Attribute attr : fragments)
+        attributes.push_back(attr);
+      newFragments = ArrayAttr::get(context, attributes);
+    } else {
+      newFragments = fragments;
+    }
+    module->setAttr(emit::getFragmentsAttrName(), newFragments);
+  };
+
   // Identify memories and group them by module.
   auto uniqueMems = memLowering.collectMemories(modules);
   MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>> memsByModule;
@@ -388,15 +446,26 @@ void SeqToSVPass::runOnOperation() {
   }
 
   // Lower memories and registers in modules in parallel.
+  bool needsRegRandomization = false;
+  bool needsMemRandomization = false;
   mlir::parallelForEach(&getContext(), modules, [&](HWModuleOp module) {
     SeqToSVTypeConverter typeConverter;
     FirRegLowering regLowering(typeConverter, module, disableRegRandomization,
                                emitSeparateAlwaysBlocks);
     regLowering.lower();
+    if (regLowering.needsRegRandomization()) {
+      if (!disableRegRandomization)
+        addFragments(module, regFragments);
+      needsRegRandomization = true;
+    }
     numSubaccessRestored += regLowering.numSubaccessRestored;
 
-    if (auto *it = memsByModule.find(module); it != memsByModule.end())
+    if (auto *it = memsByModule.find(module); it != memsByModule.end()) {
       memLowering.lowerMemoriesInModule(module, it->second);
+      if (!disableMemRandomization)
+        addFragments(module, memFragments);
+      needsMemRandomization = true;
+    }
   });
 
   // Mark all ops which can have clock types as illegal.
@@ -413,6 +482,7 @@ void SeqToSVPass::runOnOperation() {
   patterns.add<ClockCastLowering<seq::FromClockOp>>(typeConverter, context);
   patterns.add<ClockCastLowering<seq::ToClockOp>>(typeConverter, context);
   patterns.add<ClockGateLowering>(typeConverter, context);
+  patterns.add<ClockInverterLowering>(typeConverter, context);
   patterns.add<ClockMuxLowering>(typeConverter, context);
   patterns.add<ClockDividerLowering>(typeConverter, context);
   patterns.add<ClockConstLowering>(typeConverter, context);
@@ -420,6 +490,143 @@ void SeqToSVPass::runOnOperation() {
 
   if (failed(applyPartialConversion(circuit, target, std::move(patterns))))
     signalPassFailure();
+
+  auto loc = UnknownLoc::get(context);
+  auto b = ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBody());
+  if (needsRegRandomization || needsMemRandomization) {
+    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_REG_");
+    b.create<sv::MacroDeclOp>("ENABLE_INITIAL_MEM_");
+    if (needsRegRandomization) {
+      b.create<sv::MacroDeclOp>("FIRRTL_BEFORE_INITIAL");
+      b.create<sv::MacroDeclOp>("FIRRTL_AFTER_INITIAL");
+    }
+    if (needsMemRandomization)
+      b.create<sv::MacroDeclOp>("RANDOMIZE_MEM_INIT");
+    b.create<sv::MacroDeclOp>("RANDOMIZE_REG_INIT");
+    b.create<sv::MacroDeclOp>("RANDOMIZE");
+    b.create<sv::MacroDeclOp>("RANDOMIZE_DELAY");
+    b.create<sv::MacroDeclOp>("RANDOM");
+    b.create<sv::MacroDeclOp>("INIT_RANDOM");
+    b.create<sv::MacroDeclOp>("INIT_RANDOM_PROLOG_");
+  }
+
+  bool hasRegRandomization = needsRegRandomization && !disableRegRandomization;
+  bool hasMemRandomization = needsMemRandomization && !disableMemRandomization;
+  if (!hasRegRandomization && !hasMemRandomization)
+    return;
+
+  // Build macros for FIRRTL-style register and memory initialization.
+  // Insert them at the start of the module, after any other verbatims.
+  for (Operation &op : *circuit.getBody()) {
+    if (!isa<sv::VerbatimOp, sv::IfDefOp>(&op)) {
+      b.setInsertionPoint(&op);
+      break;
+    }
+  }
+
+  // Create SYNTHESIS/VERILATOR macros if other passes have not done so already.
+  {
+    StringSet<> symbols;
+    for (auto sym : circuit.getOps<sv::MacroDeclOp>())
+      symbols.insert(sym.getName());
+    if (!symbols.count("SYNTHESIS"))
+      b.create<sv::MacroDeclOp>("SYNTHESIS");
+    if (!symbols.count("VERILATOR"))
+      b.create<sv::MacroDeclOp>("VERILATOR");
+  }
+
+  // TODO: We could have an operation for macros and uses of them, and
+  // even turn them into symbols so we can DCE unused macro definitions.
+  auto emitGuardedDefine = [&](StringRef guard, StringRef defName,
+                               StringRef defineTrue = "",
+                               StringRef defineFalse = StringRef()) {
+    if (!defineFalse.data()) {
+      assert(defineTrue.data() && "didn't define anything");
+      b.create<sv::IfDefOp>(
+          guard, [&]() { b.create<sv::MacroDefOp>(defName, defineTrue); });
+    } else {
+      b.create<sv::IfDefOp>(
+          guard,
+          [&]() {
+            if (defineTrue.data())
+              b.create<sv::MacroDefOp>(defName, defineTrue);
+          },
+          [&]() { b.create<sv::MacroDefOp>(defName, defineFalse); });
+    }
+  };
+
+  // Helper function to emit #ifndef guard.
+  auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
+    b.create<sv::IfDefOp>(
+        guard, []() {}, body);
+  };
+
+  b.create<emit::FragmentOp>(randomInitFragmentName.getAttr(), [&] {
+    b.create<sv::VerbatimOp>(
+        "// Standard header to adapt well known macros for "
+        "register randomization.");
+
+    b.create<sv::VerbatimOp>(
+        "\n// RANDOM may be set to an expression that produces a 32-bit "
+        "random unsigned value.");
+    emitGuardedDefine("RANDOM", "RANDOM", StringRef(), "$random");
+
+    b.create<sv::VerbatimOp>(
+        "\n// Users can define INIT_RANDOM as general code that gets "
+        "injected "
+        "into the\n// initializer block for modules with registers.");
+    emitGuardedDefine("INIT_RANDOM", "INIT_RANDOM", StringRef(), "");
+
+    b.create<sv::VerbatimOp>(
+        "\n// If using random initialization, you can also define "
+        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
+        "is used.");
+    emitGuardedDefine("RANDOMIZE_DELAY", "RANDOMIZE_DELAY", StringRef(),
+                      "0.002");
+
+    b.create<sv::VerbatimOp>(
+        "\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    emitGuard("INIT_RANDOM_PROLOG_", [&]() {
+      b.create<sv::IfDefOp>(
+          "RANDOMIZE",
+          [&]() {
+            emitGuardedDefine("VERILATOR", "INIT_RANDOM_PROLOG_",
+                              "`INIT_RANDOM",
+                              "`INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+          },
+          [&]() { b.create<sv::MacroDefOp>("INIT_RANDOM_PROLOG_", ""); });
+    });
+  });
+
+  if (hasMemRandomization) {
+    b.create<emit::FragmentOp>(randomInitMemFragmentName.getAttr(), [&] {
+      b.create<sv::VerbatimOp>("\n// Include rmemory initializers in init "
+                               "blocks unless synthesis is set");
+      emitGuard("RANDOMIZE", [&]() {
+        emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+      });
+      emitGuard("SYNTHESIS", [&] {
+        emitGuardedDefine("ENABLE_INITIAL_MEM_", "ENABLE_INITIAL_MEM_",
+                          StringRef(), "");
+      });
+      b.create<sv::VerbatimOp>("");
+    });
+  }
+
+  if (hasRegRandomization) {
+    b.create<emit::FragmentOp>(randomInitRegFragmentName.getAttr(), [&] {
+      b.create<sv::VerbatimOp>("\n// Include register initializers in init "
+                               "blocks unless synthesis is set");
+      emitGuard("RANDOMIZE", [&]() {
+        emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+      });
+      emitGuard("SYNTHESIS", [&] {
+        emitGuardedDefine("ENABLE_INITIAL_REG_", "ENABLE_INITIAL_REG_",
+                          StringRef(), "");
+      });
+      b.create<sv::VerbatimOp>("");
+    });
+  }
 }
 
 std::unique_ptr<Pass>
