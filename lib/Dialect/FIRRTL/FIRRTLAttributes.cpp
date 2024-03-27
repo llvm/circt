@@ -38,6 +38,7 @@ mlir::DenseBoolArrayAttr
 direction::packAttribute(MLIRContext *context, ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   SmallVector<bool> dirs;
+  dirs.reserve(directions.size());
   for (auto d : directions)
     dirs.push_back(d == Direction::Out);
   return mlir::DenseBoolArrayAttr::get(context, dirs);
