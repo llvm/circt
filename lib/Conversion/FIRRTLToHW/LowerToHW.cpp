@@ -1621,7 +1621,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
-  LogicalResult visitStmt(AssumeEdgedPredicateIntrinsicOp op);
+  LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -4530,7 +4530,7 @@ LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
 }
 
 // Lower an UNR only assume to a specific style of SV assume.
-LogicalResult FIRRTLLowering::visitStmt(AssumeEdgedPredicateIntrinsicOp op) {
+LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
   // TODO : Need to figure out if there is a cleaner way to get the string which
   // indicates the assert is UNR only. Or better - not rely on this at all -
   // ideally there should have been some other attribute which indicated that
@@ -4563,11 +4563,18 @@ LogicalResult FIRRTLLowering::visitStmt(AssumeEdgedPredicateIntrinsicOp op) {
   return emitGuards(op.getLoc(), guards, [&]() {
     builder.create<sv::AlwaysOp>(
         ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
-          buildImmediateVerifOp(
-              builder, "assume", predicate,
-              circt::sv::DeferAssertAttr::get(
-                  builder.getContext(), circt::sv::DeferAssert::Immediate),
-              assumeLabel, op.getMessageAttr(), messageOps);
+          if (op.getMessageAttr().getValue().empty())
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel);
+          else
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel, op.getMessageAttr(), messageOps);
         });
   });
 }

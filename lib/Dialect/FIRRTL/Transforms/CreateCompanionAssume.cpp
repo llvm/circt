@@ -22,7 +22,8 @@ namespace {
 struct CreateCompanionAssumePass
     : public CreateCompanionAssumeBase<CreateCompanionAssumePass> {
   void runOnOperation() override {
-    getOperation().walk([](firrtl::AssertOp assertOp) {
+    StringAttr emptyMessage = StringAttr::get(&getContext(), "");
+    getOperation().walk([&](firrtl::AssertOp assertOp) {
       OpBuilder builder(assertOp);
       builder.setInsertionPointAfter(assertOp);
       auto guards = assertOp->getAttrOfType<ArrayAttr>("guards");
@@ -37,19 +38,22 @@ struct CreateCompanionAssumePass
         });
       }
 
-      // If so, use AssumeEdgedPredicateIntrinsicOp.
+      // TODO: Currently messages are dropped to preserve the old behaivor. Copy
+      // messages once it works well with UNR tools.
       if (isUnrOnlyAssert)
-        assume = builder.create<firrtl::AssumeEdgedPredicateIntrinsicOp>(
+        // If UNROnly, use UnclockedAssumeIntrinsicOp.
+        assume = builder.create<firrtl::UnclockedAssumeIntrinsicOp>(
             assertOp.getLoc(), assertOp.getPredicate(), assertOp.getEnable(),
-            assertOp.getMessage(), assertOp.getSubstitutions(),
-            assertOp.getName());
+            emptyMessage, ValueRange{}, assertOp.getName());
       else
         // Otherwise use concurrent assume.
         assume = builder.create<firrtl::AssumeOp>(
             assertOp.getLoc(), assertOp.getClock(), assertOp.getPredicate(),
-            assertOp.getEnable(), assertOp.getMessage(),
-            assertOp.getSubstitutions(), assertOp.getName(),
+            assertOp.getEnable(), emptyMessage, ValueRange{},
+            assertOp.getName(),
             /*isConcurrent=*/true);
+
+      // Add a guard "USE_PROPERTY_AS_CONSTRAINT" to companion assumes.
       SmallVector<Attribute> newGuards{
           builder.getStringAttr("USE_PROPERTY_AS_CONSTRAINT")};
       if (guards)

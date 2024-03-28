@@ -407,7 +407,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
     firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "assert_0", guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
     firrtl.assume %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
-    firrtl.int.assume.edged_predicate %bCond, %bEn, "assume0"(%value) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {name = "assume_unr", guards = ["USE_PROPERTY_AS_CONSTRAINT", "USE_UNR_ONLY_CONSTRAINTS"]}
+    firrtl.int.unclocked_assume %bCond, %bEn, "assume0"(%value) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {name = "assume_unr", guards = ["USE_PROPERTY_AS_CONSTRAINT", "USE_UNR_ONLY_CONSTRAINTS"]}
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]

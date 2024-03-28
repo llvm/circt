@@ -147,25 +147,25 @@ circuit Foo:
 
     ; The companion assumes get bunched up in an ifdef block.
     ; CHECK-NEXT: `ifdef USE_PROPERTY_AS_CONSTRAINT
-    ; CHECK-NEXT:   assume__verif_library: assume property (@(posedge clock) ~enable | [[GEN]]) else $error("Assertion failed (verification library): ");
-    ; CHECK-NEXT:   assume__verif_library_0: assume property (@(posedge clock) ~enable | [[GEN_0]]) else $error("Assertion failed (verification library): sum =/= 1.U");
-    ; CHECK-NEXT:   assume__verif_library_1: assume property (@(posedge clock) ~[[GEN_2]] | [[GEN_1]]) else $error("Assertion failed (verification library): Assert with when");
-    ; CHECK-NEXT:   assume__verif_library_2: assume property (@(posedge clock) ~enable | [[GEN_3]]) else $error("Assertion failed (verification library): expected sum === 2.U but got %d", $sampled(sum));
-    ; CHECK-NEXT:   assume__verif_library_3: assume property (@(posedge clock) [[GEN_4]]) else $error("Assertion failed (verification library): SVA assert example, sum was %d", $sampled(sum));
-    ; CHECK-NEXT:   assume__verif_library_hello_world: assume property (@(posedge clock) [[GEN_5]]) else $error("Assertion failed (verification library): Custom label example");
-    ; CHECK-NEXT:   assume__verif_library_4: assume property (@(posedge clock) [[GEN_6]]) else $error("Assertion failed (verification library): X-passing assert example");
+    ; CHECK-NEXT:   assume__verif_library: assume property (@(posedge clock) ~enable | [[GEN]]);
+    ; CHECK-NEXT:   assume__verif_library_0: assume property (@(posedge clock) ~enable | [[GEN_0]]);
+    ; CHECK-NEXT:   assume__verif_library_1: assume property (@(posedge clock) ~[[GEN_2]] | [[GEN_1]]);
+    ; CHECK-NEXT:   assume__verif_library_2: assume property (@(posedge clock) ~enable | [[GEN_3]]);
+    ; CHECK-NEXT:   assume__verif_library_3: assume property (@(posedge clock) [[GEN_4]]);
+    ; CHECK-NEXT:   assume__verif_library_hello_world: assume property (@(posedge clock) [[GEN_5]]);
+    ; CHECK-NEXT:   assume__verif_library_4: assume property (@(posedge clock) [[GEN_6]]);
     ; CHECK-NEXT:   `ifdef USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   wire [[GEN_10:.+]] = ~enable | [[GEN_8]];
     ; CHECK-NEXT:   always @(edge [[GEN_7]])
-    ; CHECK-NEXT:     assume__verif_library_5: assume([[GEN_7]]) else $error("Assertion failed (verification library): Conditional compilation example for UNR-only assert");
+    ; CHECK-NEXT:     assume__verif_library_5: assume([[GEN_7]]);
     ; CHECK-NEXT:   always @(edge [[GEN_10]])
-    ; CHECK-NEXT:     assume__verif_library_6: assume([[GEN_10]]) else $error("Assertion failed (verification library): Conditional compilation example with if-else-fatal style assert");
+    ; CHECK-NEXT:     assume__verif_library_6: assume([[GEN_10]]);
     ; CHECK-NEXT:   `endif // USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   `ifdef USE_FORMAL_ONLY_CONSTRAINTS
     ; CHECK-NEXT:     `ifdef USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:       wire [[GEN_11:.+]] = ~enable | [[GEN_9]];
     ; CHECK-NEXT:       always @(edge [[GEN_11]])
-    ; CHECK-NEXT:         assume__verif_library_7: assume([[GEN_11]]) else $error("Assertion failed (verification library): Conditional compilation example for UNR-only and formal-only assert");
+    ; CHECK-NEXT:         assume__verif_library_7: assume([[GEN_11]]);
     ; CHECK-NEXT:     `endif // USE_UNR_ONLY_CONSTRAINTS
     ; CHECK-NEXT:   `endif // USE_FORMAL_ONLY_CONSTRAINTS
     ; CHECK-NEXT: `endif

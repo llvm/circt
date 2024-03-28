@@ -303,7 +303,7 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.int.unclocked_assume %{{.+}}, %{{.+}}, "text: %d"(
     // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
     // CHECK-SAME: name = "label for unr" 
-    %unr_predicate, %unr_enable, %unr_val = firrtl.instance unr interesting_name @AssumeEdgedPredicate(in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    %unr_predicate, %unr_enable, %unr_val = firrtl.instance unr interesting_name @UnclockedAssume(in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
     firrtl.strictconnect %unr_predicate, %cond : !firrtl.uint<1>
     firrtl.strictconnect %unr_enable, %enable : !firrtl.uint<1>
     firrtl.strictconnect %unr_val, %enable : !firrtl.uint<1>
