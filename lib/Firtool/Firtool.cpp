@@ -155,6 +155,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
+  if (opt.shouldAddCompanionAssume())
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        circt::firrtl::createCreateCompanionAssume());
+
   if (!opt.shouldDisableOptimization()) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
@@ -660,6 +664,11 @@ struct FirtoolCmdOptions {
       "fixup-eicg-wrapper",
       llvm::cl::desc("Lower `EICG_wrapper` modules into clock gate intrinsics"),
       llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> addCompanionAssume{
+      "add-companion-assume",
+      llvm::cl::desc("Add companion assumes to assertions"),
+      llvm::cl::init(false)};
 };
 } // namespace
 
@@ -695,7 +704,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
       exportModuleHierarchy(false), stripFirDebugInfo(true),
-      stripDebugInfo(false), fixupEICGWrapper(false) {
+      stripDebugInfo(false), fixupEICGWrapper(false),
+      addCompanionAssume(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -743,4 +753,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripFirDebugInfo = clOptions->stripFirDebugInfo;
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
+  addCompanionAssume = clOptions->addCompanionAssume;
 }
