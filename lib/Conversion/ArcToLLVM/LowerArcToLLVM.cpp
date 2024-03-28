@@ -355,6 +355,8 @@ struct SimInstantiateOpLowering
 
     ConversionPatternRewriter::InsertionGuard guard(rewriter);
 
+    // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
+    // sizeof(size_t) on the target architecture.
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
 
     LLVM::LLVMFuncOp mallocFunc =
@@ -460,8 +462,9 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
   }
 };
 
-/// Lowers SimEmitValueOp to a printf call. This pattern will mutate the global
-/// module.
+/// Lowers SimEmitValueOp to a printf call. The integer will be printed in its
+/// entirety if it is of size up to size_t, and explicitly truncated otherwise.
+/// This pattern will mutate the global module.
 struct SimEmitValueOpLowering
     : public OpConversionPattern<arc::SimEmitValueOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -475,19 +478,38 @@ struct SimEmitValueOpLowering
 
     Location loc = op.getLoc();
 
-    Value toPrint = rewriter.create<LLVM::IntToPtrOp>(
-        loc, LLVM::LLVMPointerType::get(getContext()), adaptor.getValue());
-
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
       return failure();
 
+    // Cast the value to a size_t.
+    // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
+    // sizeof(size_t) on the target architecture.
+    Value toPrint = adaptor.getValue();
+    DataLayout layout = DataLayout::closest(op);
+    llvm::TypeSize sizeOfSizeT =
+        layout.getTypeSizeInBits(rewriter.getIndexType());
+    assert(!sizeOfSizeT.isScalable() &&
+           sizeOfSizeT.getFixedValue() <= std::numeric_limits<unsigned>::max());
+    bool truncated = false;
+    if (valueType.getWidth() > sizeOfSizeT) {
+      toPrint = rewriter.create<LLVM::TruncOp>(
+          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
+          toPrint);
+      truncated = true;
+    } else if (valueType.getWidth() < sizeOfSizeT)
+      toPrint = rewriter.create<LLVM::ZExtOp>(
+          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
+          toPrint);
+
+    // Lookup of create printf function symbol.
     auto printfFunc = LLVM::lookupOrCreateFn(
         moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
         LLVM::LLVMVoidType::get(getContext()), true);
 
     // Insert the format string if not already available.
     SmallString<16> formatStrName{"_arc_sim_emit_"};
+    formatStrName.append(truncated ? "trunc_" : "full_");
     formatStrName.append(adaptor.getValueName());
     LLVM::GlobalOp formatStrGlobal;
     if (!(formatStrGlobal =
@@ -495,7 +517,10 @@ struct SimEmitValueOpLowering
       ConversionPatternRewriter::InsertionGuard insertGuard(rewriter);
 
       SmallString<16> formatStr = adaptor.getValueName();
-      formatStr.append(" = %0.8p\n");
+      formatStr.append(" = ");
+      if (truncated)
+        formatStr.append("(truncated) ");
+      formatStr.append("%zx\n");
       SmallVector<char> formatStrVec{formatStr.begin(), formatStr.end()};
       formatStrVec.push_back(0);
 

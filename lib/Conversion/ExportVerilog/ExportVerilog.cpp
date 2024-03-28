@@ -221,7 +221,8 @@ static void emitZeroWidthIndexingValue(PPS &os) {
 
 /// Return the verilog name of the port for the module.
 static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
-  return cast<HWModuleLike>(module).getPort(portArgNum).getVerilogName();
+  auto hml = cast<HWModuleLike>(module);
+  return hml.getPort(portArgNum).getVerilogName();
 }
 
 /// Return the verilog name of the port for the module.
@@ -6082,6 +6083,11 @@ void FileEmitter::emit(Block *block) {
         .Case<VerbatimOp, IfDefOp, MacroDefOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
+        .Case<BindInterfaceOp>(
+            [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
+        .Case<TypeScopeOp>([&](auto typedecls) {
+          ModuleEmitter(state).emitStatement(typedecls);
+        })
         .Default(
             [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
   }
@@ -6113,6 +6119,9 @@ void FileEmitter::emitOp(emit::RefOp op) {
   TypeSwitch<Operation *>(targetOp)
       .Case<hw::HWModuleOp>(
           [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
+      .Case<TypeScopeOp>([&](auto typedecls) {
+        ModuleEmitter(state).emitStatement(typedecls);
+      })
       .Default(
           [&](auto op) { emitOpError(op, "cannot be emitted to a file"); });
 }
@@ -6320,7 +6329,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<BindOp, BindInterfaceOp>([&](auto op) {
+        .Case<BindOp>([&](auto op) {
           if (!attr) {
             separateFile(op, "bindfile.sv");
           } else {
@@ -6382,7 +6391,8 @@ void SharedEmitterState::collectOpsForFile(const FileInfo &file,
 
     // Pull in the fragments that the op references. In one file, each
     // fragment is emitted only once.
-    if (auto fragments = op->getAttrOfType<ArrayAttr>("emit.fragments")) {
+    if (auto fragments =
+            op->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName())) {
       for (auto sym : fragments.getAsRange<FlatSymbolRefAttr>()) {
         auto it = fragmentMapping.find(sym.getAttr());
         if (it == fragmentMapping.end()) {
@@ -6416,8 +6426,6 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<BindInterfaceOp>(
-          [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {

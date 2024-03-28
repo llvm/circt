@@ -144,10 +144,24 @@ def VariableOp : MooreOp<"variable", [
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
-  let results = (outs UnpackedType:$result);
+  let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
+  }];
+}
+
+def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
+  let summary = "Read the current value of a declaration";
+  let description = [{
+    Samples the current value of a declaration. This is a helper to capture the
+    exact point at which declarations that can be targeted by assignments are
+    read.
+  }];
+  let arguments = (ins Arg<UnpackedType, "", [MemRead]>:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
   }];
 }
 
@@ -183,6 +197,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
 
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
+  let arguments = (ins Arg<AnyType, "", [MemWrite]>:$dst, AnyType:$src);
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {

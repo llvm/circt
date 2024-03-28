@@ -145,6 +145,12 @@ else()
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
 
+  # If building as part of a unified build, whether or not MLIR's execution engine
+  # is enabled must be fetched from its subdirectory scope.
+  get_directory_property(MLIR_ENABLE_EXECUTION_ENGINE
+      DIRECTORY ${MLIR_MAIN_SRC_DIR}
+      DEFINITION MLIR_ENABLE_EXECUTION_ENGINE)
+
   set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
 
   set(CIRCT_GTEST_AVAILABLE 1)
@@ -493,6 +499,27 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Z3 Configuration (for integration tests to check SMT-LIB export)
+#-------------------------------------------------------------------------------
+
+# If z3 hasn't been explicitly disabled, find it.
+option(Z3_DISABLE "Disable the z3 tests.")
+if (Z3_DISABLE)
+  message(STATUS "Disabling tests requiring z3.")
+else()
+  # Search for the `z3` command.
+  find_program(Z3_PATH "z3")
+  if(EXISTS ${Z3_PATH})
+    # Then strip the filename.
+    get_filename_component(Z3_PATH ${Z3_PATH} DIRECTORY)
+    message(STATUS "Found z3 at ${Z3_PATH}.")
+  else()
+    set(Z3_PATH "")
+    message(STATUS "Did NOT find z3.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 
@@ -585,6 +612,16 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
   else()
     find_package(slang 3.0 REQUIRED)
   endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Arcilator JIT
+#-------------------------------------------------------------------------------
+
+if(MLIR_ENABLE_EXECUTION_ENGINE)
+  set(ARCILATOR_JIT_ENABLED 1)
+else()
+  set(ARCILATOR_JIT_ENABLED 0)
 endif()
 
 #-------------------------------------------------------------------------------

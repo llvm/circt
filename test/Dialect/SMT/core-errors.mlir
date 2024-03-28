@@ -25,7 +25,7 @@ func.func @no_smt_value_enters_solver(%arg0: !smt.bool) {
 func.func @no_smt_value_exits_solver() {
   // expected-error @below {{result #0 must be variadic of any non-smt type, but got '!smt.bool'}}
   %0 = smt.solver() : () -> !smt.bool {
-    %a = smt.declare_const "a" : !smt.bool
+    %a = smt.declare_fun "a" : !smt.bool
     smt.yield %a : !smt.bool
   }
   return
@@ -153,5 +153,321 @@ func.func @too_few_operands(%a: !smt.bool) {
 func.func @ite_type_mismatch(%a: !smt.bool, %b: !smt.bv<32>) {
   // expected-error @below {{failed to verify that all of {thenValue, elseValue, result} have same type}}
   "smt.ite"(%a, %a, %b) {} : (!smt.bool, !smt.bool, !smt.bv<32>) -> !smt.bool
+  return
+}
+
+// -----
+
+func.func @forall_number_of_decl_names_must_match_num_args() {
+  // expected-error @below {{number of bound variable names must match number of block arguments}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %2 = smt.eq %arg2, %arg3 : !smt.int
+    smt.yield %2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @exists_number_of_decl_names_must_match_num_args() {
+  // expected-error @below {{number of bound variable names must match number of block arguments}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %2 = smt.eq %arg2, %arg3 : !smt.int
+    smt.yield %2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_yield_must_have_exactly_one_bool_value() {
+  // expected-error @below {{yielded value must be of '!smt.bool' type}}
+  %1 = smt.forall ["a", "b"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %2 = smt.int.add %arg2, %arg3
+    smt.yield %2 : !smt.int
+  }
+  return
+}
+
+// -----
+
+func.func @forall_yield_must_have_exactly_one_bool_value() {
+  // expected-error @below {{must have exactly one yielded value}}
+  %1 = smt.forall ["a", "b"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @exists_yield_must_have_exactly_one_bool_value() {
+  // expected-error @below {{yielded value must be of '!smt.bool' type}}
+  %1 = smt.exists ["a", "b"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %2 = smt.int.add %arg2, %arg3
+    smt.yield %2 : !smt.int
+  }
+  return
+}
+
+// -----
+
+func.func @exists_yield_must_have_exactly_one_bool_value() {
+  // expected-error @below {{must have exactly one yielded value}}
+  %1 = smt.exists ["a", "b"] {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @exists_patterns_region_and_no_patterns_attr_are_mutually_exclusive() {
+  // expected-error @below {{patterns and the no_pattern attribute must not be specified at the same time}}
+  %1 = smt.exists ["a"] no_pattern {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_patterns_region_and_no_patterns_attr_are_mutually_exclusive() {
+  // expected-error @below {{patterns and the no_pattern attribute must not be specified at the same time}}
+  %1 = smt.forall ["a"] no_pattern {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @exists_patterns_region_num_args() {
+  // expected-error @below {{block argument number and types of the 'body' and 'patterns' region #0 must match}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_patterns_region_num_args() {
+  // expected-error @below {{block argument number and types of the 'body' and 'patterns' region #0 must match}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool, %arg3: !smt.bool):
+    smt.yield %arg2, %arg3 : !smt.bool, !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @exists_patterns_region_at_least_one_yielded_value() {
+  // expected-error @below {{'patterns' region #0 must have at least one yielded value}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @forall_patterns_region_at_least_one_yielded_value() {
+  // expected-error @below {{'patterns' region #0 must have at least one yielded value}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @exists_all_pattern_regions_tested() {
+  // expected-error @below {{'patterns' region #1 must have at least one yielded value}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  }, {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @forall_all_pattern_regions_tested() {
+  // expected-error @below {{'patterns' region #1 must have at least one yielded value}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  }, {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield
+  }
+  return
+}
+
+// -----
+
+func.func @exists_patterns_region_no_non_smt_operations() {
+  // expected-error @below {{'patterns' region #0 may only contain SMT dialect operations}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    // expected-note @below {{first non-SMT operation here}}
+    hw.constant 0 : i32
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_patterns_region_no_non_smt_operations() {
+  // expected-error @below {{'patterns' region #0 may only contain SMT dialect operations}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    // expected-note @below {{first non-SMT operation here}}
+    hw.constant 0 : i32
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @exists_patterns_region_no_var_binding_operations() {
+  // expected-error @below {{'patterns' region #0 must not contain any variable binding operations}}
+  %1 = smt.exists ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    // expected-note @below {{first violating operation here}}
+    smt.exists ["b"] {
+    ^bb0(%arg3: !smt.bool):
+      smt.yield %arg3 : !smt.bool
+    }
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_patterns_region_no_var_binding_operations() {
+  // expected-error @below {{'patterns' region #0 must not contain any variable binding operations}}
+  %1 = smt.forall ["a"] {
+  ^bb0(%arg2: !smt.bool):
+    smt.yield %arg2 : !smt.bool
+  } patterns {
+  ^bb0(%arg2: !smt.bool):
+    // expected-note @below {{first violating operation here}}
+    smt.forall ["b"] {
+    ^bb0(%arg3: !smt.bool):
+      smt.yield %arg3 : !smt.bool
+    }
+    smt.yield %arg2 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @exists_bound_variable_type_invalid() {
+  // expected-error @below {{bound variables must by any non-function SMT value}}
+  %1 = smt.exists ["a", "b"] {
+  ^bb0(%arg2: !smt.func<(!smt.int) !smt.int>, %arg3: !smt.bool):
+    smt.yield %arg3 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+func.func @forall_bound_variable_type_invalid() {
+  // expected-error @below {{bound variables must by any non-function SMT value}}
+  %1 = smt.forall ["a", "b"] {
+  ^bb0(%arg2: !smt.func<(!smt.int) !smt.int>, %arg3: !smt.bool):
+    smt.yield %arg3 : !smt.bool
+  }
+  return
+}
+
+// -----
+
+// expected-error @below {{domain types must be any non-function SMT type}}
+func.func @func_domain_no_smt_type(%arg0: !smt.func<(i32) !smt.bool>) {
+  return
+}
+
+// -----
+
+// expected-error @below {{range type must be any non-function SMT type}}
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) i32>) {
+  return
+}
+
+// -----
+
+// expected-error @below {{range type must be any non-function SMT type}}
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.func<(!smt.bool) !smt.bool>>) {
+  return
+}
+
+// -----
+
+func.func @func_range_no_smt_type(%arg0: !smt.func<(!smt.bool) !smt.bool>) {
+  // expected-error @below {{0 operands present, but expected 1}}
+  smt.apply_func %arg0() : !smt.func<(!smt.bool) !smt.bool>
+  return
+}
+
+// -----
+
+// expected-error @below {{sort parameter types must be any non-function SMT type}}
+func.func @sort_type_no_smt_type(%arg0: !smt.sort<"sortname"[i32]>) {
   return
 }

@@ -78,7 +78,7 @@ tool_dirs = [
     config.llvm_tools_dir
 ]
 tools = [
-    'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
+    'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool'
 ]
 
@@ -201,10 +201,20 @@ if config.lec_enabled != "":
   config.available_features.add('circt-lec')
   tools.append('circt-lec')
 
+# Enable z3 if it has been detected.
+if config.z3_path != "":
+  tool_dirs.append(config.z3_path)
+  tools.append('z3')
+  config.available_features.add('z3')
+
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
+
+# Add arcilator JIT if MLIR's execution engine is enabled.
+if config.arcilator_jit_enabled:
+  config.available_features.add('arcilator-jit')
 
 config.substitutions.append(('%driver', f'{config.driver}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)

@@ -197,6 +197,13 @@ hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out
   // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock [[CLK_FALSE]] {rw6}
   %8 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clk_false {rw6} : <12 x 42, mask 3>
 
+  // CHECK: seq.firmem
+  %has_symbol = seq.firmem sym @someMem 0, 1, undefined, undefined : <12 x 42, mask 3>
+
+  // CHECK-NOT: seq.firmem
+  %no_readers = seq.firmem 0, 1, undefined, undefined : <12 x 42, mask 3>
+  seq.firmem.write_port %no_readers[%addr] = %data, clock %clk_false {w5} : <12 x 42, mask 3>
+
   %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
   hw.output %9 : i42
 }

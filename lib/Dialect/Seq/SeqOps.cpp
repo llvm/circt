@@ -758,6 +758,25 @@ OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
 // FirMemOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
+  // Do not change memories if symbols point to them.
+  if (op.getInnerSymAttr())
+    return failure();
+
+  // If the memory has no read ports, erase it.
+  for (auto *user : op->getUsers()) {
+    if (isa<FirMemReadOp, FirMemReadWriteOp>(user))
+      return failure();
+    assert(isa<FirMemWriteOp>(user) && "invalid seq.firmem user");
+  }
+
+  for (auto *user : llvm::make_early_inc_range(op->getUsers()))
+    rewriter.eraseOp(user);
+
+  rewriter.eraseOp(op);
+  return success();
+}
+
 void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
   if (!nameAttr.getValue().empty())

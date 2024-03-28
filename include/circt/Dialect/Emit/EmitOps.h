@@ -25,4 +25,13 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/Emit/Emit.h.inc"
 
+namespace circt {
+namespace emit {
+
+/// Return the name of the fragments array attribute.
+inline StringRef getFragmentsAttrName() { return "emit.fragments"; }
+
+} // namespace emit
+} // namespace circt
+
 #endif // CIRCT_DIALECT_EMIT_EMITOPS_H

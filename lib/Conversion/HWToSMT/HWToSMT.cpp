@@ -57,7 +57,9 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
   // two-valued, four-valued, nine-valued (etc.) logic each. In MLIR upstream
   // the integer type also carries poison information (which we don't have in
   // CIRCT?).
-  converter.addConversion([](IntegerType type) {
+  converter.addConversion([](IntegerType type) -> std::optional<Type> {
+    if (type.getWidth() <= 0)
+      return std::nullopt;
     return smt::BitVectorType::get(type.getContext(), type.getWidth());
   });
 

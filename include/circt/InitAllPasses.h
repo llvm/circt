@@ -34,6 +34,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/SystemC/SystemCPasses.h"
+#include "circt/Tools/circt-lec/Passes.h"
 #include "circt/Transforms/Passes.h"
 
 namespace circt {
@@ -44,6 +45,9 @@ inline void registerAllPasses() {
 
   // Transformation passes
   registerTransformsPasses();
+
+  // LEC transformation passes
+  registerLECTransformsPasses();
 
   // Standard Passes
   arc::registerPasses();

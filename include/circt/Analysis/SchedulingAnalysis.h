@@ -25,10 +25,6 @@ namespace func {
 class FuncOp;
 } // namespace func
 } // namespace mlir
-
-using namespace mlir;
-using namespace circt::scheduling;
-
 namespace circt {
 namespace analysis {
 
@@ -37,15 +33,15 @@ namespace analysis {
 /// problem. The client should retrieve the partially complete problem to add
 /// and associate operator types.
 struct CyclicSchedulingAnalysis {
-  CyclicSchedulingAnalysis(Operation *funcOp, AnalysisManager &am);
+  CyclicSchedulingAnalysis(Operation *funcOp, mlir::AnalysisManager &am);
 
-  CyclicProblem &getProblem(affine::AffineForOp forOp);
+  scheduling::CyclicProblem &getProblem(mlir::affine::AffineForOp forOp);
 
 private:
-  void analyzeForOp(affine::AffineForOp forOp,
+  void analyzeForOp(mlir::affine::AffineForOp forOp,
                     MemoryDependenceAnalysis memoryAnalysis);
 
-  DenseMap<Operation *, CyclicProblem> problems;
+  DenseMap<Operation *, scheduling::CyclicProblem> problems;
 };
 
 } // namespace analysis

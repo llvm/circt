@@ -84,12 +84,113 @@ endmodule
 // CHECK-LABEL: moore.module @Statements
 module Statements;
   bit x, y, z;
+  int i;
   initial begin
+    //===------------------------------------------------------------------===//
+    // Conditional statements
+
+    // CHECK: [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK: scf.if [[COND]] {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK: }
+    if (x) x = y;
+
+    // CHECK: [[COND0:%.+]] = moore.and %x, %y
+    // CHECK: [[COND1:%.+]] = moore.conversion [[COND0]] : !moore.bit -> i1
+    // CHECK: scf.if [[COND1]] {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK: }
+    if (x &&& y) x = y;
+
+    // CHECK: [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK: scf.if [[COND]] {
+    // CHECK:   moore.blocking_assign %x, %z
+    // CHECK: } else {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK: }
+    if (x) x = z; else x = y;
+
+    // CHECK: [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK: scf.if [[COND]] {
+    // CHECK:   moore.blocking_assign %x, %x
+    // CHECK: } else {
+    // CHECK:   [[COND:%.+]] = moore.conversion %y : !moore.bit -> i1
+    // CHECK:   scf.if [[COND]] {
+    // CHECK:     moore.blocking_assign %x, %y
+    // CHECK:   } else {
+    // CHECK:     moore.blocking_assign %x, %z
+    // CHECK:   }
+    // CHECK: }
+    if (x) begin
+      x = x;
+    end else if (y) begin
+      x = y;
+    end else begin
+      x = z;
+    end
+
+    //===------------------------------------------------------------------===//
+    // Loop statements
+
+    // CHECK: moore.blocking_assign %y, %x
+    // CHECK: scf.while : () -> () {
+    // CHECK:   [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK:   scf.condition([[COND]])
+    // CHECK: } do {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK:   moore.blocking_assign %x, %z
+    // CHECK:   scf.yield
+    // CHECK: }
+    for (y = x; x; x = z) x = y;
+
+    // CHECK: scf.while (%arg0 = %i) : (!moore.int) -> !moore.int {
+    // CHECK:   [[TMP0:%.+]] = moore.bool_cast %arg0 : !moore.int -> !moore.bit
+    // CHECK:   [[TMP1:%.+]] = moore.conversion [[TMP0]] : !moore.bit -> i1
+    // CHECK:   scf.condition([[TMP1]]) %arg0 : !moore.int
+    // CHECK: } do {
+    // CHECK: ^bb0(%arg0: !moore.int):
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK:   [[TMP0:%.+]] = moore.constant 1 : !moore.int
+    // CHECK:   [[TMP1:%.+]] = moore.sub %arg0, [[TMP0]] : !moore.int
+    // CHECK:   scf.yield [[TMP1]] : !moore.int
+    // CHECK: }
+    repeat (i) x = y;
+
+    // CHECK: scf.while : () -> () {
+    // CHECK:   [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK:   scf.condition([[COND]])
+    // CHECK: } do {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK:   scf.yield
+    // CHECK: }
+    while (x) x = y;
+
+    // CHECK: scf.while : () -> () {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK:   [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
+    // CHECK:   scf.condition([[COND]])
+    // CHECK: } do {
+    // CHECK:   scf.yield
+    // CHECK: }
+    do x = y; while (x);
+
+    // CHECK: scf.while : () -> () {
+    // CHECK:   %true = hw.constant true
+    // CHECK:   scf.condition(%true)
+    // CHECK: } do {
+    // CHECK:   moore.blocking_assign %x, %y
+    // CHECK:   scf.yield
+    // CHECK: }
+    forever x = y;
+
+    //===------------------------------------------------------------------===//
+    // Assignments
+
     // CHECK: moore.blocking_assign %x, %y : !moore.bit
     x = y;
 
     // CHECK: moore.blocking_assign %y, %z : !moore.bit
-    // CHECK: moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: moore.blocking_assign %x, %z : !moore.bit
     x = (y = z);
 
     // CHECK: moore.nonblocking_assign %x, %y : !moore.bit
@@ -161,6 +262,30 @@ module Expressions;
     // CHECK: [[TMP:%.+]] = moore.bool_cast %a : !moore.int -> !moore.bit
     // CHECK: moore.not [[TMP]] : !moore.bit
     x = !a;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.add [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[PRE]]
+    c = a++;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.sub [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[PRE]]
+    c = a--;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.add [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[POST]]
+    c = ++a;
+    // CHECK: [[PRE:%.+]] = moore.read_lvalue %a : !moore.int
+    // CHECK: [[TMP:%.+]] = moore.constant 1 : !moore.int
+    // CHECK: [[POST:%.+]] = moore.sub [[PRE]], [[TMP]] : !moore.int
+    // CHECK: moore.blocking_assign %a, [[POST]]
+    // CHECK: moore.blocking_assign %c, [[POST]]
+    c = --a;
 
     //===------------------------------------------------------------------===//
     // Binary operators
@@ -258,6 +383,70 @@ module Expressions;
     c = a >>> b;
     // CHECK: moore.shr %u, %b : !moore.int<unsigned>, !moore.int
     c = u >>> b;
+
+    //===------------------------------------------------------------------===//
+    // Assign operators
+
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.add [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a += b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.sub [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a -= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.mul [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a *= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
+    // CHECK: [[TMP2:%.+]] = moore.div [[TMP1]], %d
+    // CHECK: moore.blocking_assign %f, [[TMP2]]
+    f /= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
+    // CHECK: [[TMP2:%.+]] = moore.mod [[TMP1]], %d
+    // CHECK: moore.blocking_assign %f, [[TMP2]]
+    f %= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.and [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a &= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.or [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a |= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.xor [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a ^= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shl [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a <<= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shl [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a <<<= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.shr [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a >>= b;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP2:%.+]] = moore.ashr [[TMP1]], %b
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a >>>= b;
+
+    // CHECK: [[A_ADD:%.+]] = moore.read_lvalue %a
+    // CHECK: [[A_MUL:%.+]] = moore.read_lvalue %a
+    // CHECK: [[A_DEC:%.+]] = moore.read_lvalue %a
+    // CHECK: [[TMP1:%.+]] = moore.constant 1
+    // CHECK: [[TMP2:%.+]] = moore.sub [[A_DEC]], [[TMP1]]
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    // CHECK: [[TMP1:%.+]] = moore.mul [[A_MUL]], [[A_DEC]]
+    // CHECK: moore.blocking_assign %a, [[TMP1]]
+    // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
+    // CHECK: moore.blocking_assign %a, [[TMP2]]
+    a += (a *= a--);
   end
 endmodule
 

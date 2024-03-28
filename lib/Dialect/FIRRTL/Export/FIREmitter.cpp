@@ -490,18 +490,9 @@ void Emitter::emitModule(FIntModuleOp op) {
     auto ports = op.getPorts();
     emitModulePorts(ports);
 
-    // Emit the optional intrinsic.
-    //
-    // TODO: This really shouldn't be optional, but it is currently encoded like
-    // this.
-    if (op.getIntrinsic().has_value()) {
-      auto intrinsic = *op.getIntrinsic();
-      if (!intrinsic.empty()) {
-        startStatement();
-        ps << "intrinsic = " << PPExtString(*op.getIntrinsic());
-        setPendingNewline();
-      }
-    }
+    startStatement();
+    ps << "intrinsic = " << PPExtString(op.getIntrinsic());
+    setPendingNewline();
 
     // Emit the parameters.
     emitModuleParameters(op, op.getParameters());

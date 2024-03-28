@@ -11,7 +11,9 @@
 #define CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 
 #include "circt/Conversion/ImportVerilog.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
@@ -88,6 +90,12 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
+
+  /// A stack of assignment left-hand side values. Each assignment will push its
+  /// lowered left-hand side onto this stack before lowering its right-hand
+  /// side. This allows expressions to resolve the opaque
+  /// `LValueReferenceExpression`s in the AST.
+  SmallVector<Value> lvalueStack;
 };
 
 } // namespace ImportVerilog

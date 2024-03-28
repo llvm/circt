@@ -97,7 +97,10 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   }];
 
   let constructor = "circt::sv::createSVExtractTestCodePass()";
-  let dependentDialects = ["circt::sv::SVDialect"];
+  let dependentDialects = [
+    "circt::sv::SVDialect",
+    "circt::verif::VerifDialect"
+  ];
   let options = [
     Option<"disableInstanceExtraction", "disable-instance-extraction", "bool",
            "false", "Disable extracting instances only that feed test code">,

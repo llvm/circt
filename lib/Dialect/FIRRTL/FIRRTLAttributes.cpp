@@ -34,26 +34,28 @@ Direction direction::flip(Direction direction) {
   llvm_unreachable("unknown direction");
 }
 
-IntegerAttr direction::packAttribute(MLIRContext *context,
-                                     ArrayRef<Direction> directions) {
+mlir::DenseBoolArrayAttr
+direction::packAttribute(MLIRContext *context, ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
-  auto size = directions.size();
-  APInt portDirections(size, 0);
-  for (size_t i = 0; i != size; ++i)
-    if (directions[i] == Direction::Out)
-      portDirections.setBit(i);
-  return IntegerAttr::get(IntegerType::get(context, size), portDirections);
+  SmallVector<bool> dirs;
+  dirs.reserve(directions.size());
+  for (auto d : directions)
+    dirs.push_back(d == Direction::Out);
+  return mlir::DenseBoolArrayAttr::get(context, dirs);
 }
 
-SmallVector<Direction> direction::unpackAttribute(IntegerAttr directions) {
-  assert(directions.getType().isSignlessInteger() &&
-         "Direction attributes must be signless integers");
-  auto value = directions.getValue();
-  auto size = value.getBitWidth();
+mlir::DenseBoolArrayAttr direction::packAttribute(MLIRContext *context,
+                                                  ArrayRef<bool> directions) {
+  // Pack the array of directions into an APInt.  Input is zero, output is one.
+  return mlir::DenseBoolArrayAttr::get(context, directions);
+}
+
+SmallVector<Direction>
+direction::unpackAttribute(mlir::DenseBoolArrayAttr directions) {
   SmallVector<Direction> result;
-  result.reserve(size);
-  for (size_t i = 0; i != size; ++i)
-    result.push_back(direction::get(value[i]));
+  result.reserve(directions.size());
+  for (size_t i = 0ULL, e = directions.size(); i != e; ++i)
+    result.push_back(direction::get(directions[i]));
   return result;
 }
 

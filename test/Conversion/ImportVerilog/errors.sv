@@ -80,6 +80,22 @@ endmodule
 // -----
 
 module Foo;
+  bit x, y;
+  // expected-error @below {{match patterns in if conditions not supported}}
+  initial if (x matches 42) x = y;
+endmodule
+
+// -----
+
+module Foo;
+  bit y;
+  // expected-error @below {{variables in for loop initializer not supported}}
+  initial for (bit x = 0; x;) x = y;
+endmodule
+
+// -----
+
+module Foo;
   logic x;
   // expected-error @below {{literals with X or Z bits not supported}}
   initial x = 'x;

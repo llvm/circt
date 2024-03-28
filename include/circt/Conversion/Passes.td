@@ -404,8 +404,13 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert FSM to SV and HW";
   let constructor = "circt::createConvertFSMToSVPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
-                           "circt::seq::SeqDialect", "circt::sv::SVDialect"];
+  let dependentDialects = [
+      "circt::comb::CombDialect",
+      "circt::emit::EmitDialect",
+      "circt::hw::HWDialect",
+      "circt::seq::SeqDialect",
+      "circt::sv::SVDialect",
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -719,7 +724,11 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
   let summary = "Lower sequential firrtl ops to SV.";
   let constructor = "circt::createLowerSeqToSVPass()";
-  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
   let options = [
     Option<"disableRegRandomization", "disable-reg-randomization", "bool", "false",
            "Disable emission of register randomization code">,

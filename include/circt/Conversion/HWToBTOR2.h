@@ -21,8 +21,6 @@ namespace mlir {
 class Pass;
 } // namespace mlir
 
-using namespace mlir;
-
 namespace circt {
 std::unique_ptr<mlir::Pass> createConvertHWToBTOR2Pass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createConvertHWToBTOR2Pass();

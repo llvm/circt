@@ -53,6 +53,13 @@ struct ExprVisitor {
     return {};
   }
 
+  // Handle references to the left-hand side of a parent assignment.
+  Value visit(const slang::ast::LValueReferenceExpression &expr) {
+    assert(!context.lvalueStack.empty() && "parent assignments push lvalue");
+    auto lvalue = context.lvalueStack.back();
+    return builder.create<moore::ReadLValueOp>(loc, lvalue);
+  }
+
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
@@ -77,7 +84,9 @@ struct ExprVisitor {
   // Handle blocking and non-blocking assignments.
   Value visit(const slang::ast::AssignmentExpression &expr) {
     auto lhs = context.convertExpression(expr.left());
+    context.lvalueStack.push_back(lhs);
     auto rhs = context.convertExpression(expr.right());
+    context.lvalueStack.pop_back();
     if (!lhs || !rhs)
       return {};
 
@@ -94,7 +103,7 @@ struct ExprVisitor {
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
       builder.create<moore::BlockingAssignOp>(loc, lhs, rhs);
-    return lhs;
+    return rhs;
   }
 
   // Helper function to convert an argument to a simple bit vector type, pass it
@@ -108,6 +117,20 @@ struct ExprVisitor {
     if (invert)
       result = builder.create<moore::NotOp>(loc, result);
     return result;
+  }
+
+  // Helper function to create pre and post increments and decrements.
+  Value createIncrement(Value arg, bool isInc, bool isPost) {
+    auto preValue = convertToSimpleBitVector(arg);
+    if (!preValue)
+      return {};
+    preValue = builder.create<moore::ReadLValueOp>(loc, preValue);
+    auto one = builder.create<moore::ConstantOp>(loc, preValue.getType(), 1);
+    auto postValue =
+        isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
+              : builder.create<moore::SubOp>(loc, preValue, one).getResult();
+    builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
+    return isPost ? preValue : postValue;
   }
 
   // Handle unary operators.
@@ -155,10 +178,13 @@ struct ExprVisitor {
       return builder.create<moore::NotOp>(loc, arg);
 
     case UnaryOperator::Preincrement:
+      return createIncrement(arg, true, false);
     case UnaryOperator::Predecrement:
+      return createIncrement(arg, false, false);
     case UnaryOperator::Postincrement:
+      return createIncrement(arg, true, true);
     case UnaryOperator::Postdecrement:
-      break;
+      return createIncrement(arg, false, true);
     }
 
     mlir::emitError(loc, "unsupported unary operator");

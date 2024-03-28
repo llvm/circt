@@ -785,7 +785,8 @@ firrtl.circuit "Foo" {
     layers = [
       @GroupA,
       @GroupA::@GroupB
-    ]
+    ],
+    intrinsic = "test"
   }
 
   // CHECK:      module ModuleWithLargeEnabledLayers
