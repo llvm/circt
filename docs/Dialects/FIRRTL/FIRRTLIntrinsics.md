@@ -95,11 +95,9 @@ The enable input is sampled at the rising edge of the input clock; any changes o
 | en   | input     | UInt<1>  | enable for the output clock |
 | out  | output    | Clock    | gated output clock          |
 
-### circt.chisel_assert_assume
+### circt.chisel_assert
 
-Generate a clocked SV assertion with companion assume statement.
-
-Has legacy special behavior and should not be used by new code.
+Generate a clocked SV assert statement, with optional formatted error message.
 
 | Parameter | Type   | Description                                                                         |
 | --------- | ------ | ----------------------------------------------------------------------------------- |
@@ -118,9 +116,6 @@ Example output:
 ```systemverilog
 wire _GEN = ~enable | cond;
 assert__label: assert property (@(posedge clock) _GEN) else $error("message");
-`ifdef USE_PROPERTY_AS_CONSTRAINT
-  assume__label: assume property (@(posedge clock) _GEN);
-`endif // USE_PROPERTY_AS_CONSTRAINT
 ```
 
 ### circt.chisel_ifelsefatal

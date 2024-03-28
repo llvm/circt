@@ -605,7 +605,7 @@ static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
 namespace {
 
 template <class OpTy, bool ifElseFatal = false>
-class CirctAssertAssumeConverter : public IntrinsicConverter {
+class CirctAssertConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
@@ -798,12 +798,12 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctHasBeenResetConverter>("circt.has_been_reset",
                                            "circt_has_been_reset");
   lowering.add<CirctProbeConverter>("circt.fpga_probe", "circt_fpga_probe");
-  lowering.add<CirctAssertAssumeConverter<AssertOp>>(
-      "circt.chisel_assert_assume", "circt_chisel_assert_assume");
-  lowering.add<CirctAssertAssumeConverter<AssertOp, /*ifElseFatal=*/true>>(
+  lowering.add<CirctAssertConverter<AssertOp>>("circt.chisel_assert",
+                                               "circt_chisel_assert");
+  lowering.add<CirctAssertConverter<AssertOp, /*ifElseFatal=*/true>>(
       "circt.chisel_ifelsefatal", "circt_chisel_ifelsefatal");
-  lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
-                                                     "circt_chisel_assume");
+  lowering.add<CirctAssertConverter<AssumeOp>>("circt.chisel_assume",
+                                               "circt_chisel_assume");
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
