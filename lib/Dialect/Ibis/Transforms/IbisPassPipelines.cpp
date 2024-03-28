@@ -25,16 +25,17 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 }
 
 void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
-  pm.addPass(createContainerizePass());
+  pm.nest<ibis::DesignOp>().addPass(createContainerizePass());
 
   // Pre-tunneling CSE pass. This ensures that duplicate get_port calls are
   // removed before we start tunneling - no reason to tunnel the same thing
   // twice.
   pm.addPass(mlir::createCSEPass());
-  pm.addPass(createTunnelingPass(IbisTunnelingOptions{"", ""}));
+  pm.nest<DesignOp>().addPass(
+      createTunnelingPass(IbisTunnelingOptions{"", ""}));
   pm.addPass(createPortrefLoweringPass());
   pm.addPass(createSimpleCanonicalizerPass());
-  pm.addPass(createCleanSelfdriversPass());
+  pm.nest<DesignOp>().addPass(createCleanSelfdriversPass());
   pm.addPass(createContainersToHWPass());
 }
 

@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_IBIS_INTERFACES_TD
 #define CIRCT_DIALECT_IBIS_INTERFACES_TD
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -35,9 +37,7 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   ];
 }
 
-// TODO: @mortbopet: should inherit from InnerSymTable once we have a way to
-// support nested symbol tables.
-def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
+def ScopeOpInterface : OpInterface<"ScopeOpInterface", [InnerSymbol]> {
   let cppNamespace = "circt::ibis";
   let description = [{
     An interface for operations which define Ibis scopes, that can be referenced
@@ -72,7 +72,7 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
       "Returns the symbol name of the scope",
       "mlir::StringAttr", "getScopeName",
       (ins), [{
-        return $_op.getNameAttr();
+        return $_op.getInnerNameAttr();
       }]
     >,
     InterfaceMethod<
@@ -166,44 +166,6 @@ def MethodLikeOpInterface : OpInterface<"MethodLikeOpInterface"> {
       return $_op->getRegion(0);
     }
   }];
-}
-
-def ContainerOpInterface : OpInterface<"ContainerOpInterface"> {
-  let cppNamespace = "circt::ibis";
-  let description = [{
-    An interface for Ibis operations that contain other operations.
-  }];
-
-  let methods = [
-    InterfaceMethod<
-      "Returns the body of the container",
-      "mlir::Block*", "getBodyBlock",
-      (ins), [{}], /*defaultImplementation=*/ [{
-        return &$_op.getBody().front();
-      }]
-    >,
-    InterfaceMethod<
-      "Returns the symbol name",
-      "StringAttr", "getSymNameAttr",
-      (ins), [{
-        return $_op.getSymNameAttr();
-      }]
-    >,
-    InterfaceMethod<
-      "Returns the module name as a string attribute",
-      "StringAttr", "getModuleNameAttr",
-      (ins), [{
-        return $_op.getModuleNameAttr();
-      }]
-    >,
-    InterfaceMethod<
-      "Returns the module name",
-      "StringRef", "getModuleName",
-      (ins), [{
-        return $_op.getModuleNameAttr().getValue();
-      }]
-    >
-  ];
 }
 
 #endif // CIRCT_DIALECT_IBIS_INTERFACES_TD

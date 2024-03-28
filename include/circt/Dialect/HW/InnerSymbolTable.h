@@ -230,14 +230,14 @@ struct InnerRefNamespace {
 
   /// Resolve the InnerRef to its target within this namespace, returning empty
   /// target if no such name exists.
-  InnerSymTarget lookup(hw::InnerRefAttr inner);
+  InnerSymTarget lookup(hw::InnerRefAttr inner) const;
 
   /// Resolve the InnerRef to its target within this namespace, returning
   /// empty target if no such name exists or it's not an operation.
   /// Template type can be used to limit results to specified op type.
-  Operation *lookupOp(hw::InnerRefAttr inner);
+  Operation *lookupOp(hw::InnerRefAttr inner) const;
   template <typename T>
-  T lookupOp(hw::InnerRefAttr inner) {
+  T lookupOp(hw::InnerRefAttr inner) const {
     return dyn_cast_or_null<T>(lookupOp(inner));
   }
 };

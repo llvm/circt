@@ -38,7 +38,7 @@ namespace {
 
 // Rewrites cases where an input port is being read in the instantiating module.
 // Replaces the input port read by the assignment value of the input port.
-static LogicalResult replaceReadsOfWrites(ContainerOpInterface containerOp) {
+static LogicalResult replaceReadsOfWrites(ContainerOp containerOp) {
   // Partition out all of the get_port's wrt. their target port symbol.
   struct PortAccesses {
     GetPortOp getAsInput;
@@ -50,7 +50,7 @@ static LogicalResult replaceReadsOfWrites(ContainerOpInterface containerOp) {
                  /*portName*/ llvm::DenseMap<StringAttr, PortAccesses>>
       instancePortAccessMap;
 
-  for (auto getPortOp : containerOp.getBodyBlock()->getOps<GetPortOp>()) {
+  for (auto getPortOp : containerOp.getOps<GetPortOp>()) {
     PortAccesses &portAccesses =
         instancePortAccessMap[getPortOp.getInstance()]
                              [getPortOp.getPortSymbolAttr().getAttr()];
@@ -190,8 +190,7 @@ struct CleanSelfdriversPass
 } // anonymous namespace
 
 LogicalResult CleanSelfdriversPass::cleanInstanceSide() {
-  for (ContainerOpInterface containerOp :
-       getOperation().getOps<ContainerOpInterface>())
+  for (ContainerOp containerOp : getOperation().getOps<ContainerOp>())
     if (failed(replaceReadsOfWrites(containerOp)))
       return failure();
 
