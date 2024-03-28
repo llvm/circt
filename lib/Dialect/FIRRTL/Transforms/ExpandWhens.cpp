@@ -516,7 +516,7 @@ public:
   /// Simulation Constructs.
   void visitStmt(AssertOp op);
   void visitStmt(AssumeOp op);
-  void visitStmt(AssumeEdgedPredicateIntrinsicOp op);
+  void visitStmt(UnclockedAssumeIntrinsicOp op);
   void visitStmt(CoverOp op);
   void visitStmt(ModuleOp op);
   void visitStmt(PrintFOp op);
@@ -564,7 +564,7 @@ void WhenOpVisitor::visitStmt(AssumeOp op) {
   op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
-void WhenOpVisitor::visitStmt(AssumeEdgedPredicateIntrinsicOp op) {
+void WhenOpVisitor::visitStmt(UnclockedAssumeIntrinsicOp op) {
   op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 

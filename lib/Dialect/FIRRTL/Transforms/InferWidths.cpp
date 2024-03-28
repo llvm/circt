@@ -1641,7 +1641,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle the no-ops that don't interact with width inference.
       .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp,
-            AssumeEdgedPredicateIntrinsicOp, CoverOp>([&](auto) {})
+            UnclockedAssumeIntrinsicOp, CoverOp>([&](auto) {})
 
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {

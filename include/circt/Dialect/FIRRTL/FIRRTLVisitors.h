@@ -230,7 +230,7 @@ public:
                        AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-                       AssumeEdgedPredicateIntrinsicOp, VerifCoverIntrinsicOp,
+                       UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
                        LayerBlockOp>([&](auto opNode) -> ResultType {
           return thisCast->visitStmt(opNode, args...);
         })
@@ -276,7 +276,7 @@ public:
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
-  HANDLE(AssumeEdgedPredicateIntrinsicOp);
+  HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
 
 #undef HANDLE

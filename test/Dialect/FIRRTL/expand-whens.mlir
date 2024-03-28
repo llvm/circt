@@ -42,14 +42,14 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.int.assume.edged_predicate %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.int.unclocked_assume %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
     firrtl.printf %clock, %reset, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
     firrtl.stop %clock, %enable, 1 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.int.assume.edged_predicate %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.int.unclocked_assume %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 // CHECK-LABEL: firrtl.module @simulation(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
@@ -64,7 +64,7 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   %4 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.cover %clock, %p, %4, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %5 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.int.assume.edged_predicate %p, %5, "" : !firrtl.uint<1>, !firrtl.uint<1> 
+// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %5, "" : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   %6 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %7 = firrtl.and %6, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.printf %clock, %7, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
@@ -77,7 +77,7 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   %11 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.cover %clock, %p, %11, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
 // CHECK-NEXT:   %12 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.int.assume.edged_predicate %p, %12, "" : !firrtl.uint<1>, !firrtl.uint<1> 
+// CHECK-NEXT:   firrtl.int.unclocked_assume %p, %12, "" : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   }
 
 

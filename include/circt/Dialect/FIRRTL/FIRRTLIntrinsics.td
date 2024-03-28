@@ -139,11 +139,11 @@ def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
 // Verification Intrinsics
 //===----------------------------------------------------------------------===//
 
-def AssumeEdgedPredicateIntrinsicOp : FIRRTLOp<"int.assume.edged_predicate", []> {
+def UnclockedAssumeIntrinsicOp : FIRRTLOp<"int.unclocked_assume", []> {
   let summary = "Special Assume Verification Statement to assume predicate ";
 
   let description = [{
-    The `firrtl.int.assume.edged_predicate` intrinsic is a special assume statement
+    The `firrtl.int.unclocked_assume` intrinsic is a special assume statement
     lowered into a SV concurrent assertion within always block that has the assumed
     predicate in a sensitivity list.
   }];

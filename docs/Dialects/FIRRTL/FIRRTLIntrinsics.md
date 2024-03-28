@@ -200,7 +200,7 @@ Example SV output:
 cover__label: cover property (@(posedge clock) enable & cond);
 ```
 
-### circt.assume_edged_predicate
+### circt.unclocked_assume
 
 Generate a SV assume statement whose predicate is used in a sensitivity list of the enclosing always block.
 

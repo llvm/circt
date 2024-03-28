@@ -289,19 +289,19 @@ firrtl.circuit "Foo" {
                                          in predicate: !firrtl.uint<1>,
                                          in enable: !firrtl.uint<1>
                                        ) attributes {intrinsic = "circt.chisel_cover"}
-  firrtl.intmodule private @AssumeEdgedPredicate<format: none = "text: %d",
+  firrtl.intmodule private @UnclockedAssume<format: none = "text: %d",
                                                  label: none = "label for unr",
                                                  guards: none = "MACRO_GUARD;ASDF">(
                                          in predicate: !firrtl.uint<1>,
                                          in enable: !firrtl.uint<1>,
                                          in val: !firrtl.uint<1>
-                                       ) attributes {intrinsic = "circt.assume_edged_predicate"}
+                                       ) attributes {intrinsic = "circt.unclocked_assume"}
   // CHECK-NOT: @AssertAssume
   // CHECK-NOT: @AssertAssumeFormat
   // CHECK-NOT: @IfElseFatalFormat
   // CHECK-NOT: @Assume
   // CHECK-NOT: @CoverLabel
-  // CHECK-NOT: @AssumeEdgedPredicate
+  // CHECK-NOT: @UnclockedAssume
 
   // CHECK: firrtl.module @ChiselVerif(
   firrtl.module @ChiselVerif(in %clock: !firrtl.clock,
@@ -354,10 +354,10 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %cover_enable, %enable : !firrtl.uint<1>
 
     // CHECK-NOT: firrtl.instance
-    // CHECK: firrtl.int.assume.edged_predicate %{{.+}}, %{{.+}}, "text: %d"(
+    // CHECK: firrtl.int.unclocked_assume %{{.+}}, %{{.+}}, "text: %d"(
     // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
     // CHECK-SAME: name = "label for unr"
-    %unr_predicate, %unr_enable, %unr_val = firrtl.instance unr interesting_name @AssumeEdgedPredicate(in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    %unr_predicate, %unr_enable, %unr_val = firrtl.instance unr interesting_name @UnclockedAssume(in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
     firrtl.strictconnect %unr_predicate, %cond : !firrtl.uint<1>
     firrtl.strictconnect %unr_enable, %enable : !firrtl.uint<1>
     firrtl.strictconnect %unr_val, %enable : !firrtl.uint<1>

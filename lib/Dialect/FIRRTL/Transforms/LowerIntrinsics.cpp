@@ -701,7 +701,7 @@ public:
   }
 };
 
-class CirctAssumeEdgedPredicateConverter : public IntrinsicConverter {
+class CirctUnclockedAssumeConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
@@ -734,7 +734,7 @@ public:
     auto message = format ? cast<StringAttr>(format.getValue())
                           : builder.getStringAttr("");
 
-    auto op = builder.template create<AssumeEdgedPredicateIntrinsicOp>(
+    auto op = builder.template create<UnclockedAssumeIntrinsicOp>(
         predicate, enable, message, substitutions, name);
 
     if (guards) {
@@ -805,8 +805,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
                                                      "circt_chisel_assume");
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
-  lowering.add<CirctAssumeEdgedPredicateConverter>(
-      "circt.assume_edged_predicate", "circt_assume_edged_predicate");
+  lowering.add<CirctUnclockedAssumeConverter>(
+      "circt.unclocked_assume", "circt_unclocked_assume");
 
   // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
   if (fixupEICGWrapper)
