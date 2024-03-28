@@ -62,4 +62,15 @@ def FlattenConcats : Pat<
   (ConcatOp $inputs), (ConcatOp (flattenConcats $inputs)),
   [(AnyDefiningOpIsConcat $inputs)]>;
 
+//===----------------------------------------------------------------------===//
+// NextOp
+//===----------------------------------------------------------------------===//
+
+// next(next(p, N), M) -> next(p, N+M)
+def mergedTimes : NativeCodeCall<
+  "$_builder.getI64IntegerAttr($0.getInt() + $1.getInt())">;
+def NestedNexts : Pat<
+  (NextOp (NextOp $input, $times1), $times2),
+  (NextOp $input, (mergedTimes $times1, $times2))>;
+
 #endif // CIRCT_DIALECT_LTL_LTLFOLDS_TD
