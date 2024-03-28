@@ -54,8 +54,8 @@ SmallVector<Direction>
 direction::unpackAttribute(mlir::DenseBoolArrayAttr directions) {
   SmallVector<Direction> result;
   result.reserve(directions.size());
-  for (size_t i = 0ULL, e = directions.size(); i != e; ++i)
-    result.push_back(direction::get(directions[i]));
+  for (auto d : directions.asArrayRef())
+    result.push_back(direction::get(d));
   return result;
 }
 

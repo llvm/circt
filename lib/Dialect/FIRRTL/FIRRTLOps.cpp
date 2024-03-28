@@ -812,8 +812,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
     return;
 
   // Drop the direction markers for dead ports.
-  SmallVector<Direction> portDirections =
-      direction::unpackAttribute(op.getPortDirectionsAttr());
+  ArrayRef<bool> portDirections = op.getPortDirectionsAttr().asArrayRef();
   ArrayRef<Attribute> portNames = op.getPortNames();
   ArrayRef<Attribute> portTypes = op.getPortTypes();
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
@@ -828,8 +827,8 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   assert(portSyms.size() == numPorts || portSyms.empty());
   assert(portLocs.size() == numPorts);
 
-  SmallVector<Direction> newPortDirections =
-      removeElementsAtIndices<Direction>(portDirections, portIndices);
+  SmallVector<bool> newPortDirections =
+      removeElementsAtIndices<bool>(portDirections, portIndices);
   SmallVector<Attribute> newPortNames, newPortTypes, newPortAnnos, newPortSyms,
       newPortLocs;
   newPortNames = removeElementsAtIndices(portNames, portIndices);
