@@ -1,20 +1,21 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intrinsics{fixup-eicg-wrapper}))' --split-input-file --verify-diagnostics %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-intrinsics)))' -verify-diagnostics --split-input-file %s
 
-firrtl.circuit "EICGWithInstAnno" {
-  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
-  hw.hierpath private @nla [@EICGWithInstAnno::@ckg, @EICG_wrapper]
-  firrtl.module @EICGWithInstAnno(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    // expected-error @below {{EICG_wrapper instance cannot have annotations since it is an intrinsic}}
-    firrtl.instance ckg sym @ckg {annotations = [{circt.nonlocal = @nla, class = "DummyA"}]} @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
+firrtl.circuit "UnknownIntrinsic" {
+  firrtl.module private @UnknownIntrinsic(in %data: !firrtl.uint<32>) {
+    %0 = firrtl.wire : !firrtl.uint<32>
+    // expected-error @below {{failed to legalize}}
+    firrtl.int.generic "unknown_intrinsic" %0 : (!firrtl.uint<32>) -> ()
+    firrtl.strictconnect %0, %data : !firrtl.uint<32>
   }
 }
 
 // -----
 
-firrtl.circuit "EICGWithModuleAnno" {
-  // expected-error @below {{EICG_wrapper cannot have annotations since it is an intrinsic}}
-  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper", annotations = [{class = "DummyA"}]}
-  firrtl.module @EICGWithModuleAnno(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
-    firrtl.instance ckg @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-  }
+firrtl.circuit "InvalidCGOperand" {
+    firrtl.module @InvalidCGOperand(in %clk: !firrtl.clock, in %en: !firrtl.uint<2>) {
+      // expected-error @below {{circt.clock_gate input 1 not size 1}}
+      // expected-error @below {{failed to legalize}}
+      %0 = firrtl.int.generic "circt.clock_gate" %clk, %en : (!firrtl.clock, !firrtl.uint<2>) -> !firrtl.clock
+    }
 }
+
