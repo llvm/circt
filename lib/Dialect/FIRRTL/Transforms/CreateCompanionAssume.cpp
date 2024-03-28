@@ -38,8 +38,8 @@ struct CreateCompanionAssumePass
         });
       }
 
-      // TODO: Currently messages are dropped to preserve the old behaviour. Copy
-      // messages once we confirmed that it works well with UNR tools.
+      // TODO: Currently messages are dropped to preserve the old behaviour.
+      // Copy messages once we confirmed that it works well with UNR tools.
       if (isUnrOnlyAssert)
         // If UNROnly, use UnclockedAssumeIntrinsicOp.
         assume = builder.create<firrtl::UnclockedAssumeIntrinsicOp>(
