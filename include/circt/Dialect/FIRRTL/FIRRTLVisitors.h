@@ -53,7 +53,7 @@ public:
             LTLConcatIntrinsicOp, LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
             LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
-            HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp,
+            HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp, GenericIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -180,6 +180,7 @@ public:
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
   HANDLE(HasBeenResetIntrinsicOp, Unhandled);
   HANDLE(FPGAProbeIntrinsicOp, Unhandled);
+  HANDLE(GenericIntrinsicOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -225,12 +226,12 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
-                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, LayerBlockOp>(
+        .template Case<
+            AttachOp, ConnectOp, StrictConnectOp, RefDefineOp, ForceOp,
+            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
+            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
+            RefReleaseInitialOp, VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
+            UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp, LayerBlockOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -276,6 +277,7 @@ public:
   HANDLE(VerifAssertIntrinsicOp);
   HANDLE(VerifAssumeIntrinsicOp);
   HANDLE(VerifCoverIntrinsicOp);
+  HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
 
 #undef HANDLE

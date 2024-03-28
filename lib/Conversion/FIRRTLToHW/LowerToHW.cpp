@@ -43,6 +43,7 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/Mutex.h"
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "lower-to-hw"
@@ -401,6 +402,17 @@ private:
     macroDeclNames.insert(name);
   }
 
+  /// The list of fragments on which the modules rely. Must be set outside the
+  /// parallelized module lowering since module type reads access it.
+  DenseMap<hw::HWModuleOp, SetVector<Attribute>> fragments;
+  llvm::sys::SmartMutex<true> fragmentsMutex;
+
+  void addFragment(hw::HWModuleOp module, StringRef fragment) {
+    llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
+    fragments[module].insert(
+        FlatSymbolRefAttr::get(circuitOp.getContext(), fragment));
+  }
+
   /// Cached nla table analysis.
   NLATable *nlaTable = nullptr;
 
@@ -723,6 +735,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
+
+  // Fix up fragment attributes.
+  for (auto &[module, fragments] : state.fragments)
+    module->setAttr(emit::getFragmentsAttrName(),
+                    ArrayAttr::get(&getContext(), fragments.getArrayRef()));
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -1454,6 +1471,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                      std::function<void(void)>());
   }
 
+  LogicalResult emitGuards(Location loc, ArrayRef<Attribute> guards,
+                           std::function<void(void)> emit);
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
@@ -1602,6 +1621,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
+  LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -1739,9 +1759,6 @@ private:
   /// the LTL ops, which were necessary to go from the def-before-use FIRRTL
   /// dialect to the graph-like HW dialect.
   SetVector<Operation *> ltlOpFixupWorklist;
-
-  /// The list of fragments on which the module relies.
-  SetVector<Attribute> fragments;
 };
 } // end anonymous namespace
 
@@ -1873,10 +1890,6 @@ LogicalResult FIRRTLLowering::run() {
   // intermediate wires among them.
   if (failed(fixupLTLOps()))
     return failure();
-
-  if (!fragments.empty())
-    theModule->setAttr(emit::getFragmentsAttrName(),
-                       builder.getArrayAttr(fragments.getArrayRef()));
 
   return backedgeBuilder.clearOrEmitError();
 }
@@ -2522,6 +2535,27 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   // defined ahead of the uses, which leads to better generated Verilog.
   alwaysOp->moveBefore(builder.getInsertionBlock(),
                        builder.getInsertionPoint());
+}
+
+LogicalResult FIRRTLLowering::emitGuards(Location loc,
+                                         ArrayRef<Attribute> guards,
+                                         std::function<void(void)> emit) {
+  if (guards.empty()) {
+    emit();
+    return success();
+  }
+  auto guard = guards[0].dyn_cast<StringAttr>();
+  if (!guard)
+    return mlir::emitError(loc,
+                           "elements in `guards` array must be `StringAttr`");
+
+  // Record the guard macro to emit a declaration for it.
+  circuitState.addMacroDecl(builder.getStringAttr(guard.getValue()));
+  LogicalResult result = LogicalResult::failure();
+  addToIfDefBlock(guard.getValue(), [&]() {
+    result = emitGuards(loc, guards.drop_front(), emit);
+  });
+  return result;
 }
 
 void FIRRTLLowering::addToIfDefBlock(StringRef cond,
@@ -4246,8 +4280,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToAlwaysBlock(clock, [&]() {
       circuitState.usedPrintfCond = true;
-      fragments.insert(FlatSymbolRefAttr::get(
-          builder.getStringAttr("PRINTF_COND_FRAGMENT")));
+      circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
 
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
@@ -4274,8 +4307,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
     return failure();
 
   circuitState.usedStopCond = true;
-  fragments.insert(
-      FlatSymbolRefAttr::get(builder.getStringAttr("STOP_COND_FRAGMENT")));
+  circuitState.addFragment(theModule, "STOP_COND_FRAGMENT");
 
   Value stopCond =
       builder.create<sv::MacroRefExprOp>(cond.getType(), "STOP_COND_");
@@ -4348,18 +4380,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
     guards = guardsAttr.getValue();
 
-  auto isAssert = opName == "assert";
-  auto isCover = opName == "cover";
-
-  // TODO : Need to figure out if there is a cleaner way to get the string which
-  // indicates the assert is UNR only. Or better - not rely on this at all -
-  // ideally there should have been some other attribute which indicated that
-  // this assert for UNR only.
-  auto isUnrOnlyAssert = llvm::any_of(guards, [](Attribute attr) {
-    StringAttr strAttr = dyn_cast<StringAttr>(attr);
-    return strAttr && strAttr.getValue() == "USE_UNR_ONLY_CONSTRAINTS";
-  });
-
+  auto isCover = isa<CoverOp>(op);
   auto clock = getLoweredNonClockValue(opClock);
   auto enable = getLoweredValue(opEnable);
   auto predicate = getLoweredValue(opPredicate);
@@ -4430,12 +4451,10 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
         addToAlwaysBlock(clock, [&]() {
           addIfProceduralBlock(predicate, [&]() {
             circuitState.usedStopCond = true;
-            fragments.insert(FlatSymbolRefAttr::get(
-                builder.getStringAttr("STOP_COND_FRAGMENT")));
+            circuitState.addFragment(theModule, "STOP_COND_FRAGMENT");
 
             circuitState.usedAssertVerboseCond = true;
-            fragments.insert(FlatSymbolRefAttr::get(
-                builder.getStringAttr("ASSERT_VERBOSE_COND_FRAGMENT")));
+            circuitState.addFragment(theModule, "ASSERT_VERBOSE_COND_FRAGMENT");
 
             addIfProceduralBlock(
                 builder.create<sv::MacroRefExprOp>(boolType,
@@ -4478,61 +4497,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
         builder, opName,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
         predicate, prefixedLabel, message, messageOps);
-
-    // Assertions gain a companion `assume` behind a
-    // `USE_PROPERTY_AS_CONSTRAINT` guard.
-    if (isAssert) {
-      StringAttr assumeLabel;
-      if (label)
-        assumeLabel = StringAttr::get(builder.getContext(),
-                                      "assume__" + label.getValue());
-
-      circuitState.addMacroDecl(
-          builder.getStringAttr("USE_PROPERTY_AS_CONSTRAINT"));
-      addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
-        if (!isUnrOnlyAssert) {
-          builder.create<sv::AssumeConcurrentOp>(
-              circt::sv::EventControlAttr::get(builder.getContext(), event),
-              clock, predicate, assumeLabel);
-        } else {
-          builder.create<sv::AlwaysOp>(
-              ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
-                buildImmediateVerifOp(builder, "assume", predicate,
-                                      circt::sv::DeferAssertAttr::get(
-                                          builder.getContext(),
-                                          circt::sv::DeferAssert::Immediate),
-                                      assumeLabel);
-              });
-        }
-      });
-    }
   };
 
   // Wrap the verification statement up in the optional preprocessor
   // guards. This is a bit awkward since we want to translate an array of
   // guards  into a recursive call to `addToIfDefBlock`.
-  bool anyFailed = false;
-  std::function<void()> emitWrapped = [&]() {
-    if (guards.empty()) {
-      emit();
-      return;
-    }
-    auto guard = guards[0].dyn_cast<StringAttr>();
-    if (!guard) {
-      op->emitOpError("elements in `guards` array must be `StringAttr`");
-      anyFailed = true;
-      return;
-    }
-
-    // Record the guard macro to emit a declaration for it.
-    circuitState.addMacroDecl(builder.getStringAttr(guard.getValue()));
-    guards = guards.drop_front();
-    addToIfDefBlock(guard.getValue(), emitWrapped);
-  };
-  emitWrapped();
-  if (anyFailed)
-    return failure();
-  return success();
+  return emitGuards(op->getLoc(), guards, emit);
 }
 
 // Lower an assert to SystemVerilog.
@@ -4557,6 +4527,56 @@ LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
       op, "cover__", op.getClock(), op.getPredicate(), op.getEnable(),
       op.getMessageAttr(), op.getSubstitutions(), op.getNameAttr(),
       op.getIsConcurrent(), op.getEventControl());
+}
+
+// Lower an UNR only assume to a specific style of SV assume.
+LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
+  // TODO : Need to figure out if there is a cleaner way to get the string which
+  // indicates the assert is UNR only. Or better - not rely on this at all -
+  // ideally there should have been some other attribute which indicated that
+  // this assert for UNR only.
+  auto guardsAttr = op->getAttrOfType<mlir::ArrayAttr>("guards");
+  ArrayRef<Attribute> guards =
+      guardsAttr ? guardsAttr.getValue() : ArrayRef<Attribute>();
+
+  auto label = op.getNameAttr();
+  StringAttr assumeLabel;
+  if (label)
+    assumeLabel =
+        StringAttr::get(builder.getContext(), "assume__" + label.getValue());
+  auto predicate = getLoweredValue(op.getPredicate());
+  auto enable = getLoweredValue(op.getEnable());
+  auto notEnable = comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+  predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
+
+  SmallVector<Value> messageOps;
+  for (auto operand : op.getSubstitutions()) {
+    auto loweredValue = getLoweredValue(operand);
+    if (!loweredValue) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      loweredValue = getOrCreateIntConstant(1, 0);
+    }
+    messageOps.push_back(loweredValue);
+  }
+  return emitGuards(op.getLoc(), guards, [&]() {
+    builder.create<sv::AlwaysOp>(
+        ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
+          if (op.getMessageAttr().getValue().empty())
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel);
+          else
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel, op.getMessageAttr(), messageOps);
+        });
+  });
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

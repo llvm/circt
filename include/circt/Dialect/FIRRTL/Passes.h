@@ -61,6 +61,9 @@ std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
 std::unique_ptr<mlir::Pass>
+createLowerIntmodulesPass(bool fixupEICGWrapper = false);
+
+std::unique_ptr<mlir::Pass>
 createLowerIntrinsicsPass(bool fixupEICGWrapper = false);
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
@@ -197,6 +200,8 @@ std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
 std::unique_ptr<mlir::Pass> createLintingPass();
 
 std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
+
+std::unique_ptr<mlir::Pass> createCreateCompanionAssume();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

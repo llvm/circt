@@ -13,36 +13,24 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 
-def IsXIntrinsicOp : FIRRTLOp<"int.isX",
-    [HasCustomSSAName, Pure]> {
-  let summary = "Test for 'x";
-  let description = [{
-    The `int.isX` expression checks that the operand is not a verilog literal
-    'x.  FIRRTL doesn't have a notion of 'x per-se, but x can come in to the
-    system from external modules and from SV constructs.  Verification
-    constructs need to explicitly test for 'x.
-    }];
+include "FIRRTLDialect.td"
 
-  let arguments = (ins FIRRTLBaseType:$arg);
-  let results = (outs NonConstUInt1Type:$result);
-  let hasFolder = 1;
-  let assemblyFormat = "$arg attr-dict `:` type($arg)";
-}
+//===----------------------------------------------------------------------===//
+// Generic intrinsic operation for parsing into before lowering.
+//===----------------------------------------------------------------------===//
 
-def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
-  let summary = "Check that a proper reset has been seen.";
-  let description = [{
-    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
-    startup and after each power-cycle in a power-aware simulation. The result
-    remains 0 before and during reset and only switches to 1 after the reset is
-    deasserted again.
+def GenericIntrinsicOp : FIRRTLOp<"int.generic",
+    [HasCustomSSAName]> {
+  let summary = "Generic intrinsic operation for FIRRTL intrinsics.";
 
-    See the corresponding `verif.has_been_reset` operation.
-  }];
-  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
-  let results = (outs NonConstUInt1Type:$result);
-  let hasFolder = 1;
-  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
+  let arguments = (
+    ins StrAttr:$intrinsic,
+    Variadic<PassiveType>:$operands,
+    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
+  );
+
+  let results = (outs Optional<PassiveType>:$result);
+  let assemblyFormat = "$intrinsic custom<ParameterList>($parameters) ($operands^)? attr-dict-with-keyword `:` functional-type($operands, $result)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -134,5 +122,71 @@ def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
   let results = (outs NonConstClockType:$output);
   let assemblyFormat = "$input attr-dict";
 }
+
+//===----------------------------------------------------------------------===//
+// Verification Intrinsics
+//===----------------------------------------------------------------------===//
+
+def UnclockedAssumeIntrinsicOp : FIRRTLOp<"int.unclocked_assume", []> {
+  let summary = "Special Assume Verification Statement to assume predicate ";
+
+  let description = [{
+    The `firrtl.int.unclocked_assume` intrinsic is a special assume statement
+    lowered into a SV concurrent assertion within always block that has the assumed
+    predicate in a sensitivity list.
+  }];
+  let arguments = (ins
+    UInt1Type:$predicate,
+    UInt1Type:$enable,
+    StrAttr:$message,
+    Variadic<AnyType>:$substitutions,
+    StrAttr:$name
+  );
+
+  let assemblyFormat = [{
+    $predicate `,` $enable `,` $message (`(` $substitutions^ `)`)? `:`
+    type($predicate) `,` type($enable) (`,` qualified(type($substitutions))^)?
+    custom<VerifAttrs>(attr-dict)
+  }];
+
+  let hasCanonicalizer = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Other intrinsics
+//===----------------------------------------------------------------------===//
+
+def IsXIntrinsicOp : FIRRTLOp<"int.isX",
+    [HasCustomSSAName, Pure]> {
+  let summary = "Test for 'x";
+  let description = [{
+    The `int.isX` expression checks that the operand is not a verilog literal
+    'x.  FIRRTL doesn't have a notion of 'x per-se, but x can come in to the
+    system from external modules and from SV constructs.  Verification
+    constructs need to explicitly test for 'x.
+    }];
+
+  let arguments = (ins FIRRTLBaseType:$arg);
+  let results = (outs NonConstUInt1Type:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$arg attr-dict `:` type($arg)";
+}
+
+def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
+  let summary = "Check that a proper reset has been seen.";
+  let description = [{
+    The result of `firrtl.int.has_been_reset` reads as 0 immediately after simulation
+    startup and after each power-cycle in a power-aware simulation. The result
+    remains 0 before and during reset and only switches to 1 after the reset is
+    deasserted again.
+
+    See the corresponding `verif.has_been_reset` operation.
+  }];
+  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
+  let results = (outs NonConstUInt1Type:$result);
+  let hasFolder = 1;
+  let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
+}
+
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

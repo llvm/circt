@@ -1,4 +1,4 @@
-; RUN: firtool %s | FileCheck %s
+; RUN: firtool %s --add-companion-assume | FileCheck %s
 
 FIRRTL version 4.0.0
 
@@ -51,11 +51,9 @@ circuit ChiselVerif:
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>
-
+    ; CHECK:  wire [[GEN:.+]] = ~enable | cond;
     ; CHECK: assert property
     ; CHECK-NOT: $error
-    ; CHECK: PROPERTY_AS_CONSTRAINT
-    ; CHECK: assume
     inst assert of AssertAssume
     connect assert.clock, clock
     connect assert.predicate, cond
@@ -67,8 +65,6 @@ circuit ChiselVerif:
     ; CHECK: assert property
     ; CHECK: "message: %d"
     ; CHECK: $sampled(cond)
-    ; CHECK: PROPERTY_AS_CONSTRAINT
-    ; CHECK: assume
     inst assertFormat of AssertAssumeFormat
     connect assertFormat.clock, clock
     connect assertFormat.predicate, cond
@@ -84,6 +80,17 @@ circuit ChiselVerif:
     connect ief.predicate, cond
     connect ief.enable, enable
     connect ief.val, enable
+    ; CHECK: `ifdef USE_PROPERTY_AS_CONSTRAINT
+    ; CHECK-NEXT:  assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:  `ifdef MACRO_GUARD
+    ; CHECK-NEXT:    `ifdef ASDF
+    ; CHECK-NEXT:      assume__label_for_assert_with_format_string:
+    ; CHECK-NEXT:        assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:      assume__label_for_ifelsefatal_assert:
+    ; CHECK-SAME:        assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:    `endif
+    ; CHECK-NEXT:  `endif
+    ; CHECK-NEXT:`endif
 
     ; CHECK: label_for_assume
     ; CHECK: assume property

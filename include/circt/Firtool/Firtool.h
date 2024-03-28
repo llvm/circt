@@ -129,6 +129,7 @@ public:
   }
   bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
+  bool shouldAddCompanionAssume() const { return addCompanionAssume; }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -349,6 +350,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setAddCompanionAssume(bool value) {
+    addCompanionAssume = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
   bool disableAnnotationsUnknown;
@@ -394,6 +400,7 @@ private:
   bool stripFirDebugInfo;
   bool stripDebugInfo;
   bool fixupEICGWrapper;
+  bool addCompanionAssume;
 };
 
 void registerFirtoolCLOptions();

@@ -3883,10 +3883,7 @@ ParseResult FIRStmtParser::parseInstanceChoice() {
   SmallVector<PortInfo> modulePorts = defaultModule.getPorts();
 
   // Find the option group.
-  auto circuit =
-      builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto optionGroup =
-      dyn_cast_or_null<OptionOp>(circuit.lookupSymbol(optionGroupName));
+  auto optionGroup = circuitSymTbl.lookup<OptionOp>(optionGroupName);
   if (!optionGroup)
     return emitError(loc,
                      "use of undefined option group '" + optionGroupName + "'");

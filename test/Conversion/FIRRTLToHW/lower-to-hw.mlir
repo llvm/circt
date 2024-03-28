@@ -404,6 +404,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0"}
     firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "assert_0", guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.int.unclocked_assume %bCond, %bEn, "assume0"(%value) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {name = "assume_unr", guards = ["USE_PROPERTY_AS_CONSTRAINT", "USE_UNR_ONLY_CONSTRAINTS"]}
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
@@ -418,10 +422,28 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]]) : i42
-    // CHECK-NEXT: sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP4]] label "assume__assert_0"
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP6]]
+    // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value : i42
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP7:%.+]] = comb.xor bin %bEn, [[TRUE]] : i1
+    // CHECK-NEXT: [[TMP8:%.+]] = comb.or bin [[TMP7]], %bCond : i1
+    // CHECK:      sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP3:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP4:%.+]] = comb.or bin [[TMP3]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP4]] label "assume__assert_0" message "assert0"
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]])
+    // CHECK-NEXT:   sv.ifdef  @USE_UNR_ONLY_CONSTRAINTS {
+    // CHECK-NEXT:     sv.always edge [[TMP8]] {
+    // CHECK-NEXT:       sv.assume [[TMP8]], immediate label "assume__assume_unr" message "assume0"(%value) : i42
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assume_0"}
@@ -501,9 +523,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:     sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
-    // CHECK-NEXT:     sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
-    // CHECK-NEXT:       sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
-    // CHECK-NEXT:     }
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
@@ -525,6 +544,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %i0: !firrtl.uint<0>
   ) {
     firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
+    firrtl.assume %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["USE_PROPERTY_AS_CONSTRAINT"]}
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
@@ -532,6 +552,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
     // CHECK-NEXT: sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
     // CHECK-NEXT: }
     firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
