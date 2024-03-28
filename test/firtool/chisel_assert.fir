@@ -3,18 +3,18 @@
 FIRRTL version 4.0.0
 
 circuit ChiselVerif:
-  intmodule AssertAssume:
+  intmodule Assert:
     input clock: Clock
     input predicate: UInt<1>
     input enable: UInt<1>
-    intrinsic = circt_chisel_assert_assume
+    intrinsic = circt_chisel_assert
 
-  intmodule AssertAssumeFormat:
+  intmodule AssertFormat:
     input clock: Clock
     input predicate: UInt<1>
     input enable: UInt<1>
     input val: UInt<1>
-    intrinsic = circt_chisel_assert_assume
+    intrinsic = circt_chisel_assert
     parameter format = "message: %d"
     parameter label = "label for assert with format string"
     parameter guards = "MACRO_GUARD;ASDF"
@@ -54,7 +54,7 @@ circuit ChiselVerif:
     ; CHECK:  wire [[GEN:.+]] = ~enable | cond;
     ; CHECK: assert property
     ; CHECK-NOT: $error
-    inst assert of AssertAssume
+    inst assert of Assert
     connect assert.clock, clock
     connect assert.predicate, cond
     connect assert.enable, enable
@@ -65,7 +65,7 @@ circuit ChiselVerif:
     ; CHECK: assert property
     ; CHECK: "message: %d"
     ; CHECK: $sampled(cond)
-    inst assertFormat of AssertAssumeFormat
+    inst assertFormat of AssertFormat
     connect assertFormat.clock, clock
     connect assertFormat.predicate, cond
     connect assertFormat.enable, enable
