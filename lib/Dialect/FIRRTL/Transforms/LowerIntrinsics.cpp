@@ -805,8 +805,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
                                                      "circt_chisel_assume");
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
-  lowering.add<CirctUnclockedAssumeConverter>(
-      "circt.unclocked_assume", "circt_unclocked_assume");
+  lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
+                                              "circt_unclocked_assume");
 
   // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
   if (fixupEICGWrapper)

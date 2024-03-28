@@ -3172,8 +3172,8 @@ void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add(canonicalizeImmediateVerifOp<AssumeOp>);
 }
 
-void UnclockedAssumeIntrinsicOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                           MLIRContext *context) {
+void UnclockedAssumeIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<UnclockedAssumeIntrinsicOp>);
 }
 
