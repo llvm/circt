@@ -105,7 +105,8 @@ static bool applyToPort(AnnotationSet annos, Operation *op, size_t portCount,
     portAnnotations.append(before.begin(), before.end());
   portAnnotations[portNo] = annos.getArrayAttr();
   auto after = ArrayAttr::get(context, portAnnotations);
-  op->setAttr(getPortAnnotationAttrName(), after);
+  if (before != after)
+    op->setAttr(getPortAnnotationAttrName(), after);
   return before != after;
 }
 
