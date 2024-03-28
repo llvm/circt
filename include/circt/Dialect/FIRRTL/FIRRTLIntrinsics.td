@@ -124,6 +124,35 @@ def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
 }
 
 //===----------------------------------------------------------------------===//
+// Verification Intrinsics
+//===----------------------------------------------------------------------===//
+
+def UnclockedAssumeIntrinsicOp : FIRRTLOp<"int.unclocked_assume", []> {
+  let summary = "Special Assume Verification Statement to assume predicate ";
+
+  let description = [{
+    The `firrtl.int.unclocked_assume` intrinsic is a special assume statement
+    lowered into a SV concurrent assertion within always block that has the assumed
+    predicate in a sensitivity list.
+  }];
+  let arguments = (ins
+    UInt1Type:$predicate,
+    UInt1Type:$enable,
+    StrAttr:$message,
+    Variadic<AnyType>:$substitutions,
+    StrAttr:$name
+  );
+
+  let assemblyFormat = [{
+    $predicate `,` $enable `,` $message (`(` $substitutions^ `)`)? `:`
+    type($predicate) `,` type($enable) (`,` qualified(type($substitutions))^)?
+    custom<VerifAttrs>(attr-dict)
+  }];
+
+  let hasCanonicalizer = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Other intrinsics
 //===----------------------------------------------------------------------===//
 

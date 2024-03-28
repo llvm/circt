@@ -701,6 +701,54 @@ public:
   }
 };
 
+class CirctUnclockedAssumeConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return namedPort(0, "predicate") || sizedPort<UIntType>(0, 1) ||
+           namedPort(1, "enable") || sizedPort<UIntType>(1, 1) ||
+           allInputs(mod.getPorts()) ||
+           namedParam("format", /*optional=*/true) ||
+           namedParam("label", /*optional=*/true) ||
+           namedParam("guards", /*optional=*/true);
+    // TODO: Check all parameters accounted for.
+  }
+
+  LogicalResult convert(InstanceOp inst) override {
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto params = mod.getParameters();
+    auto format = getNamedParam(params, "format");
+    auto label = getNamedParam(params, "label");
+    auto guards = getNamedParam(params, "guards");
+
+    auto wires = replaceResults(builder, inst.getResults());
+
+    auto predicate = wires[0];
+    auto enable = wires[1];
+
+    auto substitutions = ArrayRef(wires).drop_front(2);
+    auto name = label ? cast<StringAttr>(label.getValue()).strref() : "";
+
+    // Message is not optional, so provide empty string if not present.
+    auto message = format ? cast<StringAttr>(format.getValue())
+                          : builder.getStringAttr("");
+
+    auto op = builder.template create<UnclockedAssumeIntrinsicOp>(
+        predicate, enable, message, substitutions, name);
+
+    if (guards) {
+      SmallVector<StringRef> guardStrings;
+      cast<StringAttr>(guards.getValue()).strref().split(guardStrings, ';');
+      // TODO: Legalize / sanity-check?
+      op->setAttr("guards", builder.getStrArrayAttr(guardStrings));
+    }
+
+    inst.erase();
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -757,6 +805,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctAssertAssumeConverter<AssumeOp>>("circt.chisel_assume",
                                                      "circt_chisel_assume");
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
+  lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
+                                              "circt_unclocked_assume");
 
   // Remove this once `EICG_wrapper` is no longer special-cased by firtool.
   if (fixupEICGWrapper)

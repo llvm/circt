@@ -199,3 +199,31 @@ Example SV output:
 ```systemverilog
 cover__label: cover property (@(posedge clock) enable & cond);
 ```
+
+### circt.unclocked_assume
+
+Generate a SV assume statement whose predicate is used in a sensitivity list of the enclosing always block.
+
+
+| Parameter | Type   | Description                                                                         |
+| --------- | ------ | ----------------------------------------------------------------------------------- |
+| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| label     | string | Label for assume statement.  Optional.                                              |
+| guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
+
+| Port      | Direction | Type     | Description                |
+| --------- | --------- | -------- | -------------------------- |
+| predicate | input     | UInt<1>  | predicate to assume        |
+| enable    | input     | UInt<1>  | enable signal              |
+| ...       | input     | Signals  | arguments to format string |
+
+Example SV output:
+```systemverilog
+ifdef USE_FORMAL_ONLY_CONSTRAINTS
+ `ifdef USE_UNR_ONLY_CONSTRAINTS
+   wire _GEN = ~enable | pred;
+   always @(edge _GEN)
+     assume_label: assume(_GEN) else $error("Conditional compilation example for UNR-only and formal-only assert");
+ `endif // USE_UNR_ONLY_CONSTRAINTS
+endif // USE_FORMAL_ONLY_CONSTRAINTS
+```

@@ -468,6 +468,7 @@ firrtl.circuit "Foo" {
     }
     firrtl.assert %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.int.unclocked_assume %true, %true, "foo" : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   }
 
