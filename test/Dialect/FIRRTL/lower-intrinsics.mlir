@@ -206,15 +206,15 @@ firrtl.circuit "Foo" {
   // CHECK-NOT: VerifAssume
   // CHECK-NOT: VerifCover
 // TODO:
-  firrtl.intmodule private @AssertAssume<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert_assume"}
-  firrtl.intmodule private @AssertAssumeFormat<format: none = "message: %d",
+  firrtl.intmodule private @Assert<format: none = "testing">(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>) attributes {intrinsic = "circt.chisel_assert"}
+  firrtl.intmodule private @AssertFormat<format: none = "message: %d",
                                                label: none = "label for assert with format string",
                                                guards: none = "MACRO_GUARD;ASDF">(
                                                  in clock: !firrtl.clock,
                                                  in predicate: !firrtl.uint<1>,
                                                  in enable: !firrtl.uint<1>,
                                                  in val: !firrtl.uint<1>
-                                               ) attributes {intrinsic = "circt.chisel_assert_assume"}
+                                               ) attributes {intrinsic = "circt.chisel_assert"}
   firrtl.intmodule private @IfElseFatalFormat<format: none = "ief: %d",
                                               label: none = "label for ifelsefatal assert",
                                               guards: none = "MACRO_GUARD;ASDF">(
@@ -242,8 +242,8 @@ firrtl.circuit "Foo" {
                                          in enable: !firrtl.uint<1>,
                                          in val: !firrtl.uint<1>
                                        ) attributes {intrinsic = "circt.unclocked_assume"}
-  // CHECK-NOT: @AssertAssume
-  // CHECK-NOT: @AssertAssumeFormat
+  // CHECK-NOT: @Assert
+  // CHECK-NOT: @AssertFormat
   // CHECK-NOT: @IfElseFatalFormat
   // CHECK-NOT: @Assume
   // CHECK-NOT: @CoverLabel
@@ -256,7 +256,7 @@ firrtl.circuit "Foo" {
     // CHECK-NOT: firrtl.instance
     // CHECK: firrtl.assert %{{.+}}, %{{.+}}, %{{.+}}, "testing" :
     // CHECK-SAME: isConcurrent = true
-    %assert_clock, %assert_predicate, %assert_enable = firrtl.instance assert interesting_name @AssertAssume(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
+    %assert_clock, %assert_predicate, %assert_enable = firrtl.instance assert interesting_name @Assert(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>)
     firrtl.strictconnect %assert_clock, %clock : !firrtl.clock
     firrtl.strictconnect %assert_predicate, %cond : !firrtl.uint<1>
     firrtl.strictconnect %assert_enable, %enable : !firrtl.uint<1>
@@ -265,7 +265,7 @@ firrtl.circuit "Foo" {
     // CHECK-SAME: guards = ["MACRO_GUARD", "ASDF"]
     // CHECK-SAME: isConcurrent = true
     // CHECK-SAME: name = "label for assert with format string"
-    %assertFormat_clock, %assertFormat_predicate, %assertFormat_enable, %assertFormat_val = firrtl.instance assertFormat interesting_name @AssertAssumeFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
+    %assertFormat_clock, %assertFormat_predicate, %assertFormat_enable, %assertFormat_val = firrtl.instance assertFormat interesting_name @AssertFormat(in clock: !firrtl.clock, in predicate: !firrtl.uint<1>, in enable: !firrtl.uint<1>, in val: !firrtl.uint<1>)
     firrtl.strictconnect %assertFormat_clock, %clock : !firrtl.clock
     firrtl.strictconnect %assertFormat_predicate, %cond : !firrtl.uint<1>
     firrtl.strictconnect %assertFormat_enable, %enable : !firrtl.uint<1>
