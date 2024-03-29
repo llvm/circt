@@ -398,8 +398,6 @@ StringAttr BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 OutputFileInfo BlackBoxReaderPass::getOutputFile(Operation *origOp,
                                                  StringAttr fileNameAttr,
                                                  bool isCover) {
-  // If the original operation has a specified output file that is not a
-  // directory, then just use that.
   auto outputFile = origOp->getAttrOfType<hw::OutputFileAttr>("output_file");
   if (outputFile && !outputFile.isDirectory()) {
     return {outputFile.getFilename(), Priority::TargetDir,
@@ -413,16 +411,19 @@ OutputFileInfo BlackBoxReaderPass::getOutputFile(Operation *origOp,
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
   auto outDir = std::make_pair(targetDir, Priority::TargetDir);
+  // If the original operation has a specified output file that is not a
+  // directory, then just use that.
+  if (outputFile)
+    outDir = {outputFile.getFilename(), Priority::Explicit};
   // In order to output into the testbench directory, we need to have a
   // testbench dir annotation, not have a blackbox target directory annotation
   // (or one set to the current directory), have a DUT annotation, and the
   // module needs to be in or under the DUT.
-  if (!testBenchDir.empty() && targetDir.equals(".") && dut && !isDut(origOp))
+  else if (!testBenchDir.empty() && targetDir.equals(".") && dut &&
+           !isDut(origOp))
     outDir = {testBenchDir, Priority::TestBench};
   else if (isCover)
     outDir = {coverDir, Priority::Verification};
-  else if (outputFile)
-    outDir = {outputFile.getFilename(), Priority::Explicit};
 
   // If targetDir is not set explicitly and this is a testbench module, then
   // update the targetDir to be the "../testbench".
@@ -448,6 +449,8 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   bool anyParentIsDut = false;
   if (node)
     for (auto *u : node->uses()) {
+      if (cast<InstanceOp>(u->getInstance().getOperation()).getLowerToBind())
+        return false;
       // Recursively check the parents.
       auto dut = isDut(u->getInstance()->getParentOfType<FModuleOp>());
       // Cache the result.

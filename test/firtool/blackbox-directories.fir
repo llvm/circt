@@ -7,11 +7,14 @@
 ;
 ; The test enumerates all possible combinations for a simple design that
 ; consists of a TestHarness top module, a DUT instantiated by the TestHarness,
-; and a Grand Central companion module inside the DUT.  This is summarized by
-; the table below. A one in the "T" column indicates it is instantiated by the
-; TestHarness, a one in the "D" column indicates it is instantiated by the DUT,
-; and a one in the "G" column indicates it is instantiated by the Grand Central
-; companion.
+; and a Grand Central companion module inside the DUT.  Additionally, both the
+; DUT and the TestHarness have layerblocks of the Verification color.  This is
+; summarized by the table below. A one ("1") in the "T" column indicates it is
+; instantiated by the TestHarness, a one in the "D" column indicates it is
+; instantiated by the DUT, and a one in the "G" column indicates it is
+; instantiated by the Grand Central companion.  A zero ("0") indicates it is not
+; instantiated.  An "L" indicates that it is instantiated in a layer in that
+; module.
 ;
 ;            T D G Output
 ;     --------------------
@@ -22,6 +25,9 @@
 ;     Quz    1 0 1 gct/Quz.sv
 ;     Corge  1 1 0 Corge.sv
 ;     Grault 1 1 1 Grault
+;     Bazola 0 L 0 testbench/Bazola.sv
+;     Ztesch L 0 0 testbench/Ztesch.sv
+;     Thud   L L 0 testbench/Thud.sv
 ;
 ; CHECK-LABEL: module DUT
 ;
@@ -32,8 +38,11 @@
 ; CHECK: FILE "gct{{[/\]}}Quz.sv"
 ; CHECK: FILE ".{{[/\]}}Corge.sv"
 ; CHECK: FILE ".{{[/\]}}Grault.sv"
+; CHECK: FILE "testbench{{[/\]}}Bazola.sv"
+; CHECK: FILE "testbench{{[/\]}}Ztesch.sv"
+; CHECK: FILE "testbench{{[/\]}}Thud.sv"
 
-FIRRTL version 3.0.0
+FIRRTL version 4.0.0
 circuit TestHarness: %[[
   {
     "class": "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -148,8 +157,34 @@ circuit TestHarness: %[[
     "target": "~TestHarness|BlackBox_Grault_GCT",
     "name": "Grault.sv",
     "text": "module Grault #(parameter X=hello)(output a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~TestHarness|BlackBox_Bazola_DUT",
+    "name": "Bazola.sv",
+    "text": "module Bazola #(parameter X=hello)(output a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~TestHarness|BlackBox_Ztesch_TestHarness",
+    "name": "Ztesch.sv",
+    "text": "module Ztesch #(parameter X=hello)(output a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~TestHarness|BlackBox_Thud_TestHarness",
+    "name": "Thud.sv",
+    "text": "module Thud #(parameter X=hello)(output a);\nendmodule"
+  },
+  {
+    "class": "firrtl.transforms.BlackBoxInlineAnno",
+    "target": "~TestHarness|BlackBox_Thud_DUT",
+    "name": "Thud.sv",
+    "text": "module Thud #(parameter X=hello)(output a);\nendmodule"
   }
 ]]
+  layer Verification, bind:
+
   extmodule BlackBox_Foo_GCT:
     output a: UInt<1>
     defname = Foo
@@ -205,7 +240,26 @@ circuit TestHarness: %[[
     defname = Grault
     parameter X = "Grault_GCT"
 
-  module TestHarness:
+  extmodule BlackBox_Bazola_DUT:
+    output a: UInt<1>
+    defname = Bazola
+    parameter X = "Bazola_TestHarness"
+
+  extmodule BlackBox_Ztesch_TestHarness:
+    output a: UInt<1>
+    defname = Ztesch
+    parameter X = "Ztesch_TestHarness"
+
+  extmodule BlackBox_Thud_TestHarness:
+    output a: UInt<1>
+    defname = Thud
+    parameter X = "Thud_TestHarness"
+  extmodule BlackBox_Thud_DUT:
+    output a: UInt<1>
+    defname = Thud
+    parameter X = "Thud_DUT"
+
+  public module TestHarness:
 
     inst dut of DUT
 
@@ -213,6 +267,10 @@ circuit TestHarness: %[[
     inst blackBox_Quz_TestHarness of BlackBox_Quz_TestHarness
     inst blackBox_Corge_TestHarness of BlackBox_Corge_TestHarness
     inst blackBox_Grault_TestHarness of BlackBox_Grault_TestHarness
+
+    layerblock Verification:
+      inst blackBox_Ztesch_TestHarness of BlackBox_Ztesch_TestHarness
+      inst blackBox_Thud_TestHarness of BlackBox_Thud_TestHarness
 
   module DUT:
 
@@ -225,6 +283,10 @@ circuit TestHarness: %[[
     inst blackBox_Baz_DUT of BlackBox_Baz_DUT
     inst blackBox_Corge_DUT of BlackBox_Corge_DUT
     inst blackBox_Grault_DUT of BlackBox_Grault_DUT
+
+    layerblock Verification:
+      inst blackBox_Bazola_DUT of BlackBox_Bazola_DUT
+      inst blackBox_Thud_DUT of BlackBox_Thud_DUT
 
   module GrandCentral:
 
