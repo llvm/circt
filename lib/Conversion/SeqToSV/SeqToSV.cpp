@@ -413,9 +413,9 @@ void SeqToSVPass::runOnOperation() {
       FlatSymbolRefAttr::get(context, "RANDOM_INIT_MEM_FRAGMENT");
 
   auto regFragments = ArrayAttr::get(
-      context, {randomInitFragmentName, randomInitRegFragmentName});
+      context, {randomInitRegFragmentName, randomInitFragmentName});
   auto memFragments = ArrayAttr::get(
-      context, {randomInitFragmentName, randomInitMemFragmentName});
+      context, {randomInitMemFragmentName, randomInitFragmentName});
 
   auto addFragments = [&](HWModuleOp module, ArrayAttr fragments) {
     ArrayAttr newFragments;
