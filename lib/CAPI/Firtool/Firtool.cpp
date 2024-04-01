@@ -253,7 +253,7 @@ void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setAddMuxPragmas(value);
 }
 
-void circtFirtoolOptionsSetverificationFlavor(
+void circtFirtoolOptionsSetVerificationFlavor(
     CirctFirtoolFirtoolOptions options, firrtl::VerificationFlavor value) {
   unwrap(options)->setVerificationFlavor(value);
 }
