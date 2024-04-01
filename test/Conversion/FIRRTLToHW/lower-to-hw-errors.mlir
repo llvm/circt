@@ -218,3 +218,13 @@ firrtl.circuit "InputSelfDriver" {
     firrtl.connect %ip2_in, %ip2_in : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
+firrtl.circuit "IfElseFatalOnAssume" {
+  firrtl.module @IfElseFatalOnAssume (in %clock: !firrtl.clock, in %pred: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
+    // expected-error @+2 {{ifElseFatal format cannot be used for non-assertions}}
+    // expected-error @below {{'firrtl.assume' op LowerToHW couldn't handle this operation}}
+    firrtl.assume %clock, %en, %pred, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
+  }
+}

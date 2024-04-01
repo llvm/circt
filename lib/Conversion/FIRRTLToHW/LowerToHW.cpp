@@ -215,11 +215,11 @@ struct CircuitLoweringState {
   std::atomic<bool> usedStopCond{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA,
+                       firrtl::VerificationFlavor verificationFlavor,
                        InstanceGraph &instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
+        verificationFlavor(verificationFlavor), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -369,7 +369,7 @@ private:
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
-  const bool emitChiselAssertsAsSVA;
+  const firrtl::VerificationFlavor verificationFlavor;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -549,7 +549,8 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
-  void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
+
+  using LowerFIRRTLToHWBase<FIRRTLModuleLowering>::verificationFlavor;
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -578,14 +579,13 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool emitChiselAssertsAsSVA) {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
+    bool enableAnnotationWarning,
+    firrtl::VerificationFlavor verificationFlavor) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
-  if (emitChiselAssertsAsSVA)
-    pass->setEmitChiselAssertAsSVA();
+  pass->verificationFlavor = verificationFlavor;
   return pass;
 }
 
@@ -611,9 +611,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
-      getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
+  CircuitLoweringState state(circuit, enableAnnotationWarning,
+                             verificationFlavor, getAnalysis<InstanceGraph>(),
+                             &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
@@ -4397,6 +4397,29 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   StringAttr message;
   SmallVector<Value> messageOps;
+  VerificationFlavor flavor = circuitState.verificationFlavor;
+
+  // For non-assertion, rollback to per-op configuration.
+  if (flavor == VerificationFlavor::IfElseFatal && !isa<AssertOp>(op))
+    flavor = VerificationFlavor::None;
+
+  if (flavor == VerificationFlavor::None) {
+    // TODO: This should *not* be part of the op, but rather a lowering
+    // option that the user of this pass can choose.
+
+    auto format = op->getAttrOfType<StringAttr>("format");
+    // if-else-fatal iff concurrent and the format is specified.
+    if (isConcurrent && format && format.getValue() == "ifElseFatal") {
+      if (!isa<AssertOp>(op))
+        return op->emitError()
+               << "ifElseFatal format cannot be used for non-assertions";
+      flavor = VerificationFlavor::IfElseFatal;
+    } else if (isConcurrent)
+      flavor = VerificationFlavor::SVA;
+    else
+      flavor = VerificationFlavor::Immediate;
+  }
+
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
     for (auto operand : opOperands) {
@@ -4407,22 +4430,20 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
           return failure();
         loweredValue = getOrCreateIntConstant(1, 0);
       }
-      // Wrap any message ops in $sampled() to guarantee that these will print
-      // with the same value as when the assertion triggers.  (See SystemVerilog
-      // 2017 spec section 16.9.3 for more information.)  The custom
-      // "ifElseFatal" variant is special cased because this isn't actually a
-      // concurrent assertion.
-      auto format = op->getAttrOfType<StringAttr>("format");
-      if (isConcurrent && (!format || format.getValue() != "ifElseFatal" ||
-                           circuitState.emitChiselAssertsAsSVA))
+      // For SVA assert/assume statements, wrap any message ops in $sampled() to
+      // guarantee that these will print with the same value as when the
+      // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
+      // more information.)
+      if (flavor == VerificationFlavor::SVA)
         loweredValue = builder.create<sv::SampledOp>(loweredValue);
       messageOps.push_back(loweredValue);
     }
   }
 
   auto emit = [&]() {
-    // Handle the purely procedural flavor of the operation.
-    if (!isConcurrent && !circuitState.emitChiselAssertsAsSVA) {
+    switch (flavor) {
+    case VerificationFlavor::Immediate: {
+      // Handle the purely procedural flavor of the operation.
       auto deferImmediate = circt::sv::DeferAssertAttr::get(
           builder.getContext(), circt::sv::DeferAssert::Immediate);
       addToAlwaysBlock(clock, [&]() {
@@ -4433,16 +4454,11 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       });
       return;
     }
-
-    auto boolType = IntegerType::get(builder.getContext(), 1);
-
-    // Handle the `ifElseFatal` format, which does not emit an SVA but
-    // rather a process that uses $error and $fatal to perform the checks.
-    // TODO: This should *not* be part of the op, but rather a lowering
-    // option that the user of this pass can choose.
-    auto format = op->template getAttrOfType<StringAttr>("format");
-    if (format && (format.getValue() == "ifElseFatal" &&
-                   !circuitState.emitChiselAssertsAsSVA)) {
+    case VerificationFlavor::IfElseFatal: {
+      assert(isa<AssertOp>(op) && "only assert is expected");
+      // Handle the `ifElseFatal` format, which does not emit an SVA but
+      // rather a process that uses $error and $fatal to perform the checks.
+      auto boolType = IntegerType::get(builder.getContext(), 1);
       predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
 
@@ -4468,35 +4484,42 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       });
       return;
     }
+    case VerificationFlavor::SVA: {
+      // Formulate the `enable -> predicate` as `!enable | predicate`.
+      // Except for covers, combine them: enable & predicate
+      if (!isCover) {
+        auto notEnable =
+            comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+        predicate =
+            builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
+      } else {
+        predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+      }
 
-    // Formulate the `enable -> predicate` as `!enable | predicate`.
-    // Except for covers, combine them: enable & predicate
-    if (!isCover) {
-      auto notEnable =
-          comb::createOrFoldNot(enable, builder, /*twoState=*/true);
-      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
-    } else {
-      predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+      // Handle the regular SVA case.
+      sv::EventControl event;
+      switch (opEventControl) {
+      case EventControl::AtPosEdge:
+        event = circt::sv::EventControl::AtPosEdge;
+        break;
+      case EventControl::AtEdge:
+        event = circt::sv::EventControl::AtEdge;
+        break;
+      case EventControl::AtNegEdge:
+        event = circt::sv::EventControl::AtNegEdge;
+        break;
+      }
+
+      buildConcurrentVerifOp(
+          builder, opName,
+          circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
+          predicate, prefixedLabel, message, messageOps);
+      return;
     }
-
-    // Handle the regular SVA case.
-    sv::EventControl event;
-    switch (opEventControl) {
-    case EventControl::AtPosEdge:
-      event = circt::sv::EventControl::AtPosEdge;
-      break;
-    case EventControl::AtEdge:
-      event = circt::sv::EventControl::AtEdge;
-      break;
-    case EventControl::AtNegEdge:
-      event = circt::sv::EventControl::AtNegEdge;
-      break;
+    case VerificationFlavor::None:
+      llvm_unreachable(
+          "flavor `None` must be converted into one of concreate flavors");
     }
-
-    buildConcurrentVerifOp(
-        builder, opName,
-        circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, prefixedLabel, message, messageOps);
   };
 
   // Wrap the verification statement up in the optional preprocessor

@@ -1,5 +1,5 @@
 ; RUN: firtool --verify-diagnostics --verilog %s --lowering-options=emittedLineLength=200 --add-companion-assume | FileCheck %s
-; RUN: firtool --verify-diagnostics --verilog --emit-chisel-asserts-as-sva %s --lowering-options=emittedLineLength=200 --add-companion-assume | FileCheck %s --check-prefix=SVA
+; RUN: firtool --verify-diagnostics --verilog --verification-flavor=sva %s --lowering-options=emittedLineLength=200 --add-companion-assume | FileCheck %s --check-prefix=SVA
 ; Tests extracted from:
 ; - test/scala/firrtl/extractverif/ExtractAssertsSpec.scala
 

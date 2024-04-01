@@ -166,8 +166,8 @@ circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
                                     bool value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetEmitChiselAssertsAsSVA(CirctFirtoolFirtoolOptions options,
-                                             bool value);
+circtFirtoolOptionsSetverificationFlavor(CirctFirtoolFirtoolOptions options,
+                                         bool value);
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
     CirctFirtoolFirtoolOptions options, bool value);
