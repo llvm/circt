@@ -34,7 +34,7 @@ enum class VerificationFlavor {
   // Use SVA.
   SVA
 };
-}
+} // namespace firrtl
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
