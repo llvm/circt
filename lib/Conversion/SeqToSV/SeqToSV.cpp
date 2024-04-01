@@ -32,6 +32,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Mutex.h"
 
 #define DEBUG_TYPE "lower-seq-to-sv"
 
@@ -405,32 +406,6 @@ void SeqToSVPass::runOnOperation() {
 
   FirMemLowering memLowering(circuit);
 
-  auto randomInitFragmentName =
-      FlatSymbolRefAttr::get(context, "RANDOM_INIT_FRAGMENT");
-  auto randomInitRegFragmentName =
-      FlatSymbolRefAttr::get(context, "RANDOM_INIT_REG_FRAGMENT");
-  auto randomInitMemFragmentName =
-      FlatSymbolRefAttr::get(context, "RANDOM_INIT_MEM_FRAGMENT");
-
-  auto regFragments = ArrayAttr::get(
-      context, {randomInitFragmentName, randomInitRegFragmentName});
-  auto memFragments = ArrayAttr::get(
-      context, {randomInitFragmentName, randomInitMemFragmentName});
-
-  auto addFragments = [&](HWModuleOp module, ArrayAttr fragments) {
-    ArrayAttr newFragments;
-    if (auto others =
-            module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName())) {
-      SmallVector<Attribute> attributes = llvm::to_vector(others);
-      for (Attribute attr : fragments)
-        attributes.push_back(attr);
-      newFragments = ArrayAttr::get(context, attributes);
-    } else {
-      newFragments = fragments;
-    }
-    module->setAttr(emit::getFragmentsAttrName(), newFragments);
-  };
-
   // Identify memories and group them by module.
   auto uniqueMems = memLowering.collectMemories(modules);
   MapVector<HWModuleOp, SmallVector<FirMemLowering::MemoryConfig>> memsByModule;
@@ -448,25 +423,63 @@ void SeqToSVPass::runOnOperation() {
   // Lower memories and registers in modules in parallel.
   bool needsRegRandomization = false;
   bool needsMemRandomization = false;
+
+  struct FragmentInfo {
+    bool needsRegFragment;
+    bool needsMemFragment;
+  };
+  DenseMap<HWModuleOp, FragmentInfo> moduleFragmentInfo;
+  llvm::sys::SmartMutex<true> fragmentsMutex;
+
   mlir::parallelForEach(&getContext(), modules, [&](HWModuleOp module) {
     SeqToSVTypeConverter typeConverter;
     FirRegLowering regLowering(typeConverter, module, disableRegRandomization,
                                emitSeparateAlwaysBlocks);
     regLowering.lower();
     if (regLowering.needsRegRandomization()) {
-      if (!disableRegRandomization)
-        addFragments(module, regFragments);
+      if (!disableRegRandomization) {
+        llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
+        moduleFragmentInfo[module].needsRegFragment = true;
+      }
       needsRegRandomization = true;
     }
     numSubaccessRestored += regLowering.numSubaccessRestored;
 
     if (auto *it = memsByModule.find(module); it != memsByModule.end()) {
       memLowering.lowerMemoriesInModule(module, it->second);
-      if (!disableMemRandomization)
-        addFragments(module, memFragments);
+      if (!disableMemRandomization) {
+        llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
+        moduleFragmentInfo[module].needsMemFragment = true;
+      }
       needsMemRandomization = true;
     }
   });
+
+  auto randomInitFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_FRAGMENT");
+  auto randomInitRegFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_REG_FRAGMENT");
+  auto randomInitMemFragmentName =
+      FlatSymbolRefAttr::get(context, "RANDOM_INIT_MEM_FRAGMENT");
+
+  for (auto &[module, info] : moduleFragmentInfo) {
+    assert((info.needsRegFragment || info.needsMemFragment) &&
+           "module should use memories or registers");
+
+    SmallVector<Attribute> fragmentAttrs;
+    if (auto others =
+            module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName()))
+      fragmentAttrs = llvm::to_vector(others);
+
+    if (info.needsRegFragment)
+      fragmentAttrs.push_back(randomInitRegFragmentName);
+    if (info.needsMemFragment)
+      fragmentAttrs.push_back(randomInitMemFragmentName);
+    fragmentAttrs.push_back(randomInitFragmentName);
+
+    module->setAttr(emit::getFragmentsAttrName(),
+                    ArrayAttr::get(context, fragmentAttrs));
+  }
 
   // Mark all ops which can have clock types as illegal.
   SeqToSVTypeConverter typeConverter;

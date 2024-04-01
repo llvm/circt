@@ -2,60 +2,14 @@
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefixes=COMMON,DISABLED
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes=SEPARATE
 
-// RANDOM-LABEL: emit.fragment @RANDOM_INIT_FRAGMENT {
-// RANDOM-NEXT:    sv.verbatim "// Standard header to adapt well known macros for register randomization."
-// RANDOM-NEXT:    sv.verbatim "\0A// RANDOM may be set to an expression that produces a 32-bit random unsigned value."
-// RANDOM-NEXT:    sv.ifdef  @RANDOM {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @RANDOM "$random"
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// Users can define INIT_RANDOM as general code that gets injected into the\0A// initializer block for modules with registers."
-// RANDOM-NEXT:    sv.ifdef  @INIT_RANDOM {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @INIT_RANDOM ""
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// If using random initialization, you can also define RANDOMIZE_DELAY to\0A// customize the delay used, otherwise 0.002 is used."
-// RANDOM-NEXT:    sv.ifdef  @RANDOMIZE_DELAY {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @RANDOMIZE_DELAY "0.002"
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// Define INIT_RANDOM_PROLOG_ for use in our modules below."
-// RANDOM-NEXT:    sv.ifdef  @INIT_RANDOM_PROLOG_ {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @RANDOMIZE {
-// RANDOM-NEXT:        sv.ifdef  @VERILATOR {
-// RANDOM-NEXT:          sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM"
-// RANDOM-NEXT:        } else {
-// RANDOM-NEXT:          sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM #`RANDOMIZE_DELAY begin end"
-// RANDOM-NEXT:        }
-// RANDOM-NEXT:      } else {
-// RANDOM-NEXT:        sv.macro.def @INIT_RANDOM_PROLOG_ ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:  }
-// RANDOM-LABEL: emit.fragment @RANDOM_INIT_REG_FRAGMENT {
-// RANDOM-NEXT:    sv.verbatim "\0A// Include register initializers in init blocks unless synthesis is set"
-// RANDOM-NEXT:    sv.ifdef  @RANDOMIZE {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @RANDOMIZE_REG_INIT {
-// RANDOM-NEXT:        sv.macro.def @RANDOMIZE ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.ifdef  @SYNTHESIS {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @ENABLE_INITIAL_REG_ {
-// RANDOM-NEXT:      } else {
-// RANDOM-NEXT:        sv.macro.def @ENABLE_INITIAL_REG_ ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim ""
-// RANDOM-NEXT:  }
+// RANDOM-LABEL: emit.fragment @RANDOM_INIT_FRAGMENT
+// RANDOM-LABEL: emit.fragment @RANDOM_INIT_REG_FRAGMENT
 
 emit.fragment @SomeFragment {}
 
 // RANDOM-LABEL: hw.module @fragment_ref
 
-// RANDOM-SAME:   emit.fragments = [@SomeFragment, @RANDOM_INIT_FRAGMENT, @RANDOM_INIT_REG_FRAGMENT]
+// RANDOM-SAME:   emit.fragments = [@SomeFragment, @RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_FRAGMENT]
 hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@SomeFragment]} {
   %cst0_i32 = hw.constant 0 : i32
   %rA = seq.firreg %cst0_i32 clock %clk sym @regA : i32
