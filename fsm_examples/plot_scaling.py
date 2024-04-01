@@ -6,22 +6,32 @@ import pandas as pd
 
 reps = 10
 
-tb100 = "output_t100_cnull_reachsat.txt"
-tb200 = "output_t100_cnull_reachunsat.txt"
-# tb300 = "output_t300_cpos_rp0neg.txt"
-# tb400 = "output_t400_cpos_rp0neg.txt"
-# tb500 = "output_t500_cpos_rp0neg.txt"
+# tb100 = "reachability-init0-lin-cpos/output_t100_cpos_lin_init0.txt"
+# tb200 = "reachability-init0-lin-cpos/output_t200_cpos_lin_init0.txt"
+# tb300 = "reachability-init0-lin-cpos/output_t300_cpos_lin_init0.txt"
+# tb400 = "reachability-init0-lin-cpos/output_t400_cpos_lin_init0.txt"
+# tb500 = "reachability-init0-lin-cpos/output_t500_cpos_lin_init0.txt"
 
+
+tb100 = "sat-vs-unsat/output_t100_cnull_reachsat.txt"
+tb200 = "sat-vs-unsat/output_t100_cnull_reachunsat.txt"
+# tb300 = "reachability-cpos-inn-struc-pen/output_t300_cpos_rpen.txt"
+# tb400 = "reachability-cpos-inn-struc-pen/output_t400_cpos_rpen.txt"
+# tb500 = "reachability-cpos-inn-struc-pen/output_t500_cpos_rpen.txt"
 
 file10 = open(tb100)
 file20 = open(tb200)
-# file30 = open("Desktop/"+tb300)
-# file40 = open("Desktop/"+tb400)
-# file50 = open("Desktop/"+tb500)
+# file30 = open(tb300)
+# file40 = open(tb400)
+# file50 = open(tb500)
 
 
 
-col = ["#FB9F89", "#C4AF9A","#81AE9D","#2F323A"]
+col = [#"#f0f9e8",
+"#bae4bc",
+"#7bccc4",
+"#43a2ca",
+"#0868ac"]
 
 plt.rc('font', family='Helvetica')
 
@@ -106,11 +116,11 @@ for l in lines:
 
 
 
-if(s10 == s20):# and s20==s30 and s30==s40 and s40==s50):
-    df = pd.DataFrame({'states':s10, 'tB=100,S':d10, 'tB=100,U':d20})# 'tB=300':d30, 'tB=400':d40, 'tB=500':d50})
+if(s10 == s20):
+    df = pd.DataFrame({'states':s10, 'UNSAT':d10, 'SAT':d20})
     df1=df.sort_values(by=['states'])
     # print(df1)
-    plot = df1.plot(x='states', color=col, title='Time scaling for different-sized FSMs in relation to time bound (tB)')
+    plot = df1.plot(x='states', color=col, figsize=(10,5))
     plt.xlabel('#states')
     plt.ylabel('time [s]')    
     # plt.show()  
@@ -137,7 +147,7 @@ if(s10 == s20):# and s20==s30 and s30==s40 and s40==s50):
         
 
 
-    plt.savefig("reach_sat_unsat.pdf")
+    plt.savefig("reach-struc-cpos-sat-unsat.png", dpi=300)
 else:
     print("ERR")
 

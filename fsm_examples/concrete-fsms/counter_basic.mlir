@@ -7,9 +7,12 @@ fsm.machine @top() -> () attributes {initialState = "A"} {
 
   fsm.state @A output  {
   } transitions {
-    fsm.transition @A action {
+    fsm.transition @B action {
       %add1 = comb.add %cnt, %c_1 : i16
       fsm.update %cnt, %add1 : i16
     }
   }
+
+  fsm.state @B output  {
+  } transitions {}
 }
