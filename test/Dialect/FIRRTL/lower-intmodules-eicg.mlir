@@ -11,7 +11,7 @@ firrtl.circuit "FixupEICGWrapper" {
   firrtl.module @FixupEICGWrapper(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
     // CHECK-NOEICG: firrtl.instance
     // CHECK-EICG-NOT: firrtl.instance
-    // CHECK-EICG: firrtl.int.generic "circt_clock_gate"
+    // CHECK-EICG: firrtl.int.generic.expr "circt_clock_gate"
     %ckg_in, %ckg_test_en, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
     firrtl.strictconnect %ckg_test_en, %en : !firrtl.uint<1>
@@ -31,7 +31,7 @@ firrtl.circuit "FixupEICGWrapper2" {
   firrtl.module @FixupEICGWrapper2(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
     // CHECK-NOEICG: firrtl.instance
     // CHECK-EICG-NOT: firrtl.instance
-    // CHECK-EICG: firrtl.int.generic "circt_clock_gate"
+    // CHECK-EICG: firrtl.int.generic.expr "circt_clock_gate"
     %ckg_in, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
     firrtl.strictconnect %ckg_in, %clock : !firrtl.clock
     firrtl.strictconnect %ckg_en, %en : !firrtl.uint<1>

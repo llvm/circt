@@ -100,15 +100,14 @@ void LowerIntmodulesPass::runOnOperation() {
 
       // Create the replacement operation.
       if (outputs.empty()) {
-        // If no outputs, just create the operation.
-        builder.create<GenericIntrinsicOp>(/*result=*/Type(),
-                                           op.getIntrinsicAttr(), inputs,
-                                           op.getParameters());
+        // If no outputs, convert to generic intrinsic statement.
+        builder.create<GenericIntrinsicStmtOp>(op.getIntrinsicAttr(), inputs,
+                                               op.getParameters());
 
       } else if (outputs.size() == 1) {
         // For single output, the result is the output.
         auto resultType = outputs.front().element.type;
-        auto intop = builder.create<GenericIntrinsicOp>(
+        auto intop = builder.create<GenericIntrinsicExprOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
       } else {
@@ -116,7 +115,7 @@ void LowerIntmodulesPass::runOnOperation() {
         // and replace users with subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
             outputs, [](const auto &info) { return info.element; }));
-        auto intop = builder.create<GenericIntrinsicOp>(
+        auto intop = builder.create<GenericIntrinsicExprOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         for (auto &output : outputs)
           output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
@@ -157,7 +156,7 @@ void LowerIntmodulesPass::runOnOperation() {
         };
 
         auto inputs = replaceResults(builder, inst.getResults().drop_back());
-        auto intop = builder.create<GenericIntrinsicOp>(
+        auto intop = builder.create<GenericIntrinsicExprOp>(
             builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());
         inst.getResults().back().replaceAllUsesWith(intop.getResult());

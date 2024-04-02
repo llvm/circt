@@ -53,7 +53,8 @@ public:
             LTLConcatIntrinsicOp, LTLNotIntrinsicOp, LTLImplicationIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
             LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
-            HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp, GenericIntrinsicOp,
+            HasBeenResetIntrinsicOp, FPGAProbeIntrinsicOp,
+            GenericIntrinsicExprOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -180,7 +181,7 @@ public:
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
   HANDLE(HasBeenResetIntrinsicOp, Unhandled);
   HANDLE(FPGAProbeIntrinsicOp, Unhandled);
-  HANDLE(GenericIntrinsicOp, Unhandled);
+  HANDLE(GenericIntrinsicExprOp, Unhandled);
 
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
@@ -226,12 +227,13 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<
-            AttachOp, ConnectOp, StrictConnectOp, RefDefineOp, ForceOp,
-            PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp,
-            PropAssignOp, RefForceOp, RefForceInitialOp, RefReleaseOp,
-            RefReleaseInitialOp, VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
-            UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp, LayerBlockOp>(
+        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
+                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
+                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
+                       RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+                       VerifAssertIntrinsicOp, VerifAssumeIntrinsicOp,
+                       UnclockedAssumeIntrinsicOp, VerifCoverIntrinsicOp,
+                       LayerBlockOp, GenericIntrinsicStmtOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -279,6 +281,7 @@ public:
   HANDLE(VerifCoverIntrinsicOp);
   HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
+  HANDLE(GenericIntrinsicStmtOp);
 
 #undef HANDLE
 };
