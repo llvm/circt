@@ -65,6 +65,17 @@ firrtl.circuit "Foo" {
     firrtl.strictconnect %in2, %clk : !firrtl.clock
   }
 
+  // CHECK-NOT: ClockDivider1
+  firrtl.intmodule @ClockDivider1<POW_2: i8 = 8>(in in: !firrtl.clock, out out: !firrtl.clock) attributes {intrinsic = "circt.clock_div"}
+
+  // CHECK: ClockDivider
+  firrtl.module @ClockDivider(in %clk: !firrtl.clock) {
+    // CHECK-NOT: ClockDivider1
+    // CHECK: firrtl.int.clock_div
+    %in2, %out2 = firrtl.instance "" @ClockDivider1(in in: !firrtl.clock, out out: !firrtl.clock)
+    firrtl.strictconnect %in2, %clk : !firrtl.clock
+  }
+
   // CHECK-NOT: LTLAnd
   // CHECK-NOT: LTLOr
   // CHECK-NOT: LTLDelay1
