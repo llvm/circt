@@ -14,6 +14,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Analysis/CFGLoopInfo.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
@@ -245,6 +246,12 @@ void handshake::removeBasicBlocks(Region &r) {
     // Else, assume that this is a return-like terminator op.
     terminatorLike.moveBefore(entryBlock, entryBlock->end());
   }
+}
+
+LogicalResult
+HandshakeLowering::runSSAMaximization(ConversionPatternRewriter &rewriter,
+                                      Value entryCtrl) {
+  return maximizeSSA(entryCtrl, rewriter);
 }
 
 void removeBasicBlocks(handshake::FuncOp funcOp) {

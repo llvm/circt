@@ -7,6 +7,7 @@ add_circt_library(CIRCTCFToHandshake
   DEPENDS
   CIRCTConversionPassIncGen
   MLIRArithDialect
+  CIRCTTransforms
 
   LINK_LIBS PUBLIC
   CIRCTHandshake
