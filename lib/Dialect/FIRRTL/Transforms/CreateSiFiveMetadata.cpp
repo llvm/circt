@@ -14,31 +14,21 @@
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
-#include "circt/Dialect/OM/OMAttributes.h"
-#include "circt/Dialect/OM/OMDialect.h"
-#include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/LLVM.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -352,26 +342,31 @@ struct ObjectModelIR {
     auto addPort = [&](Value obj, StringRef fieldName) {
       auto portIndex = sifiveMetadataClass.getNumPorts();
       SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
-          {portIndex,
-           PortInfo(builder.getStringAttr(fieldName + "_field_" + Twine(portIndex)),
-                    obj.getType(), Direction::Out)}};
+          {portIndex, PortInfo(builder.getStringAttr(fieldName + "_field_" +
+                                                     Twine(portIndex)),
+                               obj.getType(), Direction::Out)}};
       sifiveMetadataClass.insertPorts(newPorts);
       auto blockarg = sifiveMetadataClass.getBodyBlock()->addArgument(
           obj.getType(), topMod->getLoc());
       builder.create<PropAssignOp>(blockarg, obj);
     };
     if (blackBoxMetadataClass)
-      addPort(builder.create<ObjectOp>(
-          blackBoxMetadataClass, builder.getStringAttr("blackbox_metadata")), "blackbox");
+      addPort(
+          builder.create<ObjectOp>(blackBoxMetadataClass,
+                                   builder.getStringAttr("blackbox_metadata")),
+          "blackbox");
 
     if (memoryMetadataClass)
-      addPort(builder.create<ObjectOp>(
-          memoryMetadataClass, builder.getStringAttr("memory_metadata")), "memory");
+      addPort(
+          builder.create<ObjectOp>(memoryMetadataClass,
+                                   builder.getStringAttr("memory_metadata")),
+          "memory");
 
     if (retimeModulesMetadataClass)
       addPort(builder.create<ObjectOp>(
-          retimeModulesMetadataClass,
-          builder.getStringAttr("retime_modules_metadata")), "retime");
+                  retimeModulesMetadataClass,
+                  builder.getStringAttr("retime_modules_metadata")),
+              "retime");
 
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
     return builder.create<ObjectOp>(sifiveMetadataClass,
@@ -478,8 +473,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     // macro replacement. The requirements for macro replacement::
     // 1. read latency and write latency of one.
     // 2. undefined read-under-write behavior.
-    if (!((mem.getReadLatency() == 1 && mem.getWriteLatency() == 1) &&
-          width > 0))
+    if (mem.getReadLatency() != 1 || mem.getWriteLatency() != 1 || width <= 0)
       return;
     auto memExtSym = FlatSymbolRefAttr::get(SymbolTable::getSymbolName(mem));
     auto symId = seqMemSymbols.size();
