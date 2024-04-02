@@ -14,6 +14,7 @@
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -67,9 +68,12 @@ struct ObjectModelIR {
     AnnotationSet annos(op);
     annos.addAnnotations(DictionaryAttr::get(context, fields));
     annos.applyToOperation(op);
+    TargetKind kind = TargetKind::Reference;
+    if (isa<InstanceOp, FModuleLike>(op))
+      kind = TargetKind::Instance;
 
     // Create the path operation.
-    return builderOM.create<PathOp>(TargetKind::Reference, id);
+    return builderOM.create<PathOp>(kind, id);
   }
 
   // Create a ClassOp, with the specified fieldNames and fieldTypes as ports.
@@ -345,17 +349,29 @@ struct ObjectModelIR {
         builder.getStringAttr("SiFive_Metadata"), mports);
     builder.setInsertionPointToStart(sifiveMetadataClass.getBodyBlock());
 
+    auto addPort = [&](Value obj, StringRef fieldName) {
+      auto portIndex = sifiveMetadataClass.getNumPorts();
+      SmallVector<std::pair<unsigned, PortInfo>> newPorts = {
+          {portIndex,
+           PortInfo(builder.getStringAttr(fieldName + "_field_" + Twine(portIndex)),
+                    obj.getType(), Direction::Out)}};
+      sifiveMetadataClass.insertPorts(newPorts);
+      auto blockarg = sifiveMetadataClass.getBodyBlock()->addArgument(
+          obj.getType(), topMod->getLoc());
+      builder.create<PropAssignOp>(blockarg, obj);
+    };
     if (blackBoxMetadataClass)
-      builder.create<ObjectOp>(blackBoxMetadataClass,
-                               builder.getStringAttr("blackbox_metadata"));
+      addPort(builder.create<ObjectOp>(
+          blackBoxMetadataClass, builder.getStringAttr("blackbox_metadata")), "blackbox");
+
     if (memoryMetadataClass)
-      builder.create<ObjectOp>(memoryMetadataClass,
-                               builder.getStringAttr("memory_metadata"));
+      addPort(builder.create<ObjectOp>(
+          memoryMetadataClass, builder.getStringAttr("memory_metadata")), "memory");
 
     if (retimeModulesMetadataClass)
-      builder.create<ObjectOp>(
+      addPort(builder.create<ObjectOp>(
           retimeModulesMetadataClass,
-          builder.getStringAttr("retime_modules_metadata"));
+          builder.getStringAttr("retime_modules_metadata")), "retime");
 
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
     return builder.create<ObjectOp>(sifiveMetadataClass,

@@ -164,7 +164,7 @@ circuit TestHarness:
 ; MLIR_OUT:    om.class.field @extraPorts, %extraPorts_in : !om.list<!om.class.type<@ExtraPortsMemorySchema>>
 ; MLIR_OUT:  }
 ; MLIR_OUT:  om.class @MemoryMetadata(%basepath: !om.basepath)
-; MLIR_OUT:     om.path_create reference %basepath @memNLA
+; MLIR_OUT:     om.path_create instance %basepath @memNLA
 ; MLIR_OUT:     om.list_create
 ; MLIR_OUT:     om.object @MemorySchema
 ; MLIR_OUT:     om.constant "foo_m_ext" : !om.string
@@ -176,7 +176,7 @@ circuit TestHarness:
 ; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
-; MLIR_OUT:     om.path_create reference %basepath @memNLA_0
+; MLIR_OUT:     om.path_create instance %basepath @memNLA_0
 ; MLIR_OUT:     om.list_create
 ; MLIR_OUT:     om.object @MemorySchema
 ; MLIR_OUT:     om.constant "bar_m_ext" : !om.string
@@ -188,8 +188,8 @@ circuit TestHarness:
 ; MLIR_OUT:     om.constant #om.integer<0 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
 ; MLIR_OUT:     om.constant #om.integer<1 : ui32> : !om.integer
-; MLIR_OUT:     om.path_create reference %basepath @memNLA_1
-; MLIR_OUT:     om.path_create reference %basepath @memNLA_2
+; MLIR_OUT:     om.path_create instance %basepath @memNLA_1
+; MLIR_OUT:     om.path_create instance %basepath @memNLA_2
 ; MLIR_OUT:     om.list_create
 ; MLIR_OUT:     om.object @MemorySchema
 ; MLIR_OUT:     om.constant "baz_m_ext" : !om.string

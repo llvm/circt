@@ -39,9 +39,9 @@ firrtl.circuit "retime0" attributes { annotations = [{
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata()>)
+// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata
 // CHECK-SAME:               [{class = "circt.tracker", id = distinct[0]<>}]
-// CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata()
+// CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata
 // CHECK:         firrtl.module @retime1() {
 // CHECK:         firrtl.module @retime2() attributes {annotations = [{class = "circt.tracker", id = distinct[1]<>}]}
 
@@ -49,11 +49,11 @@ firrtl.circuit "retime0" attributes { annotations = [{
 // CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]] : !firrtl.path
 // CHECK:  }
 // CHECK:  firrtl.class @RetimeModulesMetadata(out %[[retime0_field:.+]]: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>, out %[[retime2field:.+]]: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>)
-// CHECK:    firrtl.path reference distinct[0]<>
+// CHECK:    firrtl.path instance distinct[0]<>
 // CHECK:    %retime0 = firrtl.object @RetimeModulesSchema
 // CHECK:    firrtl.object.subfield %retime0
 // CHECK:    firrtl.propassign %[[retime0_field]], %retime0 : !firrtl.class<@RetimeModulesSchema
-// CHECK:    firrtl.path reference distinct[1]<>
+// CHECK:    firrtl.path instance distinct[1]<>
 // CHECK:    %retime2 = firrtl.object @RetimeModulesSchema
 // CHECK:    firrtl.object.subfield %retime2
 // CHECK:    firrtl.propassign %[[retime2field]], %retime2
@@ -207,7 +207,7 @@ firrtl.circuit "OneMemory" {
   // CHECK:    firrtl.propassign %hierarchy, %hierarchy_in : !firrtl.list<path>
   
   // CHECK: firrtl.class @MemoryMetadata
-  // CHECK:   firrtl.path reference distinct[0]<>
+  // CHECK:   firrtl.path instance distinct[0]<>
   // CHECK:   %MWrite_ext = firrtl.object @MemorySchema
   // CHECK:   firrtl.string "MWrite_ext"
   // CHECK:   firrtl.object.subfield %MWrite_ext[name_in]
