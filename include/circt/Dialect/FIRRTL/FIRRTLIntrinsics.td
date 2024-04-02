@@ -123,6 +123,22 @@ def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", [Pure]> {
   let assemblyFormat = "$input attr-dict";
 }
 
+def ClockDividerIntrinsicOp : FIRRTLOp<"int.clock_div", [Pure]> {
+  let summary = "Produces a clock divided by a power of two";
+  let description = [{
+    The `firrtl.int.clock_div` takes a clock signal and divides it by a
+    power-of-two ratio. The output clock is phase-aligned to the input clock.
+
+    ```
+    %div_clock = seq.clock_div %clock by 1
+    ```
+  }];
+
+  let arguments = (ins NonConstClockType:$input, I8Attr:$pow2);
+  let results = (outs NonConstClockType:$output);
+  let assemblyFormat = "$input `by` $pow2 attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Verification Intrinsics
 //===----------------------------------------------------------------------===//

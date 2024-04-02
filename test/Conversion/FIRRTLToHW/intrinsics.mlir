@@ -162,13 +162,18 @@ firrtl.circuit "Intrinsics" {
     firrtl.int.fpga_probe %clock, %in : !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: hw.module @ClockInverter
-  firrtl.module @ClockInverter(
+  // CHECK-LABEL: hw.module @ClockOps
+  firrtl.module @ClockOps(
     in %clock_in: !firrtl.clock,
-    out %clock_out: !firrtl.clock
+    out %clock_inv: !firrtl.clock,
+    out %clock_div: !firrtl.clock
   ) {
     // CHECK: seq.clock_inv %clock_in
-    %0 = firrtl.int.clock_inv %clock_in
-    firrtl.strictconnect %clock_out, %0 : !firrtl.clock
+    %clock_inv_out = firrtl.int.clock_inv %clock_in
+    firrtl.strictconnect %clock_inv, %clock_inv_out : !firrtl.clock
+
+    // CHECK: seq.clock_div %clock_in
+    %clock_div_out = firrtl.int.clock_div %clock_in by 4
+    firrtl.strictconnect %clock_div, %clock_div_out : !firrtl.clock
   }
 }

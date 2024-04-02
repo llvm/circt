@@ -30,6 +30,14 @@
 using namespace circt;
 using namespace firrtl;
 
+// Get parameter by the given name.  Null if not found.
+static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
+  for (auto param : params.getAsRange<ParamDeclAttr>())
+    if (param.getName().getValue().equals(name))
+      return param;
+  return {};
+}
+
 namespace {
 
 class CirctSizeofConverter : public IntrinsicConverter {
@@ -152,6 +160,32 @@ public:
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
     auto out = builder.create<ClockInverterIntrinsicOp>(in);
+    auto name = inst.getInstanceName();
+    Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
+    builder.create<StrictConnectOp>(outWire, out);
+    inst.getResult(1).replaceAllUsesWith(outWire);
+    inst.erase();
+    return success();
+  }
+};
+
+class CirctClockDividerConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check() override {
+    return hasNPorts(2) || namedPort(0, "in") || namedPort(1, "out") ||
+           hasNParam(1) || namedIntParam("POW_2");
+  }
+
+  LogicalResult convert(InstanceOp inst) override {
+    auto pow2 = cast<IntegerAttr>(
+        getNamedParam(mod.getParameters(), "POW_2").getValue());
+
+    ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+    auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
+    inst.getResult(0).replaceAllUsesWith(in);
+    auto out = builder.create<ClockDividerIntrinsicOp>(in, pow2);
     auto name = inst.getInstanceName();
     Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
     builder.create<StrictConnectOp>(outWire, out);
@@ -594,14 +628,6 @@ static ParseResult allInputs(ArrayRef<PortInfo> ports) {
   return success();
 }
 
-// Get parameter by the given name.  Null if not found.
-static ParamDeclAttr getNamedParam(ArrayAttr params, StringRef name) {
-  for (auto param : params.getAsRange<ParamDeclAttr>())
-    if (param.getName().getValue().equals(name))
-      return param;
-  return {};
-}
-
 namespace {
 
 template <class OpTy, bool ifElseFatal = false>
@@ -774,6 +800,8 @@ void LowerIntrinsicsPass::runOnOperation() {
   lowering.add<CirctClockGateConverter>("circt.clock_gate", "circt_clock_gate");
   lowering.add<CirctClockInverterConverter>("circt.clock_inv",
                                             "circt_clock_inv");
+  lowering.add<CirctClockDividerConverter>("circt.clock_div",
+                                           "circt_clock_div");
   lowering.add<CirctLTLAndConverter>("circt.ltl.and", "circt_ltl_and");
   lowering.add<CirctLTLOrConverter>("circt.ltl.or", "circt_ltl_or");
   lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
