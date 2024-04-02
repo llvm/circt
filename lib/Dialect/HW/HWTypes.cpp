@@ -823,60 +823,30 @@ LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 size_t ModuleType::getPortIdForInputId(size_t idx) {
-  for (auto [i, p] : llvm::enumerate(getPorts())) {
-    if (p.dir != ModulePort::Direction::Output) {
-      if (!idx)
-        return i;
-      --idx;
-    }
-  }
-  assert(0 && "Out of bounds input port id");
-  return ~0UL;
+  assert(idx < getImpl()->inputToAbs.size() && "input port out of range");
+  return getImpl()->inputToAbs[idx];
 }
 
 size_t ModuleType::getPortIdForOutputId(size_t idx) {
-  for (auto [i, p] : llvm::enumerate(getPorts())) {
-    if (p.dir == ModulePort::Direction::Output) {
-      if (!idx)
-        return i;
-      --idx;
-    }
-  }
-  assert(0 && "Out of bounds output port id");
-  return ~0UL;
+  assert(idx < getImpl()->outputToAbs.size() && " output port out of range");
+  return getImpl()->outputToAbs[idx];
 }
 
 size_t ModuleType::getInputIdForPortId(size_t idx) {
-  auto ports = getPorts();
-  assert(ports[idx].dir != ModulePort::Direction::Output);
-  size_t retval = 0;
-  for (size_t i = 0; i < idx; ++i)
-    if (ports[i].dir != ModulePort::Direction::Output)
-      ++retval;
-  return retval;
+  auto nIdx = getImpl()->absToInput[idx];
+  assert(nIdx != ~0ULL);
+  return nIdx;
 }
 
 size_t ModuleType::getOutputIdForPortId(size_t idx) {
-  auto ports = getPorts();
-  assert(ports[idx].dir == ModulePort::Direction::Output);
-  size_t retval = 0;
-  for (size_t i = 0; i < idx; ++i)
-    if (ports[i].dir == ModulePort::Direction::Output)
-      ++retval;
-  return retval;
+  auto nIdx = getImpl()->absToOutput[idx];
+  assert(nIdx != ~0ULL);
+  return nIdx;
 }
 
-size_t ModuleType::getNumInputs() {
-  return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
-    return p.dir != ModulePort::Direction::Output;
-  });
-}
+size_t ModuleType::getNumInputs() { return getImpl()->inputToAbs.size(); }
 
-size_t ModuleType::getNumOutputs() {
-  return std::count_if(getPorts().begin(), getPorts().end(), [](auto &p) {
-    return p.dir == ModulePort::Direction::Output;
-  });
-}
+size_t ModuleType::getNumOutputs() { return getImpl()->outputToAbs.size(); }
 
 size_t ModuleType::getNumPorts() { return getPorts().size(); }
 
@@ -984,6 +954,10 @@ FunctionType ModuleType::getFuncType() {
   return FunctionType::get(getContext(), inputs, outputs);
 }
 
+ArrayRef<ModulePort> ModuleType::getPorts() const {
+  return getImpl()->getPorts();
+}
+
 FailureOr<ModuleType> ModuleType::resolveParametricTypes(ArrayAttr parameters,
                                                          LocationAttr loc,
                                                          bool emitErrors) {
@@ -1021,7 +995,7 @@ static ModulePort::Direction strToDir(StringRef str) {
 }
 
 /// Parse a list of field names and types within <>. E.g.:
-/// <foo: i7, bar: i8>
+/// <input foo: i7, output bar: i8>
 static ParseResult parsePorts(AsmParser &p,
                               SmallVectorImpl<ModulePort> &ports) {
   return p.parseCommaSeparatedList(
@@ -1060,18 +1034,6 @@ void ModuleType::print(AsmPrinter &odsPrinter) const {
   printPorts(odsPrinter, getPorts());
 }
 
-namespace circt {
-namespace hw {
-
-static bool operator==(const ModulePort &a, const ModulePort &b) {
-  return a.dir == b.dir && a.name == b.name && a.type == b.type;
-}
-static llvm::hash_code hash_value(const ModulePort &port) {
-  return llvm::hash_combine(port.dir, port.name, port.type);
-}
-} // namespace hw
-} // namespace circt
-
 ModuleType circt::hw::detail::fnToMod(Operation *op,
                                       ArrayRef<Attribute> inputNames,
                                       ArrayRef<Attribute> outputNames) {
@@ -1107,6 +1069,25 @@ ModuleType circt::hw::detail::fnToMod(FunctionType fnty,
       ports.push_back({{}, t, ModulePort::Direction::Output});
   }
   return ModuleType::get(fnty.getContext(), ports);
+}
+
+detail::ModuleTypeStorage::ModuleTypeStorage(ArrayRef<ModulePort> inPorts)
+    : ports(inPorts) {
+  size_t nextInput = 0;
+  size_t nextOutput = 0;
+  for (auto [idx, p] : llvm::enumerate(ports)) {
+    if (p.dir == ModulePort::Direction::Output) {
+      outputToAbs.push_back(idx);
+      absToOutput.push_back(nextOutput);
+      absToInput.push_back(~0ULL);
+      ++nextOutput;
+    } else {
+      inputToAbs.push_back(idx);
+      absToInput.push_back(nextInput);
+      absToOutput.push_back(~0ULL);
+      ++nextInput;
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

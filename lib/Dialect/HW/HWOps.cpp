@@ -1075,8 +1075,6 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
   assert(isa<HWModuleLike>(module) &&
          "verifier hook should only be called on modules");
 
-  auto moduleType = module.getHWModuleType();
-
   SmallPtrSet<Attribute, 4> paramNames;
 
   // Check parameter default values are sensible.
