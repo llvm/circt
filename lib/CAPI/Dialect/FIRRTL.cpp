@@ -311,6 +311,7 @@ FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
   case Flow::Duplex:
     return FIRRTL_VALUE_FLOW_DUPLEX;
   }
+  llvm_unreachable("invalid flow");
 }
 
 bool firrtlImportAnnotationsFromJSONRaw(
