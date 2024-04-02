@@ -4469,7 +4469,7 @@ private:
   ParseResult parseParameter(StringAttr &resultName, TypedAttr &resultValue,
                              SMLoc &resultLoc);
   ParseResult parseRefList(ArrayRef<PortInfo> portList,
-                           ArrayAttr &internalPathResults);
+                           ArrayAttr &internalPathsResult);
 
   ParseResult skipToModuleEnd(unsigned indent);
 
