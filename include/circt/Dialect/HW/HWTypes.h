@@ -42,7 +42,6 @@ namespace detail {
 struct ModuleTypeStorage : public TypeStorage {
   ModuleTypeStorage(ArrayRef<ModulePort> inPorts);
 
-  /// The hash key for this storage is a pair of the integer and type params.
   using KeyTy = ArrayRef<ModulePort>;
 
   /// Define the comparison function for the key type.
@@ -51,8 +50,6 @@ struct ModuleTypeStorage : public TypeStorage {
   }
 
   /// Define a hash function for the key type.
-  /// Note: This isn't necessary because std::pair, unsigned, and Type all have
-  /// hash functions already available.
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine_range(key.begin(), key.end());
   }
