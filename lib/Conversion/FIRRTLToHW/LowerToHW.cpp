@@ -4273,6 +4273,13 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
         return failure();
       operands.back() = getOrCreateIntConstant(1, 0);
     }
+
+    // If the operand was an SInt, we want to give the user the option to print
+    // it as signed decimal and have to wrap it in $signed().
+    if (auto intTy = firrtl::type_cast<IntType>(operand.getType()))
+      if (intTy.isSigned())
+        operands.back() = builder.create<sv::SystemFunctionOp>(
+            operands.back().getType(), "signed", operands.back());
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
