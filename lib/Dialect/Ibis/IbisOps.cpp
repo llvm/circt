@@ -365,23 +365,18 @@ void GetPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ThisOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  // A thisOp should always refer to the parent operation, which in turn should
-  // be an Ibis ScopeOpInterface.
-  auto parentScope =
-      dyn_cast_or_null<ScopeOpInterface>(getOperation()->getParentOp());
-  if (!parentScope)
-    return emitOpError() << "thisOp must be nested in a scope op";
-
-  if (parentScope.getScopeName() != getScopeName())
-    return emitOpError() << "thisOp refers to a parent scope of name "
-                         << getScopeName() << ", but the parent scope is named "
-                         << parentScope.getScopeName();
+  if (!getScope(ns))
+    return emitOpError() << "'" << getScopeName() << "' does not exist";
 
   return success();
 }
 
 void ThisOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), "this");
+}
+
+ScopeOpInterface ThisOp::getScope(const hw::InnerRefNamespace &ns) {
+  return ns.lookupOp<ScopeOpInterface>(getScopeNameAttr());
 }
 
 //===----------------------------------------------------------------------===//

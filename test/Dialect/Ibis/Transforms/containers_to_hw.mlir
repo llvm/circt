@@ -15,7 +15,7 @@ ibis.design @D {
 // CHECK:  }
 
 ibis.container @B {
-  %this = ibis.this #hw.innerNameRef<@D::@B>
+  %this = ibis.this <@D::@B>
   %in = ibis.port.input @in : i1 {"inputAttr"}
   %out = ibis.port.output @out : i1 {"outputAttr"}
 

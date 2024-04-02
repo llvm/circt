@@ -567,6 +567,11 @@ def ThisOp : IbisOp<"this", [
       build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// Return the scope operation which this accelerator refers to
+    ScopeOpInterface getScope(const hw::InnerRefNamespace &symbolTable);
+  }];
 }
 
 // ===---------------------------------------------------------------------===//

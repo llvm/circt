@@ -46,6 +46,7 @@
 // CHECK:           }
 // CHECK:         }
 
+ibis.design @foo {
 ibis.class @ToHandshake {
   %this = ibis.this @ToHandshake 
   ibis.method @foo(%a: i32, %b: i32, %c: i1) -> i32 {
@@ -79,4 +80,5 @@ ibis.class @ToHandshake {
     %10 = memref.load %alloca[] : memref<i32>
     ibis.return %10 : i32
   }
+}
 }
