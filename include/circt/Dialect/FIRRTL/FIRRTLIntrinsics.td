@@ -106,7 +106,7 @@ def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
   }];
 }
 
-def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", []> {
+def ClockInverterIntrinsicOp : FIRRTLOp<"int.clock_inv", [Pure]> {
   let summary = "Inverts the clock signal";
 
   let description = [{
