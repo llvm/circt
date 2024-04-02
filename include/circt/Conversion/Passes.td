@@ -438,8 +438,20 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
-    Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
-           "bool", "false","Convert all Chisel asserts to SVA">
+    Option<"verificationFlavor", "verification-flavor",
+           "circt::firrtl::VerificationFlavor", 
+           "circt::firrtl::VerificationFlavor::None", 
+           "Specify a verification flavor used in the lowering", 
+           [{::llvm::cl::values(
+            clEnumValN(circt::firrtl::VerificationFlavor::None, 
+              "none", "Use the flavor specified by the op"),
+            clEnumValN(circt::firrtl::VerificationFlavor::IfElseFatal,
+              "if-else-fatal", "Use Use `if(cond) else $fatal(..)` format"),
+            clEnumValN(circt::firrtl::VerificationFlavor::Immediate, 
+              "immediate", "Use immediate verif statements"),
+            clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
+          )}]
+           >
   ];
 }
 

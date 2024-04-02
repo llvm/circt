@@ -247,7 +247,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       circt::firrtl::createLintingPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
-                                       opt.shouldEmitChiselAssertsAsSVA()));
+                                       opt.getVerificationFlavor()));
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -583,10 +583,18 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Annotate mux pragmas for memory array access"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> emitChiselAssertsAsSVA{
-      "emit-chisel-asserts-as-sva",
-      llvm::cl::desc("Convert all chisel asserts into SVA"),
-      llvm::cl::init(false)};
+  llvm::cl::opt<firrtl::VerificationFlavor> verificationFlavor{
+      "verification-flavor",
+      llvm::cl::desc("Specify a verification flavor used in LowerFIRRTLToHW"),
+      llvm::cl::values(
+          clEnumValN(firrtl::VerificationFlavor::None, "none",
+                     "Use the flavor specified by the op"),
+          clEnumValN(firrtl::VerificationFlavor::IfElseFatal, "if-else-fatal",
+                     "Use Use `if(cond) else $fatal(..)` format"),
+          clEnumValN(firrtl::VerificationFlavor::Immediate, "immediate",
+                     "Use immediate verif statements"),
+          clEnumValN(firrtl::VerificationFlavor::SVA, "sva", "Use SVA")),
+      llvm::cl::init(firrtl::VerificationFlavor::None)};
 
   llvm::cl::opt<bool> emitSeparateAlwaysBlocks{
       "emit-separate-always-blocks",
@@ -697,9 +705,9 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
       enableAnnotationWarning(false), addMuxPragmas(false),
-      emitChiselAssertsAsSVA(false), emitSeparateAlwaysBlocks(false),
-      etcDisableInstanceExtraction(false), etcDisableRegisterExtraction(false),
-      etcDisableModuleInlining(false),
+      verificationFlavor(firrtl::VerificationFlavor::None),
+      emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
+      etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
@@ -737,7 +745,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
   addMuxPragmas = clOptions->addMuxPragmas;
-  emitChiselAssertsAsSVA = clOptions->emitChiselAssertsAsSVA;
+  verificationFlavor = clOptions->verificationFlavor;
   emitSeparateAlwaysBlocks = clOptions->emitSeparateAlwaysBlocks;
   etcDisableInstanceExtraction = clOptions->etcDisableInstanceExtraction;
   etcDisableRegisterExtraction = clOptions->etcDisableRegisterExtraction;
