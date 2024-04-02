@@ -20,7 +20,7 @@ include "FIRRTLDialect.td"
 //===----------------------------------------------------------------------===//
 
 def GenericIntrinsicExprOp : FIRRTLOp<"int.generic.expr",
-    [HasCustomSSAName]> {
+    [HasCustomSSAName, Pure]> {
   let summary = "Generic intrinsic operation for FIRRTL intrinsic expressions";
 
   let arguments = (
