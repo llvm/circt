@@ -26,16 +26,15 @@ ibis.container @C {
 
 // CHECK-LABEL:   ibis.container @AccessChild {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@AccessChild>
-// CHECK:           %[[VAL_1:.*]] = ibis.container.instance @c, @C
+// CHECK:           %[[VAL_1:.*]] = ibis.container.instance @c, <@foo::@C
 // CHECK:           "foo.user"(%[[VAL_1]]) : (!ibis.scoperef<@foo::@C>) -> ()
 // CHECK:         }
 ibis.container @AccessChild {
   %this = ibis.this <@foo::@AccessChild>
-  %c = ibis.container.instance @c, @C
+  %c = ibis.container.instance @c, <@foo::@C>
   %c_ref = ibis.path [
     #ibis.step<child , @c : !ibis.scoperef<@foo::@C>>
   ]
   "foo.user"(%c_ref) : (!ibis.scoperef<@foo::@C>) -> ()
 }
-
 }

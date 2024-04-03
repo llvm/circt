@@ -248,54 +248,27 @@ LogicalResult ReturnOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult GetVarOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  assert(false && "Not implemented for new IR");
-  return failure();
+  auto varOp = getVar(ns);
+  if (!varOp)
+    return failure();
 
-  // TODO: Fix this code.
-  // ScopeRefType parentType = getInstance().getType().cast<ScopeRefType>();
-  // auto varOp = ns.lookupOp<VarOp>(hw::InnerRefAttr::get(
-  //     parentType.getScopeRef().getAttr(), getVarNameAttr().getAttr()));
+  // Ensure that the dereferenced type is the same type as the variable type.
+  if (varOp.getType() != getType())
+    return emitOpError() << "dereferenced type (" << getType()
+                         << ") must match variable type (" << varOp.getType()
+                         << ")";
 
-  // if (!varOp)
-  //   return failure();
-
-  // // Ensure that the dereferenced type is the same type as the variable type.
-  // if (varOp.getType() != getType())
-  //   return emitOpError() << "dereferenced type (" << getType()
-  //                        << ") must match variable type (" << varOp.getType()
-  //                        << ")";
-
-  // return success();
+  return success();
 }
 
-FailureOr<VarOp> GetVarOp::getVar(const hw::InnerRefNamespace &ns) {
-  // The 'instance' value holds the inner ref which the variable is contained
-  // within.
-  auto targetClassInnerRef =
-      getInstance().getType().cast<ScopeRefType>().getScopeRef();
+VarOp GetVarOp::getVar(const hw::InnerRefNamespace &ns) {
+  ScopeRefType parentType = getInstance().getType().cast<ScopeRefType>();
+  auto scopeRefOp = ns.lookupOp<ScopeOpInterface>(parentType.getScopeRef());
 
-  // Construct the nested symbol.
-  SmallVector<Attribute> path;
-  path.push_back(targetClassInnerRef.getAttr());
-  path.push_back(getVarNameAttr());
-  auto varPath = mlir::ArrayAttr::get(path);
+  if (!scopeRefOp)
+    return nullptr;
 
-  auto targetClass =
-      lookupInModule<ClassOp>(getOperation(), targetClassSym, symbolTable);
-
-  if (!targetClass)
-    return emitOpError() << "'" << targetClassSym << "' does not exist";
-
-  // Lookup the variable inside the class scope.
-  auto varName = getVarName();
-  // @teqdruid TODO: make this more efficient using
-  // innersymtablecollection when that's available to non-firrtl dialects.
-  auto var = dyn_cast_or_null<VarOp>(
-      symbolTable->lookupSymbolIn(targetClass.getOperation(), varName));
-  if (!var)
-    return emitOpError() << "'" << varName << "' does not exist in '"
-                         << targetClassSym << "'";
-  return {var};
+  return dyn_cast_or_null<VarOp>(scopeRefOp.lookupInnerSym(getVarName()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -309,12 +282,6 @@ LogicalResult InstanceOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return success();
 }
 
-// ClassOp InstanceOp::getClass(const hw::InnerRefNamespace *ns) {
-//   if
-//   return
-//                                  symbolTable);
-// }
-
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), genValueNameAttr(getResult()));
 }
@@ -324,28 +291,37 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult GetPortOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
-  // Lookup the target module type of the instance class reference.
-  // ScopeRefType crt = getInstance().getType().cast<ScopeRefType>();
-  // Operation *targetOp = ns.lookupOp(hw::InnerRefAttr::get(
-  //     crt.getScopeRef().getAttr(), getPortSymbolAttr().getAttr()));
+  auto portOp = getPort(ns);
+  if (!portOp)
+    return emitOpError() << "port '@" << getPortSymbol()
+                         << "' does not exist in @"
+                         << getInstance()
+                                .getType()
+                                .cast<ScopeRefType>()
+                                .getScopeRef()
+                                .getName()
+                                .getValue();
 
-  // if (!targetOp)
-  //   return emitOpError() << "port '" << getPortSymbolAttr()
-  //                        << "' does not exist in " << crt.getScopeRef();
-
-  // auto portOp = dyn_cast<PortOpInterface>(targetOp);
-  // if (!portOp)
-  //   return emitOpError() << "symbol '" << getPortSymbolAttr()
-  //                        << "' does not refer to a port";
-
-  // Type targetPortType = portOp.getPortType();
-  // Type thisPortType = getType().getPortType();
-  // if (targetPortType != thisPortType)
-  //   return emitOpError() << "symbol '" << getPortSymbolAttr()
-  //                        << "' refers to a port of type " << targetPortType
-  //                        << ", but this op has type " << thisPortType;
+  Type targetPortType = portOp.getPortType();
+  Type thisPortType = getType().getPortType();
+  if (targetPortType != thisPortType)
+    return emitOpError() << "symbol '" << getPortSymbolAttr()
+                         << "' refers to a port of type " << targetPortType
+                         << ", but this op has type " << thisPortType;
 
   return success();
+}
+
+PortOpInterface GetPortOp::getPort(const hw::InnerRefNamespace &ns) {
+  // Lookup the target module type of the instance class reference.
+  auto targetScope = ns.lookupOp<ScopeOpInterface>(
+      getInstance().getType().cast<ScopeRefType>().getScopeRef());
+
+  if (!targetScope)
+    return nullptr;
+
+  return dyn_cast_or_null<PortOpInterface>(
+      targetScope.lookupInnerSym(getPortSymbol()));
 }
 
 LogicalResult GetPortOp::canonicalize(GetPortOp op, PatternRewriter &rewriter) {
@@ -400,17 +376,6 @@ void PortReadOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // ContainerInstanceOp
 //===----------------------------------------------------------------------===//
 
-// ContainerOp
-// ContainerInstanceOp::getContainer(const hw::InnerSymbolTable *symbolTable) {
-//   if (symbolTable)
-//     return dyn_cast_or_null<ContainerOp>(
-//         symbolTable->lookupOp(getTargetNameAttr().getName()));
-
-//   auto mod = getOperation()->getParentOfType<DesignOp>();
-//   return dyn_cast_or_null<ContainerOp>(
-//       mod.lookupSymbol(getReferencedModuleNameAttr()));
-// }
-
 LogicalResult ContainerInstanceOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   auto targetContainer = getContainer(ns);
   if (!targetContainer)
@@ -421,6 +386,21 @@ LogicalResult ContainerInstanceOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
 void ContainerInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), genValueNameAttr(getResult()));
+}
+
+//===----------------------------------------------------------------------===//
+// CallOp
+//===----------------------------------------------------------------------===//
+
+MethodOp CallOp::getTarget(const hw::InnerRefNamespace &ns) {
+  return ns.lookupOp<MethodOp>(getCallee());
+}
+
+LogicalResult CallOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  if (!getTarget(ns))
+    return emitOpError() << "'" << getCallee() << "' does not exist";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -474,7 +454,8 @@ LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
     auto *targetScope = ns.lookupOp(scopeRefSym);
     if (!targetScope)
-      return emitOpError() << "ibis.step scoperef symbol '" << scopeRefSym
+      return emitOpError() << "ibis.step scoperef symbol '@"
+                           << scopeRefSym.getName().getValue()
                            << "' does not exist";
   }
 

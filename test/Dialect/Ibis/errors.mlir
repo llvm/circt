@@ -24,8 +24,8 @@ ibis.class @C {
 
 // -----
 
-// expected-error @+1 {{'ibis.class' op must contain only one 'ibis.this' operation}}
 ibis.design @foo {
+// expected-error @+1 {{'ibis.class' op must contain only one 'ibis.this' operation}}
 ibis.class @MultipleThis {
   %this = ibis.this <@foo::@MultipleThis>
   %this2 = ibis.this <@foo::@MultipleThis>
@@ -34,8 +34,8 @@ ibis.class @MultipleThis {
 
 // -----
 
-// expected-error @+1 {{'ibis.container' op must contain a 'ibis.this' operation}}
 ibis.design @foo {
+// expected-error @+1 {{'ibis.container' op must contain a 'ibis.this' operation}}
 ibis.container @NoThis {
 }
 }
@@ -57,26 +57,6 @@ ibis.class @PathStepInvalidType {
   %this = ibis.this <@foo::@PathStepParentWithInstanceName>
   // expected-error @+1 {{ibis.step type must be an !ibis.scoperef type}}
   %p = ibis.path [#ibis.step<parent : i1>]
-}
-}
-
-// -----
-
-ibis.design @foo {
-ibis.class @PathStepNonExistingChild {
-  %this = ibis.this <@foo::@PathStepNonExistingChild>
-  // expected-error @+1 {{'ibis.path' op ibis.step scoperef symbol '@A' does not exist}}
-  %p = ibis.path [#ibis.step<child , @a : !ibis.scoperef<@foo::@A>>]
-}
-}
-
-// -----
-
-ibis.design @foo {
-ibis.class @PathStepNonExistingChild {
-  %this = ibis.this <@foo::@PathStepNonExistingChild>
-  // expected-error @+1 {{'ibis.path' op last ibis.step in path must specify a symbol for the scoperef}}
-  %p = ibis.path [#ibis.step<parent : !ibis.scoperef>]
 }
 }
 

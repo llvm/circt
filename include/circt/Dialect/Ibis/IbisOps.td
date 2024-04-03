@@ -439,13 +439,16 @@ def GetVarOp : IbisOp<"get_var", [
   }];
 }
 
-def CallOp : IbisOp<"call", [CallOpInterface]> {
+def CallOp : IbisOp<"call", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    CallOpInterface
+  ]> {
   let summary = "Ibis method call";
   let description = [{
     Dispatch a call to an Ibis method.
   }];
 
-  let arguments = (ins SymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let arguments = (ins InnerRefAttr:$callee, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -470,6 +473,9 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
+
+    /// Return the callee of this operation.
+    MethodOp getTarget(const hw::InnerRefNamespace &symbolTable);
   }];
 
   let assemblyFormat = [{
@@ -722,6 +728,9 @@ def GetPortOp : IbisOp<"get_port", [
     ibis::Direction getDirection() {
       return getPort().getType().cast<PortRefType>().getDirection();
     }
+
+    // Returns the port op that this operation is referencing.
+    PortOpInterface getPort(const hw::InnerRefNamespace &symbolTable);
   }];
 }
 

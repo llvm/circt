@@ -29,9 +29,9 @@ void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
   // Inner ref: We create an inner ref verification pass to initially validate
   // the IR, as well as after all structure-changing passes.
   // In the future, could consider hiding this behind a flag to reduce overhead.
-  pm.addPass(createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
   pm.nest<ibis::DesignOp>().addPass(createContainerizePass());
-  pm.addPass(createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
   // Pre-tunneling CSE pass. This ensures that duplicate get_port calls are
   // removed before we start tunneling - no reason to tunnel the same thing
@@ -39,17 +39,19 @@ void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(mlir::createCSEPass());
   pm.nest<DesignOp>().addPass(
       createTunnelingPass(IbisTunnelingOptions{"", ""}));
-  pm.addPass(createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
   pm.addPass(createPortrefLoweringPass());
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<DesignOp>().addPass(createCleanSelfdriversPass());
   pm.addPass(createContainersToHWPass());
-  pm.addPass(createVerifyInnerRefNamespacePass());
+  pm.addPass(hw::createVerifyInnerRefNamespacePass());
 }
 
 void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
-  pm.nest<ibis::ClassOp>().nest<ibis::MethodOp>().addPass(
-      ibis::createInlineSBlocksPass());
+  pm.nest<ibis::DesignOp>()
+      .nest<ibis::ClassOp>()
+      .nest<ibis::MethodOp>()
+      .addPass(ibis::createInlineSBlocksPass());
   pm.addPass(mlir::createMem2Reg());
 
   // TODO @mortbopet: Add a verification pass to ensure that there are no more
@@ -61,8 +63,10 @@ void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(circt::createMaximizeSSAPass());
 
   // SSA maximal form achieved. Reconstruct the Ibis sblocks.
-  pm.nest<ibis::ClassOp>().nest<ibis::MethodOp>().addPass(
-      ibis::createReblockPass());
+  pm.nest<ibis::DesignOp>()
+      .nest<ibis::ClassOp>()
+      .nest<ibis::MethodOp>()
+      .addPass(ibis::createReblockPass());
   pm.addPass(ibis::createArgifyBlocksPass());
   pm.addPass(createSimpleCanonicalizerPass());
 }

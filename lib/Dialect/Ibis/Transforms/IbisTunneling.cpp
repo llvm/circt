@@ -268,8 +268,9 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
       locateInstanceIn(parentOp, tunnelInto);
   if (failed(locateRes))
     return op->emitOpError()
-           << "expected an instance named " << tunnelInto << " in "
-           << parentSymbolOp.getInnerSymAttr() << " but found none";
+           << "expected an instance named " << tunnelInto << " in @"
+           << parentSymbolOp.getInnerSymAttr().getSymName().getValue()
+           << " but found none";
   ContainerInstanceOp tunnelInstance = *locateRes;
 
   if (path.empty()) {

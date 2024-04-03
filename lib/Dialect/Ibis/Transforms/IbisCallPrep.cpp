@@ -30,7 +30,7 @@ struct CallPrepPrecomputed {
   DenseMap<hw::InnerRefAttr, ClassOp> classSymbols;
 
   // Mapping of method to argument type.
-  DenseMap<SymbolRefAttr, std::pair<hw::StructType, Location>> argTypes;
+  DenseMap<hw::InnerRefAttr, std::pair<hw::StructType, Location>> argTypes;
 
   // Lookup the class to which a particular instance (in a particular class) is
   // referring.
@@ -44,18 +44,11 @@ struct CallPrepPrecomputed {
     return entry->second;
   }
 
-  // Given an instance path, get the class::func symbolref for it.
-  SymbolRefAttr resolveInstancePath(Operation *scope, SymbolRefAttr path) const;
-
-  // Utility function to create a symbolref to a method.
-  static SymbolRefAttr getSymbol(MethodOp method) {
-    assert(false && "Not implemented for new IR format");
-    // ClassOp cls = method.getParentOp();
-    // return SymbolRefAttr::get(
-    //     cls.getSymNameAttr(),
-    //     {FlatSymbolRefAttr::get(method.getContext(),
-    //     *method.getInnerName())});
-    return SymbolRefAttr();
+  // Utility function to create a hw::InnerRefAttr to a method.
+  static hw::InnerRefAttr getSymbol(MethodOp method) {
+    auto design = method->getParentOfType<DesignOp>();
+    return hw::InnerRefAttr::get(design.getSymNameAttr(),
+                                 method.getInnerSym().getSymName());
   }
 };
 
@@ -108,32 +101,6 @@ CallPrepPrecomputed::CallPrepPrecomputed(DesignOp design) {
   }
 }
 
-SymbolRefAttr
-CallPrepPrecomputed::resolveInstancePath(Operation *scope,
-                                         SymbolRefAttr path) const {
-  auto cls = scope->getParentOfType<ClassOp>();
-  assert(cls && "scope outside of ibis class");
-
-  // SymbolRefAttr is rather silly. The start of the path is root reference...
-  cls = lookupNext(cls, path.getRootReference());
-  if (!cls)
-    return {};
-
-  // ... then the rest are the nested references. The last one is the function
-  // name rather than an instance.
-  for (auto instSym : path.getNestedReferences().drop_back()) {
-    cls = lookupNext(cls, instSym.getAttr());
-    if (!cls)
-      return {};
-  }
-
-  // The last one is the function symbol.
-  assert(false && "Not implemented for new IR format");
-  // return SymbolRefAttr::get(cls.getSymNameAttr(),
-  //                           {FlatSymbolRefAttr::get(path.getLeafReference())});
-  return SymbolRefAttr();
-}
-
 namespace {
 /// For each CallOp, the corresponding method signature will have changed. Pack
 /// all the operands into a struct.
@@ -157,9 +124,7 @@ void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
   auto method = call->getParentOfType<ibis::MethodLikeOpInterface>();
 
   // Use the 'info' accelerator structures to find the argument type.
-  SymbolRefAttr calleeSym =
-      info.resolveInstancePath(method, adaptor.getCalleeAttr());
-  auto argStructEntry = info.argTypes.find(calleeSym);
+  auto argStructEntry = info.argTypes.find(call.getCalleeAttr());
   assert(argStructEntry != info.argTypes.end() && "Method symref not found!");
   auto [argStruct, argLoc] = argStructEntry->second;
 
@@ -167,10 +132,9 @@ void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
   auto newArg = rewriter.create<hw::StructCreateOp>(loc, argStruct,
                                                     adaptor.getOperands());
   newArg->setAttr("sv.namehint",
-                  rewriter.getStringAttr(
-                      call.getCalleeAttr().getLeafReference().getValue() +
-                      "_args_called_from_" +
-                      method.getMethodName().getValue()));
+                  rewriter.getStringAttr(call.getCallee().getName().getValue() +
+                                         "_args_called_from_" +
+                                         method.getMethodName().getValue()));
 
   // Update the call to use just the new struct.
   rewriter.modifyOpInPlace(call, [&]() {

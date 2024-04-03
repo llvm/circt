@@ -32,7 +32,7 @@ ibis.container @Child {
 
 ibis.container @MissingChild {
   %this = ibis.this <@foo::@MissingChild>
-  // expected-error @+2 {{'ibis.path' op expected an instance named @c in "Parent" but found none}}
+  // expected-error @+2 {{'ibis.path' op expected an instance named @c in @Parent but found none}}
   // expected-error @+1 {{failed to legalize operation 'ibis.path' that was explicitly marked illegal}}
   %parent = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,

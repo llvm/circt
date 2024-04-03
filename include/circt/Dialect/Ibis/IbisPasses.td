@@ -16,8 +16,9 @@ def IbisCallPrep : Pass<"ibis-call-prep", "DesignOp"> {
 
   let constructor = "circt::ibis::createCallPrepPass()";
   let dependentDialects = [
-    "circt::hw::HWDialect", "circt::dc::DCDialect"];
+    "circt::hw::HWDialect"];
 }
+
 
 def IbisContainerize : Pass<"ibis-containerize", "DesignOp"> {
   let summary = "Ibis containerization pass";
