@@ -232,7 +232,6 @@ struct ObjectModelIR {
         return builderOM.create<FIntegerConstantOp>(intConstant);
       if (auto strConstant = dyn_cast_or_null<mlir::StringAttr>(constVal))
         return builderOM.create<StringConstantOp>(strConstant);
-      // static_assert(false, "Attribute not handled");
       return {};
     };
     auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
@@ -314,6 +313,11 @@ struct ObjectModelIR {
           propVal = extraPorts;
       }
 
+      // The memory schema is a simple class, with input tied to output. The
+      // arguments are ordered such that, port index i is the input that is tied
+      // to i+1 which is the output.
+      // The following `2*index` translates the index to the memory schema input
+      // port number.
       auto inPort =
           builderOM.create<ObjectSubfieldOp>(object, 2 * field.index());
       builderOM.create<PropAssignOp>(inPort, propVal);
@@ -869,8 +873,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       topMod.insertPorts(ports);
     }
 
-  // This pass does not modify the hierarchy.
-  markAnalysesPreserved<InstanceGraph>();
+  // This pass modifies the hierarchy, InstanceGraph is not preserved.
 
   // Clear pass-global state as required by MLIR pass infrastructure.
   dutMod = {};
