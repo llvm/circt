@@ -610,8 +610,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-
-    
   }
 
   firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) { }
