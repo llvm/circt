@@ -329,7 +329,7 @@ public:
       one = rewriter.create<hw::ConstantOp>(loc, APInt(1, 1));
     }
 
-    Value output = clockDiv.getClockIn();
+    Value output = clockDiv.getInput();
 
     SmallVector<Value> regs;
     for (unsigned i = 0; i < clockDiv.getPow2(); ++i) {
