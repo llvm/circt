@@ -512,6 +512,8 @@ void FirRegOp::print(::mlir::OpAsmPrinter &p) {
 
   if (auto preset = getPresetAttr()) {
     p << " preset ";
+
+    // Don't emit negative integers to match the parsing logic.
     const auto &presetVal = preset.getValue();
     if (presetVal.isNonNegative())
       p << presetVal;
