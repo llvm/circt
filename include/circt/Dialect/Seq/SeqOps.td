@@ -448,7 +448,7 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
     ```
   }];
 
-  let arguments = (ins ClockType:$clockIn, I8Attr:$pow2);
+  let arguments = (ins ClockType:$clockIn, I64Attr:$pow2);
   let results = (outs ClockType:$clockOut);
 
   let assemblyFormat = [{

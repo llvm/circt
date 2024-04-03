@@ -179,13 +179,19 @@ public:
   }
 
   LogicalResult convert(InstanceOp inst) override {
-    auto pow2 = cast<IntegerAttr>(
-        getNamedParam(mod.getParameters(), "POW_2").getValue());
+    auto pow2 = getNamedParam(mod.getParameters(), "POW_2")
+                    .getValue()
+                    .cast<IntegerAttr>()
+                    .getValue()
+                    .getZExtValue();
+
+    auto pow2Attr =
+        IntegerAttr::get(IntegerType::get(mod.getContext(), 64), pow2);
 
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
     auto in = builder.create<WireOp>(inst.getResult(0).getType()).getResult();
     inst.getResult(0).replaceAllUsesWith(in);
-    auto out = builder.create<ClockDividerIntrinsicOp>(in, pow2);
+    auto out = builder.create<ClockDividerIntrinsicOp>(in, pow2Attr);
     auto name = inst.getInstanceName();
     Value outWire = builder.create<WireOp>(out.getType(), name).getResult();
     builder.create<StrictConnectOp>(outWire, out);

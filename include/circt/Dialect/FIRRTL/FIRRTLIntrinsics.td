@@ -134,7 +134,7 @@ def ClockDividerIntrinsicOp : FIRRTLOp<"int.clock_div", [Pure]> {
     ```
   }];
 
-  let arguments = (ins NonConstClockType:$input, I8Attr:$pow2);
+  let arguments = (ins NonConstClockType:$input, I64Attr:$pow2);
   let results = (outs NonConstClockType:$output);
   let assemblyFormat = "$input `by` $pow2 attr-dict";
 }
