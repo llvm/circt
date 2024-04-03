@@ -19,9 +19,15 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-void exportCallback(MlirStringRef message, void *userData) {
-  printf("%.*s", (int)message.length, message.data);
+void dumpCallback(MlirStringRef message, void *userData) {
+  fprintf(stderr, "%.*s", (int)message.length, message.data);
+}
+
+void appendBufferCallback(MlirStringRef message, void *userData) {
+  char *buffer = (char *)userData;
+  sprintf(buffer + strlen(buffer), "%.*s", (int)message.length, message.data);
 }
 
 void testExport(MlirContext ctx) {
@@ -39,7 +45,7 @@ void testExport(MlirContext ctx) {
   MlirModule module =
       mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testFIR));
 
-  MlirLogicalResult result = mlirExportFIRRTL(module, exportCallback, NULL);
+  MlirLogicalResult result = mlirExportFIRRTL(module, dumpCallback, NULL);
   assert(mlirLogicalResultIsSuccess(result));
 
   // CHECK: FIRRTL version 4.0.0
@@ -104,11 +110,78 @@ void testImportAnnotations(MlirContext ctx) {
       firCircuit, mlirStringRefCreateFromCString("rawAnnotations"),
       rawAnnotationsAttr);
 
-  mlirOperationPrint(mlirModuleGetOperation(module), exportCallback, NULL);
+  mlirOperationPrint(mlirModuleGetOperation(module), dumpCallback, NULL);
 
   // clang-format off
   // CHECK: firrtl.circuit "AnnoTest" attributes {rawAnnotations = [{class = "firrtl.transforms.DontTouchAnnotation", target = "~AnnoTest|AnnoTest>in"}]} {
   // clang-format on
+}
+
+void assertAttrEqual(MlirAttribute lhs, MlirAttribute rhs) {
+  char lhsBuffer[256] = {0}, rhsBuffer[256] = {0};
+  mlirAttributePrint(lhs, appendBufferCallback, lhsBuffer);
+  mlirAttributePrint(rhs, appendBufferCallback, rhsBuffer);
+  assert(strcmp(lhsBuffer, rhsBuffer) == 0);
+}
+
+void testAttrGetIntegerFromString(MlirContext ctx) {
+  // large negative hex
+  assertAttrEqual(
+      mlirAttributeParseGet(
+          ctx, mlirStringRefCreateFromCString("0xFF0000000000000000 : i72")),
+      firrtlAttrGetIntegerFromString(
+          mlirIntegerTypeGet(ctx, 72), 72,
+          mlirStringRefCreateFromCString("FF0000000000000000"), 16));
+
+  // large positive hex
+  assertAttrEqual(
+      mlirAttributeParseGet(
+          ctx, mlirStringRefCreateFromCString("0xFF0000000000000000 : i73")),
+      firrtlAttrGetIntegerFromString(
+          mlirIntegerTypeGet(ctx, 73), 73,
+          mlirStringRefCreateFromCString("FF0000000000000000"), 16));
+
+  // large negative dec
+  assertAttrEqual(
+      mlirAttributeParseGet(ctx, mlirStringRefCreateFromCString(
+                                     "-12345678912345678912345 : i75")),
+      firrtlAttrGetIntegerFromString(
+          mlirIntegerTypeGet(ctx, 75), 75,
+          mlirStringRefCreateFromCString("-12345678912345678912345"), 10));
+
+  // large positive dec
+  assertAttrEqual(
+      mlirAttributeParseGet(
+          ctx, mlirStringRefCreateFromCString("12345678912345678912345 : i75")),
+      firrtlAttrGetIntegerFromString(
+          mlirIntegerTypeGet(ctx, 75), 75,
+          mlirStringRefCreateFromCString("12345678912345678912345"), 10));
+
+  // small negative hex
+  assertAttrEqual(
+      mlirAttributeParseGet(ctx, mlirStringRefCreateFromCString("0xFF : i8")),
+      firrtlAttrGetIntegerFromString(mlirIntegerTypeGet(ctx, 8), 8,
+                                     mlirStringRefCreateFromCString("FF"), 16));
+
+  // small positive hex
+  assertAttrEqual(
+      mlirAttributeParseGet(ctx, mlirStringRefCreateFromCString("0xFF : i9")),
+      firrtlAttrGetIntegerFromString(mlirIntegerTypeGet(ctx, 9), 9,
+                                     mlirStringRefCreateFromCString("FF"), 16));
+
+  // small negative dec
+  assertAttrEqual(mlirAttributeParseGet(
+                      ctx, mlirStringRefCreateFromCString("-114514 : i18")),
+                  firrtlAttrGetIntegerFromString(
+                      mlirIntegerTypeGet(ctx, 18), 18,
+                      mlirStringRefCreateFromCString("-114514"), 10));
+
+  // small positive dec
+  assertAttrEqual(mlirAttributeParseGet(
+                      ctx, mlirStringRefCreateFromCString("114514 : i18")),
+                  firrtlAttrGetIntegerFromString(
+                      mlirIntegerTypeGet(ctx, 18), 18,
+                      mlirStringRefCreateFromCString("114514"), 10));
 }
 
 int main(void) {
@@ -117,5 +190,6 @@ int main(void) {
   testExport(ctx);
   testValueFoldFlow(ctx);
   testImportAnnotations(ctx);
+  testAttrGetIntegerFromString(ctx);
   return 0;
 }

@@ -146,6 +146,11 @@ MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetMemDir(MlirContext ctx,
 MLIR_CAPI_EXPORTED MlirAttribute
 firrtlAttrGetEventControl(MlirContext ctx, FIRRTLEventControl eventControl);
 
+// Workaround:
+// https://github.com/llvm/llvm-project/issues/84190#issuecomment-2035552035
+MLIR_CAPI_EXPORTED MlirAttribute firrtlAttrGetIntegerFromString(
+    MlirType type, unsigned numBits, MlirStringRef str, uint8_t radix);
+
 //===----------------------------------------------------------------------===//
 // Utility API.
 //===----------------------------------------------------------------------===//
