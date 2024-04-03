@@ -559,6 +559,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>,
     in %value: !firrtl.uint<42>,
+    in %value2: !firrtl.sint<24>,
     in %i0: !firrtl.uint<0>
   ) {
     firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
@@ -576,9 +577,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
     // CHECK-NEXT: }
     firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
+    firrtl.assert %clock, %cond, %enable, "assert2 %d"(%value2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.sint<24> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
+    // CHECK-NEXT: [[SIGNEDVAL:%.+]] = sv.system "signed"(%value2) : (i24) -> i24 
+    // CHECK-NEXT: [[TRUE2:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %cond, [[TRUE2]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.and bin %enable, [[TMP3]]
     // CHECK-NEXT: sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
@@ -592,8 +598,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:         sv.fatal
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.if [[TMP4]] {
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
+    // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
+    // CHECK-NEXT:         sv.error "assert2 %d"([[SIGNEDVAL]]) : i24
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT:       sv.if [[STOP_COND]] {
+    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
+
+    
   }
 
   firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) { }
