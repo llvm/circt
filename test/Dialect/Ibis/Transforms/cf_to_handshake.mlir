@@ -1,5 +1,5 @@
 
-// RUN: circt-opt --pass-pipeline="builtin.module(ibis.class(ibis-convert-cf-to-handshake))" \
+// RUN: circt-opt --pass-pipeline="builtin.module(ibis.design(ibis.class(ibis-convert-cf-to-handshake)))" \
 // RUN:      --allow-unregistered-dialect %s | FileCheck %s
 
 // CHECK:           ibis.method.df @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: none) -> (i32, none) {

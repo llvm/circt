@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Ibis/IbisPassPipelines.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -25,7 +26,12 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 }
 
 void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
+  // Inner ref: We create an inner ref verification pass to initially validate
+  // the IR, as well as after all structure-changing passes.
+  // In the future, could consider hiding this behind a flag to reduce overhead.
+  pm.addPass(createVerifyInnerRefNamespacePass());
   pm.nest<ibis::DesignOp>().addPass(createContainerizePass());
+  pm.addPass(createVerifyInnerRefNamespacePass());
 
   // Pre-tunneling CSE pass. This ensures that duplicate get_port calls are
   // removed before we start tunneling - no reason to tunnel the same thing
@@ -33,10 +39,12 @@ void circt::ibis::loadIbisLowLevelPassPipeline(mlir::PassManager &pm) {
   pm.addPass(mlir::createCSEPass());
   pm.nest<DesignOp>().addPass(
       createTunnelingPass(IbisTunnelingOptions{"", ""}));
+  pm.addPass(createVerifyInnerRefNamespacePass());
   pm.addPass(createPortrefLoweringPass());
   pm.addPass(createSimpleCanonicalizerPass());
   pm.nest<DesignOp>().addPass(createCleanSelfdriversPass());
   pm.addPass(createContainersToHWPass());
+  pm.addPass(createVerifyInnerRefNamespacePass());
 }
 
 void circt::ibis::loadIbisHighLevelPassPipeline(mlir::PassManager &pm) {

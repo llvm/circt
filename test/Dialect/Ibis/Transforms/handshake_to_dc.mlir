@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(ibis.class(ibis-convert-handshake-to-dc))' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis.class(ibis-convert-handshake-to-dc)))' %s | FileCheck %s
 
 // Actual handshake-to-dc conversion is tested in the respective pass tests.
 // This file just tests the ibis-specific hooks.

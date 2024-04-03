@@ -429,7 +429,7 @@ def GetVarOp : IbisOp<"get_var", [
 
   let extraClassDeclaration = [{
     // Return the `VarOp` that this operation is referencing.
-    FailureOr<VarOp> getTarget(SymbolTable* symbolTable = nullptr);
+    VarOp getVar(const hw::InnerRefNamespace &symbolTable);
   }];
 
   let extraClassDefinition = [{

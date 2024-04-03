@@ -1,4 +1,5 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(ibis.class(ibis.method(ibis-inline-sblocks)))' --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis.class(ibis.method(ibis-inline-sblocks))))' \
+// RUN:   --allow-unregistered-dialect %s | FileCheck %s
 
 ibis.design @foo {
 

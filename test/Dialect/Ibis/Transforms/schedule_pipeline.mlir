@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(ibis-add-operator-library, ibis.class(ibis.method.df(ibis.sblock.isolated(pipeline-schedule-linear))))' %s | \
+// RUN: circt-opt --pass-pipeline='builtin.module(ibis-add-operator-library, ibis.design(ibis.class(ibis.method.df(ibis.sblock.isolated(pipeline-schedule-linear)))))' %s | \
 // RUN:   FileCheck %s
 
 // CHECK-LABEL:   ssp.library @ibis_operator_library {

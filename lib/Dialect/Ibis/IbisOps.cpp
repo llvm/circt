@@ -268,26 +268,35 @@ LogicalResult GetVarOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   // return success();
 }
 
-// FailureOr<VarOp> GetVarOp::getTarget(SymbolTable *symbolTable) {
-//   auto targetClassSym =
-//       getInstance().getType().cast<ScopeRefType>().getScopeRef();
-//   auto targetClass =
-//       lookupInModule<ClassOp>(getOperation(), targetClassSym, symbolTable);
+FailureOr<VarOp> GetVarOp::getVar(const hw::InnerRefNamespace &ns) {
+  // The 'instance' value holds the inner ref which the variable is contained
+  // within.
+  auto targetClassInnerRef =
+      getInstance().getType().cast<ScopeRefType>().getScopeRef();
 
-//   if (!targetClass)
-//     return emitOpError() << "'" << targetClassSym << "' does not exist";
+  // Construct the nested symbol.
+  SmallVector<Attribute> path;
+  path.push_back(targetClassInnerRef.getAttr());
+  path.push_back(getVarNameAttr());
+  auto varPath = mlir::ArrayAttr::get(path);
 
-//   // Lookup the variable inside the class scope.
-//   auto varName = getVarName();
-//   // @teqdruid TODO: make this more efficient using
-//   // innersymtablecollection when that's available to non-firrtl dialects.
-//   auto var = dyn_cast_or_null<VarOp>(
-//       symbolTable->lookupSymbolIn(targetClass.getOperation(), varName));
-//   if (!var)
-//     return emitOpError() << "'" << varName << "' does not exist in '"
-//                          << targetClassSym << "'";
-//   return {var};
-// }
+  auto targetClass =
+      lookupInModule<ClassOp>(getOperation(), targetClassSym, symbolTable);
+
+  if (!targetClass)
+    return emitOpError() << "'" << targetClassSym << "' does not exist";
+
+  // Lookup the variable inside the class scope.
+  auto varName = getVarName();
+  // @teqdruid TODO: make this more efficient using
+  // innersymtablecollection when that's available to non-firrtl dialects.
+  auto var = dyn_cast_or_null<VarOp>(
+      symbolTable->lookupSymbolIn(targetClass.getOperation(), varName));
+  if (!var)
+    return emitOpError() << "'" << varName << "' does not exist in '"
+                         << targetClassSym << "'";
+  return {var};
+}
 
 //===----------------------------------------------------------------------===//
 // InstanceOp

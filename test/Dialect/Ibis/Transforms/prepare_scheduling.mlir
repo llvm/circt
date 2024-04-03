@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline="builtin.module(ibis.class(ibis.method.df(ibis.sblock.isolated(ibis-prepare-scheduling))))" \
+// RUN: circt-opt --pass-pipeline="builtin.module(ibis.design(ibis.class(ibis.method.df(ibis.sblock.isolated(ibis-prepare-scheduling)))))" \
 // RUN:      --allow-unregistered-dialect %s | FileCheck %s
 
 // CHECK:  ibis.method.df @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> (i32, i32) {

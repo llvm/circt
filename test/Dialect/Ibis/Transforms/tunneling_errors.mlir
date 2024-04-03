@@ -22,7 +22,7 @@ ibis.container @Orphan {
 ibis.design @foo {
 ibis.container @Parent {
   %this = ibis.this <@foo::@Parent>
-  %mc = ibis.container.instance @mc, @MissingChild
+  %mc = ibis.container.instance @mc, <@foo::@MissingChild>
 }
 
 ibis.container @Child {
