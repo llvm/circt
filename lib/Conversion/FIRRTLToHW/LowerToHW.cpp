@@ -521,7 +521,6 @@ void CircuitLoweringState::processRemainingAnnotations(
             // consuming these, they will linger around and can be ignored.
             scalaClassAnnoClass, dutAnnoClass, metadataDirectoryAttrName,
             elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
-            subCircuitsTargetDirectoryAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             blackBoxAnnoClass,
