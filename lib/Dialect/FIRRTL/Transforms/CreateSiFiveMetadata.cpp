@@ -866,11 +866,15 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   auto *node = instanceGraph.getTopLevelNode();
   if (FModuleOp topMod = dyn_cast<FModuleOp>(*node->getModule()))
     if (auto objectOp = omir.instantiateSifiveMetadata(topMod)) {
+      auto portIndex = topMod.getNumPorts();
       SmallVector<std::pair<unsigned, PortInfo>> ports = {
-          {topMod.getNumPorts(),
+          {portIndex,
            PortInfo(StringAttr::get(objectOp->getContext(), "metadataObj"),
                     objectOp.getType(), Direction::Out)}};
       topMod.insertPorts(ports);
+      auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
+          topMod->getLoc(), topMod.getBodyBlock());
+      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectOp);
     }
 
   // This pass modifies the hierarchy, InstanceGraph is not preserved.
