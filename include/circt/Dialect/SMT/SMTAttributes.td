@@ -52,7 +52,7 @@ def BitVectorAttr : AttrDef<SMTDialect, "BitVector", [
 
   let builders = [
     AttrBuilder<(ins "llvm::StringRef":$value)>,
-    AttrBuilder<(ins "unsigned":$value, "unsigned":$width)>,
+    AttrBuilder<(ins "uint64_t":$value, "unsigned":$width)>,
   ];
 
   let extraClassDeclaration = [{

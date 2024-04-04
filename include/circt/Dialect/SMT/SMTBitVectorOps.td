@@ -52,7 +52,7 @@ def BVConstantOp : SMTBVOp<"constant", [
       build($_builder, $_state,
             BitVectorAttr::get($_builder.getContext(), value));
     }]>,
-    OpBuilder<(ins "unsigned":$value, "unsigned":$width), [{
+    OpBuilder<(ins "uint64_t":$value, "unsigned":$width), [{
       build($_builder, $_state,
             BitVectorAttr::get($_builder.getContext(), value, width));
     }]>,

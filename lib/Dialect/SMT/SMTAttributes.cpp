@@ -86,16 +86,16 @@ BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
   return Base::getChecked(emitError, context, *maybeValue);
 }
 
-BitVectorAttr BitVectorAttr::get(MLIRContext *context, unsigned value,
+BitVectorAttr BitVectorAttr::get(MLIRContext *context, uint64_t value,
                                  unsigned width) {
   return Base::get(context, APInt(width, value));
 }
 
 BitVectorAttr
 BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
-                          MLIRContext *context, unsigned value,
+                          MLIRContext *context, uint64_t value,
                           unsigned width) {
-  if ((~((1U << width) - 1U) & value) != 0U) {
+  if (width < 64 && value >= (UINT64_C(1) << width)) {
     emitError() << "value does not fit in a bit-vector of desired width";
     return {};
   }
