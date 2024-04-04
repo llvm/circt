@@ -8,6 +8,10 @@ func.func @bitvectors() {
   %c92_bv8 = smt.bv.constant #smt.bv<0x5c> : !smt.bv<8> {smt.some_attr}
   // CHECK: %c-1_bv8 = smt.bv.constant #smt.bv<-1> : !smt.bv<8>
   %c-1_bv8 = smt.bv.constant #smt.bv<-1> : !smt.bv<8>
+  // CHECK: %c-1_bv1{{(_[0-9]+)?}} = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+  %c-1_bv1_neg = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+  // CHECK: %c-1_bv1{{(_[0-9]+)?}} = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+  %c-1_bv1_pos = smt.bv.constant #smt.bv<1> : !smt.bv<1>
 
   // CHECK: [[C0:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
   %c = smt.bv.constant #smt.bv<0> : !smt.bv<32>

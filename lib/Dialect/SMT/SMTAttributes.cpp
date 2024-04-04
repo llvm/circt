@@ -117,14 +117,20 @@ Attribute BitVectorAttr::parse(AsmParser &odsParser, Type odsType) {
   }
 
   unsigned width = llvm::cast<BitVectorType>(odsType).getWidth();
-  if (width > val.getBitWidth())
-    val = val.sext(width);
 
-  if (width < val.getBitWidth()) {
-    if ((val.isNegative() && val.getSignificantBits() > width) ||
-        val.getActiveBits() > width) {
+  if (width > val.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the
+    // top bits if it is a positive number.
+    val = val.sext(width);
+  } else if (width < val.getBitWidth()) {
+    // The parser can return an unnecessarily wide result.
+    // This isn't a problem, but truncating off bits is bad.
+    unsigned neededBits =
+        val.isNegative() ? val.getSignificantBits() : val.getActiveBits();
+    if (width < neededBits) {
       odsParser.emitError(loc)
-          << "integer value out of range for given bit-vector type";
+          << "integer value out of range for given bit-vector type " << odsType;
       return {};
     }
     val = val.trunc(width);
