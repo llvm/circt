@@ -35,9 +35,6 @@ def ScopeRefType : IbisTypeDef<"ScopeRef"> {
     TypeBuilder<(ins), [{
       return $_get($_ctxt, nullptr);
     }]>
-    // TypeBuilder<(ins "StringAttr":$scopeRef), [{
-    //   return $_get($_ctxt, FlatSymbolRefAttr::get(scopeRef));
-    // }]>
   ];
 }
 

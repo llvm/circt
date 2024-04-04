@@ -121,10 +121,6 @@ class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     std::optional<size_t> $cppClass::getTargetResultIndex() {
       return std::nullopt;
     }
-
-    // Operation* InstanceOp::getReferencedModuleSlow() {
-    //   return getReferencedModule(nullptr);
-    // }
   }];
 }
 
@@ -623,17 +619,6 @@ def ContainerOp : IbisOp<"container", [
     $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
-  // let skipDefaultBuilders = 1;
-  // let builders = [
-  //   OpBuilder<(ins "StringAttr":$name, "bool":$isTopLevel), [{
-  //     auto region = $_state.addRegion();
-  //     region->push_back(new Block());
-  //     $_state.addAttribute(getInnerSymAttrName($_state.name), name);
-  //     if (isTopLevel)
-  //       $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
-  //   }]>
-  // ];
-
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -655,6 +640,21 @@ def ContainerOp : IbisOp<"container", [
       return std::nullopt;
     }
   }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringRef":$inner_sym, "bool":$isTopLevel), [{
+      build($_builder, $_state,
+        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), isTopLevel);
+    }]>,
+    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "bool":$isTopLevel), [{
+      auto region = $_state.addRegion();
+      region->push_back(new Block());
+      $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      if (isTopLevel)
+        $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
+    }]>
+  ];
 }
 
 def ContainerInstanceOp : InstanceOpBase<"container.instance"> {

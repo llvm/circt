@@ -1,6 +1,4 @@
-// XFAIL: *
-// See https://github.com/llvm/circt/issues/6658
-// RUN: circt-opt --ibis-containerize %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis-containerize))' %s | FileCheck %s
 
 ibis.design @foo {
 
