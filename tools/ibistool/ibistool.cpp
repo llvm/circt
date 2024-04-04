@@ -164,7 +164,8 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
   pm.addPass(circt::createInsertMergeBlocksPass());
 
   // Perform dataflow conversion
-  pm.nest<ibis::ClassOp>().addPass(ibis::createConvertCFToHandshakePass());
+  pm.nest<ibis::DesignOp>().nest<ibis::ClassOp>().addPass(
+      ibis::createConvertCFToHandshakePass());
   // Canonicalize - necessary after handshake conversion to clean up a lot of
   // stuff e.g. simple branches.
   pm.addPass(createSimpleCanonicalizerPass());
@@ -173,9 +174,10 @@ static void loadHandshakeTransformsPipeline(OpPassManager &pm) {
 }
 
 static void loadDCTransformsPipeline(OpPassManager &pm) {
-  pm.nest<ClassOp>().addPass(ibis::createConvertHandshakeToDCPass());
+  pm.nest<ibis::DesignOp>().nest<ClassOp>().addPass(
+      ibis::createConvertHandshakeToDCPass());
   pm.addPass(createSimpleCanonicalizerPass());
-  pm.nest<ClassOp>().nest<DataflowMethodOp>().addPass(
+  pm.nest<ibis::DesignOp>().nest<ClassOp>().nest<DataflowMethodOp>().addPass(
       dc::createDCMaterializeForksSinksPass());
   // pm.nest<ClassOp>().addPass(circt::createDCToHWPass());
 }
@@ -208,19 +210,22 @@ static void loadSchedulingPipeline(OpPassManager &pm) {
   pm.addPass(ibis::createAddOperatorLibraryPass());
 
   // Map any arith operators to comb
-  pm.nest<ibis::ClassOp>()
+  pm.nest<ibis::DesignOp>()
+      .nest<ibis::ClassOp>()
       .nest<ibis::DataflowMethodOp>()
       .nest<ibis::IsolatedStaticBlockOp>()
       .addPass(circt::createMapArithToCombPass());
 
   // Prepare for scheduling
-  pm.nest<ibis::ClassOp>()
+  pm.nest<ibis::DesignOp>()
+      .nest<ibis::ClassOp>()
       .nest<ibis::DataflowMethodOp>()
       .nest<ibis::IsolatedStaticBlockOp>()
       .addPass(ibis::createPrepareSchedulingPass());
 
   // Schedule!
-  pm.nest<ibis::ClassOp>()
+  pm.nest<ibis::DesignOp>()
+      .nest<ibis::ClassOp>()
       .nest<ibis::DataflowMethodOp>()
       .nest<ibis::IsolatedStaticBlockOp>()
       .addPass(pipeline::createScheduleLinearPipelinePass());

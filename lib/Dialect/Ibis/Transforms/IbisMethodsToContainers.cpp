@@ -31,14 +31,14 @@ struct DataflowMethodOpConversion
   matchAndRewrite(DataflowMethodOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
-    auto newContainer = rewriter.create<InnerContainerOp>(
-        op.getLoc(), hw::InnerSymAttr::get(op.getInnerSym().getSymName()));
+    auto newContainer = rewriter.create<ContainerOp>(
+        op.getLoc(), op.getInnerSym(), /*isTopLevel=*/false);
     rewriter.setInsertionPointToStart(newContainer.getBodyBlock());
 
     // Create mandatory %this
     // TODO @mortbopet: this will most likely already be present at the
     // method.df level soon...
-    rewriter.create<ThisOp>(op.getLoc(), newContainer.getSymNameAttr());
+    rewriter.create<ThisOp>(op.getLoc(), newContainer.getInnerRef());
 
     // Create in- and output ports.
     llvm::SmallVector<Value> argValues;

@@ -1,7 +1,7 @@
 // RUN: ibistool --hi --post-ibis-ir %s | FileCheck %s
 
 // CHECK-LABEL:   ibis.class @ToHandshake {
-// CHECK:           %[[VAL_0:.*]] = ibis.this @ToHandshake
+// CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToHandshake>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1) -> i32 {
 // CHECK:             %[[VAL_4:.*]]:3 = ibis.sblock.isolated () -> (i32, i32, i32) {
 // CHECK:               %[[VAL_5:.*]] = arith.constant 2 : i32
@@ -46,8 +46,9 @@
 // CHECK:           }
 // CHECK:         }
 
+ibis.design @foo {
 ibis.class @ToHandshake {
-  %this = ibis.this @ToHandshake 
+  %this = ibis.this <@foo::@ToHandshake>
   ibis.method @foo(%a: i32, %b: i32, %c: i1) -> i32 {
     %c2_i32 = arith.constant 2 : i32
     %c1 = arith.constant 1 : i32
@@ -79,4 +80,5 @@ ibis.class @ToHandshake {
     %10 = memref.load %alloca[] : memref<i32>
     ibis.return %10 : i32
   }
+}
 }

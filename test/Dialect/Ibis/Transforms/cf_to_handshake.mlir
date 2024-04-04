@@ -1,5 +1,5 @@
 
-// RUN: circt-opt --pass-pipeline="builtin.module(ibis.class(ibis-convert-cf-to-handshake))" \
+// RUN: circt-opt --pass-pipeline="builtin.module(ibis.design(ibis.class(ibis-convert-cf-to-handshake)))" \
 // RUN:      --allow-unregistered-dialect %s | FileCheck %s
 
 // CHECK:           ibis.method.df @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i1, %[[VAL_4:.*]]: none) -> (i32, none) {
@@ -39,8 +39,9 @@
 // CHECK:             ibis.return %[[VAL_40]], %[[VAL_42]] : i32, none
 // CHECK:           }
 
+ibis.design @foo {
 ibis.class @ToHandshake {
-  %this = ibis.this @ToHandshake
+  %this = ibis.this <@foo::@ToHandshake>
   // Just a simple test demonstrating the intended mixing of `ibis.sblock`s and
   // control flow operations. The meat of cf-to-handshake conversion is tested
   // in the handshake dialect tests.
@@ -65,4 +66,5 @@ ibis.class @ToHandshake {
   ^bb4(%res : i32):
     ibis.return %res : i32
   }
+}
 }

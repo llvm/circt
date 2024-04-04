@@ -262,14 +262,15 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
                                    PortRefMapping &portMapping) {
   // Locate the instance that we're tunneling into
   Operation *parentOp = currentContainer->getModule().getOperation();
-  auto parentSymbolOp = dyn_cast<SymbolOpInterface>(parentOp);
+  auto parentSymbolOp = dyn_cast<hw::InnerSymbolOpInterface>(parentOp);
   assert(parentSymbolOp && "expected current container to be a symbol op");
   FailureOr<ContainerInstanceOp> locateRes =
       locateInstanceIn(parentOp, tunnelInto);
   if (failed(locateRes))
     return op->emitOpError()
-           << "expected an instance named " << tunnelInto << " in "
-           << parentSymbolOp.getNameAttr() << " but found none";
+           << "expected an instance named " << tunnelInto << " in @"
+           << parentSymbolOp.getInnerSymAttr().getSymName().getValue()
+           << " but found none";
   ContainerInstanceOp tunnelInstance = *locateRes;
 
   if (path.empty()) {
@@ -288,7 +289,7 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   // We're not in the target, but tunneling into a child instance.
   // Create output ports in the child instance for the requested ports.
   auto *tunnelScopeNode =
-      ig.lookup(tunnelInstance.getTargetNameAttr().getAttr());
+      ig.lookup(tunnelInstance.getTargetNameAttr().getName());
   auto tunnelScope = tunnelScopeNode->getModule<ScopeOpInterface>();
 
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
