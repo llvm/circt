@@ -86,7 +86,10 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
         // scope.
         // Until then, brute-force scan the inner symbol ops for a match.
         for (auto op : $_op.getBodyBlock()->template getOps<hw::InnerSymbolOpInterface>()) {
-          if (*op.getInnerName() == symName)
+          auto innerName = op.getInnerName();
+          if(!innerName)
+            continue;
+          if (*innerName == symName)
             return op;
         }
         return nullptr;
