@@ -171,4 +171,30 @@ def MethodLikeOpInterface : OpInterface<"MethodLikeOpInterface"> {
   }];
 }
 
+def NestedSymbolNamespace : NativeOpTrait<"NestedSymbolNamespace">;
+
+def NestedSymbol : OpInterface<"NestedSymbolOpInterface"> {
+  let description = [{
+    Nested symbol with C++-like namespace resolution rules.
+  }];
+
+  let cppNamespace = "::circt::ibis";
+}
+
+def NestedSymbolTable : NativeOpTrait<"NestedSymbolTable">;
+
+def NestedRefUserOpInterface : OpInterface<"NestedRefUserOpInterface"> {
+  let description = [{
+    An interface for operations that use nested references.
+  }];
+  let cppNamespace = "circt::ibis";
+
+  let methods = [
+    InterfaceMethod<"Verify the nested ref uses held by this operation.",
+      "::mlir::LogicalResult", "verifyNestedRefs",
+      (ins "::circt::ibis::NestedRefNamespace&":$ns)
+    >,
+  ];
+}
+
 #endif // CIRCT_DIALECT_IBIS_INTERFACES_TD
