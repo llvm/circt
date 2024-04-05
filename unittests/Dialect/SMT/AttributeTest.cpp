@@ -22,7 +22,7 @@ TEST(BitVectorAttrTest, MinBitWidth) {
   context.loadDialect<SMTDialect>();
   Location loc(UnknownLoc::get(&context));
 
-  auto attr = BitVectorAttr::getChecked(loc, &context, 0U, 0U);
+  auto attr = BitVectorAttr::getChecked(loc, &context, UINT64_C(0), 0U);
   ASSERT_EQ(attr, BitVectorAttr());
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "bit-width must be at least 1, but got 0");
@@ -96,12 +96,24 @@ TEST(BitVectorAttrTest, OutOfRange) {
   context.loadDialect<SMTDialect>();
   Location loc(UnknownLoc::get(&context));
 
-  auto attr = BitVectorAttr::getChecked(loc, &context, 2U, 1U);
-  ASSERT_EQ(attr, BitVectorAttr());
+  auto attr1 = BitVectorAttr::getChecked(loc, &context, UINT64_C(2), 1U);
+  auto attr63 =
+      BitVectorAttr::getChecked(loc, &context, UINT64_C(3) << 62, 63U);
+  ASSERT_EQ(attr1, BitVectorAttr());
+  ASSERT_EQ(attr63, BitVectorAttr());
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(),
               "value does not fit in a bit-vector of desired width");
   });
+}
+
+TEST(BitVectorAttrTest, GetUInt64Max) {
+  MLIRContext context;
+  context.loadDialect<SMTDialect>();
+  auto attr64 = BitVectorAttr::get(&context, UINT64_MAX, 64);
+  auto attr65 = BitVectorAttr::get(&context, UINT64_MAX, 65);
+  ASSERT_EQ(attr64.getValue(), APInt::getAllOnes(64));
+  ASSERT_EQ(attr65.getValue(), APInt::getAllOnes(64).zext(65));
 }
 
 } // namespace
