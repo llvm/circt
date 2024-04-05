@@ -97,7 +97,8 @@ TEST(BitVectorAttrTest, OutOfRange) {
   Location loc(UnknownLoc::get(&context));
 
   auto attr1 = BitVectorAttr::getChecked(loc, &context, UINT64_C(2), 1U);
-  auto attr63 = BitVectorAttr::getChecked(loc, &context, UINT64_C(3) << 62, 63U);
+  auto attr63 =
+      BitVectorAttr::getChecked(loc, &context, UINT64_C(3) << 62, 63U);
   ASSERT_EQ(attr1, BitVectorAttr());
   ASSERT_EQ(attr63, BitVectorAttr());
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
