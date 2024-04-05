@@ -47,6 +47,7 @@ struct FIRParserOptions {
   /// source manager.
   unsigned numAnnotationFiles;
   bool scalarizePublicModules = false;
+  bool scalarizeInternalModules = false;
   bool scalarizeExtModules = false;
 };
 
