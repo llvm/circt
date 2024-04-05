@@ -157,12 +157,8 @@ constexpr const char *scalaClassAnnoClass =
     "sifive.enterprise.firrtl.ScalaClassAnnotation";
 constexpr const char *elaborationArtefactsDirectoryAnnoClass =
     "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
-constexpr const char *subCircuitsTargetDirectoryAnnoClass =
-    "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory";
 constexpr const char *testHarnessPathAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
-constexpr const char *subCircuitDirAnnotation =
-    "sifive.enterprise.grandcentral.SubCircuitDirAnnotation";
 /// Annotation that marks a reset (port or wire) and domain.
 constexpr const char *fullAsyncResetAnnoClass =
     "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
