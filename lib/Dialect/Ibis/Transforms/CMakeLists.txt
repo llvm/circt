@@ -27,6 +27,7 @@ add_circt_dialect_library(CIRCTIbisTransforms
   CIRCTIbis
   CIRCTSSP
   CIRCTHW
+  CIRCTHWTransforms
   CIRCTSupport
   CIRCTTransforms
   MLIRIR

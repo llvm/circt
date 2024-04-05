@@ -369,7 +369,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(Mux2CellIntrinsicOp op);
   bool visitExpr(Mux4CellIntrinsicOp op);
-  bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
@@ -379,8 +378,15 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
   bool visitStmt(LayerBlockOp op);
+  bool visitUnrealizedConversionCast(mlir::UnrealizedConversionCastOp op);
 
   bool isFailed() const { return encounteredError; }
+
+  bool visitInvalidOp(Operation *op) {
+    if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      return visitUnrealizedConversionCast(castOp);
+    return false;
+  }
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -1080,7 +1086,8 @@ bool TypeLoweringVisitor::visitExpr(Mux4CellIntrinsicOp op) {
 }
 
 // Expand UnrealizedConversionCastOp of aggregates
-bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
+bool TypeLoweringVisitor::visitUnrealizedConversionCast(
+    mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getOperand(0), field.index);

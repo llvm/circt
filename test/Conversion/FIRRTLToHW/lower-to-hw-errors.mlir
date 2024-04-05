@@ -116,7 +116,6 @@ firrtl.circuit "Foo" attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MetadataDirAnnotation", dirname = "metadata"},
     {class = "sifive.enterprise.firrtl.ElaborationArtefactsDirectory", dirname = "artefacts"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"},
-    {class = "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory", dir = "subcircuits"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", directory = "gct-dir", filename = "gct-dir/bindings.sv"}
   ]} {
     firrtl.module @Foo() attributes {annotations = [

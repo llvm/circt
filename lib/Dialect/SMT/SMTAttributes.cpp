@@ -86,16 +86,16 @@ BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
   return Base::getChecked(emitError, context, *maybeValue);
 }
 
-BitVectorAttr BitVectorAttr::get(MLIRContext *context, unsigned value,
+BitVectorAttr BitVectorAttr::get(MLIRContext *context, uint64_t value,
                                  unsigned width) {
   return Base::get(context, APInt(width, value));
 }
 
 BitVectorAttr
 BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
-                          MLIRContext *context, unsigned value,
+                          MLIRContext *context, uint64_t value,
                           unsigned width) {
-  if ((~((1U << width) - 1U) & value) != 0U) {
+  if (width < 64 && value >= (UINT64_C(1) << width)) {
     emitError() << "value does not fit in a bit-vector of desired width";
     return {};
   }
@@ -117,14 +117,20 @@ Attribute BitVectorAttr::parse(AsmParser &odsParser, Type odsType) {
   }
 
   unsigned width = llvm::cast<BitVectorType>(odsType).getWidth();
-  if (width > val.getBitWidth())
-    val = val.sext(width);
 
-  if (width < val.getBitWidth()) {
-    if ((val.isNegative() && val.getSignificantBits() > width) ||
-        val.getActiveBits() > width) {
+  if (width > val.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the
+    // top bits if it is a positive number.
+    val = val.sext(width);
+  } else if (width < val.getBitWidth()) {
+    // The parser can return an unnecessarily wide result.
+    // This isn't a problem, but truncating off bits is bad.
+    unsigned neededBits =
+        val.isNegative() ? val.getSignificantBits() : val.getActiveBits();
+    if (width < neededBits) {
       odsParser.emitError(loc)
-          << "integer value out of range for given bit-vector type";
+          << "integer value out of range for given bit-vector type " << odsType;
       return {};
     }
     val = val.trunc(width);

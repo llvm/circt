@@ -29,8 +29,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 namespace circt {
 namespace ibis {
-class OuterContainerOp;
-class InnerContainerOp;
+class ContainerOp;
 class ThisOp;
 
 // Symbol name for the ibis operator library to be used during scheduling.

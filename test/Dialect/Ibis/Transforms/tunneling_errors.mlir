@@ -1,40 +1,43 @@
 // RUN: circt-opt --split-input-file --allow-unregistered-dialect --ibis-tunneling --verify-diagnostics %s
 
-ibis.container.outer @Parent {
-  %this = ibis.this @Parent
+ibis.design @foo {
+ibis.container @Parent {
+  %this = ibis.this <@foo::@Parent>
   %in = ibis.port.input @in : i1
 }
 
-ibis.container.outer @Orphan {
-  %this = ibis.this @Orphan
+ibis.container @Orphan {
+  %this = ibis.this <@foo::@Orphan>
   // expected-error @+2 {{'ibis.path' op cannot tunnel up from "Orphan" because it has no uses}}
   // expected-error @+1 {{failed to legalize operation 'ibis.path' that was explicitly marked illegal}}
   %parent = ibis.path [
-    #ibis.step<parent : !ibis.scoperef<@Parent>>
+    #ibis.step<parent : !ibis.scoperef<@foo::@Parent>>
   ]
 
-  %p = ibis.get_port %parent, @in : !ibis.scoperef<@Parent> -> !ibis.portref<in i1>
+  %p = ibis.get_port %parent, @in : !ibis.scoperef<@foo::@Parent> -> !ibis.portref<in i1>
 }
-
+}
 // -----
 
-ibis.container.outer @Parent {
-  %this = ibis.this @Parent
-  %mc = ibis.container.instance @mc, @MissingChild
+ibis.design @foo {
+ibis.container @Parent {
+  %this = ibis.this <@foo::@Parent>
+  %mc = ibis.container.instance @mc, <@foo::@MissingChild>
 }
 
-ibis.container.outer @Child {
-  %this = ibis.this @Child
+ibis.container @Child {
+  %this = ibis.this <@foo::@Child>
   %in = ibis.port.input @in : i1
 }
 
-ibis.container.outer @MissingChild {
-  %this = ibis.this @MissingChild
-  // expected-error @+2 {{'ibis.path' op expected an instance named @c in "Parent" but found none}}
+ibis.container @MissingChild {
+  %this = ibis.this <@foo::@MissingChild>
+  // expected-error @+2 {{'ibis.path' op expected an instance named @c in @Parent but found none}}
   // expected-error @+1 {{failed to legalize operation 'ibis.path' that was explicitly marked illegal}}
   %parent = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,
-    #ibis.step<child , @c : !ibis.scoperef<@Child>>
+    #ibis.step<child , @c : !ibis.scoperef<@foo::@Child>>
   ]
-  %p = ibis.get_port %parent, @in : !ibis.scoperef<@Child> -> !ibis.portref<in i1>
+  %p = ibis.get_port %parent, @in : !ibis.scoperef<@foo::@Child> -> !ibis.portref<in i1>
+}
 }

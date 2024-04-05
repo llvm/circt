@@ -292,12 +292,14 @@ void SplitLoopsPass::splitArc(Namespace &arcNamespace, DefineOp defOp,
                        split->block->getTerminator()->getOperandTypes()));
     splitArc.getBody().push_back(split->block.release());
     splitArcs.push_back(splitArc);
+    ++numArcsCreated;
   }
 
   // Replace all uses with the new splits and remove the old definition.
   for (auto arcUse : arcUses)
     replaceArcUse(arcUse, splitArcs, splitter.splits, splitter.outputs);
   defOp.erase();
+  ++numArcsRemoved;
 }
 
 /// Replace a use of the original arc with new uses for the splits.
