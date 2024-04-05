@@ -1,5 +1,5 @@
 ; RUN: firtool %s
-; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false
+; RUN: firtool %s -preserve-aggregate=all -scalarize-public-modules=false -scalarize-internal-modules
 FIRRTL version 3.0.0
 circuit Refs:
   ; SPEC EXAMPLE BEGIN

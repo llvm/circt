@@ -1,11 +1,11 @@
-; RUN: firtool %s --format=fir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir --parse-only --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
-; RUN: firtool %s --format=fir -verilog | FileCheck %s --check-prefix=VERILOG
-; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
-; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
-; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
+; RUN: firtool %s --scalarize-internal-modules --format=fir --ir-fir    | circt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --scalarize-internal-modules --format=fir --parse-only --annotation-file %s.anno.json,%s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --scalarize-internal-modules --format=fir --parse-only --annotation-file %s.anno.json --annotation-file %s.anno.1.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --scalarize-internal-modules --format=fir --ir-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
+; RUN: firtool %s --scalarize-internal-modules --format=fir -verilog | FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --scalarize-internal-modules --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
+; RUN: firtool %s --scalarize-internal-modules --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
+; RUN: firtool %s --scalarize-internal-modules --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
 
 
 circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]

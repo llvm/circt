@@ -331,18 +331,17 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   TypeLoweringVisitor(
       MLIRContext *context, PreserveAggregate::PreserveMode preserveAggregate,
       PreserveAggregate::PreserveMode memoryPreservationMode,
-      SymbolTable &symTbl, const AttrCache &cache,
-      const llvm::DenseMap<FModuleLike, Convention> &conventionTable)
+      const AttrCache &cache)
       : context(context), aggregatePreservationMode(preserveAggregate),
-        memoryPreservationMode(memoryPreservationMode), symTbl(symTbl),
-        cache(cache), conventionTable(conventionTable) {}
+        memoryPreservationMode(memoryPreservationMode), 
+        cache(cache) {}
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
 
   /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
   /// type lowering on all operations.
-  void lowerModule(FModuleLike op);
+  LogicalResult lowerModule(FModuleOp op);
 
   bool lowerArg(FModuleLike module, size_t argIndex, size_t argsRemoved,
                 SmallVectorImpl<PortInfoWithIP> &newArgs,
@@ -353,9 +352,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
          PortInfoWithIP &oldArg, hw::InnerSymAttr newSym);
 
   // Helpers to manage state.
-  bool visitDecl(FExtModuleOp op);
   bool visitDecl(FModuleOp op);
-  bool visitDecl(InstanceOp op);
   bool visitDecl(MemOp op);
   bool visitDecl(NodeOp op);
   bool visitDecl(RegOp op);
@@ -391,6 +388,12 @@ private:
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
 
+  /// Lower a simple expression operation one layer.
+  /// Use the provided \p clone function to generate individual ops for the expanded subelements/fields.
+  bool lowerSimpleExpr(Operation* op,
+         llvm::function_ref<Value(Value, ArrayAttr)> clone
+);
+
   /// Lower a "producer" operation one layer based on policy.
   /// Use the provided \p clone function to generate individual ops for
   /// the expanded subelements/fields.  The type used to determine if lowering
@@ -413,8 +416,6 @@ private:
                                  SmallVectorImpl<hw::InnerSymAttr> &newSyms,
                                  Location errorLoc);
 
-  PreserveAggregate::PreserveMode
-  getPreservationModeForModule(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
 
   size_t uniqueIdx = 0;
@@ -432,35 +433,13 @@ private:
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
-  // Keep a symbol table around for resolving symbols
-  SymbolTable &symTbl;
-
   // Cache some attributes
   const AttrCache &cache;
-
-  const llvm::DenseMap<FModuleLike, Convention> &conventionTable;
 
   // Set true if the lowering failed.
   bool encounteredError = false;
 };
 } // namespace
-
-/// Return aggregate preservation mode for the module. If the module has a
-/// scalarized linkage, then we may not preserve it's aggregate ports.
-PreserveAggregate::PreserveMode
-TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
-  auto lookup = conventionTable.find(module);
-  if (lookup == conventionTable.end())
-    return aggregatePreservationMode;
-  switch (lookup->second) {
-  case Convention::Scalarized:
-    return PreserveAggregate::None;
-  case Convention::Internal:
-    return aggregatePreservationMode;
-  }
-  llvm_unreachable("Unknown convention");
-  return aggregatePreservationMode;
-}
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   if (type_isa<BundleType>(val.getType()))
@@ -746,11 +725,16 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   }
 }
 
-void TypeLoweringVisitor::lowerModule(FModuleLike op) {
-  if (auto module = llvm::dyn_cast<FModuleOp>(*op))
-    visitDecl(module);
-  else if (auto extModule = llvm::dyn_cast<FExtModuleOp>(*op))
-    visitDecl(extModule);
+LogicalResult TypeLoweringVisitor::lowerModule(FModuleOp op) {
+  auto *body = op.getBodyBlock();
+
+  ImplicitLocOpBuilder theBuilder(op.getLoc(), context);
+  builder = &theBuilder;
+
+  // Lower the operations.
+  lowerBlock(body);
+
+  return success();
 }
 
 // Creates and returns a new block argument of the specified type to the
@@ -783,44 +767,6 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
       PortInfoWithIP{PortInfo{name, fieldType, direction, newSym, oldArg.pi.loc,
                               AnnotationSet(newAnnotations)},
                      oldArg.internalPath});
-}
-
-// Lower arguments with bundle type by flattening them.
-bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
-                                   size_t argsRemoved,
-                                   SmallVectorImpl<PortInfoWithIP> &newArgs,
-                                   SmallVectorImpl<Value> &lowering) {
-
-  // Flatten any bundle types.
-  SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].pi.type);
-  if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
-    return false;
-
-  // Ports with internalPath set cannot be lowered.
-  if (auto ip = newArgs[argIndex].internalPath; ip && ip->getPath()) {
-    ::mlir::emitError(newArgs[argIndex].pi.loc,
-                      "cannot lower port with internal path");
-    encounteredError = true;
-    return false;
-  }
-
-  SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
-  if (failed(partitionSymbols(newArgs[argIndex].pi.sym, srcType, fieldSyms,
-                              newArgs[argIndex].pi.loc))) {
-    encounteredError = true;
-    return false;
-  }
-
-  for (const auto &[idx, field, fieldSym] :
-       llvm::enumerate(fieldTypes, fieldSyms)) {
-    auto newValue = addArg(module, 1 + argIndex + idx, argsRemoved, srcType,
-                           field, newArgs[argIndex], fieldSym);
-    newArgs.insert(newArgs.begin() + 1 + argIndex + idx, newValue.second);
-    // Lower any other arguments by copying them to keep the relative order.
-    lowering.push_back(newValue.first);
-  }
-  return true;
 }
 
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
@@ -1027,176 +973,6 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
   return true;
 }
 
-bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
-  ImplicitLocOpBuilder theBuilder(extModule.getLoc(), context);
-  builder = &theBuilder;
-
-  // Top level builder
-  OpBuilder builder(context);
-
-  auto internalPaths = extModule.getInternalPaths();
-
-  // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
-  SmallVector<PortInfoWithIP> newArgs;
-  for (auto [idx, pi] : llvm::enumerate(extModule.getPorts())) {
-    std::optional<InternalPathAttr> internalPath;
-    if (internalPaths)
-      internalPath = cast<InternalPathAttr>(internalPaths->getValue()[idx]);
-    newArgs.push_back({pi, internalPath});
-  }
-
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
-    SmallVector<Value> lowering;
-    if (lowerArg(extModule, argIndex, argsRemoved, newArgs, lowering)) {
-      argsToRemove.push_back(argIndex);
-      ++argsRemoved;
-    }
-    // lowerArg might have invalidated any reference to newArgs, be careful
-  }
-
-  // Remove block args that have been lowered
-  for (auto toRemove : llvm::reverse(argsToRemove))
-    newArgs.erase(newArgs.begin() + toRemove);
-
-  SmallVector<NamedAttribute, 8> newModuleAttrs;
-
-  // Copy over any attributes that weren't original argument attributes.
-  for (auto attr : extModule->getAttrDictionary())
-    // Drop old "portNames", directions, and argument attributes.  These are
-    // handled differently below.
-    if (attr.getName() != "portDirections" && attr.getName() != "portNames" &&
-        attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
-      newModuleAttrs.push_back(attr);
-
-  SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute> newArgNames;
-  SmallVector<Attribute, 8> newArgTypes;
-  SmallVector<Attribute, 8> newArgSyms;
-  SmallVector<Attribute, 8> newArgLocations;
-  SmallVector<Attribute, 8> newArgAnnotations;
-  SmallVector<Attribute, 8> newInternalPaths;
-
-  auto emptyInternalPath = InternalPathAttr::get(context);
-  for (auto &port : newArgs) {
-    newArgDirections.push_back(port.pi.direction);
-    newArgNames.push_back(port.pi.name);
-    newArgTypes.push_back(TypeAttr::get(port.pi.type));
-    newArgSyms.push_back(port.pi.sym);
-    newArgLocations.push_back(port.pi.loc);
-    newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-    if (internalPaths)
-      newInternalPaths.push_back(port.internalPath.value_or(emptyInternalPath));
-  }
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortDirections,
-                     direction::packAttribute(context, newArgDirections)));
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortNames, builder.getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortTypes, builder.getArrayAttr(newArgTypes)));
-
-  newModuleAttrs.push_back(NamedAttribute(
-      cache.sPortLocations, builder.getArrayAttr(newArgLocations)));
-
-  newModuleAttrs.push_back(NamedAttribute(
-      cache.sPortAnnotations, builder.getArrayAttr(newArgAnnotations)));
-
-  // Update the module's attributes.
-  extModule->setAttrs(newModuleAttrs);
-  extModule.setPortSymbols(newArgSyms);
-  if (internalPaths)
-    extModule.setInternalPathsAttr(builder.getArrayAttr(newInternalPaths));
-
-  return false;
-}
-
-bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
-  auto *body = module.getBodyBlock();
-
-  ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
-  builder = &theBuilder;
-
-  // Lower the operations.
-  lowerBlock(body);
-
-  // Lower the module block arguments.
-  llvm::BitVector argsToRemove;
-  auto newArgs = llvm::map_to_vector(module.getPorts(), [](auto pi) {
-    return PortInfoWithIP{pi, std::nullopt};
-  });
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
-    SmallVector<Value> lowerings;
-    if (lowerArg(module, argIndex, argsRemoved, newArgs, lowerings)) {
-      auto arg = module.getArgument(argIndex);
-      processUsers(arg, lowerings);
-      argsToRemove.push_back(true);
-      ++argsRemoved;
-    } else
-      argsToRemove.push_back(false);
-    // lowerArg might have invalidated any reference to newArgs, be careful
-  }
-
-  // Remove block args that have been lowered.
-  body->eraseArguments(argsToRemove);
-  for (auto deadArg = argsToRemove.find_last(); deadArg != -1;
-       deadArg = argsToRemove.find_prev(deadArg))
-    newArgs.erase(newArgs.begin() + deadArg);
-
-  SmallVector<NamedAttribute, 8> newModuleAttrs;
-
-  // Copy over any attributes that weren't original argument attributes.
-  for (auto attr : module->getAttrDictionary())
-    // Drop old "portNames", directions, and argument attributes.  These are
-    // handled differently below.
-    if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
-        attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations")
-      newModuleAttrs.push_back(attr);
-
-  SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute> newArgNames;
-  SmallVector<Attribute> newArgTypes;
-  SmallVector<Attribute> newArgSyms;
-  SmallVector<Attribute> newArgLocations;
-  SmallVector<Attribute, 8> newArgAnnotations;
-  for (auto &port : newArgs) {
-    newArgDirections.push_back(port.pi.direction);
-    newArgNames.push_back(port.pi.name);
-    newArgTypes.push_back(TypeAttr::get(port.pi.type));
-    newArgSyms.push_back(port.pi.sym);
-    newArgLocations.push_back(port.pi.loc);
-    newArgAnnotations.push_back(port.pi.annotations.getArrayAttr());
-  }
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortDirections,
-                     direction::packAttribute(context, newArgDirections)));
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortNames, builder->getArrayAttr(newArgNames)));
-
-  newModuleAttrs.push_back(
-      NamedAttribute(cache.sPortTypes, builder->getArrayAttr(newArgTypes)));
-
-  newModuleAttrs.push_back(NamedAttribute(
-      cache.sPortLocations, builder->getArrayAttr(newArgLocations)));
-
-  newModuleAttrs.push_back(NamedAttribute(
-      cache.sPortAnnotations, builder->getArrayAttr(newArgAnnotations)));
-
-  // Update the module's attributes.
-  module->setAttrs(newModuleAttrs);
-  module.setPortSymbols(newArgSyms);
-  return false;
-}
-
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   if (op.isForceable())
@@ -1312,7 +1088,7 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
         .getResult(0);
   };
   // If the input to the cast is not a FIRRTL type, getSubWhatever cannot handle
-  // it, donot lower the op.
+  // it, do not lower the op.
   if (!type_isa<FIRRTLType>(op->getOperand(0).getType()))
     return false;
   return lowerProducer(op, clone);
@@ -1320,6 +1096,7 @@ bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
 
 // Expand BitCastOp of aggregates
 bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
+  //FIXME
   Value srcLoweredVal = op.getInput();
   // If the input is of aggregate type, then cat all the leaf fields to form a
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
@@ -1413,89 +1190,6 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
                                       input);
   };
   return lowerProducer(op, clone);
-}
-
-bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
-  bool skip = true;
-  SmallVector<Type, 8> resultTypes;
-  SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  auto oldPortAnno = op.getPortAnnotations();
-  SmallVector<Direction> newDirs;
-  SmallVector<Attribute> newNames;
-  SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode = getPreservationModeForModule(
-      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
-
-  endFields.push_back(0);
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto srcType = type_cast<FIRRTLType>(op.getType(i));
-
-    // Flatten any nested bundle types the usual way.
-    SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    if (!peelType(srcType, fieldTypes, mode)) {
-      newDirs.push_back(op.getPortDirection(i));
-      newNames.push_back(op.getPortName(i));
-      resultTypes.push_back(srcType);
-      newPortAnno.push_back(oldPortAnno[i]);
-    } else {
-      skip = false;
-      auto oldName = op.getPortNameStr(i);
-      auto oldDir = op.getPortDirection(i);
-      // Store the flat type for the new bundle type.
-      for (const auto &field : fieldTypes) {
-        newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
-        newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        resultTypes.push_back(mapLoweredType(srcType, field.type));
-        auto annos = filterAnnotations(
-            context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
-            field);
-        newPortAnno.push_back(annos);
-      }
-    }
-    endFields.push_back(resultTypes.size());
-  }
-
-  auto sym = getInnerSymName(op);
-
-  if (skip) {
-    return false;
-  }
-
-  // FIXME: annotation update
-  auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
-      op.getNameKindAttr(), direction::packAttribute(context, newDirs),
-      builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
-      op.getLowerToBindAttr(),
-      sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
-
-  // Copy over any attributes which have not already been copied over by
-  // arguments to the builder.
-  auto attrNames = InstanceOp::getAttributeNames();
-  DenseSet<StringRef> attrSet(attrNames.begin(), attrNames.end());
-  SmallVector<NamedAttribute> newAttrs(newInstance->getAttrs());
-  for (auto i : llvm::make_filter_range(op->getAttrs(), [&](auto namedAttr) {
-         return !attrSet.count(namedAttr.getName());
-       }))
-    newAttrs.push_back(i);
-  newInstance->setAttrs(newAttrs);
-
-  SmallVector<Value> lowered;
-  for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
-       ++aggIndex) {
-    lowered.clear();
-    for (size_t fieldIndex = endFields[aggIndex],
-                eField = endFields[aggIndex + 1];
-         fieldIndex < eField; ++fieldIndex)
-      lowered.push_back(newInstance.getResult(fieldIndex));
-    if (lowered.size() != 1 ||
-        op.getType(aggIndex) != resultTypes[endFields[aggIndex]])
-      processUsers(op.getResult(aggIndex), lowered);
-    else
-      op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
-  }
-  return true;
 }
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
@@ -1620,33 +1314,16 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n");
-  std::vector<FModuleLike> ops;
-  // Symbol Table
-  auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
   AttrCache cache(&getContext());
 
-  DenseMap<FModuleLike, Convention> conventionTable;
-  auto circuit = getOperation();
-  for (auto module : circuit.getOps<FModuleLike>()) {
-    conventionTable.insert({module, module.getConvention()});
-    ops.push_back(module);
-  }
+  auto fmod = getOperation();
 
-  // This lambda, executes in parallel for each Op within the circt.
-  auto lowerModules = [&](FModuleLike op) -> LogicalResult {
-    auto tl =
+  auto tl =
         TypeLoweringVisitor(&getContext(), preserveAggregate, preserveMemories,
-                            symTbl, cache, conventionTable);
-    tl.lowerModule(op);
-
-    return LogicalResult::failure(tl.isFailed());
-  };
-
-  auto result = failableParallelForEach(&getContext(), ops, lowerModules);
-
-  if (failed(result))
-    signalPassFailure();
+                            cache);
+    if (failed(tl.lowerModule(fmod)))
+      signalPassFailure();
 }
 
 /// This is the pass constructor.

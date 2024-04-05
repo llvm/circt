@@ -1,4 +1,4 @@
-; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --emit-omir %s | FileCheck %s
+; RUN: firtool --scalarize-internal-modules --repl-seq-mem --repl-seq-mem-file="dummy" --emit-omir %s | FileCheck %s
 
 circuit Foo : %[[
   {

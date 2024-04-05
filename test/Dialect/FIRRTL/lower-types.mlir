@@ -1,6 +1,6 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=CHECK,LT,COMMON %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=AGGREGATE,LT,COMMON %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=SIG,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types)))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=CHECK,LT,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=all)}))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=AGGREGATE,LT,COMMON %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-signatures)))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=SIG,COMMON %s
 
 firrtl.circuit "TopLevel" {
 

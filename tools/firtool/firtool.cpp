@@ -128,6 +128,11 @@ static cl::opt<bool>
                            cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    scalarizeInternalModules("scalarize-internal-modules",
+                           cl::desc("Scalarize internal modules with an internal port convention"),
+                           cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
@@ -348,6 +353,7 @@ static LogicalResult processBuffer(
     options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
     options.scalarizePublicModules = scalarizePublicModules;
+    options.scalarizeInternalModules = scalarizeInternalModules;
     options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {

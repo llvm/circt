@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=none}))'
+// RUN: circt-opt %s --verify-diagnostics -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=none})))'
 
 // Don't silently drop symbols from memories.
 

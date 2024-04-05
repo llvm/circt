@@ -8,9 +8,9 @@
 // Derived from this example:
 // https://github.com/llvm/circt/pull/5051/files#r1178556059
 
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' %s | FileCheck --check-prefixes=CHECK,COMMON --implicit-check-not=mux %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=1d-vec}))' %s | FileCheck --check-prefixes=1DVEC,COMMON --implicit-check-not=mux %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' %s | FileCheck --check-prefixes=ALL,COMMON --implicit-check-not=mux %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures,firrtl.module(firrtl-lower-types)))' %s | FileCheck --check-prefixes=CHECK,COMMON --implicit-check-not=mux %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures,firrtl.module(firrtl-loser-types{preserve-aggregate=1d-vec})))' %s | FileCheck --check-prefixes=1DVEC,COMMON --implicit-check-not=mux %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures,firrtl.module(firrtl-loser-types{preserve-aggregate=all})))' %s | FileCheck --check-prefixes=ALL,COMMON --implicit-check-not=mux %s
 
 // COMMON-LABEL: firrtl.circuit "Bar"
 firrtl.circuit "Bar" {

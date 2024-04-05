@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types))' %s --verify-diagnostics --split-input-file
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-signatures))' %s --verify-diagnostics --split-input-file
 
 // Check diagnostic when attempting to lower something with symbols on it.
 firrtl.circuit "InnerSym" {
@@ -16,5 +16,8 @@ firrtl.circuit "InternalPath" {
   firrtl.extmodule @InternalPath(
   // expected-error @below {{cannot lower port with internal path}}
       out x: !firrtl.probe<bundle<a: uint<5>, b: uint<3>>>
-    ) attributes { internalPaths = [#firrtl.internalpath<"a.b.c">] }
+    ) attributes { 
+      internalPaths = [#firrtl.internalpath<"a.b.c">],
+      convention = #firrtl<convention scalarized>
+    }
 }

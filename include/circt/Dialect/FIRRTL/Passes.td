@@ -57,7 +57,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
   ];
 }
 
-def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
+def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::FModuleOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
     Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc

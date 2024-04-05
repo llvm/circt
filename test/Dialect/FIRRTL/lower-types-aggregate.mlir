@@ -1,7 +1,7 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=all}))' %s    | FileCheck --check-prefix=PRESERVE_ALL %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=vec}))' %s    | FileCheck --check-prefix=PRESERVE_VEC %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=1d-vec}))' %s | FileCheck --check-prefix=PRESERVE_1D_VEC %s
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-types{preserve-aggregate=none}))' %s   | FileCheck --check-prefix=PRESERVE_NONE %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=all})))' %s    | FileCheck --check-prefix=PRESERVE_ALL %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=vec})))' %s    | FileCheck --check-prefix=PRESERVE_VEC %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=1d-vec})))' %s | FileCheck --check-prefix=PRESERVE_1D_VEC %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-types{preserve-aggregate=none})))' %s   | FileCheck --check-prefix=PRESERVE_NONE %s
 
 firrtl.circuit "TopLevel" {
   firrtl.module @TopLevel() {}

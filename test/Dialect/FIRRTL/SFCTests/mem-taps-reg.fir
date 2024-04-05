@@ -1,4 +1,4 @@
-; RUN: firtool --verilog %s | FileCheck %s
+; RUN: firtool -scalarize-internal-modules --verilog %s | FileCheck %s
 
 circuit Top : %[[
   {
