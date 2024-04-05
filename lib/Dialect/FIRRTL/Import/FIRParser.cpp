@@ -2023,7 +2023,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
-  case FIRToken::kw_intrinsic:
+  case FIRToken::lp_intrinsic:
     if (requireFeature({4, 0, 0}, "generic intrinsics") ||
         parseIntrinsicExp(result))
       return failure();
@@ -2669,7 +2669,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     if (requireFeature({4, 0, 0}, "layers"))
       return failure();
     return parseLayerBlockOrGroup(stmtIndent);
-  case FIRToken::kw_intrinsic:
+  case FIRToken::lp_intrinsic:
     if (requireFeature({4, 0, 0}, "generic intrinsics"))
       return failure();
     return parseIntrinsicStmt();
@@ -3399,13 +3399,12 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
 /// intrinsic_expr ::=  'intrinsic(' Id (params)?  ':' type    exp* ')'
 /// intrinsic_stmt ::=  'intrinsic(' Id (params)? (':' type )? exp* ')'
 ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
-  auto startTok = consumeToken(FIRToken::kw_intrinsic);
+  auto startTok = consumeToken(FIRToken::lp_intrinsic);
   StringRef intrinsic;
   ArrayAttr parameters;
   FIRRTLType type;
 
-  if (parseToken(FIRToken::l_paren, "expected '(' in intrinsic expression") ||
-      parseId(intrinsic, "expected intrinsic identifier") ||
+  if (parseId(intrinsic, "expected intrinsic identifier") ||
       parseOptionalParams(parameters))
     return failure();
 
