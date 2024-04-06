@@ -1415,6 +1415,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredNonClockValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
+  Value getLoweredFmtOperand(Value operand);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -2299,6 +2300,28 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
+}
+
+/// Return a lowered version of 'operand' suitable for use with substitution /
+/// format strings. Zero bit operands are rewritten as one bit zeros and signed
+/// integers are wrapped in $signed().
+Value FIRRTLLowering::getLoweredFmtOperand(Value operand) {
+  auto loweredValue = getLoweredValue(operand);
+  if (!loweredValue) {
+    // If this is a zero bit operand, just pass a one bit zero.
+    if (!isZeroBitFIRRTLType(operand.getType()))
+      return nullptr;
+    loweredValue = getOrCreateIntConstant(1, 0);
+  }
+
+  // If the operand was an SInt, we want to give the user the option to print
+  // it as signed decimal and have to wrap it in $signed().
+  if (auto intTy = firrtl::type_cast<IntType>(operand.getType()))
+    if (intTy.isSigned())
+      loweredValue = builder.create<sv::SystemFunctionOp>(
+          loweredValue.getType(), "signed", loweredValue);
+
+  return loweredValue;
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -4277,13 +4300,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
   for (auto operand : op.getSubstitutions()) {
-    operands.push_back(getLoweredValue(operand));
-    if (!operands.back()) {
-      // If this is a zero bit operand, just pass a one bit zero.
-      if (!isZeroBitFIRRTLType(operand.getType()))
-        return failure();
-      operands.back() = getOrCreateIntConstant(1, 0);
-    }
+    Value loweredValue = getLoweredFmtOperand(operand);
+    if (!loweredValue)
+      return failure();
+    operands.push_back(loweredValue);
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
@@ -4434,13 +4454,10 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
     for (auto operand : opOperands) {
-      auto loweredValue = getLoweredValue(operand);
-      if (!loweredValue) {
-        // If this is a zero bit operand, just pass a one bit zero.
-        if (!isZeroBitFIRRTLType(operand.getType()))
-          return failure();
-        loweredValue = getOrCreateIntConstant(1, 0);
-      }
+      auto loweredValue = getLoweredFmtOperand(operand);
+      if (!loweredValue)
+        return failure();
+
       // For SVA assert/assume statements, wrap any message ops in $sampled() to
       // guarantee that these will print with the same value as when the
       // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
