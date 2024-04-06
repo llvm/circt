@@ -27,9 +27,12 @@ namespace arc {
 using namespace circt;
 using namespace arc;
 using namespace hw;
-using mlir::CallOpInterface;
 
+using llvm::SmallBitVector;
+using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
+using mlir::CallOpInterface;
+using mlir::SymbolUserMap;
 
 //===----------------------------------------------------------------------===//
 // Arc Splitter
@@ -178,7 +181,135 @@ Split &Splitter::getSplit(const APInt &color) {
 }
 
 //===----------------------------------------------------------------------===//
-// Pass Implementation
+// Input-to-Output Dependency Analysis
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct InputOutputDeps {
+  void analyze(DefineOp defineOp);
+
+  ArrayRef<SmallBitVector> get(DefineOp defineOp) {
+    return get(defineOp.getSymNameAttr());
+  }
+  ArrayRef<SmallBitVector> get(StateOp stateOp) {
+    return get(stateOp.getArcAttr().getAttr());
+  }
+  ArrayRef<SmallBitVector> get(CallOp callOp) {
+    return get(callOp.getArcAttr().getAttr());
+  }
+  ArrayRef<SmallBitVector> get(StringAttr sym) {
+    auto it = deps.find(sym);
+    assert(it != deps.end());
+    return it->second;
+  }
+
+  /// Contains the set of inputs every output of an arc depends on.
+  DenseMap<StringAttr, SmallVector<SmallBitVector>> deps;
+};
+} // namespace
+
+void InputOutputDeps::analyze(DefineOp defineOp) {
+  unsigned numArgs = defineOp.getNumArguments();
+
+  // Initialize the arguments. Each argument is assigned a bit vector with the
+  // corresponding argument number set.
+  SmallDenseMap<Value, SmallBitVector> usedArgs;
+  for (auto [index, arg] : llvm::enumerate(defineOp.getArguments())) {
+    SmallBitVector bv(numArgs);
+    bv.set(index);
+    usedArgs.insert({arg, std::move(bv)});
+  }
+
+  // Propagate the argument bit vectors through operations.
+  for (auto &op : defineOp.getBodyBlock().without_terminator()) {
+    SmallBitVector bv(numArgs);
+    for (auto operand : op.getOperands())
+      bv |= usedArgs.lookup(operand);
+    for (auto result : op.getResults())
+      usedArgs.insert({result, bv});
+  }
+
+  // Collect the argument bit vector for each output and store it in the `deps`
+  // map for later retrieval.
+  Operation *outputOp = defineOp.getBodyBlock().getTerminator();
+  SmallVector<SmallBitVector> argsByResult;
+  argsByResult.reserve(outputOp->getNumOperands());
+  for (auto operand : outputOp->getOperands())
+    argsByResult.push_back(usedArgs.lookup(operand));
+  deps.insert({defineOp.getSymNameAttr(), std::move(argsByResult)});
+}
+
+//===----------------------------------------------------------------------===//
+// Rank Analysis
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct RankAnalysis {
+  RankAnalysis(InputOutputDeps &deps) : deps(deps) {}
+  LogicalResult analyze(CallOp callOp);
+
+  InputOutputDeps &deps;
+  DenseMap<Value, unsigned> ranks;
+};
+} // namespace
+
+LogicalResult RankAnalysis::analyze(CallOp callOp) {
+  SmallDenseSet<Value> seen;
+  SmallVector<std::tuple<Value, unsigned, unsigned>> worklist;
+  for (auto result : callOp.getResults())
+    worklist.push_back({result, 0, 0});
+
+  while (!worklist.empty()) {
+    auto &[value, idx, rank] = worklist.back();
+    auto *op = value.getDefiningOp();
+
+    // If this is a block argument or the result of a clocked operation, it has
+    // rank 0 and we're done.
+    if (auto clockedOp = dyn_cast_or_null<ClockedOpInterface>(op);
+        !op || (clockedOp && clockedOp.getLatency() > 0)) {
+      ranks[value] = 0;
+      worklist.pop_back();
+      continue;
+    }
+    auto result = cast<OpResult>(value);
+
+    // If we have handled all operands, we're done.
+    if (idx == op->getNumOperands()) {
+      seen.erase(result);
+      ranks[result] = rank;
+      worklist.pop_back();
+      continue;
+    }
+
+    // Skip this operand if this is a call to an arc and there is no dependency
+    // between the result and this operand.
+    if (auto callOp = dyn_cast<CallOp>(op);
+        callOp && !deps.get(callOp)[result.getResultNumber()][idx]) {
+      ++idx;
+      continue;
+    }
+
+    // Look up the rank of this operand. If it hasn't been computed yet, push
+    // the operand onto the worklist.
+    auto operand = op->getOperand(idx);
+    auto rankIt = ranks.find(operand);
+    if (rankIt == ranks.end()) {
+      if (!seen.insert(operand).second)
+        return op->emitError("loop detected");
+      worklist.push_back({operand, 0, 0});
+      continue;
+    }
+
+    // Incorporate the operand's rank into the rank of this result and advance.
+    rank = std::max(rank, rankIt->second + 1);
+    ++idx;
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -190,12 +321,110 @@ struct SplitLoopsPass : public arc::impl::SplitLoopsBase<SplitLoopsPass> {
                      ArrayRef<Split *> splits, ArrayRef<ImportedValue> outputs);
   LogicalResult ensureNoLoops();
 
-  DenseSet<mlir::CallOpInterface> allArcUses;
+  DenseSet<CallOpInterface> allArcUses;
 };
 } // namespace
 
 void SplitLoopsPass::runOnOperation() {
   auto module = getOperation();
+
+  // Determine the input-to-output data dependencies for all arc definitions.
+  // These will be used later to compute the dependencies.
+  InputOutputDeps deps;
+  SmallVector<DefineOp, 0> defineOps;
+  for (auto defineOp : module.getOps<DefineOp>()) {
+    defineOps.push_back(defineOp);
+    deps.analyze(defineOp);
+  }
+
+  // Compute a topological rank for every value affecting call operations with
+  // multiple results. Registers and inputs have rank zero.
+  SymbolTableCollection symbolTable;
+  SymbolUserMap symbolUserMap(symbolTable, module);
+  RankAnalysis rankAnalysis(deps);
+  SmallVector<CallOp, 0> callOps;
+  for (auto defineOp : defineOps) {
+    for (auto *user : symbolUserMap.getUsers(defineOp)) {
+      if (auto callOp = dyn_cast<CallOp>(user)) {
+        if (callOp.getNumResults() > 1) {
+          callOps.push_back(callOp);
+          if (failed(rankAnalysis.analyze(callOp)))
+            return signalPassFailure();
+        }
+      }
+    }
+  }
+
+  // Determine which arcs need to be split.
+  for (auto defineOp : defineOps) {
+    unsigned numResults = defineOp.getFunctionType().getNumResults();
+    if (numResults <= 1)
+      continue;
+    unsigned numSplits = 1;
+    SmallVector<unsigned> resultSplits;
+    resultSplits.resize(numResults, 0);
+
+    SmallDenseMap<unsigned, unsigned> splitToRank, rankToSplit;
+    for (auto *user : symbolUserMap.getUsers(defineOp)) {
+      auto callOp = dyn_cast<CallOp>(user);
+      if (!callOp)
+        continue;
+      for (auto [result, currentSplit] :
+           llvm::zip(callOp.getResults(), resultSplits)) {
+        unsigned rank = rankAnalysis.ranks.lookup(result);
+        unsigned &split =
+            rankToSplit.insert({rank, currentSplit}).first->second;
+        if (splitToRank.insert({split, rank}).first->second != rank) {
+          split = numSplits++;
+          currentSplit = split;
+          splitToRank.insert({currentSplit, rank});
+        }
+      }
+      splitToRank.clear();
+      rankToSplit.clear();
+    }
+
+    if (numSplits == 1) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Keeping " << defineOp.getSymName() << " unchanged\n");
+      continue;
+    }
+
+    LLVM_DEBUG(llvm::dbgs() << "Splitting " << defineOp.getSymName() << " into "
+                            << numSplits << " result groups\n");
+    for (unsigned resultIdx = 0; resultIdx < numResults; ++resultIdx)
+      LLVM_DEBUG(llvm::dbgs() << "- Result #" << resultIdx << " in split "
+                              << resultSplits[resultIdx] << "\n");
+
+    // resultSplits.reserve(numResults);
+    // for (unsigned resultIdx = 0; resultIdx < numResults; ++resultIdx) {
+    //   SmallVector<unsigned> ranks;
+    //   for (auto *user : users)
+    //     if (auto callOp = dyn_cast<CallOp>(user))
+    //       ranks.push_back(
+    //           rankAnalysis.ranks.lookup(callOp.getResult(resultIdx)));
+    //   auto it = ranksToSplit.try_emplace(std::move(ranks),
+    //   ranksToSplit.size()); resultSplits.push_back(it->second);
+    // }
+  }
+
+  // // Determine which calls need a split.
+  // LLVM_DEBUG(llvm::dbgs() << "Found " << callOps.size() << " call ops\n");
+  // for (auto callOp : callOps) {
+  //   LLVM_DEBUG(llvm::dbgs() << "Ranks in " << callOp << "\n");
+  //   for (auto &operand : callOp->getOpOperands())
+  //     LLVM_DEBUG(llvm::dbgs()
+  //                << "- Operand #" << operand.getOperandNumber() << " has rank
+  //                "
+  //                << rankAnalysis.ranks.lookup(operand.get()) << "\n");
+  //   for (auto result : callOp.getResults())
+  //     LLVM_DEBUG(llvm::dbgs()
+  //                << "- Result #" << result.getResultNumber() << " has rank "
+  //                << rankAnalysis.ranks.lookup(result) << "\n");
+  // }
+
+  return;
+
   allArcUses.clear();
 
   // Collect all arc definitions.
@@ -209,7 +438,6 @@ void SplitLoopsPass::runOnOperation() {
   // Collect all arc uses and determine which arcs we should split.
   SetVector<DefineOp> arcsToSplit;
   DenseMap<DefineOp, SmallVector<CallOpInterface>> arcUses;
-  SetVector<CallOpInterface> allArcUses;
 
   auto result = module.walk([&](CallOpInterface callOp) -> WalkResult {
     auto refSym = callOp.getCallableForCallee().dyn_cast<SymbolRefAttr>();
@@ -235,8 +463,8 @@ void SplitLoopsPass::runOnOperation() {
   // TODO: This is ugly and we should only split arcs that are truly involved in
   // a loop. But detecting the minimal split among the arcs is fairly
   // non-trivial and needs a dedicated implementation effort.
-  for (auto defOp : arcsToSplit)
-    splitArc(arcNamespace, defOp, arcUses[defOp]);
+  // for (auto defOp : arcsToSplit)
+  //   splitArc(arcNamespace, defOp, arcUses[defOp]);
 
   // Ensure that there are no loops through arcs remaining.
   if (failed(ensureNoLoops()))
