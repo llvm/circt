@@ -146,7 +146,7 @@ struct ObjectModelIR {
     auto unknownLoc = mlir::UnknownLoc::get(context);
     auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
         unknownLoc, circtOp.getBodyBlock());
-    Type classFieldTypes[] = {PathType::get(context)};
+    Type classFieldTypes[] = {StringType::get(context)};
     retimeModulesSchemaClass =
         buildSimpleClassOp(builderOM, unknownLoc, "RetimeModulesSchema",
                            retimeModulesParamNames, classFieldTypes);
@@ -163,7 +163,8 @@ struct ObjectModelIR {
         module->getLoc(), retimeModulesMetadataClass.getBodyBlock());
 
     // Create the path operation.
-    auto modEntry = createPathRef(module, nullptr, builderOM);
+    auto modEntry =
+        builderOM.create<StringConstantOp>(module.getModuleNameAttr());
     auto object = builderOM.create<ObjectOp>(retimeModulesSchemaClass,
                                              module.getModuleNameAttr());
 
