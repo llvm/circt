@@ -935,11 +935,22 @@ static Value getCommonOperand(Op op) {
 template <typename Op>
 static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
   auto inputs = op.getInputs();
-  llvm::SmallSetVector<Value, 8> uniqueInputs;
 
-  for (const auto input : inputs)
-    uniqueInputs.insert(input);
+  llvm::SmallSetVector<Value, 8> alreadyCovered;
+  llvm::SmallVector<Value, 8> worklist(inputs.begin(), inputs.end());
+  while (!worklist.empty()) {
+    auto element = worklist.pop_back_val();
 
+    if (auto idempotentOp = element.getDefiningOp<Op>()) {
+      alreadyCovered.insert(idempotentOp.getInputs().begin(),
+                            idempotentOp.getInputs().end());
+      worklist.append(idempotentOp.getInputs().begin(),
+                      idempotentOp.getInputs().end());
+    }
+  }
+
+  llvm::SmallSetVector<Value, 8> uniqueInputs(inputs.begin(), inputs.end());
+  uniqueInputs.set_subtract(alreadyCovered);
   if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
                                       uniqueInputs.getArrayRef());
@@ -962,8 +973,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
     return success();
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
+  // and(..., x, and(..., x, ...)) -> and(..., and(..., x, ...)) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
+  if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
@@ -1248,8 +1260,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
     return success();
 
   // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
+  // or(..., x, or(..., x, ...)) -> or(..., or(..., x, ...)) -- idempotent
   // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
+  if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
