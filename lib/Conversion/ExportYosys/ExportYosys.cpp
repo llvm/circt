@@ -47,26 +47,34 @@ std::string getEscapedName(StringRef name) {
 
 struct RTLILConverter {};
 
-using ResultTy = FailureOr<RTLIL::SigSpec *>;
+struct ExprEmitter
+    : public hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>,
+      public comb::CombinationalVisitor<ExprEmitter,
+                                        FailureOr<Yosys::SigSpec>> {
+  using hw::TypeOpVisitor<ExprEmitter, ResultTy>::visitTypeOp;
+  using comb::CombinationalVisitor<ExprEmitter, ResultTy>::visitComb;
+  FailureOr<Yosys::SigSpec> emitExpression(Operation* op) {}
+}
+
+using ResultTy = LogicalResult;
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, ResultTy>,
-      // public hw::StmtVisitor<ModuleConverter, ResultTy>,
       public comb::CombinationalVisitor<ModuleConverter, ResultTy> {
   using hw::TypeOpVisitor<ModuleConverter, ResultTy>::visitTypeOp;
   using comb::CombinationalVisitor<ModuleConverter, ResultTy>::visitComb;
-  ResultTy getValue(Value value) {
+  FailureOr<SigSpec> getValue(Value value) {
     auto it = mapping.find(value);
     if (it != mapping.end())
       return it->second;
     if (isa<OpResult>(value)) {
       // TODO: If it's instance like ...
       auto *op = value.getDefiningOp();
-      auto result = visit(op);
-      if(failed(result))
+      auto result = ExprEmitter().emitExpression(op);
+      if (failed(result))
         return result;
 
       setLowering(op->getResult(0), result.value());
-      return result;
+      return success();
     }
     // TODO: Convert ports.
     return failure();
@@ -90,10 +98,8 @@ struct ModuleConverter
   // TODO: Consider BumpAllocator instead of many allocations with unique
   // pointers.
   llvm::SmallVector<std::unique_ptr<SigSpec>> sigSpecs;
-  template <typename... Params> SigSpec *allocateSigSpec(Params &&...params) {
-    sigSpecs.push_back(
-        std::make_unique<SigSpec>(std::forward<Params>(params)...));
-    return sigSpecs.back().get();
+  template <typename... Params> SigSpec allocateSigSpec(Params &&...params) {
+    return SigSpec(std::forward<Params>(params)...));
   }
 
   // Comb.
@@ -102,7 +108,7 @@ struct ModuleConverter
   ResultTy emitVariadicOp(Operation *op, BinaryFn fn) {
     // Construct n-1 binary op (currently linear) chains.
     // TODO: Need to create a tree?
-    SigSpec *cur = nullptr;
+    std::optional<SigSpec> cur;
     for (auto operand : op->getOperands()) {
       auto result = getValue(operand);
       if (failed(result))
@@ -111,13 +117,13 @@ struct ModuleConverter
         auto *resultWire = rtlilModule->addWire(
             getNewName(), hw::getBitWidth(operand.getType()));
 
-        Cell *cell = fn(getNewName(), *cur, *result.value(), resultWire);
+        Cell *cell = fn(getNewName(), *cur, result.value(), resultWire);
         // assert(cell->connections().size() == 3);
         cur = allocateSigSpec(resultWire);
       } else
         cur = result.value();
     }
-    return cur;
+    return cur.value();
   }
   circt::Namespace moduleNameSpace;
   RTLIL::IdString getNewName(StringRef name = "_GEN_") {
@@ -216,10 +222,10 @@ struct ModuleConverter
     }
   }
 
-  DenseMap<Value, SigSpec *> mapping;
+  DenseMap<Value, SigSpec> mapping;
   SmallVector<RTLIL::Wire *> outputs;
 
-  LogicalResult setLowering(Value value, SigSpec *s) {
+  LogicalResult setLowering(Value value, SigSpec s) {
     return LogicalResult::success(mapping.insert({value, s}).second);
   }
 
