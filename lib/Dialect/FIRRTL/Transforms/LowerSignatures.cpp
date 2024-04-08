@@ -178,10 +178,10 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                          << "] should be subdivided, but cannot be because of "
                             "annotations [";
               auto [b, e] = annos.find(fieldID, fieldID);
-              err << b->getClass();
+              err << b->getClass() << "(" << b->getFieldID() << ")";
               b++;
               for (; b != e; ++b)
-                err << ", " << b->getClass();
+                err << ", " << b->getClass() << "(" << b->getFieldID() << ")";
               err << "] on a bundle";
               return err;
             }
@@ -251,12 +251,11 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
 static LogicalResult computeLowering(FModuleLike mod, Convention conv,
                                      PortConversion &newPorts) {
   for (auto [idx, port] : llvm::enumerate(mod.getPorts())) {
-    if (computeLoweringImpl(
+    if (failed(computeLoweringImpl(
             mod, newPorts, conv, idx, port, port.direction == Direction::Out,
             port.name.getValue(), type_cast<FIRRTLType>(port.type), 0,
             FieldIDSearch<hw::InnerSymAttr>(port.sym),
-            FieldIDSearch<AnnotationSet>(port.annotations))
-            .failed())
+            FieldIDSearch<AnnotationSet>(port.annotations))))
       return failure();
   }
   return success();
