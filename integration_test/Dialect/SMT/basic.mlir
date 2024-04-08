@@ -62,6 +62,56 @@ func.func @entry() {
     smt.yield
   }
 
+  // CHECK: unsat
+  // CHECK: Res: -1
+  smt.solver () : () -> () {
+    %0 = smt.bv.constant #smt.bv<1> : !smt.bv<32>
+    %1 = smt.bv.constant #smt.bv<2> : !smt.bv<32>
+    %2 = smt.bv.cmp ugt %0, %1 : !smt.bv<32>
+    func.call @check(%2) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: unsat
+  // CHECK: Res: -1
+  smt.solver () : () -> () {
+    %t = smt.constant true
+    %f = smt.constant false
+    %0 = smt.xor %t, %f, %t, %f
+    func.call @check(%0) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %0 = smt.bv.constant #smt.bv<0x0f> : !smt.bv<8>
+    %1 = smt.bv.constant #smt.bv<0x0> : !smt.bv<4>
+    %2 = smt.bv.concat %0, %1 : !smt.bv<8>, !smt.bv<4>
+    %3 = smt.bv.extract %0 from 0 : (!smt.bv<8>) -> !smt.bv<4>
+    %4 = smt.bv.constant #smt.bv<0x0f0> : !smt.bv<12>
+    %5 = smt.bv.constant #smt.bv<0xf> : !smt.bv<4>
+    %6 = smt.eq %2, %4 : !smt.bv<12>
+    %7 = smt.eq %3, %5 : !smt.bv<4>
+    %8 = smt.and %6, %7
+    func.call @check(%8) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %0 = smt.int.constant -42
+    %1 = smt.int.constant -9223372036854775809
+    %2 = smt.int.constant 9223372036854775809
+    %3 = smt.int.abs %1
+    %4 = smt.int.cmp lt %1, %0
+    %5 = smt.eq %3, %2 : !smt.int
+    %6 = smt.and %4, %5
+    func.call @check(%6) : (!smt.bool) -> ()
+    smt.yield
+  }
+
   return
 }
 

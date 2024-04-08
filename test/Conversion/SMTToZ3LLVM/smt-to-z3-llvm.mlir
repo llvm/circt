@@ -185,6 +185,161 @@ func.func @test(%arg0: i32) {
       %c-1 = llvm.mlir.constant(-1 : i32) : i32
       smt.yield %c-1 : i32
     } -> i32
+
+    // CHECK: [[TRUE:%.+]] = llvm.call @Z3_mk_true({{%[0-9a-zA-Z_]+}}) : (!llvm.ptr) -> !llvm.ptr
+    %true = smt.constant true
+    // CHECK-NEXT: [[FALSE:%.+]] = llvm.call @Z3_mk_false({{%[0-9a-zA-Z_]+}}) : (!llvm.ptr) -> !llvm.ptr
+    %false = smt.constant false
+
+    // CHECK-NEXT: llvm.call @Z3_mk_bvneg({{%[0-9a-zA-Z_]+}}, [[BV0]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.neg %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvadd({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.add %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvmul({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.mul %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvurem({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.urem %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsrem({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.srem %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsmod({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.smod %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvudiv({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.udiv %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsdiv({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.sdiv %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvshl({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.shl %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvlshr({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.lshr %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvashr({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.ashr %c0_bv4, %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_bvnot({{%[0-9a-zA-Z_]+}}, [[BV0]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.not %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvand({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.and %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvor({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.or %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvxor({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.xor %c0_bv4, %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_concat({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.concat %c0_bv4, %c0_bv4 : !smt.bv<4>, !smt.bv<4>
+    // CHECK-NEXT: [[TWO:%.+]] = llvm.mlir.constant(2 : i32) : i32
+    // CHECK-NEXT: [[THREE:%.+]] = llvm.mlir.constant(3 : i32) : i32
+    // CHECK-NEXT: llvm.call @Z3_mk_extract({{%[0-9a-zA-Z_]+}}, [[THREE]], [[TWO]], [[BV0]]) : (!llvm.ptr, i32, i32, !llvm.ptr) -> !llvm.ptr
+    smt.bv.extract %c0_bv4 from 2 : (!smt.bv<4>) -> !smt.bv<2>
+    // CHECK-NEXT: [[TWO:%.+]] = llvm.mlir.constant(2 : i32) : i32
+    // CHECK-NEXT: llvm.call @Z3_mk_repeat({{%[0-9a-zA-Z_]+}}, [[TWO]], [[BV0]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.bv.repeat 2 times %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_bvslt({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp slt %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsle({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp sle %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsgt({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp sgt %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvsge({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp sge %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvult({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp ult %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvule({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp ule %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvugt({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp ugt %c0_bv4, %c0_bv4 : !smt.bv<4>
+    // CHECK-NEXT: llvm.call @Z3_mk_bvuge({{%[0-9a-zA-Z_]+}}, [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.bv.cmp uge %c0_bv4, %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NEXT: [[THREE:%.+]] = llvm.mlir.constant(3 : i32) : i32
+    // CHECK-NEXT: [[ONE:%.+]] = llvm.mlir.constant(1 : i32) : i32
+    // CHECK-NEXT: [[STORAGE:%.+]] = llvm.alloca [[ONE]] x !llvm.array<3 x ptr> : (i32) -> !llvm.ptr
+    // CHECK-NEXT: [[A0:%.+]] = llvm.mlir.undef : !llvm.array<3 x ptr>
+    // CHECK-NEXT: [[A1:%.+]] = llvm.insertvalue [[TRUE]], [[A0]][0] : !llvm.array<3 x ptr>
+    // CHECK-NEXT: [[A2:%.+]] = llvm.insertvalue [[FALSE]], [[A1]][1] : !llvm.array<3 x ptr>
+    // CHECK-NEXT: [[A3:%.+]] = llvm.insertvalue [[TRUE]], [[A2]][2] : !llvm.array<3 x ptr>
+    // CHECK-NEXT: llvm.store [[A3]], [[STORAGE]] : !llvm.array<3 x ptr>, !llvm.ptr
+    // CHECK-NEXT: llvm.call @Z3_mk_or({{%[0-9a-zA-Z_]+}}, [[THREE]], [[STORAGE]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.or %true, %false, %true
+
+    // CHECK-NEXT: llvm.call @Z3_mk_ite({{%[0-9a-zA-Z_]+}}, [[TRUE]], [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.ite %true, %c0_bv4, %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_not({{%[0-9a-zA-Z_]+}}, [[TRUE]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.not %true
+    // CHECK-NEXT: llvm.call @Z3_mk_xor({{%[0-9a-zA-Z_]+}}, [[TRUE]], [[FALSE]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.xor %true, %false
+    // CHECK-NEXT: [[V0:%.+]] = llvm.call @Z3_mk_xor({{%[0-9a-zA-Z_]+}}, [[TRUE]], [[FALSE]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[V1:%.+]] = llvm.call @Z3_mk_xor({{%[0-9a-zA-Z_]+}}, [[V0]], [[TRUE]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: llvm.call @Z3_mk_xor({{%[0-9a-zA-Z_]+}}, [[V1]], [[FALSE]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.xor %true, %false, %true, %false
+    // CHECK-NEXT: llvm.call @Z3_mk_implies({{%[0-9a-zA-Z_]+}}, [[TRUE]], [[FALSE]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.implies %true, %false
+
+    // CHECK-NEXT: [[FOUR:%.+]] = llvm.mlir.constant(4 : i32) : i32
+    // CHECK-NEXT: [[BV_SORT:%.+]] = llvm.call @Z3_mk_bv_sort({{%[0-9a-zA-Z_]+}}, [[FOUR]]) : (!llvm.ptr, i32) -> !llvm.ptr
+    // CHECK-NEXT: [[ARR:%.+]] = llvm.call @Z3_mk_const_array({{%[0-9a-zA-Z_]+}}, [[BV_SORT]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    %9 = smt.array.broadcast %c0_bv4 : !smt.array<[!smt.bv<4> -> !smt.bv<4>]>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_select({{%[0-9a-zA-Z_]+}}, [[ARR]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.array.select %9[%c0_bv4] : !smt.array<[!smt.bv<4> -> !smt.bv<4>]>
+
+    // CHECK-NEXT: llvm.call @Z3_mk_store({{%[0-9a-zA-Z_]+}}, [[ARR]], [[BV0]], [[BV0]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.array.store %9[%c0_bv4], %c0_bv4 : !smt.array<[!smt.bv<4> -> !smt.bv<4>]>
+
+    // CHECK-NEXT: [[SORT:%.+]] = llvm.call @Z3_mk_int_sort({{%[0-9a-zA-Z_]+}}) : (!llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[VAL:%.+]] = llvm.mlir.constant(-123 : i64) : i64
+    // CHECK-NEXT: [[C123:%.+]] = llvm.call @Z3_mk_int64({{%[0-9a-zA-Z_]+}}, [[VAL]], [[SORT]]) : (!llvm.ptr, i64, !llvm.ptr) -> !llvm.ptr
+    %10 = smt.int.constant -123
+
+    // CHECK-NEXT: [[INT_SORT:%.+]] = llvm.call @Z3_mk_int_sort({{%[0-9a-zA-Z_]+}}) : (!llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
+    // CHECK-NEXT: [[NUMERAL:%.+]] = llvm.call @Z3_mk_numeral({{%[0-9a-zA-Z_]+}}, [[STR]], [[INT_SORT]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: llvm.call @Z3_mk_unary_minus({{%[0-9a-zA-Z_]+}}, [[NUMERAL]]) : (!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.constant -9223372036854775809
+
+    // CHECK-NEXT: [[SORT:%.+]] = llvm.call @Z3_mk_int_sort({{%[0-9a-zA-Z_]+}}) : (!llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[ZERO:%.+]] = llvm.mlir.constant(0 : i64) : i64
+    // CHECK-NEXT: [[ZERO_VAL:%.+]] = llvm.call @Z3_mk_int64({{%[0-9a-zA-Z_]+}}, [[ZERO]], [[SORT]]) : (!llvm.ptr, i64, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[COND:%.+]] = llvm.call @Z3_mk_lt({{%[0-9a-zA-Z_]+}}, [[C123]], [[ZERO_VAL]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: [[TWO:%.+]] = llvm.mlir.constant(2 : i32) : i32
+    // CHECK-NEXT: [[ONE:%.+]] = llvm.mlir.constant(1 : i32) : i32
+    // CHECK-NEXT: [[STORAGE:%.+]] = llvm.alloca [[ONE]] x !llvm.array<2 x ptr> : (i32) -> !llvm.ptr
+    // CHECK-NEXT: [[A0:%.+]] = llvm.mlir.undef : !llvm.array<2 x ptr>
+    // CHECK-NEXT: [[A1:%.+]] = llvm.insertvalue [[ZERO_VAL]], [[A0]][0] : !llvm.array<2 x ptr>
+    // CHECK-NEXT: [[A2:%.+]] = llvm.insertvalue [[C123]], [[A1]][1] : !llvm.array<2 x ptr>
+    // CHECK-NEXT: llvm.store [[A2]], [[STORAGE]] : !llvm.array<2 x ptr>, !llvm.ptr
+    // CHECK-NEXT: [[NEG:%.+]] = llvm.call @Z3_mk_sub({{%[0-9a-zA-Z_]+}}, [[TWO]], [[STORAGE]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    // CHECK-NEXT: llvm.call @Z3_mk_ite({{%[0-9a-zA-Z_]+}}, [[COND]], [[NEG]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.abs %10
+
+    // CHECK: [[THREE:%.+]] = llvm.mlir.constant(3 : i32) : i32
+    // CHECK: [[ALLOCA:%.+]] = llvm.alloca
+    // CHECK: llvm.call @Z3_mk_add({{%[0-9a-zA-Z_]+}}, [[THREE]], [[ALLOCA]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.int.add %10, %10, %10
+
+    // CHECK: [[THREE:%.+]] = llvm.mlir.constant(3 : i32) : i32
+    // CHECK: [[ALLOCA:%.+]] = llvm.alloca
+    // CHECK: llvm.call @Z3_mk_mul({{%[0-9a-zA-Z_]+}}, [[THREE]], [[ALLOCA]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.int.mul %10, %10, %10
+
+    // CHECK: [[THREE:%.+]] = llvm.mlir.constant(2 : i32) : i32
+    // CHECK: [[ALLOCA:%.+]] = llvm.alloca
+    // CHECK: llvm.call @Z3_mk_sub({{%[0-9a-zA-Z_]+}}, [[THREE]], [[ALLOCA]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    smt.int.sub %10, %10
+
+    // CHECK-NEXT: llvm.call @Z3_mk_div({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.div %10, %10
+    // CHECK-NEXT: llvm.call @Z3_mk_mod({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.mod %10, %10
+
+    // CHECK-NEXT: llvm.call @Z3_mk_le({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.cmp le %10, %10
+    // CHECK-NEXT: llvm.call @Z3_mk_lt({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.cmp lt %10, %10
+    // CHECK-NEXT: llvm.call @Z3_mk_ge({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.cmp ge %10, %10
+    // CHECK-NEXT: llvm.call @Z3_mk_gt({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    smt.int.cmp gt %10, %10
     
     smt.yield %8 : i32
   }
