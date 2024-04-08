@@ -40,23 +40,24 @@ firrtl.circuit "retime0" attributes { annotations = [{
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
 // CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata
-// CHECK-SAME:               [{class = "circt.tracker", id = distinct[0]<>}]
 // CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata
 // CHECK:         firrtl.module @retime1() {
-// CHECK:         firrtl.module @retime2() attributes {annotations = [{class = "circt.tracker", id = distinct[1]<>}]}
+// CHECK:         firrtl.module @retime2()
 
-// CHECK:  firrtl.class @RetimeModulesSchema(in %[[moduleName_in:.+]]: !firrtl.path, out %moduleName: !firrtl.path) {
-// CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]] : !firrtl.path
-// CHECK:  }
-// CHECK:  firrtl.class @RetimeModulesMetadata(out %[[retime0_field:.+]]: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>, out %[[retime2field:.+]]: !firrtl.class<@RetimeModulesSchema(in moduleName_in: !firrtl.path, out moduleName: !firrtl.path)>)
-// CHECK:    firrtl.path instance distinct[0]<>
+// CHECK:    firrtl.class @RetimeModulesSchema(in %[[moduleName_in:.+]]: !firrtl.string, out %moduleName: !firrtl.string) {
+// CHECK:    firrtl.propassign %moduleName, %[[moduleName_in]]
+
+// CHECK:  firrtl.class @RetimeModulesMetadata
+// CHECK-SAME: (out %[[retime0_field:[a-zA-Z][a-zA-Z0-9_]*]]: !firrtl.class<@RetimeModulesSchema
+// CHECK:    %[[v0:.+]] = firrtl.string "retime0"
 // CHECK:    %retime0 = firrtl.object @RetimeModulesSchema
-// CHECK:    firrtl.object.subfield %retime0
-// CHECK:    firrtl.propassign %[[retime0_field]], %retime0 : !firrtl.class<@RetimeModulesSchema
-// CHECK:    firrtl.path instance distinct[1]<>
+// CHECK-NEXT:    %[[v1:.+]] = firrtl.object.subfield %retime0
+// CHECK-NEXT:    firrtl.propassign %[[v1]], %[[v0]] : !firrtl.string
+// CHECK-NEXT:    firrtl.propassign %[[retime0_field]], %retime0
+// CHECK:    %2 = firrtl.string "retime2"
 // CHECK:    %retime2 = firrtl.object @RetimeModulesSchema
 // CHECK:    firrtl.object.subfield %retime2
-// CHECK:    firrtl.propassign %[[retime2field]], %retime2
+// CHECK:    firrtl.propassign %[[retime2field:.+]], %retime2
 
 // CHECK:               emit.file "retime_modules.json" {
 // CHECK-NEXT{LITERAL}:   sv.verbatim "[\0A \22{{0}}\22,\0A \22{{1}}\22\0A]" {symbols = [@retime0, @retime2]}
