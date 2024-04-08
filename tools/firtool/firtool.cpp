@@ -130,7 +130,7 @@ static cl::opt<bool>
 static cl::opt<bool>
     scalarizeIntModules("scalarize-internal-modules",
                         cl::desc("Scalarize the ports of any internal modules"),
-                        cl::init(false), cl::cat(mainCategory));
+                        cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
