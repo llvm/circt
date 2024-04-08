@@ -3439,7 +3439,7 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
   return success();
 }
 
-/// params ::= '<' param param* '>'
+/// params ::= '<' param* '>'
 ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
   if (!consumeIf(FIRToken::less))
     return success();
