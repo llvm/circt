@@ -46,6 +46,12 @@ module Basic;
   int v1;
   int v2 = v1;
 
+  // CHECK: %b1 = moore.variable : !moore.packed<range<bit, 0:0>>
+  // CHECK: [[TMP:%.+]] = moore.conversion %b1 : !moore.packed<range<bit, 0:0>> -> !moore.bit
+  // CHECK: %b2 = moore.variable [[TMP]] : !moore.bit
+  bit [0:0] b1;
+  bit b2 = b1;
+
   // CHECK: moore.procedure initial {
   // CHECK: }
   initial;
