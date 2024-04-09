@@ -12,7 +12,6 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Debug.h"
-#include <cassert>
 
 using namespace circt;
 using namespace hw;
@@ -21,69 +20,34 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firreg"
 
-std::function<bool(const Operation *op)> OpUserInfo::opAllowsReachability =
-    [](const Operation *op) -> bool {
-  return (isa<comb::MuxOp, ArrayGetOp, ArrayCreateOp>(op));
-};
+// Reimplemented from SliceAnalysis to use a worklist rather than recursion and
+// non-insert ordered set.
+static void
+getForwardSliceSimple(Operation *root,
+                      llvm::DenseSet<Operation *> &forwardSlice,
+                      llvm::function_ref<bool(Operation *)> filter = nullptr) {
+  SmallVector<Operation *> worklist({root});
 
-bool ReachableMuxes::isMuxReachableFrom(seq::FirRegOp regOp,
-                                        comb::MuxOp muxOp) {
-  return llvm::any_of(regOp.getResult().getUsers(), [&](Operation *user) {
-    if (!OpUserInfo::opAllowsReachability(user))
-      return false;
-    buildReachabilityFrom(user);
-    return reachableMuxes[user].contains(muxOp);
-  });
-}
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
 
-void ReachableMuxes::buildReachabilityFrom(Operation *startNode) {
-  // This is a backward dataflow analysis.
-  // First build a graph rooted at the `startNode`. Every user of an operation
-  // that does not block the reachability is a child node. Then, the ops that
-  // are reachable from a node is computed as the union of the Reachability of
-  // all its child nodes.
-  // The dataflow can be expressed as, for all child in the Children(node)
-  // Reachability(node) = node + Union{Reachability(child)}
-  if (visited.contains(startNode))
-    return;
+    if (!op)
+      continue;
 
-  // The stack to record enough information for an iterative post-order
-  // traversal.
-  llvm::SmallVector<OpUserInfo> stk;
+    if (filter && !filter(op))
+      continue;
 
-  stk.emplace_back(startNode);
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        for (Operation &blockOp : block)
+          if (forwardSlice.insert(&blockOp).second)
+            worklist.push_back(&blockOp);
+    for (Value result : op->getResults())
+      for (Operation *userOp : result.getUsers())
+        if (forwardSlice.insert(userOp).second)
+          worklist.push_back(userOp);
 
-  while (!stk.empty()) {
-    auto &info = stk.back();
-    Operation *currentNode = info.op;
-
-    // Node is being visited for the first time.
-    if (info.getAndSetUnvisited())
-      visited.insert(currentNode);
-
-    if (info.userIter != info.userEnd) {
-      Operation *child = *info.userIter;
-      ++info.userIter;
-      if (!visited.contains(child))
-        stk.emplace_back(child);
-
-    } else { // All children of the node have been visited
-      // Any op is reachable from itself.
-      reachableMuxes[currentNode].insert(currentNode);
-
-      for (auto *childOp : llvm::make_filter_range(
-               info.op->getUsers(), OpUserInfo::opAllowsReachability)) {
-        reachableMuxes[currentNode].insert(childOp);
-        // Propagate the reachability backwards from m to currentNode.
-        auto iter = reachableMuxes.find(childOp);
-        assert(iter != reachableMuxes.end());
-
-        // Add all the mux that was reachable from childOp, to currentNode.
-        reachableMuxes[currentNode].insert(iter->getSecond().begin(),
-                                           iter->getSecond().end());
-      }
-      stk.pop_back();
-    }
+    forwardSlice.insert(op);
   }
 }
 
@@ -104,17 +68,6 @@ void FirRegLowering::addToIfBlock(OpBuilder &builder, Value cond,
     builder.setInsertionPointToEnd(op.getElseBlock());
     falseSide();
   }
-}
-
-FirRegLowering::FirRegLowering(TypeConverter &typeConverter,
-                               hw::HWModuleOp module,
-                               bool disableRegRandomization,
-                               bool emitSeparateAlwaysBlocks)
-    : typeConverter(typeConverter), module(module),
-      disableRegRandomization(disableRegRandomization),
-      emitSeparateAlwaysBlocks(emitSeparateAlwaysBlocks) {
-
-  reachableMuxes = std::make_unique<ReachableMuxes>(module);
 }
 
 void FirRegLowering::lower() {
@@ -405,6 +358,10 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   // want to create if/else structure for logic unrelated to the register's
   // enable.
   auto firReg = term.getDefiningOp<seq::FirRegOp>();
+  DenseSet<Operation *> regMuxFanout;
+  getForwardSliceSimple(firReg, regMuxFanout, [&](Operation *op) {
+    return op == firReg || !isa<sv::RegOp, seq::FirRegOp, hw::InstanceOp>(op);
+  });
 
   SmallVector<std::tuple<Block *, Value, Value, Value>> worklist;
   auto addToWorklist = [&](Value reg, Value term, Value next) {
@@ -432,8 +389,7 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
     // If this is a two-state mux within the fanout from the register, we use
     // if/else structure for proper enable inference.
     auto mux = next.getDefiningOp<comb::MuxOp>();
-    if (mux && mux.getTwoState() &&
-        reachableMuxes->isMuxReachableFrom(firReg, mux)) {
+    if (mux && mux.getTwoState() && regMuxFanout.contains(mux)) {
       addToIfBlock(
           builder, mux.getCond(),
           [&]() { addToWorklist(reg, term, mux.getTrueValue()); },
