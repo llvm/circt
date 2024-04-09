@@ -11,3 +11,17 @@ func.func @test() {
 
   return
 }
+
+// CHECK-LABEL: func.func @modA(%{{.*}}: !smt.bv<32>) -> !smt.bv<32>
+hw.module @modA(in %in: i32, out out: i32) {
+  // CHECK-NEXT: return
+  hw.output %in : i32
+}
+
+// CHECK-LABEL: func.func @modB(%{{.*}}: !smt.bv<32>) -> !smt.bv<32>
+hw.module @modB(in %in: i32, out out: i32) {
+  // CHECK-NEXT: [[V:%.+]] = call @modA(%{{.*}}) : (!smt.bv<32>) -> !smt.bv<32>
+  %0 = hw.instance "inst" @modA(in: %in: i32) -> (out: i32)
+  // CHECK-NEXT: return [[V]] : !smt.bv<32>
+  hw.output %0 : i32
+}

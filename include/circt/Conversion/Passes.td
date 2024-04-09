@@ -701,7 +701,7 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
 
 def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
-  let dependentDialects = ["smt::SMTDialect"];
+  let dependentDialects = ["smt::SMTDialect", "mlir::func::FuncDialect"];
 }
 
 //===----------------------------------------------------------------------===//

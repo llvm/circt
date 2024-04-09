@@ -9,8 +9,10 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/TopologicalSortUtils.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTHWTOSMT
@@ -36,6 +38,60 @@ struct HWConstantOpConversion : OpConversionPattern<ConstantOp> {
     return success();
   }
 };
+
+/// Lower a hw::HWModuleOp operation to func::FuncOp.
+struct HWModuleOpConversion : OpConversionPattern<HWModuleOp> {
+  using OpConversionPattern<HWModuleOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(HWModuleOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto funcTy = op.getModuleType().getFuncType();
+    SmallVector<Type> inputTypes, resultTypes;
+    if (failed(typeConverter->convertTypes(funcTy.getInputs(), inputTypes)))
+      return failure();
+    if (failed(typeConverter->convertTypes(funcTy.getResults(), resultTypes)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&op.getBody(), *typeConverter)))
+      return failure();
+    auto funcOp = rewriter.create<mlir::func::FuncOp>(
+        op.getLoc(), adaptor.getSymNameAttr(),
+        rewriter.getFunctionType(inputTypes, resultTypes));
+    rewriter.inlineRegionBefore(op.getBody(), funcOp.getBody(), funcOp.end());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Lower a hw::OutputOp operation to func::ReturnOp.
+struct OutputOpConversion : OpConversionPattern<OutputOp> {
+  using OpConversionPattern<OutputOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op, adaptor.getOutputs());
+    return success();
+  }
+};
+
+/// Lower a hw::InstanceOp operation to func::CallOp.
+struct InstanceOpConversion : OpConversionPattern<InstanceOp> {
+  using OpConversionPattern<InstanceOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> resultTypes;
+    if (failed(typeConverter->convertTypes(op->getResultTypes(), resultTypes)))
+      return failure();
+
+    rewriter.replaceOpWithNewOp<mlir::func::CallOp>(
+        op, adaptor.getModuleNameAttr(), resultTypes, adaptor.getInputs());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -117,13 +173,15 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
 
 void circt::populateHWToSMTConversionPatterns(TypeConverter &converter,
                                               RewritePatternSet &patterns) {
-  patterns.add<HWConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<HWConstantOpConversion, HWModuleOpConversion, OutputOpConversion,
+               InstanceOpConversion>(converter, patterns.getContext());
 }
 
 void ConvertHWToSMTPass::runOnOperation() {
   ConversionTarget target(getContext());
   target.addIllegalDialect<hw::HWDialect>();
   target.addLegalDialect<smt::SMTDialect>();
+  target.addLegalDialect<mlir::func::FuncDialect>();
 
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
@@ -133,4 +191,16 @@ void ConvertHWToSMTPass::runOnOperation() {
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
     return signalPassFailure();
+
+  // Sort the functions topologically because 'hw.module' has a graph region
+  // while 'func.func' is a regular SSACFG region. Real combinational cycles or
+  // pseudo cycles through module instances are not supported yet.
+  for (auto func : getOperation().getOps<mlir::func::FuncOp>()) {
+    // Skip functions that are definitely not the result of lowering from
+    // 'hw.module'
+    if (func.getBody().getBlocks().size() != 1)
+      continue;
+
+    mlir::sortTopologically(&func.getBody().front());
+  }
 }

@@ -1,12 +1,12 @@
-// These tests will be only enabled if circt-lec is built.
-// REQUIRES: circt-lec
+// REQUIRES: libz3
+// REQUIRES: circt-lec-jit
 
 hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
 }
 
 // hw.constant
-//  RUN: circt-lec %s -c1=basic -c2=notnot -v=false | FileCheck %s --check-prefix=HW_CONSTANT
+//  RUN: circt-lec %s -c1=basic -c2=notnot --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_CONSTANT
 //  HW_CONSTANT: c1 == c2
 
 hw.module @onePlusTwo(out out: i2) {
@@ -22,7 +22,7 @@ hw.module @three(out out: i2) {
 }
 
 // hw.instance
-//  RUN: circt-lec %s -c1=basic -c2=notnot -v=false | FileCheck %s --check-prefix=HW_INSTANCE
+//  RUN: circt-lec %s -c1=basic -c2=notnot --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_INSTANCE
 //  HW_INSTANCE: c1 == c2
 
 hw.module @not(in %in: i1, out out: i1) {
@@ -38,7 +38,7 @@ hw.module @notnot(in %in: i1, out out: i1) {
 }
 
 // hw.output
-//  RUN: circt-lec %s -c1=basic -c2=basic -v=false | FileCheck %s --check-prefix=HW_OUTPUT
+//  RUN: circt-lec %s -c1=basic -c2=basic --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_OUTPUT
 //  HW_OUTPUT: c1 == c2
 
 hw.module @constZeroZero(in %in: i1, out o1: i1, out o2: i1) {
@@ -58,11 +58,11 @@ hw.module @constZeroOne(in %in: i1, out o1: i1, out o2: i1) {
 }
 
 // Equivalent modules with two outputs
-//  RUN: circt-lec %s -c1=constZeroZero -c2=xorZeroZero -v=false | FileCheck %s --check-prefix=TWOOUTPUTS
+//  RUN: circt-lec %s -c1=constZeroZero -c2=xorZeroZero --shared-libs=%libz3 | FileCheck %s --check-prefix=TWOOUTPUTS
 //  TWOOUTPUTS: c1 == c2
 
 // Modules with one equivalent and one non-equivalent output
-//  RUN: not circt-lec %s -c1=constZeroZero -c2=constZeroOne -v=false | FileCheck %s --check-prefix=TWOOUTPUTSFAIL
+//  RUN: circt-lec %s -c1=constZeroZero -c2=constZeroOne --shared-libs=%libz3 | FileCheck %s --check-prefix=TWOOUTPUTSFAIL
 //  TWOOUTPUTSFAIL: c1 != c2
 
 hw.module @onePlusTwoNonSSA(out out: i2) {
@@ -73,6 +73,6 @@ hw.module @onePlusTwoNonSSA(out out: i2) {
 }
 
 // hw.module graph region check
-//  RUN: circt-lec %s -c1=onePlusTwo -c2=onePlusTwoNonSSA -v=false | FileCheck %s --check-prefix=HW_MODULE_GRAPH
+//  RUN: circt-lec %s -c1=onePlusTwo -c2=onePlusTwoNonSSA --shared-libs=%libz3 | FileCheck %s --check-prefix=HW_MODULE_GRAPH
 //  HW_MODULE_GRAPH: c1 == c2
 
