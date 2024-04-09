@@ -209,6 +209,10 @@ module Expressions;
   integer d, e, f;
   bit x;
   logic y;
+  logic [31:0] vec_1;
+  logic [0:31] vec_2;
+  bit [4:1] arr [1:3][2:7];
+  bit [3:2] s;
 
   initial begin
     // CHECK: moore.constant 0 : !moore.packed<range<bit, 31:0>>
@@ -225,6 +229,43 @@ module Expressions;
     a = {a, b, c};
     // CHECK: moore.concat %d, %e : (!moore.integer, !moore.integer) -> !moore.packed<range<logic, 63:0>>
     d = {d, e};
+    // CHECK: %[[VAL_1:.*]] = moore.constant false : !moore.packed<range<bit, 0:0>>
+    // CHECK: %[[VAL_2:.*]] = moore.concat %[[VAL_1]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 0:0>>
+    // CHECK: %[[VAL_3:.*]] = moore.replicate %[[VAL_2]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 31:0>>
+    a = {32{1'b0}};
+    // CHECK: %[[VAL:.*]] = moore.constant 1 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 3:1>>
+    y = vec_1[3:1];
+    // CHECK: %[[VAL:.*]] = moore.constant 2 : !moore.int
+    // CHECK: moore.extract %vec_2 from %[[VAL]] : !moore.packed<range<logic, 0:31>>, !moore.int -> !moore.packed<range<logic, 2:3>>
+    y = vec_2[2:3];
+    // CHECK: moore.extract %d from %x : !moore.integer, !moore.bit -> !moore.logic
+    y = d[x];
+    // CHECK: moore.extract %a from %x : !moore.int, !moore.bit -> !moore.bit
+    y = a[x];
+    // CHECK: %[[VAL:.*]] = moore.constant 15 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.logic
+    y = vec_1[15];
+    // CHECK: %[[VAL:.*]] = moore.constant 15 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 15:15>>
+    y = vec_1[15+:1];
+    // CHECK: %[[VAL:.*]] = moore.constant 0 : !moore.int
+    // CHECK: moore.extract %vec_2 from %[[VAL]] : !moore.packed<range<logic, 0:31>>, !moore.int -> !moore.packed<range<logic, 0:0>>
+    y = vec_2[0+:1];
+    // CHECK: %[[VAL_1:.*]] = moore.constant 1 : !moore.int
+    // CHECK: %[[VAL_2:.*]] = moore.mul %[[VAL_1]], %a : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL_2]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 31:31>>
+    y = vec_1[1*a-:1];
+    // CHECK: %[[VAL_1:.*]] = moore.constant 3 : !moore.int
+    // CHECK: %[[VAL_2:.*]] = moore.extract %arr from %[[VAL_1]] : !moore.unpacked<range<range<packed<range<bit, 4:1>>, 2:7>, 1:3>>, !moore.int -> !moore.unpacked<range<packed<range<bit, 4:1>>, 2:7>>
+    // CHECK: %[[VAL_3:.*]] = moore.constant 7 : !moore.int
+    // CHECK: %[[VAL_4:.*]] = moore.extract %[[VAL_2]] from %[[VAL_3]] : !moore.unpacked<range<packed<range<bit, 4:1>>, 2:7>>, !moore.int -> !moore.packed<range<bit, 4:1>>
+    // CHECK: %[[VAL_5:.*]] = moore.constant 3 : !moore.int
+    // CHECK: moore.extract %[[VAL_4]] from %[[VAL_5]] : !moore.packed<range<bit, 4:1>>, !moore.int -> !moore.packed<range<bit, 4:3>>
+    s = arr[3][7][4:3];
+    // CHECK: moore.extract %vec_1 from %s : !moore.packed<range<logic, 31:0>>, !moore.packed<range<bit, 3:2>> -> !moore.logic
+    y = vec_1[s];
+
 
     //===------------------------------------------------------------------===//
     // Unary operators
