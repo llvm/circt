@@ -51,17 +51,25 @@ struct ExprEmitter
     : public hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>,
       public comb::CombinationalVisitor<ExprEmitter,
                                         FailureOr<Yosys::SigSpec>> {
-  using hw::TypeOpVisitor<ExprEmitter, ResultTy>::visitTypeOp;
-  using comb::CombinationalVisitor<ExprEmitter, ResultTy>::visitComb;
-  FailureOr<Yosys::SigSpec> emitExpression(Operation* op) {}
-}
+  // using hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>::visitTypeOp;
+  // using comb::CombinationalVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>::visitComb;
+  // FailureOr<Yosys::SigSpec> visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
+  // FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
+  // FailureOr<Yosys::SigSpec> visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
+  FailureOr<Yosys::SigSpec> visitUnhandledTypeOp(Operation *op) {
+    return op->emitError() << " is unsupported";
+  }
+  FailureOr<Yosys::SigSpec> visitUnhandledExpr(Operation *op) {
+    return op->emitError() << " is unsupported";
+  }
+
+};
 
 using ResultTy = LogicalResult;
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, ResultTy>,
       public comb::CombinationalVisitor<ModuleConverter, ResultTy> {
-  using hw::TypeOpVisitor<ModuleConverter, ResultTy>::visitTypeOp;
-  using comb::CombinationalVisitor<ModuleConverter, ResultTy>::visitComb;
+
   FailureOr<SigSpec> getValue(Value value) {
     auto it = mapping.find(value);
     if (it != mapping.end())
@@ -84,7 +92,8 @@ struct ModuleConverter
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
     // TODO: Figure out who has to free constants and sigspec.
-    return allocateSigSpec(new RTLIL::Const(op.getValue().getZExtValue()));
+    // allocateSigSpec(new RTLIL::Const(op.getValue().getZExtValue()));
+    return success();
   }
 
   ResultTy visit(Operation *op) { return dispatchCombinationalVisitor(op); }
@@ -94,12 +103,14 @@ struct ModuleConverter
   ResultTy visitUnhandledExpr(Operation *op) {
     return op->emitError() << " is unsupported";
   }
+  using hw::TypeOpVisitor<ModuleConverter, ResultTy>::visitTypeOp;
+  using comb::CombinationalVisitor<ModuleConverter, ResultTy>::visitComb;
 
   // TODO: Consider BumpAllocator instead of many allocations with unique
   // pointers.
   llvm::SmallVector<std::unique_ptr<SigSpec>> sigSpecs;
   template <typename... Params> SigSpec allocateSigSpec(Params &&...params) {
-    return SigSpec(std::forward<Params>(params)...));
+    return SigSpec(std::forward<Params>(params)...);
   }
 
   // Comb.
@@ -123,7 +134,7 @@ struct ModuleConverter
       } else
         cur = result.value();
     }
-    return cur.value();
+    return success();
   }
   circt::Namespace moduleNameSpace;
   RTLIL::IdString getNewName(StringRef name = "_GEN_") {
@@ -147,7 +158,7 @@ struct ModuleConverter
       auto result = getValue(op);
       if (failed(result))
         return result;
-      rtlilModule->connect(*allocateSigSpec(wire), *result.value());
+      rtlilModule->connect(allocateSigSpec(wire), result.value());
     }
     return success();
   }
