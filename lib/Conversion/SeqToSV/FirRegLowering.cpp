@@ -12,7 +12,6 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/Debug.h"
-#include <cassert>
 
 using namespace circt;
 using namespace hw;
@@ -49,7 +48,7 @@ void ReachableMuxes::buildReachabilityFrom(Operation *startNode) {
 
   // The stack to record enough information for an iterative post-order
   // traversal.
-  llvm::SmallVector<OpUserInfo> stk;
+  llvm::SmallVector<OpUserInfo, 16> stk;
 
   stk.emplace_back(startNode);
 

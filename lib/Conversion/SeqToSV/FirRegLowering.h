@@ -17,13 +17,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
-#include "mlir/IR/Visitors.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
-#include <mlir/IR/ValueRange.h>
-#include <stack>
-#include <unordered_set>
 
 namespace circt {
 
