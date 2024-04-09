@@ -82,6 +82,9 @@ struct MemberVisitor {
       initial = context.convertExpression(*init);
       if (!initial)
         return failure();
+
+      if (initial.getType() != type)
+        initial = builder.create<moore::ConversionOp>(loc, type, initial);
     }
 
     auto varOp = builder.create<moore::VariableOp>(
