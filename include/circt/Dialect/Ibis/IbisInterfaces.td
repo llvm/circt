@@ -37,7 +37,10 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   ];
 }
 
-def ScopeOpInterface : OpInterface<"ScopeOpInterface", [InnerSymbol]> {
+def ScopeOpInterface : OpInterface<"ScopeOpInterface", [
+    InnerSymbolTable,
+    InnerSymbol
+  ]> {
   let cppNamespace = "circt::ibis";
   let description = [{
     An interface for operations which define Ibis scopes, that can be referenced
