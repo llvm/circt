@@ -50,10 +50,13 @@ static LogicalResult checkInstForAnnotations(FInstanceLike inst,
 void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
 
+  bool changed = false;
+
   // Convert to int ops.
   for (auto op :
        llvm::make_early_inc_range(getOperation().getOps<FIntModuleOp>())) {
     auto *node = ig.lookup(op);
+    changed = true;
 
     if (failed(checkModForAnnotations(op, op.getIntrinsic())))
       return signalPassFailure();
@@ -125,10 +128,12 @@ void LowerIntmodulesPass::runOnOperation() {
       // Remove instance from IR and instance graph.
       use->erase();
       inst.erase();
+      ++numInstances;
     }
     // Remove intmodule from IR and instance graph.
     ig.erase(node);
     op.erase();
+    ++numIntmodules;
   }
 
   // Special handling for magic EICG wrapper extmodule.  Deprecate and remove.
@@ -142,6 +147,7 @@ void LowerIntmodulesPass::runOnOperation() {
         return signalPassFailure();
 
       auto *node = ig.lookup(op);
+      changed = true;
       for (auto *use : llvm::make_early_inc_range(node->uses())) {
         auto inst = use->getInstance<InstanceOp>();
         if (failed(checkInstForAnnotations(inst, eicgName)))
@@ -173,6 +179,9 @@ void LowerIntmodulesPass::runOnOperation() {
   }
 
   markAnalysesPreserved<InstanceGraph>();
+
+  if (!changed)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.
