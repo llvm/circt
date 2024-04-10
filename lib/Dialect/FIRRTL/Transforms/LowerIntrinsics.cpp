@@ -44,8 +44,8 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(0) || gi.sizedOutput<UIntType>(1) || gi.hasNParam(1) ||
-           gi.namedParam("FORMAT");
+    return gi.hasNInputs(0) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedParam("FORMAT") || gi.hasNParam(1);
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -62,8 +62,8 @@ public:
   bool check(GenericIntrinsic gi) override {
     return gi.hasNOutputElements(2) ||
            gi.sizedOutputElement<UIntType>(0, "found", 1) ||
-           gi.hasOutputElement(1, "result") || gi.hasNParam(1) ||
-           gi.namedParam("FORMAT");
+           gi.hasOutputElement(1, "result") || gi.namedParam("FORMAT") ||
+           gi.hasNParam(1);
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -116,8 +116,8 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.typedInput<ClockType>(0) ||
-           gi.typedOutput<ClockType>() || gi.hasNParam(1) ||
-           gi.namedIntParam("POW_2");
+           gi.typedOutput<ClockType>() || gi.namedIntParam("POW_2") ||
+           gi.hasNParam(1);
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -161,8 +161,8 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.sizedOutput<UIntType>(1) || gi.hasNParam(1, 1) ||
-           gi.namedIntParam("delay") || gi.namedIntParam("length", true);
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("delay") ||
+           gi.namedIntParam("length", true) || gi.hasNParam(1, 1);
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -198,7 +198,7 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.hasNParam(0, 1) || gi.namedParam("label", true) ||
+           gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
            gi.hasNoOutput();
   }
 
@@ -259,10 +259,11 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
-           gi.sizedInput<UIntType>(2, 1) || gi.hasNParam(0, 3) ||
+           gi.sizedInput<UIntType>(2, 1) ||
            gi.namedParam("format", /*optional=*/true) ||
            gi.namedParam("label", /*optional=*/true) ||
-           gi.namedParam("guards", /*optional=*/true) || gi.hasNoOutput();
+           gi.namedParam("guards", /*optional=*/true) || gi.hasNParam(0, 3) ||
+           gi.hasNoOutput();
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -306,9 +307,9 @@ public:
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(3) || gi.hasNoOutput() ||
            gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
-           gi.sizedInput<UIntType>(2, 1) || gi.hasNParam(0, 2) ||
+           gi.sizedInput<UIntType>(2, 1) ||
            gi.namedParam("label", /*optional=*/true) ||
-           gi.namedParam("guards", /*optional=*/true);
+           gi.namedParam("guards", /*optional=*/true) || gi.hasNParam(0, 2);
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -343,9 +344,10 @@ public:
 
   bool check(GenericIntrinsic gi) override {
     return gi.sizedInput<UIntType>(0, 1) || gi.sizedInput<UIntType>(1, 1) ||
-           gi.hasNParam(0, 3) || gi.namedParam("format", /*optional=*/true) ||
+           gi.namedParam("format", /*optional=*/true) ||
            gi.namedParam("label", /*optional=*/true) ||
-           gi.namedParam("guards", /*optional=*/true) || gi.hasNoOutput();
+           gi.namedParam("guards", /*optional=*/true) || gi.hasNParam(0, 3) ||
+           gi.hasNoOutput();
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,

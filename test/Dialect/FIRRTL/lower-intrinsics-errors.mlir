@@ -20,3 +20,13 @@ firrtl.circuit "InvalidCGOperand" {
     }
 }
 
+// -----
+
+firrtl.circuit "MissingParam" {
+    firrtl.module @MissingParam(in %clk: !firrtl.clock, in %en: !firrtl.uint<2>) {
+      // expected-error @below {{circt_plusargs_test is missing parameter FORMAT}}
+      // expected-error @below {{failed to legalize}}
+      %0 = firrtl.int.generic "circt_plusargs_test" : () -> !firrtl.uint<1>
+    }
+}
+
