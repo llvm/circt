@@ -5,12 +5,11 @@
 # RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_test.py cosim env
 
 import pycde
-from pycde import (AppID, Clock, Input, Module, generator)
+from pycde import (AppID, Clock, Module, Reset, generator)
 from pycde.bsp import cosim
 from pycde.constructs import Wire
-from pycde.esi import FuncService
-from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, UInt)
+from pycde.esi import FuncService, MMIO
+from pycde.types import (Bits, Channel, UInt)
 
 import sys
 
@@ -33,20 +32,42 @@ class LoopbackInOutAdd7(Module):
     loopback.assign(data_chan)
 
 
+class MMIOClient(Module):
+
+  @generator
+  def build(ports):
+    mmio_read_bundle = MMIO.read(appid=AppID("mmio_client"))
+
+    address_chan_wire = Wire(Channel(UInt(32)))
+    address, address_valid = address_chan_wire.unwrap(1)
+    response_data = (address + 7).as_bits(32)
+    response_chan, response_ready = Channel(Bits(32)).wrap(
+        response_data, address_valid)
+
+    address_chan = mmio_read_bundle.unpack(data=response_chan)['offset']
+    address_chan_wire.assign(address_chan)
+
+
 class Top(Module):
   clk = Clock()
-  rst = Input(Bits(1))
+  rst = Reset()
 
   @generator
   def construct(ports):
     LoopbackInOutAdd7()
+    # MMIOClient()
 
 
 if __name__ == "__main__":
   s = pycde.System(cosim.CosimBSP(Top),
                    name="ESILoopback",
                    output_directory=sys.argv[1])
-  s.compile()
-  s.package()
-
-  s.print()
+  try:
+    s.generate()
+    s.run_passes(debug=True)
+    s.compile()
+    s.package()
+    s.print()
+  except Exception as e:
+    s.print(file=open("error.mlir", "w"), enable_debug_info=True)
+    raise e

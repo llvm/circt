@@ -5,7 +5,7 @@
 from __future__ import annotations
 from re import T
 
-from .common import Clock, Input, Output
+from .common import Clock, Input, Output, Reset
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal

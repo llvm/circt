@@ -216,12 +216,12 @@ def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
   if isinstance(idx, int):
     if idx >= size:
       raise ValueError("Subscript out-of-bounds")
+  elif isinstance(idx, BitVectorSignal):
+    if idx.type.width != (size - 1).bit_length():
+      raise ValueError("Index must be exactly clog2 of the size of the array")
   else:
-    idx = support.get_value(idx)
-    if idx is None or not isinstance(support.type_to_pytype(idx.type),
-                                     ir.IntegerType):
-      raise TypeError("Subscript on array must be either int or int signal"
-                      f" not {type(idx)}.")
+    raise TypeError("Subscript on array must be either int or int signal"
+                    f" not {type(idx)}.")
 
 
 def get_slice_bounds(size, idxOrSlice: Union[int, slice]):

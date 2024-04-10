@@ -296,6 +296,10 @@ class Array(Type):
     return self._type.size
 
   @property
+  def select_bits(self) -> int:
+    return (self.size - 1).bit_length()
+
+  @property
   def shape(self):
     _shape = [self.size]
     if isinstance(self.element_type, Array):

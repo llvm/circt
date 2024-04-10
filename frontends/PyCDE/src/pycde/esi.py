@@ -2,12 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .common import (AppID, Input, Output, _PyProxy, PortError)
-from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .common import (AppID, Clock, Input, Output, _PyProxy, PortError, Reset)
+from .constructs import Wire
+from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .signals import BitsSignal, BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
-                    _FromCirctType)
+from .types import (Array, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, Type, UInt, types, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -131,6 +132,7 @@ class _OutputBundleSetter:
                old_value_to_replace: ir.OpResult):
     self.type: Bundle = _FromCirctType(req.toClient.type)
     self.client_name = req.relativeAppIDPath
+    self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
 
   def assign(self, new_value: ChannelSignal):
@@ -179,7 +181,7 @@ class _ServiceGeneratorBundles:
   def check_unconnected_outputs(self):
     for req in self._output_reqs:
       if req._bundle_to_replace is not None:
-        name_str = ".".join(req.client_name)
+        name_str = str(req.client_name)
         raise ValueError(f"{name_str} has not been connected.")
 
 
@@ -448,7 +450,7 @@ class MMIO:
   """ESI standard service to request access to an MMIO region."""
 
   read = Bundle([
-      BundledChannel("offset", ChannelDirection.TO, Bits(32)),
+      BundledChannel("offset", ChannelDirection.TO, UInt(32)),
       BundledChannel("data", ChannelDirection.FROM, Bits(32))
   ])
 
@@ -564,3 +566,85 @@ def package(sys: System):
     circt_lib_dir = build_dir / "tools" / "circt" / "lib"
     esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
   # shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
+
+
+def PipelinedDemux(type: Channel, num_outputs: int):
+  """Build a pipelined demultiplexer of ESI channels."""
+
+  class PipelinedDemux(Module):
+
+    # TODO: Actually pipeline this!
+
+    OutputType = Array(type, num_outputs)
+
+    clk = Clock()
+    rst = Reset()
+    sel = Input(Bits(OutputType.select_bits))
+    input = Input(type)
+    output_channels = Output(OutputType)
+
+    @generator
+    def generate(ports) -> None:
+      input_ready = Wire(Bits(1))
+      input_data, input_valid = ports.input.unwrap(input_ready)
+
+      output_channels: List[ChannelSignal] = []
+      output_readys: List[BitsSignal] = []
+      for idx in range(num_outputs):
+        valid = input_valid & (ports.sel == ports.sel.type(idx))
+        output_channel, output_output_ready = type.wrap(input_data, valid)
+        output_channels.append(output_channel)
+        output_readys.append(output_output_ready)
+
+      ports.output_channels = PipelinedDemux.OutputType(output_channels)
+      input_ready.assign(Array(Bits(1), num_outputs)(output_readys)[ports.sel])
+
+  return PipelinedDemux
+
+
+def ChannelMux(type: Channel, num_inputs: int):
+  """Build a channel multiplexer of ESI channels."""
+
+  class ChannelMux(Module):
+
+    # TODO: Actually pipeline this!
+
+    InputType = Array(type, num_inputs)
+
+    clk = Clock()
+    rst = Reset()
+    input_channels = Input(InputType)
+    output_channel = Output(type)
+    output_idx = Output(Bits(InputType.select_bits))
+
+    @staticmethod
+    def build_selector(input_valids: List[BitsSignal]) -> BitsSignal:
+      addr_bits = ChannelMux.InputType.select_bits
+      return Bits(addr_bits)(0)
+
+    @generator
+    def generate(ports):
+      data_type = type.inner_type
+      out_data, out_valid = Wire(data_type), Wire(Bits(1))
+      ports.output_channel, out_ready = type.wrap(out_data, out_valid)
+
+      input_datas = []
+      input_valids = []
+      input_readys = []
+      for idx in range(len(ports.input_channels)):
+        ready = Wire(Bits(1))
+        data, valid = ports.input_channels[idx].unwrap(ready)
+        input_datas.append(data)
+        input_valids.append(valid)
+        input_readys.append(ready)
+
+      selected_input = ChannelMux.build_selector(input_valids)
+      for idx, ready in enumerate(input_readys):
+        ready.assign((selected_input == selected_input.type(idx)) & out_ready)
+      out_data.assign(
+          Array(data_type, len(input_datas))(input_datas)[selected_input])
+      out_valid.assign(
+          Array(Bits(1), len(input_valids))(input_valids)[selected_input])
+      ports.output_idx = selected_input
+
+  return ChannelMux
