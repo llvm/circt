@@ -87,8 +87,10 @@ public:
 
   IntrinsicOpConversion(MLIRContext *context,
                         const ConversionMapTy &conversions,
+                        size_t &numConversions,
                         bool allowUnknownIntrinsics = false)
       : OpConversionPattern(context), conversions(conversions),
+        numConversions(numConversions),
         allowUnknownIntrinsics(allowUnknownIntrinsics) {}
 
   LogicalResult
@@ -106,16 +108,18 @@ public:
     if (conv.check(GenericIntrinsic(op)))
       return failure();
     conv.convert(GenericIntrinsic(op), adaptor, rewriter);
+    ++numConversions;
     return success();
   }
 
 private:
   const ConversionMapTy &conversions;
+  size_t &numConversions;
   const bool allowUnknownIntrinsics;
 };
 
-LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
-                                        bool allowUnknownIntrinsics) {
+FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
+                                            bool allowUnknownIntrinsics) {
 
   ConversionTarget target(*context);
 
@@ -129,8 +133,12 @@ LogicalResult IntrinsicLowerings::lower(FModuleOp mod,
     target.addIllegalOp<GenericIntrinsicOp>();
 
   RewritePatternSet patterns(context);
-  patterns.add<IntrinsicOpConversion>(context, conversions,
+  size_t count = 0;
+  patterns.add<IntrinsicOpConversion>(context, conversions, count,
                                       allowUnknownIntrinsics);
 
-  return mlir::applyPartialConversion(mod, target, std::move(patterns));
+  if (failed(mlir::applyPartialConversion(mod, target, std::move(patterns))))
+    return failure();
+
+  return count;
 }
