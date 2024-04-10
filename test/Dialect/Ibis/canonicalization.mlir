@@ -4,12 +4,12 @@ ibis.design @foo {
 
 // CHECK-LABEL:   ibis.container @GetPortOnThis {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@GetPortOnThis>
-// CHECK:           %[[VAL_1:.*]] = ibis.port.input @in : i1
+// CHECK:           %[[VAL_1:.*]] = ibis.port.input "in" sym @in : i1
 // CHECK:           "foo.user"(%[[VAL_1]]) : (!ibis.portref<in i1>) -> ()
 // CHECK:         }
 ibis.container @GetPortOnThis {
   %this = ibis.this <@foo::@GetPortOnThis>
-  %p = ibis.port.input @in : i1
+  %p = ibis.port.input "in" sym @in : i1
   %p2 = ibis.get_port %this, @in : !ibis.scoperef<@foo::@GetPortOnThis> -> !ibis.portref<in i1>
   "foo.user"(%p2) : (!ibis.portref<in i1>) -> ()
 }

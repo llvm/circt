@@ -742,10 +742,17 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
       HasCustomSSAName,
       DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
   ])> {
-  let arguments = (ins InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
+
+  let description = [{
+    An ibis port has an attached 'name' attribute. This is a name-hint used
+    to generate the final port name. The port name and port symbol are not
+    related, and all references to a port is done through the port symbol.
+  }];
+
+  let arguments = (ins StrAttr:$name, InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
-    $inner_sym `:` $type attr-dict
+    $name `sym` $inner_sym `:` $type attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -778,6 +785,9 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
   code extraPortClassDefinition = ?;
   let extraClassDefinition =  extraPortClassDefinition # [{
     LogicalResult $cppClass::verify() {
+      if(getName().empty())
+        return emitOpError("port name cannot be empty");
+
       if(getType().isa<ScopeRefType>())
         return emitOpError("port type cannot be a scope reference");
 

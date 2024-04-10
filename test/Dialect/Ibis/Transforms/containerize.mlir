@@ -8,7 +8,7 @@ ibis.design @foo {
 // CHECK-LABEL:   ibis.container @A_C
 // CHECK-LABEL:   ibis.container @A {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@A>
-// CHECK:           ibis.port.input @A_in : i1
+// CHECK:           ibis.port.input "A_in" sym @A_in : i1
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @myClass, <@foo::@MyClass>
 // CHECK:           %[[VAL_2:.*]] = ibis.container.instance @A_B_0, <@foo::@A_B_0>
 // CHECK:           %[[VAL_3:.*]] = ibis.container.instance @A_C, <@foo::@A_C>
@@ -25,7 +25,7 @@ ibis.class @MyClass {
 
 ibis.class @A {
   %this = ibis.this <@foo::@A>
-  ibis.port.input @A_in : i1
+  ibis.port.input "A_in" sym @A_in : i1
   %myClass = ibis.instance @myClass, <@foo::@MyClass>
   ibis.container @B {
     %B_this = ibis.this <@foo::@B>

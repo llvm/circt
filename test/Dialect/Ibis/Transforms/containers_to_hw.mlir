@@ -2,22 +2,23 @@
 
 ibis.design @D {
 
-// CHECK:  hw.module @D_B(in %in : i1 {inputAttr}, out out : i1 {outputAttr}) {
-// CHECK:    hw.output %in : i1
+// CHECK:  hw.module @D_B(in %in_foo : i1 {inputAttr}, out out_foo : i1 {outputAttr}) {
+// CHECK:    hw.output %in_foo : i1
 // CHECK:  }
-// CHECK:  hw.module @D_AccessSibling(in %p_b_out : i1, out p_b_in : i1) {
-// CHECK:    hw.output %p_b_out : i1
+// CHECK:  hw.module @D_AccessSibling(in %p_b_out_foo : i1, out p_b_in_foo : i1) {
+// CHECK:    hw.output %p_b_out_foo : i1
 // CHECK:  }
 // CHECK:  hw.module @Parent() {
-// CHECK:    %a.p_b_in = hw.instance "a" @D_AccessSibling(p_b_out: %b.out: i1) -> (p_b_in: i1)
-// CHECK:    %b.out = hw.instance "b" @D_B(in: %a.p_b_in: i1) -> (out: i1)
+// CHECK:    %a.p_b_in_foo = hw.instance "a" @D_AccessSibling(p_b_out_foo: %b.out_foo: i1) -> (p_b_in_foo: i1)
+// CHECK:    %b.out_foo = hw.instance "b" @D_B(in_foo: %a.p_b_in_foo: i1) -> (out_foo: i1)
 // CHECK:    hw.output
 // CHECK:  }
 
 ibis.container @B {
   %this = ibis.this <@D::@B>
-  %in = ibis.port.input @in : i1 {"inputAttr"}
-  %out = ibis.port.output @out : i1 {"outputAttr"}
+  // Test different port names vs. symbol names
+  %in = ibis.port.input "in_foo" sym @in : i1 {"inputAttr"}
+  %out = ibis.port.output "out_foo" sym @out : i1 {"outputAttr"}
 
   // Loopback.
   %v = ibis.port.read %in : !ibis.portref<in i1>
@@ -26,8 +27,8 @@ ibis.container @B {
 
 ibis.container @AccessSibling {
   %this = ibis.this <@D::@AccessSibling>
-  %p_b_out = ibis.port.input @p_b_out : i1
-  %p_b_in = ibis.port.output @p_b_in : i1
+  %p_b_out = ibis.port.input "p_b_out_foo" sym @p_b_out : i1
+  %p_b_in = ibis.port.output "p_b_in_foo" sym @p_b_in : i1
   ibis.port.write %p_b_in, %p_b_out.val : !ibis.portref<out i1>
   %p_b_out.val = ibis.port.read %p_b_out : !ibis.portref<in i1>
 }
@@ -53,18 +54,18 @@ ibis.container @Parent top_level {
 
 ibis.design @D {
 
-// CHECK:  hw.module @D_C(in %in : i1, out out : i1) {
-// CHECK:    hw.output %in : i1
+// CHECK:  hw.module @D_C(in %in_foo : i1, out out_foo : i1) {
+// CHECK:    hw.output %in_foo : i1
 // CHECK:  }
 // CHECK:  hw.module @Top() {
-// CHECK:    %c.out = hw.instance "c" @D_C(in: %c.out: i1) -> (out: i1)
+// CHECK:    %c.out_foo = hw.instance "c" @D_C(in_foo: %c.out_foo: i1) -> (out_foo: i1)
 // CHECK:    hw.output
 // CHECK:  }
 
 ibis.container @C {
   %this = ibis.this <@D::@C>
-  %in = ibis.port.input @in : i1
-  %out = ibis.port.output @out : i1
+  %in = ibis.port.input "in_foo" sym @in : i1
+  %out = ibis.port.output "out_foo" sym @out : i1
   %v = ibis.port.read %in : !ibis.portref<in i1>
   ibis.port.write %out, %v : !ibis.portref<out i1>
 }
@@ -99,7 +100,7 @@ ibis.design @D {
 
 ibis.container @Inst {
   %this = ibis.this <@D::@Inst>
-  %out = ibis.port.output @out : i1
+  %out = ibis.port.output "out" sym @out : i1
   %true = hw.constant 1 : i1
   ibis.port.write %out, %true : !ibis.portref<out i1>
 }
@@ -112,4 +113,26 @@ ibis.container @Top {
   %blake = comb.and bin %true, %out.v : i1
 }
 
+}
+
+// -----
+
+// Test that we can unique duplicate port names.
+
+ibis.design @D {
+
+// CHECK:   hw.module @D_Top(in %clk : i1, in %clk_0 : i1, out out : i1, out out_0 : i1) {
+// CHECK:     hw.output %clk, %clk_0 : i1, i1
+ibis.container @Top {
+  %this = ibis.this <@D::@Top>
+  %clk1 = ibis.port.input "clk" sym @clk1 : i1
+  %clk2 = ibis.port.input "clk" sym @clk2 : i1
+  %out1 = ibis.port.output "out" sym @out1 : i1
+  %out2 = ibis.port.output "out" sym @out2 : i1
+
+  %v1 = ibis.port.read %clk1 : !ibis.portref<in i1>
+  %v2 = ibis.port.read %clk2 : !ibis.portref<in i1>
+  ibis.port.write %out1, %v1 : !ibis.portref<out i1>
+  ibis.port.write %out2, %v2 : !ibis.portref<out i1>
+}
 }
