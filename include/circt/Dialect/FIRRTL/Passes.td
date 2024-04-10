@@ -695,6 +695,10 @@ def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,
   ];
+  let statistics = [
+    Statistic<"numInstances", "num-instances", "Number of intmodules instances lowered">,
+    Statistic<"numIntmodules", "num-intmodules", "Number of intmodules lowered">,
+  ];
 }
 
 def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
