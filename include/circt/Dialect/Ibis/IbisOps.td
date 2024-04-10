@@ -706,7 +706,7 @@ def GetPortOp : IbisOp<"get_port", [
 
   let arguments = (ins
     ScopeRefType:$instance,
-    FlatSymbolRefAttr:$portSymbol);
+    InnerRefAttr:$portSymbol);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
     $instance `,` $portSymbol `:` qualified(type($instance)) `->`
@@ -714,10 +714,12 @@ def GetPortOp : IbisOp<"get_port", [
   }];
 
   let builders = [
-    OpBuilder<(ins "Value":$instance, "StringAttr":$portName, "Type":$innerPortType,
+    OpBuilder<(ins "Value":$instance, "StringAttr":$portSymbol, "Type":$innerPortType,
         "ibis::Direction":$direction), [{
+      auto designOp = instance.getDefiningOp()->getParentOfType<ibis::DesignOp>();
       build($_builder, $_state, $_builder.getType<PortRefType>(
-        innerPortType, direction), instance, portName
+        innerPortType, direction), instance,
+        hw::InnerRefAttr::get(designOp.getSymNameAttr(), portSymbol)
       );
     }]>
   ];
