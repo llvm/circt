@@ -148,11 +148,12 @@ struct GenericIntrinsic {
     auto ty = b.getType();
     if (n >= ty.getNumElements())
       return emitError() << " missing output element " << n;
-    auto element = ty.getElement(n);
-    if (element.name != name)
+    auto elementName = ty.getElementName(n);
+    if (elementName != name)
       return emitError() << " output element " << n << " is named "
-                         << element.name << " not " << name;
-    if (!std::invoke(std::forward<C>(call), element.type))
+                         << elementName << " not " << name;
+    if (!std::invoke(std::forward<C>(call),
+                     ty.getElementTypePreservingConst(n)))
       return emitError() << " output element " << n << " " << msg;
     return success();
   }
