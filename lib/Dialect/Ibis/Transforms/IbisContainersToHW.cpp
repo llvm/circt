@@ -41,7 +41,7 @@ struct ContainerPortInfo {
   ContainerPortInfo() = default;
   ContainerPortInfo(ContainerOp container) {
     SmallVector<hw::PortInfo, 4> inputs, outputs;
-    auto ctx = container.getContext();
+    auto *ctx = container.getContext();
 
     // Copies all attributes from a port, except for the port symbol, name, and
     // type.
