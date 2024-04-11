@@ -290,16 +290,12 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
   // COMMON-NEXT:  %6 = comb.extract %5 from 1 : (i33) -> i32
   // COMMON-NEXT:  %7 = comb.mux bin %io_en, %io_d, %6 : i32
-  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset  {
+  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset {
   // COMMON-NEXT:    sv.if %reset {
   // COMMON-NEXT:      sv.passign %reg, %c0_i32 : i32
   // COMMON-NEXT:      sv.passign %reg3, %c1_i32 : i32
   // COMMON-NEXT:    } else {
-  // COMMON-NEXT:      sv.if %io_en {
-  // COMMON-NEXT:        sv.passign %reg, %io_d : i32
-  // COMMON-NEXT:      } else {
-  // COMMON-NEXT:        sv.passign %reg, %6 : i32
-  // COMMON-NEXT:      }
+  // COMMON-NEXT:      sv.passign %reg, %7 : i32
   // COMMON-NEXT:      sv.passign %reg3, %2 : i32
   // COMMON-NEXT:    }
   // COMMON-NEXT:  }
@@ -914,4 +910,21 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
   // CHECK: }
   %0 = comb.mux bin %c, %r2, %r3 : i8
   hw.output %r1 : i8
+}
+
+ // CHECK-LABEL: hw.module @SharedMux
+ hw.module @SharedMux(in %clock: !seq.clock, in %cond : i1, out o: i2){
+    %mux = comb.mux bin %cond, %r1, %r2 : i2
+    %r1 = seq.firreg %mux clock %clock : i2
+    %r2 = seq.firreg %mux clock %clock : i2
+    hw.output %r2: i2
+    //CHECK: %r1 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !hw.inout<i2>
+    //CHECK: %r2 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !hw.inout<i2>
+    //CHECK: sv.always posedge %clock {
+    //CHECK:   sv.if %cond {
+    //CHECK:     sv.passign %r2, %[[V1]] : i2
+    //CHECK:   } else {
+    //CHECK:     sv.passign %r1, %[[V2]] : i2
 }
