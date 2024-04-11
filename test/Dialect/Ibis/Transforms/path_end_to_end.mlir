@@ -65,8 +65,8 @@ ibis.container @C_down {
 }
 ibis.container @D_down {
   %this = ibis.this <@foo::@D_down>
-  %clk = ibis.port.input @clk_in : i1
-  %clk_out = ibis.port.output @clk_out : i1
+  %clk = ibis.port.input "clk_in" sym @clk_in : i1
+  %clk_out = ibis.port.output "clk_out" sym @clk_out : i1
   %clk.val = ibis.port.read %clk : !ibis.portref<in i1>
   ibis.port.write %clk_out, %clk.val : !ibis.portref<out i1>
 }

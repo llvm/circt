@@ -58,9 +58,9 @@
 ibis.design @foo {
 ibis.class @A {
   %this = ibis.this @A
-  ibis.port.input @in : i1
-  ibis.port.output @out : i1
-  ibis.port.input @clk : !seq.clock
+  ibis.port.input "in" sym @in : i1
+  ibis.port.output "out" sym @out : i1
+  ibis.port.input "clk" sym @clk : !seq.clock
   
   ibis.container@B {
     %B_this = ibis.this @B

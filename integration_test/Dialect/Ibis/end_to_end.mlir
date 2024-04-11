@@ -8,7 +8,7 @@ ibis.design @foo {
 
 ibis.class @C1 {
   %this = ibis.this <@foo::@C1>
-  %out = ibis.port.output @out : i32
+  %out = ibis.port.output "out" sym @out : i32
   %c0 = hw.constant 42 : i32
   ibis.port.write %out, %c0 : !ibis.portref<out i32>
 }
@@ -16,11 +16,11 @@ ibis.class @C1 {
 ibis.class @C2 {
   %this = ibis.this <@foo::@C2>
 
-  %go_port = ibis.port.input @go : i1
-  %clk_port = ibis.port.input @clk : !seq.clock
-  %rst_port = ibis.port.input @rst : i1
-  %done_port = ibis.port.output @done : i1
-  %out_port = ibis.port.output @out : i32
+  %go_port = ibis.port.input "go" sym @go : i1
+  %clk_port = ibis.port.input "clk" sym @clk : !seq.clock
+  %rst_port = ibis.port.input "rst" sym @rst : i1
+  %done_port = ibis.port.output "done" sym @done : i1
+  %out_port = ibis.port.output "out" sym @out : i32
 
   ibis.container @MyMethod {
     %t = ibis.this <@foo::@MyMethod>
@@ -73,12 +73,12 @@ ibis.class @Parent {
   %c1 = ibis.instance @c1, <@foo::@C1>
   %c2 = ibis.instance @c2, <@foo::@C2>
 
-  %go = ibis.port.input @go : i1
-  %clk = ibis.port.input @clk : !seq.clock
-  %rst = ibis.port.input @rst : i1
+  %go = ibis.port.input "go" sym @go : i1
+  %clk = ibis.port.input "clk" sym @clk : !seq.clock
+  %rst = ibis.port.input "rst" sym @rst : i1
 
-  %done = ibis.port.output @done : i1
-  %out = ibis.port.output @out : i32
+  %done = ibis.port.output "done" sym @done : i1
+  %out = ibis.port.output "out" sym @out : i32
 
   // Wire up to c2
   %go_ref = ibis.get_port %c2, @go : !ibis.scoperef<@foo::@C2> -> !ibis.portref<in i1>

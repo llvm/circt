@@ -56,14 +56,15 @@ ibis.class @HighLevel {
 
 // CHECK-LABEL:  ibis.class @A {
 // CHECK-NEXT:    %this = ibis.this <@foo::@A> 
-// CHECK-NEXT:    %in = ibis.port.input @in : i1
-// CHECK-NEXT:    %out = ibis.port.output @out : i1
+// CHECK-NEXT:    %in = ibis.port.input "in" sym @in : i1
+// CHECK-NEXT:    %out = ibis.port.output "out" sym @out : i1
+// CHECK-NEXT:    %AnonymousPort = ibis.port.input sym @AnonymousPort : i1
 // CHECK-NEXT:  }
 
 // CHECK-LABEL:  ibis.class @LowLevel {
 // CHECK-NEXT:    %this = ibis.this <@foo::@LowLevel> 
-// CHECK-NEXT:    %LowLevel_in = ibis.port.input @LowLevel_in : i1
-// CHECK-NEXT:    %LowLevel_out = ibis.port.output @LowLevel_out : i1
+// CHECK-NEXT:    %LowLevel_in = ibis.port.input "LowLevel_in" sym @LowLevel_in : i1
+// CHECK-NEXT:    %LowLevel_out = ibis.port.output "LowLevel_out" sym @LowLevel_out : i1
 // CHECK-NEXT:    %in_wire, %in_wire.out = ibis.wire.input @in_wire : i1
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %out_wire = ibis.wire.output @out_wire, %true : i1
@@ -87,14 +88,15 @@ ibis.class @HighLevel {
 
 ibis.class @A {
   %this = ibis.this <@foo::@A>
-  ibis.port.input @in : i1
-  ibis.port.output @out : i1
+  ibis.port.input "in" sym @in : i1
+  ibis.port.output "out" sym @out : i1
+  ibis.port.input sym @AnonymousPort : i1
 }
 
 ibis.class @LowLevel {
   %this = ibis.this <@foo::@LowLevel>
-  ibis.port.input @LowLevel_in : i1
-  ibis.port.output @LowLevel_out : i1
+  ibis.port.input "LowLevel_in" sym @LowLevel_in : i1
+  ibis.port.output "LowLevel_out" sym @LowLevel_out : i1
 
   %in_wire, %in_wire.val = ibis.wire.input @in_wire : i1
   %true = hw.constant 1 : i1

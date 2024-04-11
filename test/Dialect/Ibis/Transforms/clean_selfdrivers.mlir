@@ -4,14 +4,14 @@ ibis.design @D {
 // CHECK-LABEL:   ibis.container @C {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@C>
 // CHECK:           %[[VAL_1:.*]] = hw.wire %[[VAL_2:.*]]  : i1
-// CHECK:           %[[VAL_3:.*]] = ibis.port.output @out : i1
+// CHECK:           %[[VAL_3:.*]] = ibis.port.output "out" sym @out : i1
 // CHECK:           %[[VAL_2]] = hw.constant true
 // CHECK:           ibis.port.write %[[VAL_3]], %[[VAL_1]] : !ibis.portref<out i1>
 // CHECK:         }
 ibis.container @C {
     %this = ibis.this <@D::@C>
-    %in = ibis.port.input @in : i1
-    %out = ibis.port.output @out : i1
+    %in = ibis.port.input "in" sym @in : i1
+    %out = ibis.port.output "out" sym @out : i1
     %true = hw.constant 1 : i1
     ibis.port.write %in, %true : !ibis.portref<in i1>
     %v = ibis.port.read %in : !ibis.portref<in i1>
@@ -26,7 +26,7 @@ ibis.design @D {
 // CHECK-LABEL:   ibis.container @Selfdriver {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@Selfdriver>
 // CHECK:           %[[VAL_1:.*]] = hw.wire %[[VAL_2:.*]]  : i1
-// CHECK:           %[[VAL_3:.*]] = ibis.port.output @in : i1
+// CHECK:           %[[VAL_3:.*]] = ibis.port.output "in" sym @in : i1
 // CHECK:           ibis.port.write %[[VAL_3]], %[[VAL_1]] : !ibis.portref<out i1>
 // CHECK:           %[[VAL_2]] = hw.constant true
 // CHECK:         }
@@ -40,7 +40,7 @@ ibis.design @D {
 
 ibis.container @Selfdriver {
   %this = ibis.this <@D::@Selfdriver>
-  %in = ibis.port.input @in : i1
+  %in = ibis.port.input "in" sym @in : i1
   %true = hw.constant 1 : i1
   ibis.port.write %in, %true : !ibis.portref<in i1>
 }
@@ -60,7 +60,7 @@ ibis.design @D {
 
 ibis.container @Foo {
   %this = ibis.this <@D::@Foo>
-  %in = ibis.port.input @in : i1
+  %in = ibis.port.input "in" sym @in : i1
 }
 
 // CHECK-LABEL:   ibis.container @ParentReaderWriter {

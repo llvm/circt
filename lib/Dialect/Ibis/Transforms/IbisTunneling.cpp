@@ -296,7 +296,8 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
   for (PortInfo &pi : portInfos) {
     outputPortOps[pi.portName] = rewriter.create<OutputPortOp>(
-        op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName), pi.getType());
+        op.getLoc(), pi.portName, circt::hw::InnerSymAttr::get(pi.portName),
+        pi.getType());
   }
 
   // Recurse into the tunnel instance container.
@@ -375,7 +376,8 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
   for (PortInfo &pi : portInfos) {
     auto inputPort = rewriter.create<InputPortOp>(
-        op.getLoc(), hw::InnerSymAttr::get(pi.portName), pi.getType());
+        op.getLoc(), pi.portName, hw::InnerSymAttr::get(pi.portName),
+        pi.getType());
     // Read the input port of the current container to forward the portref.
 
     portMapping[&pi] =

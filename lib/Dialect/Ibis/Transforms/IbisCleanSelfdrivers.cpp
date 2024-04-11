@@ -165,7 +165,7 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
 
       if (anyOutsideReads) {
         auto outputPort = rewriter.create<OutputPortOp>(
-            op.getLoc(), op.getInnerSym(), op.getType());
+            op.getLoc(), op.getNameAttr(), op.getInnerSym(), op.getType());
         rewriter.create<PortWriteOp>(op.getLoc(), outputPort, wire);
       }
     }

@@ -4,9 +4,9 @@
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToContainers>
 // CHECK:           ibis.container @foo {
 // CHECK:             %[[VAL_1:.*]] = ibis.this <@foo::@foo>
-// CHECK:             %[[VAL_2:.*]] = ibis.port.input @arg0 : !dc.value<i32>
+// CHECK:             %[[VAL_2:.*]] = ibis.port.input "arg0" sym @arg0 : !dc.value<i32>
 // CHECK:             %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<in !dc.value<i32>>
-// CHECK:             %[[VAL_4:.*]] = ibis.port.output @out0 : !dc.value<i32>
+// CHECK:             %[[VAL_4:.*]] = ibis.port.output "out0" sym @out0 : !dc.value<i32>
 // CHECK:             ibis.port.write %[[VAL_4]], %[[VAL_5:.*]] : !ibis.portref<out !dc.value<i32>>
 // CHECK:             %[[VAL_6:.*]], %[[VAL_7:.*]] = dc.unpack %[[VAL_3]] : !dc.value<i32>
 // CHECK:             %[[VAL_8:.*]]:2 = dc.fork [2] %[[VAL_6]]

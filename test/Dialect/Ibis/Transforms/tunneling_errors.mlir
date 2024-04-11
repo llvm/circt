@@ -3,7 +3,7 @@
 ibis.design @foo {
 ibis.container @Parent {
   %this = ibis.this <@foo::@Parent>
-  %in = ibis.port.input @in : i1
+  %in = ibis.port.input "in" sym @in : i1
 }
 
 ibis.container @Orphan {
@@ -27,7 +27,7 @@ ibis.container @Parent {
 
 ibis.container @Child {
   %this = ibis.this <@foo::@Child>
-  %in = ibis.port.input @in : i1
+  %in = ibis.port.input "in" sym @in : i1
 }
 
 ibis.container @MissingChild {

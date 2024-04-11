@@ -47,7 +47,7 @@ ibis.class @InvalidGetVar {
 ibis.design @foo {
 ibis.class @PortTypeMismatch {
   %this = ibis.this <@foo::@PortTypeMismatch>
-  ibis.port.input @in : i1
+  ibis.port.input "in" sym @in : i1
   // expected-error @+1 {{'ibis.get_port' op symbol '@in' refers to a port of type 'i1', but this op has type 'i2'}}
   %c_in = ibis.get_port %this, @in : !ibis.scoperef<@foo::@PortTypeMismatch> -> !ibis.portref<in i2>
 }

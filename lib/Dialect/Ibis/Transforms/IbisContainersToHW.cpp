@@ -14,6 +14,7 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -34,30 +35,40 @@ struct ContainerPortInfo {
   // A mapping between the port name and the port op within the container.
   llvm::DenseMap<StringAttr, OutputPortOp> opOutputs;
 
+  // A mapping between port symbols and their corresponding port name.
+  llvm::DenseMap<StringAttr, StringAttr> portSymbolsToPortName;
+
   ContainerPortInfo() = default;
   ContainerPortInfo(ContainerOp container) {
     SmallVector<hw::PortInfo, 4> inputs, outputs;
+    auto *ctx = container.getContext();
 
-    // Copies all attributes from a port, except for the port symbol and type.
-    auto copyPortAttrs = [](auto port) {
+    // Copies all attributes from a port, except for the port symbol, name, and
+    // type.
+    auto copyPortAttrs = [ctx](auto port) {
       llvm::DenseSet<StringAttr> elidedAttrs;
       elidedAttrs.insert(port.getInnerSymAttrName());
       elidedAttrs.insert(port.getTypeAttrName());
+      elidedAttrs.insert(port.getNameAttrName());
       llvm::SmallVector<NamedAttribute> attrs;
       for (NamedAttribute namedAttr : port->getAttrs()) {
         if (elidedAttrs.contains(namedAttr.getName()))
           continue;
         attrs.push_back(namedAttr);
       }
-      return DictionaryAttr::get(port.getContext(), attrs);
+      return DictionaryAttr::get(ctx, attrs);
     };
 
-    // Gather in and output port ops.
+    // Gather in and output port ops to define the hw.module interface. Here, we
+    // also perform uniqueing of the port names.
+    Namespace portNs;
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
-      opInputs[input.getInnerSym().getSymName()] = input;
-
+      auto uniquePortName =
+          StringAttr::get(ctx, portNs.newName(input.getNameAttr().getValue()));
+      opInputs[uniquePortName] = input;
       hw::PortInfo portInfo;
-      portInfo.name = input.getInnerSym().getSymName();
+      portInfo.name = uniquePortName;
+      portSymbolsToPortName[input.getInnerSym().getSymName()] = uniquePortName;
       portInfo.type = cast<PortOpInterface>(input.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Input;
       portInfo.attrs = copyPortAttrs(input);
@@ -65,10 +76,13 @@ struct ContainerPortInfo {
     }
 
     for (auto output : container.getBodyBlock()->getOps<OutputPortOp>()) {
-      opOutputs[output.getInnerSym().getSymName()] = output;
+      auto uniquePortName =
+          StringAttr::get(ctx, portNs.newName(output.getNameAttr().getValue()));
+      opOutputs[uniquePortName] = output;
 
       hw::PortInfo portInfo;
-      portInfo.name = output.getInnerSym().getSymName();
+      portInfo.name = uniquePortName;
+      portSymbolsToPortName[output.getInnerSym().getSymName()] = uniquePortName;
       portInfo.type =
           cast<PortOpInterface>(output.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Output;
@@ -193,6 +207,9 @@ struct ContainerInstanceOpConversionPattern
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<Value> operands;
 
+    const ContainerPortInfo &cpi =
+        portOrder.at(op.getResult().getType().getScopeRef());
+
     // Gather the get_port ops that target the instance
     llvm::DenseMap<StringAttr, PortReadOp> outputReadsToReplace;
     llvm::DenseMap<StringAttr, PortWriteOp> inputWritesToUse;
@@ -208,7 +225,9 @@ struct ContainerInstanceOpConversionPattern
             llvm::TypeSwitch<Operation *, LogicalResult>(user)
                 .Case<PortReadOp>([&](auto read) {
                   auto [it, inserted] = outputReadsToReplace.insert(
-                      {getPort.getPortSymbolAttr().getAttr(), read});
+                      {cpi.portSymbolsToPortName.at(
+                           getPort.getPortSymbolAttr().getAttr()),
+                       read});
                   if (!inserted)
                     return rewriter.notifyMatchFailure(
                         read, "expected only one ibis.port.read op of the "
@@ -217,7 +236,9 @@ struct ContainerInstanceOpConversionPattern
                 })
                 .Case<PortWriteOp>([&](auto write) {
                   auto [it, inserted] = inputWritesToUse.insert(
-                      {getPort.getPortSymbolAttr().getAttr(), write});
+                      {cpi.portSymbolsToPortName.at(
+                           getPort.getPortSymbolAttr().getAttr()),
+                       write});
                   if (!inserted)
                     return rewriter.notifyMatchFailure(
                         write,
@@ -238,8 +259,6 @@ struct ContainerInstanceOpConversionPattern
     }
 
     // Grab the operands in the order of the hw.module ports.
-    const ContainerPortInfo &cpi =
-        portOrder.at(op.getResult().getType().getScopeRef());
     size_t nInputPorts = std::distance(cpi.hwPorts->getInputs().begin(),
                                        cpi.hwPorts->getInputs().end());
     if (nInputPorts != inputWritesToUse.size()) {
