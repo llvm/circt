@@ -749,10 +749,10 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     related, and all references to a port is done through the port symbol.
   }];
 
-  let arguments = (ins StrAttr:$name, InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
+  let arguments = (ins OptionalAttr<StrAttr>:$name, InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
-    $name `sym` $inner_sym `:` $type attr-dict
+    ($name^)? `sym` $inner_sym `:` $type attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -785,9 +785,6 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
   code extraPortClassDefinition = ?;
   let extraClassDefinition =  extraPortClassDefinition # [{
     LogicalResult $cppClass::verify() {
-      if(getName().empty())
-        return emitOpError("port name cannot be empty");
-
       if(getType().isa<ScopeRefType>())
         return emitOpError("port type cannot be a scope reference");
 

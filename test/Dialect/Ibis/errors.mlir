@@ -94,13 +94,3 @@ ibis.class @InvalidReturn {
   }
 }
 }
-
-// -----
-
-ibis.design @foo {
-ibis.container @B {
-  %this = ibis.this <@foo::@B>
-  // expected-error @+1 {{'ibis.port.input' op port name cannot be empty}}
-  %in = ibis.port.input "" sym @in : i1
-}
-}

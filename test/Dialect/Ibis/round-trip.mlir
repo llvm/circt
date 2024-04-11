@@ -58,6 +58,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:    %this = ibis.this <@foo::@A> 
 // CHECK-NEXT:    %in = ibis.port.input "in" sym @in : i1
 // CHECK-NEXT:    %out = ibis.port.output "out" sym @out : i1
+// CHECK-NEXT:    %AnonymousPort = ibis.port.input sym @AnonymousPort : i1
 // CHECK-NEXT:  }
 
 // CHECK-LABEL:  ibis.class @LowLevel {
@@ -89,6 +90,7 @@ ibis.class @A {
   %this = ibis.this <@foo::@A>
   ibis.port.input "in" sym @in : i1
   ibis.port.output "out" sym @out : i1
+  ibis.port.input sym @AnonymousPort : i1
 }
 
 ibis.class @LowLevel {
