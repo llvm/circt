@@ -47,12 +47,13 @@ void SFCCompatPass::runOnOperation() {
   SmallVector<InvalidValueOp> invalidOps;
 
   bool fullAsyncResetExists = false;
-  AnnotationSet::removePortAnnotations(getOperation(), [&](unsigned argNum, Annotation anno) {
-    if (!anno.isClass(fullAsyncResetAnnoClass))
-        return false;
-    fullAsyncResetExists = true;
-    return true;
-  });
+  AnnotationSet::removePortAnnotations(
+      getOperation(), [&](unsigned argNum, Annotation anno) {
+        if (!anno.isClass(fullAsyncResetAnnoClass))
+          return false;
+        fullAsyncResetExists = true;
+        return true;
+      });
 
   auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.
@@ -66,7 +67,8 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization and we
     // are not running FART, then replace it with a `RegOp`.
-    if (!fullAsyncResetExists && walkDrivers(reg.getResetValue(), true, false, false,
+    if (!fullAsyncResetExists &&
+        walkDrivers(reg.getResetValue(), true, false, false,
                     [](FieldRef dst, FieldRef src) {
                       return src.isa<InvalidValueOp>();
                     })) {
