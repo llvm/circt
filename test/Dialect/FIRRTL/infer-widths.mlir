@@ -364,20 +364,18 @@ firrtl.circuit "Foo" {
   firrtl.module @MuxOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %2 = firrtl.wire : !firrtl.uint<0>
     // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
     %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
-    // CHECK: %4 = firrtl.wire : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %4 = firrtl.wire : !firrtl.uint
-    %5 = firrtl.mux(%4, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
     firrtl.connect %1, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
+    firrtl.connect %2, %c0_ui0 : !firrtl.uint, !firrtl.uint<0>
   }
 
   // see https://github.com/llvm/circt/issues/3070
@@ -957,9 +955,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Property(in %a: !firrtl.string) { }
 
   // CHECK-LABEL: module @MuxIntrinsics
-  // CHECK-SAME: %sel: !firrtl.uint<1>
-  // CHECK-SAME: %sel2: !firrtl.uint<2>
-  firrtl.module @MuxIntrinsics(in %sel: !firrtl.uint, in %sel2: !firrtl.uint, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
+  firrtl.module @MuxIntrinsics(in %sel_0w: !firrtl.uint<0>, in %sel_1w: !firrtl.uint<1>, in %high: !firrtl.uint<1>, in %low: !firrtl.uint<1>, out %out1: !firrtl.uint, out %out2: !firrtl.uint) {
     %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
     %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -967,12 +963,16 @@ firrtl.circuit "Foo" {
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1 = firrtl.constant 0: !firrtl.uint
+    %sel = firrtl.wire : !firrtl.uint
+    firrtl.connect %sel, %sel_0w : !firrtl.uint, !firrtl.uint<0>
     // CHECK: firrtl.int.mux2cell
-    // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-SAME: (!firrtl.uint<0>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
+    %sel2 = firrtl.wire : !firrtl.uint
+    firrtl.connect %sel2, %sel_1w : !firrtl.uint, !firrtl.uint<1>
     // CHECK: firrtl.int.mux4cell
-    // CHECK-SAME: (!firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
+    // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
     %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
