@@ -1308,7 +1308,7 @@ InferResetsPass::collectAnnos(FModuleOp module) {
       reset = arg;
       conflictingAnnos.insert({anno, reset.getLoc()});
 
-      return true;
+      return false;
     }
     if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
       anyFailed = true;
@@ -1350,7 +1350,7 @@ InferResetsPass::collectAnnos(FModuleOp module) {
         }
         reset = op->getResult(0);
         conflictingAnnos.insert({anno, reset.getLoc()});
-        return true;
+        return false;
       }
       if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
         anyFailed = true;
