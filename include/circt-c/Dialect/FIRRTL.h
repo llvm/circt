@@ -114,6 +114,8 @@ MLIR_CAPI_EXPORTED MlirType
 firrtlTypeGetClass(MlirContext ctx, MlirAttribute name, size_t numberOfElements,
                    const FIRRTLClassElement *elements);
 
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetMaskType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
