@@ -756,7 +756,7 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins UInt1OrUnsizedType:$sel, PassiveType:$high,
+  let arguments = (ins UIntLTE1OrUnsizedType:$sel, PassiveType:$high,
                        PassiveType:$low);
   let results = (outs PassiveType:$result);
 
@@ -842,7 +842,7 @@ def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
     the inference process in the same way as a normal mux operation.
   }];
 
-  let arguments = (ins UInt1OrUnsizedType:$sel, PassiveType:$high,
+  let arguments = (ins UIntLTE1OrUnsizedType:$sel, PassiveType:$high,
                        PassiveType:$low);
   let results = (outs PassiveType:$result);
 
@@ -861,7 +861,7 @@ def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
     the inference process as a sugar of mux operation chains.
   }];
 
-  let arguments = (ins UInt2OrUnsizedType:$sel, PassiveType:$v3,
+  let arguments = (ins UIntLTE2OrUnsizedType:$sel, PassiveType:$v3,
                        PassiveType:$v2, PassiveType:$v1,
                        PassiveType:$v0);
   let results = (outs PassiveType:$result);
