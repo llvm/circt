@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof((arr)[0]))
+
 void dumpCallback(MlirStringRef message, void *userData) {
   fprintf(stderr, "%.*s", (int)message.length, message.data);
 }
@@ -184,6 +186,53 @@ void testAttrGetIntegerFromString(MlirContext ctx) {
                       mlirStringRefCreateFromCString("114514"), 10));
 }
 
+void testTypeGetMaskType(MlirContext ctx) {
+  assert(mlirTypeEqual(firrtlTypeGetMaskType(firrtlTypeGetUInt(ctx, 32)),
+                       firrtlTypeGetUInt(ctx, 1)));
+  assert(mlirTypeEqual(firrtlTypeGetMaskType(firrtlTypeGetSInt(ctx, 64)),
+                       firrtlTypeGetUInt(ctx, 1)));
+
+  FIRRTLBundleField lhsFields[] = {
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f1")),
+          .isFlip = false,
+          .type = firrtlTypeGetUInt(ctx, 32),
+      },
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f2")),
+          .isFlip = false,
+          .type = firrtlTypeGetSInt(ctx, 64),
+      },
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f3")),
+          .isFlip = false,
+          .type = firrtlTypeGetClock(ctx),
+      },
+  };
+  FIRRTLBundleField rhsFields[] = {
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f1")),
+          .isFlip = false,
+          .type = firrtlTypeGetUInt(ctx, 1),
+      },
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f2")),
+          .isFlip = false,
+          .type = firrtlTypeGetUInt(ctx, 1),
+      },
+      {
+          .name = mlirIdentifierGet(ctx, mlirStringRefCreateFromCString("f3")),
+          .isFlip = false,
+          .type = firrtlTypeGetUInt(ctx, 1),
+      },
+  };
+  MlirType lhsBundle =
+      firrtlTypeGetBundle(ctx, ARRAY_SIZE(lhsFields), lhsFields);
+  MlirType rhsBundle =
+      firrtlTypeGetBundle(ctx, ARRAY_SIZE(rhsFields), rhsFields);
+  assert(mlirTypeEqual(firrtlTypeGetMaskType(lhsBundle), rhsBundle));
+}
+
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__firrtl__(), ctx);
@@ -191,5 +240,6 @@ int main(void) {
   testValueFoldFlow(ctx);
   testImportAnnotations(ctx);
   testAttrGetIntegerFromString(ctx);
+  testTypeGetMaskType(ctx);
   return 0;
 }
