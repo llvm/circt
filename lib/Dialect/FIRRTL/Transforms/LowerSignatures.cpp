@@ -64,6 +64,7 @@ struct FieldMapEntry : public PortInfo {
   size_t portID;
   size_t resultID;
   size_t fieldID;
+  size_t probeID;
 };
 
 using PortConversion = SmallVector<FieldMapEntry>;
@@ -139,6 +140,51 @@ annosForFieldIDRange(MLIRContext *ctx,
 }
 
 static LogicalResult
+computeProbeLowering(FModuleLike mod, PortConversion &newPorts,
+                    size_t portID, const PortInfo &port, bool isFlip,
+                    Twine name, FIRRTLType type, uint64_t fieldID, uint64_t bundleID) {
+  auto *ctx = type.getContext();
+  return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
+      .Case<BundleType>([&](BundleType bundle) -> LogicalResult {
+          for (auto [idx, elem] : llvm::enumerate(bundle.getElements())) {
+            if (failed(computeProbeLowering(
+                    mod, newPorts, portID, port, isFlip ^ elem.isFlip,
+                    name + "_" + elem.name.getValue(), elem.type,
+                    fieldID, bundleID + bundle.getFieldID(idx))))
+              return failure();
+        }
+        return success();
+      })
+      .Case<FVectorType>([&](FVectorType vector) -> LogicalResult {
+          for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
+            if (failed(computeProbeLowering(
+                    mod, newPorts, portID, port, isFlip,
+                    name + "_" + Twine(i), vector.getElementType(),
+                    fieldID, bundleID + vector.getFieldID(i))))
+              return failure();
+          }
+        return success();
+      })
+      .Case<RefType>([&](RefType probe) {
+        mod.emitError("Probe inside probe is forbidden");
+        return failure();
+         })
+      .Default([&](FIRRTLType type) {
+        assert(isFlip && "Probe is not output");
+        // Properties and other types wind up here.
+        newPorts.push_back(
+            {{StringAttr::get(ctx, name), RefType::get(cast<FIRRTLBaseType>(type)),
+              isFlip ? Direction::Out : Direction::In,
+              {}, port.loc,
+              {}},
+             portID,
+             newPorts.size(),
+             fieldID, bundleID});
+        return success();
+      });
+}
+
+static LogicalResult
 computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                     size_t portID, const PortInfo &port, bool isFlip,
                     Twine name, FIRRTLType type, uint64_t fieldID,
@@ -158,7 +204,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                 annosForFieldIDRange(ctx, annos, fieldID, lastId)},
                portID,
                newPorts.size(),
-               fieldID});
+               fieldID, 0});
         } else {
           for (auto [idx, elem] : llvm::enumerate(bundle.getElements())) {
             if (failed(computeLoweringImpl(
@@ -200,7 +246,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                 annosForFieldIDRange(ctx, annos, fieldID, lastId)},
                portID,
                newPorts.size(),
-               fieldID});
+               fieldID, 0});
         } else {
           for (size_t i = 0, e = vector.getNumElements(); i < e; ++i) {
             if (failed(computeLoweringImpl(
@@ -231,7 +277,19 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
+      .Case<FEnumType>([&](FEnumType fenum) { type.dump(); return mod.emitError("Enum unhandled"); })
+      .Case<RefType>([&](RefType probe) {
+        auto lsyms = symbolsForFieldIDRange(ctx, syms, fieldID, fieldID);
+        if (lsyms && !lsyms.empty()) {
+          mod.emitError("Probes should not have symbols on port[") << port.name << "].";
+          return failure();
+        }
+        assert(annosForFieldIDRange(ctx, annos, fieldID, fieldID).empty());
+        return computeProbeLowering(mod, newPorts,
+                    portID, port, isFlip,
+                    name, probe.getType(), fieldID, 0
+                    );
+         })
       .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(
@@ -241,7 +299,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
              portID,
              newPorts.size(),
-             fieldID});
+             fieldID, 0});
         return success();
       });
 }
@@ -389,8 +447,46 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   return success();
 }
 
+static void replaceProbeID(Value orig, size_t probeID, Value newVal) {
+  llvm::errs() << "rPI\n";
+  llvm::errs() << "rid: " << probeID << "\n";
+  if (probeID == 0) {
+    llvm::errs() << "Replacing: "; orig.dump();
+    orig.replaceAllUsesWith(newVal);
+    return;
+  }
+  for (auto *use : llvm::make_early_inc_range(orig.getUsers())) {
+    use->dump();
+    if (auto refsub = dyn_cast<RefSubOp>(use)) {
+      refsub.getInput().getType().getType().dump();
+      size_t subfield;
+      size_t probeIndex;
+      size_t projProbeId;
+      if (auto refvtype = dyn_cast<FVectorType>(refsub.getInput().getType().getType())) {
+        subfield = refvtype.getFieldID(refsub.getIndex());
+        probeIndex = refvtype.getIndexForFieldID(probeID);
+        projProbeId = refvtype.projectToChildFieldID(probeID, refsub.getIndex()).first;
+      } else {
+        auto refbtype = cast<BundleType>(refsub.getInput().getType().getType());
+        subfield = refbtype.getFieldID(refsub.getIndex());
+        probeIndex = refbtype.getIndexForFieldID(probeID);
+        projProbeId = refbtype.projectToChildFieldID(probeID, refsub.getIndex()).first;
+      }
+      llvm::errs() << "REFSUB[" << refsub.getIndex() << "] fid: " << subfield << " @ rid: " << probeID << "\n";
+      if (probeIndex == refsub.getIndex()) {
+        replaceProbeID(refsub, projProbeId, newVal);
+      }
+    } else if (auto def = dyn_cast<RefDefineOp>(use)) {
+      llvm::errs() << "** REF DEFINE ** "; def.dump(); 
+    }
+  }
+  llvm::errs() << "\n";
+}
+
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
+  SmallVector<Operation*> toErase;
+
   mod->walk([&](InstanceOp inst) -> void {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
     const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
@@ -420,13 +516,15 @@ static void lowerModuleBody(FModuleOp mod,
     // Connect up the old instance users to the new instance
     SmallVector<WireOp> bounce(inst.getNumResults());
     for (auto p : modPorts) {
+      llvm::errs() << "pid: " << p.portID << " fid: " << p.fieldID << " rid: " << p.probeID << "\n\n";
       // No change?  No bounce wire.
-      if (p.fieldID == 0) {
+      if (p.fieldID == 0 && p.probeID == 0) {
         inst.getResult(p.portID).replaceAllUsesWith(
             newOp.getResult(p.resultID));
         continue;
       }
-      if (!bounce[p.portID]) {
+      // Make a bounce wire, but not for probes, deal with them separately.
+      if (!bounce[p.portID] && !isa<RefType>(p.type)) {
         bounce[p.portID] = theBuilder.create<WireOp>(
             inst.getResult(p.portID).getType(),
             theBuilder.getStringAttr(
@@ -436,25 +534,39 @@ static void lowerModuleBody(FModuleOp mod,
             bounce[p.portID].getResult());
       }
       // Connect up the Instance to the bounce wires
-      if (p.isInput())
+      if (isa<RefType>(p.type)) {
+        replaceProbeID(inst.getResult(p.portID), p.probeID, newOp.getResult(p.resultID));
+      } else if (p.isInput()) {
         emitConnect(theBuilder, newOp.getResult(p.resultID),
                     getValueByFieldID(theBuilder, bounce[p.portID].getResult(),
                                       p.fieldID));
-      else
+      } else {
         emitConnect(theBuilder,
                     getValueByFieldID(theBuilder, bounce[p.portID].getResult(),
                                       p.fieldID),
                     newOp.getResult(p.resultID));
+      }
+      llvm::errs() << "\n\n";
+      mod.dump();
+      llvm::errs() << "\n\n";
     }
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
-    for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
-      assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
-      use->erase();
-    }
-    inst->erase();
+    toErase.push_back(inst);
     return;
   });
+
+  for (auto op : toErase) {
+    for (auto *use : llvm::make_early_inc_range(op->getUsers()))
+      toErase.push_back(use);
+  }
+for (auto i = toErase.rbegin(), e = toErase.rend(); i != e; ++i) {
+    llvm::errs() << "Erasing\n";
+    mod.dump();
+    llvm::errs() << "This one\n";
+    (*i)->dump();
+    (*i)->erase();
+  }
 }
 
 //===----------------------------------------------------------------------===//
