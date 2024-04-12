@@ -55,6 +55,12 @@ def IntTypeWidthGEQ32 : Constraint<CPred<
 def IntTypeWidthGT32 : Constraint<CPred<
   "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() > type_cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
 
+// sizeof(0) < X
+class IntTypeWidthLTX<int X> : Constraint<CPred<
+  "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() >= 0 &&"
+  "type_cast<IntType>($0.getType()).getBitWidthOrSentinel()< " # X
+>>;
+
 // Constraint that enforces int types
 def IntTypes : Constraint<CPred<"type_isa<IntType>($0.getType())">>;
 
@@ -561,6 +567,25 @@ def MuxNEQ : Pat<
   (MuxPrimOp:$old (NEQPrimOp $a, $b), $x, $y),
   (MoveNameHint $old, (MuxPrimOp (EQPrimOp $a, $b), $y, $x)),
   [(EqualTypes $x, $y), (KnownWidth $x)]>;
+
+// mux(cond : u0, a, b) -> mux(0 : u1, a, b)
+def MuxPadSel : Pat<
+  (MuxPrimOp $cond, $a, $b),
+  (MuxPrimOp
+     (ConstantOp
+      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (returnType "$_builder.getType<UIntType>(1)")),
+    $a, $b),
+  [(IntTypeWidthLTX<1> $cond)]>;
+
+// mux4(cond : u0/u1, a, b) -> mux4(pad(cond -> u2), a, b)
+def Mux4PadSel : Pat<
+  (Mux4CellIntrinsicOp $cond, $a, $b, $c, $d),
+  (Mux4CellIntrinsicOp
+    (PadPrimOp $cond,
+      (NativeCodeCall<"$_builder.getI32IntegerAttr(2)">)),
+    $a, $b, $c, $d),
+  [(IntTypeWidthLTX<2> $cond)]>;
 
 def CatDoubleConst : Pat <
   (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
