@@ -6,7 +6,7 @@ module {
   //CHECK:    [[NID2:[0-9]+]] input [[NID0]] reset1
   //CHECK:    [[NID3:[0-9]+]] sort bitvec 32
   //CHECK:    [[NID4:[0-9]+]] input [[NID3]] in
-  hw.module @TwoResets(in %clock : !seq.clock, in %reset0 : i1, in %reset1 : i1, in %in : i32) {
+  hw.module @MultipleResets(in %clock : !seq.clock, in %reset0 : i1, in %reset1 : i1, in %in : i32) {
     // Registers are all emitted before any other operation
     //CHECK:    [[NID5:[0-9]+]] state [[NID3]] reg0
     //CHECK:    [[NID6:[0-9]+]] state [[NID3]] reg1
