@@ -528,7 +528,20 @@ private:
     // Check if the register has a reset
     if (reset) {
       size_t resetValLID = noLID;
-      size_t resetLID = getOpLID(reset);
+
+      // Check if the reset signal is a port to avoid nullptrs (as done above
+      // with next)
+      size_t resetLID = noLID;
+      if (BlockArgument barg = dyn_cast<BlockArgument>(reset)) {
+        // Extract the block argument index and use that to get the line number
+        size_t argIdx = barg.getArgNumber();
+
+        // Check that the extracted argument is in range before using it
+        resetLID = inputLIDs[argIdx];
+
+      } else {
+        resetLID = getOpLID(reset);
+      }
 
       // Check for a reset value, if none exists assume it's zero
       if (resetVal)
