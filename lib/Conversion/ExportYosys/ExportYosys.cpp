@@ -222,6 +222,8 @@ struct ModuleConverter
         wire->port_input = true;
       }
     }
+    // Need to call fixup ports after port mutations.
+    rtlilModule->fixup_ports();
   }
 
   DenseMap<Value, SigSpec> mapping;
@@ -262,6 +264,8 @@ RTLIL::IdString ExprEmitter::getNewName(StringRef name) {
 
 void ExportYosysPass::runOnOperation() {
   auto *design = new Yosys::RTLIL::Design;
+  Yosys::log_streams.push_back(&std::cout);
+	Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
   SmallVector<ModuleConverter> converter;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
@@ -273,7 +277,9 @@ void ExportYosysPass::runOnOperation() {
       signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
-  Yosys::run_pass("opt;synth;write_verilog synth.v", design);
+  // Yosys::run_pass("synth;write_verilog synth.v", design);
+  Yosys::shell(design);
+
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
