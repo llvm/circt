@@ -47,6 +47,11 @@ std::string getEscapedName(StringRef name) {
 
 struct RTLILConverter {};
 struct ModuleConverter;
+int64_t getBitWidthSeq(Type type) {
+  if (isa<seq::ClockType>(type))
+    return 1;
+  return getBitWidth(type);
+}
 
 struct ExprEmitter
     : public hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>,
@@ -77,7 +82,8 @@ struct ExprEmitter
   FailureOr<Yosys::SigSpec> visitTypeOp(ConstantOp op) {
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
-    return Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(), op.getValue().getBitWidth()));
+    return Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
+                                       op.getValue().getBitWidth()));
   }
 
   using hw::TypeOpVisitor<ExprEmitter, FailureOr<SigSpec>>::visitTypeOp;
@@ -85,6 +91,7 @@ struct ExprEmitter
 
   FailureOr<Yosys::SigSpec> visitComb(AddOp op);
   FailureOr<Yosys::SigSpec> visitComb(SubOp op);
+  FailureOr<Yosys::SigSpec> visitComb(MuxOp op);
 
   // Comb.
   // ResultTy visitComb(MuxOp op);
@@ -139,6 +146,22 @@ struct ModuleConverter
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
+  FailureOr<SigSpec> visitSeq(seq::FirRegOp op) {
+    if (op.getReset())
+      return failure();
+    auto clock = getValue(op.getClk());
+    auto next = getValue(op.getNext());
+    auto width = hw::getBitWidth(op.getType());
+    if (failed(clock) || failed(next) || width <= 0)
+      return failure();
+    auto wireName = getNewName(op.getName());
+    // Connect!
+    auto wire = getValue(op).value();
+    rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
+                        SigSpec(wire));
+    return SigSpec(wire);
+  }
+
   ResultTy visitStmt(OutputOp op) {
     assert(op.getNumOperands() == outputs.size());
     for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
@@ -183,48 +206,58 @@ struct ModuleConverter
   // ResultTy visitComb(ICmpOp op);
 
   LogicalResult run() {
-    return LogicalResult::failure(
-        module
-            .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
-              // Skip zero result operatins.
-              if (module == op)
-                return WalkResult::advance();
-              if (auto out = dyn_cast<hw::OutputOp>(op)) {
-                auto result = visitStmt(out);
-                if (failed(result))
-                  return op->emitError() << "failed to lower",
-                         WalkResult::interrupt();
-                return WalkResult::advance();
-              }
-              return WalkResult::advance();
-            })
-            .wasInterrupted());
-  }
-
-  ModuleConverter(Yosys::RTLIL::Design *design,
-                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
-      : design(design), rtlilModule(rtlilModule), module(module) {
     ModulePortInfo ports(module.getPortList());
     size_t inputPos = 0;
     for (auto [idx, port] : llvm::enumerate(ports)) {
       auto *wire = rtlilModule->addWire(getEscapedName(port.getName()));
+      // NOTE: Port id is 1-indexed.
       wire->port_id = idx + 1;
-      auto bitWidth = hw::getBitWidth(port.type);
+      auto bitWidth = getBitWidthSeq(port.type);
       assert(bitWidth >= 0);
       wire->width = bitWidth;
       if (port.isOutput()) {
         wire->port_output = true;
         outputs.push_back(wire);
-      } else {
+      } else if (port.isInput()) {
         setLowering(module.getBodyBlock()->getArgument(inputPos++),
                     Yosys::SigSpec(wire));
         // TODO: Need to consider inout?
         wire->port_input = true;
+      } else {
+        return failure();
       }
     }
     // Need to call fixup ports after port mutations.
     rtlilModule->fixup_ports();
+    module.walk([this](seq::FirRegOp op) {
+      auto *wire = this->rtlilModule->addWire(getNewName(op.getName()),
+                                              getBitWidth(op.getType()));
+      setLowering(op.getResult(), SigSpec(wire));
+    });
+
+    auto result = module
+                      .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
+                        // Skip zero result operatins.
+                        if (module == op)
+                          return WalkResult::advance();
+                        if (auto out = dyn_cast<hw::OutputOp>(op)) {
+                          auto result = visitStmt(out);
+                          if (failed(result))
+                            return op->emitError() << "failed to lower",
+                                   WalkResult::interrupt();
+                          return WalkResult::advance();
+                        }
+                        if (auto reg = dyn_cast<seq::FirRegOp>(op))
+                          visitSeq(reg);
+                        return WalkResult::advance();
+                      })
+                      .wasInterrupted();
+    return LogicalResult::success(!result);
   }
+
+  ModuleConverter(Yosys::RTLIL::Design *design,
+                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
+      : design(design), rtlilModule(rtlilModule), module(module) {}
 
   DenseMap<Value, SigSpec> mapping;
   SmallVector<RTLIL::Wire *> outputs;
@@ -256,6 +289,16 @@ FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(SubOp op) {
   });
 }
 
+FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(MuxOp op) {
+  auto cond = getValue(op.getCond());
+  auto high = getValue(op.getTrueValue());
+  auto low = getValue(op.getFalseValue());
+  if (failed(cond) || failed(high) || failed(low))
+    return failure();
+  return moduleEmitter.rtlilModule->Mux(getNewName(), low.value(),
+                                        high.value(), cond.value());
+}
+
 RTLIL::IdString ExprEmitter::getNewName(StringRef name) {
   return moduleEmitter.getNewName(name);
 }
@@ -263,10 +306,12 @@ RTLIL::IdString ExprEmitter::getNewName(StringRef name) {
 } // namespace
 
 void ExportYosysPass::runOnOperation() {
-  auto *design = new Yosys::RTLIL::Design;
+  // Set up yosys.
   Yosys::log_streams.push_back(&std::cout);
-	Yosys::log_error_stderr = true;
+  Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
+
+  auto *design = new Yosys::RTLIL::Design;
   SmallVector<ModuleConverter> converter;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
@@ -277,8 +322,9 @@ void ExportYosysPass::runOnOperation() {
       signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
-  // Yosys::run_pass("synth;write_verilog synth.v", design);
-  Yosys::shell(design);
+  Yosys::run_pass("synth", design);
+  Yosys::run_pass("write_verilog synth.v", design);
+  // Yosys::shell(design);
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
