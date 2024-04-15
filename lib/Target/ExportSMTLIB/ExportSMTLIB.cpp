@@ -293,8 +293,9 @@ struct ExpressionVisitor
   LogicalResult quantifierHelper(OpTy op, StringRef operatorString,
                                  VisitorInfo &info) {
     // TODO: add support
-    if (op.getWeight() != 0)
-      return op.emitError() << "non-zero weights not supported yet";
+    auto weight = op.getWeight();
+    // if (op.getWeight() != 0)
+    //   return op.emitError() << "non-zero weights not supported yet";
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
     if (!op.getPatterns().empty())
@@ -321,7 +322,10 @@ struct ExpressionVisitor
       delimiter = " ";
     }
 
+
     info.stream << ")\n";
+
+
 
     // Print the quantifier body. This assumes that quantifiers are not deeply
     // nested (at least not enough that recursive calls could become a problem).
@@ -334,9 +338,17 @@ struct ExpressionVisitor
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
+    if (weight != 0)
+      info.stream << "( ! ";
+
     info.stream << info.valueMap.lookup(yieldedValue);
+    if(weight != 0)
+      info.stream <<" "<< weight << ")";
+
     for (unsigned k = 0; k < newInfo.openParens + 1; ++k)
       info.stream << ")";
+
+
 
     return success();
   }
