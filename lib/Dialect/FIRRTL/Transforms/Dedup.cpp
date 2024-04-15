@@ -21,6 +21,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -34,6 +35,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
+
+#define DEBUG_TYPE "firrtl-dedup"
 
 using namespace circt;
 using namespace firrtl;
@@ -1576,6 +1579,8 @@ struct DenseMapInfo<ModuleInfo> {
 namespace {
 class DedupPass : public DedupBase<DedupPass> {
   void runOnOperation() override {
+    LLVM_DEBUG(debugPassHeader(this) << "\n");
+
     auto *context = &getContext();
     auto circuit = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
@@ -1691,10 +1696,15 @@ class DedupPass : public DedupBase<DedupPass> {
       if (it != moduleInfoToModule.end()) {
         auto original = cast<FModuleLike>(it->second);
         // Record the group ID of the other module.
-        dedupMap[moduleName] = original.getModuleNameAttr();
+        auto originalName = original.getModuleNameAttr();
+        dedupMap[moduleName] = originalName;
         deduper.dedup(original, module);
         ++erasedModules;
         anythingChanged = true;
+        LLVM_DEBUG({
+          llvm::dbgs() << "- dedup " << moduleName << " into " << originalName
+                       << "\n";
+        });
         continue;
       }
       // Any module not deduplicated must be recorded.
@@ -1786,6 +1796,7 @@ class DedupPass : public DedupBase<DedupPass> {
     markAnalysesPreserved<NLATable>();
     if (!anythingChanged)
       markAllAnalysesPreserved();
+    LLVM_DEBUG(debugFooter() << "\n");
   }
 };
 } // end anonymous namespace
