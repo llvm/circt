@@ -54,14 +54,6 @@ struct ExprEmitter
                                         FailureOr<Yosys::SigSpec>> {
   ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
   ModuleConverter &moduleEmitter;
-  // using hw::TypeOpVisitor<ExprEmitter,
-  // FailureOr<Yosys::SigSpec>>::visitTypeOp; using
-  // comb::CombinationalVisitor<ExprEmitter,
-  // FailureOr<Yosys::SigSpec>>::visitComb; FailureOr<Yosys::SigSpec>
-  // visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
-  // FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) { return
-  // visitUnhandledExpr(op); } FailureOr<Yosys::SigSpec>
-  // visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
   FailureOr<Yosys::SigSpec> getValue(Value value);
   FailureOr<Yosys::SigSpec> emitExpression(Operation *op) {
     return dispatchCombinationalVisitor(op);
@@ -82,10 +74,10 @@ struct ExprEmitter
     return visitUnhandledExpr(op);
   }
 
-  ResultTy visitTypeOp(ConstantOp op) {
+  FailureOr<Yosys::SigSpec> visitTypeOp(ConstantOp op) {
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
-    return ResultTySuccess;
+    return Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(), op.getValue().getBitWidth()));
   }
 
   using hw::TypeOpVisitor<ExprEmitter, FailureOr<SigSpec>>::visitTypeOp;
@@ -281,7 +273,7 @@ void ExportYosysPass::runOnOperation() {
       signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
-  Yosys::run_pass("opt;write_verilog synth.v", design);
+  Yosys::run_pass("opt;synth;write_verilog synth.v", design);
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
