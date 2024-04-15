@@ -846,6 +846,8 @@ def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
                        PassiveType:$low);
   let results = (outs PassiveType:$result);
 
+  let hasCanonicalizer = true;
+
   let assemblyFormat =
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 }

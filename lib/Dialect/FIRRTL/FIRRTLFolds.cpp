@@ -1484,6 +1484,11 @@ void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
           context);
 }
 
+void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::Mux2PadSel>(context);
+}
+
 void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.add<patterns::Mux4PadSel>(context);

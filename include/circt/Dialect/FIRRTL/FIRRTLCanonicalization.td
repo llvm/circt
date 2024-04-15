@@ -570,21 +570,31 @@ def MuxNEQ : Pat<
 
 // mux(cond : u0, a, b) -> mux(0 : u1, a, b)
 def MuxPadSel : Pat<
-  (MuxPrimOp $cond, $a, $b),
-  (MuxPrimOp
-     (ConstantOp
+  (MuxPrimOp:$old $cond, $a, $b),
+  (MoveNameHint $old, (MuxPrimOp
+    (ConstantOp
       (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
       (returnType "$_builder.getType<UIntType>(1)")),
-    $a, $b),
+    $a, $b)),
+  [(IntTypeWidthLTX<1> $cond)]>;
+
+// mux2(cond : u0, a, b) -> mux2(0 : u1, a, b)
+def Mux2PadSel : Pat<
+  (Mux2CellIntrinsicOp:$old $cond, $a, $b),
+  (MoveNameHint $old, (Mux2CellIntrinsicOp
+    (ConstantOp
+      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (returnType "$_builder.getType<UIntType>(1)")),
+    $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
 
 // mux4(cond : u0/u1, a, b) -> mux4(pad(cond -> u2), a, b)
 def Mux4PadSel : Pat<
-  (Mux4CellIntrinsicOp $cond, $a, $b, $c, $d),
-  (Mux4CellIntrinsicOp
+  (Mux4CellIntrinsicOp:$old $cond, $a, $b, $c, $d),
+  (MoveNameHint $old, (Mux4CellIntrinsicOp
     (PadPrimOp $cond,
       (NativeCodeCall<"$_builder.getI32IntegerAttr(2)">)),
-    $a, $b, $c, $d),
+    $a, $b, $c, $d)),
   [(IntTypeWidthLTX<2> $cond)]>;
 
 def CatDoubleConst : Pat <
