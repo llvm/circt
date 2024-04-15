@@ -596,8 +596,8 @@ if(CIRCT_YOSYS_INTEGRATION_ENABLED)
   message(STATUS "Yosys integration is enabled")
   include(ExternalProject)
   ExternalProject_Add(yosys
-    URL https://github.com/YosysHQ/yosys/archive/refs/tags/yosys-0.38.zip
-    URL_HASH SHA256=2bfbc60dd3244dd5f67e79fc725f0c5a8629e7ac9c6dc1189dd51dd5b41ff0d0
+    URL https://github.com/YosysHQ/yosys/archive/refs/tags/yosys-0.40.zip
+    URL_HASH SHA256=3f20dcaeee9be882a818885d857ff476e8cc491657447f2c3629da82723ccd1f
     SOURCE_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
     BINARY_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
     INSTALL_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
@@ -606,13 +606,19 @@ if(CIRCT_YOSYS_INTEGRATION_ENABLED)
     BUILD_COMMAND make --jobs=12 # TODO: Make the number of workers configurable. We cannot get it from ninja.
     INSTALL_COMMAND "" # skip install
     TEST_COMMAND ""
+    BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/third-party/yosys/libyosys.so"
   )
   ExternalProject_Get_Property(yosys INSTALL_DIR)
   include_directories(${INSTALL_DIR}/share/include)
-  add_library (yosys_yosys SHARED IMPORTED)
+  add_library (libyosys SHARED IMPORTED)
   message(STATUS, "${INSTALL_DIR} is here")
-  set_target_properties(yosys_yosys PROPERTIES IMPORTED_LOCATION "${INSTALL_DIR}/libyosys.so")
-  target_link_libraries(yosys_yosys INTERFACE "${INSTALL_DIR}/libyosys.so")
+  add_dependencies(libyosys yosys)
+  set_target_properties(libyosys PROPERTIES 
+    IMPORTED_LOCATION "${INSTALL_DIR}/libyosys.so"
+    INSTALL_RPATH "{INSTALL_RPATH}"
+    INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/share/include/"
+  )
+  #target_link_libraries(libyosys INTERFACE "${INSTALL_DIR}/libyosys.so")
 endif()
 
 #-------------------------------------------------------------------------------

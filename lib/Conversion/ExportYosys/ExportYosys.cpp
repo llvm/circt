@@ -46,29 +46,82 @@ std::string getEscapedName(StringRef name) {
 }
 
 struct RTLILConverter {};
+struct ModuleConverter;
 
 struct ExprEmitter
     : public hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>,
       public comb::CombinationalVisitor<ExprEmitter,
                                         FailureOr<Yosys::SigSpec>> {
-  // using hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>::visitTypeOp;
-  // using comb::CombinationalVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>::visitComb;
-  // FailureOr<Yosys::SigSpec> visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
-  // FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
-  // FailureOr<Yosys::SigSpec> visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
+  ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
+  ModuleConverter &moduleEmitter;
+  // using hw::TypeOpVisitor<ExprEmitter,
+  // FailureOr<Yosys::SigSpec>>::visitTypeOp; using
+  // comb::CombinationalVisitor<ExprEmitter,
+  // FailureOr<Yosys::SigSpec>>::visitComb; FailureOr<Yosys::SigSpec>
+  // visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
+  // FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) { return
+  // visitUnhandledExpr(op); } FailureOr<Yosys::SigSpec>
+  // visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
+  FailureOr<Yosys::SigSpec> getValue(Value value);
+  FailureOr<Yosys::SigSpec> emitExpression(Operation *op) {
+    return dispatchCombinationalVisitor(op);
+  }
   FailureOr<Yosys::SigSpec> visitUnhandledTypeOp(Operation *op) {
     return op->emitError() << " is unsupported";
   }
   FailureOr<Yosys::SigSpec> visitUnhandledExpr(Operation *op) {
     return op->emitError() << " is unsupported";
   }
+  FailureOr<Yosys::SigSpec> visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
+  FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  FailureOr<Yosys::SigSpec> visitInvalidTypeOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
 
+  ResultTy visitTypeOp(ConstantOp op) {
+    if (op.getValue().getBitWidth() >= 32)
+      return op.emitError() << "unsupported";
+    return ResultTySuccess;
+  }
+
+  using hw::TypeOpVisitor<ExprEmitter, FailureOr<SigSpec>>::visitTypeOp;
+  using comb::CombinationalVisitor<ExprEmitter, FailureOr<SigSpec>>::visitComb;
+
+  FailureOr<Yosys::SigSpec> visitComb(AddOp op);
+  FailureOr<Yosys::SigSpec> visitComb(SubOp op);
+
+  // Comb.
+  // ResultTy visitComb(MuxOp op);
+  template <typename BinaryFn>
+  FailureOr<Yosys::SigSpec> emitVariadicOp(Operation *op, BinaryFn fn) {
+    // Construct n-1 binary op (currently linear) chains.
+    // TODO: Need to create a tree?
+    std::optional<SigSpec> cur;
+    for (auto operand : op->getOperands()) {
+      auto result = getValue(operand);
+      if (failed(result))
+        return failure();
+      if (cur) {
+        cur = fn(getNewName(), *cur, result.value());
+      } else
+        cur = result.value();
+    }
+
+    return cur.value();
+  }
+  RTLIL::IdString getNewName(StringRef name = "_GEN_");
 };
 
-using ResultTy = LogicalResult;
+using ResultTy = FailureOr<bool>;
+constexpr bool ResultTySuccess = true;
+
 struct ModuleConverter
-    : public hw::TypeOpVisitor<ModuleConverter, ResultTy>,
-      public comb::CombinationalVisitor<ModuleConverter, ResultTy> {
+    : public hw::TypeOpVisitor<ModuleConverter, FailureOr<bool>>,
+      public comb::CombinationalVisitor<ModuleConverter, FailureOr<bool>> {
 
   FailureOr<SigSpec> getValue(Value value) {
     auto it = mapping.find(value);
@@ -77,115 +130,60 @@ struct ModuleConverter
     if (isa<OpResult>(value)) {
       // TODO: If it's instance like ...
       auto *op = value.getDefiningOp();
-      auto result = ExprEmitter().emitExpression(op);
+      auto result = ExprEmitter(*this).emitExpression(op);
+      // auto result = visit(op);
       if (failed(result))
-        return result;
+        return op->emitError() << "lowering failed";
 
       setLowering(op->getResult(0), result.value());
-      return success();
+      return result;
     }
     // TODO: Convert ports.
     return failure();
   }
 
-  ResultTy visitTypeOp(ConstantOp op) {
-    if (op.getValue().getBitWidth() >= 32)
-      return op.emitError() << "unsupported";
-    // TODO: Figure out who has to free constants and sigspec.
-    // allocateSigSpec(new RTLIL::Const(op.getValue().getZExtValue()));
-    return success();
-  }
-
-  ResultTy visit(Operation *op) { return dispatchCombinationalVisitor(op); }
-  ResultTy visitInvalidComb(Operation *op) { return dispatchTypeOpVisitor(op); }
-  ResultTy visitUnhandledComb(Operation *op) { return visitUnhandledExpr(op); }
-  ResultTy visitInvalidTypeOp(Operation *op) { return visitUnhandledExpr(op); }
-  ResultTy visitUnhandledExpr(Operation *op) {
-    return op->emitError() << " is unsupported";
-  }
-  using hw::TypeOpVisitor<ModuleConverter, ResultTy>::visitTypeOp;
-  using comb::CombinationalVisitor<ModuleConverter, ResultTy>::visitComb;
-
-  // TODO: Consider BumpAllocator instead of many allocations with unique
-  // pointers.
-  llvm::SmallVector<std::unique_ptr<SigSpec>> sigSpecs;
-  template <typename... Params> SigSpec allocateSigSpec(Params &&...params) {
-    return SigSpec(std::forward<Params>(params)...);
-  }
-
-  // Comb.
-  // ResultTy visitComb(MuxOp op);
-  template <typename BinaryFn>
-  ResultTy emitVariadicOp(Operation *op, BinaryFn fn) {
-    // Construct n-1 binary op (currently linear) chains.
-    // TODO: Need to create a tree?
-    std::optional<SigSpec> cur;
-    for (auto operand : op->getOperands()) {
-      auto result = getValue(operand);
-      if (failed(result))
-        return result;
-      if (cur) {
-        auto *resultWire = rtlilModule->addWire(
-            getNewName(), hw::getBitWidth(operand.getType()));
-
-        Cell *cell = fn(getNewName(), *cur, result.value(), resultWire);
-        // assert(cell->connections().size() == 3);
-        cur = allocateSigSpec(resultWire);
-      } else
-        cur = result.value();
-    }
-    return success();
-  }
   circt::Namespace moduleNameSpace;
   RTLIL::IdString getNewName(StringRef name = "_GEN_") {
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  ResultTy visitComb(AddOp op) {
-    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
-      return rtlilModule->addAdd(name, l, r, out);
-    });
-  }
-  ResultTy visitComb(SubOp op) {
-    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
-      return rtlilModule->addSub(name, l, r, out);
-    });
-  }
-
-  LogicalResult visitStmt(OutputOp op) {
+  ResultTy visitStmt(OutputOp op) {
     assert(op.getNumOperands() == outputs.size());
     for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
       auto result = getValue(op);
       if (failed(result))
-        return result;
-      rtlilModule->connect(allocateSigSpec(wire), result.value());
+        return failure();
+      rtlilModule->connect(Yosys::SigSpec(wire), result.value());
     }
-    return success();
+
+    return ResultTySuccess;
   }
 
-  ResultTy visitComb(MulOp op) {}
-  ResultTy visitComb(DivUOp op) {}
-  ResultTy visitComb(DivSOp op) {}
-  ResultTy visitComb(ModUOp op) {}
-  ResultTy visitComb(ModSOp op) {}
-  ResultTy visitComb(ShlOp op) {}
-  ResultTy visitComb(ShrUOp op) {}
-  ResultTy visitComb(ShrSOp op) {}
-  ResultTy visitComb(AndOp op) {
-    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
-      return rtlilModule->addAnd(name, l, r, out);
-    });
-  }
-  ResultTy visitComb(OrOp op) {
-    return emitVariadicOp(op, [&](auto name, auto l, auto r, auto out) {
-      return rtlilModule->addOr(name, l, r, out);
-    });
-  }
-  ResultTy visitComb(XorOp op) {}
+  /*
+    ResultTy visitComb(MulOp op) {}
+    ResultTy visitComb(DivUOp op) {}
+    ResultTy visitComb(DivSOp op) {}
+    ResultTy visitComb(ModUOp op) {}
+    ResultTy visitComb(ModSOp op) {}
+    ResultTy visitComb(ShlOp op) {}
+    ResultTy visitComb(ShrUOp op) {}
+    ResultTy visitComb(ShrSOp op) {}
+    ResultTy visitComb(AndOp op) {};
+      return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+        return rtlilModule->And(name, l, r);
+      });
+    }
+    ResultTy visitComb(OrOp op) {
+      return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+        return rtlilModule->Or(name, l, r);
+      });
+    }
+    ResultTy visitComb(XorOp op) {}
 
-  // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
-  // regardless of the operands."
-  ResultTy visitComb(ParityOp op) {}
+    // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
+    // regardless of the operands."
+    ResultTy visitComb(ParityOp op) {}
+    */
 
   // ResultTy visitComb(ReplicateOp op);
   // ResultTy visitComb(ConcatOp op);
@@ -195,16 +193,17 @@ struct ModuleConverter
   LogicalResult run() {
     return LogicalResult::failure(
         module
-            .walk<mlir::WalkOrder::PreOrder>([this](Operation *op) {
+            .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
               // Skip zero result operatins.
-              op->emitWarning() << "foo";
-              RTLIL_BACKEND::dump_design(std::cout, design, false);
               if (module == op)
                 return WalkResult::advance();
-              if (auto out = dyn_cast<hw::OutputOp>(op))
-                return visitStmt(out), WalkResult::advance();
-              if (failed(visit(op)))
-                return WalkResult::interrupt();
+              if (auto out = dyn_cast<hw::OutputOp>(op)) {
+                auto result = visitStmt(out);
+                if (failed(result))
+                  return op->emitError() << "failed to lower",
+                         WalkResult::interrupt();
+                return WalkResult::advance();
+              }
               return WalkResult::advance();
             })
             .wasInterrupted());
@@ -217,7 +216,7 @@ struct ModuleConverter
     size_t inputPos = 0;
     for (auto [idx, port] : llvm::enumerate(ports)) {
       auto *wire = rtlilModule->addWire(getEscapedName(port.getName()));
-      wire->port_id = idx;
+      wire->port_id = idx + 1;
       auto bitWidth = hw::getBitWidth(port.type);
       assert(bitWidth >= 0);
       wire->width = bitWidth;
@@ -226,7 +225,7 @@ struct ModuleConverter
         outputs.push_back(wire);
       } else {
         setLowering(module.getBodyBlock()->getArgument(inputPos++),
-                    allocateSigSpec(wire));
+                    Yosys::SigSpec(wire));
         // TODO: Need to consider inout?
         wire->port_input = true;
       }
@@ -237,7 +236,7 @@ struct ModuleConverter
   SmallVector<RTLIL::Wire *> outputs;
 
   LogicalResult setLowering(Value value, SigSpec s) {
-    return LogicalResult::success(mapping.insert({value, s}).second);
+    return success(mapping.insert({value, s}).second);
   }
 
   Yosys::RTLIL::Design *design;
@@ -247,30 +246,42 @@ struct ModuleConverter
   RTLIL::Cell *getCellForValue(Value value);
 };
 
+FailureOr<SigSpec> ExprEmitter::getValue(Value value) {
+  return moduleEmitter.getValue(value);
+}
+
+FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(AddOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return moduleEmitter.rtlilModule->Add(name, l, r);
+  });
+}
+
+FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(SubOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return moduleEmitter.rtlilModule->Sub(name, l, r);
+  });
+}
+
+RTLIL::IdString ExprEmitter::getNewName(StringRef name) {
+  return moduleEmitter.getNewName(name);
+}
+
 } // namespace
 
 void ExportYosysPass::runOnOperation() {
   auto *design = new Yosys::RTLIL::Design;
-  // auto *mod = new Yosys::RTLIL::Module;
-  // mod->name = "\\dog";
-  // design->add(mod);
-  // auto *wire = mod->addWire("\\cat");
-  // mod->addCell()
-  // wire->port_id = 1;
-  // wire->port_input = true;
-  // design->addModule(Yosys::RTLIL::IdString("test"));
+  Yosys::yosys_setup();
   SmallVector<ModuleConverter> converter;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
-    llvm::errs() << op.getModuleName() << " "
-                 << getEscapedName(op.getModuleName());
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
     converter.emplace_back(design, newModule, op);
   }
   for (auto &c : converter)
-    c.run();
+    if (failed(c.run()))
+      signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
-  Yosys::run_pass("opt", design);
+  Yosys::run_pass("opt;write_verilog synth.v", design);
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 

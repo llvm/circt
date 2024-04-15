@@ -41,8 +41,6 @@ add_circt_translation_library(CIRCTExportYosys
   DEPENDS
   CIRCTConversionPassIncGen
 
-  yosys_yosys
-
   LINK_COMPONENTS
   Core
 
@@ -53,5 +51,5 @@ add_circt_translation_library(CIRCTExportYosys
   MLIRTransforms
   CIRCTHW
   CIRCTComb
-  yosys_yosys
+  libyosys
 )
