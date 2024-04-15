@@ -4,7 +4,7 @@
 // This file just tests the ibis-specific hooks.
 
 // CHECK-LABEL:   ibis.class @ToDC {
-// CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToDC>
+// CHECK:           %[[VAL_0:.*]] = ibis.this <@ToDC>
 // CHECK:           ibis.method.df @foo(%[[VAL_1:.*]]: !dc.value<i32>) -> !dc.value<i32> {
 // CHECK:             %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i32>
 // CHECK:             %[[VAL_4:.*]]:2 = dc.fork [2] %[[VAL_2]]
@@ -20,7 +20,7 @@
 
 ibis.design @foo {
 ibis.class @ToDC {
-  %this = ibis.this <@foo::@ToDC> 
+  %this = ibis.this <@ToDC> 
   ibis.method.df @foo(%arg0: i32) -> (i32) {
     %o0, %o1 = handshake.fork [2] %arg0 : i32
     %1 = ibis.sblock.isolated(%a0 : i32 = %o0, %a1 : i32 = %o1) -> i32 {

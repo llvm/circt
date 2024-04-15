@@ -35,6 +35,9 @@ evaluateParametricAttr(mlir::Location loc, mlir::ArrayAttr parameters,
 /// Returns true if any part of t is parametric.
 bool isParametricType(mlir::Type t);
 
+/// Parse an InnerRefAttr with optional enclosing `<` `>` characters
+mlir::Attribute parseInnerRefAttr(mlir::AsmParser &p, bool parseLess = true);
+
 } // namespace hw
 } // namespace circt
 

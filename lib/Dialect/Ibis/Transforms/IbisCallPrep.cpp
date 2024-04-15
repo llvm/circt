@@ -43,23 +43,15 @@ struct CallPrepPrecomputed {
       return {};
     return entry->second;
   }
-
-  // Utility function to create a hw::InnerRefAttr to a method.
-  static hw::InnerRefAttr getSymbol(MethodOp method) {
-    auto design = method->getParentOfType<DesignOp>();
-    return hw::InnerRefAttr::get(design.getSymNameAttr(),
-                                 method.getInnerSym().getSymName());
-  }
 };
 
 CallPrepPrecomputed::CallPrepPrecomputed(DesignOp design) {
   auto *ctxt = design.getContext();
-  StringAttr modName = design.getNameAttr();
 
   // Populate the class-symbol lookup table.
   for (auto cls : design.getOps<ClassOp>())
-    classSymbols[hw::InnerRefAttr::get(
-        modName, cls.getInnerSymAttr().getSymName())] = cls;
+    classSymbols[hw::InnerRefAttr::get(cls.getInnerSymAttr().getSymName())] =
+        cls;
 
   for (auto cls : design.getOps<ClassOp>()) {
     // Compute new argument types for each method.
@@ -86,8 +78,8 @@ CallPrepPrecomputed::CallPrepPrecomputed(DesignOp design) {
       }
 
       // Add both to the lookup table.
-      argTypes.insert(
-          std::make_pair(getSymbol(method), std::make_pair(argStruct, argLoc)));
+      argTypes.insert(std::make_pair(method.getInnerRef(),
+                                     std::make_pair(argStruct, argLoc)));
     }
 
     // Populate the instances table.
@@ -165,8 +157,7 @@ void MergeMethodArgs::rewrite(MethodOp func, OpAdaptor adaptor,
   auto *ctxt = getContext();
 
   // Find the pre-computed arg struct for this method.
-  auto argStructEntry =
-      info.argTypes.find(CallPrepPrecomputed::getSymbol(func));
+  auto argStructEntry = info.argTypes.find(func.getInnerRef());
   assert(argStructEntry != info.argTypes.end() && "Cannot find symref!");
   auto [argStruct, argLoc] = argStructEntry->second;
 

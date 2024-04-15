@@ -1216,8 +1216,8 @@ namespace {
 class InferenceMapping {
 public:
   InferenceMapping(ConstraintSolver &solver, SymbolTable &symtbl,
-                   hw::InnerSymbolTableCollection &istc)
-      : solver(solver), symtbl(symtbl), irn{symtbl, istc} {}
+                   hw::InnerRefNamespace &irn)
+      : solver(solver), symtbl(symtbl), irn(irn) {}
 
   LogicalResult map(CircuitOp op);
   LogicalResult mapOperation(Operation *op);
@@ -1294,7 +1294,7 @@ private:
   SymbolTable &symtbl;
 
   /// Full design inner symbol information.
-  hw::InnerRefNamespace irn;
+  hw::InnerRefNamespace &irn;
 };
 
 } // namespace
@@ -2362,7 +2362,7 @@ void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
   InferenceMapping mapping(solver, getAnalysis<SymbolTable>(),
-                           getAnalysis<hw::InnerSymbolTableCollection>());
+                           getAnalysis<hw::InnerRefNamespace>());
   if (failed(mapping.map(getOperation()))) {
     signalPassFailure();
     return;

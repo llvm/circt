@@ -55,14 +55,13 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
                          .getThis()
                          .getDefiningOp());
     rewriter.setInsertionPoint(thisOp);
-    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, design.getSymNameAttr(),
-                                        newContainer.getInnerSymAttr());
+    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, newContainer.getInnerRef());
 
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
     rewriter.create<ContainerInstanceOp>(
         parentClass.getLoc(), hw::InnerSymAttr::get(newContainerName),
-        newContainer.getInnerRef());
+        hw::InnerRefAttr::get(newContainerName));
     rewriter.eraseOp(op);
     return success();
   }
@@ -123,11 +122,14 @@ LogicalResult ContainerizePass::outlineContainers() {
   // Setup a namespace to ensure that the new container names are unique.
   // Grab existing names from the InnerSymbolTable of the top-level design op.
   SymbolCache symCache;
-  (void)hw::InnerSymbolTable::walkSymbols(
+  auto walkRes = hw::InnerSymbolTable::walkSymbols(
       getOperation(), [&](StringAttr name, const hw::InnerSymTarget &target) {
         symCache.addDefinition(name, target.getOp());
         return success();
       });
+
+  if (failed(walkRes))
+    return failure();
 
   Namespace ns;
   symCache.addDefinitions(getOperation());

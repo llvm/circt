@@ -365,13 +365,7 @@ private:
   CircuitNamespace circuitNamespace;
 
   /// Symbol and Inner Symbol analyses, valid within the call to `emitCircuit`.
-  struct SymInfos {
-    SymbolTable symbolTable;
-    hw::InnerSymbolTableCollection istc;
-    hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
-  };
-  std::optional<std::reference_wrapper<SymInfos>> symInfos;
+  std::optional<std::reference_wrapper<hw::InnerRefNamespace>> symInfos;
 
   /// The version of the FIRRTL spec that should be emitted.
   FIRVersion version;
@@ -383,7 +377,7 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
   circuitNamespace.add(op);
-  SymInfos circuitSymInfos(op);
+  hw::InnerRefNamespace circuitSymInfos(op);
   symInfos = circuitSymInfos;
   startStatement();
   ps << "FIRRTL version ";
@@ -1282,7 +1276,7 @@ void Emitter::emitExpression(RWProbeOp op) {
   ps << "rwprobe(";
 
   // Find the probe target.
-  auto target = symInfos->get().irn.lookup(op.getTarget());
+  auto target = symInfos->get().lookup(op.getTarget());
   Value base;
   if (target.isPort()) {
     auto mod = cast<FModuleOp>(target.getOp());

@@ -210,14 +210,30 @@ EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
 // InnerRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
+Attribute circt::hw::parseInnerRefAttr(AsmParser &p, bool parseLess) {
+  // For convenience's sake, leverage the existing mlir::SymbolRefAttr parser,
+  // and transform its `{root, [nested]}` parse result into the flat path
+  // expected by InnerRefAttr.
+
+  if (parseLess && p.parseLess())
+    return Attribute();
+
   SymbolRefAttr attr;
-  if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
-      p.parseGreater())
+  if (p.parseAttribute<SymbolRefAttr>(attr))
     return Attribute();
-  if (attr.getNestedReferences().size() != 1)
+
+  if (parseLess && p.parseGreater())
     return Attribute();
-  return InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference());
+
+  llvm::SmallVector<StringAttr> path;
+  path.push_back(attr.getRootReference());
+  llvm::transform(attr.getNestedReferences(), std::back_inserter(path),
+                  [&](auto a) { return a.getAttr(); });
+  return InnerRefAttr::get(path);
+}
+
+Attribute InnerRefAttr::parse(AsmParser &p, Type type) {
+  return parseInnerRefAttr(p, /*parseLess=*/true);
 }
 
 static void printSymbolName(AsmPrinter &p, StringAttr sym) {
@@ -229,10 +245,17 @@ static void printSymbolName(AsmPrinter &p, StringAttr sym) {
 
 void InnerRefAttr::print(AsmPrinter &p) const {
   p << "<";
-  printSymbolName(p, getModule());
-  p << "::";
-  printSymbolName(p, getName());
+  llvm::interleave(
+      getPath(), p, [&](StringAttr sym) { printSymbolName(p, sym); }, "::");
   p << ">";
+}
+
+LogicalResult InnerRefAttr::verify(
+    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
+    llvm::ArrayRef<mlir::StringAttr> path) {
+  if (path.empty())
+    return emitError() << "path cannot be empty";
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

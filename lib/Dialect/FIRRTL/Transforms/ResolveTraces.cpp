@@ -76,8 +76,8 @@ private:
   /// runOnOperation.
   NLATable *nlaTable;
 
-  /// Stores a pointer to an inner symbol table collection.
-  hw::InnerSymbolTableCollection *istc;
+  /// Stores a pointer to an inner ref namespace.
+  hw::InnerRefNamespace *irn;
 
   /// Global symbol index used for substitutions, e.g., "{{42}}".  This value is
   /// the _next_ index that will be used.
@@ -199,9 +199,8 @@ private:
       hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
-        instances.push_back(dyn_cast<InstanceOp>(
-            istc->getInnerSymbolTable(nlaTable->getModule(inst.getModule()))
-                .lookupOp(inst.getName())));
+        instances.push_back(dyn_cast<InstanceOp>(irn->lookupOp(
+            hw::InnerRefAttr::get(inst.getModule(), inst.getName()))));
       }
     }
 
@@ -255,9 +254,10 @@ private:
       hw::HierPathOp path = nlaTable->getNLA(nla.getAttr());
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
-        instances.push_back(cast<InstanceOp>(
-            istc->getInnerSymbolTable(nlaTable->getModule(inst.getModule()))
-                .lookupOp(inst.getName())));
+        instances.push_back(
+            cast<InstanceOp>(irn->lookupOp(hw::InnerRefAttr::get(
+                nlaTable->getModule(inst.getModule()).getModuleNameAttr(),
+                inst.getName()))));
       }
     }
 
@@ -279,7 +279,7 @@ void ResolveTracesPass::runOnOperation() {
 
   // Populate pointer datastructures.
   nlaTable = &getAnalysis<NLATable>();
-  istc = &getAnalysis<hw::InnerSymbolTableCollection>();
+  irn = &getAnalysis<hw::InnerRefNamespace>();
 
   // Function to find all Trace Annotations in the circuit, add a "target" field
   // to them indicating the current local/non-local target of the operation/port

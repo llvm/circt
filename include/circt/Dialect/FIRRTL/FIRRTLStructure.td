@@ -64,7 +64,9 @@ class FIRRTLModuleLike<string mnemonic, list<Trait> traits = []> :
     DeclareOpInterfaceMethods<PortList>,
     DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    OpAsmOpInterface, InnerSymbolTable]> {
+    OpAsmOpInterface,
+    InnerSymbolTable
+  ]> {
 
   /// Additional class definitions inside the module op.
   code extraModuleClassDefinition = [{}];

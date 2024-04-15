@@ -749,9 +749,18 @@ struct Equivalence {
 
   // NOLINTNEXTLINE(misc-no-recursion)
   void check(InFlightDiagnostic &diag, Operation *a, Operation *b) {
-    hw::InnerSymbolTable aTable(a);
-    hw::InnerSymbolTable bTable(b);
-    ModuleData data(aTable, bTable);
+    auto aTable = hw::InnerSymbolTable::get(a);
+    if (failed(aTable)) {
+      diag.attachNote(a->getLoc()) << "failed to create symbol table";
+      return;
+    }
+    auto bTable = hw::InnerSymbolTable::get(b);
+    if (failed(bTable)) {
+      diag.attachNote(b->getLoc()) << "failed to create symbol table";
+      return;
+    }
+
+    ModuleData data(**aTable, **bTable);
     AnnotationSet aAnnos(a);
     AnnotationSet bAnnos(b);
     if (aAnnos.hasAnnotation(noDedupClass)) {

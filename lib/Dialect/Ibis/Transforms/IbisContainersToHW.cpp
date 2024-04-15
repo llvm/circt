@@ -18,6 +18,7 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace ibis;
@@ -97,9 +98,15 @@ using ContainerPortInfoMap =
     llvm::DenseMap<hw::InnerRefAttr, ContainerPortInfo>;
 using ContainerHWModSymbolMap = llvm::DenseMap<hw::InnerRefAttr, StringAttr>;
 
-static StringAttr concatNames(hw::InnerRefAttr ref) {
-  return StringAttr::get(ref.getContext(), ref.getModule().getValue() + "_" +
-                                               ref.getName().getValue());
+static StringAttr concatNames(hw::InnerRefAttr ref,
+                              StringAttr prefix = nullptr) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  llvm::interleave(
+      ref.getPath(), os, [&](StringAttr v) { os << v.getValue(); }, "_");
+  if (prefix)
+    s = (prefix.getValue() + "_" + s).str();
+  return StringAttr::get(ref.getContext(), s);
 }
 
 struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
@@ -114,13 +121,14 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto design = op->getParentOfType<DesignOp>();
     rewriter.setInsertionPoint(design);
+    mlir::StringAttr designName = design.getSymNameAttr();
 
     // If the container is a top level container, ignore the design name.
     StringAttr hwmodName;
     if (op.getIsTopLevel())
       hwmodName = op.getInnerNameAttr();
     else
-      hwmodName = concatNames(op.getInnerRef());
+      hwmodName = concatNames(op.getInnerRef(), /*prefix*/ designName);
 
     const ContainerPortInfo &cpi = portOrder.at(op.getInnerRef());
     auto hwMod =

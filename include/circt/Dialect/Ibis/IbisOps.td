@@ -37,6 +37,7 @@ def HasCustomSSAName :
 def ClassOp : IbisOp<"class", [
     IsolatedFromAbove, RegionKindInterface,
     SingleBlock,
+    InnerSymbolTable,
     NoTerminator, ScopeOpInterface,
     InstanceGraphModuleOpInterface,
     HasParent<"DesignOp"> ] > {
@@ -138,7 +139,6 @@ def InstanceOp : InstanceOpBase<"instance"> {
   let extraInstanceClassDefinition = [{
     ClassOp InstanceOp::getClass(const hw::InnerRefNamespace &ns) {
       return ns.lookupOp<ClassOp>(getTargetNameAttr());
-      // return dyn_cast_or_null<ClassOp>(getReferencedModule(&ns));
     }
     Operation* InstanceOp::getReferencedModule(
         const hw::InnerRefNamespace &ns) {
@@ -560,13 +560,8 @@ def ThisOp : IbisOp<"this", [
   }];
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$moduleName, "hw::InnerSymAttr":$sym), [{
-      auto name = $_builder.getAttr<hw::InnerRefAttr>(
-        FlatSymbolRefAttr::get(moduleName), sym.getSymName());
-      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
-    }]>,
-    OpBuilder<(ins "hw::InnerRefAttr":$name), [{
-      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
+    OpBuilder<(ins "circt::hw::InnerRefAttr":$scopeRef), [{
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(scopeRef), scopeRef);
     }]>
   ];
 
@@ -583,7 +578,7 @@ def ThisOp : IbisOp<"this", [
 def DesignOp : IbisOp<"design", [
   Symbol,
   SingleBlock,
-  InnerSymbolTable,
+  InnerRefNamespace,
   NoTerminator,
   NoRegionArguments,
   IsolatedFromAbove
@@ -604,8 +599,8 @@ def ContainerOp : IbisOp<"container", [
   ScopeOpInterface, IsolatedFromAbove,
   InstanceGraphModuleOpInterface,
   RegionKindInterface,
-  DeclareOpInterfaceMethods<InnerSymbol>,
-  ParentOneOf<["DesignOp", "ClassOp"]>
+  InnerSymbolTable,
+  ParentOneOf<["DesignOp", "ClassOp", "ContainerOp"]>
 ]> {
   let summary = "Ibis container";
   let description = [{
@@ -632,11 +627,8 @@ def ContainerOp : IbisOp<"container", [
     llvm::StringRef getModuleName() {
       return getModuleNameAttr();
     }
-  }];
-
-  let extraClassDefinition = [{
     // For hw:InnerSymbol - the symbol targets the operation and not any result.
-    std::optional<size_t> $cppClass::getTargetResultIndex() {
+    static std::optional<size_t> getTargetResultIndex() {
       return std::nullopt;
     }
   }];
@@ -671,7 +663,6 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
   let extraInstanceClassDefinition = [{
     ContainerOp ContainerInstanceOp::getContainer(
         const hw::InnerRefNamespace &ns) {
-      // return dyn_cast_or_null<ContainerOp>(getReferencedModule(&ns));
       return ns.lookupOp<ContainerOp>(getTargetNameAttr());
     }
     Operation* ContainerInstanceOp::getReferencedModule(
