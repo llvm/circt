@@ -349,17 +349,17 @@ struct ExpressionVisitor
 
     // llvm::outs()<<"\n\n\nOpen Parens is "<<newInfo.openParens;
 
+
+
+    for (unsigned k = 0; k < newInfo.openParens; ++k)
+      info.stream << ")";
+
     if(weight != 0 && newInfo.openParens > 0)
       info.stream <<") :weight "<< weight << ")";
     else if (weight != 0)
       info.stream <<" :weight "<< weight << "))";
     else
       info.stream << ")";
-
-    for (unsigned k = 0; k < newInfo.openParens; ++k)
-      info.stream << ")";
-
-
 
     return success();
   }
