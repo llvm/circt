@@ -250,6 +250,30 @@ private:
   }
 };
 
+/// A dialect interface to provide lowering conversions.
+struct IntrinsicLoweringDialectInterface
+    : public mlir::DialectInterface::Base<IntrinsicLoweringDialectInterface> {
+  IntrinsicLoweringDialectInterface(Dialect *dialect) : Base(dialect) {}
+
+  virtual void
+  populateIntrinsicLowerings(IntrinsicLowerings &lowerings) const = 0;
+};
+
+struct IntrinsicLoweringInterfaceCollection
+    : public mlir::DialectInterfaceCollection<
+          IntrinsicLoweringDialectInterface> {
+  using Base::Base;
+
+  // Collect the intrinsic lowerings defined by each dialect.
+  void populateIntrinsicLowerings(IntrinsicLowerings &lowerings) const;
+};
+
+struct FIRRTLIntrinsicLoweringDialectInterface
+    : public IntrinsicLoweringDialectInterface {
+  using IntrinsicLoweringDialectInterface::IntrinsicLoweringDialectInterface;
+  void populateIntrinsicLowerings(IntrinsicLowerings &lowerings) const override;
+};
+
 } // namespace firrtl
 } // namespace circt
 
