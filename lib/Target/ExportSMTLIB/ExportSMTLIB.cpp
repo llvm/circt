@@ -325,7 +325,8 @@ struct ExpressionVisitor
 
     info.stream << ")\n";
 
-
+    if (weight != 0)
+      info.stream << "( ! ";
 
     // Print the quantifier body. This assumes that quantifiers are not deeply
     // nested (at least not enough that recursive calls could become a problem).
@@ -338,14 +339,24 @@ struct ExpressionVisitor
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
-    if (weight != 0)
-      info.stream << "( ! ";
+
+    // llvm::outs()<<"\n\n\nEXPRESSION\n ";
+
+
+    // printExpression(worklist, newInfo);
 
     info.stream << info.valueMap.lookup(yieldedValue);
-    if(weight != 0)
-      info.stream <<" "<< weight << ")";
 
-    for (unsigned k = 0; k < newInfo.openParens + 1; ++k)
+    // llvm::outs()<<"\n\n\nOpen Parens is "<<newInfo.openParens;
+
+    if(weight != 0 && newInfo.openParens > 0)
+      info.stream <<") :weight "<< weight << ")";
+    else if (weight != 0)
+      info.stream <<" :weight "<< weight << "))";
+    else
+      info.stream << ")";
+
+    for (unsigned k = 0; k < newInfo.openParens; ++k)
       info.stream << ")";
 
 
