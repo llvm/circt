@@ -131,7 +131,7 @@ class SizedUIntType<int width> : FIRRTLDialectType<
 class SizedUIntTypeLTE<int width> : FIRRTLDialectType<
     CPred<"type_isa<UIntType>($_self) && "
           "type_cast<UIntType>($_self).getWidth() <= " # width>,
-    "uint with width less than or equal to " # width # "bits",
+    "uint with width less than or equal to " # width # " bits",
     "::circt::firrtl::UIntType">;
 
 class NonConstSizedUIntType<int width> :
