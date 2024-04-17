@@ -1,5 +1,5 @@
 ; RUN: firtool %s -mlir-print-ir-after=firrtl-infer-resets 2>&1 | FileCheck %s --check-prefix POST-INFER-RESETS
-; RUN: firtool %s -mlir-print-ir-after=firrtl-sfc-compat 2>&1 | FileCheck %s --implicit-check-not POST-SFC-COMPAT
+; RUN: firtool %s -mlir-print-ir-after=firrtl-sfc-compat 2>&1 | FileCheck %s --implicit-check-not POST-SFC-COMPAT-NOT
 
 ; Check that FullAsyncResetAnnotation exists after infer-resets pass
 ; but is deleted after sfc-compat
@@ -13,7 +13,7 @@ circuit test :%[[{
     input clock : Clock
     input reset : AsyncReset
     ; POST-INFER-RESETS: [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]
-    ; POST-SFC-COMPAT: [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]
+    ; POST-SFC-COMPAT-NOT: [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]
     input in : { foo : UInt<8>, bar : UInt<8>}
     output out : { foo : UInt<8>, bar : UInt<8>}
     connect out, in
