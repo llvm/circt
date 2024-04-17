@@ -1,5 +1,5 @@
-; RUN: firtool %s -mlir-print-ir-after=firrtl-infer-resets 2>&1 | FileCheck %s --check-prefix POST-INFER-RESETS
-; RUN: firtool %s -mlir-print-ir-after=firrtl-sfc-compat 2>&1 | FileCheck %s --implicit-check-not POST-SFC-COMPAT-NOT
+; RUN: firtool %s -parse-only | circt-opt -firrtl-infer-resets | FileCheck %s --check-prefix POST-INFER-RESETS
+; RUN: firtool %s -parse-only | circt-opt -firrtl-infer-resets -firrtl-sfc-compat | FileCheck %s --implicit-check-not POST-SFC-COMPAT-NOT
 
 ; Check that FullAsyncResetAnnotation exists after infer-resets pass
 ; but is deleted after sfc-compat

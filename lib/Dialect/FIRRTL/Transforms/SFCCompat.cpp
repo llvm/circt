@@ -51,8 +51,7 @@ void SFCCompatPass::runOnOperation() {
       getOperation(), [&](unsigned argNum, Annotation anno) {
         if (!anno.isClass(fullAsyncResetAnnoClass))
           return false;
-        fullAsyncResetExists = true;
-        return true;
+        return fullAsyncResetExists = true;
       });
 
   auto result = getOperation()->walk([&](Operation *op) {
