@@ -189,3 +189,16 @@ arc.define @SplitDependency(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
   %2 = comb.xor %0, %1 : i1
   arc.output %1, %2 : i1, i1
 }
+
+//===----------------------------------------------------------------------===//
+// This test ensures unrelated calls do not confuse arc splitting.
+
+func.func @unrelated_call() -> (i1, i1) {
+  %1 = arith.constant false
+  return %1, %1 : i1, i1
+}
+
+func.func @entry() {
+  func.call @unrelated_call() : () -> (i1, i1)
+  return
+}
