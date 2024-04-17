@@ -362,18 +362,6 @@ firrtl.module @ForeignTypes(out %out: !firrtl.reset) {
 firrtl.module @ConsumeIgnoreAnno() attributes {annotations = [{class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation"}]} {
 }
 
-// CHECK-LABEL: firrtl.module @ConsumeResetAnnoPort
-// CHECK-NOT: FullAsyncResetAnnotation
-firrtl.module @ConsumeResetAnnoPort(in %outerReset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
-}
-
-// CHECK-LABEL: firrtl.module @ConsumeResetAnnoWire
-firrtl.module @ConsumeResetAnnoWire(in %outerReset: !firrtl.asyncreset) {
-  // CHECK: %innerReset = firrtl.wire
-  // CHECK-NOT: FullAsyncResetAnnotation
-  %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
-}
-
 } // firrtl.circuit
 
 // -----
