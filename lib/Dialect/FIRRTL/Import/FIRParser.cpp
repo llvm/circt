@@ -1002,6 +1002,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     SmallVector<OpenBundleType::BundleElement, 4> elements;
     bool bundleCompatible = true;
+    bool structCompatible = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
@@ -1016,20 +1017,30 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           elements.push_back(
               {StringAttr::get(getContext(), fieldName), isFlipped, type});
           bundleCompatible &= isa<BundleType::ElementType>(type);
+          structCompatible &= isFlipped;
           return success();
         }))
       return failure();
 
     // Try to emit base-only bundle.
-    if (bundleCompatible) {
+    if (bundleCompatible && structCompatible) {
+      auto structElements = llvm::map_range(elements, [](auto element) {
+        return FStructType::Element{
+            element.name, 
+            cast<BundleType::ElementType>(element.type)};
+      });
+      result = FStructType::get(getContext(), llvm::to_vector(structElements), false);
+
+    } else if (bundleCompatible) {
       auto bundleElements = llvm::map_range(elements, [](auto element) {
         return BundleType::BundleElement{
             element.name, element.isFlip,
             cast<BundleType::ElementType>(element.type)};
       });
       result = BundleType::get(getContext(), llvm::to_vector(bundleElements));
-    } else
+    } else {
       result = OpenBundleType::get(getContext(), elements);
+    }
     break;
   }
 
@@ -1782,10 +1793,22 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           if (!subfield) {
             OpBuilder::InsertionGuard guard(builder);
             builder.setInsertionPointAfterValue(val);
-            subfield = builder.create<SubfieldOp>(val, i);
+            subfield = builder.create<BundleSubfieldOp>(val, i);
           }
           emitInvalidate(subfield,
                          tpe.getElement(i).isFlip ? swapFlow(flow) : flow);
+        }
+      })
+      .Case<FStructType>([&](auto tpe) {
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto &subfield = moduleContext.getCachedSubaccess(val, i);
+          if (!subfield) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointAfterValue(val);
+            subfield = builder.create<SubfieldOp>(val, i);
+          }
+          emitInvalidate(subfield,
+                          flow);
         }
       })
       .Case<FVectorType>([&](auto tpe) {
@@ -1828,6 +1851,39 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
       if (!dstRef) {
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPointAfterValue(dst);
+        dstRef = builder.create<BundleSubfieldOp>(dst, dstIndex);
+      }
+      // We are pulling two fields from the cache. If the dstField was a
+      // pointer into the cache, then the lookup for srcField might invalidate
+      // it. So, we just copy dstField into a local.
+      auto dstField = dstRef;
+      auto srcIndex = *maybe;
+      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
+      if (!srcField) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        srcField = builder.create<BundleSubfieldOp>(src, srcIndex);
+      }
+      if (!dstElement.isFlip)
+        emitPartialConnect(builder, dstField, srcField);
+      else
+        emitPartialConnect(builder, srcField, dstField);
+    }
+  } else if (auto dstBundle = type_dyn_cast<FStructType>(dstType)) {
+    auto srcBundle = type_cast<FStructType>(srcType);
+    auto numElements = dstBundle.getNumElements();
+    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
+      // Find a matching field by name in the other bundle.
+      auto &dstElement = dstBundle.getElements()[dstIndex];
+      auto name = dstElement.name;
+      auto maybe = srcBundle.getElementIndex(name);
+      // If there was no matching field name, don't connect this one.
+      if (!maybe)
+        continue;
+      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
+      if (!dstRef) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(dst);
         dstRef = builder.create<SubfieldOp>(dst, dstIndex);
       }
       // We are pulling two fields from the cache. If the dstField was a
@@ -1841,10 +1897,7 @@ void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
         builder.setInsertionPointAfterValue(src);
         srcField = builder.create<SubfieldOp>(src, srcIndex);
       }
-      if (!dstElement.isFlip)
-        emitPartialConnect(builder, dstField, srcField);
-      else
-        emitPartialConnect(builder, srcField, dstField);
+      emitPartialConnect(builder, dstField, srcField);
     }
   } else if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
     auto srcVector = type_cast<FVectorType>(srcType);
@@ -2163,6 +2216,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     auto type = result.getType();
     if (auto refTy = type_dyn_cast<RefType>(type))
       type = refTy.getType();
+    if (auto bundle = type_dyn_cast<FStructType>(type))
+      indexV = bundle.getElementIndex(fieldName);
     if (auto bundle = type_dyn_cast<BundleType>(type))
       indexV = bundle.getElementIndex(fieldName);
     else if (auto bundle = type_dyn_cast<OpenBundleType>(type))
@@ -2191,7 +2246,10 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
                               builder.getI32IntegerAttr(indexNo)};
       if (type_isa<BundleType>(type))
         subResult =
-            emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
+            emitCachedSubAccess<BundleSubfieldOp>(result, attrs, indexNo, loc);
+      else if (type_isa<FStructType>(type))
+        subResult = 
+          emitCachedSubAccess<SubfieldOp>(result, attrs, indexNo, loc);
       else
         subResult =
             emitCachedSubAccess<OpenSubfieldOp>(result, attrs, indexNo, loc);
@@ -3349,6 +3407,12 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
             continue;
           }
         } else if (auto bundle = type_dyn_cast<OpenBundleType>(type)) {
+          if (auto index = bundle.getElementIndex(fieldName)) {
+            refResult = refResult.getSubField(bundle.getFieldID(*index));
+            type = bundle.getElementTypePreservingConst(*index);
+            continue;
+          }
+        } else if (auto bundle = type_dyn_cast<FStructType>(type)) {
           if (auto index = bundle.getElementIndex(fieldName)) {
             refResult = refResult.getSubField(bundle.getFieldID(*index));
             type = bundle.getElementTypePreservingConst(*index);

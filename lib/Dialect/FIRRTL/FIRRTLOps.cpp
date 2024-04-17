@@ -101,7 +101,7 @@ bool firrtl::isDuplexValue(Value val) {
   while (Operation *op = val.getDefiningOp()) {
     auto isDuplex =
         TypeSwitch<Operation *, std::optional<bool>>(op)
-            .Case<SubfieldOp, SubindexOp, SubaccessOp>([&val](auto op) {
+            .Case<SubfieldOp, BundleSubfieldOp, SubindexOp, SubaccessOp>([&val](auto op) {
               val = op.getInput();
               return std::nullopt;
             })
@@ -194,7 +194,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
-      .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
+      .Case<SubfieldOp, BundleSubfieldOp, OpenSubfieldOp>([&](auto op) {
         return foldFlow(op.getInput(), op.isFieldFlipped()
                                            ? swapFlow(accumulatedFlow)
                                            : accumulatedFlow);
@@ -263,7 +263,7 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 
   return TypeSwitch<Operation *, DeclKind>(op)
       .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
-      .Case<SubfieldOp, SubindexOp, SubaccessOp, OpenSubfieldOp, OpenSubindexOp,
+      .Case<SubfieldOp, SubindexOp, SubaccessOp, BundleSubfieldOp, OpenSubfieldOp, OpenSubindexOp,
             RefSubOp>([](auto op) { return getDeclarationKind(op.getInput()); })
       .Default([](auto) { return DeclKind::Other; });
 }
@@ -4434,6 +4434,9 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
 ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<SubfieldOp>(parser, result);
 }
+ParseResult BundleSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<BundleSubfieldOp>(parser, result);
+}
 ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
 }
@@ -4450,6 +4453,9 @@ static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
 }
 void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   return printSubfieldLikeOp<SubfieldOp>(*this, printer);
+}
+void BundleSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<BundleSubfieldOp>(*this, printer);
 }
 void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   return printSubfieldLikeOp<OpenSubfieldOp>(*this, printer);
@@ -4476,6 +4482,9 @@ static LogicalResult verifySubfieldLike(OpTy op) {
 }
 LogicalResult SubfieldOp::verify() {
   return verifySubfieldLike<SubfieldOp>(*this);
+}
+LogicalResult BundleSubfieldOp::verify() {
+  return verifySubfieldLike<BundleSubfieldOp>(*this);
 }
 LogicalResult OpenSubfieldOp::verify() {
   return verifySubfieldLike<OpenSubfieldOp>(*this);
@@ -4541,6 +4550,23 @@ LogicalResult ConstCastOp::verify() {
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
+  auto inType = type_cast<FStructType>(operands[0].getType());
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // SubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElementTypePreservingConst(fieldIndex);
+}
+
+FIRRTLType BundleSubfieldOp::inferReturnType(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       std::optional<Location> loc) {
   auto inType = type_cast<BundleType>(operands[0].getType());
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
@@ -4573,7 +4599,10 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  BundleType bundle = getInput().getType();
+  return false;
+}
+bool BundleSubfieldOp::isFieldFlipped() {
+  auto bundle = getInput().getType().base();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
@@ -5851,6 +5880,9 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void BundleSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

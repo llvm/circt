@@ -582,7 +582,7 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 
 static unsigned getMaxFieldID(FIRRTLBaseType type) {
   return FIRRTLTypeSwitch<FIRRTLBaseType, unsigned>(type)
-      .Case<BundleType>([](auto type) {
+      .Case<FStructType>([](auto type) {
         unsigned id = 0;
         for (auto e : type.getElements())
           id += getMaxFieldID(e.type) + 1;
@@ -593,17 +593,17 @@ static unsigned getMaxFieldID(FIRRTLBaseType type) {
       .Default([](auto) { return 0; });
 }
 
-static unsigned getFieldID(BundleType type, unsigned index) {
+static unsigned getFieldID(FStructType type, unsigned index) {
   assert(index < type.getNumElements());
   unsigned id = 1;
   for (unsigned i = 0; i < index; ++i)
-    id += getMaxFieldID(type.getElementType(i)) + 1;
+    id += getMaxFieldID(type.getElement(i).type) + 1;
   return id;
 }
 
 static unsigned getFieldID(FVectorType type) { return 1; }
 
-static unsigned getIndexForFieldID(BundleType type, unsigned fieldID) {
+static unsigned getIndexForFieldID(FStructType type, unsigned fieldID) {
   assert(type.getNumElements() && "Bundle must have >0 fields");
   --fieldID;
   for (const auto &e : llvm::enumerate(type.getElements())) {
@@ -624,10 +624,10 @@ static bool isUselessVec(FIRRTLBaseType oldType, unsigned fieldID) {
   }
 
   // If this is a bundle type, recurse.
-  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
-    unsigned index = getIndexForFieldID(bundleType, fieldID);
-    return isUselessVec(bundleType.getElementType(index),
-                        fieldID - getFieldID(bundleType, index));
+  if (auto structType = type_dyn_cast<FStructType>(oldType)) {
+    unsigned index = getIndexForFieldID(structType, fieldID);
+    return isUselessVec(structType.getElement(index).type,
+                        fieldID - getFieldID(structType, index));
   }
 
   // If this is a vector type, check if it is zero length.  Anything in a
@@ -681,16 +681,16 @@ static bool getFieldName(const FieldRef &fieldRef, SmallString<32> &string) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    if (auto bundleType = type_dyn_cast<BundleType>(type)) {
-      auto index = getIndexForFieldID(bundleType, localID);
+    if (auto structType = type_dyn_cast<FStructType>(type)) {
+      auto index = getIndexForFieldID(structType, localID);
       // Add the current field string, and recurse into a subfield.
-      auto &element = bundleType.getElements()[index];
+      auto &element = structType.getElements()[index];
       if (!string.empty())
         string += ".";
       string += element.name.getValue();
       // Recurse in to the element type.
       type = element.type;
-      localID = localID - getFieldID(bundleType, index);
+      localID = localID - getFieldID(structType, index);
     } else if (auto vecType = type_dyn_cast<FVectorType>(type)) {
       string += "[]";
       // Recurse in to the element type.
@@ -804,11 +804,11 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           .Case<SubfieldOp>([&](auto op) {
             // Associate the input bundle's resets with the output field's
             // resets.
-            BundleType bundleType = op.getInput().getType();
+            auto structType = op.getInput().getType().base();
             auto index = op.getFieldIndex();
             traceResets(op.getType(), op.getResult(), 0,
-                        bundleType.getElements()[index].type, op.getInput(),
-                        getFieldID(bundleType, index), op.getLoc());
+                        structType.getElement(index).type, op.getInput(),
+                        getFieldID(structType, index), op.getLoc());
           })
 
           .Case<SubindexOp, SubaccessOp>([&](auto op) {
@@ -837,7 +837,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                                    .Case<FVectorType>([](auto type) {
                                      return getFieldID(type);
                                    })
-                                   .Case<BundleType>([&](auto type) {
+                                   .Case<FStructType>([&](auto type) {
                                      return getFieldID(type, op.getIndex());
                                    });
             traceResets(op.getType(), op.getResult(), 0,
@@ -879,8 +879,8 @@ void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
 void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
                                   Type srcType, Value src, unsigned srcID,
                                   Location loc) {
-  if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
-    auto srcBundle = type_cast<BundleType>(srcType);
+  if (auto dstBundle = type_dyn_cast<FStructType>(dstType)) {
+    auto srcBundle = type_cast<FStructType>(srcType);
     for (unsigned dstIdx = 0, e = dstBundle.getNumElements(); dstIdx < e;
          ++dstIdx) {
       auto dstField = dstBundle.getElements()[dstIdx].name;
@@ -889,15 +889,9 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
         continue;
       auto &dstElt = dstBundle.getElements()[dstIdx];
       auto &srcElt = srcBundle.getElements()[*srcIdx];
-      if (dstElt.isFlip) {
-        traceResets(srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
-                    dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
-                    loc);
-      } else {
-        traceResets(dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
-                    srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
-                    loc);
-      }
+      traceResets(dstElt.type, dst, dstID + getFieldID(dstBundle, dstIdx),
+                  srcElt.type, src, srcID + getFieldID(srcBundle, *srcIdx),
+                  loc);
     }
     return;
   }
@@ -1196,13 +1190,12 @@ static FIRRTLBaseType updateType(FIRRTLBaseType oldType, unsigned fieldID,
   }
 
   // If this is a bundle type, update the corresponding field.
-  if (auto bundleType = type_dyn_cast<BundleType>(oldType)) {
-    unsigned index = getIndexForFieldID(bundleType, fieldID);
-    SmallVector<BundleType::BundleElement> fields(bundleType.begin(),
-                                                  bundleType.end());
+  if (auto structType = type_dyn_cast<FStructType>(oldType)) {
+    unsigned index = getIndexForFieldID(structType, fieldID);
+    SmallVector<FStructType::Element> fields(structType.getElements());
     fields[index].type = updateType(
-        fields[index].type, fieldID - getFieldID(bundleType, index), fieldType);
-    return BundleType::get(oldType.getContext(), fields, bundleType.isConst());
+        fields[index].type, fieldID - getFieldID(structType, index), fieldType);
+    return FStructType::get(oldType.getContext(), fields, structType.isConst());
   }
 
   // If this is a vector type, update the element type.

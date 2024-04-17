@@ -69,6 +69,8 @@ def AnalogType : FIRRTLDialectAliasTypeHelper<"AnalogType", "analog type">;
 
 def BundleType : FIRRTLDialectAliasTypeHelper<"BundleType", "bundle type">;
 
+def FStructType : FIRRTLDialectAliasTypeHelper<"FStructType", "struct type">;
+
 def OpenBundleType : FIRRTLDialectTypeHelper<"OpenBundleType", "open bundle type">;
 
 def FVectorType : FIRRTLDialectAliasTypeHelper<"FVectorType", "vector type">;
@@ -78,8 +80,12 @@ def OpenVectorType : FIRRTLDialectTypeHelper<"OpenVectorType", "open vector type
 def FEnumType : FIRRTLDialectAliasTypeHelper<"FEnumType", "enum type">;
 
 def AggregateType : FIRRTLDialectType<
-  CPred<"type_isa<FVectorType, BundleType, FEnumType>($_self)">,
+  CPred<"type_isa<FVectorType, BundleType, FStructType, FEnumType>($_self)">,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
+
+def BundleLikeType : FIRRTLDialectType<
+  CPred<"type_isa<OpenBundleType, BundleType, FStructType>($_self)">,
+  "a bundle like type", "::circt::firrtl::FIRRTLBaseType">;
 
 def PassiveType : FIRRTLDialectType<
   CPred<"type_isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isPassive()">,

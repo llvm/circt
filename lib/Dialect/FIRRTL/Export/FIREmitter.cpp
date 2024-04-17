@@ -1220,9 +1220,9 @@ void Emitter::emitExpression(SpecialConstantOp op) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void Emitter::emitExpression(SubfieldOp op) {
-  BundleType type = op.getInput().getType();
+  auto type = op.getInput().getType();
   emitExpression(op.getInput());
-  ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
+  ps << "." << legalize(type.base().getElementNameAttr(op.getFieldIndex()));
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)

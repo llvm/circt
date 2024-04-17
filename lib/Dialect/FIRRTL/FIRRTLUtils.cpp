@@ -78,10 +78,30 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
-      auto dstField = builder.create<SubfieldOp>(dst, i);
-      auto srcField = builder.create<SubfieldOp>(src, i);
+      auto dstField = builder.create<BundleSubfieldOp>(dst, i);
+      auto srcField = builder.create<BundleSubfieldOp>(src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
+      emitConnect(builder, dstField, srcField);
+    }
+    return;
+  }
+
+  // Most structs will be connected by identity, but deal with uninferred widths.
+  if (auto dstBundle = type_dyn_cast<FStructType>(dstType)) {
+    assert(dstBundle.hasUninferredWidth());
+    // Connect all the bundle elements pairwise.
+    auto numElements = dstBundle.getNumElements();
+    // Check if we are trying to create an illegal connect - just create the
+    // connect and let the verifier catch it.
+    auto srcBundle = type_dyn_cast<FStructType>(srcType);
+    if (!srcBundle || numElements != srcBundle.getNumElements()) {
+      builder.create<ConnectOp>(dst, src);
+      return;
+    }
+    for (size_t i = 0; i < numElements; ++i) {
+      auto dstField = builder.create<SubfieldOp>(dst, i);
+      auto srcField = builder.create<SubfieldOp>(src, i);
       emitConnect(builder, dstField, srcField);
     }
     return;
@@ -448,11 +468,22 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
       auto fieldID = back.fieldID;
 
       if (auto subfield = dyn_cast<SubfieldOp>(user)) {
-        BundleType bundleType = subfield.getInput().getType();
+        auto structType = subfield.getInput().getType().base();
         auto index = subfield.getFieldIndex();
-        auto subID = bundleType.getFieldID(index);
+        auto subID = structType.getFieldID(index);
         // If the index of this operation doesn't match the target, skip it.
-        if (fieldID && index != bundleType.getIndexForFieldID(fieldID))
+        if (fieldID && index != structType.getIndexForFieldID(fieldID))
+          continue;
+        auto subRef = fieldRef.getSubField(subID);
+        auto subOriginal = original.getSubField(subID);
+        auto value = subfield.getResult();
+        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+      } else if (auto subfield = dyn_cast<BundleSubfieldOp>(user)) {
+        auto structType = subfield.getInput().getType().base();
+        auto index = subfield.getFieldIndex();
+        auto subID = structType.getFieldID(index);
+        // If the index of this operation doesn't match the target, skip it.
+        if (fieldID && index != structType.getIndexForFieldID(fieldID))
           continue;
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
@@ -507,7 +538,7 @@ FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
               return FieldRef();
             return FieldRef(op.getInput(), 0);
           })
-      .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
+      .Case<SubfieldOp, BundleSubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
             ObjectSubfieldOp>(
           [](auto subOp) { return subOp.getAccessedField(); })
       .Default(FieldRef());
@@ -669,7 +700,17 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
     FIRRTLTypeSwitch<Type, void>(value.getType())
-        .Case<BundleType, OpenBundleType>([&](auto bundle) {
+        .Case<BundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = builder.create<BundleSubfieldOp>(value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<OpenBundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = builder.create<OpenSubfieldOp>(value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<FStructType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
           value = builder.create<SubfieldOp>(value, index);
           fieldID -= bundle.getFieldID(index);

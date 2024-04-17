@@ -146,13 +146,55 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                     const FieldIDSearch<AnnotationSet> &annos) {
   auto *ctx = type.getContext();
   return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
+      .Case<FStructType>([&](FStructType bundle) -> LogicalResult {
+        if (conv != Convention::Scalarized) {
+          auto lastId = fieldID + bundle.getMaxFieldID();
+          newPorts.push_back(
+              {{StringAttr::get(ctx, name), type,
+                isFlip ? Direction::Out : Direction::In,
+                symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
+                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+               portID,
+               newPorts.size(),
+               fieldID});
+        } else {
+          for (auto [idx, elem] : llvm::enumerate(bundle.getElements())) {
+            if (failed(computeLoweringImpl(
+                    mod, newPorts, conv, portID, port, isFlip,
+                    name + "_" + elem.name.getValue(), elem.type,
+                    fieldID + bundle.getFieldID(idx), syms, annos)))
+              return failure();
+            if (!syms.empty(fieldID, fieldID))
+              return mod.emitError("Port [")
+                     << port.name
+                     << "] should be subdivided, but cannot be because of "
+                        "symbol ["
+                     << port.sym.getSymIfExists(fieldID) << "] on a bundle";
+            if (!annos.empty(fieldID, fieldID)) {
+              auto err = mod.emitError("Port [")
+                         << port.name
+                         << "] should be subdivided, but cannot be because of "
+                            "annotations [";
+              auto [b, e] = annos.find(fieldID, fieldID);
+              err << b->getClass() << "(" << b->getFieldID() << ")";
+              b++;
+              for (; b != e; ++b)
+                err << ", " << b->getClass() << "(" << b->getFieldID() << ")";
+              err << "] on a bundle";
+              return err;
+            }
+          }
+        }
+        return success();
+      })
       .Case<BundleType>([&](BundleType bundle) -> LogicalResult {
         // This should be enhanced to be able to handle bundle<all flips of
         // passive>, or this should be a canonicalizer
         if (conv != Convention::Scalarized && bundle.isPassive()) {
           auto lastId = fieldID + bundle.getMaxFieldID();
+          auto stype = FStructType::get(bundle);
           newPorts.push_back(
-              {{StringAttr::get(ctx, name), type,
+              {{StringAttr::get(ctx, name), stype,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
                 annosForFieldIDRange(ctx, annos, fieldID, lastId)},

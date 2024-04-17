@@ -122,7 +122,7 @@ void LowerIntmodulesPass::runOnOperation() {
         auto intop = builder.create<GenericIntrinsicOp>(
             resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
         for (auto &output : outputs)
-          output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
+          output.result.replaceAllUsesWith(builder.create<BundleSubfieldOp>(
               intop.getResult(), output.element.name));
       }
       // Remove instance from IR and instance graph.

@@ -67,12 +67,31 @@ void MaterializeDebugInfoPass::materializeVariable(OpBuilder &builder,
 Value MaterializeDebugInfoPass::convertToDebugAggregates(OpBuilder &builder,
                                                          Value value) {
   return FIRRTLTypeSwitch<Type, Value>(value.getType())
-      .Case<BundleType>([&](auto type) {
+      .Case<FStructType>([&](auto type) {
         SmallVector<Value> fields;
         SmallVector<Attribute> names;
         SmallVector<Operation *> subOps;
         for (auto [index, element] : llvm::enumerate(type.getElements())) {
           auto subOp = builder.create<SubfieldOp>(value.getLoc(), value, index);
+          subOps.push_back(subOp);
+          if (auto dbgValue = convertToDebugAggregates(builder, subOp)) {
+            fields.push_back(dbgValue);
+            names.push_back(element.name);
+          }
+        }
+        auto result = builder.create<debug::StructOp>(
+            value.getLoc(), fields, builder.getArrayAttr(names));
+        for (auto *subOp : subOps)
+          if (subOp->use_empty())
+            subOp->erase();
+        return result;
+      })
+      .Case<BundleType>([&](auto type) {
+        SmallVector<Value> fields;
+        SmallVector<Attribute> names;
+        SmallVector<Operation *> subOps;
+        for (auto [index, element] : llvm::enumerate(type.getElements())) {
+          auto subOp = builder.create<BundleSubfieldOp>(value.getLoc(), value, index);
           subOps.push_back(subOp);
           if (auto dbgValue = convertToDebugAggregates(builder, subOp)) {
             fields.push_back(dbgValue);

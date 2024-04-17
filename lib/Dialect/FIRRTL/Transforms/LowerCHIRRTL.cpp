@@ -378,11 +378,11 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     // Initialization at the MemoryOp.
     ImplicitLocOpBuilder portBuilder(cmemoryPortAccess.getLoc(),
                                      cmemoryPortAccess);
-    auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
+    auto address = memBuilder.create<BundleSubfieldOp>(memoryPort, "addr");
     emitInvalid(memBuilder, address);
-    auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
+    auto enable = memBuilder.create<BundleSubfieldOp>(memoryPort, "en");
     emitConnect(memBuilder, enable, getConst(0));
-    auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
+    auto clock = memBuilder.create<BundleSubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
     // Initialization at the MemoryPortOp.
@@ -403,13 +403,13 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
     if (portKind == MemOp::PortKind::Read) {
       // Store the read information for updating subfield ops.
-      auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
+      auto data = memBuilder.create<BundleSubfieldOp>(memoryPort, "data");
       rdataValues[cmemoryPort.getData()] = data;
     } else if (portKind == MemOp::PortKind::Write) {
       // Initialization at the MemoryOp.
-      auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
+      auto data = memBuilder.create<BundleSubfieldOp>(memoryPort, "data");
       emitInvalid(memBuilder, data);
-      auto mask = memBuilder.create<SubfieldOp>(memoryPort, "mask");
+      auto mask = memBuilder.create<BundleSubfieldOp>(memoryPort, "mask");
       emitInvalid(memBuilder, mask);
 
       // Initialization at the MemoryPortOp.
@@ -419,12 +419,12 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
       wdataValues[cmemoryPort.getData()] = {data, mask, nullptr};
     } else if (portKind == MemOp::PortKind::ReadWrite) {
       // Initialization at the MemoryOp.
-      auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
-      auto wmode = memBuilder.create<SubfieldOp>(memoryPort, "wmode");
+      auto rdata = memBuilder.create<BundleSubfieldOp>(memoryPort, "rdata");
+      auto wmode = memBuilder.create<BundleSubfieldOp>(memoryPort, "wmode");
       emitConnect(memBuilder, wmode, getConst(0));
-      auto wdata = memBuilder.create<SubfieldOp>(memoryPort, "wdata");
+      auto wdata = memBuilder.create<BundleSubfieldOp>(memoryPort, "wdata");
       emitInvalid(memBuilder, wdata);
-      auto wmask = memBuilder.create<SubfieldOp>(memoryPort, "wmask");
+      auto wmask = memBuilder.create<BundleSubfieldOp>(memoryPort, "wmask");
       emitInvalid(memBuilder, wmask);
 
       // Initialization at the MemoryPortOp.

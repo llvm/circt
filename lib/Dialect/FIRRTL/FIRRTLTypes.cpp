@@ -88,6 +88,22 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         });
         os << '>';
       })
+      .Case<FStructType>([&](auto bundleType) {
+        os << "struct<";
+        llvm::interleaveComma(bundleType.getElements(), os, [&](auto element) {
+          StringRef fieldName = element.name.getValue();
+          bool isLiteralIdentifier =
+              !fieldName.empty() && llvm::isDigit(fieldName.front());
+          if (isLiteralIdentifier)
+            os << "\"";
+          os << element.name.getValue();
+          if (isLiteralIdentifier)
+            os << "\"";
+          os << ": ";
+          printNestedType(element.type, os);
+        });
+        os << '>';
+      })
       .Case<FEnumType>([&](auto fenumType) {
         os << "enum<";
         llvm::interleaveComma(fenumType, os,
@@ -652,7 +668,7 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{
             true, false, true, type.isConst(), false, !type.hasWidth(), false};
       })
-      .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType,
+      .Case<BundleType, FVectorType, FEnumType, FStructType, OpenBundleType, OpenVectorType,
             RefType, BaseTypeAliasType>(
           [](auto type) { return type.getRecursiveTypeProperties(); })
       .Case<PropertyType>([](auto type) {
@@ -2098,6 +2114,213 @@ OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
   if (elementType.containsReference() && isConst)
     return emitErrorFn() << "vector cannot be const with references";
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FStructType
+//===----------------------------------------------------------------------===//
+
+struct circt::firrtl::detail::FStructTypeStorage
+    : detail::FIRRTLBaseTypeStorage {
+  using KeyTy = std::pair<ArrayRef<FStructType::Element>, char>;
+
+  FStructTypeStorage(ArrayRef<FStructType::Element> elements, bool isConst)
+      : detail::FIRRTLBaseTypeStorage(isConst),
+        elements(elements.begin(), elements.end()), props{true,    false, false,
+                                                          isConst, false, false,
+                                                          false} {
+    uint64_t fieldID = 0;
+    fieldIDs.reserve(elements.size());
+    for (auto &element : elements) {
+      auto type = element.type;
+      auto eltInfo = type.getRecursiveTypeProperties();
+      assert(eltInfo.isPassive);
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.containsReference |= eltInfo.containsReference;
+      props.containsConst |= eltInfo.containsConst;
+      props.containsTypeAlias |= eltInfo.containsTypeAlias;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      props.hasUninferredReset |= eltInfo.hasUninferredReset;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += hw::FieldIdImpl::getMaxFieldID(type);
+    }
+    maxFieldID = fieldID;
+  }
+
+  bool operator==(const KeyTy &key) const { return key == getAsKey(); }
+
+  KeyTy getAsKey() const { return KeyTy(elements, isConst); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(
+        llvm::hash_combine_range(key.first.begin(), key.first.end()),
+        key.second);
+  }
+
+  static FStructTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      KeyTy key) {
+    return new (allocator.allocate<FStructTypeStorage>())
+        FStructTypeStorage(key.first, static_cast<bool>(key.second));
+  }
+
+  SmallVector<FStructType::Element, 4> elements;
+  SmallVector<uint64_t, 4> fieldIDs;
+  uint64_t maxFieldID;
+
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  RecursiveTypeProperties props;
+  FStructType anonymousType;
+};
+
+FStructType FStructType::get(BundleType bundle) {
+    auto structElements = llvm::map_range(bundle.getElements(), [](auto element) {
+        return FStructType::Element{
+            element.name, 
+            mlir::cast<BundleType::ElementType>(element.type)};
+      });
+  return get(bundle.getContext(), llvm::to_vector(structElements), bundle.isConst());
+}
+
+/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
+RecursiveTypeProperties FStructType::getRecursiveTypeProperties() const {
+  return getImpl()->props;
+}
+
+
+FStructType FStructType::getConstType(bool isConst) {
+  if (isConst == this->isConst())
+    return *this;
+  return FStructType::get(getContext(), getImpl()->elements, isConst);
+}
+
+FStructType FStructType::getAllConstDroppedType() {
+  if (!containsConst())
+    return *this;
+
+  SmallVector<Element> constDroppedElements(
+      llvm::map_range(getImpl()->elements, [](Element element) {
+        element.type = element.type.getAllConstDroppedType();
+        return element;
+      }));
+  return FStructType::get(getContext(), constDroppedElements, false);
+}
+
+uint64_t FStructType::getFieldID(uint64_t index) const {
+  return getImpl()->fieldIDs[index];
+}
+
+uint64_t FStructType::getIndexForFieldID(uint64_t fieldID) const {
+  assert(!getImpl()->elements.empty() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto *it = std::prev(llvm::upper_bound(fieldIDs, fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+std::pair<uint64_t, uint64_t>
+FStructType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  auto index = getIndexForFieldID(fieldID);
+  auto elementFieldID = getFieldID(index);
+  return {index, fieldID - elementFieldID};
+}
+
+std::pair<Type, uint64_t>
+FStructType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+  auto subfieldIndex = getIndexForFieldID(fieldID);
+  auto subfieldType = getImpl()->elements[subfieldIndex].type;
+  auto subfieldID = fieldID - getFieldID(subfieldIndex);
+  return {subfieldType, subfieldID};
+}
+
+uint64_t FStructType::getMaxFieldID() const { return getImpl()->maxFieldID; }
+
+std::pair<uint64_t, bool>
+FStructType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getImpl()->elements.size() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
+}
+
+bool FStructType::isConst() { return getImpl()->isConst; }
+
+/// Return this type with any type aliases recursively removed from itself.
+FIRRTLBaseType FStructType::getAnonymousType() {
+  auto *impl = getImpl();
+
+  // If we've already determined and cached the anonymous type, use it.
+  if (impl->anonymousType)
+    return impl->anonymousType;
+
+  // If this type is already anonymous, use it and remember for next time.
+  if (!impl->props.containsTypeAlias) {
+    impl->anonymousType = *this;
+    return *this;
+  }
+
+  // Otherwise at least one element has an alias type, rebuild an anonymous
+  // version.
+  SmallVector<Element, 16> newElements;
+  newElements.reserve(impl->elements.size());
+  for (auto &elt : impl->elements)
+    newElements.push_back({elt.name, elt.type.getAnonymousType()});
+
+  auto anonymousType = FStructType::get(getContext(), newElements, isConst());
+  impl->anonymousType = anonymousType;
+  return anonymousType;
+}
+
+size_t FStructType::getNumElements() const {
+  return getImpl()->elements.size();
+}
+
+ArrayRef<FStructType::Element> FStructType::getElements() const {
+  return getImpl()->elements;
+}
+
+const FStructType::Element& FStructType::getElement(size_t index) const {
+  return getImpl()->elements[index];
+}
+
+std::optional<unsigned> FStructType::getElementIndex(StringAttr name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<unsigned> FStructType::getElementIndex(StringRef name) {
+  for (const auto &it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return std::nullopt;
+}
+
+StringAttr FStructType::getElementNameAttr(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getImpl()->elements[index].name;
+}
+
+StringRef FStructType::getElementName(size_t index) {
+  return getElementNameAttr(index).getValue();
+}
+
+FIRRTLBaseType
+FStructType::getElementTypePreservingConst(size_t index) {
+  auto type = getImpl()->elements[index].type;
+  return type.getConstType(type.isConst() || isConst());
 }
 
 //===----------------------------------------------------------------------===//

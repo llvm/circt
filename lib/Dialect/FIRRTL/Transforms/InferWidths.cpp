@@ -1451,8 +1451,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        BundleType bundleType = op.getInput().getType();
-        auto fieldID = bundleType.getFieldID(op.getFieldIndex());
+        FStructType structType = op.getInput().getType();
+        auto fieldID = structType.getFieldID(op.getFieldIndex());
         unifyTypes(FieldRef(op.getResult(), 0),
                    FieldRef(op.getInput(), fieldID), op.getType());
       })

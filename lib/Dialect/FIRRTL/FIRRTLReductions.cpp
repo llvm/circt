@@ -222,7 +222,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
     for (auto element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
-          builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
+          builder.createOrFold<firrtl::BundleSubfieldOp>(value, element.index());
       invalidateOutputs(builder, subfield, invalidCache,
                         flip ^ element.value().isFlip);
       if (subfield.use_empty())
@@ -230,6 +230,20 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
     }
     return;
   }
+
+  // Descend into structs by creating subfield ops.
+  if (auto bundleType = type.dyn_cast<firrtl::FStructType>()) {
+    for (auto element : llvm::enumerate(bundleType.getElements())) {
+      auto subfield =
+          builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
+      invalidateOutputs(builder, subfield, invalidCache,
+                        flip);
+      if (subfield.use_empty())
+        subfield.getDefiningOp()->erase();
+    }
+    return;
+  }
+
 
   // Descend into vectors by creating subindex ops.
   if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
@@ -436,14 +450,14 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
       Value input, output;
       switch (memOp.getPortKind(i)) {
       case firrtl::MemOp::PortKind::Read:
-        output = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
+        output = builder.createOrFold<firrtl::BundleSubfieldOp>(wire, 3);
         break;
       case firrtl::MemOp::PortKind::Write:
-        input = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
+        input = builder.createOrFold<firrtl::BundleSubfieldOp>(wire, 3);
         break;
       case firrtl::MemOp::PortKind::ReadWrite:
-        input = builder.createOrFold<firrtl::SubfieldOp>(wire, 5);
-        output = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
+        input = builder.createOrFold<firrtl::BundleSubfieldOp>(wire, 5);
+        output = builder.createOrFold<firrtl::BundleSubfieldOp>(wire, 3);
         break;
       case firrtl::MemOp::PortKind::Debug:
         output = wire;
@@ -457,7 +471,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
         for (unsigned i = 0; i != numFields; ++i) {
           if (i != 2 && i != 3 && i != 5)
             reduceXor(builder, xorInputs,
-                      builder.createOrFold<firrtl::SubfieldOp>(wire, i));
+                      builder.createOrFold<firrtl::BundleSubfieldOp>(wire, i));
         }
         if (input)
           reduceXor(builder, xorInputs, input);

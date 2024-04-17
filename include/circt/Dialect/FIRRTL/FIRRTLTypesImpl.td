@@ -296,6 +296,77 @@ def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLTyp
   let genVerifyDecl = 1;
 }
 
+def FStructTypeImpl : FIRRTLImplType<"FStruct", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>], "::circt::firrtl::FIRRTLBaseType" > {
+  let summary = "FIRRTL struct type";
+  let description = [{
+    Represents a structure of name, value pairs.
+    !firrtl.struct<fieldName1: Type1, fieldName2: Type2>
+  }];
+  let mnemonic = "struct";
+
+  let hasCustomAssemblyFormat = 1;
+
+  let parameters = (
+    ins ArrayRefParameter<
+      "::circt::firrtl::FStructType::Element", "struct fields">: $elements,
+      "bool":$isConst
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "BundleType":$passivebundle)>
+  ];
+
+  let extraClassDeclaration = [{
+
+    /// Each element of a bundle, which is a name and type.
+    struct Element {
+      StringAttr name;
+      FIRRTLBaseType type;
+
+      bool operator==(const Element &rhs) const {
+        return name == rhs.name && type == rhs.type;
+      }
+      bool operator!=(const Element &rhs) const {
+        return !operator==(rhs);
+      }
+
+      friend llvm::hash_code hash_value(const Element &arg) {
+        return llvm::hash_combine(arg.name, arg.type);
+      }
+    };
+
+    ArrayRef<Element> getElements() const;
+
+    size_t getNumElements() const;
+
+    const Element& getElement(size_t index) const;
+
+    /// Look up an element's index by name.  This returns None on failure.
+    std::optional<unsigned> getElementIndex(StringAttr name);
+    std::optional<unsigned> getElementIndex(StringRef name);
+
+    /// Look up an element's name by index. This asserts if index is invalid.
+    StringAttr getElementNameAttr(size_t index);
+    StringRef getElementName(size_t index);
+
+    /// Return the recursive properties of the type.
+    RecursiveTypeProperties getRecursiveTypeProperties() const;
+
+    /// Return this type with any type alias types recursively removed from itself.
+    FIRRTLBaseType getAnonymousType();
+
+    /// Const support.
+    bool isConst();
+    FStructType getConstType(bool isConst);
+    FIRRTLBaseType getElementTypePreservingConst(size_t index);
+
+    /// Return this type with a 'const' modifiers dropped
+    FStructType getAllConstDroppedType();
+
+  }];
+}
+
+
 def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
   let summary = "a sum type of named elements.";
   let parameters = (ins "ArrayRef<EnumElement>":$elements, "bool":$isConst);

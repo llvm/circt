@@ -38,6 +38,8 @@ FieldSource::FieldSource(Operation *operation) {
 void FieldSource::visitOp(Operation *op) {
   if (auto sf = dyn_cast<SubfieldOp>(op))
     return visitSubfield(sf);
+  if (auto sf = dyn_cast<BundleSubfieldOp>(op))
+    return visitBundleSubfield(sf);
   if (auto sf = dyn_cast<OpenSubfieldOp>(op))
     return visitOpenSubfield(sf);
 
@@ -70,6 +72,15 @@ void FieldSource::visitOp(Operation *op) {
 }
 
 void FieldSource::visitSubfield(SubfieldOp sf) {
+  auto value = sf.getInput();
+  const auto *node = nodeForValue(value);
+  assert(node && "node should be in the map");
+  auto sv = node->path;
+  sv.push_back(sf.getFieldIndex());
+  makeNodeForValue(sf.getResult(), node->src, sv, foldFlow(sf));
+}
+
+void FieldSource::visitBundleSubfield(BundleSubfieldOp sf) {
   auto value = sf.getInput();
   const auto *node = nodeForValue(value);
   assert(node && "node should be in the map");

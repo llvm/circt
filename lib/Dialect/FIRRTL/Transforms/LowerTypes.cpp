@@ -469,8 +469,10 @@ TypeLoweringVisitor::getPreservationModeForModule(FModuleLike module) {
 }
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
-  if (type_isa<BundleType>(val.getType()))
+  if (type_isa<FStructType>(val.getType()))
     return builder->create<SubfieldOp>(val, index);
+  if (type_isa<BundleType>(val.getType()))
+    return builder->create<BundleSubfieldOp>(val, index);
   if (type_isa<FVectorType>(val.getType()))
     return builder->create<SubindexOp>(val, index);
   if (type_isa<RefType>(val.getType()))

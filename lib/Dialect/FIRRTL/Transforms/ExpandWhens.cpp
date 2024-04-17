@@ -291,7 +291,7 @@ public:
   void foreachSubelement(OpBuilder &builder, Value value,
                          llvm::function_ref<void(Value)> fn) {
     FIRRTLTypeSwitch<Type>(value.getType())
-        .template Case<BundleType>([&](BundleType bundle) {
+        .template Case<FStructType>([&](FStructType bundle) {
           for (auto i : llvm::seq(0u, (unsigned)bundle.getNumElements())) {
             auto subfield =
                 builder.create<SubfieldOp>(value.getLoc(), value, i);

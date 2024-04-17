@@ -313,10 +313,11 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   }];
 }
 
-def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType> {
+def SubfieldOp : BaseSubfieldOp<"subfield", FStructType, FIRRTLBaseType> {
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
+def BundleSubfieldOp : BaseSubfieldOp<"bundlesubfield", BundleType, FIRRTLBaseType>;
 def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {

@@ -62,6 +62,7 @@ public:
 private:
   void visitOp(Operation *op);
   void visitSubfield(SubfieldOp sf);
+  void visitBundleSubfield(BundleSubfieldOp sf);
   void visitOpenSubfield(OpenSubfieldOp sf);
   void visitSubindex(SubindexOp si);
   void visitOpenSubindex(OpenSubindexOp si);

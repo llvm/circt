@@ -1712,7 +1712,7 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see an attach or aggregate sublements, just conservatively fail.
-    if (isa<AttachOp, SubfieldOp, SubaccessOp, SubindexOp>(user))
+    if (isa<AttachOp, SubfieldOp, BundleSubfieldOp, SubaccessOp, SubindexOp>(user))
       return {};
 
     if (auto aConnect = dyn_cast<FConnectLike>(user))
@@ -1995,7 +1995,7 @@ struct AggOneShot : public mlir::RewritePattern {
 
   SmallVector<Value> getCompleteWrite(Operation *lhs) const {
     auto lhsTy = lhs->getResult(0).getType();
-    if (!type_isa<BundleType, FVectorType>(lhsTy))
+    if (!type_isa<FStructType, FVectorType>(lhsTy))
       return {};
 
     DenseMap<uint32_t, Value> fields;
@@ -2006,6 +2006,20 @@ struct AggOneShot : public mlir::RewritePattern {
         if (aConnect.getDest() == lhs->getResult(0))
           return {};
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser : subField.getResult().getUsers()) {
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+            if (aConnect.getDest() == subField) {
+              if (subuser->getParentOp() != lhs->getParentOp())
+                return {};
+              if (fields.count(subField.getFieldIndex())) // duplicate write
+                return {};
+              fields[subField.getFieldIndex()] = aConnect.getSrc();
+            }
+            continue;
+          }
+          return {};
+        }
+      } else if (auto subField = dyn_cast<BundleSubfieldOp>(user)) {
         for (Operation *subuser : subField.getResult().getUsers()) {
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
             if (aConnect.getDest() == subField) {
@@ -2039,8 +2053,8 @@ struct AggOneShot : public mlir::RewritePattern {
     }
 
     SmallVector<Value> values;
-    uint32_t total = type_isa<BundleType>(lhsTy)
-                         ? type_cast<BundleType>(lhsTy).getNumElements()
+    uint32_t total = type_isa<FStructType>(lhsTy)
+                         ? type_cast<FStructType>(lhsTy).getNumElements()
                          : type_cast<FVectorType>(lhsTy).getNumElements();
     for (uint32_t i = 0; i < total; ++i) {
       if (!fields.count(i))
@@ -2077,6 +2091,12 @@ struct AggOneShot : public mlir::RewritePattern {
             if (aConnect.getDest() == subIndex)
               rewriter.eraseOp(aConnect);
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
+        for (Operation *subuser :
+             llvm::make_early_inc_range(subField.getResult().getUsers()))
+          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+            if (aConnect.getDest() == subField)
+              rewriter.eraseOp(aConnect);
+      } else if (auto subField = dyn_cast<BundleSubfieldOp>(user)) {
         for (Operation *subuser :
              llvm::make_early_inc_range(subField.getResult().getUsers()))
           if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
@@ -2144,7 +2164,7 @@ static Attribute collectFields(MLIRContext *context,
 OpFoldResult BundleCreateOp::fold(FoldAdaptor adaptor) {
   // bundle_create(%foo["a"], %foo["b"]) -> %foo when the type of %foo is
   // bundle<a:..., b:...>.
-  if (getNumOperands() > 0)
+  if (getNumOperands() > 0) {
     if (SubfieldOp first = getOperand(0).getDefiningOp<SubfieldOp>())
       if (first.getFieldIndex() == 0 &&
           first.getInput().getType() == getType() &&
@@ -2156,7 +2176,18 @@ OpFoldResult BundleCreateOp::fold(FoldAdaptor adaptor) {
                        subindex.getFieldIndex() == elem.index();
               }))
         return first.getInput();
-
+    if (BundleSubfieldOp first = getOperand(0).getDefiningOp<BundleSubfieldOp>())
+      if (first.getFieldIndex() == 0 &&
+          first.getInput().getType() == getType() &&
+          llvm::all_of(
+              llvm::drop_begin(llvm::enumerate(getOperands())), [&](auto elem) {
+                auto subindex =
+                    elem.value().template getDefiningOp<BundleSubfieldOp>();
+                return subindex && subindex.getInput() == first.getInput() &&
+                       subindex.getFieldIndex() == elem.index();
+              }))
+        return first.getInput();
+  }
   return collectFields(getContext(), adaptor.getOperands());
 }
 
