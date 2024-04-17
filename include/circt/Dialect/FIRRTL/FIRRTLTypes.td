@@ -128,6 +128,12 @@ class SizedUIntType<int width> : FIRRTLDialectType<
           "type_cast<UIntType>($_self).getWidth() == " # width>,
     width # "-bit uint", "::circt::firrtl::UIntType">;
 
+class SizedUIntTypeLTE<int width> : FIRRTLDialectType<
+    CPred<"type_isa<UIntType>($_self) && "
+          "type_cast<UIntType>($_self).getWidth() <= " # width>,
+    "uint with width less than or equal to " # width # " bits",
+    "::circt::firrtl::UIntType">;
+
 class NonConstSizedUIntType<int width> :
   SizedUIntType<width>,
   BuildableType<
@@ -138,8 +144,8 @@ def UInt2Type : SizedUIntType<2>;
 def UInt32Type : SizedUIntType<32>;
 def NonConstUInt1Type : NonConstSizedUIntType<1>;
 
-def UInt1OrUnsizedType : AnyTypeOf<[UInt1Type, UnsizedUIntType]>;
-def UInt2OrUnsizedType : AnyTypeOf<[UInt2Type, UnsizedUIntType]>;
+def UIntLTE1OrUnsizedType : AnyTypeOf<[SizedUIntTypeLTE<1>, UnsizedUIntType]>;
+def UIntLTE2OrUnsizedType : AnyTypeOf<[SizedUIntTypeLTE<2>, UnsizedUIntType]>;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
