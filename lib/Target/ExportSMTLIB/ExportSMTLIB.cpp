@@ -292,10 +292,8 @@ struct ExpressionVisitor
   template <typename OpTy>
   LogicalResult quantifierHelper(OpTy op, StringRef operatorString,
                                  VisitorInfo &info) {
-    // TODO: add support
     auto weight = op.getWeight();
-    // if (op.getWeight() != 0)
-    //   return op.emitError() << "non-zero weights not supported yet";
+    // TODO: add support
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
     if (!op.getPatterns().empty())
@@ -339,7 +337,7 @@ struct ExpressionVisitor
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
-    
+
     info.stream << info.valueMap.lookup(yieldedValue);
 
     if(weight != 0 && newInfo.openParens > 0){
