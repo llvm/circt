@@ -213,10 +213,15 @@ void SplitLoopsPass::runOnOperation() {
 
   auto result = module.walk([&](CallOpInterface callOp) -> WalkResult {
     auto refSym = callOp.getCallableForCallee().dyn_cast<SymbolRefAttr>();
-    if (!refSym)
-      return callOp->emitOpError("found unsupported call to an arc");
 
-    auto defOp = arcDefs.lookup(refSym.getLeafReference());
+    // If this call is not to an arc, skip it.
+    if (!refSym)
+      return WalkResult::advance();
+    StringAttr leafRef = refSym.getLeafReference();
+    if (!arcDefs.contains(leafRef))
+      return WalkResult::advance();
+
+    auto defOp = arcDefs.lookup(leafRef);
     arcUses[defOp].push_back(callOp);
     allArcUses.insert(callOp);
 

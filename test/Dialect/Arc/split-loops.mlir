@@ -189,3 +189,24 @@ arc.define @SplitDependency(%arg0: i1, %arg1: i1, %arg2: i1) -> (i1, i1) {
   %2 = comb.xor %0, %1 : i1
   arc.output %1, %2 : i1, i1
 }
+
+//===----------------------------------------------------------------------===//
+// This test ensures unrelated calls do not confuse splitting.
+
+// CHECK-LABEL: func.func @UnrelatedCallee() -> (i1, i1) {
+// CHECK-NEXT:    %[[FALSE:.*]] = arith.constant false
+// CHECK-NEXT:    return %[[FALSE]], %[[FALSE]] : i1, i1
+// CHECK-NEXT:  }
+func.func @UnrelatedCallee() -> (i1, i1) {
+  %1 = arith.constant false
+  return %1, %1 : i1, i1
+}
+
+// CHECK-LABEL: func.func @UnrelatedCaller() {
+// CHECK-NEXT:    {{.*}} = call @UnrelatedCallee() : () -> (i1, i1)
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func.func @UnrelatedCaller() {
+  %res:2 = call @UnrelatedCallee() : () -> (i1, i1)
+  return
+}
