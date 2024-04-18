@@ -26,7 +26,7 @@ smt.solver () : () -> () {
   // CHECK:         [[V12]]))
 
   // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
-  // CHECK-INLINED:                 ( ! (= [[A]] [[B]]) :weight 2))
+  // CHECK-INLINED:                 ( ! (= [[A]] [[B]]) :weight 2)))
   %2 = smt.exists weight 2 {
   ^bb0(%arg2: !smt.int, %arg3: !smt.int):
     %3 = smt.eq %arg2, %arg3 : !smt.int

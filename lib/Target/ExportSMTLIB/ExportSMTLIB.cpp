@@ -340,17 +340,13 @@ struct ExpressionVisitor
 
     info.stream << info.valueMap.lookup(yieldedValue);
 
-    if(weight != 0 && newInfo.openParens > 0){
-      for(int j=0;j<newInfo.openParens;j++)
-        info.stream <<")";
+    for(int j=0;j<newInfo.openParens;++j)
+      info.stream <<")";
+
+    if(weight != 0){
       info.stream <<" :weight "<< weight << "))";
-    } else if (weight != 0){
-      info.stream <<" :weight "<< weight << "))";
-      for(int j=0;j<newInfo.openParens;j++)
-        info.stream <<")";
     } else{
-      for (unsigned k = 0; k < newInfo.openParens+1; ++k)
-        info.stream << ")";
+      info.stream << ")";
     }
 
     return success();
