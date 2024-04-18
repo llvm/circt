@@ -339,23 +339,8 @@ struct ExpressionVisitor
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
-
-    // llvm::outs()<<"\n\n\nEXPRESSION\n ";
-
-
-    // printExpression(worklist, newInfo);
-
+    
     info.stream << info.valueMap.lookup(yieldedValue);
-
-    // llvm::outs()<<"\n\n\nOpen Parens is "<<newInfo.openParens;
-    // llvm::outs()<<"\n\n\nIndent Level is "<<newInfo.indentLevel;
-    // llvm::outs()<<"\n\n\nValue Map is "<<newInfo.valueMap;
-
-
-
-
-
-
 
     if(weight != 0 && newInfo.openParens > 0){
       for(int j=0;j<newInfo.openParens;j++)
