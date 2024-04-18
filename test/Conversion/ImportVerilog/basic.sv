@@ -130,6 +130,57 @@ module Statements;
     end
 
     //===------------------------------------------------------------------===//
+    // Case statements
+
+    // CHECK: [[TMP1:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP2]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP3:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP4:%.+]] = moore.eq %x, %y : !moore.bit -> !moore.bit
+    // CHECK: [[TMP5:%.+]] = moore.or [[TMP3]], [[TMP4]] : !moore.bit
+    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP6]] {
+    // CHECK:   moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: }
+    case (x)
+      x: x = x;
+      x, y: x = y;
+    endcase
+
+    // CHECK: [[TMP1:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP2]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP3:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP4:%.+]] = moore.eq %x, %y : !moore.bit -> !moore.bit
+    // CHECK: [[TMP5:%.+]] = moore.or [[TMP3]], [[TMP4]] : !moore.bit
+    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP6]] {
+    // CHECK:   moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP7:%.+]] = moore.eq %x, %z : !moore.bit -> !moore.bit
+    // CHECK: [[TMP8:%.+]] = moore.conversion [[TMP7]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP8]] {
+    // CHECK:   moore.blocking_assign %x, %z : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP9:%.+]] = moore.or [[TMP5]], [[TMP7]] : !moore.bit
+    // CHECK: [[TMP10:%.+]] = moore.or [[TMP1]], [[TMP9]] : !moore.bit
+    // CHECK: [[TMP11:%.+]] = moore.not [[TMP10]] : !moore.bit
+    // CHECK: [[TMP12:%.+]] = moore.conversion [[TMP11]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP12]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    case (x)
+      x: x = x;
+      x, y: x = y;
+      z: x = z;
+      default x = x;
+    endcase
+
+    //===------------------------------------------------------------------===//
     // Loop statements
 
     // CHECK: moore.blocking_assign %y, %x
