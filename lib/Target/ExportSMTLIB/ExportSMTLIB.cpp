@@ -348,18 +348,27 @@ struct ExpressionVisitor
     info.stream << info.valueMap.lookup(yieldedValue);
 
     // llvm::outs()<<"\n\n\nOpen Parens is "<<newInfo.openParens;
+    // llvm::outs()<<"\n\n\nIndent Level is "<<newInfo.indentLevel;
+    // llvm::outs()<<"\n\n\nValue Map is "<<newInfo.valueMap;
 
 
 
-    for (unsigned k = 0; k < newInfo.openParens; ++k)
-      info.stream << ")";
 
-    if(weight != 0 && newInfo.openParens > 0)
-      info.stream <<") :weight "<< weight << ")";
-    else if (weight != 0)
+
+
+
+    if(weight != 0 && newInfo.openParens > 0){
+      for(int j=0;j<newInfo.openParens;j++)
+        info.stream <<")";
       info.stream <<" :weight "<< weight << "))";
-    else
-      info.stream << ")";
+    } else if (weight != 0){
+      info.stream <<" :weight "<< weight << "))";
+      for(int j=0;j<newInfo.openParens;j++)
+        info.stream <<")";
+    } else{
+      for (unsigned k = 0; k < newInfo.openParens+1; ++k)
+        info.stream << ")";
+    }
 
     return success();
   }
