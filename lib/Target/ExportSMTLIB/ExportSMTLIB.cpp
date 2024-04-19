@@ -320,7 +320,6 @@ struct ExpressionVisitor
       delimiter = " ";
     }
 
-
     info.stream << ")\n";
 
     if (weight != 0)
@@ -340,14 +339,13 @@ struct ExpressionVisitor
 
     info.stream << info.valueMap.lookup(yieldedValue);
 
-    for(int j=0;j<newInfo.openParens;++j)
-      info.stream <<")";
-
-    if(weight != 0){
-      info.stream <<" :weight "<< weight << "))";
-    } else{
+    for (int j = 0; j < newInfo.openParens; ++j)
       info.stream << ")";
-    }
+
+    if (weight != 0)
+      info.stream << " :weight " << weight << ")";
+
+    info.stream << ")";
 
     return success();
   }
