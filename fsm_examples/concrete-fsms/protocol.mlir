@@ -1,5 +1,3 @@
-// FSM recognizing language 1001, we want to check that it only recognizes those strings 
-
 fsm.machine @top(%go: i16) -> () attributes {initialState = "I"} {
     %c_0 = hw.constant 0 : i16
     %c_1 = hw.constant 1 : i16
