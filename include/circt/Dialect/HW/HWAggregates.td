@@ -178,6 +178,11 @@ def ArrayGetOp : HWOp<"array_get",
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+  
+  let builders = [
+    // Construct a get with a constant index.
+    OpBuilder<(ins "Value":$input, "size_t":$index)>
+  ];
 }
 
 //===----------------------------------------------------------------------===//

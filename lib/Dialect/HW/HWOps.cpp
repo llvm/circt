@@ -2803,6 +2803,17 @@ void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
 
+void ArrayGetOp ::build(OpBuilder &odsBuilder, OperationState &odsState,
+                        Value input, size_t index) {
+  hw::ArrayType arrayType =
+      hw::getCanonicalType(input.getType()).dyn_cast<hw::ArrayType>();
+  assert(arrayType && "expected array type");
+  auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getNumElements());
+  Value indexConst = odsBuilder.create<ConstantOp>(
+      odsState.location, odsBuilder.getIntegerType(requiredWidth), index);
+  build(odsBuilder, odsState, input, indexConst);
+}
+
 // An array_get of an array_create with a constant index can just be the
 // array_create operand at the constant index. If the array_create has a
 // single uniform value for each element, just return that value regardless of

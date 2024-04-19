@@ -65,3 +65,30 @@ hw.module @TestNullFold() {
   %false = hw.constant false
   %chanOutput, %ready = esi.wrap.vr %c0_i0, %false: i0
 }
+
+// hw.module @ArrayOfBundles(in %inBundles: !hw.array<2x!bundleType>, out outBundles: !hw.array<2x!bundleType>) {
+//   hw.output %inBundles : !hw.array<2x!bundleType>
+// }
+
+hw.module @ArrayOfInBundles(
+  in %ack : !esi.channel<none>,
+  out data : !esi.channel<i8>,
+  out addr : !esi.channel<i32>,
+  in %outBundles: !hw.array<1x!bundleType>) {
+
+    %c0_i0 = hw.constant 0 : i0
+    %bundle0 = hw.array_get %outBundles[%c0_i0] : !hw.array<1x!bundleType>, i0
+    %data, %addr =  esi.bundle.unpack %ack from %bundle0 : !bundleType
+    hw.output %data, %addr : !esi.channel<i8>, !esi.channel<i32>
+}
+
+hw.module @ArrayOfOutBundles(
+  out ack : !esi.channel<none>,
+  in %data : !esi.channel<i8>,
+  in %addr : !esi.channel<i32>,
+  out outBundles: !hw.array<1x!bundleType>) {
+
+    %bundle0, %ack = esi.bundle.pack %data, %addr : !bundleType
+    %outBundle = hw.array_create %bundle0 : !bundleType
+    hw.output %ack, %outBundle : !esi.channel<none>, !hw.array<1x!bundleType>
+}
