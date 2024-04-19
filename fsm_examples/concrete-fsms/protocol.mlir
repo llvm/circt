@@ -3,6 +3,9 @@ fsm.machine @top(%go: i16) -> () attributes {initialState = "I"} {
     %c_1 = hw.constant 1 : i16
     %c_2 = hw.constant 2 : i16
 
+    %cnt = fsm.variable "cnt" {initValue = 0 : i16} : i16
+
+
     // idle - ARREADY
     fsm.state @I output  { 
 
@@ -34,7 +37,10 @@ fsm.machine @top(%go: i16) -> () attributes {initialState = "I"} {
         fsm.transition @I guard {
             %eq = comb.icmp eq %go, %c_2 : i16
             fsm.return %eq
-        }  
+        } action {
+            %add1 = comb.add %cnt, %c_1 : i16
+            fsm.update %cnt, %add1 : i16
+        }
     }
 
 }
