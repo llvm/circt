@@ -22,7 +22,7 @@ namespace {
 struct PathResolver {
   PathResolver(CircuitOp circuit, InstanceGraph &instanceGraph)
       : circuit(circuit), symbolTable(circuit), instanceGraph(instanceGraph),
-        hierPathCache(circuit, symbolTable),
+        instancePathCache(instanceGraph), hierPathCache(circuit, symbolTable),
         builder(OpBuilder::atBlockBegin(circuit->getBlock())) {}
 
   /// This function will find the operation targeted and create a hierarchical
@@ -30,7 +30,8 @@ struct PathResolver {
   /// be a reference to the HierPathOp, or null if no HierPathOp was needed.
   LogicalResult resolveHierPath(Location loc, FModuleOp owningModule,
                                 const AnnoPathValue &target,
-                                FlatSymbolRefAttr &op) {
+                                bool canDisambiguate,
+                                SmallVectorImpl<FlatSymbolRefAttr> &results) {
 
     // We want to root this path at the top level module, or in the case of an
     // unreachable module, we settle for as high as we can get.
@@ -38,6 +39,7 @@ struct PathResolver {
     if (!target.instances.empty())
       module = target.instances.front()->getParentOfType<FModuleLike>();
     auto *node = instanceGraph[module];
+    bool needsDisambiguation = false;
     while (true) {
       // If the path is rooted at the owning module, we're done.
       if (node->getModule() == owningModule)
@@ -49,8 +51,15 @@ struct PathResolver {
                << "unable to resolve path relative to owning module "
                << owningModule.getModuleNameAttr();
       // If there is more than one instance of this module, then the path
-      // operation is ambiguous, which is an error.
+      // operation is ambiguous.
       if (!node->hasOneUse()) {
+        // If we can disambiguate by duplicating paths, stop here, otherwise
+        // this is an error.
+        if (canDisambiguate) {
+          needsDisambiguation = true;
+          break;
+        }
+
         auto diag = emitError(loc) << "unable to uniquely resolve target due "
                                       "to multiple instantiation";
         for (auto *use : node->uses())
@@ -68,11 +77,10 @@ struct PathResolver {
       return !node->hasOneUse();
     });
 
-    // If the path is empty, then this is a local reference and we should not
-    // construct a HierPathOp.
+    // If the path is empty and we don't need to disambiguate, then this is a
+    // local reference and we should not construct a HierPathOp.
     auto pathLength = std::distance(it, target.instances.end());
-    if (pathLength == 0) {
-      op = nullptr;
+    if (pathLength == 0 && !needsDisambiguation) {
       return success();
     }
 
@@ -88,10 +96,47 @@ struct PathResolver {
     // Push a reference to the current module.
     insts.push_back(
         FlatSymbolRefAttr::get(target.ref.getModule().getModuleNameAttr()));
-    auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
 
-    // Return the hierchical path.
-    op = hierPathCache.getRefFor(instAttr);
+    // If we need to disambiguate this path, create new paths with every unique
+    // prefix from the owning module to the point where the path suffix starts.
+    if (needsDisambiguation) {
+      ArrayRef<igraph::InstancePath> instancePaths =
+          instancePathCache.getAbsolutePaths(node->getModule(),
+                                             instanceGraph[owningModule]);
+      for (auto instancePath : instancePaths) {
+        // For each unique prefix from the owning module, build up a new path.
+        SmallVector<Attribute> fullInsts;
+        fullInsts.reserve(instancePath.size() + target.instances.size() + 1);
+        std::transform(
+            instancePath.begin(), instancePath.end(),
+            std::back_inserter(fullInsts),
+            [&](igraph::InstanceOpInterface inst) {
+              return OpAnnoTarget(cast<InstanceOp>(inst))
+                  .getNLAReference(
+                      namespaces[inst->getParentOfType<FModuleLike>()]);
+            });
+
+        // If present, include the start of the target's instance path to tie
+        // the prefix to the suffix.
+        if (!target.instances.empty())
+          for (InstanceOp inst : target.instances)
+            fullInsts.push_back(OpAnnoTarget(inst).getNLAReference(
+                namespaces[inst->getParentOfType<FModuleOp>()]));
+
+        // Include the suffix, starting from the module which was multiply
+        // instantiated.
+        fullInsts.append(insts);
+
+        // Return the disambiguated hierchical path.
+        auto instAttr = ArrayAttr::get(circuit.getContext(), fullInsts);
+        results.push_back(hierPathCache.getRefFor(instAttr));
+      }
+    } else {
+      // Return the one hierchical path.
+      auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
+      results.push_back(hierPathCache.getRefFor(instAttr));
+    }
+
     return success();
   }
 
@@ -168,9 +213,6 @@ struct PathResolver {
         return emitError(loc, "unable to target aggregate type ") << targetType;
     }
 
-    // Create a unique ID.
-    auto id = DistinctAttr::create(UnitAttr::get(context));
-
     auto owningModule = cache.lookup(unresolved);
     StringRef moduleName = "nullptr";
     if (owningModule)
@@ -178,33 +220,80 @@ struct PathResolver {
     if (!owningModule)
       return unresolved->emitError("path does not have a single owning module");
 
-    // Resolve a unique path to the operation in question.
-    FlatSymbolRefAttr hierPathName;
-    if (failed(resolveHierPath(loc, owningModule, *path, hierPathName)))
+    // If the UnresolvedPathOp is ambiguous due to multiple instantiation, we
+    // can disambiguate by expanding it into multiple unambiguous paths, but
+    // only if the UnresolvedPathOp is already being used in a list.
+    bool canDisambiguate =
+        !unresolved->use_empty() &&
+        llvm::all_of(unresolved->getUsers(),
+                     [](Operation *user) { return isa<ListCreateOp>(user); });
+
+    // Resolve a unique path to the operation in question, or multiple paths if
+    // necessary and it is legal to disambiguate.
+    SmallVector<FlatSymbolRefAttr> hierPathNames;
+    if (failed(resolveHierPath(loc, owningModule, *path, canDisambiguate,
+                               hierPathNames)))
       return failure();
 
-    // Create the annotation.
-    NamedAttrList fields;
-    fields.append("id", id);
-    fields.append("class", StringAttr::get(context, "circt.tracker"));
-    if (hierPathName)
-      fields.append("circt.nonlocal", hierPathName);
-    if (path->fieldIdx != 0)
-      fields.append("circt.fieldID", b.getI64IntegerAttr(path->fieldIdx));
-    auto annotation = DictionaryAttr::get(context, fields);
+    auto createAnnotation = [&](std::optional<FlatSymbolRefAttr> hierPathName) {
+      // Create a unique ID.
+      auto id = DistinctAttr::create(UnitAttr::get(context));
 
-    // Attach the annotation to the target.
+      // Create the annotation.
+      NamedAttrList fields;
+      fields.append("id", id);
+      fields.append("class", StringAttr::get(context, "circt.tracker"));
+      if (hierPathName)
+        fields.append("circt.nonlocal", hierPathName.value());
+      if (path->fieldIdx != 0)
+        fields.append("circt.fieldID", b.getI64IntegerAttr(path->fieldIdx));
+
+      return DictionaryAttr::get(context, fields);
+    };
+
+    // Create the annotation(s).
+    SmallVector<Attribute> annotations;
+    if (hierPathNames.empty()) {
+      annotations.push_back(createAnnotation(std::nullopt));
+    } else {
+      for (auto hierPathName : hierPathNames)
+        annotations.push_back(createAnnotation(hierPathName));
+    }
+
+    // Attach the annotation(s) to the target.
     auto annoTarget = path->ref;
-    auto annotations = annoTarget.getAnnotations();
-    annotations.addAnnotations(annotation);
+    auto targetAnnotations = annoTarget.getAnnotations();
+    targetAnnotations.addAnnotations(annotations);
     if (targetKindAttr.getValue() == TargetKind::DontTouch)
-      annotations.addDontTouch();
-    annoTarget.setAnnotations(annotations);
+      targetAnnotations.addDontTouch();
+    annoTarget.setAnnotations(targetAnnotations);
 
-    // Create the path operation.
-    auto resolved = b.create<PathOp>(targetKindAttr, id);
-    unresolved->replaceAllUsesWith(resolved);
-    unresolved.erase();
+    // Create the path operation(s).
+    size_t lastAnnotationIdx = annotations.size() - 1;
+    for (auto [i, annotation] : llvm::enumerate(annotations)) {
+      // Create a PathOp using the id in the annotation we added to the target.
+      auto dictAttr = cast<DictionaryAttr>(annotation);
+      auto id = cast<DistinctAttr>(dictAttr.get("id"));
+      auto resolved = b.create<PathOp>(targetKindAttr, id);
+
+      if (!canDisambiguate || i == lastAnnotationIdx) {
+        // If we didn't need to disambiguate, always just replace the unresolved
+        // path with the resolved path. If we did disambiguate, and this is the
+        // last path, replace the unresolved path. In the case of multiple
+        // paths, we save the final replacement for last so the other paths can
+        // find the uses to update.
+        unresolved->replaceAllUsesWith(resolved);
+        unresolved.erase();
+      } else {
+        // If we are handling one of several paths after disambiguation, insert
+        // a use of the new path next to where the unresolved path was used.
+        for (auto &use : unresolved->getUses()) {
+          assert(isa<ListCreateOp>(use.getOwner()));
+          use.getOwner()->insertOperands(use.getOperandNumber(),
+                                         resolved.getResult());
+        }
+      }
+    }
     return success();
   }
 
@@ -212,6 +301,7 @@ struct PathResolver {
   SymbolTable symbolTable;
   CircuitTargetCache targetCache;
   InstanceGraph &instanceGraph;
+  InstancePathCache instancePathCache;
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache hierPathCache;
   OpBuilder builder;
