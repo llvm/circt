@@ -1,0 +1,99 @@
+//===- ModuleSummaryt.cpp ---------------------------------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "PassDetails.h"
+#include "mlir/IR/Threading.h"
+
+using namespace mlir;
+using namespace circt;
+using namespace firrtl;
+
+namespace {
+struct ModuleSummaryPass : public ModuleSummaryBase<ModuleSummaryPass> {
+  struct KeyTy {
+    SmallVector<size_t> portSizes;
+    size_t opcount;
+    bool operator==(const KeyTy &rhs) const {
+      return portSizes == rhs.portSizes && opcount == rhs.opcount;
+    }
+  };
+
+  size_t countOps(FModuleOp mod) {
+    size_t retval = 0;
+    mod.walk([&](Operation *op) { retval += 1; });
+    return retval;
+  }
+
+  SmallVector<size_t> protSig(FModuleOp mod) {
+    SmallVector<size_t> ports;
+    for (auto p : mod.getPortTypes())
+      ports.push_back(cast<FIRRTLBaseType>(cast<TypeAttr>(p).getValue())
+                          .getBitWidthOrSentinel());
+    return ports;
+  }
+
+  void runOnOperation() override;
+};
+} // namespace
+
+namespace mlir {
+// NOLINTNEXTLINE(readability-identifier-naming)
+inline llvm::hash_code hash_value(const ModuleSummaryPass::KeyTy &element) {
+  return llvm::hash_combine(element.portSizes.size(),
+                            llvm::hash_combine_range(element.portSizes.begin(),
+                                                     element.portSizes.end()),
+                            element.opcount);
+}
+} // namespace mlir
+
+namespace llvm {
+// Type hash just like pointers.
+template <>
+struct DenseMapInfo<ModuleSummaryPass::KeyTy> {
+  using KeyTy = ModuleSummaryPass::KeyTy;
+  static KeyTy getEmptyKey() { return {{}, ~0ULL}; }
+  static KeyTy getTombstoneKey() { return {{}, ~0ULL - 1}; }
+  static unsigned getHashValue(KeyTy val) { return mlir::hash_value(val); }
+  static bool isEqual(KeyTy LHS, KeyTy RHS) { return LHS == RHS; }
+};
+} // namespace llvm
+
+void ModuleSummaryPass::runOnOperation() {
+  auto circuit = getOperation();
+
+  using MapTy = DenseMap<KeyTy, SmallVector<FModuleOp>>;
+  MapTy data;
+
+  for (auto mod : circuit.getOps<FModuleOp>()) {
+    auto p = protSig(mod);
+    auto n = countOps(mod);
+    data[{p, n}].push_back(mod);
+  }
+  SmallVector<MapTy::value_type> sortedData(data.begin(), data.end());
+  std::sort(sortedData.begin(), sortedData.end(),
+            [](const std::tuple<KeyTy, SmallVector<FModuleOp>> &lhs,
+               const std::tuple<KeyTy, SmallVector<FModuleOp>> &rhs) {
+              return std::get<0>(lhs).opcount * std::get<1>(lhs).size() *
+                         std::get<1>(lhs).size() >
+                     std::get<0>(rhs).opcount * std::get<1>(rhs).size() *
+                         std::get<1>(rhs).size();
+            });
+  llvm::errs() << "cost, opcount, ports, modcount, examplename\n";
+  for (auto &p : sortedData)
+    if (p.second.size() > 1) {
+      llvm::errs() << (p.first.opcount * p.second.size() * p.second.size())
+                   << "," << p.first.opcount << ", " << p.first.portSizes.size()
+                   << ", " << p.second.size() << ", " << p.second[0].getName()
+                   << "\n";
+    }
+  markAllAnalysesPreserved();
+}
+
+std::unique_ptr<Pass> firrtl::createModuleSummaryPass() {
+  return std::make_unique<ModuleSummaryPass>();
+}
