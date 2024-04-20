@@ -249,10 +249,7 @@ struct ModuleConverter
       auto result = getValue(operand);
       if (failed(result))
         return failure();
-      if (cur) {
-        cur = fn(getNewName(), *cur, result.value());
-      } else
-        cur = result.value();
+      cur = cur ? fn(getNewName(), *cur, result.value()) : result.value();
     }
 
     return setLowering(op->getResult(0), cur.value());
