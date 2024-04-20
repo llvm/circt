@@ -148,17 +148,16 @@ struct ModuleConverter
 
     auto result = module
                       .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
-                        // Skip zero result operatins.
                         if (module == op)
                           return WalkResult::advance();
 
-                        if (auto out = dyn_cast<hw::OutputOp>(op)) {
-                          auto result = visitStmt(out);
-                          if (failed(result))
-                            return op->emitError() << "failed to lower",
-                                   WalkResult::interrupt();
-                          return WalkResult::advance();
-                        }
+                        // if (auto out = dyn_cast<hw::OutputOp>(op)) {
+                        //   auto result = visitStmt(out);
+                        //   if (failed(result))
+                        //     return op->emitError() << "failed to lower",
+                        //            WalkResult::interrupt();
+                        //   return WalkResult::advance();
+                        // }
 
                         if (auto reg = dyn_cast<seq::FirRegOp>(op))
                           visitSeq(reg);
