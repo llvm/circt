@@ -146,26 +146,24 @@ struct ModuleConverter
       }
     });
 
-    auto result = module
-                      .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
-                        if (module == op)
-                          return WalkResult::advance();
+    auto result =
+        module
+            .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
+              if (module == op)
+                return WalkResult::advance();
 
-                        // if (auto out = dyn_cast<hw::OutputOp>(op)) {
-                        //   auto result = visitStmt(out);
-                        //   if (failed(result))
-                        //     return op->emitError() << "failed to lower",
-                        //            WalkResult::interrupt();
-                        //   return WalkResult::advance();
-                        // }
-
-                        if (auto reg = dyn_cast<seq::FirRegOp>(op))
-                          visitSeq(reg);
-                        else
-                          visitOp(op);
-                        return WalkResult::advance();
-                      })
-                      .wasInterrupted();
+              if (auto reg = dyn_cast<seq::FirRegOp>(op))
+                visitSeq(reg);
+              else if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
+                           op->getDialect())) {
+                if (failed(visitOp(op)))
+                  return WalkResult::interrupt();
+              } else {
+                // Ignore verif-only and SV.
+              }
+              return WalkResult::advance();
+            })
+            .wasInterrupted();
     return LogicalResult::success(!result);
   }
 
