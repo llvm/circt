@@ -721,7 +721,7 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Yosys Integeration
+// Yosys Integration 
 //===----------------------------------------------------------------------===//
 
 #ifdef CIRCT_YOSYS_INTEGRATION_ENABLED

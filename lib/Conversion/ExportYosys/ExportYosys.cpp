@@ -86,7 +86,10 @@ struct ModuleConverter
   }
 
   circt::Namespace moduleNameSpace;
-  RTLIL::IdString getNewName(StringRef name = "_GEN_") {
+  RTLIL::IdString getNewName(StringRef name = "") {
+    if (name.empty())
+      return NEW_ID;
+
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
@@ -292,7 +295,7 @@ LogicalResult ModuleConverter::visitComb(MuxOp op) {
 
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
-  Yosys::log_streams.push_back(&std::cout);
+  Yosys::log_streams.push_back(&std::cerr);
   Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
 
