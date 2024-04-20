@@ -71,18 +71,25 @@ struct ModuleConverter
     auto *wire = createWire(value.getType(), name);
     if (!wire)
       return failure();
-    return setValue(value, SigSpec(wire));
+    return setValue(value, wire);
   }
 
-  LogicalResult setValue(Value value, Yosys::SigSpec sig) {
-    return success(mapping.insert({value, sig}).second);
+  LogicalResult setValue(Value value, RTLIL::Wire *wire) {
+    return success(mapping.insert({value, wire}).second);
   }
 
   FailureOr<SigSpec> getValue(Value value) {
     auto it = mapping.find(value);
     if (it != mapping.end())
-      return it->second;
+      return SigSpec(it->second);
     return failure();
+  }
+
+  RTLIL::Wire *getValueWire(Value value) {
+    auto it = mapping.find(value);
+    if (it != mapping.end())
+      return it->second;
+    return nullptr;
   }
 
   circt::Namespace moduleNameSpace;
@@ -94,12 +101,14 @@ struct ModuleConverter
   }
 
   FailureOr<SigSpec> visitSeq(seq::FirRegOp op) {
-    if (op.getReset())
+    if (op.getReset()) {
+      // Adlatch.
+      // addSdff
       return failure();
+    }
     auto clock = getValue(op.getClk());
     auto next = getValue(op.getNext());
-    auto width = hw::getBitWidth(op.getType());
-    if (failed(clock) || failed(next) || width <= 0)
+    if (failed(clock) || failed(next))
       return failure();
     auto wireName = getNewName(op.getName());
     // Connect!
@@ -120,8 +129,7 @@ struct ModuleConverter
         wire->port_output = true;
         outputs.push_back(wire);
       } else if (port.isInput()) {
-        setValue(module.getBodyBlock()->getArgument(inputPos++),
-                 Yosys::RTLIL::SigSpec(wire));
+        setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
         // TODO: Need to consider inout?
         wire->port_input = true;
       } else {
@@ -165,7 +173,7 @@ struct ModuleConverter
                   Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
       : design(design), rtlilModule(rtlilModule), module(module) {}
 
-  DenseMap<Value, SigSpec> mapping;
+  DenseMap<Value, RTLIL::Wire*> mapping;
   SmallVector<RTLIL::Wire *> outputs;
 
   LogicalResult setLowering(Value value, SigSpec s) {
