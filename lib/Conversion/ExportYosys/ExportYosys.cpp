@@ -301,13 +301,19 @@ LogicalResult ModuleConverter::visitComb(MuxOp op) {
                                           high.value(), cond.value()));
 }
 
+struct YosysCircuitExporter {
+  Yosys::RTLIL::Design *design;
+};
+
+struct YosysCircuitImporter {};
+
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
   Yosys::log_streams.push_back(&std::cerr);
   Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
-
-  auto *design = new Yosys::RTLIL::Design;
+  auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
+  auto *design = theDesign.get();
   SmallVector<ModuleConverter> converter;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
