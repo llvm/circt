@@ -158,7 +158,7 @@ struct ExpressionVisitor
     info.stream << "(let ((" << name << " ";
 
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + 7 + name.size(), info.openParens);
+                        info.indentLevel + 8 + name.size(), 0);
     if (failed(Base::dispatchSMTOpVisitor(op, newInfo)))
       return failure();
 
@@ -332,14 +332,14 @@ struct ExpressionVisitor
     worklist.push_back(yieldedValue);
     unsigned indentExt = operatorString.size() + 2;
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + indentExt, info.openParens);
+                        info.indentLevel + indentExt, 0);
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
 
     info.stream << info.valueMap.lookup(yieldedValue);
 
-    for (int j = 0; j < newInfo.openParens; ++j)
+    for (unsigned j = 0; j < newInfo.openParens; ++j)
       info.stream << ")";
 
     if (weight != 0)
