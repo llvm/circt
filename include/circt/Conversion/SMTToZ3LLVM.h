@@ -59,10 +59,10 @@ struct SMTGlobalsHandler {
   const mlir::LLVM::GlobalOp ctx;
 
   Namespace names;
-  DenseMap<StringRef, mlir::LLVM::LLVMFuncOp> funcMap;
+  DenseMap<StringAttr, mlir::LLVM::LLVMFuncOp> funcMap;
   DenseMap<Block *, Value> ctxCache;
   DenseMap<Block *, Value> solverCache;
-  DenseMap<StringRef, mlir::LLVM::GlobalOp> stringCache;
+  DenseMap<StringAttr, mlir::LLVM::GlobalOp> stringCache;
 };
 
 /// Populate the given type converter with the SMT to LLVM type conversions.

@@ -140,7 +140,7 @@ protected:
   LLVM::CallOp buildCall(OpBuilder &builder, Location loc, StringRef name,
                          LLVM::LLVMFunctionType funcType,
                          ValueRange args) const {
-    auto &funcOp = globals.funcMap[name];
+    auto &funcOp = globals.funcMap[builder.getStringAttr(name)];
     if (!funcOp) {
       OpBuilder::InsertionGuard guard(builder);
       auto module =
@@ -158,7 +158,7 @@ protected:
   /// Multiple calls with the same string will reuse the same global. It is
   /// guaranteed that the symbol of the global will be unique.
   Value buildString(OpBuilder &builder, Location loc, StringRef str) const {
-    auto &global = globals.stringCache[str];
+    auto &global = globals.stringCache[builder.getStringAttr(str)];
     if (!global) {
       OpBuilder::InsertionGuard guard(builder);
       auto module =
@@ -495,6 +495,29 @@ class LowerChainableSMTPattern : public SMTLoweringPattern<SourceTy> {
   }
 };
 
+/// A pattern to lower SMT operations with a variadic number of operands
+/// modelling the `:left-assoc` attribute to a sequence of binary operators.
+template <typename SourceTy>
+class LowerLeftAssocSMTPattern : public SMTLoweringPattern<SourceTy> {
+  using SMTLoweringPattern<SourceTy>::SMTLoweringPattern;
+  using OpAdaptor = typename SMTLoweringPattern<SourceTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (adaptor.getOperands().size() <= 2)
+      return rewriter.notifyMatchFailure(op, "must have at least two operands");
+
+    Value runner = adaptor.getOperands()[0];
+    for (Value val : adaptor.getOperands().drop_front())
+      runner = rewriter.create<SourceTy>(op.getLoc(), op->getResultTypes(),
+                                         ValueRange{runner, val});
+
+    rewriter.replaceOp(op, runner);
+    return success();
+  }
+};
+
 /// The 'smt.solver' operation has a region that corresponds to the lifetime of
 /// the Z3 context and one solver instance created within this context.
 /// To create a context, a Z3 configuration has to be built first and various
@@ -779,6 +802,194 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
   }
 };
 
+/// Lower `smt.bv.repeat` operations to Z3 API function calls of the form
+/// ```
+/// Z3_ast Z3_API Z3_mk_repeat(Z3_context c, unsigned i, Z3_ast t1);
+/// ```
+struct RepeatOpLowering : public SMTLoweringPattern<RepeatOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(RepeatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value count = rewriter.create<LLVM::ConstantOp>(
+        op.getLoc(), rewriter.getI32Type(), op.getCount());
+    rewriter.replaceOp(op,
+                       buildPtrAPICall(rewriter, op.getLoc(), "Z3_mk_repeat",
+                                       {count, adaptor.getInput()}));
+    return success();
+  }
+};
+
+/// Lower `smt.bv.extract` operations to Z3 API function calls of the following
+/// form, where the output bit-vector has size `n = high - low + 1`. This means,
+/// both the 'high' and 'low' indices are inclusive.
+/// ```
+/// Z3_ast Z3_API Z3_mk_extract(Z3_context c, unsigned high, unsigned low,
+/// Z3_ast t1);
+/// ```
+struct ExtractOpLowering : public SMTLoweringPattern<ExtractOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Value low = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(),
+                                                  adaptor.getLowBit());
+    Value high = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(),
+        adaptor.getLowBit() + op.getType().getWidth() - 1);
+    rewriter.replaceOp(op, buildPtrAPICall(rewriter, loc, "Z3_mk_extract",
+                                           {high, low, adaptor.getInput()}));
+    return success();
+  }
+};
+
+/// Lower `smt.array.broadcast` operations to Z3 API function calls of the form
+/// ```
+/// Z3_ast Z3_API Z3_mk_const_array(Z3_context c, Z3_sort domain, Z3_ast v);
+/// ```
+struct ArrayBroadcastOpLowering
+    : public SMTLoweringPattern<smt::ArrayBroadcastOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(smt::ArrayBroadcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto domainSort = buildSort(
+        rewriter, op.getLoc(),
+        cast<smt::ArrayType>(op.getResult().getType()).getDomainType());
+
+    rewriter.replaceOp(op, buildPtrAPICall(rewriter, op.getLoc(),
+                                           "Z3_mk_const_array",
+                                           {domainSort, adaptor.getValue()}));
+    return success();
+  }
+};
+
+/// Lower the `smt.constant` operation to one of the following Z3 API function
+/// calls depending on the value of the boolean attribute.
+/// ```
+/// Z3_ast Z3_API Z3_mk_true(Z3_context c);
+/// Z3_ast Z3_API Z3_mk_false(Z3_context c);
+/// ```
+struct BoolConstantOpLowering : public SMTLoweringPattern<smt::BoolConstantOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(smt::BoolConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(
+        op, buildPtrAPICall(rewriter, op.getLoc(),
+                            adaptor.getValue() ? "Z3_mk_true" : "Z3_mk_false"));
+    return success();
+  }
+};
+
+/// Lower `smt.int.constant` operations to one of the following two Z3 API
+/// function calls depending on whether the storage APInt has a bit-width that
+/// fits in a `uint64_t`.
+/// ```
+/// Z3_sort Z3_API Z3_mk_int_sort(Z3_context c);
+///
+/// Z3_ast Z3_API Z3_mk_int64(Z3_context c, int64_t v, Z3_sort ty);
+///
+/// Z3_ast Z3_API Z3_mk_numeral(Z3_context c, Z3_string numeral, Z3_sort ty);
+/// Z3_ast Z3_API Z3_mk_unary_minus(Z3_context c, Z3_ast arg);
+/// ```
+struct IntConstantOpLowering : public SMTLoweringPattern<smt::IntConstantOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(smt::IntConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Value type = buildPtrAPICall(rewriter, loc, "Z3_mk_int_sort");
+    if (adaptor.getValue().getBitWidth() <= 64) {
+      Value val = rewriter.create<LLVM::ConstantOp>(
+          loc, rewriter.getI64Type(), adaptor.getValue().getSExtValue());
+      rewriter.replaceOp(
+          op, buildPtrAPICall(rewriter, loc, "Z3_mk_int64", {val, type}));
+      return success();
+    }
+
+    std::string numeralStr;
+    llvm::raw_string_ostream stream(numeralStr);
+    stream << adaptor.getValue().abs();
+
+    Value numeral = buildString(rewriter, loc, numeralStr);
+    Value intNumeral =
+        buildPtrAPICall(rewriter, loc, "Z3_mk_numeral", {numeral, type});
+
+    if (adaptor.getValue().isNegative())
+      intNumeral =
+          buildPtrAPICall(rewriter, loc, "Z3_mk_unary_minus", intNumeral);
+
+    rewriter.replaceOp(op, intNumeral);
+    return success();
+  }
+};
+
+/// Lower `smt.int.cmp` operations to one of the following Z3 API function calls
+/// depending on the predicate.
+/// ```
+/// Z3_ast Z3_API Z3_mk_{{pred}}(Z3_context c, Z3_ast t1, Z3_ast t2);
+/// ```
+struct IntCmpOpLowering : public SMTLoweringPattern<IntCmpOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(IntCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(
+        op,
+        buildPtrAPICall(rewriter, op.getLoc(),
+                        "Z3_mk_" + stringifyIntPredicate(op.getPred()).str(),
+                        {adaptor.getLhs(), adaptor.getRhs()}));
+    return success();
+  }
+};
+
+/// Lower `smt.bv.cmp` operations to one of the following Z3 API function calls,
+/// performing two's complement comparison, depending on the predicate
+/// attribute.
+/// ```
+/// Z3_ast Z3_API Z3_mk_bv{{pred}}(Z3_context c, Z3_ast t1, Z3_ast t2);
+/// ```
+struct BVCmpOpLowering : public SMTLoweringPattern<BVCmpOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(BVCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(
+        op, buildPtrAPICall(rewriter, op.getLoc(),
+                            "Z3_mk_bv" +
+                                stringifyBVCmpPredicate(op.getPred()).str(),
+                            {adaptor.getLhs(), adaptor.getRhs()}));
+    return success();
+  }
+};
+
+/// Expand the `smt.int.abs` operation to a `smt.ite` operation.
+struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(IntAbsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Value zero = rewriter.create<IntConstantOp>(
+        loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+    Value cmp = rewriter.create<IntCmpOp>(loc, IntPredicate::lt,
+                                          adaptor.getInput(), zero);
+    Value neg = rewriter.create<IntSubOp>(loc, zero, adaptor.getInput());
+    rewriter.replaceOpWithNewOp<IteOp>(op, cmp, neg, adaptor.getInput());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -822,6 +1033,12 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                                        converter, patterns.getContext(),       \
                                        globals, options, APINAME,              \
                                        MIN_NUM_ARGS);
+
+#define ADD_ONE_TO_ONE_PATTERN(OP, APINAME, NUM_ARGS)                          \
+  patterns.add<OneToOneSMTPattern<OP>>(/*NOLINT(bugprone-macro-parentheses)*/  \
+                                       converter, patterns.getContext(),       \
+                                       globals, options, APINAME, NUM_ARGS);
+
   // Lower `smt.distinct` operations which allows a variadic number of operands
   // according to the `:pairwise` attribute. The Z3 API function supports a
   // variadic number of operands as well, i.e., a direct lowering is possible:
@@ -840,13 +1057,142 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
   // Z3_ast Z3_API Z3_mk_and(Z3_context c, unsigned num_args, Z3_ast const
   // args[])
   // ```
-  // The API function requires num_args > 0. This is not guaranteed by the
+  // The API function requires num_args > 1. This is not guaranteed by the
   // `smt.and` operation and thus the pattern will not apply when no operand is
   // present. The constant folder of the operation is assumed to fold this to
   // a constant 'true' (neutral element of AND).
-  ADD_VARIADIC_PATTERN(AndOp, "Z3_mk_and", 1);
+  ADD_VARIADIC_PATTERN(AndOp, "Z3_mk_and", 2);
+
+  // Lower `smt.or` operations which allows a variadic number of operands
+  // according to the `:left-assoc` attribute. The Z3 API function supports a
+  // variadic number of operands as well, i.e., a direct lowering is possible:
+  // ```
+  // Z3_ast Z3_API Z3_mk_or(Z3_context c, unsigned num_args, Z3_ast const
+  // args[])
+  // ```
+  // The API function requires num_args > 1. This is not guaranteed by the
+  // `smt.or` operation and thus the pattern will not apply when no operand is
+  // present. The constant folder of the operation is assumed to fold this to
+  // a constant 'false' (neutral element of OR).
+  ADD_VARIADIC_PATTERN(OrOp, "Z3_mk_or", 2);
+
+  // Lower `smt.not` operations to the following Z3 API function:
+  // ```
+  // Z3_ast Z3_API Z3_mk_not(Z3_context c, Z3_ast a);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(NotOp, "Z3_mk_not", 1);
+
+  // Lower `smt.xor` operations which allows a variadic number of operands
+  // according to the `:left-assoc` attribute. The Z3 API function, however,
+  // only takes two operands.
+  // ```
+  // Z3_ast Z3_API Z3_mk_xor(Z3_context c, Z3_ast t1, Z3_ast t2);
+  // ```
+  // Therefore, we need to decompose the operation first to a sequence of XOR
+  // operations matching the left associative behavior.
+  patterns.add<LowerLeftAssocSMTPattern<XOrOp>>(
+      converter, patterns.getContext(), globals, options);
+  ADD_ONE_TO_ONE_PATTERN(XOrOp, "Z3_mk_xor", 2);
+
+  // Lower `smt.implies` operations to the following Z3 API function:
+  // ```
+  // Z3_ast Z3_API Z3_mk_implies(Z3_context c, Z3_ast t1, Z3_ast t2);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(ImpliesOp, "Z3_mk_implies", 2);
+
+  // All the bit-vector arithmetic and bitwise operations conveniently lower to
+  // Z3 API function calls with essentially matching names and a one-to-one
+  // correspondence of operands to call arguments.
+  ADD_ONE_TO_ONE_PATTERN(BVNegOp, "Z3_mk_bvneg", 1);
+  ADD_ONE_TO_ONE_PATTERN(BVAddOp, "Z3_mk_bvadd", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVMulOp, "Z3_mk_bvmul", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVURemOp, "Z3_mk_bvurem", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVSRemOp, "Z3_mk_bvsrem", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVSModOp, "Z3_mk_bvsmod", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVUDivOp, "Z3_mk_bvudiv", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVSDivOp, "Z3_mk_bvsdiv", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVShlOp, "Z3_mk_bvshl", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVLShrOp, "Z3_mk_bvlshr", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVAShrOp, "Z3_mk_bvashr", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVNotOp, "Z3_mk_bvnot", 1);
+  ADD_ONE_TO_ONE_PATTERN(BVAndOp, "Z3_mk_bvand", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVOrOp, "Z3_mk_bvor", 2);
+  ADD_ONE_TO_ONE_PATTERN(BVXOrOp, "Z3_mk_bvxor", 2);
+
+  // The `smt.bv.concat` operation only supports two operands, just like the
+  // Z3 API function.
+  // ```
+  // Z3_ast Z3_API Z3_mk_concat(Z3_context c, Z3_ast t1, Z3_ast t2);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(ConcatOp, "Z3_mk_concat", 2);
+
+  // Lower the `smt.ite` operation to the following Z3 API function call, where
+  // `t1` must have boolean sort.
+  // ```
+  // Z3_ast Z3_API Z3_mk_ite(Z3_context c, Z3_ast t1, Z3_ast t2, Z3_ast t3);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(IteOp, "Z3_mk_ite", 3);
+
+  // Lower the `smt.array.select` operation to the following Z3 function call.
+  // The operand declaration of the operation matches the order of arguments of
+  // the API function.
+  // ```
+  // Z3_ast Z3_API Z3_mk_select(Z3_context c, Z3_ast a, Z3_ast i);
+  // ```
+  // Where `a` is the array expression and `i` is the index expression.
+  ADD_ONE_TO_ONE_PATTERN(ArraySelectOp, "Z3_mk_select", 2);
+
+  // Lower the `smt.array.store` operation to the following Z3 function call.
+  // The operand declaration of the operation matches the order of arguments of
+  // the API function.
+  // ```
+  // Z3_ast Z3_API Z3_mk_store(Z3_context c, Z3_ast a, Z3_ast i, Z3_ast v);
+  // ```
+  // Where `a` is the array expression, `i` is the index expression, and `v` is
+  // the value expression to be stored.
+  ADD_ONE_TO_ONE_PATTERN(ArrayStoreOp, "Z3_mk_store", 3);
+
+  // Lower the `smt.int.add` operation to the following Z3 API function call.
+  // ```
+  // Z3_ast Z3_API Z3_mk_add(Z3_context c, unsigned num_args, Z3_ast const
+  // args[]);
+  // ```
+  // The number of arguments must be greater than zero. Therefore, the pattern
+  // will fail if applied to an operation with less than two operands.
+  ADD_VARIADIC_PATTERN(IntAddOp, "Z3_mk_add", 2);
+
+  // Lower the `smt.int.mul` operation to the following Z3 API function call.
+  // ```
+  // Z3_ast Z3_API Z3_mk_mul(Z3_context c, unsigned num_args, Z3_ast const
+  // args[]);
+  // ```
+  // The number of arguments must be greater than zero. Therefore, the pattern
+  // will fail if applied to an operation with less than two operands.
+  ADD_VARIADIC_PATTERN(IntMulOp, "Z3_mk_mul", 2);
+
+  // Lower the `smt.int.sub` operation to the following Z3 API function call.
+  // ```
+  // Z3_ast Z3_API Z3_mk_sub(Z3_context c, unsigned num_args, Z3_ast const
+  // args[]);
+  // ```
+  // The number of arguments must be greater than zero. Since the `smt.int.sub`
+  // operation always has exactly two operands, this trivially holds.
+  ADD_VARIADIC_PATTERN(IntSubOp, "Z3_mk_sub", 2);
+
+  // Lower the `smt.int.div` operation to the following Z3 API function call.
+  // ```
+  // Z3_ast Z3_API Z3_mk_div(Z3_context c, Z3_ast arg1, Z3_ast arg2);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(IntDivOp, "Z3_mk_div", 2);
+
+  // Lower the `smt.int.mod` operation to the following Z3 API function call.
+  // ```
+  // Z3_ast Z3_API Z3_mk_mod(Z3_context c, Z3_ast arg1, Z3_ast arg2);
+  // ```
+  ADD_ONE_TO_ONE_PATTERN(IntModOp, "Z3_mk_mod", 2);
 
 #undef ADD_VARIADIC_PATTERN
+#undef ADD_ONE_TO_ONE_PATTERN
 
   // Lower `smt.eq` operations which allows a variadic number of operands
   // according to the `:chainable` attribute. The Z3 API function does not
@@ -872,8 +1218,11 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
   // information.
   patterns.add<BVConstantOpLowering, DeclareFunOpLowering, AssertOpLowering,
                CheckOpLowering, SolverOpLowering, ApplyFuncOpLowering,
-               YieldOpLowering>(converter, patterns.getContext(), globals,
-                                options);
+               YieldOpLowering, RepeatOpLowering, ExtractOpLowering,
+               BoolConstantOpLowering, IntConstantOpLowering,
+               ArrayBroadcastOpLowering, BVCmpOpLowering, IntCmpOpLowering,
+               IntAbsOpLowering>(converter, patterns.getContext(), globals,
+                                 options);
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {
