@@ -159,7 +159,7 @@ struct ModuleConverter
                 if (failed(visitOp(op)))
                   return WalkResult::interrupt();
               } else {
-                // Ignore verif-only and SV.
+                // Ignore Verif, LTL, SV and so on.
               }
               return WalkResult::advance();
             })
