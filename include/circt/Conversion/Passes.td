@@ -721,12 +721,20 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// ConvertSimToSV
+// Yosys Integeration
 //===----------------------------------------------------------------------===//
 
+#ifdef CIRCT_YOSYS_INTEGRATION_ENABLED
 def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
   let summary = "Translate core dialects into yosys's RTL IR";
   let constructor = "createExportYosys()";
+  let options = [
+    Option<"commands", "commmands", "std::string",
+            "", "yosys commands to run">,
+    Option<"importResult", "import-result", "bool",
+            "false", "Import Yosys's result and replace it with the input.">
+  ];
 }
+#endif
 
 #endif // CIRCT_CONVERSION_PASSES_TD

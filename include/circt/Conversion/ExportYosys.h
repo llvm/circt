@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include <memory>
+#include <string>
 
 namespace mlir {
 class Pass;

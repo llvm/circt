@@ -302,6 +302,7 @@ void ExportYosysPass::runOnOperation() {
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
     converter.emplace_back(design, newModule, op);
   }
+
   for (auto &c : converter)
     if (failed(c.run()))
       return signalPassFailure();
