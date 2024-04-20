@@ -217,25 +217,13 @@ struct ModuleConverter
   }
 
   // HW stmt op.
-  LogicalResult visitStmt(OutputOp op) {
-    assert(op.getNumOperands() == outputs.size());
-    for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
-      auto result = getValue(op);
-      if (failed(result))
-        return failure();
-      rtlilModule->connect(Yosys::SigSpec(wire), result.value());
-    }
-
-    return success();
-  }
+  LogicalResult visitStmt(OutputOp op);
 
   // Comb.
   LogicalResult visitComb(AddOp op);
   LogicalResult visitComb(SubOp op);
   LogicalResult visitComb(MuxOp op);
 
-  // Comb.
-  // ResultTy visitComb(MuxOp op);
   template <typename BinaryFn>
   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
     // Construct n-1 binary op (currently linear) chains.
@@ -253,8 +241,31 @@ struct ModuleConverter
 
     return setLowering(op->getResult(0), cur.value());
   }
+
+  template <typename BinaryFn>
+  LogicalResult emitBinaryOp(Operation *op, BinaryFn fn) {
+    assert(op->getOperands() != 2 && "only expect binary op");
+    auto lhs = getValue(op->getOperand(0));
+    auto rhs = getValue(op->getOperand(1));
+    if (failed(lhs) || failed(rhs))
+      return failure();
+    return setLowering(op->getResult(0),
+                       fn(getNewName(), lhs.value(), rhs.value()));
+  }
 };
 } // namespace
+
+LogicalResult ModuleConverter::visitStmt(OutputOp op) {
+  assert(op.getNumOperands() == outputs.size());
+  for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
+    auto result = getValue(op);
+    if (failed(result))
+      return failure();
+    rtlilModule->connect(Yosys::SigSpec(wire), result.value());
+  }
+
+  return success();
+}
 
 LogicalResult ModuleConverter::visitComb(AddOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
@@ -293,7 +304,7 @@ void ExportYosysPass::runOnOperation() {
   }
   for (auto &c : converter)
     if (failed(c.run()))
-      signalPassFailure();
+      return signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
   Yosys::run_pass("synth", design);
