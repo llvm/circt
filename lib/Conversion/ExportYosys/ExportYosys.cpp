@@ -45,76 +45,73 @@ std::string getEscapedName(StringRef name) {
   return RTLIL::escape_id(name.str());
 }
 
-struct RTLILConverter {};
-struct ModuleConverter;
 int64_t getBitWidthSeq(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
   return getBitWidth(type);
 }
 
-struct ExprEmitter
-    : public hw::TypeOpVisitor<ExprEmitter, LogicalResult>,
-      public comb::CombinationalVisitor<ExprEmitter, LogicalResult> {
-  ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
-  ModuleConverter &moduleEmitter;
-  FailureOr<Yosys::SigSpec> getValue(Value value);
-  LogicalResult emitExpression(Operation *op) {
-    return dispatchCombinationalVisitor(op);
-  }
-  LogicalResult visitUnhandledTypeOp(Operation *op) {
-    return op->emitError() << " is unsupported";
-  }
-  LogicalResult visitUnhandledExpr(Operation *op) {
-    return op->emitError() << " is unsupported";
-  }
-  LogicalResult visitInvalidComb(Operation *op) {
-    return dispatchTypeOpVisitor(op);
-  }
-  LogicalResult visitUnhandledComb(Operation *op) {
-    return visitUnhandledExpr(op);
-  }
-  LogicalResult visitInvalidTypeOp(Operation *op) {
-    return visitUnhandledExpr(op);
-  }
-
-  LogicalResult visitTypeOp(ConstantOp op) {
-    if (op.getValue().getBitWidth() >= 32)
-      return op.emitError() << "unsupported";
-    return setLowering(
-        op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
-                                        op.getValue().getBitWidth())));
-  }
-
-  using hw::TypeOpVisitor<ExprEmitter, LogicalResult>::visitTypeOp;
-  using comb::CombinationalVisitor<ExprEmitter, LogicalResult>::visitComb;
-
-  LogicalResult visitComb(AddOp op);
-  LogicalResult visitComb(SubOp op);
-  LogicalResult visitComb(MuxOp op);
-
-  // Comb.
-  // ResultTy visitComb(MuxOp op);
-  template <typename BinaryFn>
-  LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
-    // Construct n-1 binary op (currently linear) chains.
-    // TODO: Need to create a tree?
-    std::optional<SigSpec> cur;
-    for (auto operand : op->getOperands()) {
-      auto result = getValue(operand);
-      if (failed(result))
-        return failure();
-      if (cur) {
-        cur = fn(getNewName(), *cur, result.value());
-      } else
-        cur = result.value();
-    }
-
-    return setLowering(op->getResult(0), cur.value());
-  }
-  RTLIL::IdString getNewName(StringRef name = "_GEN_");
-  LogicalResult setLowering(Value value, Yosys::SigSpec);
-};
+// struct ExprEmitter
+//     : public hw::TypeOpVisitor<ExprEmitter, LogicalResult>,
+//       public comb::CombinationalVisitor<ExprEmitter, LogicalResult> {
+//   ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter)
+//   {} ModuleConverter &moduleEmitter; FailureOr<Yosys::SigSpec> getValue(Value
+//   value); LogicalResult emitExpression(Operation *op) {
+//     return dispatchCombinationalVisitor(op);
+//   }
+//   LogicalResult visitUnhandledTypeOp(Operation *op) {
+//     return op->emitError() << " is unsupported";
+//   }
+//   LogicalResult visitUnhandledExpr(Operation *op) {
+//     return op->emitError() << " is unsupported";
+//   }
+//   LogicalResult visitInvalidComb(Operation *op) {
+//     return dispatchTypeOpVisitor(op);
+//   }
+//   LogicalResult visitUnhandledComb(Operation *op) {
+//     return visitUnhandledExpr(op);
+//   }
+//   LogicalResult visitInvalidTypeOp(Operation *op) {
+//     return visitUnhandledExpr(op);
+//   }
+//
+//   LogicalResult visitTypeOp(ConstantOp op) {
+//     if (op.getValue().getBitWidth() >= 32)
+//       return op.emitError() << "unsupported";
+//     return setLowering(
+//         op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
+//                                         op.getValue().getBitWidth())));
+//   }
+//
+//   using hw::TypeOpVisitor<ExprEmitter, LogicalResult>::visitTypeOp;
+//   using comb::CombinationalVisitor<ExprEmitter, LogicalResult>::visitComb;
+//
+//   LogicalResult visitComb(AddOp op);
+//   LogicalResult visitComb(SubOp op);
+//   LogicalResult visitComb(MuxOp op);
+//
+//   // Comb.
+//   // ResultTy visitComb(MuxOp op);
+//   template <typename BinaryFn>
+//   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
+//     // Construct n-1 binary op (currently linear) chains.
+//     // TODO: Need to create a tree?
+//     std::optional<SigSpec> cur;
+//     for (auto operand : op->getOperands()) {
+//       auto result = getValue(operand);
+//       if (failed(result))
+//         return failure();
+//       if (cur) {
+//         cur = fn(getNewName(), *cur, result.value());
+//       } else
+//         cur = result.value();
+//     }
+//
+//     return setLowering(op->getResult(0), cur.value());
+//   }
+//   RTLIL::IdString getNewName(StringRef name = "_GEN_");
+//   LogicalResult setLowering(Value value, Yosys::SigSpec);
+// };
 
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, LogicalResult>,
@@ -183,37 +180,6 @@ struct ModuleConverter
     return success();
   }
 
-  /*
-    ResultTy visitComb(MulOp op) {}
-    ResultTy visitComb(DivUOp op) {}
-    ResultTy visitComb(DivSOp op) {}
-    ResultTy visitComb(ModUOp op) {}
-    ResultTy visitComb(ModSOp op) {}
-    ResultTy visitComb(ShlOp op) {}
-    ResultTy visitComb(ShrUOp op) {}
-    ResultTy visitComb(ShrSOp op) {}
-    ResultTy visitComb(AndOp op) {};
-      return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-        return rtlilModule->And(name, l, r);
-      });
-    }
-    ResultTy visitComb(OrOp op) {
-      return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-        return rtlilModule->Or(name, l, r);
-      });
-    }
-    ResultTy visitComb(XorOp op) {}
-
-    // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
-    // regardless of the operands."
-    ResultTy visitComb(ParityOp op) {}
-    */
-
-  // ResultTy visitComb(ReplicateOp op);
-  // ResultTy visitComb(ConcatOp op);
-  // ResultTy visitComb(ExtractOp op);
-  // ResultTy visitComb(ICmpOp op);
-
   LogicalResult run() {
     ModulePortInfo ports(module.getPortList());
     size_t inputPos = 0;
@@ -258,7 +224,7 @@ struct ModuleConverter
                         if (auto reg = dyn_cast<seq::FirRegOp>(op))
                           visitSeq(reg);
                         else
-                          ExprEmitter(*this).emitExpression(op);
+                          emitExpression(op);
                         return WalkResult::advance();
                       })
                       .wasInterrupted();
@@ -284,25 +250,76 @@ struct ModuleConverter
   hw::HWModuleOp module;
   RTLIL::Wire *getWireForValue(Value value);
   RTLIL::Cell *getCellForValue(Value value);
+
+  using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
+  using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
+
+  LogicalResult emitExpression(Operation *op) {
+    return dispatchCombinationalVisitor(op);
+  }
+  LogicalResult visitUnhandledTypeOp(Operation *op) {
+    return op->emitError() << " is unsupported";
+  }
+  LogicalResult visitUnhandledExpr(Operation *op) {
+    return op->emitError() << " is unsupported";
+  }
+  LogicalResult visitInvalidComb(Operation *op) {
+    return dispatchTypeOpVisitor(op);
+  }
+  LogicalResult visitUnhandledComb(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  LogicalResult visitInvalidTypeOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+
+  LogicalResult visitTypeOp(ConstantOp op) {
+    if (op.getValue().getBitWidth() >= 32)
+      return op.emitError() << "unsupported";
+    return setLowering(
+        op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
+                                        op.getValue().getBitWidth())));
+  }
+
+  LogicalResult visitComb(AddOp op);
+  LogicalResult visitComb(SubOp op);
+  LogicalResult visitComb(MuxOp op);
+
+  // Comb.
+  // ResultTy visitComb(MuxOp op);
+  template <typename BinaryFn>
+  LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
+    // Construct n-1 binary op (currently linear) chains.
+    // TODO: Need to create a tree?
+    std::optional<SigSpec> cur;
+    for (auto operand : op->getOperands()) {
+      auto result = getValue(operand);
+      if (failed(result))
+        return failure();
+      if (cur) {
+        cur = fn(getNewName(), *cur, result.value());
+      } else
+        cur = result.value();
+    }
+
+    return setLowering(op->getResult(0), cur.value());
+  }
 };
+} // namespace
 
-FailureOr<SigSpec> ExprEmitter::getValue(Value value) {
-  return moduleEmitter.getValue(value);
-}
-
-LogicalResult ExprEmitter::visitComb(AddOp op) {
+LogicalResult ModuleConverter::visitComb(AddOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return moduleEmitter.rtlilModule->Add(name, l, r);
+    return rtlilModule->Add(name, l, r);
   });
 }
 
-LogicalResult ExprEmitter::visitComb(SubOp op) {
+LogicalResult ModuleConverter::visitComb(SubOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return moduleEmitter.rtlilModule->Sub(name, l, r);
+    return rtlilModule->Sub(name, l, r);
   });
 }
 
-LogicalResult ExprEmitter::visitComb(MuxOp op) {
+LogicalResult ModuleConverter::visitComb(MuxOp op) {
   auto cond = getValue(op.getCond());
   auto high = getValue(op.getTrueValue());
   auto low = getValue(op.getFalseValue());
@@ -310,18 +327,9 @@ LogicalResult ExprEmitter::visitComb(MuxOp op) {
     return failure();
 
   return setLowering(
-      op, moduleEmitter.rtlilModule->Mux(getNewName(), low.value(),
+      op, rtlilModule->Mux(getNewName(), low.value(),
                                          high.value(), cond.value()));
 }
-
-Yosys::IdString ExprEmitter::getNewName(StringRef name) {
-  return moduleEmitter.getNewName(name);
-}
-
-LogicalResult ExprEmitter::setLowering(Value value, Yosys::SigSpec sig) {
-  return moduleEmitter.setLowering(value, sig);
-} // namespace
-} // namespace
 
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
