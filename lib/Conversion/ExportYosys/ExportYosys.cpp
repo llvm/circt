@@ -51,68 +51,6 @@ int64_t getBitWidthSeq(Type type) {
   return getBitWidth(type);
 }
 
-// struct ExprEmitter
-//     : public hw::TypeOpVisitor<ExprEmitter, LogicalResult>,
-//       public comb::CombinationalVisitor<ExprEmitter, LogicalResult> {
-//   ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter)
-//   {} ModuleConverter &moduleEmitter; FailureOr<Yosys::SigSpec> getValue(Value
-//   value); LogicalResult emitExpression(Operation *op) {
-//     return dispatchCombinationalVisitor(op);
-//   }
-//   LogicalResult visitUnhandledTypeOp(Operation *op) {
-//     return op->emitError() << " is unsupported";
-//   }
-//   LogicalResult visitUnhandledExpr(Operation *op) {
-//     return op->emitError() << " is unsupported";
-//   }
-//   LogicalResult visitInvalidComb(Operation *op) {
-//     return dispatchTypeOpVisitor(op);
-//   }
-//   LogicalResult visitUnhandledComb(Operation *op) {
-//     return visitUnhandledExpr(op);
-//   }
-//   LogicalResult visitInvalidTypeOp(Operation *op) {
-//     return visitUnhandledExpr(op);
-//   }
-//
-//   LogicalResult visitTypeOp(ConstantOp op) {
-//     if (op.getValue().getBitWidth() >= 32)
-//       return op.emitError() << "unsupported";
-//     return setLowering(
-//         op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
-//                                         op.getValue().getBitWidth())));
-//   }
-//
-//   using hw::TypeOpVisitor<ExprEmitter, LogicalResult>::visitTypeOp;
-//   using comb::CombinationalVisitor<ExprEmitter, LogicalResult>::visitComb;
-//
-//   LogicalResult visitComb(AddOp op);
-//   LogicalResult visitComb(SubOp op);
-//   LogicalResult visitComb(MuxOp op);
-//
-//   // Comb.
-//   // ResultTy visitComb(MuxOp op);
-//   template <typename BinaryFn>
-//   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
-//     // Construct n-1 binary op (currently linear) chains.
-//     // TODO: Need to create a tree?
-//     std::optional<SigSpec> cur;
-//     for (auto operand : op->getOperands()) {
-//       auto result = getValue(operand);
-//       if (failed(result))
-//         return failure();
-//       if (cur) {
-//         cur = fn(getNewName(), *cur, result.value());
-//       } else
-//         cur = result.value();
-//     }
-//
-//     return setLowering(op->getResult(0), cur.value());
-//   }
-//   RTLIL::IdString getNewName(StringRef name = "_GEN_");
-//   LogicalResult setLowering(Value value, Yosys::SigSpec);
-// };
-
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, LogicalResult>,
       public comb::CombinationalVisitor<ModuleConverter, LogicalResult> {
@@ -143,7 +81,6 @@ struct ModuleConverter
     auto it = mapping.find(value);
     if (it != mapping.end())
       return it->second;
-    // TODO: Convert ports.
     return failure();
   }
 
@@ -214,6 +151,7 @@ struct ModuleConverter
                         // Skip zero result operatins.
                         if (module == op)
                           return WalkResult::advance();
+
                         if (auto out = dyn_cast<hw::OutputOp>(op)) {
                           auto result = visitStmt(out);
                           if (failed(result))
@@ -221,10 +159,11 @@ struct ModuleConverter
                                    WalkResult::interrupt();
                           return WalkResult::advance();
                         }
+
                         if (auto reg = dyn_cast<seq::FirRegOp>(op))
                           visitSeq(reg);
                         else
-                          emitExpression(op);
+                          visitOp(op);
                         return WalkResult::advance();
                       })
                       .wasInterrupted();
@@ -254,7 +193,7 @@ struct ModuleConverter
   using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
   using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
 
-  LogicalResult emitExpression(Operation *op) {
+  LogicalResult visitOp(Operation *op) {
     return dispatchCombinationalVisitor(op);
   }
   LogicalResult visitUnhandledTypeOp(Operation *op) {
@@ -326,9 +265,8 @@ LogicalResult ModuleConverter::visitComb(MuxOp op) {
   if (failed(cond) || failed(high) || failed(low))
     return failure();
 
-  return setLowering(
-      op, rtlilModule->Mux(getNewName(), low.value(),
-                                         high.value(), cond.value()));
+  return setLowering(op, rtlilModule->Mux(getNewName(), low.value(),
+                                          high.value(), cond.value()));
 }
 
 void ExportYosysPass::runOnOperation() {
