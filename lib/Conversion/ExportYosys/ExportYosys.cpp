@@ -106,18 +106,6 @@ struct ModuleConverter
     return SigSpec(wire);
   }
 
-  LogicalResult visitStmt(OutputOp op) {
-    assert(op.getNumOperands() == outputs.size());
-    for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
-      auto result = getValue(op);
-      if (failed(result))
-        return failure();
-      rtlilModule->connect(Yosys::SigSpec(wire), result.value());
-    }
-
-    return success();
-  }
-
   LogicalResult run() {
     ModulePortInfo ports(module.getPortList());
     size_t inputPos = 0;
@@ -210,9 +198,16 @@ struct ModuleConverter
     return visitUnhandledExpr(op);
   }
   LogicalResult visitInvalidTypeOp(Operation *op) {
+    return dispatchStmtVisitor(op);
+  }
+  LogicalResult visitInvalidStmt(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  LogicalResult visitUnhandledStmt(Operation *op) {
     return visitUnhandledExpr(op);
   }
 
+  // HW type op.
   LogicalResult visitTypeOp(ConstantOp op) {
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
@@ -221,6 +216,20 @@ struct ModuleConverter
                                         op.getValue().getBitWidth())));
   }
 
+  // HW stmt op.
+  LogicalResult visitStmt(OutputOp op) {
+    assert(op.getNumOperands() == outputs.size());
+    for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
+      auto result = getValue(op);
+      if (failed(result))
+        return failure();
+      rtlilModule->connect(Yosys::SigSpec(wire), result.value());
+    }
+
+    return success();
+  }
+
+  // Comb.
   LogicalResult visitComb(AddOp op);
   LogicalResult visitComb(SubOp op);
   LogicalResult visitComb(MuxOp op);
