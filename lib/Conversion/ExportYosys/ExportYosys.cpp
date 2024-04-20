@@ -123,22 +123,26 @@ struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, FailureOr<bool>>,
       public comb::CombinationalVisitor<ModuleConverter, FailureOr<bool>> {
 
-  LogicalResult createWire(Value value, StringAttr name) {
-    auto type = value.getType();
-    int64_t width;
-    if (isa<seq::ClockType>(type))
-      width = 1;
-    else if (hw::isHWValueType(type)) {
-      width = hw::getBitWidth(type);
-    }
+  Yosys::Wire *createWire(Type type, StringAttr name) {
+    int64_t width = getBitWidthSeq(type);
 
     if (width < 0)
-      return failure();
+      return nullptr;
 
     auto *wire =
         rtlilModule->addWire(name ? getNewName(name) : getNewName(), width);
+    return wire;
+  }
 
-    return success(mapping.insert({value, SigSpec(wire)}).second);
+  LogicalResult createAndSetWire(Value value, StringAttr name) {
+    auto *wire = createWire(value.getType(), name);
+    if (!wire)
+      return failure();
+    return setValue(value, SigSpec(wire));
+  }
+
+  LogicalResult setValue(Value value, Yosys::SigSpec sig) {
+    return success(mapping.insert({value, sig}).second);
   }
 
   FailureOr<SigSpec> getValue(Value value) {
@@ -217,18 +221,15 @@ struct ModuleConverter
     ModulePortInfo ports(module.getPortList());
     size_t inputPos = 0;
     for (auto [idx, port] : llvm::enumerate(ports)) {
-      auto *wire = rtlilModule->addWire(getEscapedName(port.getName()));
+      auto *wire = createWire(port.type, port.name);
       // NOTE: Port id is 1-indexed.
       wire->port_id = idx + 1;
-      auto bitWidth = getBitWidthSeq(port.type);
-      assert(bitWidth >= 0);
-      wire->width = bitWidth;
       if (port.isOutput()) {
         wire->port_output = true;
         outputs.push_back(wire);
       } else if (port.isInput()) {
-        mapping[module.getBodyBlock()->getArgument(inputPos++)] =
-            Yosys::SigSpec(wire);
+        setValue(module.getBodyBlock()->getArgument(inputPos++),
+                 Yosys::RTLIL::SigSpec(wire));
         // TODO: Need to consider inout?
         wire->port_input = true;
       } else {
@@ -241,7 +242,7 @@ struct ModuleConverter
       for (auto result : op->getResults()) {
         // TODO: Use SSA name.
         mlir::StringAttr name = {};
-        createWire(result, name);
+        createAndSetWire(result, name);
       }
     });
 
