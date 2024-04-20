@@ -54,49 +54,49 @@ int64_t getBitWidthSeq(Type type) {
 }
 
 struct ExprEmitter
-    : public hw::TypeOpVisitor<ExprEmitter, FailureOr<Yosys::SigSpec>>,
-      public comb::CombinationalVisitor<ExprEmitter,
-                                        FailureOr<Yosys::SigSpec>> {
+    : public hw::TypeOpVisitor<ExprEmitter, LogicalResult>,
+      public comb::CombinationalVisitor<ExprEmitter, LogicalResult> {
   ExprEmitter(ModuleConverter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
   ModuleConverter &moduleEmitter;
   FailureOr<Yosys::SigSpec> getValue(Value value);
-  FailureOr<Yosys::SigSpec> emitExpression(Operation *op) {
+  LogicalResult emitExpression(Operation *op) {
     return dispatchCombinationalVisitor(op);
   }
-  FailureOr<Yosys::SigSpec> visitUnhandledTypeOp(Operation *op) {
+  LogicalResult visitUnhandledTypeOp(Operation *op) {
     return op->emitError() << " is unsupported";
   }
-  FailureOr<Yosys::SigSpec> visitUnhandledExpr(Operation *op) {
+  LogicalResult visitUnhandledExpr(Operation *op) {
     return op->emitError() << " is unsupported";
   }
-  FailureOr<Yosys::SigSpec> visitInvalidComb(Operation *op) {
+  LogicalResult visitInvalidComb(Operation *op) {
     return dispatchTypeOpVisitor(op);
   }
-  FailureOr<Yosys::SigSpec> visitUnhandledComb(Operation *op) {
+  LogicalResult visitUnhandledComb(Operation *op) {
     return visitUnhandledExpr(op);
   }
-  FailureOr<Yosys::SigSpec> visitInvalidTypeOp(Operation *op) {
+  LogicalResult visitInvalidTypeOp(Operation *op) {
     return visitUnhandledExpr(op);
   }
 
-  FailureOr<Yosys::SigSpec> visitTypeOp(ConstantOp op) {
+  LogicalResult visitTypeOp(ConstantOp op) {
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
-    return Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
-                                       op.getValue().getBitWidth()));
+    return setLowering(
+        op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
+                                        op.getValue().getBitWidth())));
   }
 
-  using hw::TypeOpVisitor<ExprEmitter, FailureOr<SigSpec>>::visitTypeOp;
-  using comb::CombinationalVisitor<ExprEmitter, FailureOr<SigSpec>>::visitComb;
+  using hw::TypeOpVisitor<ExprEmitter, LogicalResult>::visitTypeOp;
+  using comb::CombinationalVisitor<ExprEmitter, LogicalResult>::visitComb;
 
-  FailureOr<Yosys::SigSpec> visitComb(AddOp op);
-  FailureOr<Yosys::SigSpec> visitComb(SubOp op);
-  FailureOr<Yosys::SigSpec> visitComb(MuxOp op);
+  LogicalResult visitComb(AddOp op);
+  LogicalResult visitComb(SubOp op);
+  LogicalResult visitComb(MuxOp op);
 
   // Comb.
   // ResultTy visitComb(MuxOp op);
   template <typename BinaryFn>
-  FailureOr<Yosys::SigSpec> emitVariadicOp(Operation *op, BinaryFn fn) {
+  LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
     // Construct n-1 binary op (currently linear) chains.
     // TODO: Need to create a tree?
     std::optional<SigSpec> cur;
@@ -110,9 +110,10 @@ struct ExprEmitter
         cur = result.value();
     }
 
-    return cur.value();
+    return setLowering(op->getResult(0), cur.value());
   }
   RTLIL::IdString getNewName(StringRef name = "_GEN_");
+  LogicalResult setLowering(Value value, Yosys::SigSpec);
 };
 
 using ResultTy = FailureOr<bool>;
@@ -122,21 +123,28 @@ struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, FailureOr<bool>>,
       public comb::CombinationalVisitor<ModuleConverter, FailureOr<bool>> {
 
+  LogicalResult createWire(Value value, StringAttr name) {
+    auto type = value.getType();
+    int64_t width;
+    if (isa<seq::ClockType>(type))
+      width = 1;
+    else if (hw::isHWValueType(type)) {
+      width = hw::getBitWidth(type);
+    }
+
+    if (width < 0)
+      return failure();
+
+    auto *wire =
+        rtlilModule->addWire(name ? getNewName(name) : getNewName(), width);
+
+    return success(mapping.insert({value, SigSpec(wire)}).second);
+  }
+
   FailureOr<SigSpec> getValue(Value value) {
     auto it = mapping.find(value);
     if (it != mapping.end())
       return it->second;
-    if (isa<OpResult>(value)) {
-      // TODO: If it's instance like ...
-      auto *op = value.getDefiningOp();
-      auto result = ExprEmitter(*this).emitExpression(op);
-      // auto result = visit(op);
-      if (failed(result))
-        return op->emitError() << "lowering failed";
-
-      setLowering(op->getResult(0), result.value());
-      return result;
-    }
     // TODO: Convert ports.
     return failure();
   }
@@ -219,8 +227,8 @@ struct ModuleConverter
         wire->port_output = true;
         outputs.push_back(wire);
       } else if (port.isInput()) {
-        setLowering(module.getBodyBlock()->getArgument(inputPos++),
-                    Yosys::SigSpec(wire));
+        mapping[module.getBodyBlock()->getArgument(inputPos++)] =
+            Yosys::SigSpec(wire);
         // TODO: Need to consider inout?
         wire->port_input = true;
       } else {
@@ -229,10 +237,12 @@ struct ModuleConverter
     }
     // Need to call fixup ports after port mutations.
     rtlilModule->fixup_ports();
-    module.walk([this](seq::FirRegOp op) {
-      auto *wire = this->rtlilModule->addWire(getNewName(op.getName()),
-                                              getBitWidth(op.getType()));
-      setLowering(op.getResult(), SigSpec(wire));
+    module.walk([this](Operation *op) {
+      for (auto result : op->getResults()) {
+        // TODO: Use SSA name.
+        mlir::StringAttr name = {};
+        createWire(result, name);
+      }
     });
 
     auto result = module
@@ -249,6 +259,8 @@ struct ModuleConverter
                         }
                         if (auto reg = dyn_cast<seq::FirRegOp>(op))
                           visitSeq(reg);
+                        else
+                          ExprEmitter(*this).emitExpression(op);
                         return WalkResult::advance();
                       })
                       .wasInterrupted();
@@ -263,7 +275,10 @@ struct ModuleConverter
   SmallVector<RTLIL::Wire *> outputs;
 
   LogicalResult setLowering(Value value, SigSpec s) {
-    return success(mapping.insert({value, s}).second);
+    auto it = mapping.find(value);
+    assert(it != mapping.end());
+    rtlilModule->connect(it->second, s);
+    return success();
   }
 
   Yosys::RTLIL::Design *design;
@@ -277,32 +292,37 @@ FailureOr<SigSpec> ExprEmitter::getValue(Value value) {
   return moduleEmitter.getValue(value);
 }
 
-FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(AddOp op) {
+LogicalResult ExprEmitter::visitComb(AddOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
     return moduleEmitter.rtlilModule->Add(name, l, r);
   });
 }
 
-FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(SubOp op) {
+LogicalResult ExprEmitter::visitComb(SubOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
     return moduleEmitter.rtlilModule->Sub(name, l, r);
   });
 }
 
-FailureOr<Yosys::SigSpec> ExprEmitter::visitComb(MuxOp op) {
+LogicalResult ExprEmitter::visitComb(MuxOp op) {
   auto cond = getValue(op.getCond());
   auto high = getValue(op.getTrueValue());
   auto low = getValue(op.getFalseValue());
   if (failed(cond) || failed(high) || failed(low))
     return failure();
-  return moduleEmitter.rtlilModule->Mux(getNewName(), low.value(),
-                                        high.value(), cond.value());
+
+  return setLowering(
+      op, moduleEmitter.rtlilModule->Mux(getNewName(), low.value(),
+                                         high.value(), cond.value()));
 }
 
-RTLIL::IdString ExprEmitter::getNewName(StringRef name) {
+Yosys::IdString ExprEmitter::getNewName(StringRef name) {
   return moduleEmitter.getNewName(name);
 }
 
+LogicalResult ExprEmitter::setLowering(Value value, Yosys::SigSpec sig) {
+  return moduleEmitter.setLowering(value, sig);
+} // namespace
 } // namespace
 
 void ExportYosysPass::runOnOperation() {
