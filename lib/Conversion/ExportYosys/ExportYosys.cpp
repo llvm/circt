@@ -173,7 +173,7 @@ struct ModuleConverter
                   Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
       : design(design), rtlilModule(rtlilModule), module(module) {}
 
-  DenseMap<Value, RTLIL::Wire*> mapping;
+  DenseMap<Value, RTLIL::Wire *> mapping;
   SmallVector<RTLIL::Wire *> outputs;
 
   LogicalResult setLowering(Value value, SigSpec s) {
@@ -181,6 +181,11 @@ struct ModuleConverter
     assert(it != mapping.end());
     rtlilModule->connect(it->second, s);
     return success();
+  }
+
+  template <typename SigSpecTy>
+  LogicalResult setLowering(Value value, SigSpecTy s) {
+    return setLowering(value, SigSpec(s));
   }
 
   Yosys::RTLIL::Design *design;
@@ -222,9 +227,8 @@ struct ModuleConverter
   LogicalResult visitTypeOp(ConstantOp op) {
     if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
-    return setLowering(
-        op, Yosys::SigSpec(RTLIL::Const(op.getValue().getZExtValue(),
-                                        op.getValue().getBitWidth())));
+    return setLowering(op, RTLIL::Const(op.getValue().getZExtValue(),
+                                        op.getValue().getBitWidth()));
   }
 
   // HW stmt op.
