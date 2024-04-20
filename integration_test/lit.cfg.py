@@ -207,6 +207,16 @@ if config.z3_path != "":
   tools.append('z3')
   config.available_features.add('z3')
 
+# Enable libz3 if it has been detected.
+if config.z3_library != "":
+  tools.append(ToolSubst(f"%libz3", config.z3_library))
+  config.available_features.add('libz3')
+
+# Add mlir-cpu-runner if the execution engine is built.
+if config.mlir_enable_execution_engine:
+  config.available_features.add('mlir-cpu-runner')
+  tools.append('mlir-cpu-runner')
+
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:
   config.available_features.add('slang')

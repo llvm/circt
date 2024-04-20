@@ -41,6 +41,7 @@
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/PipelineToHW.h"
 #include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Conversion/SimToSV.h"
 #include "circt/Conversion/VerifToSMT.h"

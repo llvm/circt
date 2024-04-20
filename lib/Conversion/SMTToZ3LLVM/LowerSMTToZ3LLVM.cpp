@@ -1,0 +1,925 @@
+//===- LowerSMTToZ3LLVM.cpp -----------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "circt/Conversion/SMTToZ3LLVM.h"
+#include "circt/Dialect/SMT/SMTOps.h"
+#include "circt/Support/Namespace.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "lower-smt-to-z3-llvm"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERSMTTOZ3LLVM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
+
+using namespace mlir;
+using namespace circt;
+using namespace smt;
+
+//===----------------------------------------------------------------------===//
+// SMTGlobalHandler implementation
+//===----------------------------------------------------------------------===//
+
+SMTGlobalsHandler SMTGlobalsHandler::create(OpBuilder &builder,
+                                            ModuleOp module) {
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(module.getBody());
+
+  SymbolCache symCache;
+  symCache.addDefinitions(module);
+  Namespace names;
+  names.add(symCache);
+
+  Location loc = module.getLoc();
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+
+  auto createGlobal = [&](StringRef namePrefix) {
+    auto global = builder.create<LLVM::GlobalOp>(
+        loc, ptrTy, false, LLVM::Linkage::Internal, names.newName(namePrefix),
+        Attribute{}, /*alignment=*/8);
+    OpBuilder::InsertionGuard g(builder);
+    builder.createBlock(&global.getInitializer());
+    Value res = builder.create<LLVM::ZeroOp>(loc, ptrTy);
+    builder.create<LLVM::ReturnOp>(loc, res);
+    return global;
+  };
+
+  auto ctxGlobal = createGlobal("ctx");
+  auto solverGlobal = createGlobal("solver");
+
+  return SMTGlobalsHandler(std::move(names), solverGlobal, ctxGlobal);
+}
+
+SMTGlobalsHandler::SMTGlobalsHandler(Namespace &&names,
+                                     mlir::LLVM::GlobalOp solver,
+                                     mlir::LLVM::GlobalOp ctx)
+    : solver(solver), ctx(ctx), names(names) {}
+
+SMTGlobalsHandler::SMTGlobalsHandler(ModuleOp module,
+                                     mlir::LLVM::GlobalOp solver,
+                                     mlir::LLVM::GlobalOp ctx)
+    : solver(solver), ctx(ctx) {
+  SymbolCache symCache;
+  symCache.addDefinitions(module);
+  names.add(symCache);
+}
+
+//===----------------------------------------------------------------------===//
+// Lowering Pattern Base
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+template <typename OpTy>
+class SMTLoweringPattern : public OpConversionPattern<OpTy> {
+public:
+  SMTLoweringPattern(const TypeConverter &typeConverter, MLIRContext *context,
+                     SMTGlobalsHandler &globals,
+                     const LowerSMTToZ3LLVMOptions &options)
+      : OpConversionPattern<OpTy>(typeConverter, context), globals(globals),
+        options(options) {}
+
+private:
+  Value buildGlobalPtrToGlobal(OpBuilder &builder, Location loc,
+                               LLVM::GlobalOp global,
+                               DenseMap<Block *, Value> &cache) const {
+    Block *block = builder.getBlock();
+    if (auto iter = cache.find(block); iter != cache.end())
+      return iter->getSecond();
+
+    Value globalAddr = builder.create<LLVM::AddressOfOp>(loc, global);
+    return cache[block] = builder.create<LLVM::LoadOp>(
+               loc, LLVM::LLVMPointerType::get(builder.getContext()),
+               globalAddr);
+  }
+
+protected:
+  /// A convenience function to get the pointer to the context from the 'global'
+  /// operation. The result is cached for each basic block, i.e., it is assumed
+  /// that this function is never called in the same basic block again at a
+  /// location (insertion point of the 'builder') not dominating all previous
+  /// locations this function was called at.
+  Value buildContextPtr(OpBuilder &builder, Location loc) const {
+    return buildGlobalPtrToGlobal(builder, loc, globals.ctx, globals.ctxCache);
+  }
+
+  /// A convenience function to get the pointer to the solver from the 'global'
+  /// operation. The result is cached for each basic block, i.e., it is assumed
+  /// that this function is never called in the same basic block again at a
+  /// location (insertion point of the 'builder') not dominating all previous
+  /// locations this function was called at.
+  Value buildSolverPtr(OpBuilder &builder, Location loc) const {
+    return buildGlobalPtrToGlobal(builder, loc, globals.solver,
+                                  globals.solverCache);
+  }
+
+  /// Create a `llvm.call` operation to a function with the given 'name' and
+  /// 'type'. If there does not already exist a (external) function with that
+  /// name create a matching external function declaration.
+  LLVM::CallOp buildCall(OpBuilder &builder, Location loc, StringRef name,
+                         LLVM::LLVMFunctionType funcType,
+                         ValueRange args) const {
+    auto &funcOp = globals.funcMap[name];
+    if (!funcOp) {
+      OpBuilder::InsertionGuard guard(builder);
+      auto module =
+          builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
+      builder.setInsertionPointToEnd(module.getBody());
+      funcOp = LLVM::lookupOrCreateFn(module, name, funcType.getParams(),
+                                      funcType.getReturnType(),
+                                      funcType.getVarArg());
+    }
+    return builder.create<LLVM::CallOp>(loc, funcOp, args);
+  }
+
+  /// Build a global constant for the given string and construct an 'addressof'
+  /// operation at the current 'builder' insertion point to get a pointer to it.
+  /// Multiple calls with the same string will reuse the same global. It is
+  /// guaranteed that the symbol of the global will be unique.
+  Value buildString(OpBuilder &builder, Location loc, StringRef str) const {
+    auto &global = globals.stringCache[str];
+    if (!global) {
+      OpBuilder::InsertionGuard guard(builder);
+      auto module =
+          builder.getBlock()->getParent()->getParentOfType<ModuleOp>();
+      builder.setInsertionPointToEnd(module.getBody());
+      auto arrayTy =
+          LLVM::LLVMArrayType::get(builder.getI8Type(), str.size() + 1);
+      auto strAttr = builder.getStringAttr(str.str() + '\00');
+      global = builder.create<LLVM::GlobalOp>(
+          loc, arrayTy, /*isConstant=*/true, LLVM::Linkage::Internal,
+          globals.names.newName("str"), strAttr);
+    }
+    return builder.create<LLVM::AddressOfOp>(loc, global);
+  }
+  /// Most API functions require a pointer to the the Z3 context object as the
+  /// first argument. This helper function prepends this pointer value to the
+  /// call for convenience.
+  LLVM::CallOp buildAPICallWithContext(OpBuilder &builder, Location loc,
+                                       StringRef name, Type returnType,
+                                       ValueRange args = {}) const {
+    auto ctx = buildContextPtr(builder, loc);
+    SmallVector<Value> arguments;
+    arguments.emplace_back(ctx);
+    arguments.append(SmallVector<Value>(args));
+    return buildCall(
+        builder, loc, name,
+        LLVM::LLVMFunctionType::get(
+            returnType, SmallVector<Type>(ValueRange(arguments).getTypes())),
+        arguments);
+  }
+
+  /// Most API functions we need to call return a 'Z3_AST' object which is a
+  /// pointer in LLVM. This helper function simplifies calling those API
+  /// functions.
+  Value buildPtrAPICall(OpBuilder &builder, Location loc, StringRef name,
+                        ValueRange args = {}) const {
+    return buildAPICallWithContext(
+               builder, loc, name,
+               LLVM::LLVMPointerType::get(builder.getContext()), args)
+        ->getResult(0);
+  }
+
+  /// Build a value representing the SMT sort given with 'type'.
+  Value buildSort(OpBuilder &builder, Location loc, Type type) const {
+    // NOTE: if a type not handled by this switch is passed, an assertion will
+    // be triggered.
+    return TypeSwitch<Type, Value>(type)
+        .Case([&](smt::IntType ty) {
+          return buildPtrAPICall(builder, loc, "Z3_mk_int_sort");
+        })
+        .Case([&](smt::BitVectorType ty) {
+          Value bitwidth = builder.create<LLVM::ConstantOp>(
+              loc, builder.getI32Type(), ty.getWidth());
+          return buildPtrAPICall(builder, loc, "Z3_mk_bv_sort", {bitwidth});
+        })
+        .Case([&](smt::BoolType ty) {
+          return buildPtrAPICall(builder, loc, "Z3_mk_bool_sort");
+        })
+        .Case([&](smt::SortType ty) {
+          Value str = buildString(builder, loc, ty.getIdentifier());
+          Value sym =
+              buildPtrAPICall(builder, loc, "Z3_mk_string_symbol", {str});
+          return buildPtrAPICall(builder, loc, "Z3_mk_uninterpreted_sort",
+                                 {sym});
+        })
+        .Case([&](smt::ArrayType ty) {
+          return buildPtrAPICall(builder, loc, "Z3_mk_array_sort",
+                                 {buildSort(builder, loc, ty.getDomainType()),
+                                  buildSort(builder, loc, ty.getRangeType())});
+        });
+  }
+
+  SMTGlobalsHandler &globals;
+  const LowerSMTToZ3LLVMOptions &options;
+};
+
+//===----------------------------------------------------------------------===//
+// Lowering Patterns
+//===----------------------------------------------------------------------===//
+
+/// The 'smt.declare_fun' operation is used to declare both constants and
+/// functions. The Z3 API, however, uses two different functions. Therefore,
+/// depending on the result type of this operation, one of the following two
+/// API functions is used to create the symbolic value:
+/// ```
+/// Z3_ast Z3_API Z3_mk_fresh_const(Z3_context c, Z3_string prefix, Z3_sort ty);
+/// Z3_func_decl Z3_API Z3_mk_fresh_func_decl(
+///     Z3_context c, Z3_string prefix, unsigned domain_size,
+///     Z3_sort const domain[], Z3_sort range);
+/// ```
+struct DeclareFunOpLowering : public SMTLoweringPattern<DeclareFunOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(DeclareFunOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+
+    // Create the name prefix.
+    Value prefix;
+    if (adaptor.getNamePrefix())
+      prefix = buildString(rewriter, loc, *adaptor.getNamePrefix());
+    else
+      prefix = rewriter.create<LLVM::ZeroOp>(
+          loc, LLVM::LLVMPointerType::get(getContext()));
+
+    // Handle the constant value case.
+    if (!isa<SMTFuncType>(op.getType())) {
+      Value sort = buildSort(rewriter, loc, op.getType());
+      Value constDecl =
+          buildPtrAPICall(rewriter, loc, "Z3_mk_fresh_const", {prefix, sort});
+      rewriter.replaceOp(op, constDecl);
+      return success();
+    }
+
+    // Otherwise, we declare a function.
+    Type llvmPtrTy = LLVM::LLVMPointerType::get(getContext());
+    auto funcType = cast<SMTFuncType>(op.getResult().getType());
+    Value rangeSort = buildSort(rewriter, loc, funcType.getRangeType());
+
+    Type arrTy =
+        LLVM::LLVMArrayType::get(llvmPtrTy, funcType.getDomainTypes().size());
+
+    Value domain = rewriter.create<LLVM::UndefOp>(loc, arrTy);
+    for (auto [i, ty] : llvm::enumerate(funcType.getDomainTypes())) {
+      Value sort = buildSort(rewriter, loc, ty);
+      domain = rewriter.create<LLVM::InsertValueOp>(loc, domain, sort, i);
+    }
+
+    Value one =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), 1);
+    Value domainStorage =
+        rewriter.create<LLVM::AllocaOp>(loc, llvmPtrTy, arrTy, one);
+    rewriter.create<LLVM::StoreOp>(loc, domain, domainStorage);
+
+    Value domainSize = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(), funcType.getDomainTypes().size());
+    Value decl =
+        buildPtrAPICall(rewriter, loc, "Z3_mk_fresh_func_decl",
+                        {prefix, domainSize, domainStorage, rangeSort});
+
+    rewriter.replaceOp(op, decl);
+    return success();
+  }
+};
+
+/// Lower the 'smt.apply_func' operation to Z3 API calls of the form:
+/// ```
+/// Z3_ast Z3_API Z3_mk_app(Z3_context c, Z3_func_decl d,
+///                         unsigned num_args, Z3_ast const args[]);
+/// ```
+struct ApplyFuncOpLowering : public SMTLoweringPattern<ApplyFuncOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(ApplyFuncOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Type llvmPtrTy = LLVM::LLVMPointerType::get(getContext());
+    Type arrTy = LLVM::LLVMArrayType::get(llvmPtrTy, adaptor.getArgs().size());
+
+    // Create an array of the function arguments.
+    Value domain = rewriter.create<LLVM::UndefOp>(loc, arrTy);
+    for (auto [i, arg] : llvm::enumerate(adaptor.getArgs()))
+      domain = rewriter.create<LLVM::InsertValueOp>(loc, domain, arg, i);
+
+    // Store the array on the stack.
+    Value one =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), 1);
+    Value domainStorage =
+        rewriter.create<LLVM::AllocaOp>(loc, llvmPtrTy, arrTy, one);
+    rewriter.create<LLVM::StoreOp>(loc, domain, domainStorage);
+
+    // Call the API function with a pointer to the function, the number of
+    // arguments, and the pointer to the arguments stored on the stack.
+    Value domainSize = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(), adaptor.getArgs().size());
+    Value returnVal =
+        buildPtrAPICall(rewriter, loc, "Z3_mk_app",
+                        {adaptor.getFunc(), domainSize, domainStorage});
+    rewriter.replaceOp(op, returnVal);
+
+    return success();
+  }
+};
+
+/// Lower the `smt.bv.constant` operation to either
+/// ```
+/// Z3_ast Z3_API Z3_mk_unsigned_int64(Z3_context c, uint64_t v, Z3_sort ty);
+/// ```
+/// if the bit-vector fits into a 64-bit integer or convert it to a string and
+/// use the sligtly slower but arbitrary precision API function:
+/// ```
+/// Z3_ast Z3_API Z3_mk_numeral(Z3_context c, Z3_string numeral, Z3_sort ty);
+/// ```
+/// Note that there is also an API function taking an array of booleans, and
+/// while those are typically compiled to 'i8' in LLVM they don't necessarily
+/// have to (I think).
+struct BVConstantOpLowering : public SMTLoweringPattern<smt::BVConstantOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(smt::BVConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    unsigned width = op.getType().getWidth();
+    auto bvSort = buildSort(rewriter, loc, op.getResult().getType());
+    APInt val = adaptor.getValue().getValue();
+
+    if (width <= 64) {
+      Value bvConst = rewriter.create<LLVM::ConstantOp>(
+          loc, rewriter.getI64Type(), val.getZExtValue());
+      Value res = buildPtrAPICall(rewriter, loc, "Z3_mk_unsigned_int64",
+                                  {bvConst, bvSort});
+      rewriter.replaceOp(op, res);
+      return success();
+    }
+
+    std::string str;
+    llvm::raw_string_ostream stream(str);
+    stream << val;
+    Value bvString = buildString(rewriter, loc, str);
+    Value bvNumeral =
+        buildPtrAPICall(rewriter, loc, "Z3_mk_numeral", {bvString, bvSort});
+
+    rewriter.replaceOp(op, bvNumeral);
+    return success();
+  }
+};
+
+/// Some of the Z3 API supports a variadic number of operands for some
+/// operations (in particular if the expansion would lead to a super-linear
+/// increase in operations such as with the ':pairwise' attribute). Those API
+/// calls take an 'unsigned' argument indicating the size of an array of
+/// pointers to the operands.
+template <typename SourceTy>
+struct VariadicSMTPattern : public SMTLoweringPattern<SourceTy> {
+  using OpAdaptor = typename SMTLoweringPattern<SourceTy>::OpAdaptor;
+
+  VariadicSMTPattern(const TypeConverter &typeConverter, MLIRContext *context,
+                     SMTGlobalsHandler &globals,
+                     const LowerSMTToZ3LLVMOptions &options,
+                     StringRef apiFuncName, unsigned minNumArgs)
+      : SMTLoweringPattern<SourceTy>(typeConverter, context, globals, options),
+        apiFuncName(apiFuncName), minNumArgs(minNumArgs) {}
+
+  LogicalResult
+  matchAndRewrite(SourceTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (adaptor.getOperands().size() < minNumArgs)
+      return failure();
+
+    Location loc = op.getLoc();
+    Value numOperands = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(), op->getNumOperands());
+    Value constOne =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), 1);
+    Type ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Type arrTy = LLVM::LLVMArrayType::get(ptrTy, op->getNumOperands());
+    Value storage =
+        rewriter.create<LLVM::AllocaOp>(loc, ptrTy, arrTy, constOne);
+    Value array = rewriter.create<LLVM::UndefOp>(loc, arrTy);
+
+    for (auto [i, operand] : llvm::enumerate(adaptor.getOperands()))
+      array = rewriter.create<LLVM::InsertValueOp>(
+          loc, array, operand, ArrayRef<int64_t>{(int64_t)i});
+
+    rewriter.create<LLVM::StoreOp>(loc, array, storage);
+
+    rewriter.replaceOp(op,
+                       SMTLoweringPattern<SourceTy>::buildPtrAPICall(
+                           rewriter, loc, apiFuncName, {numOperands, storage}));
+    return success();
+  }
+
+private:
+  StringRef apiFuncName;
+  unsigned minNumArgs;
+};
+
+/// Lower an SMT operation to a function call with the name 'apiFuncName' with
+/// arguments matching the operands one-to-one.
+template <typename SourceTy>
+struct OneToOneSMTPattern : public SMTLoweringPattern<SourceTy> {
+  using OpAdaptor = typename SMTLoweringPattern<SourceTy>::OpAdaptor;
+
+  OneToOneSMTPattern(const TypeConverter &typeConverter, MLIRContext *context,
+                     SMTGlobalsHandler &globals,
+                     const LowerSMTToZ3LLVMOptions &options,
+                     StringRef apiFuncName, unsigned numOperands)
+      : SMTLoweringPattern<SourceTy>(typeConverter, context, globals, options),
+        apiFuncName(apiFuncName), numOperands(numOperands) {}
+
+  LogicalResult
+  matchAndRewrite(SourceTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (adaptor.getOperands().size() != numOperands)
+      return failure();
+
+    rewriter.replaceOp(
+        op, SMTLoweringPattern<SourceTy>::buildPtrAPICall(
+                rewriter, op.getLoc(), apiFuncName, adaptor.getOperands()));
+    return success();
+  }
+
+private:
+  StringRef apiFuncName;
+  unsigned numOperands;
+};
+
+/// A pattern to lower SMT operations with a variadic number of operands
+/// modelling the ':chainable' attribute in SMT to binary operations.
+template <typename SourceTy>
+class LowerChainableSMTPattern : public SMTLoweringPattern<SourceTy> {
+  using SMTLoweringPattern<SourceTy>::SMTLoweringPattern;
+  using OpAdaptor = typename SMTLoweringPattern<SourceTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (adaptor.getOperands().size() <= 2)
+      return failure();
+
+    Location loc = op.getLoc();
+    SmallVector<Value> elements;
+    for (int i = 1, e = adaptor.getOperands().size(); i < e; ++i) {
+      Value val = rewriter.create<SourceTy>(
+          loc, op->getResultTypes(),
+          ValueRange{adaptor.getOperands()[i - 1], adaptor.getOperands()[i]});
+      elements.push_back(val);
+    }
+    rewriter.replaceOpWithNewOp<smt::AndOp>(op, elements);
+    return success();
+  }
+};
+
+/// The 'smt.solver' operation has a region that corresponds to the lifetime of
+/// the Z3 context and one solver instance created within this context.
+/// To create a context, a Z3 configuration has to be built first and various
+/// configuration parameters can be set before creating a context from it. Once
+/// we have a context, we can create a solver and store a pointer to the context
+/// and the solver in an LLVM global such that operations in the child region
+/// have access to them. While the context created with `Z3_mk_context` takes
+/// care of the reference counting of `Z3_AST` objects, it still requires manual
+/// reference counting of `Z3_solver` objects, therefore, we need to increase
+/// the ref. counter of the solver we get from `Z3_mk_solver` and must decrease
+/// it again once we don't need it anymore. Finally, the configuration object
+/// can be deleted.
+/// ```
+/// Z3_config Z3_API Z3_mk_config(void);
+/// void Z3_API Z3_set_param_value(Z3_config c, Z3_string param_id,
+///                                Z3_string param_value);
+/// Z3_context Z3_API Z3_mk_context(Z3_config c);
+/// Z3_solver Z3_API Z3_mk_solver(Z3_context c);
+/// void Z3_API Z3_solver_inc_ref(Z3_context c, Z3_solver s);
+/// void Z3_API Z3_del_config(Z3_config c);
+/// ```
+/// At the end of the solver lifetime, we have to tell the context that we
+/// don't need the solver anymore and delete the context itself.
+/// ```
+/// void Z3_API Z3_solver_dec_ref(Z3_context c, Z3_solver s);
+/// void Z3_API Z3_del_context(Z3_context c);
+/// ```
+/// Note that the solver created here is a combined solver. There might be some
+/// potential for optimization by creating more specialized solvers supported by
+/// the Z3 API according the the kind of operations present in the body region.
+struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(SolverOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto voidTy = LLVM::LLVMVoidType::get(getContext());
+    auto ptrToPtrFunc = LLVM::LLVMFunctionType::get(ptrTy, ptrTy);
+    auto ptrToVoidFunc = LLVM::LLVMFunctionType::get(voidTy, ptrTy);
+    auto ptrPtrToVoidFunc = LLVM::LLVMFunctionType::get(voidTy, {ptrTy, ptrTy});
+
+    // Create the configuration.
+    Value config = buildCall(rewriter, loc, "Z3_mk_config",
+                             LLVM::LLVMFunctionType::get(ptrTy, {}), {})
+                       .getResult();
+
+    // In debug-mode, we enable proofs such that we can fetch one in the 'unsat'
+    // region of each 'smt.check' operation.
+    if (options.debug) {
+      Value paramKey = buildString(rewriter, loc, "proof");
+      Value paramValue = buildString(rewriter, loc, "true");
+      buildCall(rewriter, loc, "Z3_set_param_value",
+                LLVM::LLVMFunctionType::get(voidTy, {ptrTy, ptrTy, ptrTy}),
+                {config, paramKey, paramValue});
+    }
+
+    // Create the context and store a pointer to it in the global variable.
+    Value ctx = buildCall(rewriter, loc, "Z3_mk_context", ptrToPtrFunc, config)
+                    .getResult();
+    Value ctxAddr =
+        rewriter.create<LLVM::AddressOfOp>(loc, globals.ctx).getResult();
+    rewriter.create<LLVM::StoreOp>(loc, ctx, ctxAddr);
+
+    // Delete the configuration again.
+    buildCall(rewriter, loc, "Z3_del_config", ptrToVoidFunc, {config});
+
+    // Create a solver instance, increase its reference counter, and store a
+    // pointer to it in the global variable.
+    Value solver = buildCall(rewriter, loc, "Z3_mk_solver", ptrToPtrFunc, ctx)
+                       ->getResult(0);
+    buildCall(rewriter, loc, "Z3_solver_inc_ref", ptrPtrToVoidFunc,
+              {ctx, solver});
+    Value solverAddr =
+        rewriter.create<LLVM::AddressOfOp>(loc, globals.solver).getResult();
+    rewriter.create<LLVM::StoreOp>(loc, solver, solverAddr);
+
+    // This assumes that no constant hoisting of the like happens inbetween
+    // the patterns defined in this pass because once the solver initialization
+    // and deallocation calls are inserted and the body region is inlined,
+    // canonicalizations and folders applied inbetween lowering patterns might
+    // hoist the SMT constants which means they would access uninitialized
+    // global variables once they are lowered.
+    SmallVector<Type> convertedTypes;
+    if (failed(
+            typeConverter->convertTypes(op->getResultTypes(), convertedTypes)))
+      return failure();
+
+    func::FuncOp funcOp;
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      auto module = op->getParentOfType<ModuleOp>();
+      rewriter.setInsertionPointToEnd(module.getBody());
+
+      funcOp = rewriter.create<func::FuncOp>(
+          loc, globals.names.newName("solver"),
+          rewriter.getFunctionType(adaptor.getInputs().getTypes(),
+                                   convertedTypes));
+      rewriter.inlineRegionBefore(op.getBodyRegion(), funcOp.getBody(),
+                                  funcOp.end());
+    }
+
+    ValueRange results =
+        rewriter.create<func::CallOp>(loc, funcOp, adaptor.getInputs())
+            ->getResults();
+
+    // At the end of the region, decrease the solver's reference counter and
+    // delete the context.
+    // NOTE: we cannot use the convenience helper here because we don't want to
+    // load the context from the global but use the result from the 'mk_context'
+    // call directly for two reasons:
+    // * avoid an unnecessary load
+    // * the caching mechanism of the context does not work here because it
+    // would reuse the loaded context from a earlier solver
+    buildCall(rewriter, loc, "Z3_solver_dec_ref", ptrPtrToVoidFunc,
+              {ctx, solver});
+    buildCall(rewriter, loc, "Z3_del_context", ptrToVoidFunc, ctx);
+
+    rewriter.replaceOp(op, results);
+    return success();
+  }
+};
+
+/// Lower `smt.assert` operations to Z3 API calls of the form:
+/// ```
+/// void Z3_API Z3_solver_assert(Z3_context c, Z3_solver s, Z3_ast a);
+/// ```
+struct AssertOpLowering : public SMTLoweringPattern<AssertOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    buildAPICallWithContext(
+        rewriter, loc, "Z3_solver_assert",
+        LLVM::LLVMVoidType::get(getContext()),
+        {buildSolverPtr(rewriter, loc), adaptor.getInput()});
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Lower `smt.yield` operations to `scf.yield` operations. This not necessary
+/// for the yield in `smt.solver` or in quantifiers since they are deleted
+/// directly by the parent operation, but makes the lowering of the `smt.check`
+/// operation simpler and more convenient since the regions get translated
+/// directly to regions of `scf.if` operations.
+struct YieldOpLowering : public SMTLoweringPattern<YieldOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(YieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (op->getParentOfType<func::FuncOp>()) {
+      rewriter.replaceOpWithNewOp<func::ReturnOp>(op, adaptor.getValues());
+      return success();
+    }
+    if (op->getParentOfType<LLVM::LLVMFuncOp>()) {
+      rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, adaptor.getValues());
+      return success();
+    }
+    if (isa<scf::SCFDialect>(op->getParentOp()->getDialect())) {
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getValues());
+      return success();
+    }
+    return failure();
+  }
+};
+
+/// Lower `smt.check` operations to Z3 API calls and control-flow operations.
+/// ```
+/// Z3_lbool Z3_API Z3_solver_check(Z3_context c, Z3_solver s);
+///
+/// typedef enum
+/// {
+///     Z3_L_FALSE = -1, // means unsatisfiable here
+///     Z3_L_UNDEF,      // means unknown here
+///     Z3_L_TRUE        // means satisfiable here
+/// } Z3_lbool;
+/// ```
+struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
+
+  LogicalResult
+  matchAndRewrite(CheckOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto printfType =
+        LLVM::LLVMFunctionType::get(rewriter.getI32Type(), {ptrTy}, true);
+
+    auto getHeaderString = [](const std::string &title) {
+      unsigned titleSize = title.size() + 2; // Add a space left and right
+      return std::string((80 - titleSize) / 2, '-') + " " + title + " " +
+             std::string((80 - titleSize + 1) / 2, '-') + "\n%s\n" +
+             std::string(80, '-') + "\n";
+    };
+
+    // Get the pointer to the solver instance.
+    Value solver = buildSolverPtr(rewriter, loc);
+
+    // In debug-mode, print the state of the solver before calling 'check-sat'
+    // on it. This prints the asserted SMT expressions.
+    if (options.debug) {
+      auto solverStringPtr =
+          buildPtrAPICall(rewriter, loc, "Z3_solver_to_string", {solver});
+      auto solverFormatString =
+          buildString(rewriter, loc, getHeaderString("Solver"));
+      buildCall(rewriter, op.getLoc(), "printf", printfType,
+                {solverFormatString, solverStringPtr});
+    }
+
+    // Convert the result types of the `smt.check` operation.
+    SmallVector<Type> resultTypes;
+    if (failed(typeConverter->convertTypes(op->getResultTypes(), resultTypes)))
+      return failure();
+
+    // Call 'check-sat' and check if the assertions are satisfiable.
+    Value checkResult =
+        buildAPICallWithContext(rewriter, loc, "Z3_solver_check",
+                                rewriter.getI32Type(), {solver})
+            ->getResult(0);
+    Value constOne =
+        rewriter.create<LLVM::ConstantOp>(loc, checkResult.getType(), 1);
+    Value isSat = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq,
+                                                checkResult, constOne);
+
+    // Simply inline the 'sat' region into the 'then' region of the 'scf.if'
+    auto satIfOp = rewriter.create<scf::IfOp>(loc, resultTypes, isSat);
+    rewriter.inlineRegionBefore(op.getSatRegion(), satIfOp.getThenRegion(),
+                                satIfOp.getThenRegion().end());
+
+    // Otherwise, the 'else' block checks if the assertions are unsatisfiable or
+    // unknown. The corresponding regions can also be simply inlined into the
+    // two branches of this nested if-statement as well.
+    rewriter.createBlock(&satIfOp.getElseRegion());
+    Value constNegOne =
+        rewriter.create<LLVM::ConstantOp>(loc, checkResult.getType(), -1);
+    Value isUnsat = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq,
+                                                  checkResult, constNegOne);
+    auto unsatIfOp = rewriter.create<scf::IfOp>(loc, resultTypes, isUnsat);
+    rewriter.create<scf::YieldOp>(loc, unsatIfOp->getResults());
+
+    rewriter.inlineRegionBefore(op.getUnsatRegion(), unsatIfOp.getThenRegion(),
+                                unsatIfOp.getThenRegion().end());
+    rewriter.inlineRegionBefore(op.getUnknownRegion(),
+                                unsatIfOp.getElseRegion(),
+                                unsatIfOp.getElseRegion().end());
+
+    rewriter.replaceOp(op, satIfOp->getResults());
+
+    if (options.debug) {
+      // In debug-mode, if the assertions are unsatisfiable we can print the
+      // proof.
+      rewriter.setInsertionPointToStart(unsatIfOp.thenBlock());
+      auto proof = buildPtrAPICall(rewriter, op.getLoc(), "Z3_solver_get_proof",
+                                   {solver});
+      auto stringPtr =
+          buildPtrAPICall(rewriter, op.getLoc(), "Z3_ast_to_string", {proof});
+      auto formatString =
+          buildString(rewriter, op.getLoc(), getHeaderString("Proof"));
+      buildCall(rewriter, op.getLoc(), "printf", printfType,
+                {formatString, stringPtr});
+
+      // In debug mode, if the assertions are satisfiable we can print the model
+      // (effectively a counter-example).
+      rewriter.setInsertionPointToStart(satIfOp.thenBlock());
+      auto model = buildPtrAPICall(rewriter, op.getLoc(), "Z3_solver_get_model",
+                                   {solver});
+      auto modelStringPtr =
+          buildPtrAPICall(rewriter, op.getLoc(), "Z3_model_to_string", {model});
+      auto modelFormatString =
+          buildString(rewriter, op.getLoc(), getHeaderString("Model"));
+      buildCall(rewriter, op.getLoc(), "printf", printfType,
+                {modelFormatString, modelStringPtr});
+    }
+
+    return success();
+  }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Pass Implementation
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct LowerSMTToZ3LLVMPass
+    : public circt::impl::LowerSMTToZ3LLVMBase<LowerSMTToZ3LLVMPass> {
+  using Base::Base;
+  void runOnOperation() override;
+};
+} // namespace
+
+void circt::populateSMTToZ3LLVMTypeConverter(TypeConverter &converter) {
+  converter.addConversion([](smt::BoolType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](smt::BitVectorType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](smt::ArrayType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](smt::IntType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](smt::SMTFuncType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([](smt::SortType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+}
+
+void circt::populateSMTToZ3LLVMConversionPatterns(
+    RewritePatternSet &patterns, TypeConverter &converter,
+    SMTGlobalsHandler &globals, const LowerSMTToZ3LLVMOptions &options) {
+#define ADD_VARIADIC_PATTERN(OP, APINAME, MIN_NUM_ARGS)                        \
+  patterns.add<VariadicSMTPattern<OP>>(/*NOLINT(bugprone-macro-parentheses)*/  \
+                                       converter, patterns.getContext(),       \
+                                       globals, options, APINAME,              \
+                                       MIN_NUM_ARGS);
+  // Lower `smt.distinct` operations which allows a variadic number of operands
+  // according to the `:pairwise` attribute. The Z3 API function supports a
+  // variadic number of operands as well, i.e., a direct lowering is possible:
+  // ```
+  // Z3_ast Z3_API Z3_mk_distinct(Z3_context c, unsigned num_args, Z3_ast const
+  // args[])
+  // ```
+  // The API function requires num_args > 1 which is guaranteed to be satisfied
+  // because `smt.distinct` is verified to have > 1 operands.
+  ADD_VARIADIC_PATTERN(DistinctOp, "Z3_mk_distinct", 2);
+
+  // Lower `smt.and` operations which allows a variadic number of operands
+  // according to the `:left-assoc` attribute. The Z3 API function supports a
+  // variadic number of operands as well, i.e., a direct lowering is possible:
+  // ```
+  // Z3_ast Z3_API Z3_mk_and(Z3_context c, unsigned num_args, Z3_ast const
+  // args[])
+  // ```
+  // The API function requires num_args > 0. This is not guaranteed by the
+  // `smt.and` operation and thus the pattern will not apply when no operand is
+  // present. The constant folder of the operation is assumed to fold this to
+  // a constant 'true' (neutral element of AND).
+  ADD_VARIADIC_PATTERN(AndOp, "Z3_mk_and", 1);
+
+#undef ADD_VARIADIC_PATTERN
+
+  // Lower `smt.eq` operations which allows a variadic number of operands
+  // according to the `:chainable` attribute. The Z3 API function does not
+  // support a variadic number of operands, but exactly two:
+  // ```
+  // Z3_ast Z3_API Z3_mk_eq(Z3_context c, Z3_ast l, Z3_ast r)
+  // ```
+  // As a result, we first apply a rewrite pattern that unfolds chainable
+  // operators and then lower it one-to-one to the API function. In this case,
+  // this means:
+  // ```
+  // eq(a,b,c,d) ->
+  // and(eq(a,b), eq(b,c), eq(c,d)) ->
+  // and(Z3_mk_eq(ctx, a, b), Z3_mk_eq(ctx, b, c), Z3_mk_eq(ctx, c, d))
+  // ```
+  // The patterns for `smt.and` will then do the remaining work.
+  patterns.add<LowerChainableSMTPattern<EqOp>>(converter, patterns.getContext(),
+                                               globals, options);
+  patterns.add<OneToOneSMTPattern<EqOp>>(converter, patterns.getContext(),
+                                         globals, options, "Z3_mk_eq", 2);
+
+  // Other lowering patterns. Refer to their implementation directly for more
+  // information.
+  patterns.add<BVConstantOpLowering, DeclareFunOpLowering, AssertOpLowering,
+               CheckOpLowering, SolverOpLowering, ApplyFuncOpLowering,
+               YieldOpLowering>(converter, patterns.getContext(), globals,
+                                options);
+}
+
+void LowerSMTToZ3LLVMPass::runOnOperation() {
+  LowerSMTToZ3LLVMOptions options;
+  options.debug = debug;
+
+  // Set up the type converter
+  LLVMTypeConverter converter(&getContext());
+  populateSMTToZ3LLVMTypeConverter(converter);
+
+  RewritePatternSet patterns(&getContext());
+
+  // Populate the func to LLVM conversion patterns for two reasons:
+  // * Typically functions are represented using `func.func` and including the
+  //   patterns to lower them here is more convenient for most lowering
+  //   pipelines (avoids running another pass).
+  // * Already having `llvm.func` in the input or lowering `func.func` before
+  //   the SMT in the body leads to issues because the SCF conversion patterns
+  //   don't take the type converter into consideration and thus create blocks
+  //   with the old types for block arguments. However, the conversion happens
+  //   top-down and thus are assumed to be converted by the parent function op
+  //   which at that point would have already been lowered (and the blocks are
+  //   also not there when doing everything in one pass, i.e.,
+  //   `populateAnyFunctionOpInterfaceTypeConversionPattern` does not have any
+  //   effect as well). Are the SCF lowering patterns actually broken and should
+  //   take a type-converter?
+  populateFuncToLLVMConversionPatterns(converter, patterns);
+
+  // Populate SCF to CF and CF to LLVM lowering patterns because we create
+  // `scf.if` operations in the lowering patterns for convenience (given the
+  // above issue we might want to lower to LLVM directly; or fix upstream?)
+  populateSCFToControlFlowConversionPatterns(patterns);
+  mlir::cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
+
+  // Create the globals to store the context and solver and populate the SMT
+  // lowering patterns.
+  OpBuilder builder(&getContext());
+  auto globals = SMTGlobalsHandler::create(builder, getOperation());
+  populateSMTToZ3LLVMConversionPatterns(patterns, converter, globals, options);
+
+  // Do a full conversion. This assumes that all other dialects have been
+  // lowered before this pass already.
+  LLVMConversionTarget target(getContext());
+  target.addLegalOp<mlir::ModuleOp>();
+  target.addLegalOp<scf::YieldOp>();
+
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    return signalPassFailure();
+}

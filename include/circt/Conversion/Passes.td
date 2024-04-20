@@ -730,6 +730,23 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// ConvertSMTToZ3LLVM
+//===----------------------------------------------------------------------===//
+
+def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
+  let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
+  let dependentDialects = [
+    "smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
+    "mlir::cf::ControlFlowDialect"
+  ];
+  let options = [
+    Option<"debug", "debug", "bool", "false",
+           "Insert additional printf calls printing the solver's state to "
+           "stdout (e.g. at check-sat operations) for debugging purposes">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // ConvertSeqToSV
 //===----------------------------------------------------------------------===//
 

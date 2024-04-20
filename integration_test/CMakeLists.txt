@@ -13,6 +13,10 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   handshake-runner
   )
 
+if (MLIR_ENABLE_EXECUTION_ENGINE)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS mlir-cpu-runner)
+endif()
+
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS CIRCTPythonModules)
