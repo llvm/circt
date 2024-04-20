@@ -116,12 +116,9 @@ struct ExprEmitter
   LogicalResult setLowering(Value value, Yosys::SigSpec);
 };
 
-using ResultTy = FailureOr<bool>;
-constexpr bool ResultTySuccess = true;
-
 struct ModuleConverter
-    : public hw::TypeOpVisitor<ModuleConverter, FailureOr<bool>>,
-      public comb::CombinationalVisitor<ModuleConverter, FailureOr<bool>> {
+    : public hw::TypeOpVisitor<ModuleConverter, LogicalResult>,
+      public comb::CombinationalVisitor<ModuleConverter, LogicalResult> {
 
   Yosys::Wire *createWire(Type type, StringAttr name) {
     int64_t width = getBitWidthSeq(type);
@@ -174,7 +171,7 @@ struct ModuleConverter
     return SigSpec(wire);
   }
 
-  ResultTy visitStmt(OutputOp op) {
+  LogicalResult visitStmt(OutputOp op) {
     assert(op.getNumOperands() == outputs.size());
     for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
       auto result = getValue(op);
@@ -183,7 +180,7 @@ struct ModuleConverter
       rtlilModule->connect(Yosys::SigSpec(wire), result.value());
     }
 
-    return ResultTySuccess;
+    return success();
   }
 
   /*
