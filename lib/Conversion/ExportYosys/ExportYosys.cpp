@@ -225,9 +225,9 @@ struct ModuleConverter
 
   // HW type op.
   LogicalResult visitTypeOp(ConstantOp op) {
-    if (op.getValue().getBitWidth() >= 32) {
+    if (op.getValue().getBitWidth() >= 32)
       return op.emitError() << "unsupported";
-    }
+
     return setLowering(op, RTLIL::Const(op.getValue().getZExtValue(),
                                         op.getValue().getBitWidth()));
   }
