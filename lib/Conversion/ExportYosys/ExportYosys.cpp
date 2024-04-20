@@ -53,6 +53,7 @@ int64_t getBitWidthSeq(Type type) {
 
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, LogicalResult>,
+      public hw::StmtVisitor<ModuleConverter, LogicalResult>,
       public comb::CombinationalVisitor<ModuleConverter, LogicalResult> {
 
   Yosys::Wire *createWire(Type type, StringAttr name) {
@@ -190,6 +191,7 @@ struct ModuleConverter
   RTLIL::Cell *getCellForValue(Value value);
 
   using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
+  using hw::StmtVisitor<ModuleConverter, LogicalResult>::visitStmt;
   using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
 
   LogicalResult visitOp(Operation *op) {
