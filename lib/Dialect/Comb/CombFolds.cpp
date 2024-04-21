@@ -936,8 +936,8 @@ template <typename Op>
 static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
   auto inputs = op.getInputs();
 
-  llvm::SmallSetVector<Value, 8> alreadyCovered;
-  llvm::SmallSetVector<Value, 8> checked;
+  llvm::SmallSetVector<Value, 8> uniqueInputs(inputs.begin(), inputs.end());
+  llvm::SmallDenseSet<Value, 8> checked;
   checked.insert(op);
 
   llvm::SmallVector<Value, 8> worklist;
@@ -948,20 +948,17 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 
   while (!worklist.empty()) {
     auto element = worklist.pop_back_val();
-    checked.insert(element);
 
     if (auto idempotentOp = element.getDefiningOp<Op>()) {
       for (auto input : idempotentOp.getInputs()) {
-        alreadyCovered.insert(input);
+        uniqueInputs.remove(input);
 
-        if (!checked.contains(input))
+        if (checked.insert(input).second)
           worklist.push_back(input);
       }
     }
   }
 
-  llvm::SmallSetVector<Value, 8> uniqueInputs(inputs.begin(), inputs.end());
-  uniqueInputs.set_subtract(alreadyCovered);
   if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
                                       uniqueInputs.getArrayRef());
