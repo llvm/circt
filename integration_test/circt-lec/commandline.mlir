@@ -1,18 +1,13 @@
-// These tests will be only enabled if circt-lec is built.
-// REQUIRES: circt-lec
+// RUN: circt-lec %s -c1=modA -c2=modB --emit-mlir | FileCheck %s --check-prefix=CHECK-MLIR
+// RUN: circt-lec %s -c1=modA -c2=modB --emit-llvm | FileCheck %s --check-prefix=CHECK-LLVM
 
-// RUN: split-file %s %t
+// CHECK-MLIR: func.func @modA()
+// CHECK-LLVM: define void @modA()
 
-// Passing two input files
-//  RUN: circt-lec %t/first.mlir %t/second.mlir -v=false | FileCheck %s
-//  CHECK: c1 == c2
-
-//--- first.mlir
-hw.module @basic(in %in: i1, out out: i1) {
-  hw.output %in : i1
+hw.module @modA(in %in: i32, out out: i32) {
+  hw.output %in : i32
 }
 
-//--- second.mlir
-hw.module @basic(in %in: i1, out out: i1) {
-  hw.output %in : i1
+hw.module @modB(in %in: i32, out out: i32) {
+  hw.output %in : i32
 }

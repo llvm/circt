@@ -13,4 +13,5 @@ add_circt_library(CIRCTLECTransforms
   MLIRFuncDialect
   MLIRLLVMDialect
   MLIRTransforms
+  MLIRTransformUtils
 )

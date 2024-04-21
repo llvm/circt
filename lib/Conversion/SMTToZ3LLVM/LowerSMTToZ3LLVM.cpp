@@ -9,6 +9,7 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
@@ -1250,6 +1251,7 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
   //   effect as well). Are the SCF lowering patterns actually broken and should
   //   take a type-converter?
   populateFuncToLLVMConversionPatterns(converter, patterns);
+  arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   // Populate SCF to CF and CF to LLVM lowering patterns because we create
   // `scf.if` operations in the lowering patterns for convenience (given the

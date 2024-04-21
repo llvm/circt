@@ -100,3 +100,11 @@ func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.
 
   return
 }
+
+// regression test for APInt comparison in BitVectorAttrStorage (just checking
+// that it doesn't lead to a crash)
+hw.module @decomposedShl(in %in1 : i2, in %in2 : i2, out out : i2) {
+  %c0_i2 = hw.constant 0 : i2
+  %0 = comb.icmp bin eq %c0_i2, %c0_i2 : i2
+  hw.output %c0_i2 : i2
+}

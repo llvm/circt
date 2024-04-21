@@ -1,5 +1,5 @@
-// These tests will be only enabled if circt-lec is built.
-// REQUIRES: circt-lec
+// REQUIRES: libz3
+// REQUIRES: circt-lec-jit
 
 hw.module @basic(in %in: i1, out out: i1) {
   hw.output %in : i1
@@ -12,7 +12,7 @@ hw.module @not(in %in: i1, out out: i1) {
 }
 
 // comb.add
-//  RUN: circt-lec %s -c1=adder -c2=completeAdder -v=false | FileCheck %s --check-prefix=COMB_ADD
+//  RUN: circt-lec %s -c1=adder -c2=completeAdder --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ADD
 //  COMB_ADD: c1 == c2
 
 hw.module @adder(in %in1: i2, in %in2: i2, out out: i2) {
@@ -39,7 +39,7 @@ hw.module @completeAdder(in %in1: i2, in %in2 : i2, out out: i2) {
 }
 
 // comb.and
-//  RUN: circt-lec %s -c1=and -c2=decomposedAnd -v=false | FileCheck %s --check-prefix=COMB_AND
+//  RUN: circt-lec %s -c1=and -c2=decomposedAnd --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_AND
 //  COMB_AND: c1 == c2
 
 hw.module @and(in %in1: i1, in %in2: i1, out out: i1) {
@@ -77,7 +77,7 @@ hw.module @decomposedAnd(in %in1: i1, in %in2: i1, out out: i1) {
 // TODO
 
 // comb.mul
-//  RUN: circt-lec %s -c1=mulBy2 -c2=addTwice -v=false | FileCheck %s --check-prefix=COMB_MUL
+//  RUN: circt-lec %s -c1=mulBy2 -c2=addTwice --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL
 //  COMB_MUL: c1 == c2
 
 hw.module @mulBy2(in %in: i2, out out: i2) {
@@ -92,7 +92,7 @@ hw.module @addTwice(in %in: i2, out out: i2) {
 }
 
 // comb.mux
-//  RUN: circt-lec %s -c1=mux -c2=decomposedMux -v=false | FileCheck %s --check-prefix=COMB_MUX
+//  RUN: circt-lec %s -c1=mux -c2=decomposedMux --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUX
 //  COMB_MUX: c1 == c2
 
 hw.module @mux(in %cond: i1, in %tvalue: i8, in %fvalue: i8, out out: i8) {
@@ -112,7 +112,7 @@ hw.module @decomposedMux(in %cond: i1, in %tvalue: i8, in %fvalue: i8, out out: 
 }
 
 // comb.or
-//  RUN: circt-lec %s -c1=or -c2=decomposedOr -v=false | FileCheck %s --check-prefix=COMB_OR
+//  RUN: circt-lec %s -c1=or -c2=decomposedOr --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_OR
 //  COMB_OR: c1 == c2
 
 hw.module @or(in %in1: i1, in %in2: i1, out out: i1) {
@@ -129,7 +129,7 @@ hw.module @decomposedOr(in %in1: i1, in %in2: i1, out out: i1) {
 }
 
 // comb.parity
-//  RUN: circt-lec %s -c1=parity -c2=decomposedParity -v=false | FileCheck %s --check-prefix=COMB_PARITY
+//  RUN: circt-lec %s -c1=parity -c2=decomposedParity --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_PARITY
 //  COMB_PARITY: c1 == c2
 
 hw.module @parity(in %in: i8, out out: i1) {
@@ -151,7 +151,7 @@ hw.module @decomposedParity(in %in: i8, out out: i1) {
 }
 
 // comb.replicate
-//  RUN: circt-lec %s -c1=replicate -c2=decomposedReplicate -v=false | FileCheck %s --check-prefix=COMB_REPLICATE
+//  RUN: circt-lec %s -c1=replicate -c2=decomposedReplicate --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_REPLICATE
 //  COMB_REPLICATE: c1 == c2
 
 hw.module @replicate(in %in: i2, out out: i8) {
@@ -165,7 +165,7 @@ hw.module @decomposedReplicate(in %in: i2, out out: i8) {
 }
 
 // comb.shl
-//  RUN: circt-lec %s -c1=shl -c2=decomposedShl -v=false | FileCheck %s --check-prefix=COMB_SHL
+//  RUN: circt-lec %s -c1=shl -c2=decomposedShl --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_SHL
 //  COMB_SHL: c1 == c2
 
 hw.module @shl(in %in1: i2, in %in2: i2, out out: i2) {
@@ -199,7 +199,7 @@ hw.module @decomposedShl(in %in1: i2, in %in2: i2, out out: i2) {
 // TODO
 
 // comb.sub
-//  RUN: circt-lec %s -c1=subtractor -c2=completeSubtractor -v=false | FileCheck %s --check-prefix=COMB_SUB
+//  RUN: circt-lec %s -c1=subtractor -c2=completeSubtractor --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_SUB
 //  COMB_SUB: c1 == c2
 
 hw.module @subtractor(in %in1: i8, in %in2: i8, out out: i8) {

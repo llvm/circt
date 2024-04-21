@@ -464,13 +464,13 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
-# circt-lec Configuration
+# Z3Lib Configuration (for circt-lec and SMT dialect integration tests)
 #-------------------------------------------------------------------------------
 
-# If circt-lec hasn't been explicitly disabled, find it.
-option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
-if(CIRCT_LEC_DISABLE)
-  message(STATUS "Disabling circt-lec")
+# If z3 hasn't been explicitly disabled, find it.
+option(Z3_DISABLE "Disable the z3 tests.")
+if (Z3_DISABLE)
+  message(STATUS "Disabling tests requiring z3.")
 else()
   if(Z3_DIR)
     # Search and load the package configuration file in the specified directory.
@@ -485,15 +485,13 @@ else()
     # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
     find_package(Z3)
   endif()
-  
+
   if(Z3_FOUND)
     SET(CIRCT_LEC_Z3_VER 4.8.11)
     if(Z3_VERSION_STRING VERSION_LESS ${CIRCT_LEC_Z3_VER})
       message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION_STRING}, requires ${CIRCT_LEC_Z3_VER}.")
     else()
       message(STATUS "Z3 identified as a logical backend.")
-      # Signal to proceed building circt-lec.
-      set(CIRCT_LEC_ENABLED ON)
     endif()
   endif()
 endif()
