@@ -16,7 +16,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
-#include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 using namespace circt;
 using namespace handshake;
@@ -30,10 +30,10 @@ struct DeconstructCMergePattern
 
   LogicalResult matchAndRewrite(handshake::ControlMergeOp cmergeOp,
                                 PatternRewriter &rewriter) const override {
-    auto loc = cmergeOp.getLoc();
+    if (cmergeOp.getNumOperands() <= 2)
+      return failure();
 
-    assert(cmergeOp.getNumOperands() > 2 &&
-           "ControlMergeOp must have more than two operands");
+    auto loc = cmergeOp.getLoc();
 
     // Function for create a cmerge-pack structure which generates a
     // tuple<index, data> from two operands and an index offset.
@@ -88,15 +88,11 @@ struct DeconstructCMergePattern
 struct HandshakeSplitControlMerges
     : public HandshakeSplitControlMergesBase<HandshakeSplitControlMerges> {
   void runOnOperation() override {
-    ConversionTarget target(getContext());
-    target.addLegalDialect<handshake::HandshakeDialect, arith::ArithDialect>();
-    target.addDynamicallyLegalOp<handshake::ControlMergeOp>(
-        [&](handshake::ControlMergeOp op) { return op.getNumOperands() <= 2; });
     RewritePatternSet patterns(&getContext());
     patterns.insert<DeconstructCMergePattern>(&getContext());
 
-    if (failed(applyPartialConversion(getOperation(), target,
-                                      std::move(patterns))))
+    if (failed(
+            applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
       signalPassFailure();
   };
 };
