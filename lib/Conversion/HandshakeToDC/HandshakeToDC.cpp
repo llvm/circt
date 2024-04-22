@@ -403,15 +403,27 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     llvm::SmallVector<Value, 4> inputData;
-    llvm::SmallVector<Value, 4> inputTokens;
-    for (auto input : operands) {
-      auto dct = unpack(rewriter, input);
-      inputData.push_back(dct.data);
-      inputTokens.push_back(dct.token);
-    }
+    Value outToken;
+    if (operands.empty()) {
+      if (!op->hasTrait<OpTrait::ConstantLike>())
+        return op->emitOpError(
+            "no-operand operation which isn't constant-like. Too dangerous "
+            "to assume semantics - won't convert");
 
-    // Join the tokens of the inputs.
-    auto join = rewriter.create<dc::JoinOp>(op->getLoc(), inputTokens);
+      // Constant-like operation; assume the token can be represented as a
+      // constant `dc.source`.
+      outToken = rewriter.create<dc::SourceOp>(op->getLoc());
+    } else {
+      llvm::SmallVector<Value, 4> inputTokens;
+      for (auto input : operands) {
+        auto dct = unpack(rewriter, input);
+        inputData.push_back(dct.data);
+        inputTokens.push_back(dct.token);
+      }
+      // Join the tokens of the inputs.
+      assert(!inputTokens.empty() && "Expected at least one input token");
+      outToken = rewriter.create<dc::JoinOp>(op->getLoc(), inputTokens);
+    }
 
     // Patchwork to fix bad IR design in Handshake.
     auto opName = op->getName();
@@ -431,7 +443,7 @@ public:
     // Pack the result token with the output data, and replace the uses.
     llvm::SmallVector<Value> results;
     for (auto result : newOp->getResults())
-      results.push_back(pack(rewriter, join, result));
+      results.push_back(pack(rewriter, outToken, result));
 
     rewriter.replaceOp(op, results);
 
