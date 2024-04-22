@@ -755,6 +755,31 @@ public:
   }
 };
 
+class PackDataTupleConversionPattern
+    : public OpConversionPattern<PackDataTupleOp> {
+public:
+  using OpConversionPattern<PackDataTupleOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PackDataTupleOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::StructCreateOp>(
+        op, tupleToStruct(op.getResult().getType()), operands.getOperands());
+    return success();
+  }
+};
+
+class UnpackDataTupleConversionPattern
+    : public OpConversionPattern<UnpackDataTupleOp> {
+public:
+  using OpConversionPattern<UnpackDataTupleOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(UnpackDataTupleOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::StructExplodeOp>(op, operands.getInput());
+    return success();
+  }
+};
+
 class PackConversionPattern : public OpConversionPattern<PackOp> {
 public:
   using OpConversionPattern<PackOp>::OpConversionPattern;
@@ -825,7 +850,9 @@ public:
 
 } // namespace
 
-static bool isDCType(Type type) { return type.isa<TokenType, ValueType>(); }
+static bool isDCType(Type type) {
+  return type.isa<dc::TokenType, dc::ValueType, mlir::TupleType>();
+}
 
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
@@ -891,6 +918,7 @@ public:
     patterns.insert<
         ForkConversionPattern, JoinConversionPattern, SelectConversionPattern,
         BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
+        PackDataTupleConversionPattern, UnpackDataTupleConversionPattern,
         BufferConversionPattern, SourceConversionPattern, SinkConversionPattern,
         MergeConversionPattern, TypeConversionPattern, ToESIConversionPattern,
         FromESIConversionPattern>(typeConverter, parent->getContext());
