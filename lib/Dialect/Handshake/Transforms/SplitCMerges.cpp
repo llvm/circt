@@ -1,0 +1,104 @@
+//===- SplitCMerges.cpp - handshake cmerge deconstruction pass --*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Contains the definitions of the handshake control merge deconstruction pass.
+//
+//===----------------------------------------------------------------------===//
+
+#include "PassDetails.h"
+#include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/Rewrite/FrozenRewritePatternSet.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+using namespace circt;
+using namespace handshake;
+using namespace mlir;
+
+namespace {
+
+struct DeconstructCMergePattern
+    : public OpRewritePattern<handshake::ControlMergeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(handshake::ControlMergeOp cmergeOp,
+                                PatternRewriter &rewriter) const override {
+    if (cmergeOp.getNumOperands() <= 2)
+      return failure();
+
+    auto loc = cmergeOp.getLoc();
+
+    // Function for create a cmerge-pack structure which generates a
+    // tuple<index, data> from two operands and an index offset.
+    auto mergeTwoOperands = [&](Value op0, Value op1,
+                                unsigned idxOffset) -> Value {
+      auto cm2 =
+          rewriter.create<handshake::ControlMergeOp>(loc, ValueRange{op0, op1});
+      Value idxOperand = cm2.getIndex();
+      if (idxOffset != 0) {
+        // Non-zero index offset; add it to the index operand.
+        idxOperand = rewriter.create<arith::AddIOp>(
+            loc, idxOperand,
+            rewriter.create<arith::ConstantOp>(
+                loc,
+                rewriter.getIntegerAttr(rewriter.getIndexType(), idxOffset)));
+      }
+
+      // Pack index and data into a tuple s.t. they share control.
+      return rewriter.create<handshake::PackOp>(
+          loc, ValueRange{cm2.getResult(), idxOperand});
+    };
+
+    llvm::SmallVector<Value> packedTuples;
+    // Perform the two-operand merges.
+    for (unsigned i = 0, e = cmergeOp.getNumOperands(); i < ((e / 2) * 2);
+         i += 2) {
+      packedTuples.push_back(mergeTwoOperands(cmergeOp.getOperand(i),
+                                              cmergeOp.getOperand(i + 1), i));
+    }
+    if (cmergeOp.getNumOperands() % 2 != 0) {
+      // If there is an odd number of operands, the last operand becomes a tuple
+      // of itself with an index of the number of operands - 1.
+      unsigned lastIdx = cmergeOp.getNumOperands() - 1;
+      packedTuples.push_back(rewriter.create<handshake::PackOp>(
+          loc, ValueRange{cmergeOp.getOperand(lastIdx),
+                          rewriter.create<arith::ConstantOp>(
+                              loc, rewriter.getIntegerAttr(
+                                       rewriter.getIndexType(), lastIdx))}));
+    }
+
+    // Non-deterministically merge the tuples and unpack the result.
+    auto mergedTuple =
+        rewriter.create<handshake::MergeOp>(loc, ValueRange(packedTuples));
+
+    // And finally, replace the original cmerge with the unpacked result.
+    rewriter.replaceOpWithNewOp<handshake::UnpackOp>(cmergeOp,
+                                                     mergedTuple.getResult());
+    return success();
+  }
+};
+
+struct HandshakeSplitControlMerges
+    : public HandshakeSplitControlMergesBase<HandshakeSplitControlMerges> {
+  void runOnOperation() override {
+    RewritePatternSet patterns(&getContext());
+    patterns.insert<DeconstructCMergePattern>(&getContext());
+
+    if (failed(
+            applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
+      signalPassFailure();
+  };
+};
+} // namespace
+
+std::unique_ptr<mlir::Pass>
+circt::handshake::createHandshakeSplitControlMergesPass() {
+  return std::make_unique<HandshakeSplitControlMerges>();
+}

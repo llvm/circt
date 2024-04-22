@@ -123,4 +123,14 @@ def HandshakeLegalizeMemrefs : Pass<"handshake-legalize-memrefs", "mlir::func::F
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
+def HandshakeSplitControlMerges : Pass<"handshake-split-cmerge", "handshake::FuncOp"> {
+  let summary = "Deconstruct >2 input cmerge operations";
+  let description = [{
+    This pass deconstructs the (rather complex) semantics of a >2 input cmerge
+    operation into a series of 2-input cmerge operations + supporting logic.
+  }];
+  let constructor = "circt::handshake::createHandshakeSplitControlMergesPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEPASSES_TD
