@@ -134,7 +134,7 @@ namespace {
 struct DCMaterializeForksSinksPass
     : public DCMaterializeForksSinksBase<DCMaterializeForksSinksPass> {
   void runOnOperation() override {
-    auto op = getOperation();
+    auto *op = getOperation();
     OpBuilder builder(op);
 
     auto walkRes = op->walk([&](mlir::Block *block) {
@@ -153,7 +153,7 @@ struct DCMaterializeForksSinksPass
 struct DCDematerializeForksSinksPass
     : public DCDematerializeForksSinksBase<DCDematerializeForksSinksPass> {
   void runOnOperation() override {
-    auto op = getOperation();
+    auto *op = getOperation();
     op->walk([&](dc::SinkOp sinkOp) { sinkOp.erase(); });
     op->walk([&](dc::ForkOp forkOp) {
       for (auto res : forkOp->getResults())
