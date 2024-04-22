@@ -250,4 +250,37 @@ def FromESIOp : DCOp<"from_esi", [
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
+def PackDataTupleOp : DCOp<"pack_data_tuple", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Pack multiple SSA values into an MLIR tuple";
+  let description = [{
+    Pack multiple SSA values into a tuple. **This is a data-only operation**, and
+    really shouldn't be in DC. However, upstream MLIR doesn't provide any
+    tuple-modifying operations, hence _something_ has to provide packing/unpacking
+    semantics. For now, we keep these in DC to facilitate lowerings.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyTuple:$output);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+}
+
+def UnpackDataTupleOp : DCOp<"unpack_data_tuple", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
+]> {
+  let summary = "Unpack an MLIR tuple into multiple SSA values";
+  let description = [{
+    Unpack an MLIR tuple into multiple SSA values. **This is a data-only operation**,
+    and really shouldn't be in DC. However, upstream MLIR doesn't provide any
+    tuple-modifying operations, hence _something_ has to provide packing/unpacking
+    semantics. For now, we keep these in DC to facilitate lowerings.
+  }];
+
+  let arguments = (ins AnyTuple:$input);
+  let results = (outs Variadic<AnyType>:$values);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
+
 #endif // CIRCT_DIALECT_DC_OPS_TD

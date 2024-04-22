@@ -11,6 +11,8 @@
 // CHECK-NEXT:    %9 = dc.to_esi %1 : !dc.value<i1>
 // CHECK-NEXT:    %10 = dc.from_esi %8 : <i0>
 // CHECK-NEXT:    %11 = dc.from_esi %9 : <i1>
+// CHECK-NEXT:    %12 = dc.pack_data_tuple %output, %2 : i1, i32
+// CHECK-NEXT:    %13:2 = dc.unpack_data_tuple %12 : tuple<i1, i32>
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 
@@ -25,4 +27,6 @@ hw.module @foo(in %0 : !dc.token, in %1 : !dc.value<i1>, in %2 : i32) {
   %esi_value = dc.to_esi %1 : !dc.value<i1>
   %from_esi_token = dc.from_esi %esi_token : !esi.channel<i0>
   %from_esi_value = dc.from_esi %esi_value : !esi.channel<i1>
+  %data_tuple = dc.pack_data_tuple %unpack_value, %2 : i1, i32
+  %di1, %di32 = dc.unpack_data_tuple %data_tuple : tuple<i1, i32>
 }

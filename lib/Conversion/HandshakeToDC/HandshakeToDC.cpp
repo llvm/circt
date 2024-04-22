@@ -198,6 +198,57 @@ public:
   }
 };
 
+class PackOpConversion : public DCOpConversionPattern<handshake::PackOp> {
+public:
+  using DCOpConversionPattern<handshake::PackOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::PackOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::PackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Like the join conversion, but also emits a dc.pack_tuple operation to
+    // handle the data side of the operation (since there's no upstream support
+    // for doing so, sigh...)
+    llvm::SmallVector<Value, 4> inputTokens, inputData;
+    for (auto input : adaptor.getOperands()) {
+      auto dct = unpack(rewriter, input);
+      inputTokens.push_back(dct.token);
+      if (dct.data)
+        inputData.push_back(dct.data);
+    }
+
+    auto join = rewriter.create<dc::JoinOp>(op.getLoc(), inputTokens);
+    auto packedData =
+        rewriter.create<dc::PackDataTupleOp>(op.getLoc(), inputData);
+
+    rewriter.replaceOp(op, pack(rewriter, join, packedData));
+    return success();
+  }
+};
+
+class UnpackOpConversion : public DCOpConversionPattern<handshake::UnpackOp> {
+public:
+  using DCOpConversionPattern<handshake::UnpackOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::UnpackOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::UnpackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Unpack the !dc.value<tuple<...>> into the !dc.token and tuple<...>
+    // values.
+    DCTuple unpackedInput = unpack(rewriter, adaptor.getInput());
+    auto unpackedData =
+        rewriter.create<dc::UnpackDataTupleOp>(op.getLoc(), unpackedInput.data);
+    // Re-pack each of the tuple elements with the token.
+    llvm::SmallVector<Value, 4> repackedInputs;
+    for (auto outputData : unpackedData.getResults())
+      repackedInputs.push_back(pack(rewriter, unpackedInput.token, outputData));
+
+    rewriter.replaceOp(op, repackedInputs);
+    return success();
+  }
+};
+
 class ControlMergeOpConversion
     : public DCOpConversionPattern<handshake::ControlMergeOp> {
 public:
@@ -511,9 +562,9 @@ public:
   // Replaces a handshake.func with a hw.module, converting the argument and
   // result types using the provided type converter.
   // @mortbopet: Not a fan of converting to hw here seeing as we don't
-  // necessarily have hardware semantics here. But, DC doesn't define a function
-  // operation, and there is no "func.graph_func" or any other generic function
-  // operation which is a graph region...
+  // necessarily have hardware semantics here. But, DC doesn't define a
+  // function operation, and there is no "func.graph_func" or any other
+  // generic function operation which is a graph region...
   LogicalResult
   matchAndRewrite(handshake::FuncOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
@@ -615,8 +666,9 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
       .add<BufferOpConversion, CondBranchConversionPattern,
            SinkOpConversionPattern, SourceOpConversionPattern,
            MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
-           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
-          ctx, typeConverter, &convertedOps);
+           PackOpConversion, UnpackOpConversion, ControlMergeOpConversion,
+           ConstantOpConversion, SyncOpConversion>(ctx, typeConverter,
+                                                   &convertedOps);
 
   // ALL other single-result operations are converted via the
   // UnitRateConversionPattern.

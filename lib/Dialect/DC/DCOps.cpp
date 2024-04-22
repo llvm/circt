@@ -391,6 +391,27 @@ LogicalResult FromESIOp::inferReturnTypes(
   return success();
 }
 
+// =============================================================================
+// PackTupleOp
+// =============================================================================
+
+LogicalResult PackDataTupleOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  results.push_back(TupleType::get(context, operands.getTypes()));
+  return success();
+}
+
+LogicalResult UnpackDataTupleOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  TupleType inputTuple = operands.front().getType().cast<TupleType>();
+  llvm::copy(inputTuple.getTypes(), std::back_inserter(results));
+  return success();
+}
+
 } // namespace dc
 } // namespace circt
 
