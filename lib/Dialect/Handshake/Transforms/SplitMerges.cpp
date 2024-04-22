@@ -43,9 +43,9 @@ struct DeconstructMergePattern : public OpRewritePattern<handshake::MergeOp> {
             mergeOp.getLoc(), ValueRange{mergeInputs[i], mergeInputs[i + 1]});
         newMergeInputs.push_back(cm2.getResult());
       }
-      if (mergeInputs.size() % 2 != 0) {
+      if (mergeInputs.size() % 2 != 0)
         newMergeInputs.push_back(mergeInputs.back());
-      }
+
       mergeInputs = newMergeInputs;
     }
 
