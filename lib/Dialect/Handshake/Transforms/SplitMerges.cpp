@@ -1,4 +1,4 @@
-//===- SplitCMerges.cpp - handshake cmerge deconstruction pass --*- C++ -*-===//
+//===- SplitMerges.cpp - handshake merge deconstruction pass --*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Contains the definitions of the handshake control merge deconstruction pass.
+// Contains the definitions of the handshake merge deconstruction pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,6 +23,38 @@ using namespace handshake;
 using namespace mlir;
 
 namespace {
+
+struct DeconstructMergePattern : public OpRewritePattern<handshake::MergeOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(handshake::MergeOp mergeOp,
+                                PatternRewriter &rewriter) const override {
+    if (mergeOp.getNumOperands() <= 2)
+      return failure();
+
+    llvm::SmallVector<Value> mergeInputs;
+    llvm::copy(mergeOp.getOperands(), std::back_inserter(mergeInputs));
+
+    // Recursively build a balanced 2-input merge tree.
+    while (mergeInputs.size() > 1) {
+      llvm::SmallVector<Value> newMergeInputs;
+      for (unsigned i = 0, e = mergeInputs.size(); i < ((e / 2) * 2); i += 2) {
+        auto cm2 = rewriter.create<handshake::MergeOp>(
+            mergeOp.getLoc(), ValueRange{mergeInputs[i], mergeInputs[i + 1]});
+        newMergeInputs.push_back(cm2.getResult());
+      }
+      if (mergeInputs.size() % 2 != 0)
+        newMergeInputs.push_back(mergeInputs.back());
+
+      mergeInputs = newMergeInputs;
+    }
+
+    assert(mergeInputs.size() == 1);
+    rewriter.replaceOp(mergeOp, mergeInputs[0]);
+
+    return success();
+  }
+};
 
 struct DeconstructCMergePattern
     : public OpRewritePattern<handshake::ControlMergeOp> {
@@ -85,11 +117,12 @@ struct DeconstructCMergePattern
   }
 };
 
-struct HandshakeSplitControlMerges
-    : public HandshakeSplitControlMergesBase<HandshakeSplitControlMerges> {
+struct HandshakeSplitMerges
+    : public HandshakeSplitMergesBase<HandshakeSplitMerges> {
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
-    patterns.insert<DeconstructCMergePattern>(&getContext());
+    patterns.insert<DeconstructCMergePattern, DeconstructMergePattern>(
+        &getContext());
 
     if (failed(
             applyPatternsAndFoldGreedily(getOperation(), std::move(patterns))))
@@ -98,7 +131,6 @@ struct HandshakeSplitControlMerges
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass>
-circt::handshake::createHandshakeSplitControlMergesPass() {
-  return std::make_unique<HandshakeSplitControlMerges>();
+std::unique_ptr<mlir::Pass> circt::handshake::createHandshakeSplitMergesPass() {
+  return std::make_unique<HandshakeSplitMerges>();
 }

@@ -42,7 +42,7 @@ std::unique_ptr<mlir::OperationPass<handshake::FuncOp>>
 createHandshakeInsertBuffersPass(const std::string &strategy = "all",
                                  unsigned bufferSize = 2);
 std::unique_ptr<mlir::Pass> createHandshakeLockFunctionsPass();
-std::unique_ptr<mlir::Pass> createHandshakeSplitControlMergesPass();
+std::unique_ptr<mlir::Pass> createHandshakeSplitMergesPass();
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
