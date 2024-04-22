@@ -11,7 +11,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def DCMaterializeForksSinks : InterfacePass<"dc-materialize-forks-sinks", "mlir::FunctionOpInterface"> {
+def DCMaterializeForksSinks : Pass<"dc-materialize-forks-sinks"> {
   let summary = "Materialize fork and sink operations.";
   let description = [{
     This pass analyses a function-like operation and inserts fork and sink
@@ -21,7 +21,7 @@ def DCMaterializeForksSinks : InterfacePass<"dc-materialize-forks-sinks", "mlir:
   let dependentDialects = ["dc::DCDialect"];
 }
 
-def DCDematerializeForksSinks : InterfacePass<"dc-dematerialize-forks-sinks", "mlir::FunctionOpInterface"> {
+def DCDematerializeForksSinks : Pass<"dc-dematerialize-forks-sinks"> {
   let summary = "Dematerialize fork and sink operations.";
   let description = [{
     This pass analyses a function-like operation and removes all fork and sink
