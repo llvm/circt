@@ -198,6 +198,50 @@ public:
   }
 };
 
+class MergeOpConversion : public DCOpConversionPattern<handshake::MergeOp> {
+public:
+  using DCOpConversionPattern<handshake::MergeOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::MergeOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::MergeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() > 2)
+      return op.emitOpError("only two inputs supported");
+
+    llvm::SmallVector<Value, 4> tokens, data;
+
+    for (auto input : adaptor.getDataOperands()) {
+      auto up = unpack(rewriter, input);
+      tokens.push_back(up.token);
+      if (up.data)
+        data.push_back(up.data);
+    }
+
+    // Control side
+    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    auto selectedIndexUnpacked = unpack(rewriter, selectedIndex);
+    Value mergeOutput;
+
+    if (!data.empty()) {
+      // Data-merge; mux the selected input.
+      auto dataMux = rewriter.create<arith::SelectOp>(
+          op.getLoc(), selectedIndexUnpacked.data, data[0], data[1]);
+      convertedOps->insert(dataMux);
+
+      // Pack the data mux with the control token.
+      mergeOutput = pack(rewriter, selectedIndexUnpacked.token, dataMux);
+    } else {
+      // Control-only merge; throw away the index value of the dc.merge
+      // operation and only forward the dc.token.
+      mergeOutput = selectedIndexUnpacked.token;
+    }
+
+    rewriter.replaceOp(op, mergeOutput);
+    return success();
+  }
+};
+
 class ControlMergeOpConversion
     : public DCOpConversionPattern<handshake::ControlMergeOp> {
 public:
@@ -611,12 +655,12 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // Add handshake conversion patterns.
   // Note: merge/control merge are not supported - these are non-deterministic
   // operators and we do not care for them.
-  patterns
-      .add<BufferOpConversion, CondBranchConversionPattern,
-           SinkOpConversionPattern, SourceOpConversionPattern,
-           MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
-           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
-          ctx, typeConverter, &convertedOps);
+  patterns.add<BufferOpConversion, CondBranchConversionPattern,
+               SinkOpConversionPattern, SourceOpConversionPattern,
+               MuxOpConversionPattern, ForkOpConversionPattern,
+               JoinOpConversion, MergeOpConversion, ControlMergeOpConversion,
+               ConstantOpConversion, SyncOpConversion>(ctx, typeConverter,
+                                                       &convertedOps);
 
   // ALL other single-result operations are converted via the
   // UnitRateConversionPattern.
