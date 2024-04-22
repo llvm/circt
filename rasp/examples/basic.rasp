@@ -1,0 +1,96 @@
+type Unsigned <T : Integer> {
+    let data: __builtin_firrtl_UInt<T>;
+
+    static function add<Tr : Integer>(rhs : Unsigned<Tr>) -> Unsigned<1+max(T, Tr)> {
+        return Unsigned(__builtin_firrtl_uint_add<T, Tr>(data, rhs.data));
+    }
+    function trunc<width : Integer>() -> Unsigned<width> {
+        return Unsigned<width>(__builtin_firrtl_trunc<width>(data));
+    }
+    function asRaw() -> __builtin_firrtl_UInt<T> { return data; }
+}
+
+function concat<w1 : Integer, w2 : Integer>(Unsigned<w1> v1, Unsigned<w2> v2) -> Unsigned<w1 + w2> {
+    __builtin_firrtl_concat<w1, w2>(v1.asRaw(),v2.asRaw());
+}
+
+module Foo (
+    input a : Unsigned<1>,
+    input b : Unsigned<1>,
+    output c : Unsigned<2>
+) {
+    c = add(a,b);
+}
+
+
+module Bar <M : Module<input a1 : Unsigned<3>, input a2 : Unsigned<3>, output b1 :Unsigned<3>, output b2 : Unsigned<3>> (
+    input in1 : Unsigned<3>,
+    output out1 : Unsigned<3>
+) {
+    let im_b1, im_b2 = M(in1, in1)
+    let c = Foo(im_b1.trunc<1>(), im_b2.trunc<1>());
+    out1 = concat(Unsigned<1>(1), c);
+}
+
+
+// Bus stuff
+// You can source, sink, and tap busses.
+
+// A bus is just a type, which has no accessors
+Bus SimpleBus <DataTy> {
+    input data : DataTy;
+    input valid : Unsigned<1>;
+    output ready : Unsigned<1>;
+
+    let function SimpleBus(indata : DataTy, invalid : Unsigned<1>) -> ??;
+}
+
+module Foo<DataTy> (
+    input inbus : SimpleBus<DataTy>,
+    output outbus : SimpleBus<DataTy>
+) {
+    let data = 5;
+    let valid = 1;
+    let tmpbus, ready = SimpleBus<DataTy>(data, valid);
+    let oready = 0;
+    let odata, ovalid = sink(inbus, oready);
+}
+
+// A terminator has access to bus' internals
+// A terminator may combine multiple busses
+// An output creates a new bus
+// An input terminates a new bus
+terminator SimpleBusSender<DataTy>  (
+    output bus: SimpleBus<DataTy>
+ ) {
+    // Sender functions
+    let function send(DataTy data) -> void;
+    let function isReady() -> Unsigned<1>;
+}
+
+terminator SimpleBusReciever<DataTy> (
+    input bus: SimpleBus<DataTy>
+ ) {
+    // Reciever functions
+    let function isValid() -> Unsigned<1>;
+    let function signalReady() -> void;
+    let function getData() -> DataTy;    
+}
+
+module dst(input bus : SimpleBus<UInt<20>>) {
+    dst.signalReady(); // We are always ready
+    if (dst.isValid()) { // take the data when it's valid
+        system.printf("recieved %", dst.getData());
+    }
+}
+
+module mid(input reference bus : SimpleBus<UInt<20>>) {
+    let dst = dst(pass);
+}
+
+module src (
+) {
+    let foo = SimpleBus<UInt<20>>;
+    let mid = mid(foo);
+    foo.send(4);
+}
