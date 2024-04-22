@@ -695,19 +695,18 @@ def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,
   ];
+  let statistics = [
+    Statistic<"numInstances", "num-instances", "Number of intmodules instances lowered">,
+    Statistic<"numIntmodules", "num-intmodules", "Number of intmodules lowered">,
+  ];
 }
 
-def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
+def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
   let summary = "Lower intrinsics";
   let description = [{
-    This pass lowers intrinsics encoded as extmodule with annotation and
-    intmodule to their implementation or op.
+    This pass lowers generic intrinsic ops to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
-  let options = [
-    Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
-      "Lower `EICG_wrapper` modules into clock gate intrinsics">,
-  ];
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {

@@ -36,6 +36,8 @@ hw.module @modB0(in %in0: i32, in %in1: i32, out out: i32) {
 
 
 // RUN: circt-opt --construct-lec="first-module=modA1 second-module=modB1 insert-main=false" %s | FileCheck %s --check-prefix=CHECK1
+// Test that using the same module twice doesn't lead to a double free
+// RUN: circt-opt --construct-lec="first-module=modA1 second-module=modA1 insert-main=false" %s
 
 hw.module @modA1() {
   hw.output

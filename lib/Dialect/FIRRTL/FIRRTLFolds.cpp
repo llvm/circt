@@ -1476,10 +1476,22 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
-              patterns::MuxEQOperandsSwapped, patterns::MuxNEQ,
-              patterns::MuxNot, patterns::MuxSameTrue, patterns::MuxSameFalse,
-              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
+  results
+      .add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
+           patterns::MuxEQOperandsSwapped, patterns::MuxNEQ, patterns::MuxNot,
+           patterns::MuxSameTrue, patterns::MuxSameFalse,
+           patterns::NarrowMuxLHS, patterns::NarrowMuxRHS, patterns::MuxPadSel>(
+          context);
+}
+
+void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::Mux2PadSel>(context);
+}
+
+void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::Mux4PadSel>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {

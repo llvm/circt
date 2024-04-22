@@ -213,10 +213,15 @@ void SplitLoopsPass::runOnOperation() {
 
   auto result = module.walk([&](CallOpInterface callOp) -> WalkResult {
     auto refSym = callOp.getCallableForCallee().dyn_cast<SymbolRefAttr>();
-    if (!refSym)
-      return callOp->emitOpError("found unsupported call to an arc");
 
-    auto defOp = arcDefs.lookup(refSym.getLeafReference());
+    // If this call is not to an arc, skip it.
+    if (!refSym)
+      return WalkResult::advance();
+    StringAttr leafRef = refSym.getLeafReference();
+    if (!arcDefs.contains(leafRef))
+      return WalkResult::advance();
+
+    auto defOp = arcDefs.lookup(leafRef);
     arcUses[defOp].push_back(callOp);
     allArcUses.insert(callOp);
 
@@ -292,12 +297,14 @@ void SplitLoopsPass::splitArc(Namespace &arcNamespace, DefineOp defOp,
                        split->block->getTerminator()->getOperandTypes()));
     splitArc.getBody().push_back(split->block.release());
     splitArcs.push_back(splitArc);
+    ++numArcsCreated;
   }
 
   // Replace all uses with the new splits and remove the old definition.
   for (auto arcUse : arcUses)
     replaceArcUse(arcUse, splitArcs, splitter.splits, splitter.outputs);
   defOp.erase();
+  ++numArcsRemoved;
 }
 
 /// Replace a use of the original arc with new uses for the splits.

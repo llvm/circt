@@ -13,6 +13,7 @@
 #ifndef CIRCT_FIRTOOL_FIRTOOL_H
 #define CIRCT_FIRTOOL_FIRTOOL_H
 
+#include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/LLVM.h"
@@ -119,7 +120,7 @@ public:
     return disableAggressiveMergeConnections;
   }
   bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
-  bool shouldEmitChiselAssertsAsSVA() const { return emitChiselAssertsAsSVA; }
+  auto getVerificationFlavor() const { return verificationFlavor; }
   bool shouldEmitSeparateAlwaysBlocks() const {
     return emitSeparateAlwaysBlocks;
   }
@@ -274,8 +275,8 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setEmitChiselAssertsAsSVA(bool value) {
-    emitChiselAssertsAsSVA = value;
+  FirtoolOptions &setVerificationFlavor(firrtl::VerificationFlavor value) {
+    verificationFlavor = value;
     return *this;
   }
 
@@ -384,7 +385,7 @@ private:
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
   bool addMuxPragmas;
-  bool emitChiselAssertsAsSVA;
+  firrtl::VerificationFlavor verificationFlavor;
   bool emitSeparateAlwaysBlocks;
   bool etcDisableInstanceExtraction;
   bool etcDisableRegisterExtraction;

@@ -227,12 +227,18 @@ InstanceGraph::getInferredTopLevelNodes() {
 
 static InstancePath empty{};
 
-// NOLINTBEGIN(misc-no-recursion)
 ArrayRef<InstancePath>
 InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
+  return getAbsolutePaths(op, instanceGraph.getTopLevelNode());
+}
+
+// NOLINTBEGIN(misc-no-recursion)
+ArrayRef<InstancePath>
+InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
+                                    InstanceGraphNode *top) {
   InstanceGraphNode *node = instanceGraph[op];
 
-  if (node == instanceGraph.getTopLevelNode()) {
+  if (node == top) {
     return empty;
   }
 

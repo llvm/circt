@@ -1,7 +1,10 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(ibis.class(ibis.method(ibis-inline-sblocks)))' --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis.class(ibis.method(ibis-inline-sblocks))))' \
+// RUN:   --allow-unregistered-dialect %s | FileCheck %s
+
+ibis.design @foo {
 
 // CHECK-LABEL:   ibis.class @Inline1 {
-// CHECK:           %[[VAL_0:.*]] = ibis.this @Inline1
+// CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@Inline1>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
 // CHECK:             %[[VAL_3:.*]] = "foo.op1"(%[[VAL_1]], %[[VAL_2]]) : (i32, i32) -> i32
@@ -10,7 +13,7 @@
 // CHECK:           }
 // CHECK:         }
 ibis.class @Inline1 {
-  %this = ibis.this @Inline1
+  %this = ibis.this <@foo::@Inline1>
 
   ibis.method @foo(%a : i32, %b : i32) {
     %0 = ibis.sblock() -> (i32) attributes {maxThreads = 1} {
@@ -22,7 +25,7 @@ ibis.class @Inline1 {
 }
 
 // CHECK-LABEL:   ibis.class @Inline2 {
-// CHECK:           %[[VAL_0:.*]] = ibis.this @Inline2
+// CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@Inline2>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             "foo.unused1"() : () -> ()
 // CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
@@ -38,7 +41,7 @@ ibis.class @Inline1 {
 // CHECK:           }
 // CHECK:         }
 ibis.class @Inline2 {
-  %this = ibis.this @Inline2
+  %this = ibis.this <@foo::@Inline2>
   ibis.method @foo(%a : i32, %b : i32) {
     "foo.unused1"() : () -> ()
     %0 = ibis.sblock() -> (i32) attributes {maxThreads = 1} {
@@ -56,4 +59,6 @@ ibis.class @Inline2 {
     "foo.unused4"() : () -> ()
     ibis.return
   }
+}
+
 }

@@ -243,6 +243,7 @@ def ModuleTypeImpl : HWType<"Module"> {
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
   let mnemonic = "modty";
+  let genStorageClass = 0;
 
   let extraClassDeclaration = [{
     // Many of these are transitional and will be removed when modules and instances

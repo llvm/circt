@@ -253,9 +253,9 @@ void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setAddMuxPragmas(value);
 }
 
-void circtFirtoolOptionsSetEmitChiselAssertsAsSVA(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEmitChiselAssertsAsSVA(value);
+void circtFirtoolOptionsSetVerificationFlavor(
+    CirctFirtoolFirtoolOptions options, firrtl::VerificationFlavor value) {
+  unwrap(options)->setVerificationFlavor(value);
 }
 
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(

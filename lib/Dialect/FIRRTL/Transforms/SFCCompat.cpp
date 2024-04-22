@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -44,6 +45,15 @@ void SFCCompatPass::runOnOperation() {
 
   bool madeModifications = false;
   SmallVector<InvalidValueOp> invalidOps;
+
+  bool fullAsyncResetExists = false;
+  AnnotationSet::removePortAnnotations(
+      getOperation(), [&](unsigned argNum, Annotation anno) {
+        if (!anno.isClass(fullAsyncResetAnnoClass))
+          return false;
+        return fullAsyncResetExists = true;
+      });
+
   auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.
     if (auto inv = dyn_cast<InvalidValueOp>(op)) {
@@ -54,9 +64,10 @@ void SFCCompatPass::runOnOperation() {
     if (!reg)
       return WalkResult::advance();
 
-    // If the `RegResetOp` has an invalidated initialization, then replace it
-    // with a `RegOp`.
-    if (walkDrivers(reg.getResetValue(), true, false, false,
+    // If the `RegResetOp` has an invalidated initialization and we
+    // are not running FART, then replace it with a `RegOp`.
+    if (!fullAsyncResetExists &&
+        walkDrivers(reg.getResetValue(), true, false, false,
                     [](FieldRef dst, FieldRef src) {
                       return src.isa<InvalidValueOp>();
                     })) {

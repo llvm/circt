@@ -2080,3 +2080,36 @@ circuit StaticShiftRight:
     ; CHECK: %11 = firrtl.shr %x, 10
     ; CHECK: %x_1 = firrtl.node {{.*}} %11 : !firrtl.sint
     node x_1 = shr(x, 10)
+
+;// -----
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "GenericIntrinsics"
+circuit GenericIntrinsics:
+  ; CHECK: firrtl.module @GenericIntrinsics
+  public module GenericIntrinsics:
+    input clock : Clock
+    input data : UInt<32>
+    input c : UInt<1>
+
+    ; Statements
+    ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert" %c : (!firrtl.uint<1>) -> ()
+    intrinsic(circt_verif_assert, c)
+    ; CHECK-NEXT: firrtl.int.generic "circt_fpga_probe" %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
+    intrinsic(circt_fpga_probe, data, clock)
+
+    ; Expressions
+    ; CHECK-NEXT: %[[PAV:.+]] = firrtl.int.generic "circt_plusargs_value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
+    ; CHECK-NEXT: %n = firrtl.node interesting_name %[[PAV]]
+    node n = intrinsic(circt_plusargs_value<FORMAT = "foo"> : { found : UInt<1>, result : UInt<5> })
+    ; CHECK-NEXT: %[[PAT:.+]] = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "bar"> : () -> !firrtl.uint<3>
+    ; CHECK-NEXT: %n2 = firrtl.node interesting_name %[[PAT]]
+    node n2 = intrinsic(circt_plusargs_test<FORMAT = "bar"> : UInt<3>)
+ 
+
+    ; Statement with unused return value.
+    ; CHECK-NEXT: firrtl.int.generic "circt_clock_gate" %clock, %c : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
+    intrinsic(circt_clock_gate : Clock, clock, c)
+
+    ; CHECK-NEXT: %[[SZ:.+]] = firrtl.int.generic "circt_isX"
+    ; CHECK-NEXT: "circt_verif_assert" %[[SZ]]
+    intrinsic(circt_verif_assert, intrinsic(circt_isX: UInt<1>, data))

@@ -281,6 +281,12 @@ MlirAttribute firrtlAttrGetEventControl(MlirContext ctx,
   return wrap(EventControlAttr::get(unwrap(ctx), value));
 }
 
+MlirAttribute firrtlAttrGetIntegerFromString(MlirType type, unsigned numBits,
+                                             MlirStringRef str, uint8_t radix) {
+  auto value = APInt{numBits, unwrap(str), radix};
+  return wrap(IntegerAttr::get(unwrap(type), value));
+}
+
 FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
   Flow flowValue;
 
@@ -311,6 +317,7 @@ FIRRTLValueFlow firrtlValueFoldFlow(MlirValue value, FIRRTLValueFlow flow) {
   case Flow::Duplex:
     return FIRRTL_VALUE_FLOW_DUPLEX;
   }
+  llvm_unreachable("invalid flow");
 }
 
 bool firrtlImportAnnotationsFromJSONRaw(

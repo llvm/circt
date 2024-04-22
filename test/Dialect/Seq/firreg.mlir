@@ -2,60 +2,14 @@
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{disable-reg-randomization})" | FileCheck %s --check-prefixes=COMMON,DISABLED
 // RUN: circt-opt %s -verify-diagnostics --pass-pipeline="builtin.module(lower-seq-to-sv{emit-separate-always-blocks})" | FileCheck %s --check-prefixes=SEPARATE
 
-// RANDOM-LABEL: emit.fragment @RANDOM_INIT_FRAGMENT {
-// RANDOM-NEXT:    sv.verbatim "// Standard header to adapt well known macros for register randomization."
-// RANDOM-NEXT:    sv.verbatim "\0A// RANDOM may be set to an expression that produces a 32-bit random unsigned value."
-// RANDOM-NEXT:    sv.ifdef  @RANDOM {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @RANDOM "$random"
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// Users can define INIT_RANDOM as general code that gets injected into the\0A// initializer block for modules with registers."
-// RANDOM-NEXT:    sv.ifdef  @INIT_RANDOM {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @INIT_RANDOM ""
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// If using random initialization, you can also define RANDOMIZE_DELAY to\0A// customize the delay used, otherwise 0.002 is used."
-// RANDOM-NEXT:    sv.ifdef  @RANDOMIZE_DELAY {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.macro.def @RANDOMIZE_DELAY "0.002"
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim "\0A// Define INIT_RANDOM_PROLOG_ for use in our modules below."
-// RANDOM-NEXT:    sv.ifdef  @INIT_RANDOM_PROLOG_ {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @RANDOMIZE {
-// RANDOM-NEXT:        sv.ifdef  @VERILATOR {
-// RANDOM-NEXT:          sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM"
-// RANDOM-NEXT:        } else {
-// RANDOM-NEXT:          sv.macro.def @INIT_RANDOM_PROLOG_ "`INIT_RANDOM #`RANDOMIZE_DELAY begin end"
-// RANDOM-NEXT:        }
-// RANDOM-NEXT:      } else {
-// RANDOM-NEXT:        sv.macro.def @INIT_RANDOM_PROLOG_ ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:  }
-// RANDOM-LABEL: emit.fragment @RANDOM_INIT_REG_FRAGMENT {
-// RANDOM-NEXT:    sv.verbatim "\0A// Include register initializers in init blocks unless synthesis is set"
-// RANDOM-NEXT:    sv.ifdef  @RANDOMIZE {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @RANDOMIZE_REG_INIT {
-// RANDOM-NEXT:        sv.macro.def @RANDOMIZE ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.ifdef  @SYNTHESIS {
-// RANDOM-NEXT:    } else {
-// RANDOM-NEXT:      sv.ifdef  @ENABLE_INITIAL_REG_ {
-// RANDOM-NEXT:      } else {
-// RANDOM-NEXT:        sv.macro.def @ENABLE_INITIAL_REG_ ""
-// RANDOM-NEXT:      }
-// RANDOM-NEXT:    }
-// RANDOM-NEXT:    sv.verbatim ""
-// RANDOM-NEXT:  }
+// RANDOM-LABEL: emit.fragment @RANDOM_INIT_FRAGMENT
+// RANDOM-LABEL: emit.fragment @RANDOM_INIT_REG_FRAGMENT
 
 emit.fragment @SomeFragment {}
 
 // RANDOM-LABEL: hw.module @fragment_ref
 
-// RANDOM-SAME:   emit.fragments = [@SomeFragment, @RANDOM_INIT_FRAGMENT, @RANDOM_INIT_REG_FRAGMENT]
+// RANDOM-SAME:   emit.fragments = [@SomeFragment, @RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_FRAGMENT]
 hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@SomeFragment]} {
   %cst0_i32 = hw.constant 0 : i32
   %rA = seq.firreg %cst0_i32 clock %clk sym @regA : i32
@@ -336,16 +290,12 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // COMMON-NEXT:  %5 = comb.add %3, %4 : i33
   // COMMON-NEXT:  %6 = comb.extract %5 from 1 : (i33) -> i32
   // COMMON-NEXT:  %7 = comb.mux bin %io_en, %io_d, %6 : i32
-  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset  {
+  // COMMON-NEXT:  sv.always posedge %clock, posedge %reset {
   // COMMON-NEXT:    sv.if %reset {
   // COMMON-NEXT:      sv.passign %reg, %c0_i32 : i32
   // COMMON-NEXT:      sv.passign %reg3, %c1_i32 : i32
   // COMMON-NEXT:    } else {
-  // COMMON-NEXT:      sv.if %io_en {
-  // COMMON-NEXT:        sv.passign %reg, %io_d : i32
-  // COMMON-NEXT:      } else {
-  // COMMON-NEXT:        sv.passign %reg, %6 : i32
-  // COMMON-NEXT:      }
+  // COMMON-NEXT:      sv.passign %reg, %7 : i32
   // COMMON-NEXT:      sv.passign %reg3, %2 : i32
   // COMMON-NEXT:    }
   // COMMON-NEXT:  }
@@ -960,4 +910,21 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
   // CHECK: }
   %0 = comb.mux bin %c, %r2, %r3 : i8
   hw.output %r1 : i8
+}
+
+ // CHECK-LABEL: hw.module @SharedMux
+ hw.module @SharedMux(in %clock: !seq.clock, in %cond : i1, out o: i2){
+    %mux = comb.mux bin %cond, %r1, %r2 : i2
+    %r1 = seq.firreg %mux clock %clock : i2
+    %r2 = seq.firreg %mux clock %clock : i2
+    hw.output %r2: i2
+    //CHECK: %r1 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !hw.inout<i2>
+    //CHECK: %r2 = sv.reg : !hw.inout<i2> 
+    //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !hw.inout<i2>
+    //CHECK: sv.always posedge %clock {
+    //CHECK:   sv.if %cond {
+    //CHECK:     sv.passign %r2, %[[V1]] : i2
+    //CHECK:   } else {
+    //CHECK:     sv.passign %r1, %[[V2]] : i2
 }

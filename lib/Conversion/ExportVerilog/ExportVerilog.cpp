@@ -228,8 +228,11 @@ static StringRef getPortVerilogName(Operation *module, size_t portArgNum) {
 /// Return the verilog name of the port for the module.
 static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
   auto hml = cast<HWModuleLike>(module);
-  return hml.getPort(hml.getHWModuleType().getPortIdForInputId(portArgNum))
-      .getVerilogName();
+  auto pId = hml.getHWModuleType().getPortIdForInputId(portArgNum);
+  if (auto attrs = dyn_cast_or_null<DictionaryAttr>(hml.getPortAttrs(pId)))
+    if (auto updatedName = attrs.getAs<StringAttr>("hw.verilogName"))
+      return updatedName.getValue();
+  return hml.getHWModuleType().getPortName(pId);
 }
 
 /// This predicate returns true if the specified operation is considered a

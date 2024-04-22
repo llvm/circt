@@ -225,3 +225,65 @@ firrtl.class @OM() {
     %0 = firrtl.unresolved_path "OMReferenceTarget:~TargetWire|TargetWire>wire"
 }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "DisambiguateLocalPath"
+firrtl.circuit "DisambiguateLocalPath" {
+// CHECK: hw.hierpath private [[NLA0:@.+]] [@DisambiguateLocalPath::[[SYM0:@.+]], @Child]
+// CHECK: hw.hierpath private [[NLA1:@.+]] [@DisambiguateLocalPath::[[SYM1:@.+]], @Child]
+firrtl.module @DisambiguateLocalPath() {
+  // CHECK: [[PATH0:%.+]] = firrtl.path reference distinct[[[DISTINCT0:.+]]]<>
+  // CHECK: [[PATH1:%.+]] = firrtl.path reference distinct[[[DISTINCT1:.+]]]<>
+  %0 = firrtl.unresolved_path "OMReferenceTarget:~DisambiguateLocalPath|Child"
+
+  // CHECK: firrtl.list.create [[PATH0]], [[PATH1]]
+  %1 = firrtl.list.create %0 : !firrtl.list<path>
+
+  // CHECK: firrtl.instance child0 sym [[SYM1]]
+  firrtl.instance child0 @Child()
+  // CHECK: firrtl.instance child1 sym [[SYM0]]
+  firrtl.instance child1 @Child()
+}
+// CHECK: firrtl.module @Child
+// CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "circt.tracker", id = distinct[[[DISTINCT0]]]<>}
+// CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "circt.tracker", id = distinct[[[DISTINCT1]]]<>}
+firrtl.module @Child() {}
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "DisambiguateNonLocalPath"
+firrtl.circuit "DisambiguateNonLocalPath" {
+// CHECK: hw.hierpath private [[NLA0:@.+]] [@DisambiguateNonLocalPath::[[SYM0:@.+]], @Child1::[[SYM1_0:@.+]], @Child2::[[SYM2:@.+]], @Child3::[[SYM3:@.+]], @Child4]
+// CHECK: hw.hierpath private [[NLA1:@.+]] [@DisambiguateNonLocalPath::[[SYM0]], @Child1::[[SYM1_1:@.+]], @Child2::[[SYM2]], @Child3::[[SYM3]], @Child4]
+firrtl.module @DisambiguateNonLocalPath() {
+  // CHECK: [[PATH0:%.+]] = firrtl.path reference distinct[[[DISTINCT0:.+]]]<>
+  // CHECK: [[PATH1:%.+]] = firrtl.path reference distinct[[[DISTINCT1:.+]]]<>
+  %0 = firrtl.unresolved_path "OMReferenceTarget:~DisambiguateNonLocalPath|Child2/child3:Child3/child4:Child4"
+
+  // CHECK: firrtl.list.create [[PATH0]], [[PATH1]]
+  %1 = firrtl.list.create %0 : !firrtl.list<path>
+
+  // CHECK: firrtl.instance child1 sym [[SYM0]]
+  firrtl.instance child1 @Child1()
+}
+firrtl.module @Child1() {
+  // CHECK: firrtl.instance child2_0 sym [[SYM1_1]]
+  firrtl.instance child2_0 @Child2()
+  // CHECK: firrtl.instance child2_1 sym [[SYM1_0]]
+  firrtl.instance child2_1 @Child2()
+}
+firrtl.module @Child2() {
+  // CHECK: firrtl.instance child3 sym [[SYM2]]
+  firrtl.instance child3 @Child3()
+}
+firrtl.module @Child3() {
+  // CHECK: firrtl.instance child4 sym [[SYM3]]
+  firrtl.instance child4 @Child4()
+}
+// CHECK: firrtl.module @Child4
+// CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "circt.tracker", id = distinct[[[DISTINCT0]]]<>}
+// CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "circt.tracker", id = distinct[[[DISTINCT1]]]<>}
+firrtl.module @Child4() {}
+}

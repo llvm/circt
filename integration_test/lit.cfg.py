@@ -79,7 +79,7 @@ tool_dirs = [
 ]
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool'
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec'
 ]
 
 # Enable python if its path was configured
@@ -196,16 +196,22 @@ if config.clang_tidy_path != "":
 if config.have_systemc != "":
   config.available_features.add('systemc')
 
-# Enable circt-lec tests if it is built.
-if config.lec_enabled != "":
-  config.available_features.add('circt-lec')
-  tools.append('circt-lec')
-
 # Enable z3 if it has been detected.
 if config.z3_path != "":
   tool_dirs.append(config.z3_path)
   tools.append('z3')
   config.available_features.add('z3')
+
+# Enable libz3 if it has been detected.
+if config.z3_library != "":
+  tools.append(ToolSubst(f"%libz3", config.z3_library))
+  config.available_features.add('libz3')
+
+# Add mlir-cpu-runner if the execution engine is built.
+if config.mlir_enable_execution_engine:
+  config.available_features.add('mlir-cpu-runner')
+  config.available_features.add('circt-lec-jit')
+  tools.append('mlir-cpu-runner')
 
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:

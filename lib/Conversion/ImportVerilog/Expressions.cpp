@@ -361,10 +361,58 @@ struct ExprVisitor {
     for (auto *operand : expr.operands()) {
       auto value = context.convertExpression(*operand);
       if (!value)
-        return {};
+        continue;
+      value = convertToSimpleBitVector(value);
       operands.push_back(value);
     }
     return builder.create<moore::ConcatOp>(loc, operands);
+  }
+
+  // Handle replications.
+  Value visit(const slang::ast::ReplicationExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    if (isa<moore::VoidType>(type))
+      return {};
+
+    auto value = context.convertExpression(expr.concat());
+    if (!value)
+      return {};
+    return builder.create<moore::ReplicateOp>(loc, type, value);
+  }
+
+  // Handle single bit selections.
+  Value visit(const slang::ast::ElementSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = context.convertExpression(expr.value());
+    auto lowBit = context.convertExpression(expr.selector());
+
+    if (!value || !lowBit)
+      return {};
+    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+  }
+
+  // Handle range bits selections.
+  Value visit(const slang::ast::RangeSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = context.convertExpression(expr.value());
+    Value lowBit;
+    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
+      if (expr.left().constant && expr.right().constant) {
+        auto lhs = expr.left().constant->integer().as<uint64_t>().value();
+        auto rhs = expr.right().constant->integer().as<uint64_t>().value();
+        lowBit = lhs < rhs ? context.convertExpression(expr.left())
+                           : context.convertExpression(expr.right());
+      } else {
+        mlir::emitError(loc, "unsupported a variable as the index in the")
+            << slang::ast::toString(expr.getSelectionKind()) << "kind";
+        return {};
+      }
+    } else
+      lowBit = context.convertExpression(expr.left());
+
+    if (!value || !lowBit)
+      return {};
+    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
   }
 
   /// Emit an error for all other expressions.

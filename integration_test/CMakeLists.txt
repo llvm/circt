@@ -7,11 +7,16 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-opt
   circt-translate
   circt-rtl-sim
+  circt-lec
   firtool
   hlstool
   ibistool
   handshake-runner
   )
+
+if (MLIR_ENABLE_EXECUTION_ENGINE)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS mlir-cpu-runner)
+endif()
 
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
@@ -36,11 +41,6 @@ if (ESI_RUNTIME)
     )
 
   endif()
-endif()
-
-# Enable circt-lec tests if it is built.
-if(CIRCT_LEC_ENABLED)
-  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS circt-lec)
 endif()
 
 set(CIRCT_INTEGRATION_TIMEOUT 60) # Set a 60s timeout on individual tests.

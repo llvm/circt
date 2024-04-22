@@ -438,8 +438,20 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
-    Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
-           "bool", "false","Convert all Chisel asserts to SVA">
+    Option<"verificationFlavor", "verification-flavor",
+           "circt::firrtl::VerificationFlavor", 
+           "circt::firrtl::VerificationFlavor::None", 
+           "Specify a verification flavor used in the lowering", 
+           [{::llvm::cl::values(
+            clEnumValN(circt::firrtl::VerificationFlavor::None, 
+              "none", "Use the flavor specified by the op"),
+            clEnumValN(circt::firrtl::VerificationFlavor::IfElseFatal,
+              "if-else-fatal", "Use Use `if(cond) else $fatal(..)` format"),
+            clEnumValN(circt::firrtl::VerificationFlavor::Immediate, 
+              "immediate", "Use immediate verif statements"),
+            clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
+          )}]
+           >
   ];
 }
 
@@ -689,7 +701,7 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
 
 def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
-  let dependentDialects = ["smt::SMTDialect"];
+  let dependentDialects = ["smt::SMTDialect", "mlir::func::FuncDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -714,6 +726,23 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
     "mlir::LLVM::LLVMDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertSMTToZ3LLVM
+//===----------------------------------------------------------------------===//
+
+def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
+  let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
+  let dependentDialects = [
+    "smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
+    "mlir::cf::ControlFlowDialect"
+  ];
+  let options = [
+    Option<"debug", "debug", "bool", "false",
+           "Insert additional printf calls printing the solver's state to "
+           "stdout (e.g. at check-sat operations) for debugging purposes">,
   ];
 }
 

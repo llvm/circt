@@ -287,6 +287,10 @@ def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numArcsCreated", "created", "Arcs created during the splitting">,
+    Statistic<"numArcsRemoved", "removed", "Arcs removed during the splitting">,
+  ];
 }
 
 def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {

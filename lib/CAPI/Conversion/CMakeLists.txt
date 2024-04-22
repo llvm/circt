@@ -32,6 +32,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTSCFToCalyx
   CIRCTSeqToSV
   CIRCTSimToSV
+  CIRCTSMTToZ3LLVM
   CIRCTCFToHandshake
   CIRCTVerifToSMT
   CIRCTVerifToSV

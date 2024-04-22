@@ -14,10 +14,10 @@
 
 ; "The module A should be deduped"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top0"
+circuit Top0 :
+  ; CHECK: firrtl.module @Top0
+  module Top0 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
@@ -33,10 +33,10 @@ circuit Top :
 ; // -----
 ; "The module A and B should be deduped"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top1"
+circuit Top1 :
+  ; CHECK: firrtl.module @Top1
+  module Top1 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
@@ -63,10 +63,10 @@ circuit Top :
 ; // -----
 ; "The module A and B with comments should be deduped"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top2"
+circuit Top2 :
+  ; CHECK: firrtl.module @Top2
+  module Top2 :
     ; CHECK: firrtl.instance a1 @A(
     ; CHECK: firrtl.instance a2 @A(
     inst a1 of A
@@ -92,10 +92,10 @@ circuit Top :
 ; // -----
 ; "A_ but not A should be deduped if not annotated"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top3"
+circuit Top3 :
+  ; CHECK: firrtl.module @Top3
+  module Top3 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
@@ -111,10 +111,10 @@ circuit Top :
 ; // -----
 ; "Extmodules with the same defname and parameters should dedup"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top4"
+circuit Top4 :
+  ; CHECK: firrtl.module @Top4
+  module Top4 :
     output out: UInt<1>
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
@@ -145,10 +145,10 @@ circuit Top :
 ; // -----
 ; "Extmodules with different defname should NOT dedup"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top5"
+circuit Top5 :
+  ; CHECK: firrtl.module @Top5
+  module Top5 :
     output out: UInt<1>
     ; CHECK-NEXT: firrtl.instance a1 @A(
     ; CHECK-NEXT: firrtl.instance a2 @A_(
@@ -178,10 +178,10 @@ circuit Top :
 ; // -----
 ; "Extmodules with different parameters should NOT dedup"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top6"
+circuit Top6 :
+  ; CHECK: firrtl.module @Top6
+  module Top6 :
     output out: UInt<1>
     ; CHECK-NEXT: firrtl.instance a1 @A(
     ; CHECK-NEXT: firrtl.instance a2 @A_(
@@ -215,8 +215,8 @@ circuit Top :
 ; Since the MFC support expanding connects and partial connects when the port
 ; names differ, this now testing that the modules succesfully dedup.
 ;
-; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
-circuit FooAndBarModule :
+; CHECK-LABEL: firrtl.circuit "FooAndBarModule0"
+circuit FooAndBarModule0 :
   ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
@@ -225,8 +225,8 @@ circuit FooAndBarModule :
   module BarModule :
     output io : {flip bar : UInt<1>, buzz : UInt<1>}
     io.buzz <= io.bar
-  ; CHECK: firrtl.module @FooAndBarModule
-  module FooAndBarModule :
+  ; CHECK: firrtl.module @FooAndBarModule0
+  module FooAndBarModule0 :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip bar : UInt<1>, buzz : UInt<1>}}
     ; CHECK: firrtl.instance foo @FooModule
     ; CHECK: firrtl.instance bar @FooModule
@@ -239,8 +239,8 @@ circuit FooAndBarModule :
 ; "Modules with aggregate ports that are (partial)? connected should dedup if
 ; their port names are the same".
 ;
-; CHECK-LABEL: firrtl.circuit "FooAndBarModule"
-circuit FooAndBarModule :
+; CHECK-LABEL: firrtl.circuit "FooAndBarModule1"
+circuit FooAndBarModule1 :
   ; CHECK: firrtl.module private @FooModule
   module FooModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
@@ -249,8 +249,8 @@ circuit FooAndBarModule :
   module BarModule :
     output io : {flip foo : UInt<1>, fuzz : UInt<1>}
     io.fuzz <= io.foo
-  ; CHECK: firrtl.module @FooAndBarModule
-  module FooAndBarModule :
+  ; CHECK: firrtl.module @FooAndBarModule1
+  module FooAndBarModule1 :
     output io : {foo : {flip foo : UInt<1>, fuzz : UInt<1>}, bar : {flip foo : UInt<1>, fuzz : UInt<1>}}
     ; CHECK-COUNT-2: firrtl.instance {{(foo|bar)}} @FooModule
     inst foo of FooModule
@@ -261,10 +261,10 @@ circuit FooAndBarModule :
 ; // -----
 ; "The module A and B should be deduped with the first module in order".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top7"
+circuit Top7 :
+  ; CHECK: firrtl.module @Top7
+  module Top7 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
@@ -289,10 +289,10 @@ circuit Top :
 ; // -----
 ; "The module A and A_ should be deduped with fields that sort of match".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top :
-  ; CHECK: firrtl.module @Top
-  module Top :
+; CHECK-LABEL: firrtl.circuit "Top8"
+circuit Top8 :
+  ; CHECK: firrtl.module @Top8
+  module Top8 :
     ; CHECK-COUNT-2: firrtl.instance {{a(1|2)}} @A(
     inst a1 of A
     inst a2 of A_
@@ -312,18 +312,18 @@ circuit Top :
 ; // -----
 ; "The module A and A_ should dedup with different annotation targets".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top9"
+circuit Top9 : %[[
   {
     "class":"circt.test",
-    "target":"Top.A.b"
+    "target":"Top9.A.b"
   }
 ]]
-  ; CHECK: hw.hierpath private @[[nlaSym:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
-  ; CHECK: firrtl.module @Top
+  ; CHECK: hw.hierpath private @[[nlaSym:[_a-zA-Z0-9]+]] [@Top9::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: firrtl.module @Top9
   ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
-  module Top :
+  module Top9 :
     inst a1 of A
     inst a2 of A_
   ; CHECK: module private @A(
@@ -344,25 +344,25 @@ circuit Top : %[[
 ; // -----
 ; "The module A and A_ should dedup with the same annotation targets".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top10"
+circuit Top10 : %[[
   {
     "class":"circt.test",
     "data":"hello",
-    "target":"Top.A.b"
+    "target":"Top10.A.b"
   },
   {
     "class":"circt.test",
     "data":"world",
-    "target":"~Top|A_>b"
+    "target":"~Top10|A_>b"
   }
 ]]
-  ; CHECK: hw.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a2Sym:[_a-zA-Z0-9]+]], @A]
-  ; CHECK: hw.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
-  ; CHECK: firrtl.module @Top
+  ; CHECK: hw.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top10::@[[a2Sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: hw.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top10::@[[a1Sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: firrtl.module @Top10
   ; CHECK-NEXT: firrtl.instance a1 sym @[[a1Sym]] @A(
   ; CHECK-NEXT: firrtl.instance a2 sym @[[a2Sym]] @A(
-  module Top :
+  module Top10 :
     inst a1 of A
     inst a2 of A_
   ; CHECK: module private @A(
@@ -384,23 +384,23 @@ circuit Top : %[[
 ; "The deduping module A and A_ should rename internal signals that have
 ; different names".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top11"
+circuit Top11 : %[[
   {
     "class":"circt.test",
     "data":"hello",
-    "target":"~Top|A>a"
+    "target":"~Top11|A>a"
   },
   {
     "class":"circt.test",
     "data":"hello",
-    "target":"~Top|A_>b"
+    "target":"~Top11|A_>b"
   }
 ]]
   ; CHECK-NOT: hw.hierpath
-  ; CHECK: hw.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top::@[[a1sym:[_a-zA-Z0-9]+]], @A]
-  ; CHECK: hw.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top::@[[a1Sym]], @A]
-  module Top :
+  ; CHECK: hw.hierpath private @[[nlaSym2:[_a-zA-Z0-9]+]] [@Top11::@[[a1sym:[_a-zA-Z0-9]+]], @A]
+  ; CHECK: hw.hierpath private @[[nlaSym1:[_a-zA-Z0-9]+]] [@Top11::@[[a1Sym]], @A]
+  module Top11 :
     inst a1 of A
     a1 is invalid
     inst a2 of A_
@@ -438,33 +438,33 @@ circuit main:
 ; // -----
 ; "The deduping module A and A_ should rename instances and signals that have different names"
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top12"
+circuit Top12 : %[[
   {
     "class":"circt.test",
     "data":"B",
-    "target":"~Top|Top/a:A/b:B"
+    "target":"~Top12|Top12/a:A/b:B"
   },
   {
     "class":"circt.test",
     "data":"B.foo",
-    "target":"~Top|Top/a:A/b:B>foo"
+    "target":"~Top12|Top12/a:A/b:B>foo"
   },
   {
     "class":"circt.test",
     "data":"B_",
-    "target":"~Top|Top/a_:A_/b_:B_"
+    "target":"~Top12|Top12/a_:A_/b_:B_"
   },
   {
     "class":"circt.test",
     "data":"B_.bar",
-    "target":"~Top|Top/a_:A_/b_:B_>bar"
+    "target":"~Top12|Top12/a_:A_/b_:B_>bar"
   }
 ]]
-  ; CHECK: hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]] [@Top::@[[aSym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]], @B]
-  ; CHECK: hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]] [@Top::@[[a_Sym:[_a-zA-Z0-9]+]], @A::@[[bSym]], @B]
-  ; CHECK: firrtl.module @Top
-  module Top :
+  ; CHECK: hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]] [@Top12::@[[aSym:[_a-zA-Z0-9]+]], @A::@[[bSym:[_a-zA-Z0-9]+]], @B]
+  ; CHECK: hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]] [@Top12::@[[a_Sym:[_a-zA-Z0-9]+]], @A::@[[bSym]], @B]
+  ; CHECK: firrtl.module @Top12
+  module Top12 :
     ; CHECK-NEXT: firrtl.instance a sym @[[aSym]] @A()
     inst a of A
     ; CHECK-NEXT: firrtl.instance a_ sym @[[a_Sym]] @A()
@@ -497,43 +497,43 @@ circuit Top : %[[
 ; tests approximates this with two annotations with the same class that mimics
 ; how a multi-target annotation would be scattered.
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top13"
+circuit Top13 : %[[
   {
     "class":"circt.test",
     "data":"one",
-    "target":"~Top|Top/a:A/b:B/c:C/d:D"
+    "target":"~Top13|Top13/a:A/b:B/c:C/d:D"
   },
   {
     "class":"circt.test",
     "data":"one",
-    "target":"~Top|Top/a:A/b:B/c:C/d:D>foo"
+    "target":"~Top13|Top13/a:A/b:B/c:C/d:D>foo"
   },
   {
     "class":"circt.test",
     "data":"two",
-    "target":"~Top|Top/a_:A_/b_:B_/c_:C_/d_:D_"
+    "target":"~Top13|Top13/a_:A_/b_:B_/c_:C_/d_:D_"
   },
   {
     "class":"circt.test",
     "data":"two",
-    "target":"~Top|Top/a_:A_/b_:B_/c_:C_/d_:D_>bar"
+    "target":"~Top13|Top13/a_:A_/b_:B_/c_:C_/d_:D_>bar"
   }
 ]]
   ; CHECK:        hw.hierpath private @[[nla_a:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[aSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top13::@[[aSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[bSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B::@[[cSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @C::@[[dSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @D]
   ; CHECK-NEXT:   hw.hierpath private @[[nla_a_:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[a_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top13::@[[a_Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[bSym]],
   ; CHECK-SAME:      @B::@[[cSym]],
   ; CHECK-SAME:      @C::@[[dSym]],
   ; CHECK-SAME:      @D]
-  ; CHECK-NEXT:   firrtl.module @Top
-  module Top :
+  ; CHECK-NEXT:   firrtl.module @Top13
+  module Top13 :
     ; CHECK-NEXT:   firrtl.instance a sym @[[aSym]]
     ; CHECK-SAME:     @A()
     inst a of A
@@ -582,121 +582,121 @@ circuit Top : %[[
 ; "Deduping modules with multiple instances should correctly rename
 ; instances".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top14"
+circuit Top14 : %[[
   {
     "class":"circt.test",
     "data":"nla1",
-    "target":"~Top|Top/b:B"
+    "target":"~Top14|Top14/b:B"
   },
   {
     "class":"circt.test",
     "data":"nla2",
-    "target":"~Top|Top/b_:B_"
+    "target":"~Top14|Top14/b_:B_"
   },
   {
     "class":"circt.test",
     "data":"nla3",
-    "target":"~Top|Top/a1:A/b_:B_"
+    "target":"~Top14|Top14/a1:A/b_:B_"
   },
   {
     "class":"circt.test",
     "data":"nla4",
-    "target":"~Top|Top/a2:A/b_:B_"
+    "target":"~Top14|Top14/a2:A/b_:B_"
   },
   {
     "class":"circt.test",
     "data":"nla5",
-    "target":"~Top|Top/a1:A/b:B"
+    "target":"~Top14|Top14/a1:A/b:B"
   },
   {
     "class":"circt.test",
     "data":"nla6",
-    "target":"~Top|Top/a2:A/b:B"
+    "target":"~Top14|Top14/a2:A/b:B"
   },
   {
     "class":"circt.test",
     "data":"nla7",
-    "target":"~Top|Top/b:B/c:C"
+    "target":"~Top14|Top14/b:B/c:C"
   },
   {
     "class":"circt.test",
     "data":"nla8",
-    "target":"~Top|Top/b_:B_/c:C"
+    "target":"~Top14|Top14/b_:B_/c:C"
   },
   {
     "class":"circt.test",
     "data":"nla9",
-    "target":"~Top|Top/a1:A/b_:B_/c:C"
+    "target":"~Top14|Top14/a1:A/b_:B_/c:C"
   },
   {
     "class":"circt.test",
     "data":"nla10",
-    "target":"~Top|Top/a2:A/b_:B_/c:C"
+    "target":"~Top14|Top14/a2:A/b_:B_/c:C"
   },
   {
     "class":"circt.test",
     "data":"nla11",
-    "target":"~Top|Top/a1:A/b:B/c:C"
+    "target":"~Top14|Top14/a1:A/b:B/c:C"
   },
   {
     "class":"circt.test",
     "data":"nla12",
-    "target":"~Top|Top/a2:A/b:B/c:C"
+    "target":"~Top14|Top14/a2:A/b:B/c:C"
   }
 ]]
   ; CHECK:        hw.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[TopbSym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top14::@[[TopbSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topb_Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top14::@[[Topb_Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_3:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top14::@[[Topa1Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[Ab_Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_4:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym:[_a-zA-Z0-9]+]],
+  ; CHECK-SAME:     [@Top14::@[[Topa2Sym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_5:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa1Sym]],
   ; CHECK-SAME:      @A::@[[AbSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_6:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa2Sym]],
   ; CHECK-SAME:      @A::@[[AbSym]],
   ; CHECK-SAME:      @B]
   ; CHECK:        hw.hierpath private @[[nla_7:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[TopbSym]],
+  ; CHECK-SAME:     [@Top14::@[[TopbSym]],
   ; CHECK-SAME:      @B::@[[BcSym:[_a-zA-Z0-9]+]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_8:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topb_Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topb_Sym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_9:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa1Sym]],
   ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_10:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa2Sym]],
   ; CHECK-SAME:      @A::@[[Ab_Sym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_11:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa1Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa1Sym]],
   ; CHECK-SAME:      @A::@[[AbSym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
   ; CHECK:        hw.hierpath private @[[nla_12:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:     [@Top::@[[Topa2Sym]],
+  ; CHECK-SAME:     [@Top14::@[[Topa2Sym]],
   ; CHECK-SAME:      @A::@[[AbSym]],
   ; CHECK-SAME:      @B::@[[BcSym]],
   ; CHECK-SAME:      @C]
-  ; CHECK-NEXT:   firrtl.module @Top
-  module Top :
+  ; CHECK-NEXT:   firrtl.module @Top14
+  module Top14 :
     ; CHECK-NEXT:   firrtl.instance b sym @[[TopbSym]]
     ; CHECK-SAME:     @B()
     inst b of B
@@ -753,72 +753,77 @@ circuit Top : %[[
 ; the implementation of the Scala FIRRTL Compiler's rename map (which relies on
 ; strings) and is unlikely to occur in CIRCT due to the use of field IDs.
 ;
-; CHECK-LABEL: firrtl.circuit "top"
-circuit top : %[[
+; CHECK-LABEL: firrtl.circuit "Top15"
+circuit Top15 : %[[
   {
     "class":"circt.test",
     "data":"nla1",
-    "target":"~top|a>i.a"
+    "target":"~Top15|a>i.a"
   },
   {
     "class":"circt.test",
     "data":"nla2",
-    "target":"~top|b>q.a"
+    "target":"~Top15|b>q.a"
   }
 ]]
   ; CHECK:      hw.hierpath private @[[nla_2:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:   [@top::@[[topbSym:[_a-zA-Z0-9]+]], @a]
+  ; CHECK-SAME:   [@Top15::@[[topbSym:[_a-zA-Z0-9]+]], @a]
   ; CHECK:      hw.hierpath private @[[nla_1:[_a-zA-Z0-9]+]]
-  ; CHECK-SAME:   [@top::@[[topaSym:[_a-zA-Z0-9]+]], @a]
-  ; CHECK: firrtl.module @top
-  module top:
-    input ia: {z: {y: {x: UInt<1>}}, a: UInt<1>}
-    input ib: {a: {b: {c: UInt<1>}}, z: UInt<1>}
-    output oa: {z: {y: {x: UInt<1>}}, a: UInt<1>}
-    output ob: {a: {b: {c: UInt<1>}}, z: UInt<1>}
+  ; CHECK-SAME:   [@Top15::@[[topaSym:[_a-zA-Z0-9]+]], @a]
+  ; CHECK: firrtl.module @Top15
+  module Top15:
+    input ia: {z: {y: {x: UInt<1>}}, a: UInt<1> un: UInt<2>}
+    input ib: {a: {b: {c: UInt<1>}}, z: UInt<1> un: UInt<2>}
+    output oa: {z: {y: {x: UInt<1>}}, a: UInt<1> un: UInt<2>}
+    output ob: {a: {b: {c: UInt<1>}}, z: UInt<1> un: UInt<2>}
     ; CHECK:      firrtl.instance a sym @[[topaSym]]
     inst a of a
     a.i.z.y.x <= ia.z.y.x
     a.i.a <= ia.a
+    a.i.un <= ia.un
     oa.z.y.x <= a.o.z.y.x
     oa.a <= a.o.a
+    oa.un <= a.o.un
+
     ; CHECK:      firrtl.instance b sym @[[topbSym]]
     inst b of b
-    b.q.a.b.c <= ib.a.b.c
+    b.q.un.b.c <= ib.a.b.c
     b.q.z <= ib.z
-    ob.a.b.c <= b.r.a.b.c
+    b.q.a <= ib.un
+    ob.a.b.c <= b.r.un.b.c
     ob.z <= b.r.z
+    ob.un <= b.r.a
 
   ; CHECK:      firrtl.module private @a(
   ; CHECK-SAME:   in %i:
   ; CHECK-NOT:    out
   ; CHECK-SAME:     [{circt.fieldID = 4 : i32, circt.nonlocal = @[[nla_1]], class = "circt.test", data = "nla1"},
-  ; CHECK-SAME:      {circt.fieldID = 1 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"}]
+  ; CHECK-SAME:      {circt.fieldID = 5 : i32, circt.nonlocal = @[[nla_2]], class = "circt.test", data = "nla2"}]
   module a:
-    input i: {z: {y: {x: UInt<1>}}, a: UInt<1>}
-    output o: {z: {y: {x: UInt<1>}}, a: UInt<1>}
+    input i: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
+    output o: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
     o <= i
 
   ; CHECK-NOT:  firrtl.module private @b(
   module b:
-    input q: {a: {b: {c: UInt<1>}}, z: UInt<1>}
-    output r: {a: {b: {c: UInt<1>}}, z: UInt<1>}
+    input  q: {un: {b: {c: UInt<1>}}, z: UInt<1>, a: UInt<2>}
+    output r: {un: {b: {c: UInt<1>}}, z: UInt<1>, a: UInt<2>}
     r <= q
 
 ; // -----
 ; "The module A and A_ should be deduped even with different port names and info,
 ; and annotations should be remapped".
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top16"
+circuit Top16 : %[[
   {
     "class": "circt.test",
-     "target": "Top.Top.a2.y",
+     "target": "Top16.Top16.a2.y",
      "pin": "pin"
   }
 ]]
-  ; CHECK: firrtl.module @Top
-  module Top :
+  ; CHECK: firrtl.module @Top16
+  module Top16 :
     output out: UInt<1>
     ; CHECK: instance a1 @A(
     ; CHECK-NOT: SourceAnnotation
@@ -844,17 +849,17 @@ circuit Top : %[[
 ; This test is checking that a "DontTouchAnnotation" has the same behavior as
 ; any other annotation due to deduplication.
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top17"
+circuit Top17 : %[[
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
-    "target":"~Top|Top/a1:A>b"
+    "target":"~Top17|Top17/a1:A>b"
   }
 ]]
-  ; CHECK: firrtl.module @Top
+  ; CHECK: firrtl.module @Top17
   ; CHECK-NEXT: firrtl.instance a1 @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
-  module Top :
+  module Top17 :
     inst a1 of A
     inst a2 of A_
   ; CHECK: module private @A(
@@ -880,21 +885,21 @@ circuit Top : %[[
 ; that generating a symbol here is fine.  However, this is different from the
 ; Scala FIRRTL Compiler and we should make a decision on what to do with this.
 ;
-; CHECK-LABEL: firrtl.circuit "Top"
-circuit Top : %[[
+; CHECK-LABEL: firrtl.circuit "Top18"
+circuit Top18 : %[[
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
-    "target":"Top.A.b"
+    "target":"Top18.A.b"
   },
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
-    "target":"~Top|A_>b"
+    "target":"~Top18|A_>b"
   }
 ]]
-  ; CHECK: firrtl.module @Top
+  ; CHECK: firrtl.module @Top18
   ; CHECK-NEXT: firrtl.instance a1 @A(
   ; CHECK-NEXT: firrtl.instance a2 @A(
-  module Top :
+  module Top18 :
     inst a1 of A
     inst a2 of A_
   ; CHECK: module private @A(

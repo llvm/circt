@@ -22,8 +22,8 @@ def ScopeRefType : IbisTypeDef<"ScopeRef"> {
     scope (given a `$scopeName` argument) or an opaque reference.
   }];
 
-  let parameters = (ins OptionalParameter<"mlir::FlatSymbolRefAttr">:$scopeRef);
-  let assemblyFormat = "(`<` $scopeRef^  `>`)?";
+  let parameters = (ins OptionalParameter<"::circt::hw::InnerRefAttr">:$scopeRef);
+  let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     bool isOpaque() {
       return !getScopeRef();
@@ -34,9 +34,6 @@ def ScopeRefType : IbisTypeDef<"ScopeRef"> {
     // Builds an opaque (unresolved) class reference.
     TypeBuilder<(ins), [{
       return $_get($_ctxt, nullptr);
-    }]>,
-    TypeBuilder<(ins "StringAttr":$scopeRef), [{
-      return $_get($_ctxt, FlatSymbolRefAttr::get(scopeRef));
     }]>
   ];
 }

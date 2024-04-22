@@ -22,10 +22,24 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+namespace firrtl {
+enum class VerificationFlavor {
+  // Use the flavor specified by the op.
+  // TOOD: Drop this option once the migration finished.
+  None,
+  // Use `if(cond) else $fatal(..)` format.
+  IfElseFatal,
+  // Use immediate form.
+  Immediate,
+  // Use SVA.
+  SVA
+};
+} // namespace firrtl
 
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
-                          bool emitChiselAssertsAsSVA = false);
+                          firrtl::VerificationFlavor assertionFlavor =
+                              firrtl::VerificationFlavor::None);
 
 } // namespace circt
 

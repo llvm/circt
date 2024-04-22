@@ -1395,3 +1395,38 @@ circuit IntModuleBadIntrinsic:
     ; expected-error @below {{expected intrinsic name}}
     intrinsic = 0
   module IntModule:
+
+;// -----
+FIRRTL version 4.0.0
+circuit GenericIntExprNoRet:
+  public module GenericIntExprNoRet:
+    ; expected-error @below {{expected ':' in intrinsic expression}}
+    node n = intrinsic(dummy)
+
+;// -----
+FIRRTL version 4.0.0
+circuit GenericIntNotPassive:
+  public module GenericIntNotPassive:
+    ; expected-error @below {{must be a passive base type}}
+    intrinsic(dummy : { flip x : UInt<1> })
+
+;// -----
+FIRRTL version 4.0.0
+circuit GenericIntBadId:
+  public module GenericIntBadId:
+    ; expected-error @below {{expected intrinsic identifier}}
+    intrinsic(5)
+
+;// -----
+FIRRTL version 4.0.0
+circuit GenericIntUntermStr:
+  public module GenericIntUntermStr:
+    ; expected-error @below {{unterminated string}}
+    intrinsic<key = "val
+      " ; end for syntax highlighting
+;// -----
+FIRRTL version 4.0.0
+circuit GenericIntParamRedef:
+  public module GenericIntParamRedef:
+    ; expected-error @below {{redefinition of parameter 'x'}}
+    intrinsic(dummy<x = 5, x = 3>)

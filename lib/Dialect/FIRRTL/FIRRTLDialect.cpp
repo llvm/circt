@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -36,6 +38,8 @@ void FIRRTLDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/FIRRTL/FIRRTL.cpp.inc"
       >();
+
+  addInterface<FIRRTLIntrinsicLoweringDialectInterface>();
 }
 
 /// Registered hook to materialize a single constant operation from a given

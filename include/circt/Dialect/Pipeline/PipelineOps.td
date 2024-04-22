@@ -25,7 +25,6 @@ include "circt/Dialect/Seq/SeqTypes.td"
 
 class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
-      Pure,
       RegionKindInterface,
       AttrSizedOperandSegments,
       DeclareOpInterfaceMethods<OpAsmOpInterface, [

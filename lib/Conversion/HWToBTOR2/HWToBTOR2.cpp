@@ -53,7 +53,6 @@ private:
 
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1;          // btor2 line identifiers usually start at 1
-  size_t resetLID = noLID; // keeps track of the reset's LID
   size_t nclocks = 0;
 
   // Create maps to keep track of lid associations
@@ -488,16 +487,18 @@ private:
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
     int64_t width;
-    Value next, resetVal;
+    Value next, reset, resetVal;
 
     // Extract the operands depending on the register type
     if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
       width = hw::getBitWidth(reg.getType());
       next = reg.getInput();
+      reset = reg.getReset();
       resetVal = reg.getResetValue();
     } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
       width = hw::getBitWidth(reg.getType());
       next = reg.getNext();
+      reset = reg.getReset();
       resetVal = reg.getResetValue();
     } else {
       op->emitError("Invalid register operation !");
@@ -525,8 +526,22 @@ private:
     }
 
     // Check if the register has a reset
-    if (resetLID != noLID) {
+    if (reset) {
       size_t resetValLID = noLID;
+
+      // Check if the reset signal is a port to avoid nullptrs (as done above
+      // with next)
+      size_t resetLID = noLID;
+      if (BlockArgument barg = dyn_cast<BlockArgument>(reset)) {
+        // Extract the block argument index and use that to get the line number
+        size_t argIdx = barg.getArgNumber();
+
+        // Check that the extracted argument is in range before using it
+        resetLID = inputLIDs[argIdx];
+
+      } else {
+        resetLID = getOpLID(reset);
+      }
 
       // Check for a reset value, if none exists assume it's zero
       if (resetVal)
@@ -580,10 +595,6 @@ public:
       // Record the defining operation's line ID (the module itself in the case
       // of ports)
       inputLIDs[port.argNum] = lid;
-
-      // We assume that the explicit name is always %reset for reset ports
-      if (iName == "reset")
-        resetLID = lid;
 
       // Increment the lid to keep it unique
       lid++;
