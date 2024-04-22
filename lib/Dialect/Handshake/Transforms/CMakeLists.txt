@@ -6,7 +6,7 @@ add_circt_dialect_library(CIRCTHandshakeTransforms
   LockFunctions.cpp
   LowerExtmemToHW.cpp
   LegalizeMemrefs.cpp
-  SplitCMerges.cpp
+  SplitMerges.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
