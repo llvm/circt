@@ -177,3 +177,23 @@ hw.module @source(out token : !dc.token) {
     %token = dc.source
     hw.output %token : !dc.token
 }
+
+// CHECK-LABEL:   hw.module @pack_data_tuple(in 
+// CHECK-SAME:                  %[[VAL_0:.*]] : i32, in %[[VAL_1:.*]] : i1, out output : !hw.struct<field0: i32, field1: i1>) {
+// CHECK:           %[[VAL_2:.*]] = hw.struct_create (%[[VAL_0]], %[[VAL_1]]) : !hw.struct<field0: i32, field1: i1>
+// CHECK:           hw.output %[[VAL_2]] : !hw.struct<field0: i32, field1: i1>
+// CHECK:         }
+hw.module @pack_data_tuple(in %arg0 : i32, in %arg1 : i1, out output : tuple<i32, i1>) {
+    %out = dc.pack_data_tuple %arg0, %arg1 : i32, i1
+    hw.output %out : tuple<i32, i1>
+}
+
+// CHECK-LABEL:   hw.module @unpack_data_tuple(in 
+// CHECK-SAME:                                    %[[VAL_0:.*]] : !hw.struct<field0: i32, field1: i1>, out out0 : i32, out out1 : i1) {
+// CHECK:           %[[VAL_1:.*]], %[[VAL_2:.*]] = hw.struct_explode %[[VAL_0]] : !hw.struct<field0: i32, field1: i1>
+// CHECK:           hw.output %[[VAL_1]], %[[VAL_2]] : i32, i1
+// CHECK:         }
+hw.module @unpack_data_tuple(in %v : tuple<i32, i1>, out out0: i32, out out1: i1) {
+    %out:2 = dc.unpack_data_tuple %v : tuple<i32, i1>
+    hw.output %out#0, %out#1 : i32, i1
+}
