@@ -47,6 +47,7 @@ moore.module @Expressions {
   %int2 = moore.variable : !moore.int
   %integer = moore.variable : !moore.integer
   %integer2 = moore.variable : !moore.integer
+  %arr = moore.variable : !moore.unpacked<range<range<packed<range<bit, 7:0>>, 0:3>, 0:1>>
 
   // CHECK: moore.constant 0 : !moore.int
   moore.constant 0 : !moore.int
@@ -136,4 +137,23 @@ moore.module @Expressions {
   moore.concat %b5, %b1 : (!moore.packed<range<bit, 4:0>>, !moore.bit) -> !moore.packed<range<bit, 5:0>>
   // CHECK: moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
   moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
+  // CHECK: [[VAL:%.*]] = moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
+  // CHECK: moore.replicate [[VAL]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 3:0>>
+  %0 = moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
+  moore.replicate %0 : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 3:0>>
+
+  // CHECK: moore.extract %b5 from %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit -> !moore.bit
+  moore.extract %b5 from %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit -> !moore.bit
+  // CHECK: [[VAL1:%.*]] = moore.constant 0 : !moore.int
+  // CHECK: [[VAL2:%.*]] = moore.extract %arr from [[VAL1]] : !moore.unpacked<range<range<packed<range<bit, 7:0>>, 0:3>, 0:1>>, !moore.int -> !moore.unpacked<range<packed<range<bit, 7:0>>, 0:3>>
+  %1 = moore.constant 0 : !moore.int
+  %2 = moore.extract %arr from %1 : !moore.unpacked<range<range<packed<range<bit, 7:0>>, 0:3>, 0:1>>, !moore.int -> !moore.unpacked<range<packed<range<bit, 7:0>>, 0:3>>
+  // CHECK: [[VAL3:%.*]] = moore.constant 3 : !moore.int
+  // CHECK: [[VAL4:%.*]] = moore.extract [[VAL2]] from [[VAL3]] : !moore.unpacked<range<packed<range<bit, 7:0>>, 0:3>>, !moore.int -> !moore.packed<range<bit, 7:0>>
+  %3 = moore.constant 3 : !moore.int
+  %4 = moore.extract %2 from %3 : !moore.unpacked<range<packed<range<bit, 7:0>>, 0:3>>, !moore.int -> !moore.packed<range<bit, 7:0>>
+  // CHECK: [[VAL5:%.*]] = moore.constant 2 : !moore.int
+  // CHECK: moore.extract [[VAL4]] from [[VAL5]] : !moore.packed<range<bit, 7:0>>, !moore.int -> !moore.packed<range<bit, 6:2>>
+  %5 = moore.constant 2 : !moore.int
+  moore.extract %4 from %5 : !moore.packed<range<bit, 7:0>>, !moore.int -> !moore.packed<range<bit, 6:2>>
 }

@@ -656,4 +656,65 @@ def ConcatOp : MooreOp<"concat", [
   }];
 }
 
+def ReplicateOp : MooreOp<"replicate", [
+  Pure
+]> {
+  let summary = "Multiple concatenation of expressions";
+  let description = [{
+    This operation indicates a joining together of that many copies of the 
+    concatenation `{constant{w}}`. Which enclosed together within brace.
+    The 'constant' must a non-negative, non-x, and non-z constant expression.
+    The 'constant' may be a value of zero, but it only exists in parameterized
+    code, and it will be ignored(type is changed to the void).
+
+    Example:
+    ```
+      {0{w}}   // empty! ignore it.
+      {4{w}}   // the same as {w, w, w, w}
+    ```
+    See IEEE 1800-2017 §11.4.12 "Concatenation operators".
+  }];
+  let arguments = (ins SimpleBitVectorType:$value);
+  let results = (outs SimpleBitVectorType:$result);
+  let assemblyFormat = [{
+    $value attr-dict `:` functional-type($value, $result)
+  }];
+}
+
+def ExtractOp : MooreOp<"extract"> {
+  let summary = "Addressing operation";
+  let description = [{
+    This operation includes the vector bit/part-select, array, and memory 
+    addressing.If the address is invalid--out of bounds or has x or z bit--
+    then it will produce x for 4-state or 0 for 2-state.
+    Bit-select results are unsigned, regardless of the operands.
+    Part-select results are unsigned, regardless of the operands even if 
+    the part-select specifies the entire vector.
+    See IEEE 1800-2017 § 11.8.1 "Rules for expression types"
+
+    Example:
+    ```
+    logic v [7:0];
+    v[1];                      // the bit-select addressing
+    v[3:0];                    // the part-select addressing
+    v[3-:4];  v[0+:4];         // They are equivalent to v[3:0]
+    ```
+    See IEEE 1800-2017 § 11.5.1 "Vector bit-select and part-select addressing".
+
+    Example:
+    ```
+    // an array of 256-by-256 8-bit elements
+    logic [7:0] twod_array [0:255][0:255];
+    logic [7:0] mem_name [0:1023];      // a memory of 1024 8-bit words
+    ```
+    See IEEE 1800-2017 § 11.5.2 "Array and memory addressing".
+  }];
+  let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` 
+    type($input) `,` type($lowBit) `->` type($result)
+  }];
+} 
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

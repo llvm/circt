@@ -102,3 +102,49 @@ module Foo;
   // expected-error @below {{literals with X or Z bits not supported}}
   initial x = 'z;
 endmodule
+
+// -----
+
+module Foo;
+  // expected-remark @below {{declared here}}
+  int a, b;
+  initial begin
+    // expected-error @below {{replication constant can only be zero inside of a concatenation}}
+    a = {0{32'd5}};
+    // expected-error @below {{value must be positive}}
+    a = {-1{32'd5}};
+    // expected-error @below {{value must not have any unknown bits}}
+    a = {32'bx{1'b0}};
+    // expected-error @below {{value must not have any unknown bits}}
+    a = {32'bz{1'b0}};
+    // expected-error @below {{reference to non-constant variable 'b' is not allowed in a constant expression}}
+    a = {b{32'd5}};
+  end
+endmodule
+
+// -----
+
+module Foo;
+  bit [3:0] a;
+  bit [1:0] b;
+  // expected-remark @below {{declared here}}
+  bit c;
+  initial begin
+    // expected-error @below {{cannot refer to element 1'bx of 'bit[3:0]' [-Windex-oob]}}
+    c = a[1'bx];
+    // expected-error @below {{endianness of selection must match declared range (type is 'bit[3:0]')}}
+    b = a[0:1];
+    // expected-error @below {{reference to non-constant variable 'c' is not allowed in a constant expression}}
+    b = a[c:1];
+    // expected-error @below {{reference to non-constant variable 'c' is not allowed in a constant expression}}
+    b = a[2-:c];
+    // expected-error @below {{value must not have any unknown bits}}
+    b = a[1'bz:0];
+    // expected-error @below {{value must not have any unknown bits}}
+    b = a[1-:'x];
+    // expected-error @below {{value must be positive}}
+    b = a[1-:0];
+    // expected-error @below {{value must be positive}}
+    b = a[1-:-1];
+  end
+endmodule
