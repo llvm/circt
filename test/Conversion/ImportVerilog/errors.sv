@@ -44,6 +44,21 @@ endmodule
 
 // -----
 
+module Foo;
+  // expected-error @below {{unsupported construct}}
+  nettype real x;
+endmodule
+
+// -----
+
+module Foo;
+  // expected-error @+2 {{unsupported type}}
+  // expected-note @+1 {{untyped}}
+  interconnect x;
+endmodule
+
+// -----
+
 // expected-error @below {{unsupported construct}}
 package Foo;
 endpackage

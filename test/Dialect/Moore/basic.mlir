@@ -10,6 +10,33 @@ moore.module @Foo {
   // CHECK: [[TMP:%.+]] = moore.variable name "v1" %v2 : !moore.bit
   moore.variable name "v1" %v2 : !moore.bit
 
+  // CHECK: %w0 = moore.net wire : !moore.logic
+  %w0 = moore.net wire : !moore.logic
+  // CHECK: %w1 = moore.net wire %w0 : !moore.logic
+  %w1 = moore.net wire %w0 : !moore.logic
+  // CHECK: %w2 = moore.net uwire %w0 : !moore.logic
+  %w2 = moore.net uwire %w0 : !moore.logic
+  // CHECK: %w3 = moore.net tri %w0 : !moore.logic
+  %w3 = moore.net tri %w0 : !moore.logic
+  // CHECK: %w4 = moore.net triand %w0 : !moore.logic
+  %w4 = moore.net triand %w0 : !moore.logic
+  // CHECK: %w5 = moore.net trior %w0 : !moore.logic
+  %w5 = moore.net trior %w0 : !moore.logic
+  // CHECK: %w6 = moore.net wand %w0 : !moore.logic
+  %w6 = moore.net wand %w0 : !moore.logic
+  // CHECK: %w7 = moore.net wor %w0 : !moore.logic
+  %w7 = moore.net wor %w0 : !moore.logic
+  // CHECK: %w8 = moore.net trireg %w0 : !moore.logic
+  %w8 = moore.net trireg %w0 : !moore.logic
+  // CHECK: %w9 = moore.net tri0 %w0 : !moore.logic
+  %w9 = moore.net tri0 %w0 : !moore.logic
+  // CHECK: %w10 = moore.net tri1 %w0 : !moore.logic
+  %w10 = moore.net tri1 %w0 : !moore.logic
+  // CHECK: %w11 = moore.net supply0 : !moore.logic
+  %w11 = moore.net supply0 : !moore.logic
+  // CHECK: %w12 = moore.net supply1 : !moore.logic
+  %w12 = moore.net supply1 : !moore.logic  
+
   // CHECK: moore.procedure initial {
   // CHECK: moore.procedure final {
   // CHECK: moore.procedure always {

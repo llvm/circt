@@ -46,6 +46,33 @@ module Basic;
   int v1;
   int v2 = v1;
 
+  // CHECK: %w0 = moore.net wire : !moore.logic
+  // CHECK: %w1 = moore.net wire %w0 : !moore.logic
+  wire w0;
+  wire w1 = w0;
+  // CHECK: %w2 = moore.net uwire %w0 : !moore.logic
+  uwire w2 = w0;
+  // CHECK: %w3 = moore.net tri %w0 : !moore.logic
+  tri w3 = w0;
+  // CHECK: %w4 = moore.net triand %w0 : !moore.logic
+  triand w4 = w0;
+  // CHECK: %w5 = moore.net trior %w0 : !moore.logic  
+  trior w5 = w0;
+  // CHECK: %w6 = moore.net wand %w0 : !moore.logic
+  wand w6 = w0;
+  // CHECK: %w7 = moore.net wor %w0 : !moore.logic
+  wor w7 = w0;
+  // CHECK: %w8 = moore.net trireg %w0 : !moore.logic
+  trireg w8 = w0;
+  // CHECK: %w9 = moore.net tri0 %w0 : !moore.logic
+  tri0 w9 = w0;
+  // CHECK: %w10 = moore.net tri1 %w0 : !moore.logic 
+  tri1 w10 = w0;
+  // CHECK: %w11 = moore.net supply0 : !moore.logic  
+  supply0 w11;
+  // CHECK: %w12 = moore.net supply1 : !moore.logic  
+  supply1 w12;
+
   // CHECK: %b1 = moore.variable : !moore.packed<range<bit, 0:0>>
   // CHECK: [[TMP:%.+]] = moore.conversion %b1 : !moore.packed<range<bit, 0:0>> -> !moore.bit
   // CHECK: %b2 = moore.variable [[TMP]] : !moore.bit
