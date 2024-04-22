@@ -119,8 +119,9 @@ struct MemberVisitor {
       if (!initial)
         return failure();
 
-      if (initial.getType() != type)
-        initial = builder.create<moore::ConversionOp>(loc, type, initial);
+      if (initial.getType() != loweredType)
+        initial =
+            builder.create<moore::ConversionOp>(loc, loweredType, initial);
     }
 
     auto varOp = builder.create<moore::VariableOp>(
