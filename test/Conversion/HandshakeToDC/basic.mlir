@@ -201,3 +201,22 @@ handshake.func @nonemerge(%arg0 : none, %arg1 : none) -> none {
   %out = merge %arg0, %arg1 : none
   return %out : none
 }
+
+// CHECK-LABEL:   hw.module @pack_unpack(in 
+// CHECK-SAME:               %[[VAL_0:.*]] : !dc.value<i32>, in %[[VAL_1:.*]] : !dc.value<i1>, out out0 : !dc.value<i32>, out out1 : !dc.value<i1>) {
+// CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i32>
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i1>
+// CHECK:           %[[VAL_6:.*]] = dc.join %[[VAL_2]], %[[VAL_4]]
+// CHECK:           %[[VAL_7:.*]] = dc.pack_data_tuple %[[VAL_3]], %[[VAL_5]] : i32, i1
+// CHECK:           %[[VAL_8:.*]] = dc.pack %[[VAL_6]], %[[VAL_7]] : tuple<i32, i1>
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = dc.unpack %[[VAL_8]] : !dc.value<tuple<i32, i1>>
+// CHECK:           %[[VAL_11:.*]]:2 = dc.unpack_data_tuple %[[VAL_10]] : tuple<i32, i1>
+// CHECK:           %[[VAL_12:.*]] = dc.pack %[[VAL_9]], %[[VAL_11]]#0 : i32
+// CHECK:           %[[VAL_13:.*]] = dc.pack %[[VAL_9]], %[[VAL_11]]#1 : i1
+// CHECK:           hw.output %[[VAL_12]], %[[VAL_13]] : !dc.value<i32>, !dc.value<i1>
+// CHECK:         }
+handshake.func @pack_unpack(%arg0 : i32, %arg1 : i1) -> (i32, i1) {
+  %packed = handshake.pack %arg0, %arg1 : tuple<i32, i1>
+  %a, %b = handshake.unpack %packed : tuple<i32, i1>
+  return %a, %b : i32, i1
+}
