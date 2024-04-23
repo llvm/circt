@@ -56,7 +56,7 @@ LogicalResult InnerSymbolTable::buildSymbolTable(InnerSymbolTable &ist,
   auto symCallback = [&](StringAttr name, const InnerSymTarget &target,
                          Operation *currentIST) -> LogicalResult {
     // Lookup symbol table which this operation resides in.
-    auto currentSymTable = symTblCache.lookup(currentIST);
+    auto *currentSymTable = symTblCache.lookup(currentIST);
     if (!currentSymTable) {
       llvm::dbgs() << "IST: Target symbol table is: " << *currentIST << "\n";
       assert(currentSymTable && "Expected parent symbol table to be in cache");
@@ -82,7 +82,7 @@ LogicalResult InnerSymbolTable::buildSymbolTable(InnerSymbolTable &ist,
                               Operation *currentSymbolTableOp,
                               Operation *symTblOp) -> LogicalResult {
     // Lookup symbol table which this operation resides in.
-    auto currentSymTable = symTblCache.lookup(currentSymbolTableOp);
+    auto *currentSymTable = symTblCache.lookup(currentSymbolTableOp);
     assert(currentSymTable && "Expected parent symbol table to be in cache");
 
     // Construct a new nested symbol table if this operation is an
@@ -112,6 +112,7 @@ FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *istOp) {
   return table;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult InnerSymbolTable::walkSymbolsInner(
     Operation *op, InnerSymCallbackFn symCallback,
     std::optional<InnerSymTableCallbackFn> symTblCallback,

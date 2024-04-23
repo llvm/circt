@@ -25,7 +25,7 @@ namespace hw {
 
 namespace detail {
 struct InnerSymbolTableCollection;
-}
+} // namespace detail
 
 /// The target of an inner symbol, the entity the symbol is a handle for.
 class InnerSymTarget {
@@ -83,7 +83,6 @@ public:
 
 private:
   auto asTuple() const { return std::tie(op, portIdx, fieldID); }
-  Operation *symbolTableOp = nullptr;
   Operation *op = nullptr;
   size_t portIdx = 0;
   size_t fieldID = 0;
@@ -232,7 +231,7 @@ public:
 private:
   /// Construct an empty inner symbol table; used by InnerSymbolTable::get to
   /// avoid calling the InnerSymbolTable(Operation*) constructor.
-  explicit InnerSymbolTable(){};
+  explicit InnerSymbolTable() = default;
 
   /// Like walkSymbols, but also carries the currently active InnerSymbolTable
   /// operation as an argument.
