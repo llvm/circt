@@ -935,10 +935,29 @@ static Value getCommonOperand(Op op) {
 template <typename Op>
 static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
   auto inputs = op.getInputs();
-  llvm::SmallSetVector<Value, 8> uniqueInputs;
 
-  for (const auto input : inputs)
-    uniqueInputs.insert(input);
+  llvm::SmallSetVector<Value, 8> uniqueInputs(inputs.begin(), inputs.end());
+  llvm::SmallDenseSet<Value, 8> checked;
+  checked.insert(op);
+
+  llvm::SmallVector<Value, 8> worklist;
+  for (auto input : inputs) {
+    if (input != op)
+      worklist.push_back(input);
+  }
+
+  while (!worklist.empty()) {
+    auto element = worklist.pop_back_val();
+
+    if (auto idempotentOp = element.getDefiningOp<Op>()) {
+      for (auto input : idempotentOp.getInputs()) {
+        uniqueInputs.remove(input);
+
+        if (checked.insert(input).second)
+          worklist.push_back(input);
+      }
+    }
+  }
 
   if (uniqueInputs.size() < inputs.size()) {
     replaceOpWithNewOpAndCopyName<Op>(rewriter, op, op.getType(),
@@ -962,8 +981,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
     return success();
 
   // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
+  // and(..., x, and(..., x, ...)) -> and(..., and(..., x, ...)) -- idempotent
   // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
+  if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
@@ -1248,8 +1268,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
     return success();
 
   // or(..., x, ..., x, ...) -> or(..., x) -- idempotent
+  // or(..., x, or(..., x, ...)) -> or(..., or(..., x, ...)) -- idempotent
   // Trivial or(x), or(x, x) cases are handled by [OrOp::fold].
-  if (size > 2 && canonicalizeIdempotentInputs(op, rewriter))
+  if (size > 1 && canonicalizeIdempotentInputs(op, rewriter))
     return success();
 
   // Patterns for and with a constant on RHS.
