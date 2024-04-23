@@ -83,29 +83,28 @@ PortConverterImpl::PortConverterImpl(igraph::InstanceGraphNode *moduleNode)
   }
 }
 
-Value PortConverterImpl::createNewInput(PortInfo origPort, const Twine &suffix,
-                                        Type type, PortInfo &newPort) {
-  newPort = PortInfo{
-      {append(origPort.name, suffix), type, ModulePort::Direction::Input},
-      newInputs.size(),
-      {},
-      origPort.loc};
-  newInputs.emplace_back(0, newPort);
+PortHandle &PortHandle::createNewInput(const Twine &suffix, Type type) {
+  converter.newInputs.emplace_back(
+      0, PortHandle(PortInfo{{append(name, suffix), type,
+                              ModulePort::Direction::Input},
+                             converter.newInputs.size(),
+                             {},
+                             loc},
+                    converter));
 
   if (!body)
     return {};
-  return body->addArgument(type, origPort.loc);
+  return body->addArgument(type, loc);
 }
 
-void PortConverterImpl::createNewOutput(PortInfo origPort, const Twine &suffix,
-                                        Type type, Value output,
-                                        PortInfo &newPort) {
-  newPort = PortInfo{
-      {append(origPort.name, suffix), type, ModulePort::Direction::Output},
-      newOutputs.size(),
-      {},
-      origPort.loc};
-  newOutputs.emplace_back(0, newPort);
+void PortHandle::createNewOutput(const Twine &suffix, Type type, Value output,
+                                 PortHandle &newPort) {
+  newPort =
+      PortInfo{{append(name, suffix), type, ModulePort::Direction::Output},
+               converter.newOutputs.size(),
+               {},
+               loc};
+  converter.newOutputs.emplace_back(0, newPort);
 
   if (!body)
     return;

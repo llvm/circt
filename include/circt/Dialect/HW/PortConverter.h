@@ -30,29 +30,52 @@
 namespace circt {
 namespace hw {
 
+class PortConverterImpl;
 class PortConversionBuilder;
 class PortConversion;
 
+/// An abstraction through which PortConversions should interact
+struct PortHandle : hw::PortInfo {
+  PortHandle(hw::PortInfo port, PortConverterImpl &converter)
+      : hw::PortInfo(port), body(converter.body), converter(converter) {}
+
+  // If the module to which this port belongs has a body, return an OpBuilder.
+  // If the port is an output, the builder loc will be just before the
+  // terminator. If an input, at the beginning of the block.
+  std::optional<ImplicitLocOpBuilder> getBuilder();
+
+  /// Get the value of the port. If the port is an input, this will be the block
+  /// argument value. If it is an output, this will be the terminator operand
+  /// value. If there is no body, this will return a null value.
+  virtual Value getValue();
+
+  /// These two methods take care of allocating new ports in the correct place
+  /// based on the position of 'origPort'. The new port is based on the
+  /// original name and suffix. The specification for the new port is given by
+  /// `newPort` and is recorded internally. Any changes to 'newPort' after
+  /// calling this will not be reflected in the modules new port list. Will
+  /// also add the new input to the block arguments of the body of the module.
+  virtual PortHandle &createNewInput(const Twine &suffix, Type type);
+  /// Same as above. 'output' is the value fed into the new port and is
+  /// required if 'body' is non-null. Important note: cannot be a backedge
+  /// which gets replaced since this isn't attached to an op until later in
+  /// the pass.
+  virtual void createNewOutput(const Twine &suffix, Type type, Value output,
+                               PortHandle &&newPort);
+
+protected:
+  Block *body;
+  PortConverterImpl &converter;
+};
+
 class PortConverterImpl {
+  friend class PortHandle;
+
 public:
   /// Run port conversion.
   LogicalResult run();
   Block *getBody() const { return body; }
   hw::HWMutableModuleLike getModule() const { return mod; }
-
-  /// These two methods take care of allocating new ports in the correct place
-  /// based on the position of 'origPort'. The new port is based on the original
-  /// name and suffix. The specification for the new port is given by `newPort`
-  /// and is recorded internally. Any changes to 'newPort' after calling this
-  /// will not be reflected in the modules new port list. Will also add the new
-  /// input to the block arguments of the body of the module.
-  Value createNewInput(hw::PortInfo origPort, const Twine &suffix, Type type,
-                       hw::PortInfo &newPort);
-  /// Same as above. 'output' is the value fed into the new port and is required
-  /// if 'body' is non-null. Important note: cannot be a backedge which gets
-  /// replaced since this isn't attached to an op until later in the pass.
-  void createNewOutput(hw::PortInfo origPort, const Twine &suffix, Type type,
-                       Value output, hw::PortInfo &newPort);
 
 protected:
   PortConverterImpl(igraph::InstanceGraphNode *moduleNode);
@@ -82,8 +105,8 @@ private:
   // 'createNew(Input|Output)' methods. Will be cleared once port changes have
   // materialized. Default length is  0 to save memory in case we'll be keeping
   // this around for later use.
-  SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newInputs;
-  SmallVector<std::pair<unsigned, hw::PortInfo>, 0> newOutputs;
+  SmallVector<std::pair<unsigned, std::unique_ptr<PortHandle>>, 0> newInputs;
+  SmallVector<std::pair<unsigned, std::unique_ptr<PortHandle>>, 0> newOutputs;
 
   // Maintain a handle to the terminator of the body, if any. This will get
   // continuously updated during port conversion whenever a new output is added
@@ -96,8 +119,8 @@ private:
 /// keep around port mapping information to use when updating instances.
 class PortConversion {
 public:
-  PortConversion(PortConverterImpl &converter, hw::PortInfo origPort)
-      : converter(converter), body(converter.getBody()), origPort(origPort) {}
+  PortConversion(PortConverterImpl &converter, PortHandle &origPort)
+      : converter(converter), origPort(origPort) {}
   virtual ~PortConversion() = default;
 
   // An optional initialization step that can be overridden by subclasses.
@@ -134,8 +157,7 @@ protected:
   virtual void buildOutputSignals() = 0;
 
   PortConverterImpl &converter;
-  Block *body;
-  hw::PortInfo origPort;
+  PortHandle &origPort;
 
   hw::HWMutableModuleLike getModule() { return converter.getModule(); }
 
