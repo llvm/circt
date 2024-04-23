@@ -209,7 +209,7 @@ public:
     if (op.getNumOperands() > 2)
       return op.emitOpError("only two inputs supported");
 
-    llvm::SmallVector<Value, 4> tokens, data;
+   SmallVector<Value, 4> tokens, data;
 
     for (auto input : adaptor.getDataOperands()) {
       auto up = unpack(rewriter, input);
