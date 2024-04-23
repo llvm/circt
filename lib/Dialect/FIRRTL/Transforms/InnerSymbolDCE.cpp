@@ -87,20 +87,21 @@ void InnerSymbolDCEPass::removeInnerSyms(FModuleLike mod) {
   auto moduleName = mod.getModuleNameAttr();
 
   // Walk inner symbols, removing any not referenced.
-  InnerSymbolTable::walkSymbols(
-      mod, [&](StringAttr name, const InnerSymTarget &target) {
-        ++numInnerSymbolsFound;
+  InnerSymbolTable::walkSymbols(mod, [&](StringAttr name,
+                                         const InnerSymTarget &target,
+                                         Operation * /*currentIST*/) {
+    ++numInnerSymbolsFound;
 
-        // Check if the name is referenced by any InnerRef.
-        if (innerRefs.contains({moduleName, name}))
-          return;
+    // Check if the name is referenced by any InnerRef.
+    if (innerRefs.contains({moduleName, name}))
+      return;
 
-        dropSymbol(target);
-        ++numInnerSymbolsRemoved;
+    dropSymbol(target);
+    ++numInnerSymbolsRemoved;
 
-        LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": removed " << moduleName
-                                << "::" << name << '\n';);
-      });
+    LLVM_DEBUG(llvm::dbgs() << DEBUG_TYPE << ": removed " << moduleName
+                            << "::" << name << '\n';);
+  });
 }
 
 void InnerSymbolDCEPass::runOnOperation() {

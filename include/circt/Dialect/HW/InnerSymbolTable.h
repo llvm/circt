@@ -37,16 +37,12 @@ public:
   explicit InnerSymTarget(Operation *op) : InnerSymTarget(op, 0) {}
 
   /// Target an operation and a field (=0 means the op itself).
-  InnerSymTarget(Operation *op, size_t fieldID,
-                 Operation *symbolTableOp = nullptr)
-      : symbolTableOp(symbolTableOp), op(op), portIdx(invalidPort),
-        fieldID(fieldID) {}
+  InnerSymTarget(Operation *op, size_t fieldID)
+      : op(op), portIdx(invalidPort), fieldID(fieldID) {}
 
   /// Target a port, and optionally a field (=0 means the port itself).
-  InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0,
-                 Operation *symbolTableOp = nullptr)
-      : symbolTableOp(symbolTableOp), op(op), portIdx(portIdx),
-        fieldID(fieldID) {}
+  InnerSymTarget(size_t portIdx, Operation *op, size_t fieldID = 0)
+      : op(op), portIdx(portIdx), fieldID(fieldID) {}
 
   InnerSymTarget(const InnerSymTarget &) = default;
   InnerSymTarget(InnerSymTarget &&) = default;
@@ -58,10 +54,6 @@ public:
 
   /// Return the target's base operation.  For ports, this is the module.
   Operation *getOp() const { return op; }
-
-  /// Return the symbol table operation of which this target is registered
-  /// within.
-  Operation *getSymbolTableOp() const { return symbolTableOp; }
 
   /// Return the target's port, if valid.  Check "isPort()".
   auto getPort() const {
@@ -85,9 +77,8 @@ public:
   static InnerSymTarget getTargetForSubfield(const InnerSymTarget &base,
                                              size_t fieldID) {
     if (base.isPort())
-      return InnerSymTarget(base.portIdx, base.op, base.fieldID + fieldID,
-                            base.symbolTableOp);
-    return InnerSymTarget(base.op, base.fieldID + fieldID, base.symbolTableOp);
+      return InnerSymTarget(base.portIdx, base.op, base.fieldID + fieldID);
+    return InnerSymTarget(base.op, base.fieldID + fieldID);
   }
 
 private:
@@ -115,17 +106,12 @@ public:
 };
 
 /// A table of inner symbols and their resolutions.
-/// enable_shared_from_this is used to enable cross-linking between symbol
-/// tables during construction.
-/// Given this, InnerSymbolTable is only legal to construct as a shared_ptr.
-class InnerSymbolTable : public std::enable_shared_from_this<InnerSymbolTable> {
+class InnerSymbolTable {
 
 public:
   /// Construct an InnerSymbolTable, checking for verification failure.
   /// Emits diagnostics describing encountered issues.
-  /// This is the only publicly accessible constructor, to ensure that
-  /// InnerSymbolTable is only constructed as a shared_ptr.
-  static FailureOr<std::shared_ptr<InnerSymbolTable>> get(Operation *op);
+  static FailureOr<InnerSymbolTable> get(Operation *op);
 
   /// Non-copyable
   InnerSymbolTable(const InnerSymbolTable &) = delete;
@@ -189,7 +175,8 @@ public:
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
   using InnerSymCallbackFn =
-      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &)>;
+      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &,
+                                       /*currentSymbolTableOp*/ Operation *)>;
 
   /// Callback type for walking nested symbol tables. The `currentSymbolTable`
   /// operation is provided as an Operation* value. A `InnerSymbolTable*` is
@@ -204,28 +191,31 @@ public:
   /// inner symbols and symbol tables.
   /// This variant allows callbacks that return LogicalResult OR void,
   /// and wraps the underlying implementation.
-  template <typename FuncTy, typename RetTy = typename std::invoke_result_t<
-                                 FuncTy, StringAttr, const InnerSymTarget &>>
+  template <typename FuncTy,
+            typename RetTy = typename std::invoke_result_t<
+                FuncTy, StringAttr, const InnerSymTarget &, Operation *>>
   static RetTy walkSymbols(
       Operation *op, FuncTy &&symCallback,
       std::optional<InnerSymTableCallbackFn> symTblCallback = std::nullopt) {
     if constexpr (std::is_void_v<RetTy>)
       return (void)walkSymbols(
           op,
-          InnerSymCallbackFn(
-              [&](StringAttr name, const InnerSymTarget &target) {
-                std::invoke(std::forward<FuncTy>(symCallback), name, target);
-                return success();
-              }),
+          InnerSymCallbackFn([&](StringAttr name, const InnerSymTarget &target,
+                                 Operation *currentIST) {
+            std::invoke(std::forward<FuncTy>(symCallback), name, target,
+                        currentIST);
+            return success();
+          }),
           symTblCallback);
     else
-      return walkSymbols(op,
-                         InnerSymCallbackFn([&](StringAttr name,
-                                                const InnerSymTarget &target) {
-                           return std::invoke(std::forward<FuncTy>(symCallback),
-                                              name, target);
-                         }),
-                         symTblCallback);
+      return walkSymbols(
+          op,
+          InnerSymCallbackFn([&](StringAttr name, const InnerSymTarget &target,
+                                 Operation *currentIST) {
+            return std::invoke(std::forward<FuncTy>(symCallback), name, target,
+                               currentIST);
+          }),
+          symTblCallback);
   }
 
   /// Walk the given IST operation and invoke the symCallback for all
@@ -253,7 +243,7 @@ private:
 
   using SymbolTableTy = DenseMap<StringAttr, InnerSymTarget>;
   using NestedSymbolTableTy =
-      DenseMap<StringAttr, std::shared_ptr<InnerSymbolTable>>;
+      DenseMap<StringAttr, std::unique_ptr<InnerSymbolTable>>;
 
   /// Walk the symbols of the symbol table op and populate the symbol table.
   static LogicalResult buildSymbolTable(InnerSymbolTable &ist,
@@ -277,9 +267,6 @@ private:
 
   /// This maps inner symbol names to nested symbol tables.
   NestedSymbolTableTy nestedSymbolTables;
-
-  /// This is the parent symbol table, if this is a nested symbol table.
-  std::shared_ptr<InnerSymbolTable> parentSymbolTable;
 };
 
 /// This class represents the namespace in which InnerRef's can be resolved.

@@ -123,7 +123,8 @@ LogicalResult ContainerizePass::outlineContainers() {
   // Grab existing names from the InnerSymbolTable of the top-level design op.
   SymbolCache symCache;
   auto walkRes = hw::InnerSymbolTable::walkSymbols(
-      getOperation(), [&](StringAttr name, const hw::InnerSymTarget &target) {
+      getOperation(), [&](StringAttr name, const hw::InnerSymTarget &target,
+                          Operation * /*currentIST*/) {
         symCache.addDefinition(name, target.getOp());
         return success();
       });

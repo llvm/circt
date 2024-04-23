@@ -760,7 +760,7 @@ struct Equivalence {
       return;
     }
 
-    ModuleData data(**aTable, **bTable);
+    ModuleData data(*aTable, *bTable);
     AnnotationSet aAnnos(a);
     AnnotationSet bAnnos(b);
     if (aAnnos.hasAnnotation(noDedupClass)) {

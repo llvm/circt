@@ -201,7 +201,6 @@ FailureOr<ArrayAttr> AppIDIndex::getAppIDPathAttr(hw::HWModuleLike fromMod,
     FailureOr<hw::InnerSymbolOpInterface> op = modIDs->lookup(appid, loc);
     if (failed(op))
       return failure();
-    op->dump();
     path.push_back(op->getInnerRef());
 
     if (getAppID(*op))

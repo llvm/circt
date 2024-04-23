@@ -24,6 +24,10 @@ using namespace hw;
 namespace circt {
 namespace hw {
 
+//===----------------------------------------------------------------------===//
+// InnerSymbolTable
+//===----------------------------------------------------------------------===//
+
 StringAttr InnerSymbolTable::getName(Operation *innerSymbolOp) {
   return llvm::TypeSwitch<Operation *, StringAttr>(innerSymbolOp)
       .Case<hw::InnerSymbolOpInterface>(
@@ -33,11 +37,8 @@ StringAttr InnerSymbolTable::getName(Operation *innerSymbolOp) {
       .Default([](Operation *) -> StringAttr { return {}; });
 }
 
-//===----------------------------------------------------------------------===//
-// InnerSymbolTable
-//===----------------------------------------------------------------------===//
 InnerSymbolTable::InnerSymbolTable(Operation *op) {
-  auto res = buildSymbolTable(*this, op);
+  auto res = InnerSymbolTable::buildSymbolTable(*this, op);
   assert(succeeded(res) && "Expected successful symbol table construction");
 }
 
@@ -48,19 +49,16 @@ LogicalResult InnerSymbolTable::buildSymbolTable(InnerSymbolTable &ist,
         "expected operation to have InnerSymbolTable trait");
 
   // Caching of symbol table defining operations to their symbol tables.
-  DenseMap<Operation *, std::shared_ptr<InnerSymbolTable>> symTblCache;
+  DenseMap<Operation *, InnerSymbolTable *> symTblCache;
   ist.innerSymTblOp = istOp;
-  symTblCache[istOp] = ist.shared_from_this();
+  symTblCache[istOp] = &ist;
 
-  auto symCallback = [&](StringAttr name,
-                         const InnerSymTarget &target) -> LogicalResult {
-    assert(target.getSymbolTableOp() != nullptr &&
-           "Expected target to have a symbol table op");
+  auto symCallback = [&](StringAttr name, const InnerSymTarget &target,
+                         Operation *currentIST) -> LogicalResult {
     // Lookup symbol table which this operation resides in.
-    auto currentSymTable = symTblCache.lookup(target.getSymbolTableOp());
+    auto currentSymTable = symTblCache.lookup(currentIST);
     if (!currentSymTable) {
-      llvm::dbgs() << "IST: Target symbol table is: "
-                   << *target.getSymbolTableOp() << "\n";
+      llvm::dbgs() << "IST: Target symbol table is: " << *currentIST << "\n";
       assert(currentSymTable && "Expected parent symbol table to be in cache");
     }
 
@@ -91,13 +89,12 @@ LogicalResult InnerSymbolTable::buildSymbolTable(InnerSymbolTable &ist,
     // InnerSymbolTable, and the target operation is not the same as the
     // symbol table of the target operation (symbol-table defining op
     // defines symbols within its own table).
-    std::shared_ptr<InnerSymbolTable> nestedSymTbl;
-    nestedSymTbl = std::shared_ptr<InnerSymbolTable>(new InnerSymbolTable());
+    std::unique_ptr<InnerSymbolTable> nestedSymTbl;
+    nestedSymTbl = std::unique_ptr<InnerSymbolTable>(new InnerSymbolTable());
     nestedSymTbl->innerSymTblOp = symTblOp;
-    nestedSymTbl->parentSymbolTable = currentSymTable;
-    currentSymTable->nestedSymbolTables[InnerSymbolTable::getName(symTblOp)] =
-        nestedSymTbl;
-    auto nestedIt = symTblCache.try_emplace(symTblOp, nestedSymTbl);
+    auto it = currentSymTable->nestedSymbolTables.insert(
+        {InnerSymbolTable::getName(symTblOp), std::move(nestedSymTbl)});
+    auto nestedIt = symTblCache.try_emplace(symTblOp, it.first->second.get());
     assert(nestedIt.second && "Expected nested symbol table to be new");
     LLVM_DEBUG(llvm::dbgs() << "IST: Created nested symbol table for "
                             << symTblOp->getName() << "\n";);
@@ -107,10 +104,9 @@ LogicalResult InnerSymbolTable::buildSymbolTable(InnerSymbolTable &ist,
   return walkSymbols(istOp, symCallback, symTableCallback);
 }
 
-FailureOr<std::shared_ptr<InnerSymbolTable>>
-InnerSymbolTable::get(Operation *istOp) {
-  auto table = std::shared_ptr<InnerSymbolTable>(new InnerSymbolTable());
-  if (failed(table->buildSymbolTable(*table, istOp)))
+FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *istOp) {
+  InnerSymbolTable table;
+  if (failed(table.buildSymbolTable(table, istOp)))
     return failure();
 
   return table;
@@ -127,7 +123,7 @@ LogicalResult InnerSymbolTable::walkSymbolsInner(
 
   auto walkSym = [&](StringAttr name, const InnerSymTarget &target) {
     assert(name && !name.getValue().empty());
-    return symCallback(name, target);
+    return symCallback(name, target, currentIST);
   };
 
   auto walkTable = [&](StringAttr name, Operation *symTblOp) {
@@ -158,7 +154,7 @@ LogicalResult InnerSymbolTable::walkSymbolsInner(
     if (auto mod = dyn_cast<PortList>(op)) {
       for (auto [i, port] : llvm::enumerate(mod.getPortList())) {
         if (auto symAttr = port.getSym()) {
-          if (failed(walkSyms(symAttr, InnerSymTarget(i, op, 0, currentIST))))
+          if (failed(walkSyms(symAttr, InnerSymTarget(i, op, 0))))
             return failure();
         }
       }
@@ -188,7 +184,7 @@ LogicalResult InnerSymbolTable::walkSymbolsInner(
         // Check for InnerSymbolOpInterface
         if (auto symOp = dyn_cast<InnerSymbolOpInterface>(&innerOp))
           if (auto symAttr = symOp.getInnerSymAttr())
-            if (failed(walkSyms(symAttr, InnerSymTarget(symOp, 0, currentIST))))
+            if (failed(walkSyms(symAttr, InnerSymTarget(symOp, 0))))
               return failure();
 
         // Check for port-attached symbols.
@@ -360,7 +356,7 @@ struct InnerSymbolTableCollection {
   void dump(llvm::raw_ostream &os) const;
 
   /// Top-level symbol tables
-  DenseMap<Operation *, std::shared_ptr<InnerSymbolTable>> topLevelSymbolTables;
+  DenseMap<Operation *, std::unique_ptr<InnerSymbolTable>> topLevelSymbolTables;
 
   /// Mapping between top-level symbol (table) names to the top-level symbol
   /// tables.
@@ -369,8 +365,8 @@ struct InnerSymbolTableCollection {
 
 void InnerSymbolTableCollection::dump(llvm::raw_ostream &os) const {
   os << "IST: Symbol table collection:\n";
-  for (auto &symTable : topLevelSymbolTables) {
-    symTable.second->dump(os);
+  for (auto &[_, symTable] : topLevelSymbolTables) {
+    symTable->dump(os);
     os << "\n";
   }
   os << "\n";
@@ -415,7 +411,7 @@ InnerSymbolTableCollection::populateAndVerifyTables(Operation *innerRefNSOp) {
           auto result = InnerSymbolTable::get(op);
           if (failed(result))
             return failure();
-          it->second = *result;
+          it->second = std::make_unique<InnerSymbolTable>(std::move(*result));
           return success();
         }
         return failure();
