@@ -77,7 +77,7 @@ circuit Testbench: %[[
     "dirname": "testbench"
   }
 ]]
-  layer A, bind:
+  layer A, bind, "testbench":
 
   module Foo:
     node a = UInt<1>(0)
@@ -95,7 +95,7 @@ circuit Testbench: %[[
     inst qux of Qux
     inst quz of Quz
 
-  module DUT:
+  public module DUT:
     inst foo of Foo
     inst baz of Baz
     inst grandCentral of GrandCentral

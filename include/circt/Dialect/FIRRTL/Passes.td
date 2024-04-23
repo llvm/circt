@@ -914,4 +914,31 @@ def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
     let dependentDialects = ["hw::HWDialect", "seq::SeqDialect", "sim::SimDialect"];
   }
 
+def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
+  let summary = "Assign output directories to modules.";
+  let description = [{
+    While some modules are assigned output directories by the user, many modules
+    "don't care" what output directory they are placed into. This pass uses the
+    instance graph to assign these modules to the "narrowest" output directory
+    possible. For example, if a module is only instantiated under the
+    verification directory, then this pass will sink that module into the
+    verification directory, too. If a module is instantiated under multiple
+    directories, then the module is assigned to the directory that is the "least
+    common ancestor" of all directories it is instantiated under.
+
+    The least common ancestor is chosen according to a precedence graph provided
+    by the user through a circuit level annotation called
+    `OutputDirPrecedenceAnnotation`. The default output directory is implicitly 
+    the common ancestor of all other output directories.
+  }];
+  let constructor = "circt::firrtl::createAssignOutputDirsPass()";
+  let statistics = [
+    Statistic<
+      "numLcaComputations",
+      "num-lca-computations",
+      "Number of times the LCA of two output directories is computed"
+    >
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

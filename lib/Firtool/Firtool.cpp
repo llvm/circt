@@ -219,6 +219,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createVectorizationPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createAssignOutputDirsPass());
   return success();
 }
 

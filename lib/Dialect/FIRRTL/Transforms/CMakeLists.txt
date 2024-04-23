@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  AssignOutputDirs.cpp
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
   CheckCombLoops.cpp

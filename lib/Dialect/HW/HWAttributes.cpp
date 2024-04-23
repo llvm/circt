@@ -130,6 +130,23 @@ bool OutputFileAttr::isDirectory() {
   return getFilename().getValue().ends_with(llvm::sys::path::get_separator());
 }
 
+StringAttr OutputFileAttr::getDirectoryAttr() {
+  if (isDirectory())
+    return getFilename();
+
+  auto dir = getFilename().getValue();
+  for (unsigned i = 0, e = dir.size(); i < e; ++i) {
+    if (dir.ends_with(llvm::sys::path::get_separator()))
+      break;
+    dir = dir.drop_back();
+  }
+
+  if (dir.empty())
+    return nullptr;
+
+  return StringAttr::get(getContext(), dir);
+}
+
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
 Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
