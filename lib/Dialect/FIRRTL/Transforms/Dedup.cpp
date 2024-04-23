@@ -201,7 +201,7 @@ private:
 
   void update(InnerRefAttr attr) {
     // We hash the value's index as it apears in the block.
-    auto it = innerSymTargets.find(attr.getName());
+    auto it = innerSymTargets.find(attr.getTarget());
     assert(it != innerSymTargets.end() &&
            "inner symbol should have been previously hashed");
     update(attr.getTypeID());
@@ -578,8 +578,8 @@ struct Equivalence {
         auto bRef = cast<hw::InnerRefAttr>(bAttr);
         auto aRef = cast<hw::InnerRefAttr>(aAttr);
         // See if they are pointing at the same operation or port.
-        auto aTarget = data.a.lookup(aRef.getName());
-        auto bTarget = data.b.lookup(bRef.getName());
+        auto aTarget = data.a.lookup(aRef.getTarget());
+        auto bTarget = data.b.lookup(bRef.getTarget());
         if (!aTarget || !bTarget)
           diag.attachNote(a->getLoc())
               << "malformed ir, possibly violating use-before-def";

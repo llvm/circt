@@ -33,29 +33,29 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
     }]>,
   
     AttrBuilderWithInferredContext<(ins "::mlir::ArrayRef<::mlir::StringAttr>":$pathAttr,
-                                        "::mlir::StringAttr":$leaf), [{
+                                        "::mlir::StringAttr":$target), [{
       llvm::SmallVector<::mlir::StringAttr> fullPath(pathAttr.begin(), pathAttr.end());
-      fullPath.push_back(leaf);
-      return InnerRefAttr::get(leaf.getContext(), fullPath);
+      fullPath.push_back(target);
+      return InnerRefAttr::get(target.getContext(), fullPath);
     }]>,
 
     // @mortbopet: Old InnerRef single-module compatability builders.
-    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$leaf), [{
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$target), [{
       llvm::SmallVector<::mlir::StringAttr> fullPath;
-      fullPath.push_back(leaf);
+      fullPath.push_back(target);
       return InnerRefAttr::get(fullPath);
     }]>,
 
     AttrBuilderWithInferredContext<(ins 
                                     "::mlir::StringAttr":$parent,
-                                    "::mlir::StringAttr":$leaf), [{
+                                    "::mlir::StringAttr":$target), [{
       ::llvm::SmallVector<::mlir::StringAttr> fullPath{parent};
-      fullPath.push_back(leaf);
+      fullPath.push_back(target);
       return InnerRefAttr::get(fullPath);
     }]>,
     AttrBuilder<(ins "::mlir::StringAttr":$parent,
-                     "::mlir::StringAttr":$leaf), [{
-      return InnerRefAttr::get(parent, leaf);
+                     "::mlir::StringAttr":$target), [{
+      return InnerRefAttr::get(parent, target);
     }]>,
   ];
 
@@ -63,24 +63,21 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
-    ::mlir::StringAttr getRootReference() const {
+    ::mlir::StringAttr getRoot() const {
       assert(!getPath().empty() && "Empty path");
       return getPath().front();
     }
-    ::mlir::StringAttr getLeafReference() const {
+    ::mlir::StringAttr getTarget() const {
       assert(!getPath().empty() && "Empty path");
       return getPath().back();
-    }
-    ::mlir::StringAttr getName() const {
-      return getLeafReference();
     }
 
     // Old InnerRefAttr compatability accessors
     ::mlir::StringAttr getModule() const {
-      return getRootReference();
+      return getRoot();
     }
     ::mlir::FlatSymbolRefAttr getModuleRef() const {
-      return ::mlir::FlatSymbolRefAttr::get(getRootReference());
+      return ::mlir::FlatSymbolRefAttr::get(getRoot());
     }
   }];
 }

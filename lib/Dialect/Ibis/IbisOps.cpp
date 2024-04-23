@@ -297,7 +297,7 @@ LogicalResult GetPortOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
                          << "' does not exist in @"
                          << cast<ScopeRefType>(getInstance().getType())
                                 .getScopeRef()
-                                .getName()
+                                .getTarget()
                                 .getValue();
 
   Type targetPortType = portOp.getPortType();
@@ -453,7 +453,7 @@ LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     auto *targetScope = ns.lookupOp(scopeRefSym);
     if (!targetScope)
       return emitOpError() << "ibis.step scoperef symbol '@"
-                           << scopeRefSym.getName().getValue()
+                           << scopeRefSym.getTarget().getValue()
                            << "' does not exist";
   }
 

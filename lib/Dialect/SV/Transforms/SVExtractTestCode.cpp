@@ -341,7 +341,7 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
 static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
   for (auto bind : topLevelModule->getOps<BindOp>()) {
     hw::InnerRefAttr boundRef = bind.getInstance();
-    bindTable[boundRef.getModule()][boundRef.getName()] = bind;
+    bindTable[boundRef.getModule()][boundRef.getTarget()] = bind;
   }
 }
 
@@ -462,7 +462,7 @@ inlineInputOnly(hw::HWModuleOp oldMod, hw::InstanceGraph &instanceGraph,
           if (it != bindTable[oldMod.getNameAttr()].end()) {
             sv::BindOp bind = it->second;
             auto oldInnerRef = bind.getInstanceAttr();
-            auto it = symMapping.find(oldInnerRef.getName());
+            auto it = symMapping.find(oldInnerRef.getTarget());
             assert(it != symMapping.end() &&
                    "inner sym mapping must be already populated");
             auto newName = it->second;

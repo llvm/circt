@@ -438,8 +438,8 @@ InnerSymbolTableCollection::populateAndVerifyTables(Operation *innerRefNSOp) {
 InnerSymTarget InnerRefNamespace::lookup(hw::InnerRefAttr inner) const {
   // Root reference - lookup from the top-level scope. The first reference
   // in the inner reference path is the top-level symbol table name.
-  auto *rootOp = innerSymTables->topLevelSymbolTableMapping.lookup(
-      inner.getRootReference());
+  auto *rootOp =
+      innerSymTables->topLevelSymbolTableMapping.lookup(inner.getRoot());
   if (!rootOp)
     return InnerSymTarget();
   assert(rootOp->hasTrait<mlir::OpTrait::InnerSymbolTable>());

@@ -216,7 +216,7 @@ public:
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
-      last = writeBack(root.getModule(), root.getName());
+      last = writeBack(root.getModule(), root.getTarget());
 
     nla.erase();
     return last;
@@ -307,7 +307,7 @@ public:
     if (multiary)
       os << "[";
     llvm::interleaveComma(tops, os, [&](InnerRefAttr a) {
-      writeOne(a.getModule(), a.getName());
+      writeOne(a.getModule(), a.getTarget());
     });
     if (multiary)
       os << "]";
@@ -760,7 +760,7 @@ bool Inliner::renameInstance(
         // The HierPathOp could have been renamed, check for the other retoped
         // names, if they are active at the inlining context.
         for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
-          if (activeHierpaths.find(additionalSym.getName()) !=
+          if (activeHierpaths.find(additionalSym.getTarget()) !=
               activeHierpaths.end()) {
             validHierPaths.push_back(old);
             break;
@@ -1433,7 +1433,8 @@ void Inliner::run() {
               continue;
             }
             newAnnotation.push_back(
-                {pair.getName(), FlatSymbolRefAttr::get(rootAndSym.getName())});
+                {pair.getName(),
+                 FlatSymbolRefAttr::get(rootAndSym.getTarget())});
           }
           newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
         }

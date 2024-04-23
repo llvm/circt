@@ -233,7 +233,7 @@ MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
 }
 
 MlirAttribute hwInnerRefAttrGetName(MlirAttribute innerRefAttr) {
-  return wrap((Attribute)cast<InnerRefAttr>(unwrap(innerRefAttr)).getName());
+  return wrap((Attribute)cast<InnerRefAttr>(unwrap(innerRefAttr)).getTarget());
 }
 
 MlirAttribute hwInnerRefAttrGetModule(MlirAttribute innerRefAttr) {

@@ -765,7 +765,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
       auto *node = instanceGraph->lookup(ref.getModule());
       auto it = llvm::find_if(*node, [&](igraph::InstanceRecord *record) {
         return getInnerSymName(record->getInstance<InstanceOp>()) ==
-               ref.getName();
+               ref.getTarget();
       });
       assert(it != node->end() &&
              "Instance referenced by NLA does not exist in module");
@@ -1153,7 +1153,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
         if (!instOp)
           continue;
         LLVM_DEBUG(llvm::dbgs() << "Marking NLA-participating instance "
-                                << innerRef.getName() << " in module "
+                                << innerRef.getTarget() << " in module "
                                 << modName << " as dont-touch\n");
         tempSymInstances.erase(instOp);
         instName = getInnerRefTo(instOp);

@@ -357,9 +357,9 @@ getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
   auto serviceDecl = getServiceDecl(op, symbolTable, servicePort);
   if (failed(serviceDecl))
     return failure();
-  auto portInfo = serviceDecl->getPortInfo(servicePort.getName());
+  auto portInfo = serviceDecl->getPortInfo(servicePort.getTarget());
   if (failed(portInfo))
-    return op->emitOpError("Could not locate port ") << servicePort.getName();
+    return op->emitOpError("Could not locate port ") << servicePort.getTarget();
   return portInfo;
 }
 

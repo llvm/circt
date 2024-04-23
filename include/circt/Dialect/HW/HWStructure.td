@@ -106,6 +106,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
     ::circt::hw::PortInfo $cppClass::getPort(size_t idx) {
       return ::getPort(*this, idx);
     }
+
   }];
 
 }

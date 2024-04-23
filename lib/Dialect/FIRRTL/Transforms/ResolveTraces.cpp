@@ -200,7 +200,7 @@ private:
       for (auto part : path.getNamepath().getValue().drop_back()) {
         auto inst = cast<hw::InnerRefAttr>(part);
         instances.push_back(dyn_cast<InstanceOp>(irn->lookupOp(
-            hw::InnerRefAttr::get(inst.getModule(), inst.getName()))));
+            hw::InnerRefAttr::get(inst.getModule(), inst.getTarget()))));
       }
     }
 
@@ -257,7 +257,7 @@ private:
         instances.push_back(
             cast<InstanceOp>(irn->lookupOp(hw::InnerRefAttr::get(
                 nlaTable->getModule(inst.getModule()).getModuleNameAttr(),
-                inst.getName()))));
+                inst.getTarget()))));
       }
     }
 

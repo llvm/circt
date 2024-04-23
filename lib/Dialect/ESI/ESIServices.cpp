@@ -201,7 +201,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   // needed for the actual memory writes for later.
   SmallVector<std::tuple<Value, Value, Value>> writeGoAddressData;
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
-    auto port = req.getServicePort().getName();
+    auto port = req.getServicePort().getTarget();
     Value toClientResp;
 
     if (port == write) {

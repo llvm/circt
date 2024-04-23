@@ -198,7 +198,7 @@ std::string ESIBuildManifestPass::json() {
         j.attributeArray("ports", [&]() {
           for (auto port : ports) {
             j.object([&] {
-              j.attribute("name", port.port.getName().getValue());
+              j.attribute("name", port.port.getTarget().getValue());
               j.attribute("type", json(svcDecl, TypeAttr::get(port.type)));
             });
           }
@@ -371,7 +371,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
       .Case([&](hw::InnerRefAttr ref) {
         llvm::json::Object dict;
         dict["outer_sym"] = ref.getModule().getValue();
-        dict["inner"] = ref.getName().getValue();
+        dict["inner"] = ref.getTarget().getValue();
         return dict;
       })
       .Case([&](AppIDAttr appid) {

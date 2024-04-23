@@ -989,7 +989,7 @@ bool FIRRTLModuleLowering::handleForceNameAnnos(
     auto inst =
         cast<hw::InnerRefAttr>(nla.getNamepath().getValue().take_back(2)[0]);
     auto inserted = loweringState.instanceForceNames.insert(
-        {{inst.getModule(), inst.getName()}, anno.getMember("name")});
+        {{inst.getModule(), inst.getTarget()}, anno.getMember("name")});
     if (!inserted.second &&
         (anno.getMember("name") != (inserted.first->second))) {
       auto diag = oldModule.emitError()

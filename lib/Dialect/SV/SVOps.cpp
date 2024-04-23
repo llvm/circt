@@ -1846,7 +1846,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock<hw::InstanceOp>(getInstance().getName(),
+  return findInstanceSymbolInBlock<hw::InstanceOp>(getInstance().getTarget(),
                                                    hwModule.getBodyBlock());
 }
 
@@ -1857,13 +1857,13 @@ LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       symbolTable.lookupSymbolIn(module, getInstance().getModule()));
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
+           << getInstance().getModule() << "::" << getInstance().getTarget();
 
   auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
-      getInstance().getName(), hwModule.getBodyBlock());
+      getInstance().getTarget(), hwModule.getBodyBlock());
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
+           << getInstance().getModule() << "::" << getInstance().getTarget();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
@@ -1898,7 +1898,7 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 
   // ... then look up the instance within it.
   return findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      getInstance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getTarget(), &parentOp->getRegion(0).front());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
@@ -1908,13 +1908,13 @@ BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
   if (!parentOp)
     return emitError("Referenced module doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
+           << getInstance().getModule() << "::" << getInstance().getTarget();
 
   auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
-      getInstance().getName(), &parentOp->getRegion(0).front());
+      getInstance().getTarget(), &parentOp->getRegion(0).front());
   if (!inst)
     return emitError("Referenced interface doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getName();
+           << getInstance().getModule() << "::" << getInstance().getTarget();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();

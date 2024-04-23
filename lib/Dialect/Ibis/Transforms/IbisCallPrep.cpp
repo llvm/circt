@@ -123,10 +123,10 @@ void MergeCallArgs::rewrite(CallOp call, OpAdaptor adaptor,
   // Pack all of the operands into it.
   auto newArg = rewriter.create<hw::StructCreateOp>(loc, argStruct,
                                                     adaptor.getOperands());
-  newArg->setAttr("sv.namehint",
-                  rewriter.getStringAttr(call.getCallee().getName().getValue() +
-                                         "_args_called_from_" +
-                                         method.getMethodName().getValue()));
+  newArg->setAttr("sv.namehint", rewriter.getStringAttr(
+                                     call.getCallee().getTarget().getValue() +
+                                     "_args_called_from_" +
+                                     method.getMethodName().getValue()));
 
   // Update the call to use just the new struct.
   rewriter.modifyOpInPlace(call, [&]() {

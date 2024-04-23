@@ -109,7 +109,7 @@ class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     }
 
     StringAttr getReferencedModuleNameAttr() {
-      return getTargetNameAttr().getName();
+      return getTargetNameAttr().getTarget();
     }
 
     // Operation* getReferencedModuleSlow();

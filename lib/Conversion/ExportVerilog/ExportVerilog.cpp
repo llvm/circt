@@ -1297,7 +1297,7 @@ void EmitterBase::emitTextWithSubstitutions(
 
                 auto innerRef = cast<InnerRefAttr>(sym);
                 auto ref = state.symbolCache.getInnerDefinition(
-                    innerRef.getModule(), innerRef.getName());
+                    innerRef.getModule(), innerRef.getTarget());
                 ps << namify(innerRef, ref);
               }
             } else {
@@ -1306,7 +1306,7 @@ void EmitterBase::emitTextWithSubstitutions(
           }
         } else if (auto isym = dyn_cast<InnerRefAttr>(sym)) {
           auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
-                                                            isym.getName());
+                                                            isym.getTarget());
           symVerilogName = namify(sym, symOp);
         }
         if (!symVerilogName.empty())
@@ -2758,7 +2758,7 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
     ps << ".";
     auto innerRef = cast<InnerRefAttr>(sym);
     auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
-                                                    innerRef.getName());
+                                                    innerRef.getTarget());
     if (ref.hasPort()) {
       ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
       continue;

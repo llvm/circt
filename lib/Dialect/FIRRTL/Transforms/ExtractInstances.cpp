@@ -688,7 +688,7 @@ void ExtractInstancesPass::extractInstances() {
           auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx - 1]);
           if (innerRef &&
               !(innerRef.getModule() == newParent.getModuleNameAttr() &&
-                innerRef.getName() == getInnerSymName(newParentInst))) {
+                innerRef.getTarget() == getInnerSymName(newParentInst))) {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
                        << " does not pass through extraction parent\n");
@@ -932,7 +932,7 @@ void ExtractInstancesPass::groupInstances() {
             InnerRefAttr::get(parent.getModuleNameAttr(), wrapperInstName);
         Attribute ref2;
         if (auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx]))
-          ref2 = InnerRefAttr::get(wrapperModuleName, innerRef.getName());
+          ref2 = InnerRefAttr::get(wrapperModuleName, innerRef.getTarget());
         else
           ref2 = FlatSymbolRefAttr::get(wrapperModuleName);
         LLVM_DEBUG(llvm::dbgs() << "    - Expanding " << nlaPath[nlaIdx]

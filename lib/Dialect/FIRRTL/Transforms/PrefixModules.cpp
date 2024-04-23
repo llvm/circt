@@ -180,7 +180,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
   replacer.addReplacement(
       [&](hw::InnerRefAttr innerRef) -> std::pair<Attribute, WalkResult> {
         StringAttr moduleName = innerRef.getModule();
-        StringAttr symName = innerRef.getName();
+        StringAttr symName = innerRef.getTarget();
 
         StringAttr newTarget;
         if (moduleName == oldName) {

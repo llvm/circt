@@ -703,7 +703,7 @@ void LowerLayersPass::runOnOperation() {
       auto &[inst, mod] = it->getSecond();
       newNamepath.push_back(
           hw::InnerRefAttr::get(innerRef.getModule(), inst.getSymName()));
-      newNamepath.push_back(hw::InnerRefAttr::get(mod, innerRef.getName()));
+      newNamepath.push_back(hw::InnerRefAttr::get(mod, innerRef.getTarget()));
       modified = true;
     }
     if (modified)
