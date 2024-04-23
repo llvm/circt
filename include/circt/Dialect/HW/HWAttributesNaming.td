@@ -67,17 +67,14 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
       assert(!getPath().empty() && "Empty path");
       return getPath().front();
     }
+
+    ::mlir::FlatSymbolRefAttr getRootRef() const {
+      return ::mlir::FlatSymbolRefAttr::get(getRoot());
+    }
+
     ::mlir::StringAttr getTarget() const {
       assert(!getPath().empty() && "Empty path");
       return getPath().back();
-    }
-
-    // Old InnerRefAttr compatability accessors
-    ::mlir::StringAttr getModule() const {
-      return getRoot();
-    }
-    ::mlir::FlatSymbolRefAttr getModuleRef() const {
-      return ::mlir::FlatSymbolRefAttr::get(getRoot());
     }
   }];
 }

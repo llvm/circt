@@ -68,7 +68,7 @@ void InnerSymbolDCEPass::findInnerRefs(Attribute attr) {
 
 /// Add an InnerRefAttr to the set of all InnerRefAttrs.
 void InnerSymbolDCEPass::insertInnerRef(InnerRefAttr innerRef) {
-  StringAttr moduleName = innerRef.getModule();
+  StringAttr moduleName = innerRef.getRoot();
   StringAttr symName = innerRef.getTarget();
 
   // Track total inner refs found.

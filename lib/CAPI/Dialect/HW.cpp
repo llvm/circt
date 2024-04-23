@@ -237,7 +237,7 @@ MlirAttribute hwInnerRefAttrGetName(MlirAttribute innerRefAttr) {
 }
 
 MlirAttribute hwInnerRefAttrGetModule(MlirAttribute innerRefAttr) {
-  return wrap((Attribute)cast<InnerRefAttr>(unwrap(innerRefAttr)).getModule());
+  return wrap((Attribute)cast<InnerRefAttr>(unwrap(innerRefAttr)).getRoot());
 }
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute attr) {

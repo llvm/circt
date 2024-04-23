@@ -762,7 +762,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     for (auto attr : path.drop_back()) {
       auto ref = cast<hw::InnerRefAttr>(attr);
       // Find the instance referenced by the NLA.
-      auto *node = instanceGraph->lookup(ref.getModule());
+      auto *node = instanceGraph->lookup(ref.getRoot());
       auto it = llvm::find_if(*node, [&](igraph::InstanceRecord *record) {
         return getInnerSymName(record->getInstance<InstanceOp>()) ==
                ref.getTarget();
@@ -1119,7 +1119,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     for (auto nameRef : tracker.nla.getNamepath()) {
       StringAttr modName;
       if (auto innerRef = dyn_cast<hw::InnerRefAttr>(nameRef))
-        modName = innerRef.getModule();
+        modName = innerRef.getRoot();
       else if (auto ref = dyn_cast<FlatSymbolRefAttr>(nameRef))
         modName = ref.getAttr();
       if (!dutInstance && modName == dutModuleName) {

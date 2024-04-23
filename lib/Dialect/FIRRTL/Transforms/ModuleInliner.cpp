@@ -216,7 +216,7 @@ public:
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
-      last = writeBack(root.getModule(), root.getTarget());
+      last = writeBack(root.getRoot(), root.getTarget());
 
     nla.erase();
     return last;
@@ -307,7 +307,7 @@ public:
     if (multiary)
       os << "[";
     llvm::interleaveComma(tops, os, [&](InnerRefAttr a) {
-      writeOne(a.getModule(), a.getTarget());
+      writeOne(a.getRoot(), a.getTarget());
     });
     if (multiary)
       os << "]";
@@ -787,7 +787,7 @@ bool Inliner::renameInstance(
       if (!nlaMap.count(nla))
         continue;
       auto &mnla = nlaMap[nla];
-      mnla.setInnerSym(newInnerRef.getModule(), newSymAttr);
+      mnla.setInnerSym(newInnerRef.getRoot(), newSymAttr);
     }
   }
 

@@ -687,7 +687,7 @@ void ExtractInstancesPass::extractInstances() {
         if (nlaIdx > 0) {
           auto innerRef = dyn_cast<InnerRefAttr>(nlaPath[nlaIdx - 1]);
           if (innerRef &&
-              !(innerRef.getModule() == newParent.getModuleNameAttr() &&
+              !(innerRef.getRoot() == newParent.getModuleNameAttr() &&
                 innerRef.getTarget() == getInnerSymName(newParentInst))) {
             LLVM_DEBUG(llvm::dbgs()
                        << "    - Ignored since NLA parent " << innerRef
@@ -777,7 +777,7 @@ void ExtractInstancesPass::extractInstances() {
         // since we know that `nlaIdx` is a `InnerRefAttr`, we'll modify
         // `OldParent::BB` to be `NewParent::BB` and delete `NewParent::X`.
         StringAttr parentName =
-            cast<InnerRefAttr>(nlaPath[nlaIdx - 1]).getModule();
+            cast<InnerRefAttr>(nlaPath[nlaIdx - 1]).getRoot();
         Attribute newRef;
         if (isa<InnerRefAttr>(nlaPath[nlaIdx]))
           newRef = InnerRefAttr::get(parentName, getInnerSymName(newInst));
@@ -1046,8 +1046,7 @@ void ExtractInstancesPass::createTraceFiles() {
       // HACK: To match the Scala implementation, we strip all non-DUT modules
       // from the path and make the path look like it's rooted at the first DUT
       // module (so `TestHarness.dut.foo.bar` becomes `DUTModule.foo.bar`).
-      while (!path.empty() &&
-             !dutModuleNames.contains(path.back().getModule())) {
+      while (!path.empty() && !dutModuleNames.contains(path.back().getRoot())) {
         LLVM_DEBUG(llvm::dbgs()
                    << "    - Dropping non-DUT segment " << path.back() << "\n");
         path = path.drop_back();
@@ -1057,7 +1056,7 @@ void ExtractInstancesPass::createTraceFiles() {
       // instance's original parent before it was moved.
       addSymbol(FlatSymbolRefAttr::get(path.empty()
                                            ? originalInstanceParents[inst]
-                                           : path.back().getModule()));
+                                           : path.back().getRoot()));
       for (auto sym : llvm::reverse(path)) {
         os << ".";
         addSymbol(sym);

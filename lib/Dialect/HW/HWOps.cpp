@@ -2991,7 +2991,7 @@ bool HierPathOp::dropModule(StringAttr moduleToDrop) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
-      if (ref.getModule() == moduleToDrop)
+      if (ref.getRoot() == moduleToDrop)
         updateMade = true;
       else
         newPath.push_back(ref);
@@ -3014,12 +3014,12 @@ bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
-      if (ref.getModule() == moduleToDrop) {
+      if (ref.getRoot() == moduleToDrop) {
         inlinedInstanceName = ref.getTarget().getValue();
         updateMade = true;
       } else if (!inlinedInstanceName.empty()) {
         newPath.push_back(hw::InnerRefAttr::get(
-            ref.getModule(),
+            ref.getRoot(),
             StringAttr::get(getContext(), inlinedInstanceName + "_" +
                                               ref.getTarget().getValue())));
         inlinedInstanceName = "";
@@ -3043,7 +3043,7 @@ bool HierPathOp::updateModule(StringAttr oldMod, StringAttr newMod) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
-      if (ref.getModule() == oldMod) {
+      if (ref.getRoot() == oldMod) {
         newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getTarget()));
         updateMade = true;
       } else
@@ -3073,7 +3073,7 @@ bool HierPathOp::updateModuleAndInnerRef(
   // Break from the loop if the module is found, since it can occur only once.
   for (auto &element : namepathNew) {
     if (auto innerRef = dyn_cast<hw::InnerRefAttr>(element)) {
-      if (innerRef.getModule() != oldMod)
+      if (innerRef.getRoot() != oldMod)
         continue;
       auto symName = innerRef.getTarget();
       // Since the module got updated, the old innerRef symbol inside oldMod
@@ -3103,7 +3103,7 @@ bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
-      if (ref.getModule() == atMod) {
+      if (ref.getRoot() == atMod) {
         updateMade = true;
         if (includeMod)
           newPath.push_back(ref);
@@ -3127,7 +3127,7 @@ bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
 StringAttr HierPathOp::modPart(unsigned i) {
   return TypeSwitch<Attribute, StringAttr>(getNamepath()[i])
       .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-      .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+      .Case<hw::InnerRefAttr>([](auto a) { return a.getRoot(); });
 }
 
 /// Return the root module.
@@ -3141,7 +3141,7 @@ bool HierPathOp::hasModule(StringAttr modName) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
-      if (ref.getModule() == modName)
+      if (ref.getRoot() == modName)
         return true;
     } else {
       if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == modName)
@@ -3155,7 +3155,7 @@ bool HierPathOp::hasModule(StringAttr modName) {
 bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
   for (auto nameRef : const_cast<HierPathOp *>(this)->getNamepath())
     if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef))
-      if (ref.getTarget() == symName && ref.getModule() == modName)
+      if (ref.getTarget() == symName && ref.getRoot() == modName)
         return true;
 
   return false;
@@ -3234,12 +3234,12 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
              << "the instance path can only contain inner sym reference"
              << ", only the leaf can refer to a module symbol";
 
-    if (failed(checkExpectedModule(innerRef.getModule())))
+    if (failed(checkExpectedModule(innerRef.getRoot())))
       return failure();
 
     auto instOp = ns.lookupOp<igraph::InstanceOpInterface>(innerRef);
     if (!instOp)
-      return emitOpError() << " module: " << innerRef.getModule()
+      return emitOpError() << " module: " << innerRef.getRoot()
                            << " does not contain any instance with symbol: "
                            << innerRef.getTarget();
     expectedModuleNames = instOp.getReferencedModuleNamesAttr();
@@ -3252,7 +3252,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
     }
-    if (failed(checkExpectedModule(innerRef.getModule())))
+    if (failed(checkExpectedModule(innerRef.getRoot())))
       return failure();
   } else if (failed(checkExpectedModule(
                  cast<FlatSymbolRefAttr>(leafRef).getAttr()))) {
@@ -3274,7 +3274,7 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p << " [";
   llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
     if (auto ref = dyn_cast<hw::InnerRefAttr>(attr)) {
-      p.printSymbolName(ref.getModule().getValue());
+      p.printSymbolName(ref.getRoot().getValue());
       p << "::";
       p.printSymbolName(ref.getTarget().getValue());
     } else {

@@ -6022,7 +6022,7 @@ LogicalResult RefResolveOp::verify() {
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   auto targetRef = getTarget();
-  if (targetRef.getModule() !=
+  if (targetRef.getRoot() !=
       (*this)->getParentOfType<FModuleLike>().getModuleNameAttr())
     return emitOpError() << "has non-local target";
 

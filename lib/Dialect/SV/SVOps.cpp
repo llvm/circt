@@ -1841,7 +1841,7 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(getInstance().getModule()));
+      topLevelModuleOp.lookupSymbol(getInstance().getRoot()));
   if (!hwModule)
     return {};
 
@@ -1854,16 +1854,16 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 LogicalResult BindOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto module = (*this)->getParentOfType<mlir::ModuleOp>();
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      symbolTable.lookupSymbolIn(module, getInstance().getModule()));
+      symbolTable.lookupSymbolIn(module, getInstance().getRoot()));
   if (!hwModule)
     return emitError("Referenced module doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getTarget();
+           << getInstance().getRoot() << "::" << getInstance().getTarget();
 
   auto inst = findInstanceSymbolInBlock<hw::InstanceOp>(
       getInstance().getTarget(), hwModule.getBodyBlock());
   if (!inst)
     return emitError("Referenced instance doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getTarget();
+           << getInstance().getRoot() << "::" << getInstance().getTarget();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced instance isn't marked as doNotPrint");
   return success();
@@ -1892,7 +1892,7 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
   if (!symbolTable)
     return {};
   auto *parentOp =
-      lookupSymbolInNested(symbolTable, getInstance().getModule().getValue());
+      lookupSymbolInNested(symbolTable, getInstance().getRoot().getValue());
   if (!parentOp)
     return {};
 
@@ -1905,16 +1905,16 @@ BindInterfaceOp::getReferencedInstance(const hw::HWSymbolCache *cache) {
 LogicalResult
 BindInterfaceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto parentOp =
-      symbolTable.lookupNearestSymbolFrom(*this, getInstance().getModule());
+      symbolTable.lookupNearestSymbolFrom(*this, getInstance().getRoot());
   if (!parentOp)
     return emitError("Referenced module doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getTarget();
+           << getInstance().getRoot() << "::" << getInstance().getTarget();
 
   auto inst = findInstanceSymbolInBlock<sv::InterfaceInstanceOp>(
       getInstance().getTarget(), &parentOp->getRegion(0).front());
   if (!inst)
     return emitError("Referenced interface doesn't exist ")
-           << getInstance().getModule() << "::" << getInstance().getTarget();
+           << getInstance().getRoot() << "::" << getInstance().getTarget();
   if (!inst->getAttr("doNotPrint"))
     return emitError("Referenced interface isn't marked as doNotPrint");
   return success();

@@ -1297,7 +1297,7 @@ void EmitterBase::emitTextWithSubstitutions(
 
                 auto innerRef = cast<InnerRefAttr>(sym);
                 auto ref = state.symbolCache.getInnerDefinition(
-                    innerRef.getModule(), innerRef.getTarget());
+                    innerRef.getRoot(), innerRef.getTarget());
                 ps << namify(innerRef, ref);
               }
             } else {
@@ -1305,7 +1305,7 @@ void EmitterBase::emitTextWithSubstitutions(
             }
           }
         } else if (auto isym = dyn_cast<InnerRefAttr>(sym)) {
-          auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
+          auto symOp = state.symbolCache.getInnerDefinition(isym.getRoot(),
                                                             isym.getTarget());
           symVerilogName = namify(sym, symOp);
         }
@@ -2752,12 +2752,12 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
   auto globalRef = op.getReferencedPath(&state.symbolCache);
   auto namepath = globalRef.getNamepathAttr().getValue();
   auto *module = state.symbolCache.getDefinition(
-      cast<InnerRefAttr>(namepath.front()).getModule());
+      cast<InnerRefAttr>(namepath.front()).getRoot());
   ps << PPExtString(getSymOpName(module));
   for (auto sym : namepath) {
     ps << ".";
     auto innerRef = cast<InnerRefAttr>(sym);
-    auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
+    auto ref = state.symbolCache.getInnerDefinition(innerRef.getRoot(),
                                                     innerRef.getTarget());
     if (ref.hasPort()) {
       ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));

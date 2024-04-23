@@ -240,7 +240,7 @@ void ESIBuildManifestPass::gatherFilters(Attribute attr) {
   TypeSwitch<Attribute>(attr)
       .Case([&](TypeAttr a) { addType(a.getValue()); })
       .Case([&](FlatSymbolRefAttr a) { symbols.insert(a); })
-      .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getModuleRef()); })
+      .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getRootRef()); })
       .Case([&](ArrayAttr a) {
         for (auto attr : a)
           gatherFilters(attr);
@@ -370,7 +370,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
       })
       .Case([&](hw::InnerRefAttr ref) {
         llvm::json::Object dict;
-        dict["outer_sym"] = ref.getModule().getValue();
+        dict["outer_sym"] = ref.getRoot().getValue();
         dict["inner"] = ref.getTarget().getValue();
         return dict;
       })

@@ -331,7 +331,7 @@ LogicalResult LowerClassesPass::processPaths(
             llvm::any_of(oldPath, [&](auto pathFragment) {
               return llvm::TypeSwitch<Attribute, bool>(pathFragment)
                   .Case([&](hw::InnerRefAttr innerRef) {
-                    return innerRef.getModule() ==
+                    return innerRef.getRoot() ==
                            owningModule.getModuleNameAttr();
                   })
                   .Case([&](FlatSymbolRefAttr symRef) {
@@ -342,7 +342,7 @@ LogicalResult LowerClassesPass::processPaths(
         if (pathContainsOwningModule) {
           moduleName = owningModule.getModuleNameAttr();
         } else {
-          moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
+          moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getRoot();
         }
       }
 
@@ -387,7 +387,7 @@ LogicalResult LowerClassesPass::processPaths(
         altBasePathModule =
             TypeSwitch<Attribute, StringAttr>(path.front())
                 .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-                .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+                .Case<hw::InnerRefAttr>([](auto a) { return a.getRoot(); });
 
         pathInfoTable.addAltBasePathRoot(altBasePathModule);
       }

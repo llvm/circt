@@ -341,7 +341,7 @@ static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
 static void addExistingBinds(Block *topLevelModule, BindTable &bindTable) {
   for (auto bind : topLevelModule->getOps<BindOp>()) {
     hw::InnerRefAttr boundRef = bind.getInstance();
-    bindTable[boundRef.getModule()][boundRef.getTarget()] = bind;
+    bindTable[boundRef.getRoot()][boundRef.getTarget()] = bind;
   }
 }
 

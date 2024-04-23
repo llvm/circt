@@ -118,7 +118,7 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       diag.attachNote(op->getLoc()) << "component here";
       return diag;
     }
-    modules.emplace_back(innerRef.getModule(), verilogName);
+    modules.emplace_back(innerRef.getRoot(), verilogName);
   }
 
   // Process the final target.
@@ -140,7 +140,7 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       auto *op = target.getOp();
       assert(op && "innerRef should be targeting something");
       // Get the current module.
-      auto currentModule = innerRef.getModule();
+      auto currentModule = innerRef.getRoot();
       // Get the verilog name of the target.
       auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
       if (!verilogName) {

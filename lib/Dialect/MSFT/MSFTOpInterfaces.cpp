@@ -38,7 +38,7 @@ Operation *circt::msft::getHierPathTopModule(Location loc,
   if (ref.getNamepath().empty())
     return nullptr;
   auto modSym = FlatSymbolRefAttr::get(
-      cast<hw::InnerRefAttr>(ref.getNamepath()[0]).getModule());
+      cast<hw::InnerRefAttr>(ref.getNamepath()[0]).getRoot());
   return symCache.getDefinition(modSym);
 }
 

@@ -179,7 +179,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
   mlir::AttrTypeReplacer replacer;
   replacer.addReplacement(
       [&](hw::InnerRefAttr innerRef) -> std::pair<Attribute, WalkResult> {
-        StringAttr moduleName = innerRef.getModule();
+        StringAttr moduleName = innerRef.getRoot();
         StringAttr symName = innerRef.getTarget();
 
         StringAttr newTarget;
