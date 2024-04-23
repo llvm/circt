@@ -47,6 +47,17 @@ handshake.func @top(%arg0: i64, %arg1: i64, %arg8: none, ...) -> (i64, none) {
     return %1, %arg8 : i64, none
 }
 
+// CHECK-LABEL:   hw.module @constant(out out0 : !dc.value<i32>) {
+// CHECK:           %[[VAL_1:.*]] = dc.source
+// CHECK:           %[[VAL_2:.*]] = arith.constant 42 : i32
+// CHECK:           %[[VAL_3:.*]] = dc.pack %[[VAL_1]], %[[VAL_2]] : i32
+// CHECK:           hw.output %[[VAL_3]] : !dc.value<i32>
+// CHECK:         }
+handshake.func @constant() -> (i32) {
+  %0 = arith.constant 42 : i32
+  return %0 : i32
+}
+
 // CHECK:   hw.module @mux(in %[[VAL_0:.*]] : !dc.value<i1>, in %[[VAL_1:.*]] : !dc.value<i64>, in %[[VAL_2:.*]] : !dc.value<i64>, out out0 : !dc.value<i64>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i64>
