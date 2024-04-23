@@ -662,7 +662,7 @@ public:
   LogicalResult
   matchAndRewrite(MergeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bb = BackedgeBuilder(rewriter, op.getLoc());
+    BackedgeBuilder bb(rewriter, op.getLoc());
     UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
     auto output = io.outputs[0];
     RTLBuilder rtlb(op.getLoc(), rewriter);
