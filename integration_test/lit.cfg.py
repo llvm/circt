@@ -176,7 +176,7 @@ if config.esi_runtime == "1":
                                append_path=True)
 
   # Enable ESI cosim tests if they have been built.
-  if config.esi_cosim_path != "":
+  if config.esi_cosim != "OFF":
     config.available_features.add('esi-cosim')
     tools.append('esi-cosim.py')
 

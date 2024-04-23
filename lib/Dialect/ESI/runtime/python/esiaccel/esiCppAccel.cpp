@@ -203,6 +203,25 @@ PYBIND11_MODULE(esiCppAccel, m) {
   hwmodule.def_property_readonly("children", &HWModule::getChildren,
                                  py::return_value_policy::reference);
 
+  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
+                     .def(py::init(&registry::connect))
+                     .def(
+                         "sysinfo",
+                         [](AcceleratorConnection &acc) {
+                           return acc.getService<services::SysInfo>({});
+                         },
+                         py::return_value_policy::reference)
+                     .def(
+                         "get_service_mmio",
+                         [](AcceleratorConnection &acc) {
+                           return acc.getService<services::MMIO>({});
+                         },
+                         py::return_value_policy::reference);
+
+// Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
+// to test both styles of manifest retrieval for cosim. Come up with a more
+// generic way to set accelerator-specific properties/configurations.
+#ifdef ESI_COSIM
   py::enum_<backends::cosim::CosimAccelerator::ManifestMethod>(
       m, "CosimManifestMethod")
       .value("ManifestCosim",
@@ -211,32 +230,17 @@ PYBIND11_MODULE(esiCppAccel, m) {
              backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
       .export_values();
 
-  py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
-      .def(py::init(&registry::connect))
-      .def(
-          "sysinfo",
-          [](AcceleratorConnection &acc) {
-            return acc.getService<services::SysInfo>({});
-          },
-          py::return_value_policy::reference)
-      .def(
-          "get_service_mmio",
-          [](AcceleratorConnection &acc) {
-            return acc.getService<services::MMIO>({});
-          },
-          py::return_value_policy::reference)
-      // This is a bit of a hack to test. Come up with a more generic way to set
-      // accelerator-specific properties/configurations.
-      .def("set_manifest_method",
-           [](AcceleratorConnection &acc,
-              backends::cosim::CosimAccelerator::ManifestMethod method) {
-             auto cosim =
-                 dynamic_cast<backends::cosim::CosimAccelerator *>(&acc);
-             if (!cosim)
-               throw std::runtime_error(
-                   "set_manifest_method only supported for cosim connections");
-             cosim->setManifestMethod(method);
-           });
+  accConn.def(
+      "set_manifest_method",
+      [](AcceleratorConnection &acc,
+         backends::cosim::CosimAccelerator::ManifestMethod method) {
+        auto cosim = dynamic_cast<backends::cosim::CosimAccelerator *>(&acc);
+        if (!cosim)
+          throw std::runtime_error(
+              "set_manifest_method only supported for cosim connections");
+        cosim->setManifestMethod(method);
+      });
+#endif // ESI_COSIM
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())
