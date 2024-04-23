@@ -307,7 +307,8 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Value, 4> inputData;
+    llvm::SmallVector<Value> inputData;
+
     Value outToken;
     if (operands.empty()) {
       if (!op->hasTrait<OpTrait::ConstantLike>())
@@ -319,7 +320,7 @@ public:
       // constant `dc.source`.
       outToken = rewriter.create<dc::SourceOp>(op->getLoc());
     } else {
-      llvm::SmallVector<Value, 4> inputTokens;
+      llvm::SmallVector<Value> inputTokens;
       for (auto input : operands) {
         auto dct = unpack(rewriter, input);
         inputData.push_back(dct.data);
