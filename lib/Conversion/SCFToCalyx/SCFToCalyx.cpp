@@ -212,7 +212,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              scf::YieldOp, scf::WhileOp, scf::ForOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp,
+                             memref::StoreOp, memref::CopyOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
@@ -266,6 +266,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, memref::CopyOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::ForOp forOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CallOp callOp) const;
@@ -505,6 +506,25 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   getState<ComponentLoweringState>().addBlockScheduleable(loadOp->getBlock(),
                                                           group);
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::CopyOp copyOp) const {
+  auto source = copyOp.getSource();
+  auto target = copyOp.getTarget();
+
+  auto srcType = source.getType().cast<MemRefType>();
+  auto tgtType = target.getType().cast<MemRefType>();
+
+  assert(srcType.getElementType() == tgtType.getElementType() &&
+         srcType.getShape() == tgtType.getShape() &&
+         "Source and target are expected to have the same element type and "
+         "shape.");
+
+  copyOp.emitError("Please run --handshake-legalize-memrefs to replace "
+                   "memre.copy with memref.load and memref.store");
+
+  return failure();
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
