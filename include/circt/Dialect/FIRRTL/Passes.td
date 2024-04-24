@@ -718,6 +718,15 @@ def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerOpenAggsPass()";
 }
 
+def NarrowPorts : Pass<"firrtl-narrow-ports", "firrtl::CircuitOp"> {
+  let summary = "Narrow ports based on the use of values";
+  let description = [{
+    This pass looks at the bits of a port used and narrows the port based on 
+    that analysis.
+  }];
+  let constructor = "circt::firrtl::createNarrowPortsPass()";
+}
+
 def ResolveTraces : Pass<"firrtl-resolve-traces", "firrtl::CircuitOp"> {
   let summary = "Write out TraceAnnotations to an output annotation file";
   let description = [{

@@ -41,6 +41,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MemToRegOfVec.cpp
   MergeConnections.cpp
   ModuleInliner.cpp
+  NarrowPorts.cpp
   PassiveWires.cpp
   PrefixModules.cpp
   PrintFIRRTLFieldSource.cpp
