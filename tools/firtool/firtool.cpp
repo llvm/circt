@@ -409,24 +409,18 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Add passes specific to btor2 emission
-  if (outputFormat == OutputBTOR2) {
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
+  if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
         return failure();
-    if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
-                                          (*outputFile)->os())))
-      return failure();
-  }
-  // Lower if we are going to verilog or if lowering was specifically
-  // requested.
-  else if (outputFormat != OutputIRFir) {
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
-      return failure();
-    if (!hwPassPlugin.empty())
-      if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+    // Add passes specific to btor2 emission
+    if (outputFormat == OutputBTOR2)
+      if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                            (*outputFile)->os())))
         return failure();
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
