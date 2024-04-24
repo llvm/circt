@@ -50,6 +50,20 @@ smt.solver () : () -> () {
   smt.assert %3
 
 
+  // CHECK: (assert (let (([[V16:.+]] (exists (([[V17:.+]] Int) ([[V18:.+]] Int))
+  // CHECK:                           ( ! (let (([[V19:.+]] (= [[V17]] [[V18]])))
+  // CHECK:                           (let (([[V20:.+]] (=> [[V19:.+]] true)))
+  // CHECK:                           [[V20:.+]])) :weight 2))))
+  // CHECK:         [[V16]]))
+
+  %3 = smt.exists pattern {%4 = smt.eq %arg2, %arg3 : !smt.int} {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %4 = smt.eq %arg2, %arg3 : !smt.int
+    %5 = smt.implies %4, %true
+    smt.yield %5 : !smt.bool
+  }
+  smt.assert %3
+
   // CHECK: (reset)
   // CHECK-INLINED: (reset)
 }

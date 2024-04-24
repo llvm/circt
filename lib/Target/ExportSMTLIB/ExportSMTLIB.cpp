@@ -293,11 +293,12 @@ struct ExpressionVisitor
   LogicalResult quantifierHelper(OpTy op, StringRef operatorString,
                                  VisitorInfo &info) {
     auto weight = op.getWeight();
+    auto patterns = op.getPatterns();
     // TODO: add support
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
-    if (!op.getPatterns().empty())
-      return op.emitError() << "patterns not supported yet";
+    // if (!op.getPatterns().empty())
+    //   return op.emitError() << "patterns not supported yet";
 
     llvm::ScopedHashTableScope<Value, std::string> scope(info.valueMap);
     info.stream << "(" << operatorString << " (";
@@ -324,6 +325,8 @@ struct ExpressionVisitor
 
     if (weight != 0)
       info.stream << "( ! ";
+    else if(!patterns.empty())
+      info.stream << "( ! ";
 
     // Print the quantifier body. This assumes that quantifiers are not deeply
     // nested (at least not enough that recursive calls could become a problem).
@@ -344,6 +347,29 @@ struct ExpressionVisitor
 
     if (weight != 0)
       info.stream << " :weight " << weight << ")";
+    if(!patterns.empty()){
+      info.stream << " :pattern (";
+      for(auto &p: patterns){
+
+
+
+        SmallVector<Value> worklist;
+        Value yieldedValue = p.front().getTerminator()->getOperand(0);
+        worklist.push_back(yieldedValue);
+        unsigned indentExt = operatorString.size() + 2;
+        VisitorInfo newInfo(info.stream, info.valueMap,
+                            info.indentLevel + indentExt, 0);
+        newInfo.stream.indent(newInfo.indentLevel);
+        if (failed(printExpression(worklist, newInfo)))
+          return failure();
+
+        info.stream << info.valueMap.lookup(yieldedValue);
+
+
+        // info.stream<<" ("<<p<<") ";
+      }
+      info.stream << ")";
+    }
 
     info.stream << ")";
 
