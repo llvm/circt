@@ -56,6 +56,51 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
 }
 
+/// Due to the result type of the `lt`, or `le`, or `gt`, or `ge` ops are
+/// always unsigned, estimating their operands type.
+static bool isSignedType(Operation *op) {
+  return TypeSwitch<Operation *, bool>(op)
+      .template Case<LtOp, LeOp, GtOp, GeOp>([&](auto op) -> bool {
+        return cast<UnpackedType>(op->getOperand(0).getType())
+                   .castToSimpleBitVector()
+                   .isSigned() &&
+               cast<UnpackedType>(op->getOperand(1).getType())
+                   .castToSimpleBitVector()
+                   .isSigned();
+      })
+      .Default([&](auto op) -> bool {
+        return cast<UnpackedType>(op->getResult(0).getType())
+            .castToSimpleBitVector()
+            .isSigned();
+      });
+}
+
+/// Not define the predicate for `relation` and `equality` operations in the
+/// MooreDialect, but comb needs it. Return a correct `comb::ICmpPredicate`
+/// corresponding to different moore `relation` and `equality` operations.
+static comb::ICmpPredicate getCombPredicate(Operation *op) {
+  using comb::ICmpPredicate;
+  return TypeSwitch<Operation *, ICmpPredicate>(op)
+      .Case<LtOp>([&](auto op) {
+        return isSignedType(op) ? ICmpPredicate::slt : ICmpPredicate::ult;
+      })
+      .Case<LeOp>([&](auto op) {
+        return isSignedType(op) ? ICmpPredicate::sle : ICmpPredicate::ule;
+      })
+      .Case<GtOp>([&](auto op) {
+        return isSignedType(op) ? ICmpPredicate::sgt : ICmpPredicate::ugt;
+      })
+      .Case<GeOp>([&](auto op) {
+        return isSignedType(op) ? ICmpPredicate::sge : ICmpPredicate::uge;
+      })
+      .Case<EqOp>([&](auto op) { return ICmpPredicate::eq; })
+      .Case<NeOp>([&](auto op) { return ICmpPredicate::ne; })
+      .Case<CaseEqOp>([&](auto op) { return ICmpPredicate::ceq; })
+      .Case<CaseNeOp>([&](auto op) { return ICmpPredicate::cne; })
+      .Case<WildcardEqOp>([&](auto op) { return ICmpPredicate::weq; })
+      .Case<WildcardNeOp>([&](auto op) { return ICmpPredicate::wne; });
+}
+
 //===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
@@ -78,6 +123,163 @@ struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
   matchAndRewrite(ConcatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getValues());
+    return success();
+  }
+};
+
+struct ReplicateOpConversion : public OpConversionPattern<ReplicateOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ReplicateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+
+    rewriter.replaceOpWithNewOp<comb::ReplicateOp>(op, resultType,
+                                                   adaptor.getValue());
+    return success();
+  }
+};
+
+struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    auto width = typeConverter->convertType(op.getInput().getType())
+                     .getIntOrFloatBitWidth();
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.getLowBit(), width, op->getLoc());
+    Value value =
+        rewriter.create<comb::ShrUOp>(op->getLoc(), adaptor.getInput(), amount);
+
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, value, 0);
+    return success();
+  }
+};
+
+struct ReduceAndOpConversion : public OpConversionPattern<ReduceAndOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ReduceAndOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getInput().getType());
+    Value max = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, -1);
+
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::eq,
+                                              adaptor.getInput(), max);
+    return success();
+  }
+};
+
+struct ReduceOrOpConversion : public OpConversionPattern<ReduceOrOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ReduceOrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getInput().getType());
+    Value zero = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
+
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                              adaptor.getInput(), zero);
+    return success();
+  }
+};
+
+struct ReduceXorOpConversion : public OpConversionPattern<ReduceXorOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ReduceXorOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    rewriter.replaceOpWithNewOp<comb::ParityOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
+struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(BoolCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (cast<UnpackedType>(op.getInput().getType())
+            .castToSimpleBitVectorOrNull()) {
+      Type resultType = typeConverter->convertType(op.getInput().getType());
+      Value zero = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
+
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                                adaptor.getInput(), zero);
+      return success();
+    }
+
+    return failure();
+  }
+};
+
+struct NotOpConversion : public OpConversionPattern<NotOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NotOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    Value max = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, -1);
+
+    rewriter.replaceOpWithNewOp<comb::XorOp>(op, adaptor.getInput(), max);
+    return success();
+  }
+};
+
+template <typename SourceOp, typename UnsignedOp,
+          typename SignedOp = UnsignedOp>
+struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    isSignedType(op)
+        ? rewriter.replaceOpWithNewOp<SignedOp>(op, adaptor.getLhs(),
+                                                adaptor.getRhs(), false)
+        : rewriter.replaceOpWithNewOp<UnsignedOp>(op, adaptor.getLhs(),
+                                                  adaptor.getRhs(), false);
+    return success();
+  }
+};
+
+template <typename SourceOp>
+struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adapter,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    comb::ICmpPredicate pred = getCombPredicate(op);
+
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+        op, resultType, pred, adapter.getLhs(), adapter.getRhs());
+    return success();
+  }
+};
+
+struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConversionOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Value amount =
+        adjustIntegerWidth(rewriter, adaptor.getInput(),
+                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+
+    rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, resultType, amount);
     return success();
   }
 };
@@ -271,6 +473,9 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
     if (auto sbv = type.getSimpleBitVectorOrNull())
       return mlir::IntegerType::get(type.getContext(), sbv.size);
+    if (isa<UnpackedRangeDim, PackedRangeDim>(type))
+      return mlir::IntegerType::get(type.getContext(),
+                                    type.getBitSize().value());
     return std::nullopt;
   });
 
@@ -283,16 +488,38 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
-    ConstantOpConv,
-    ConcatOpConversion,
-    ReturnOpConversion,
-    CondBranchOpConversion,
-    BranchOpConversion,
-    CallOpConversion,
-    ShlOpConversion,
-    ShrOpConversion,
-    AShrOpConversion,
-    UnrealizedConversionCastConversion
+    // Patterns of miscellaneous operations.
+    ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
+    ExtractOpConversion, ConversionOpConversion,
+
+    // Patterns of unary operations.
+    ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
+    BoolCastOpConversion, NotOpConversion, 
+    
+    // Patterns of binary operations.
+    BinaryOpConversion<AddOp, comb::AddOp>,
+    BinaryOpConversion<SubOp, comb::SubOp>,
+    BinaryOpConversion<MulOp, comb::MulOp>,
+    BinaryOpConversion<DivOp, comb::DivUOp, comb::DivSOp>,
+    BinaryOpConversion<ModOp, comb::ModUOp, comb::ModSOp>,
+    BinaryOpConversion<AndOp, comb::AndOp>,
+    BinaryOpConversion<OrOp, comb::OrOp>,
+    BinaryOpConversion<XorOp, comb::XorOp>,
+
+    // Patterns of relational operations.
+    ICmpOpConversion<LtOp>, ICmpOpConversion<LeOp>, ICmpOpConversion<GtOp>,
+    ICmpOpConversion<GeOp>, ICmpOpConversion<EqOp>, ICmpOpConversion<NeOp>,
+    ICmpOpConversion<CaseEqOp>, ICmpOpConversion<CaseNeOp>,
+    ICmpOpConversion<WildcardEqOp>, ICmpOpConversion<WildcardNeOp>,
+
+    // Patterns of shifting operations.
+    ShrOpConversion, ShlOpConversion, AShrOpConversion,
+
+    // Patterns of branch operations.
+    CondBranchOpConversion, BranchOpConversion,
+
+    // Patterns of other operations outside Moore dialect.
+    ReturnOpConversion, CallOpConversion, UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
