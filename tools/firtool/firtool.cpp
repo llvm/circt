@@ -725,6 +725,7 @@ int main(int argc, char **argv) {
     registerLowerSeqToSVPass();
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerConvertHWToBTOR2Pass();
   }
 
   // Register any pass manager command line options.
