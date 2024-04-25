@@ -730,7 +730,8 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
     for (auto arg : enumerate(block->getArguments())) {
       Type argType = arg.value().getType();
-      assert(isa<IntegerType>(argType) && "unsupported block argument type");
+      assert((isa<IntegerType>(argType) || isa<FloatType>(argType)) &&
+             "unsupported block argument type");
       unsigned width = argType.getIntOrFloatBitWidth();
       std::string index = std::to_string(arg.index());
       std::string name = loweringState().blockName(block) + "_arg" + index;
@@ -753,11 +754,11 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
   for (auto argType : enumerate(funcOp.getResultTypes())) {
     auto convArgType = calyx::convIndexType(rewriter, argType.value());
-    assert(isa<IntegerType>(convArgType) && "unsupported return type");
-    unsigned width = convArgType.getIntOrFloatBitWidth();
+    assert((isa<IntegerType>(convArgType) || isa<FloatType>(convArgType)) &&
+           "unsupported return type");
     std::string name = "ret_arg" + std::to_string(argType.index());
-    auto reg =
-        createRegister(funcOp.getLoc(), rewriter, getComponent(), width, name);
+    auto reg = createRegister(funcOp.getLoc(), rewriter, getComponent(),
+                              convArgType, name);
     getState().addReturnReg(reg, argType.index());
 
     rewriter.setInsertionPointToStart(
