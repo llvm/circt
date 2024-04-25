@@ -36,7 +36,9 @@ To accomplish this, an attribute named `inner_sym` is attached, providing a
 scoped symbol-like name to the element.  An operation with an `inner_sym`
 resides in arbitrarily-nested regions of a region that defines an
 `InnerSymbolTable`.  `InnerSymbolTable` operations can themselves be arbitrarily
-nested, and thus must reside within an `InnerRefNamespace` or `InnerSymbolTable`.
+nested, and thus must reside within either an `InnerRefNamespace` or `InnerSymbolTable`.
+Ops which implement `InnerSymbolTables` must themselves also have an MLIR symbol
+or `inner_sym`, as appropriate, so their scope can be referenced.
 The `inner_sym` attribute must be an `InnerSymAttr` which defines the inner
 symbols attached to the operation and its fields. Operations containing an inner
 symbol must implement the `InnerSymbol` interface.
@@ -69,14 +71,21 @@ in languages are usually a human convenience, and not necessarily a good IR
 construct. In general, front-ends will generate fully qualified names early in
 the compilation process suitable for use in the IR. And if references truly are
 relative, then using a dataflow (SSA) representation is more appropriate.
+Specifically, references which are relative to an instance hierarchy are dynamically scoped, which is a different implementation than symbols, which are lexically scoped.
 
 ## Inner Symbol Reference Attribute
 
 An attribute `InnerRefAttr` is provided to encapsulate references to inner 
-symbols.  This attribute stores the full path to a symbol, through the
-`InnerRefNamespace` symbol table hierarchy. For `firrtl` and `hw` usage, this typically
-amounts to two levels of nesting, e.g. `@<module>::@<target>`.  This provides a uniform type for
-storing and manipulating references to inner symbols.  
+symbols.  This attribute stores the path to an inner symbol through the
+`InnerRefNamespace` symbol table hierarchy - this path being a combination of
+[`InnerSymbolTable`-operation symbols..., target inner symbol]. The path must be non-empty.  
+`InnerRefAttr` may also refer to top-level symbols (i.e. a single-element path containing only the target).
+In this case, it is legal to refer to MLIR symbols residing at the top-level in
+the `InnerRefNamespace`.
+
+For `firrtl` and `hw` usage, this typically amounts to two levels of nesting,
+e.g. `@<module>::@<target>`.  This provides a uniform type for storing and
+manipulating references to inner symbols.
 An `InnerRefAttr` resolves in an `InnerRefNamespace`.
 
 Operations using `InnerRefAttr` should implement the `verifyInnerRefs` method
