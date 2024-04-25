@@ -79,6 +79,46 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
   return rewriter.create<LLVM::ZExtOp>(loc, zextTy, value);
 }
 
+/// Create or retrieve a handler fuction for out-of-bounds dynamic array
+/// accesses in the given module's global scope.
+
+static constexpr StringLiteral handlerSymbolArrayGetOOB =
+    "_arc_handler_array_get_oob";
+
+static LLVM::LLVMFuncOp
+lookupOrInsertArrayGetOOBHandlerFunc(mlir::ModuleOp module) {
+
+  auto func = module.lookupSymbol<LLVM::LLVMFuncOp>(handlerSymbolArrayGetOOB);
+  if (func)
+    return func;
+
+  auto ptrType = LLVM::LLVMPointerType::get(module.getContext());
+  auto int64Type = IntegerType::get(module.getContext(), 64);
+  auto int32Type = IntegerType::get(module.getContext(), 32);
+
+  auto handlerFuncType = LLVM::LLVMFunctionType::get(
+      ptrType,
+      /* void* base, uint64_t size, uint32_t eltBits, void* oobAddr,
+         uint64_t oobIdx */
+      {ptrType, int64Type, int32Type, ptrType, int64Type});
+
+  ImplicitLocOpBuilder builder(UnknownLoc::get(module.getContext()), module.getBodyRegion());
+
+  // Use 'linkonce' linkage to allow user code to provide a custom handler
+  // overriding the stub.
+  func = builder.create<LLVM::LLVMFuncOp>(
+      handlerSymbolArrayGetOOB, handlerFuncType, LLVM::Linkage::Linkonce,
+      /*dsoLocal=*/false, LLVM::CConv::C);
+
+  // Build a stub handler wrangling the invalid index to zero by returning the
+  // array's base pointer.
+  auto funcBlock = func.addEntryBlock(builder);
+  builder.setInsertionPointToStart(funcBlock);
+  builder.create<LLVM::ReturnOp>(funcBlock->getArgument(0));
+
+  return func;
+}
+
 //===----------------------------------------------------------------------===//
 // Extraction operation conversions
 //===----------------------------------------------------------------------===//
@@ -147,6 +187,8 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Value arrPtr;
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
     if (auto load = adaptor.getInput().getDefiningOp<LLVM::LoadOp>()) {
       // In this case the array was loaded from an existing address, so we can
       // just grab that address instead of reallocating the array on the stack.
@@ -156,27 +198,76 @@ struct ArrayGetOpConversion : public ConvertOpToLLVMPattern<hw::ArrayGetOp> {
           op->getLoc(), IntegerType::get(rewriter.getContext(), 32),
           rewriter.getI32IntegerAttr(1));
       arrPtr = rewriter.create<LLVM::AllocaOp>(
-          op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()),
+          op->getLoc(), ptrType,
           adaptor.getInput().getType(), oneC,
           /*alignment=*/4);
       rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.getInput(), arrPtr);
     }
 
-    auto arrTy = typeConverter->convertType(op.getInput().getType());
+    auto arrTy = llvm::cast<LLVM::LLVMArrayType>(
+        typeConverter->convertType(op.getInput().getType()));
+
     auto elemTy = typeConverter->convertType(op.getResult().getType());
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
-    // During the ongoing migration to opaque types, use the constructor that
-    // accepts an element type when the array pointer type is opaque, and
-    // otherwise use the typed pointer constructor.
     auto gep = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getContext()), arrTy,
+        op->getLoc(), ptrType, arrTy,
         arrPtr, ArrayRef<LLVM::GEPArg>{0, zextIndex});
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
 
+    auto indexBitWidth = hw::getBitWidth(op.getIndex().getType());
+    assert(indexBitWidth >= 0 && indexBitWidth < 64);
+    if ((UINT64_C(1) << indexBitWidth) <= arrTy.getNumElements()) {
+      // The array spans the entire index range, so
+      // access directly without bounds check.
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, gep);
+      return success();
+    }
+
+    // Check if the dynamic index is within bounds. If not,
+    // invoke a handler function to provide a new, valid pointer.
+    auto block = op->getBlock();
+    auto opLoc = op.getLoc();
+
+    auto continueBlock =
+          rewriter.splitBlock(rewriter.getInsertionBlock(), op->getIterator());
+    auto ptrArg = continueBlock->addArgument(ptrType, op.getLoc());
+    auto callHandlerBlock = rewriter.createBlock(continueBlock);
+
+    // Create the bounds check and the (unlikely to be taken) conditional branch
+    rewriter.setInsertionPointToEnd(block);
+    auto sizeCst = rewriter.create<LLVM::ConstantOp>(opLoc, zextIndex.getType(), arrTy.getNumElements());
+    auto isOOB  = rewriter.create<LLVM::ICmpOp>(opLoc,
+       LLVM::ICmpPredicate::uge, zextIndex, sizeCst.getResult());
+    auto condBrOp = rewriter.create<LLVM::CondBrOp>(opLoc, isOOB.getResult(), callHandlerBlock, mlir::ValueRange(),
+                                     continueBlock, mlir::ValueRange{gep});
+    condBrOp.setBranchWeights(ArrayRef<int32_t>{0, INT32_MAX});
+
+    // Create the arguments and call to the handler function
+    rewriter.setInsertionPointToStart(callHandlerBlock);
+    auto moduleOp = block->getParent()->getParentOfType<ModuleOp>();
+    auto handlerFunc = lookupOrInsertArrayGetOOBHandlerFunc(moduleOp);
+
+    auto sizeCst64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, IntegerType::get(getContext(), 64), sizeCst);
+    auto index64 = rewriter.createOrFold<LLVM::ZExtOp>(
+        opLoc, IntegerType::get(getContext(), 64), zextIndex);
+    auto elementBitsCst = rewriter.create<LLVM::ConstantOp>(
+        opLoc, IntegerType::get(getContext(), 32),
+        arrTy.getElementType().getIntOrFloatBitWidth());
+
+    auto callOp = rewriter.create<LLVM::CallOp>(
+        opLoc, handlerFunc,
+        mlir::ValueRange{arrPtr, sizeCst64, elementBitsCst, gep.getResult(),
+                         index64});
+    rewriter.create<LLVM::BrOp>(opLoc, mlir::ValueRange{callOp.getResult()}, continueBlock);
+
+    // Perform the (hopefully now valid) access
+    rewriter.setInsertionPointToStart(continueBlock);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elemTy, ptrArg);
     return success();
   }
 };
+
 } // namespace
 
 namespace {
@@ -640,6 +731,11 @@ void circt::populateHWToLLVMConversionPatterns(
         &constAggregateGlobalsMap) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
+  // We may not actually need the handler, but reserve the symbol anyway.
+  auto handlerName = globals.newName(handlerSymbolArrayGetOOB);
+  assert(handlerName.str() == handlerSymbolArrayGetOOB.str() &&
+         "handler function symbol already in use");
+
   // Value creation conversion patterns.
   patterns.add<HWConstantOpConversion>(ctx, converter);
   patterns.add<HWDynamicArrayCreateOpConversion, HWStructCreateOpConversion>(
@@ -654,6 +750,7 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<ArrayGetOpConversion, ArraySliceOpConversion,
                ArrayConcatOpConversion, StructExplodeOpConversion,
                StructExtractOpConversion, StructInjectOpConversion>(converter);
+
 }
 
 void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {

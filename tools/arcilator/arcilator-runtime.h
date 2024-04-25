@@ -60,6 +60,34 @@ ARC_ENV_DECL_GET_PRINT_STREAM(id) {
 }
 #endif // ARC_NO_DEFAULT_GET_PRINT_STREAM
 
+// Handler for out-of-bounds index on an array_get operation
+// base:    Array base address
+// size:    Number of array elements
+// eltBits: Number of bits per element
+// oobAddr: Referenced address outside of array bounds
+// oobIdx:  Out-of-bounds index
+// Return value: Pointer to new the result value of the array_get operation
+#define ARC_HANDLER_ARRAYGETOOB(base, size, eltBits, oobAddr, oobIdx)          \
+  const void *_arc_handler_array_get_oob(const void *base, uint64_t size,      \
+                                         uint32_t eltBits,                     \
+                                         const void *oobAddr, uint64_t oobIdx)
+
+#ifndef ARC_NO_DEFAULT_HANDLERS
+#include <iostream>
+extern "C" {
+ARC_HANDLER_ARRAYGETOOB(base, as, eb, oa, oi) {
+  (void)base;
+  (void)eb;
+  (void)oa;
+  std::cerr << "FATAL: Out-of-bounds array_get operation!" << " (Index = " << oi
+            << ", Size = " << as << ")" << std::endl;
+  exit(-1);
+}
+}
+#endif // ARC_NO_DEFAULT_HANDLERS
+
+
+
 // ----------------
 
 struct Signal {
