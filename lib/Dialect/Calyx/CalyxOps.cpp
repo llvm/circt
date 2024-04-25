@@ -2150,6 +2150,27 @@ void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
   types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
+void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
+                        StringRef instanceName, Type type,
+                        ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
+  int64_t width = type.getIntOrFloatBitWidth();
+  state.addAttribute("width", builder.getI64IntegerAttr(width));
+  state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
+  state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
+  SmallVector<Type> types;
+  for (int64_t size : addrSizes)
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getI1Type());            // Reset
+  types.push_back(builder.getI1Type());            // Content enable
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(type);                           // Write data
+  types.push_back(type);                           // Read data
+  types.push_back(builder.getI1Type());            // Done
+  state.addTypes(types);
+}
 
 LogicalResult SeqMemoryOp::verify() {
   ArrayRef<Attribute> opSizes = getSizes().getValue();

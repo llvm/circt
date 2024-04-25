@@ -214,10 +214,10 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
                              /// standard arithmetic
-                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
-                             MulIOp, DivUIOp, DivSIOp, RemUIOp, RemSIOp,
-                             SelectOp, IndexCastOp, CallOp>(
+                             AddIOp, AddFOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
+                             ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp,
+                             TruncIOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
+                             RemSIOp, SelectOp, IndexCastOp, CallOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<FuncOp, scf::ConditionOp>([&](auto) {
                 /// Skip: these special cases will be handled separately.
@@ -244,6 +244,7 @@ private:
                         arith::ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SelectOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AddFOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, DivUIOp op) const;
@@ -489,7 +490,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     // can significantly decrease the maximum achievable frequency.
     auto reg = createRegister(
         loadOp.getLoc(), rewriter, getComponent(),
-        loadOp.getMemRefType().getElementTypeBitWidth(),
+        loadOp.getMemRefType().getElementType(),
         getState<ComponentLoweringState>().getUniqueName("load"));
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getIn(),
@@ -619,9 +620,15 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     sizes.push_back(1);
     addrSizes.push_back(1);
   }
-  auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
-      allocOp.getLoc(), componentState.getUniqueName("mem"),
-      memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  calyx::SeqMemoryOp memoryOp;
+  if (memtype.getElementType().isa<IntegerType>())
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+  else
+    memoryOp = rewriter.create<calyx::SeqMemoryOp>(
+        allocOp.getLoc(), componentState.getUniqueName("mem"),
+        memtype.getElementType(), sizes, addrSizes);
   // Externalize memories by default. This makes it easier for the native
   // compiler to provide initialized memories.
   memoryOp->setAttr("external",
@@ -1649,7 +1656,7 @@ public:
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<FuncDialect>();
     target.addIllegalDialect<ArithDialect>();
-    target.addLegalOp<AddIOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
+    target.addLegalOp<AddIOp, AddFOp, SelectOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp,
                       ShRSIOp, AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                       CondBranchOp, BranchOp, MulIOp, DivUIOp, DivSIOp, RemUIOp,
                       RemSIOp, ReturnOp, arith::ConstantOp, IndexCastOp, FuncOp,
