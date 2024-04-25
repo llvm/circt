@@ -28,7 +28,7 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
 
     AttrBuilderWithInferredContext<(ins "::mlir::ArrayRef<::mlir::StringAttr>":$pathAttr), [{
       assert(!pathAttr.empty() && "Empty path");
-      assert(pathAttr.front() && "Null path element");
+      assert(llvm::all_of(pathAttr, [](auto& e) { return e; }) && "Empty path element");
       return InnerRefAttr::get(pathAttr.front().getContext(), pathAttr);
     }]>,
   
