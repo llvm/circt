@@ -240,7 +240,9 @@ void ESIBuildManifestPass::gatherFilters(Attribute attr) {
   TypeSwitch<Attribute>(attr)
       .Case([&](TypeAttr a) { addType(a.getValue()); })
       .Case([&](FlatSymbolRefAttr a) { symbols.insert(a); })
-      .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getRootRef()); })
+      .Case([&](hw::InnerRefAttr a) {
+        symbols.insert(FlatSymbolRefAttr::get(a.getRoot()));
+      })
       .Case([&](ArrayAttr a) {
         for (auto attr : a)
           gatherFilters(attr);

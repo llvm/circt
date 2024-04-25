@@ -68,10 +68,6 @@ def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
       return getPath().front();
     }
 
-    ::mlir::FlatSymbolRefAttr getRootRef() const {
-      return ::mlir::FlatSymbolRefAttr::get(getRoot());
-    }
-
     ::mlir::StringAttr getTarget() const {
       assert(!getPath().empty() && "Empty path");
       return getPath().back();

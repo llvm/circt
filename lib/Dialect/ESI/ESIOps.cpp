@@ -346,7 +346,7 @@ getServiceDecl(Operation *op, SymbolTableCollection &symbolTable,
   auto serviceDecl = topSyms.lookup<ServiceDeclOpInterface>(modName);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
-           << servicePort.getRootRef();
+           << FlatSymbolRefAttr::get(servicePort.getRoot());
   return serviceDecl;
 }
 
