@@ -118,58 +118,8 @@ struct ModuleConverter
     return SigSpec(wire);
   }
 
-  LogicalResult lowerPorts() {
-    ModulePortInfo ports(module.getPortList());
-    size_t inputPos = 0;
-    for (auto [idx, port] : llvm::enumerate(ports)) {
-      auto *wire = createWire(port.type, port.name);
-      // NOTE: Port id is 1-indexed.
-      wire->port_id = idx + 1;
-      if (port.isOutput()) {
-        wire->port_output = true;
-        outputs.push_back(wire);
-      } else if (port.isInput()) {
-        setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
-        // TODO: Need to consider inout?
-        wire->port_input = true;
-      } else {
-        return failure();
-      }
-    }
-    // Need to call fixup ports after port mutations.
-    rtlilModule->fixup_ports();
-    return success();
-  }
-
-  LogicalResult lowerBody() {
-    module.walk([this](Operation *op) {
-      for (auto result : op->getResults()) {
-        // TODO: Use SSA name.
-        mlir::StringAttr name = {};
-        createAndSetWire(result, name);
-      }
-    });
-
-    auto result =
-        module
-            .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
-              if (module == op)
-                return WalkResult::advance();
-
-              if (auto reg = dyn_cast<seq::FirRegOp>(op))
-                visitSeq(reg);
-              else if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
-                           op->getDialect())) {
-                if (failed(visitOp(op)))
-                  return WalkResult::interrupt();
-              } else {
-                // Ignore Verif, LTL, SV and so on.
-              }
-              return WalkResult::advance();
-            })
-            .wasInterrupted();
-    return LogicalResult::success(!result);
-  }
+  LogicalResult lowerPorts();
+  LogicalResult lowerBody();
 
   ModuleConverter(Yosys::RTLIL::Design *design,
                   Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
@@ -193,9 +143,6 @@ struct ModuleConverter
   Yosys::RTLIL::Design *design;
   Yosys::RTLIL::Module *rtlilModule;
   hw::HWModuleOp module;
-  RTLIL::Wire *getWireForValue(Value value);
-  RTLIL::Cell *getCellForValue(Value value);
-
   using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
   using hw::StmtVisitor<ModuleConverter, LogicalResult>::visitStmt;
   using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
@@ -236,6 +183,7 @@ struct ModuleConverter
 
   // HW stmt op.
   LogicalResult visitStmt(OutputOp op);
+  LogicalResult visitStmt(InstanceOp op);
 
   // Comb.
   LogicalResult visitComb(AddOp op);
@@ -270,6 +218,59 @@ struct ModuleConverter
 };
 } // namespace
 
+LogicalResult ModuleConverter::lowerPorts() {
+  ModulePortInfo ports(module.getPortList());
+  size_t inputPos = 0;
+  for (auto [idx, port] : llvm::enumerate(ports)) {
+    auto *wire = createWire(port.type, port.name);
+    // NOTE: Port id is 1-indexed.
+    wire->port_id = idx + 1;
+    if (port.isOutput()) {
+      wire->port_output = true;
+      outputs.push_back(wire);
+    } else if (port.isInput()) {
+      setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
+      // TODO: Need to consider inout?
+      wire->port_input = true;
+    } else {
+      return failure();
+    }
+  }
+  // Need to call fixup ports after port mutations.
+  rtlilModule->fixup_ports();
+  return success();
+}
+
+LogicalResult ModuleConverter::lowerBody() {
+  module.walk([this](Operation *op) {
+    for (auto result : op->getResults()) {
+      // TODO: Use SSA name.
+      mlir::StringAttr name = {};
+      createAndSetWire(result, name);
+    }
+  });
+
+  auto result =
+      module
+          .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
+            if (module == op)
+              return WalkResult::advance();
+
+            if (auto reg = dyn_cast<seq::FirRegOp>(op))
+              visitSeq(reg);
+            else if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
+                         op->getDialect())) {
+              if (failed(visitOp(op)))
+                return WalkResult::interrupt();
+            } else {
+              // Ignore Verif, LTL, SV and so on.
+            }
+            return WalkResult::advance();
+          })
+          .wasInterrupted();
+  return LogicalResult::success(!result);
+}
+
 LogicalResult ModuleConverter::visitStmt(OutputOp op) {
   assert(op.getNumOperands() == outputs.size());
   for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
@@ -279,6 +280,10 @@ LogicalResult ModuleConverter::visitStmt(OutputOp op) {
     rtlilModule->connect(Yosys::SigSpec(wire), result.value());
   }
 
+  return success();
+}
+
+LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
   return success();
 }
 
@@ -341,8 +346,6 @@ void ExportYosysPass::runOnOperation() {
   RTLIL_BACKEND::dump_design(std::cout, design, false);
   Yosys::run_pass("synth", design);
   Yosys::run_pass("write_verilog synth.v", design);
-  // Yosys::shell(design);
-
   RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
