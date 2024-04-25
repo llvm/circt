@@ -598,8 +598,10 @@ private:
   /// parent, and on the current instance. Also HierPaths that are rooted at
   /// this module are also added to the active set.
   void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
-    auto &instPaths =
-        instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
+    llvm::SmallVector<StringAttr> path{moduleName};
+    if (instInnerSym)
+      path.push_back(instInnerSym);
+    auto &instPaths = instOpHierPaths[InnerRefAttr::get(path)];
     if (currentPath.empty()) {
       activeHierpaths.insert(instPaths.begin(), instPaths.end());
       return;
