@@ -223,17 +223,18 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different types
-    of net connection in SV. There are twelve built-in net types defined in the official
-    standard construct of the operation:
-    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`, `uwire`,
-    `wire`, `wand`, `wor`.
-    Optional assignment argument allows net operation to be initialized with specific
-    values as soon as it is created. Only one net declaration assignment can be made for
-    a particular net. See IEEE 1800-2017 § 10.3.1 "The net declaration assignment" for
-    the differences between net declaration assignments and continuous assign statements.
-    It has some features that are not supported: declaring an interconnect net and using
-    user-defined types in the net operation.
+    The `moore.net' operation is a net declaration. Net types defines different
+    types of net connection in SV. There are twelve built-in net types defined
+    in the official standard construct of the operation:
+    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
+    `uwire`, `wire`, `wand`, `wor`.
+    Optional assignment argument allows net operation to be initialized with
+    specific values as soon as it is created. Only one net declaration
+    assignment can be made for a particular net. See IEEE 1800-2017 § 10.3.1
+    "The net declaration assignment" for the differences between net declaration
+    assignments and continuous assign statements. It has some features that are
+    not supported: declaring an interconnect net and using user-defined types in
+    the net operation.
     
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];
@@ -961,27 +962,27 @@ def StructInjectOp : MooreOp<"struct_inject"> {
 def UnionCreateOp : MooreOp<"union_create"> {
   let summary = "Union Create operation";
   let description = [{
-  A union is a data type that represents a single piece
-  of storage that can be accessed using one of
-  the named member data types. Only one of the
-  data types in the union can be used at a time.
-  By default, a union is unpacked, meaning there
-  is no required representation for how members
-  of the union are stored. Dynamic types and chandle
-  types can only be used in tagged unions.
-  See IEEE 1800-2017 § 7.3 "Unions"
+    A union is a data type that represents a single piece
+    of storage that can be accessed using one of
+    the named member data types. Only one of the
+    data types in the union can be used at a time.
+    By default, a union is unpacked, meaning there
+    is no required representation for how members
+    of the union are stored. Dynamic types and chandle
+    types can only be used in tagged unions.
+    See IEEE 1800-2017 § 7.3 "Unions"
 
-  Example:
-  ```
-  typedef union { int i; shortreal f; } num; // named union type
-  num n;
-  n.f = 0.0; // set n in floating point format
-  typedef struct {
-  bit isfloat;
-  union { int i; shortreal f; } n;           // anonymous union type
-  } tagged_st;                               // named structure
-  ```
-  See IEEE 1800-2017 § 7.3 "Unions"
+    Example:
+    ```
+    typedef union { int i; shortreal f; } num; // named union type
+    num n;
+    n.f = 0.0; // set n in floating point format
+    typedef struct {
+    bit isfloat;
+    union { int i; shortreal f; } n;           // anonymous union type
+    } tagged_st;                               // named structure
+    ```
+    See IEEE 1800-2017 § 7.3 "Unions"
   }];
   let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
@@ -989,30 +990,30 @@ def UnionCreateOp : MooreOp<"union_create"> {
   $unionName `,` $input attr-dict `:`
   type($input) `->` type($result)
   }];
- }
+}
 
- def UnionExtractOp : MooreOp<"union_extract"> {
+def UnionExtractOp : MooreOp<"union_extract"> {
   let summary = "Union Extract operation";
   let description = [{
-  With packed unions, writing one member and reading another is
-  independent of the byte ordering of the machine,
-  unlike an unpacked union of unpacked structures,
-  which are C-compatible and have members in ascending address order.
-  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+    With packed unions, writing one member and reading another is
+    independent of the byte ordering of the machine,
+    unlike an unpacked union of unpacked structures,
+    which are C-compatible and have members in ascending address order.
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
 
-  Example:
-  ```
-  typedef union packed { // default unsigned
-  s_atmcell acell;
-  bit [423:0] bit_slice;
-  bit [52:0][7:0] byte_slice;
-  } u_atmcell;
-  u_atmcell u1;
-  byte b; bit [3:0] nib;
-  b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
-  nib = u1.bit_slice [423:420];
-  ```
-  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+    Example:
+    ```
+    typedef union packed { // default unsigned
+    s_atmcell acell;
+    bit [423:0] bit_slice;
+    bit [52:0][7:0] byte_slice;
+    } u_atmcell;
+    u_atmcell u1;
+    byte b; bit [3:0] nib;
+    b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
+    nib = u1.bit_slice [423:420];
+    ```
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
   }];
   let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
@@ -1020,5 +1021,71 @@ def UnionCreateOp : MooreOp<"union_create"> {
   $input `,`   $memberName  attr-dict `:`
   type($input) `->` type($result)
   }];
- }
+}
+
+def ConditionalOp : MooreOp<"conditional",[
+  RecursiveMemoryEffects,
+  NoRegionArguments, 
+  SingleBlockImplicitTerminator<"moore::YieldOp">
+]> {
+  let summary = "Conditional operation";
+  let description = [{
+    If cond_predicate is true, the operator returns the value of the first 
+    expression without evaluating the second expression; if false, it returns 
+    the value of the second expression without evaluating the first expression.
+    If cond_predicate evaluates to an ambiguous value (x or z), then both the
+    first expression and the second expression shall be evaluated, and compared
+    for logical equivalence. If that comparison is true (1), the operator shall
+    return either the first or second expression. Otherwise the operator returns
+    a result based on the data types of the expressions.
+
+    When both the first and second expressions are of integral types, if the
+    cond_predicate evaluates to an ambiguous value and the expressions are not
+    logically equivalent, their results shall be combined bit by bit using the
+    table below to calculate the final result. The first and second expressions
+    are extended to the same width.
+
+    |?: | 0 | 1 | X | Z |
+    |---|---|---|---|---|
+    | 0 | 0 | X | X | X |
+    | 1 | X | 1 | X | X |
+    | X | X | X | X | X |
+    | Z | X | X | X | X |
+
+    See IEEE 1800-2017 § 11.4.11 "Conditional operator".
+  }];
+  let arguments = (ins AnySingleBitType:$condition);
+  let results = (outs UnpackedType:$result);
+  let regions = (region SizedRegion<1>:$trueRegion,
+                        SizedRegion<1>:$falseRegion);
+  let assemblyFormat = [{
+    $condition attr-dict `:` type($condition) `->` type($result)
+    $trueRegion $falseRegion
+  }];
+}
+
+def YieldOp : MooreOp<"yield", [
+  Pure, 
+  Terminator, 
+  HasParent<"ConditionalOp">
+]> {
+  let summary = "conditional yield and termination operation";
+  let description = [{
+    "moore.yield" yields an SSA value from the Moore dialect op region and
+    terminates the regions. The semantics of how the values are yielded is
+    defined by the parent operation.
+    If "moore.yield" has any operands, the operands must match the parent
+    operation's results.
+    If the parent operation defines no values, then the "moore.yield" may be
+    left out in the custom syntax and the builders will insert one implicitly.
+    Otherwise, it has to be present in the syntax to indicate which values are
+    yielded.
+  }];
+  let arguments = (ins UnpackedType:$result);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+  let assemblyFormat = [{
+    attr-dict $result `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

@@ -514,6 +514,41 @@ struct ExprVisitor {
     return result;
   }
 
+  // Handle conditional operator `?:`.
+  Value visit(const slang::ast::ConditionalExpression &expr) {
+    auto type = context.convertType(*expr.type);
+
+    // Handle condition.
+    Value cond = convertToSimpleBitVector(
+        context.convertExpression(*expr.conditions.begin()->expr));
+    cond = convertToBool(cond);
+    if (!cond)
+      return {};
+    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, cond);
+
+    // Create blocks for true region and false region.
+    conditionalOp.getTrueRegion().emplaceBlock();
+    conditionalOp.getFalseRegion().emplaceBlock();
+
+    OpBuilder::InsertionGuard g(builder);
+
+    // Handle left expression.
+    builder.setInsertionPointToStart(conditionalOp.getBody(0));
+    auto trueValue = context.convertExpression(expr.left());
+    if (!trueValue)
+      return {};
+    builder.create<moore::YieldOp>(loc, trueValue);
+
+    // Handle right expression.
+    builder.setInsertionPointToStart(conditionalOp.getBody(1));
+    auto falseValue = context.convertExpression(expr.right());
+    if (!falseValue)
+      return {};
+    builder.create<moore::YieldOp>(loc, falseValue);
+
+    return conditionalOp.getResult();
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
