@@ -13,9 +13,9 @@
 #include "../PassDetail.h"
 #include "backends/rtlil/rtlil_backend.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqVisitor.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Threading.h"
@@ -51,10 +51,13 @@ int64_t getBitWidthSeq(Type type) {
   return getBitWidth(type);
 }
 
+struct YosysCircuitImporter;
+
 struct ModuleConverter
     : public hw::TypeOpVisitor<ModuleConverter, LogicalResult>,
       public hw::StmtVisitor<ModuleConverter, LogicalResult>,
-      public comb::CombinationalVisitor<ModuleConverter, LogicalResult> {
+      public comb::CombinationalVisitor<ModuleConverter, LogicalResult>,
+      public seq::SeqOpVisitor<ModuleConverter, LogicalResult> {
 
   Yosys::Wire *createWire(Type type, StringAttr name) {
     int64_t width = getBitWidthSeq(type);
@@ -100,30 +103,42 @@ struct ModuleConverter
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  FailureOr<SigSpec> visitSeq(seq::FirRegOp op) {
-    if (op.getReset()) {
-      // Adlatch.
-      // addSdff
-      return failure();
-    }
+  LogicalResult visitSeq(seq::FirRegOp op) {
+    auto result = getValue(op.getResult());
     auto clock = getValue(op.getClk());
     auto next = getValue(op.getNext());
-    if (failed(clock) || failed(next))
+
+    if (failed(result) || failed(clock) || failed(next))
       return failure();
-    auto wireName = getNewName(op.getName());
-    // Connect!
-    auto wire = getValue(op).value();
+    if (op.getIsAsync())
+      // Adlatch.
+      return op.emitError() << "async not supported yet";
+
+    if (op.getReset()) {
+      // addSdff
+      auto reset = getValue(op.getReset());
+      if (failed(reset))
+        return reset;
+      rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
+                           reset.value(), next.value(), result.value(),
+                           RTLIL::Const(1, 1));
+      return success();
+    }
+
     rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
-                        SigSpec(wire));
-    return SigSpec(wire);
+                        result.value());
+    return success();
   }
 
   LogicalResult lowerPorts();
   LogicalResult lowerBody();
 
-  ModuleConverter(Yosys::RTLIL::Design *design,
+  ModuleConverter(YosysCircuitImporter &circuitConverter,
                   Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
-      : design(design), rtlilModule(rtlilModule), module(module) {}
+      : circuitConverter(circuitConverter), rtlilModule(rtlilModule),
+        module(module) {}
+
+  YosysCircuitImporter &circuitConverter;
 
   DenseMap<Value, RTLIL::Wire *> mapping;
   SmallVector<RTLIL::Wire *> outputs;
@@ -140,12 +155,12 @@ struct ModuleConverter
     return setLowering(value, SigSpec(s));
   }
 
-  Yosys::RTLIL::Design *design;
   Yosys::RTLIL::Module *rtlilModule;
   hw::HWModuleOp module;
   using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
   using hw::StmtVisitor<ModuleConverter, LogicalResult>::visitStmt;
   using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
+  using seq::SeqOpVisitor<ModuleConverter, LogicalResult>::visitSeq;
 
   LogicalResult visitOp(Operation *op) {
     return dispatchCombinationalVisitor(op);
@@ -166,16 +181,29 @@ struct ModuleConverter
     return dispatchStmtVisitor(op);
   }
   LogicalResult visitInvalidStmt(Operation *op) {
-    return visitUnhandledExpr(op);
+    return dispatchSeqOpVisitor(op);
   }
   LogicalResult visitUnhandledStmt(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  LogicalResult visitInvalidSeqOp(Operation *op) {
+    return visitUnhandledExpr(op);
+  }
+  LogicalResult visitUnhandledSeqOp(Operation *op) {
     return visitUnhandledExpr(op);
   }
 
   // HW type op.
   LogicalResult visitTypeOp(ConstantOp op) {
-    if (op.getValue().getBitWidth() >= 32)
-      return op.emitError() << "unsupported";
+    if (op.getValue().getBitWidth() >= 33) {
+      // FIXME: Don't use inefficient binary encoding.
+      std::vector<bool> result(op.getValue().getBitWidth(), false);
+      for (size_t i = 0; i < op.getValue().getBitWidth(); i++) {
+        result[i] = op.getValue()[i];
+      }
+
+      return setLowering(op, RTLIL::Const(result));
+    }
 
     return setLowering(op, RTLIL::Const(op.getValue().getZExtValue(),
                                         op.getValue().getBitWidth()));
@@ -185,10 +213,18 @@ struct ModuleConverter
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
 
-  // Comb.
+  // Comb op.
   LogicalResult visitComb(AddOp op);
   LogicalResult visitComb(SubOp op);
+  LogicalResult visitComb(AndOp op);
+  LogicalResult visitComb(OrOp op);
+  LogicalResult visitComb(XorOp op);
   LogicalResult visitComb(MuxOp op);
+  LogicalResult visitComb(ExtractOp op);
+  LogicalResult visitComb(ICmpOp op);
+  LogicalResult visitComb(ConcatOp op);
+  LogicalResult visitComb(ShlOp op);
+  LogicalResult visitComb(ReplicateOp op);
 
   template <typename BinaryFn>
   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
@@ -207,7 +243,7 @@ struct ModuleConverter
 
   template <typename BinaryFn>
   LogicalResult emitBinaryOp(Operation *op, BinaryFn fn) {
-    assert(op->getOperands() != 2 && "only expect binary op");
+    assert(op->getNumOperands() == 2 && "only expect binary op");
     auto lhs = getValue(op->getOperand(0));
     auto rhs = getValue(op->getOperand(1));
     if (failed(lhs) || failed(rhs))
@@ -216,6 +252,29 @@ struct ModuleConverter
                        fn(getNewName(), lhs.value(), rhs.value()));
   }
 };
+struct YosysCircuitImporter {
+  YosysCircuitImporter(mlir::ModuleOp module, Yosys::RTLIL::Design *design,
+                       InstanceGraph *instanceGraph)
+      : module(module), design(design), instanceGraph(instanceGraph) {}
+  llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
+  LogicalResult run() {
+    SmallVector<ModuleConverter> converter;
+    for (auto op : module.getOps<hw::HWModuleOp>()) {
+      auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+      moduleMapping[op.getModuleNameAttr()] = newModule;
+      converter.emplace_back(*this, newModule, op);
+      if (failed(converter.back().lowerPorts()))
+        return failure();
+    }
+    for (auto &c : converter)
+      if (failed(c.lowerBody()))
+        return failure();
+    return success();
+  }
+  mlir::ModuleOp module;
+  Yosys::RTLIL::Design *design;
+  InstanceGraph *instanceGraph;
+};
 } // namespace
 
 LogicalResult ModuleConverter::lowerPorts() {
@@ -223,6 +282,8 @@ LogicalResult ModuleConverter::lowerPorts() {
   size_t inputPos = 0;
   for (auto [idx, port] : llvm::enumerate(ports)) {
     auto *wire = createWire(port.type, port.name);
+    if (!wire)
+      return mlir::emitError(port.loc) << "unknown type";
     // NOTE: Port id is 1-indexed.
     wire->port_id = idx + 1;
     if (port.isOutput()) {
@@ -233,7 +294,7 @@ LogicalResult ModuleConverter::lowerPorts() {
       // TODO: Need to consider inout?
       wire->port_input = true;
     } else {
-      return failure();
+      return module.emitError() << "inout is unssuported";
     }
   }
   // Need to call fixup ports after port mutations.
@@ -256,12 +317,12 @@ LogicalResult ModuleConverter::lowerBody() {
             if (module == op)
               return WalkResult::advance();
 
-            if (auto reg = dyn_cast<seq::FirRegOp>(op))
-              visitSeq(reg);
-            else if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
-                         op->getDialect())) {
+            if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
+                    op->getDialect())) {
+              LLVM_DEBUG(llvm::dbgs() << "Visiting " << *op << "\n");
               if (failed(visitOp(op)))
                 return WalkResult::interrupt();
+              LLVM_DEBUG(llvm::dbgs() << "Success \n");
             } else {
               // Ignore Verif, LTL, SV and so on.
             }
@@ -284,6 +345,38 @@ LogicalResult ModuleConverter::visitStmt(OutputOp op) {
 }
 
 LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
+  auto it =
+      circuitConverter.moduleMapping.find(op.getModuleNameAttr().getAttr());
+  IdString id;
+  if (it == circuitConverter.moduleMapping.end()) {
+    // Ext module.
+    auto referredMod =
+        circuitConverter.instanceGraph->lookup(op.getModuleNameAttr().getAttr())
+            ->getModule();
+    if (auto extmod =
+            dyn_cast<hw::HWModuleExternOp>(referredMod.getOperation()))
+      id = getEscapedName(extmod.getVerilogModuleName());
+  } else {
+    id = it->second->name;
+  }
+
+  auto *cell = rtlilModule->addCell(getEscapedName(op.getInstanceName()), id);
+  auto connect = [&](ArrayAttr names, auto values) -> LogicalResult {
+    for (auto [portName, value] :
+         llvm::zip(names.getAsRange<StringAttr>(), values)) {
+      auto loweredValue = getValue(value);
+      if (failed(loweredValue))
+        return failure();
+      cell->connections_.insert(
+          {getEscapedName(portName), loweredValue.value()});
+    }
+    return success();
+  };
+
+  if (failed(connect(op.getArgNames(), op.getOperands())) ||
+      failed(connect(op.getResultNames(), op.getResults())))
+    return failure();
+
   return success();
 }
 
@@ -310,27 +403,90 @@ LogicalResult ModuleConverter::visitComb(MuxOp op) {
                                           high.value(), cond.value()));
 }
 
-struct YosysCircuitImporter {
-  YosysCircuitImporter(mlir::ModuleOp module, Yosys::RTLIL::Design *design)
-      : module(module), design(design) {}
-  llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
-  LogicalResult run() {
-    SmallVector<ModuleConverter> converter;
-    for (auto op : module.getOps<hw::HWModuleOp>()) {
-      auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
-      moduleMapping[op.getModuleNameAttr()] = newModule;
-      converter.emplace_back(design, newModule, op);
-      if (failed(converter.back().lowerPorts()))
-        return failure();
-    }
-    for (auto &c : converter)
-      if (failed(c.lowerBody()))
-        return failure();
-    return success();
+LogicalResult ModuleConverter::visitComb(AndOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->And(name, l, r);
+  });
+}
+
+LogicalResult ModuleConverter::visitComb(OrOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->Or(name, l, r);
+  });
+}
+
+LogicalResult ModuleConverter::visitComb(XorOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->Xor(name, l, r);
+  });
+}
+
+LogicalResult ModuleConverter::visitComb(ExtractOp op) {
+  auto result = getValue(op.getOperand());
+  if (failed(result))
+    return result;
+  auto sig = result.value().extract(op.getLowBit(),
+                                    op.getType().getIntOrFloatBitWidth());
+  return setLowering(op, sig);
+}
+
+LogicalResult ModuleConverter::visitComb(ConcatOp op) {
+  SigSpec ret;
+  for (auto operand : op.getOperands()) {
+    auto result = getValue(operand);
+    if (failed(result))
+      return result;
+    ret.append(result.value());
   }
-  mlir::ModuleOp module;
-  Yosys::RTLIL::Design *design;
-};
+  // TODO: Check endian.
+  return setLowering(op, ret);
+}
+
+LogicalResult ModuleConverter::visitComb(ShlOp op) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->Shl(name, l, r);
+  });
+}
+
+LogicalResult ModuleConverter::visitComb(ReplicateOp op) {
+  auto value = getValue(op.getOperand());
+  if (failed(value))
+    return failure();
+  return setLowering(op, value.value().repeat(op.getMultiple()));
+}
+
+LogicalResult ModuleConverter::visitComb(ICmpOp op) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+    switch (op.getPredicate()) {
+    case ICmpPredicate::eq:
+    case ICmpPredicate::ceq:
+    case ICmpPredicate::weq:
+      return rtlilModule->Eq(name, l, r);
+    case ICmpPredicate::ne:
+    case ICmpPredicate::cne:
+    case ICmpPredicate::wne:
+      return rtlilModule->Ne(name, l, r);
+    case ICmpPredicate::slt:
+      return rtlilModule->Lt(name, l, r, /*is_signed=*/true);
+    case ICmpPredicate::sle:
+      return rtlilModule->Le(name, l, r, /*is_signed=*/true);
+    case ICmpPredicate::sgt:
+      return rtlilModule->Gt(name, l, r, /*is_signed=*/true);
+    case ICmpPredicate::sge:
+      return rtlilModule->Ge(name, l, r, /*is_signed=*/true);
+    case ICmpPredicate::ult:
+      return rtlilModule->Lt(name, l, r, /*is_signed=*/false);
+    case ICmpPredicate::ule:
+      return rtlilModule->Le(name, l, r, /*is_signed=*/false);
+    case ICmpPredicate::ugt:
+      return rtlilModule->Gt(name, l, r, /*is_signed=*/false);
+    case ICmpPredicate::uge:
+      return rtlilModule->Ge(name, l, r, /*is_signed=*/false);
+    default:
+      llvm::report_fatal_error("unsupported icmp predicate");
+    }
+  });
+}
 
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
@@ -339,7 +495,8 @@ void ExportYosysPass::runOnOperation() {
   Yosys::yosys_setup();
   auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
   auto *design = theDesign.get();
-  YosysCircuitImporter exporter(getOperation(), design);
+  auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
+  YosysCircuitImporter exporter(getOperation(), design, &theInstanceGraph);
   if (failed(exporter.run()))
     return signalPassFailure();
 
