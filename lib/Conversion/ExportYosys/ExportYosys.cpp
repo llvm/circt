@@ -118,7 +118,7 @@ struct ModuleConverter
     return SigSpec(wire);
   }
 
-  LogicalResult run() {
+  LogicalResult lowerPorts() {
     ModulePortInfo ports(module.getPortList());
     size_t inputPos = 0;
     for (auto [idx, port] : llvm::enumerate(ports)) {
@@ -138,6 +138,10 @@ struct ModuleConverter
     }
     // Need to call fixup ports after port mutations.
     rtlilModule->fixup_ports();
+    return success();
+  }
+
+  LogicalResult lowerBody() {
     module.walk([this](Operation *op) {
       for (auto result : op->getResults()) {
         // TODO: Use SSA name.
@@ -301,11 +305,27 @@ LogicalResult ModuleConverter::visitComb(MuxOp op) {
                                           high.value(), cond.value()));
 }
 
-struct YosysCircuitExporter {
+struct YosysCircuitImporter {
+  YosysCircuitImporter(mlir::ModuleOp module, Yosys::RTLIL::Design *design)
+      : module(module), design(design) {}
+  llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
+  LogicalResult run() {
+    SmallVector<ModuleConverter> converter;
+    for (auto op : module.getOps<hw::HWModuleOp>()) {
+      auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+      moduleMapping[op.getModuleNameAttr()] = newModule;
+      converter.emplace_back(design, newModule, op);
+      if (failed(converter.back().lowerPorts()))
+        return failure();
+    }
+    for (auto &c : converter)
+      if (failed(c.lowerBody()))
+        return failure();
+    return success();
+  }
+  mlir::ModuleOp module;
   Yosys::RTLIL::Design *design;
 };
-
-struct YosysCircuitImporter {};
 
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
@@ -314,15 +334,9 @@ void ExportYosysPass::runOnOperation() {
   Yosys::yosys_setup();
   auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
   auto *design = theDesign.get();
-  SmallVector<ModuleConverter> converter;
-  for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
-    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
-    converter.emplace_back(design, newModule, op);
-  }
-
-  for (auto &c : converter)
-    if (failed(c.run()))
-      return signalPassFailure();
+  YosysCircuitImporter exporter(getOperation(), design);
+  if (failed(exporter.run()))
+    return signalPassFailure();
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
   Yosys::run_pass("synth", design);
