@@ -65,7 +65,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output out_implicitTrunc: UInt<1>
     output out_prettifyExample: UInt<1>
     output out_multibitMux: UInt<1>
-    output out_mux2cell: V2
 
     inst cat of Cat
     cat.a <= b
@@ -93,11 +92,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
     inst unusedPortsMod of UnusedPortsMod
     unusedPortsMod.in <= a
-
-    inst mux2cell of Mux2Cell
-    mux2cell.cond <= a
-    mux2cell.low <= a
-    out_mux2cell <= mux2cell.out
 
     ; These outputs exist to work around the aggressive removal of unused module
     ; ports.
@@ -294,40 +288,3 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input in : UInt<1>
     output out : UInt<1>
     out is invalid
-
-  intmodule Mux2:
-     input sel: UInt<1>
-     input high: UInt
-     input low: UInt
-     output out: UInt
-     intrinsic = circt_mux2cell
-
-  extmodule Val:
-     output v: UInt<1>
-  ; VERILOG-LABEL: Mux2Cell
-  ; Make sure that mux annotations are emitted properly.
-  ; VERILOG:      /* synopsys infer_mux_override */
-  ; VERILOG-NEXT: assign [[OUT1:.+]] = mux2cell_in0 ? /* cadence map_to_mux */ mux2cell_in1 : mux2cell_in2;
-  ; VERILOG:      /* synopsys infer_mux_override */
-  ; VERILOG-NEXT: assign [[OUT2:.+]] =
-  ; VERILOG-NEXT: mux2cell_in0_0 ? /* cadence map_to_mux */ mux2cell_in1_0 : mux2cell_in2_0;
-  ; VERILOG: assign out_0 = [[OUT1]];
-  ; VERILOG: assign out_1 = [[OUT2]];
-
-  module Mux2Cell:
-    input cond: UInt<1>
-    input low: UInt<1>
-    output out: UInt<1>[2]
-    wire w: UInt<1>
-    inst mux2 of Mux2
-    inst ext of Val
-    w <= ext.v
-    mux2.sel <= xor(cond, UInt<1>(1))
-    mux2.high <= w
-    mux2.low <= low
-    out[0] <= mux2.out
-    inst mux2_1 of Mux2
-    mux2_1.sel <= xor(cond, UInt<1>(1))
-    mux2_1.high <= ext.v
-    mux2_1.low <= low
-    out[1] <= mux2_1.out

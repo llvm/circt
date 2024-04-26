@@ -103,33 +103,6 @@ struct ModuleConverter
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  LogicalResult visitSeq(seq::FirRegOp op) {
-    auto result = getValue(op.getResult());
-    auto clock = getValue(op.getClk());
-    auto next = getValue(op.getNext());
-
-    if (failed(result) || failed(clock) || failed(next))
-      return failure();
-    if (op.getIsAsync())
-      // Adlatch.
-      return op.emitError() << "async not supported yet";
-
-    if (op.getReset()) {
-      // addSdff
-      auto reset = getValue(op.getReset());
-      if (failed(reset))
-        return reset;
-      rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
-                           reset.value(), next.value(), result.value(),
-                           /*FIXME*/RTLIL::Const(0, getBitWidthSeq(op.getType())));
-      return success();
-    }
-
-    rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
-                        result.value());
-    return success();
-  }
-
   LogicalResult lowerPorts();
   LogicalResult lowerBody();
 
@@ -166,10 +139,10 @@ struct ModuleConverter
     return dispatchCombinationalVisitor(op);
   }
   LogicalResult visitUnhandledTypeOp(Operation *op) {
-    return op->emitError() << " is unsupported";
+    return op->emitError() << "unsupported op";
   }
   LogicalResult visitUnhandledExpr(Operation *op) {
-    return op->emitError() << " is unsupported";
+    return op->emitError() << "unsupported op";
   }
   LogicalResult visitInvalidComb(Operation *op) {
     return dispatchTypeOpVisitor(op);
@@ -212,10 +185,14 @@ struct ModuleConverter
   // HW stmt op.
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(AggregateConstantOp op);
+  LogicalResult visitStmt(ArrayCreateOp op);
+  LogicalResult visitStmt(ArrayGetOp op);
 
   // Comb op.
   LogicalResult visitComb(AddOp op);
   LogicalResult visitComb(SubOp op);
+  LogicalResult visitComb(MulOp op);
   LogicalResult visitComb(AndOp op);
   LogicalResult visitComb(OrOp op);
   LogicalResult visitComb(XorOp op);
@@ -224,7 +201,16 @@ struct ModuleConverter
   LogicalResult visitComb(ICmpOp op);
   LogicalResult visitComb(ConcatOp op);
   LogicalResult visitComb(ShlOp op);
+  LogicalResult visitComb(ShrSOp op);
+  LogicalResult visitComb(ShrUOp op);
   LogicalResult visitComb(ReplicateOp op);
+
+  // Seq op.
+  LogicalResult visitSeq(seq::FirRegOp op);
+  LogicalResult visitSeq(seq::FirMemOp op);
+  LogicalResult visitSeq(seq::FirMemWriteOp op);
+  LogicalResult visitSeq(seq::FirMemReadOp op);
+  LogicalResult visitSeq(seq::FirMemReadWriteOp op);
 
   template <typename BinaryFn>
   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
@@ -409,6 +395,12 @@ LogicalResult ModuleConverter::visitComb(AndOp op) {
   });
 }
 
+LogicalResult ModuleConverter::visitComb(MulOp op) {
+  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->Mul(name, l, r);
+  });
+}
+
 LogicalResult ModuleConverter::visitComb(OrOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
     return rtlilModule->Or(name, l, r);
@@ -445,6 +437,18 @@ LogicalResult ModuleConverter::visitComb(ConcatOp op) {
 LogicalResult ModuleConverter::visitComb(ShlOp op) {
   return emitBinaryOp(op, [&](auto name, auto l, auto r) {
     return rtlilModule->Shl(name, l, r);
+  });
+}
+
+LogicalResult ModuleConverter::visitComb(ShrUOp op) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+    return rtlilModule->Shr(name, l, r);
+  });
+}
+LogicalResult ModuleConverter::visitComb(ShrSOp op) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+    // TODO: Make sure it's correct
+    return rtlilModule->Sshr(name, l, r);
   });
 }
 
@@ -488,6 +492,38 @@ LogicalResult ModuleConverter::visitComb(ICmpOp op) {
   });
 }
 
+LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
+  auto result = getValue(op.getResult());
+  auto clock = getValue(op.getClk());
+  auto next = getValue(op.getNext());
+
+  if (failed(result) || failed(clock) || failed(next))
+    return failure();
+  if (op.getIsAsync())
+    // Adlatch.
+    return op.emitError() << "async not supported yet";
+
+  if (op.getReset()) {
+    // addSdff
+    auto reset = getValue(op.getReset());
+    if (failed(reset))
+      return reset;
+    rtlilModule->addSdff(
+        getNewName(op.getName()), clock.value(), reset.value(), next.value(),
+        result.value(),
+        /*FIXME*/ RTLIL::Const(0, getBitWidthSeq(op.getType())));
+    return success();
+  }
+
+  rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
+                      result.value());
+  return success();
+}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) {}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemWriteOp op) {}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemReadWriteOp op) {}
+
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
   Yosys::log_streams.push_back(&std::cerr);
@@ -504,7 +540,7 @@ void ExportYosysPass::runOnOperation() {
   // Yosys::run_pass("hierarchy -top DigitalTop", design);
   Yosys::run_pass("synth", design);
   Yosys::run_pass("write_verilog synth.v", design);
-  RTLIL_BACKEND::dump_design(std::cout, design, false);
+  // RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
 //===----------------------------------------------------------------------===//
