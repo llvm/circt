@@ -23,14 +23,10 @@
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Parallel.h"
 
@@ -54,8 +50,14 @@ void NarrowPortsPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   auto circuit = getOperation();
+    SymbolTable syms(circuit);
+
+  // for each module, which are the operations which limit the ports.  By construction, each port will have a single operation which needs to be moved across the boundary.
+  DenseMap<FModuleOp, SmallVector<Operation*> > targets;
 
   for (auto mod : circuit.getOps<FModuleOp>()) {
+    if (mod.isPublic())
+        continue;
     for (auto port : mod.getBodyBlock()->getArguments()) {
         if (!port.hasOneUse() && !port.use_empty())
             continue;
@@ -65,10 +67,37 @@ void NarrowPortsPass::runOnOperation() {
             } else if (isa<HeadPrimOp>(use)) {
                 llvm::errs() << "Head\n";
             } else if (isa<BitsPrimOp>(use)) {
-                llvm::errs() << "Bits\n";
+                llvm::errs() << "Bits " << mod.getName() << "::" << mod.getPortName(port.getArgNumber()) << "\n";
+                use->dump();
+                targets[mod].push_back(use);
             }
         }
       }
+  }
+
+    llvm::errs() << "\n";
+
+    // Now update all uses
+  for (auto mod : circuit.getOps<FModuleOp>()) {
+    mod.walk([&](InstanceOp inst) {
+        auto target = dyn_cast<FModuleOp>(inst.getReferencedOperation(syms));
+        if (!target)
+            return;        
+        auto ii = targets.find(target);
+        if (ii == targets.end())
+            return;
+        llvm::errs() << "Updating...\n";
+        for (auto* op : ii->second) {
+            ImplicitLocOpBuilder builder(op->getLoc(), inst);
+            builder.setInsertionPointAfter(inst);
+            auto argnum = cast<BlockArgument>(op->getOperand(0)).getArgNumber();
+            auto instres = inst.getResult(argnum);
+            auto bounceWire = builder.create<WireOp>(op->getResult(0).getType());
+            instres.replaceAllUsesWith(bounceWire.getResult());
+            auto newOp = builder.clone(*op);
+            builder.create<StrictConnectOp>(instres, newOp->getResult(0));
+        }
+    });
   }
 }
 

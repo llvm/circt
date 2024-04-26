@@ -212,6 +212,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     // optimizations.
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
     pm.addPass(firrtl::createIMDeadCodeElimPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createNarrowPortsPass());
   }
 
   if (opt.shouldEmitOMIR())
