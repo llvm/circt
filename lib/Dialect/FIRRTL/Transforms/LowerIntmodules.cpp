@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -143,6 +144,14 @@ void LowerIntmodulesPass::runOnOperation() {
          llvm::make_early_inc_range(getOperation().getOps<FExtModuleOp>())) {
       if (op.getDefname() != eicgName)
         continue;
+
+      // FIXME: Dedup group annotation could be annotated to EICG_wrapper but
+      //        it causes an error with `fixupEICGWrapper`. For now drop the
+      //        annotation until we fully migrate into EICG intrinsic.
+      if (AnnotationSet::removeAnnotations(op, firrtl::dedupGroupAnnoClass))
+        op.emitWarning() << "Annotation " << firrtl::dedupGroupAnnoClass
+                         << " on EICG_wrapper is dropped";
+
       if (failed(checkModForAnnotations(op, eicgName)))
         return signalPassFailure();
 

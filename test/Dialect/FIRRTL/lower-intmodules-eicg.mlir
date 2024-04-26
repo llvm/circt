@@ -1,11 +1,14 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-NOEICG
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules{fixup-eicg-wrapper}))' --split-input-file %s | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-intmodules{fixup-eicg-wrapper}))' --split-input-file %s  --verify-diagnostics | FileCheck %s --check-prefixes=CHECK,CHECK-EICG
 
 // CHECK-LABEL: "FixupEICGWrapper"
 firrtl.circuit "FixupEICGWrapper" {
   // CHECK-NOEICG: LegacyClockGate
   // CHECK-EICG-NOT: LegacyClockGate
-  firrtl.extmodule @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  // expected-warning @below {{Annotation firrtl.transforms.DedupGroupAnnotation on EICG_wrapper is dropped}}
+  firrtl.extmodule @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {
+    defname = "EICG_wrapper",
+    annotations = [{class = "firrtl.transforms.DedupGroupAnnotation", group = "foo"}]}
 
   // CHECK: FixupEICGWrapper
   firrtl.module @FixupEICGWrapper(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
