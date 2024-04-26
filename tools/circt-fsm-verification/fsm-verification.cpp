@@ -28,23 +28,23 @@ using namespace z3;
 */
 void printSolverAssertions(z3::solver& solver) {
   // llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  llvm::outs()<<solver.to_smt2()<<"\n";
-  llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  // llvm::outs()<<solver.to_smt2()<<"\n";
+  // llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
   const auto start{std::chrono::steady_clock::now()};
-  llvm::outs()<<solver.check()<<"\n";
+  int sat = solver.check();
   const auto end{std::chrono::steady_clock::now()};
 
   const std::chrono::duration<double> elapsed_seconds{end - start};
 
 
-  // llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
+  llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
-  // llvm::outs()<<solver.get_model().to_string()<<"\n";
-  // llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  llvm::outs()<<solver.get_model().to_string()<<"\n";
+  llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
   llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
 	ofstream outfile;
 	outfile.open("output.txt", ios::app);
-	outfile << elapsed_seconds.count() << endl;
+	outfile << elapsed_seconds.count()<<","<<sat << endl;
 	outfile.close();
 }
 
@@ -458,7 +458,7 @@ void populateInvInput(MyExprMap *varMap, context &c, vector<expr> *solverVars, v
 
 }
 
-void parse_fsm(string input_file, int time_bound, int to_check, int time_rem){
+void parse_fsm(string input_file, int time_bound, string to_check){
 
   DialectRegistry registry;
   // clang-format off
@@ -581,87 +581,30 @@ void parse_fsm(string input_file, int time_bound, int to_check, int time_rem){
     // if(VERBOSE){
     //   llvm::outs()<<"\n\n\ntransition from "<<t.from<<" to "<<t.to<<"\n";
     // }
-    // vector<expr> *solverVarsAfter = new vector<expr>;
+    vector<expr> *solverVarsAfter = new vector<expr>;
 
-    // copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
-    // solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
+    copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
+    solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
 
-    // if(t.isGuard && t.isAction){
-    //   expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-    //   s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-    // } 
-    // else if (t.isGuard){
-    //   expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-    //   s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body,0))))));
+    if(t.isGuard && t.isAction){
+      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
+      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
+    } 
+    else if (t.isGuard){
+      expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
+      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body,0))))));
 
-    // } else if (t.isAction){
+    } else if (t.isAction){
 
-    //   expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-    //   s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
+      expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
+      s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
 
-    // } else {
-    //   expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-    //   s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-
-    // }
-
-
-
-    if(t.from==t.to){
-          if(VERBOSE){
-            llvm::outs()<<"\n\n\ntransition from "<<t.from<<" to "<<t.to<<"\n";
-          }
-          vector<expr> *solverVarsAfter = new vector<expr>;
-
-          copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
-          solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
-
-          if(t.isGuard && t.isAction){
-            expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-          } 
-          else if (t.isGuard){
-            expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body,0))))));
-
-          } else if (t.isAction){
-
-            expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-
-          } else {
-            expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-            s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-
-          }
     } else {
+      expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
+      s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
 
-          if(VERBOSE){
-            llvm::outs()<<"\n\n\ntransition from "<<t.from<<" to "<<t.to<<"\n";
-          }
-          vector<expr> *solverVarsAfter = new vector<expr>;
-
-          copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
-          solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
-
-          if(t.isGuard && t.isAction){
-            expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars),  !(findMyFun(t.from, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data())) && findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-          } 
-          else if (t.isGuard){
-            expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars)), !(findMyFun(t.from, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data())) && findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body,0))))));
-
-          } else if (t.isAction){
-
-            expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()), !(findMyFun(t.from, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data())) && findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
-            s.add(forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-
-          } else {
-            expr body = implies((findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data())), !(findMyFun(t.from, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data())) && findMyFun(t.to, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()));
-            s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), ((nestedForall(*solverVars, body, 0))))));
-          }
     }
+
   }
 
   // initial value unsat
@@ -672,7 +615,7 @@ void parse_fsm(string input_file, int time_bound, int to_check, int time_rem){
 
   // reachability unsat
 
-  body = !(findMyFun(transitions->at(to_check).to, stateInvMap_fun)(solverVars->size(), solverVars->data()));
+  body = !(findMyFun(to_check, stateInvMap_fun)(solverVars->size(), solverVars->data()));
 
   s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0), nestedForall(*solverVars,body,0))));
 
@@ -709,9 +652,8 @@ int main(int argc, char **argv){
 
   int time = stoi(argv[2]);
 
-  int state_to_check = stoi(argv[3]);
+  string state_to_check = argv[3];
 
-  int time_in_state = stoi(argv[4]);
 
   cout << "input file: " << input << endl;
 
@@ -720,7 +662,7 @@ int main(int argc, char **argv){
 	outfile << input << endl;
 	outfile.close();
 
-  parse_fsm(input, time, state_to_check, time_in_state);
+  parse_fsm(input, time, state_to_check);
 
   return 0;
 
