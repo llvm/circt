@@ -786,11 +786,12 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
 
 // CHECK-LABEL: firrtl.module @Andr
 firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
+                    in %in2 : !firrtl.uint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                     out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
                     out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>,
-                    out %i: !firrtl.uint<1>) {
+                    out %i: !firrtl.uint<1>, out %j: !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
@@ -837,14 +838,22 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
   %11 = firrtl.pad %in1, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
   %12 = firrtl.andr %11 : (!firrtl.sint<3>) -> !firrtl.uint<1>
   firrtl.strictconnect %i, %12 : !firrtl.uint<1>
+
+  // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
+  // CHECK-NEXT: firrtl.andr %[[cat]]
+  %13 = firrtl.andr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
+  %15 = firrtl.andr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
+  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Orr
-firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
+firrtl.module @Orr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
                    out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                    out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                    out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
-                   out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
+                   out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>, 
+                   out %j : !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -877,14 +886,23 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>,
   %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.orr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+
+  // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
+  // CHECK-NEXT: firrtl.orr %[[cat]]
+  %13 = firrtl.orr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
+  %15 = firrtl.orr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
+  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
+
 }
 
 // CHECK-LABEL: firrtl.module @Xorr
-firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
+firrtl.module @Xorr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
                     out %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>,
                     out %e: !firrtl.uint<1>, out %f: !firrtl.uint<1>,
-                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>) {
+                    out %g: !firrtl.uint<1>, in %h : !firrtl.uint<64>, 
+                    out %j : !firrtl.uint<1>) {
   %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -918,6 +936,14 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>,
   %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.xorr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
   firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+
+  // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
+  // CHECK-NEXT: firrtl.xorr %[[cat]]
+  %13 = firrtl.xorr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
+  %15 = firrtl.xorr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
+  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
+
 }
 
 // CHECK-LABEL: firrtl.module @Reduce
