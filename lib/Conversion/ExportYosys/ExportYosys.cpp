@@ -121,7 +121,7 @@ struct ModuleConverter
         return reset;
       rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
                            reset.value(), next.value(), result.value(),
-                           RTLIL::Const(1, 1));
+                           /*FIXME*/RTLIL::Const(0, getBitWidthSeq(op.getType())));
       return success();
     }
 
@@ -500,7 +500,8 @@ void ExportYosysPass::runOnOperation() {
   if (failed(exporter.run()))
     return signalPassFailure();
 
-  RTLIL_BACKEND::dump_design(std::cout, design, false);
+  // RTLIL_BACKEND::dump_design(std::cout, design, false);
+  // Yosys::run_pass("hierarchy -top DigitalTop", design);
   Yosys::run_pass("synth", design);
   Yosys::run_pass("write_verilog synth.v", design);
   RTLIL_BACKEND::dump_design(std::cout, design, false);
