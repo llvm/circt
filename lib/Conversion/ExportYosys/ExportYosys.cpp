@@ -241,25 +241,26 @@ struct ModuleConverter
   }
 };
 struct YosysCircuitImporter {
-  YosysCircuitImporter(mlir::ModuleOp module, Yosys::RTLIL::Design *design,
+  YosysCircuitImporter(Yosys::RTLIL::Design *design,
                        InstanceGraph *instanceGraph)
-      : module(module), design(design), instanceGraph(instanceGraph) {}
+      : design(design), instanceGraph(instanceGraph) {}
   llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
+  LogicalResult addModule(hw::HWModuleOp op) {
+    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+    if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
+      return failure();
+    converter.emplace_back(*this, newModule, op);
+    return converter.back().lowerPorts();
+  }
+
+  SmallVector<ModuleConverter> converter;
   LogicalResult run() {
-    SmallVector<ModuleConverter> converter;
-    for (auto op : module.getOps<hw::HWModuleOp>()) {
-      auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
-      moduleMapping[op.getModuleNameAttr()] = newModule;
-      converter.emplace_back(*this, newModule, op);
-      if (failed(converter.back().lowerPorts()))
-        return failure();
-    }
     for (auto &c : converter)
       if (failed(c.lowerBody()))
         return failure();
     return success();
   }
-  mlir::ModuleOp module;
+
   Yosys::RTLIL::Design *design;
   InstanceGraph *instanceGraph;
 };
@@ -377,10 +378,26 @@ LogicalResult ModuleConverter::visitTypeOp(AggregateConstantOp op) {
 }
 
 LogicalResult ModuleConverter::visitTypeOp(ArrayCreateOp op) {
-  return failure();
+  SigSpec ret;
+  for (auto operand : op.getOperands()) {
+    auto result = getValue(operand);
+    if (failed(result))
+      return result;
+    ret.append(result.value());
+  }
+  // TODO: Check endian.
+  return setLowering(op, ret);
 }
 
-LogicalResult ModuleConverter::visitTypeOp(ArrayGetOp op) { return failure(); }
+LogicalResult ModuleConverter::visitTypeOp(ArrayGetOp op) {
+  auto input = getValue(op.getInput());
+  auto index = getValue(op.getIndex());
+  auto result = getValue(op);
+  if (failed(input) || failed(index) || failed(result))
+    return failure();
+
+  rtlilModule->addShiftx(NEW_ID, input.value(), index.value(), result.value());
+}
 
 //===----------------------------------------------------------------------===//
 // Comb Ops.
@@ -564,7 +581,12 @@ void ExportYosysPass::runOnOperation() {
   auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
   auto *design = theDesign.get();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
-  YosysCircuitImporter exporter(getOperation(), design, &theInstanceGraph);
+  YosysCircuitImporter exporter(design, &theInstanceGraph);
+  for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
+    if (failed(exporter.addModule(op)))
+      return signalPassFailure();
+  }
+
   if (failed(exporter.run()))
     return signalPassFailure();
 
