@@ -185,9 +185,11 @@ struct ModuleConverter
   // HW stmt op.
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitStmt(AggregateConstantOp op);
-  LogicalResult visitStmt(ArrayCreateOp op);
-  LogicalResult visitStmt(ArrayGetOp op);
+
+  // HW expr ops.
+  LogicalResult visitTypeOp(AggregateConstantOp op);
+  LogicalResult visitTypeOp(ArrayCreateOp op);
+  LogicalResult visitTypeOp(ArrayGetOp op);
 
   // Comb op.
   LogicalResult visitComb(AddOp op);
@@ -318,6 +320,10 @@ LogicalResult ModuleConverter::lowerBody() {
   return LogicalResult::success(!result);
 }
 
+//===----------------------------------------------------------------------===//
+// HW Ops.
+//===----------------------------------------------------------------------===//
+
 LogicalResult ModuleConverter::visitStmt(OutputOp op) {
   assert(op.getNumOperands() == outputs.size());
   for (auto [wire, op] : llvm::zip(outputs, op.getOperands())) {
@@ -365,6 +371,20 @@ LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
 
   return success();
 }
+
+LogicalResult ModuleConverter::visitTypeOp(AggregateConstantOp op) {
+  return failure();
+}
+
+LogicalResult ModuleConverter::visitTypeOp(ArrayCreateOp op) {
+  return failure();
+}
+
+LogicalResult ModuleConverter::visitTypeOp(ArrayGetOp op) { return failure(); }
+
+//===----------------------------------------------------------------------===//
+// Comb Ops.
+//===----------------------------------------------------------------------===//
 
 LogicalResult ModuleConverter::visitComb(AddOp op) {
   return emitVariadicOp(op, [&](auto name, auto l, auto r) {
@@ -492,6 +512,10 @@ LogicalResult ModuleConverter::visitComb(ICmpOp op) {
   });
 }
 
+//===----------------------------------------------------------------------===//
+// Seq Ops.
+//===----------------------------------------------------------------------===//
+
 LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
   auto result = getValue(op.getResult());
   auto clock = getValue(op.getClk());
@@ -519,10 +543,18 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
                       result.value());
   return success();
 }
-LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) {}
-LogicalResult ModuleConverter::visitSeq(seq::FirMemWriteOp op) {}
-LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {}
-LogicalResult ModuleConverter::visitSeq(seq::FirMemReadWriteOp op) {}
+
+LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) { return failure(); }
+
+LogicalResult ModuleConverter::visitSeq(seq::FirMemWriteOp op) {
+  return failure();
+}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {
+  return failure();
+}
+LogicalResult ModuleConverter::visitSeq(seq::FirMemReadWriteOp op) {
+  return failure();
+}
 
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
