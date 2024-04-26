@@ -11,10 +11,10 @@ module Empty;
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA {
-// CHECK:         moore.instance "NestedB" @NestedB
+// CHECK:         moore.instance "NestedB" @NestedB() -> ()
 // CHECK:       }
 // CHECK-LABEL: moore.module @NestedB {
-// CHECK:         moore.instance "NestedC" @NestedC
+// CHECK:         moore.instance "NestedC" @NestedC() -> ()
 // CHECK:       }
 // CHECK-LABEL: moore.module @NestedC {
 // CHECK:       }
@@ -31,7 +31,7 @@ module Child;
 endmodule
 
 // CHECK-LABEL: moore.module @Parent
-// CHECK:         moore.instance "child" @Child
+// CHECK:         moore.instance "child" @Child() -> ()
 // CHECK:       }
 module Parent;
   Child child();

@@ -17,6 +17,7 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "circt/Support/InstanceGraphInterface.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -44,14 +45,49 @@ def SVModuleOp : MooreOp<"module", [
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name);
+  let results = (outs);
   let regions = (region SizedRegion<1>:$bodyRegion);
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $bodyRegion
   }];
 }
 
+def In: I32EnumAttrCase<"In", 0>;
+def Out: I32EnumAttrCase<"Out", 1>;
+def InOut: I32EnumAttrCase<"InOut", 2>;
+def Ref: I32EnumAttrCase<"Ref", 3>;
+def DirectionAttr: I32EnumAttr<"Direction", "Port direction",
+                                  [In, Out, InOut, Ref]>{
+  let cppNamespace = "circt::moore";
+}
+
+def PortOp : MooreOp<"port", [
+  RecursiveMemoryEffects
+]> {
+  let summary = "Declare a port";
+  let description = [{
+    The `moore.port` operation defines declaration of ports from original module
+    / interface / instance ... It contains port direction (four types: 
+    **In**, **Out**, **InOut**, **Ref**); port type and port name.
+    Example:
+    ```mlir
+      moore.port In "a"
+      %a = moore.net "wire" : !moore.logic
+      moore.port Out "b"
+      %b = moore.net "wire" : !moore.logic
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, DirectionAttr:$direction);
+  let results = (outs);
+  let assemblyFormat = [{
+    $direction $name attr-dict
+  }];
+}
+
 def InstanceOp : MooreOp<"instance", [
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  // DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
 ]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -61,9 +97,38 @@ def InstanceOp : MooreOp<"instance", [
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName);
-  let assemblyFormat = [{
-    $instanceName $moduleName attr-dict
+                       FlatSymbolRefAttr:$moduleName,
+                       Variadic<AnyType>:$inputs,
+                       Variadic<AnyType>:$outputs,
+                       StrArrayAttr:$inputNames, StrArrayAttr:$outputNames);
+  let results = (outs);
+  
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    StringRef getReferencedModuleName() {
+      return getReferencedModuleNameAttr().getValue();
+    }
+
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+    
+    size_t getNumInputPorts() { return getInputNames().size(); }
+
+    size_t getNumOutputPorts() { return getOutputNames().size(); }
+    
+    size_t getNumPorts() {
+      return getNumInputPorts() + getNumOutputPorts();
+    }
+
+    StringAttr getInputName(size_t i);
+
+    StringAttr getOutputName(size_t i);
+
+    void setInputName(size_t i, StringAttr name);
+
+    void setOutputName(size_t i, StringAttr name);
   }];
 }
 
@@ -146,7 +211,7 @@ def VariableOp : MooreOp<"variable", [
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
   let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    ``custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
 }

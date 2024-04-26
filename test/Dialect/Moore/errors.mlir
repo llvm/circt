@@ -6,7 +6,7 @@ func.func @Foo() {
 
 moore.module @Bar {
   // expected-error @below {{symbol 'Foo' must reference a 'moore.module', but got a 'func.func' instead}}
-  moore.instance "foo" @Foo
+  moore.instance "foo" @Foo() -> ()
 }
 
 // -----

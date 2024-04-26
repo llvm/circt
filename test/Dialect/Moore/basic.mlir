@@ -2,8 +2,8 @@
 
 // CHECK-LABEL: moore.module @Foo
 moore.module @Foo {
-  // CHECK: moore.instance "foo" @Foo
-  moore.instance "foo" @Foo
+  // CHECK: moore.instance "foo" @Foo() -> ()
+  moore.instance "foo" @Foo() -> ()
   // CHECK: %v1 = moore.variable : !moore.bit
   %v1 = moore.variable : !moore.bit
   %v2 = moore.variable : !moore.bit

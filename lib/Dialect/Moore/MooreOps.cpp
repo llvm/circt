@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 
@@ -20,6 +22,14 @@ using namespace circt::moore;
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
+
+LogicalResult InstanceOp::verify() {
+  auto module = (*this)->getParentOfType<SVModuleOp>();
+  if (!module)
+    return emitError("can not find module definition '")
+           << module->getName() << "'";
+  return success();
+}
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =
@@ -35,6 +45,76 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << module->getName() << "' instead";
 
   return success();
+}
+
+ParseResult InstanceOp::parse(OpAsmParser &p, OperationState &result) {
+  StringAttr instanceNameAttr;
+  FlatSymbolRefAttr moduleNameAttr;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands,
+      outputsOperands;
+  SmallVector<Type> inputsTypes, outputsTypes;
+  ArrayAttr inputNames, outputNames;
+  auto noneType = p.getBuilder().getType<NoneType>();
+
+  if (p.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                       result.attributes))
+    return failure();
+
+  llvm::SMLoc inputsOperandsLoc, outputsOperandsLoc;
+  if (p.parseAttribute(moduleNameAttr, noneType, "moduleName",
+                       result.attributes) ||
+      p.getCurrentLocation(&inputsOperandsLoc) ||
+      parseInputPortList(p, inputsOperands, inputsTypes, inputNames) ||
+      p.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                        result.operands) ||
+      p.parseArrow() ||
+      circt::parseInputPortList(p, outputsOperands, outputsTypes,
+                                outputNames) ||
+      p.resolveOperands(outputsOperands, outputsTypes, outputsOperandsLoc,
+                        result.operands) ||
+      p.parseOptionalAttrDict(result.attributes)) {
+    return failure();
+  }
+  result.addAttribute("inputNames", inputNames);
+  result.addAttribute("outputNames", outputNames);
+  result.addTypes(inputsTypes);
+  result.addTypes(outputsTypes);
+  return success();
+}
+
+void InstanceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  p << ' ';
+  p.printAttributeWithoutType(getModuleNameAttr());
+  printInputPortList(p, (*this), getInputs(), getInputs().getTypes(),
+                     getInputNamesAttr());
+  p << " -> ";
+  printInputPortList(p, (*this), getOutputs(), getOutputs().getTypes(),
+                     getOutputNamesAttr());
+
+  SmallVector<StringRef> elidedAttrs = {"inputNames", "instanceName",
+                                        "moduleName", "operandSegmentSizes",
+                                        "outputNames"};
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+}
+
+StringAttr InstanceOp::getInputName(size_t i) {
+  return hw::instance_like_impl::getName(getInputNames(), i);
+}
+
+StringAttr InstanceOp::getOutputName(size_t i) {
+  return hw::instance_like_impl::getName(getOutputNames(), i);
+}
+
+void InstanceOp::setInputName(size_t i, StringAttr name) {
+  setInputNamesAttr(
+      hw::instance_like_impl::updateName(getInputNames(), i, name));
+}
+
+void InstanceOp::setOutputName(size_t i, StringAttr name) {
+  setOutputNamesAttr(
+      hw::instance_like_impl::updateName(getOutputNames(), i, name));
 }
 
 //===----------------------------------------------------------------------===//
