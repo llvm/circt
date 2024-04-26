@@ -879,7 +879,6 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
                 .getResult();
           }
         }
-
         return {};
       });
 }
@@ -1079,7 +1078,9 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
 
 void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::NotNot>(context);
+  results.insert<patterns::NotNot, patterns::NotEq, patterns::NotNeq,
+                 patterns::NotLeq, patterns::NotLt, patterns::NotGeq,
+                 patterns::NotGt>(context);
 }
 
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {

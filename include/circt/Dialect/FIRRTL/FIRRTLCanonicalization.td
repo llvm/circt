@@ -155,6 +155,42 @@ def NotNot : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   []>;
 
+// not(eq(x,y)) -> neq(x,y)
+def NotEq : Pat <
+  (NotPrimOp:$old (EQPrimOp $x, $y)),
+  (MoveNameHint $old, (NEQPrimOp $x, $y)),
+  []>;
+
+// not(neq(x,y)) -> eq(x,y)
+def NotNeq : Pat <
+  (NotPrimOp:$old (NEQPrimOp $x, $y)),
+  (MoveNameHint $old, (EQPrimOp $x, $y)),
+  []>;
+
+// not(leq(x,y)) -> gt(x,y)
+def NotLeq : Pat <
+  (NotPrimOp:$old (LEQPrimOp $x, $y)),
+  (MoveNameHint $old, (GTPrimOp $x, $y)),
+  []>;
+
+// not(lt(x,y)) -> geq(x,y)
+def NotLt : Pat <
+  (NotPrimOp:$old (LTPrimOp $x, $y)),
+  (MoveNameHint $old, (GEQPrimOp $x, $y)),
+  []>;
+
+// not(geq(x,y)) -> lt(x,y)
+def NotGeq : Pat <
+  (NotPrimOp:$old (GEQPrimOp $x, $y)),
+  (MoveNameHint $old, (LTPrimOp $x, $y)),
+  []>;
+
+// not(gt(x,y)) -> leq(x,y)
+def NotGt : Pat <
+  (NotPrimOp:$old (GTPrimOp $x, $y)),
+  (MoveNameHint $old, (LEQPrimOp $x, $y)),
+  []>;
+
 // connect(a:t,b:t) -> strictconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
