@@ -620,7 +620,7 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
                            getConstant(constOp.getValueAttr()));
       return success();
     }
-    return failure();
+    return op.emitError() << "lowering for non-constant reset value is currently not implemented";
   }
 
   rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),

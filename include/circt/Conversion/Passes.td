@@ -735,6 +735,19 @@ def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
             "false", "Import Yosys's result and replace it with the input.">
   ];
 }
+
+def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
+  let summary = "Translate core dialects into yosys's RTL IR";
+  let constructor = "createExportYosys()";
+  let options = [
+    Option<"commands", "commmands", "std::string",
+            "", "yosys commands to run">,
+    Option<"importResult", "import-result", "bool",
+            "false", "Import Yosys's result and replace it with the input.">,
+    Option<"workspace", "workspace", "std::string",
+            "", "workspace to run yosys">
+  ];
+}
 #endif
 
 #endif // CIRCT_CONVERSION_PASSES_TD
