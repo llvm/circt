@@ -103,11 +103,11 @@ struct ModuleConverter
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  LogicalResult lowerPorts();
+  LogicalResult lowerPorts(bool isDecaration = false);
   LogicalResult lowerBody();
 
   ModuleConverter(YosysCircuitImporter &circuitConverter,
-                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleOp module)
+                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleLike module)
       : circuitConverter(circuitConverter), rtlilModule(rtlilModule),
         module(module) {}
 
@@ -129,7 +129,7 @@ struct ModuleConverter
   }
 
   Yosys::RTLIL::Module *rtlilModule;
-  hw::HWModuleOp module;
+  hw::HWModuleLike module;
   using hw::TypeOpVisitor<ModuleConverter, LogicalResult>::visitTypeOp;
   using hw::StmtVisitor<ModuleConverter, LogicalResult>::visitStmt;
   using comb::CombinationalVisitor<ModuleConverter, LogicalResult>::visitComb;
@@ -192,6 +192,7 @@ struct ModuleConverter
   LogicalResult visitTypeOp(AggregateConstantOp op);
   LogicalResult visitTypeOp(ArrayCreateOp op);
   LogicalResult visitTypeOp(ArrayGetOp op);
+  LogicalResult visitTypeOp(ArrayConcatOp op);
 
   // Comb op.
   LogicalResult visitComb(AddOp op);
@@ -208,6 +209,7 @@ struct ModuleConverter
   LogicalResult visitComb(ShrSOp op);
   LogicalResult visitComb(ShrUOp op);
   LogicalResult visitComb(ReplicateOp op);
+  LogicalResult visitComb(ParityOp op);
 
   // Seq op.
   LogicalResult visitSeq(seq::FirRegOp op);
@@ -216,6 +218,7 @@ struct ModuleConverter
   LogicalResult visitSeq(seq::FirMemReadOp op);
   LogicalResult visitSeq(seq::FirMemReadWriteOp op);
   LogicalResult visitSeq(seq::FromClockOp op);
+  LogicalResult visitSeq(seq::ToClockOp op);
 
   template <typename BinaryFn>
   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
@@ -242,7 +245,16 @@ struct ModuleConverter
     return setLowering(op->getResult(0),
                        fn(getNewName(), lhs.value(), rhs.value()));
   }
+  template <typename UnaryFn>
+  LogicalResult emitUnaryOp(Operation *op, UnaryFn fn) {
+    assert(op->getNumOperands() == 1 && "only expect binary op");
+    auto input = getValue(op->getOperand(0));
+    if (failed(input))
+      return failure();
+    return setLowering(op->getResult(0), fn(getNewName(), input.value()));
+  }
 };
+
 struct YosysCircuitImporter {
   YosysCircuitImporter(Yosys::RTLIL::Design *design,
                        InstanceGraph *instanceGraph)
@@ -252,8 +264,17 @@ struct YosysCircuitImporter {
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
     if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
       return failure();
-    converter.emplace_back(*this, newModule, op);
+    converter.emplace_back(*this, newModule, cast<hw::HWModuleLike>(*op));
     return converter.back().lowerPorts();
+  }
+
+  LogicalResult addModule(hw::HWModuleExternOp op) {
+    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+    if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
+      return failure();
+    newModule->set_bool_attribute(ID::blackbox);
+    converter.emplace_back(*this, newModule, cast<hw::HWModuleLike>(*op));
+    return converter.back().lowerPorts(true);
   }
 
   SmallVector<ModuleConverter> converter;
@@ -269,7 +290,7 @@ struct YosysCircuitImporter {
 };
 } // namespace
 
-LogicalResult ModuleConverter::lowerPorts() {
+LogicalResult ModuleConverter::lowerPorts(bool isDeclaration) {
   ModulePortInfo ports(module.getPortList());
   size_t inputPos = 0;
   for (auto [idx, port] : llvm::enumerate(ports)) {
@@ -282,8 +303,8 @@ LogicalResult ModuleConverter::lowerPorts() {
       wire->port_output = true;
       outputs.push_back(wire);
     } else if (port.isInput()) {
-      setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
-      // TODO: Need to consider inout?
+      if (!isDeclaration)
+        setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
       wire->port_input = true;
     } else {
       return module.emitError() << "inout is unssuported";
@@ -299,7 +320,8 @@ LogicalResult ModuleConverter::lowerBody() {
     for (auto result : op->getResults()) {
       // TODO: Use SSA name.
       mlir::StringAttr name = {};
-      createAndSetWire(result, name);
+      if (getBitWidthSeq(result.getType()) >= 0)
+        createAndSetWire(result, name);
     }
   });
 
@@ -312,8 +334,7 @@ LogicalResult ModuleConverter::lowerBody() {
             if (isa<comb::CombDialect, hw::HWDialect, seq::SeqDialect>(
                     op->getDialect())) {
               LLVM_DEBUG(llvm::dbgs() << "Visiting " << *op << "\n");
-              if (failed(visitOp(op)))
-              {
+              if (failed(visitOp(op))) {
                 op->emitError() << "lowering failed";
                 return WalkResult::interrupt();
               }
@@ -364,8 +385,9 @@ LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
     for (auto [portName, value] :
          llvm::zip(names.getAsRange<StringAttr>(), values)) {
       auto loweredValue = getValue(value);
-      if (failed(loweredValue))
-        return failure();
+      if (failed(loweredValue)) {
+        return op.emitError() << "port " << portName << " wasnot lowered";
+      }
       cell->connections_.insert(
           {getEscapedName(portName), loweredValue.value()});
     }
@@ -415,6 +437,17 @@ LogicalResult ModuleConverter::visitTypeOp(ArrayGetOp op) {
   (void)rtlilModule->addShiftx(NEW_ID, input.value(), index.value(),
                                result.value());
   return success();
+}
+
+LogicalResult ModuleConverter::visitTypeOp(ArrayConcatOp op) {
+  SigSpec ret;
+  for (auto operand : llvm::reverse(op.getOperands())) {
+    auto result = getValue(operand);
+    if (failed(result))
+      return result;
+    ret.append(result.value());
+  }
+  return setLowering(op, ret);
 }
 
 //===----------------------------------------------------------------------===//
@@ -514,6 +547,12 @@ LogicalResult ModuleConverter::visitComb(ReplicateOp op) {
   return setLowering(op, value.value().repeat(op.getMultiple()));
 }
 
+LogicalResult ModuleConverter::visitComb(ParityOp op) {
+  return emitUnaryOp(op, [&](auto name, auto input) {
+    return rtlilModule->ReduceXor(name, input);
+  });
+}
+
 LogicalResult ModuleConverter::visitComb(ICmpOp op) {
   return emitBinaryOp(op, [&](auto name, auto l, auto r) {
     switch (op.getPredicate()) {
@@ -558,20 +597,30 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
 
   if (failed(result) || failed(clock) || failed(next))
     return failure();
-  if (op.getIsAsync())
-    // Adlatch.
-    return op.emitError() << "async not supported yet";
 
   if (op.getReset()) {
     // addSdff
     auto reset = getValue(op.getReset());
     if (failed(reset))
       return reset;
-    rtlilModule->addSdff(
-        getNewName(op.getName()), clock.value(), reset.value(), next.value(),
-        result.value(),
-        /*FIXME*/ RTLIL::Const(0, getBitWidthSeq(op.getType())));
-    return success();
+
+    auto constOp = op.getResetValue().getDefiningOp<hw::ConstantOp>();
+    if (op.getIsAsync()) {
+      // Adlatch.
+      if (!constOp)
+        return failure();
+      rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
+                           reset.value(), next.value(), result.value(),
+                           getConstant(constOp.getValueAttr()));
+      return success();
+    }
+    if (constOp) {
+      rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
+                           reset.value(), next.value(), result.value(),
+                           getConstant(constOp.getValueAttr()));
+      return success();
+    }
+    return failure();
   }
 
   rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
@@ -579,7 +628,10 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
   return success();
 }
 
-LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) { return failure(); }
+LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) {
+  return op.emitError()
+         << "firmem lowering is unimplmented yet. Use MemToRegOfVec instead.";
+}
 
 LogicalResult ModuleConverter::visitSeq(seq::FirMemWriteOp op) {
   return failure();
@@ -598,6 +650,13 @@ LogicalResult ModuleConverter::visitSeq(seq::FromClockOp op) {
   return setLowering(op, result.value());
 }
 
+LogicalResult ModuleConverter::visitSeq(seq::ToClockOp op) {
+  auto result = getValue(op.getInput());
+  if (failed(result))
+    return result;
+  return setLowering(op, result.value());
+}
+
 void ExportYosysPass::runOnOperation() {
   // Set up yosys.
   Yosys::log_streams.push_back(&std::cerr);
@@ -608,6 +667,10 @@ void ExportYosysPass::runOnOperation() {
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
   YosysCircuitImporter exporter(design, &theInstanceGraph);
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
+    if (failed(exporter.addModule(op)))
+      return signalPassFailure();
+  }
+  for (auto op : getOperation().getOps<hw::HWModuleExternOp>()) {
     if (failed(exporter.addModule(op)))
       return signalPassFailure();
   }
