@@ -13,6 +13,8 @@ target_link_libraries(firtool PRIVATE
   CIRCTExportVerilog
   CIRCTImportFIRFile
   CIRCTFIRRTLTransforms
+  # TODO: Remove before PR submission.
+  CIRCTExportYosys
   CIRCTHWTransforms
   CIRCTOMTransforms
   CIRCTSeq

@@ -167,19 +167,21 @@ struct ModuleConverter
   }
 
   // HW type op.
-  LogicalResult visitTypeOp(ConstantOp op) {
-    if (op.getValue().getBitWidth() >= 33) {
-      // FIXME: Don't use inefficient binary encoding.
-      std::vector<bool> result(op.getValue().getBitWidth(), false);
-      for (size_t i = 0; i < op.getValue().getBitWidth(); i++) {
-        result[i] = op.getValue()[i];
-      }
+  RTLIL::Const getConstant(IntegerAttr attr) {
+    auto width = attr.getValue().getBitWidth();
+    if (width <= 32)
+      return RTLIL::Const(attr.getValue().getZExtValue(),
+                          attr.getValue().getBitWidth());
 
-      return setLowering(op, RTLIL::Const(result));
+    std::vector<bool> result(width, false);
+    for (size_t i = 0; i < width; i++) {
+      result[i] = attr.getValue()[i];
     }
+    return RTLIL::Const(result);
+  }
 
-    return setLowering(op, RTLIL::Const(op.getValue().getZExtValue(),
-                                        op.getValue().getBitWidth()));
+  LogicalResult visitTypeOp(ConstantOp op) {
+    return setLowering(op, getConstant(op.getValueAttr()));
   }
 
   // HW stmt op.
@@ -213,6 +215,7 @@ struct ModuleConverter
   LogicalResult visitSeq(seq::FirMemWriteOp op);
   LogicalResult visitSeq(seq::FirMemReadOp op);
   LogicalResult visitSeq(seq::FirMemReadWriteOp op);
+  LogicalResult visitSeq(seq::FromClockOp op);
 
   template <typename BinaryFn>
   LogicalResult emitVariadicOp(Operation *op, BinaryFn fn) {
@@ -310,7 +313,10 @@ LogicalResult ModuleConverter::lowerBody() {
                     op->getDialect())) {
               LLVM_DEBUG(llvm::dbgs() << "Visiting " << *op << "\n");
               if (failed(visitOp(op)))
+              {
+                op->emitError() << "lowering failed";
                 return WalkResult::interrupt();
+              }
               LLVM_DEBUG(llvm::dbgs() << "Success \n");
             } else {
               // Ignore Verif, LTL, SV and so on.
@@ -374,18 +380,28 @@ LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
 }
 
 LogicalResult ModuleConverter::visitTypeOp(AggregateConstantOp op) {
-  return failure();
+  SigSpec ret;
+  SmallVector<Attribute> worklist{op.getFieldsAttr()};
+  while (!worklist.empty()) {
+    auto val = worklist.pop_back_val();
+    if (auto array = dyn_cast<ArrayAttr>(val))
+      for (auto a : llvm::reverse(array))
+        worklist.push_back(a);
+    else if (auto intVal = dyn_cast<IntegerAttr>(val)) {
+      ret.append(getConstant(intVal));
+    }
+  }
+  return success();
 }
 
 LogicalResult ModuleConverter::visitTypeOp(ArrayCreateOp op) {
   SigSpec ret;
-  for (auto operand : op.getOperands()) {
+  for (auto operand : llvm::reverse(op.getOperands())) {
     auto result = getValue(operand);
     if (failed(result))
       return result;
     ret.append(result.value());
   }
-  // TODO: Check endian.
   return setLowering(op, ret);
 }
 
@@ -396,7 +412,9 @@ LogicalResult ModuleConverter::visitTypeOp(ArrayGetOp op) {
   if (failed(input) || failed(index) || failed(result))
     return failure();
 
-  rtlilModule->addShiftx(NEW_ID, input.value(), index.value(), result.value());
+  (void)rtlilModule->addShiftx(NEW_ID, input.value(), index.value(),
+                               result.value());
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -571,6 +589,13 @@ LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {
 }
 LogicalResult ModuleConverter::visitSeq(seq::FirMemReadWriteOp op) {
   return failure();
+}
+
+LogicalResult ModuleConverter::visitSeq(seq::FromClockOp op) {
+  auto result = getValue(op.getInput());
+  if (failed(result))
+    return result;
+  return setLowering(op, result.value());
 }
 
 void ExportYosysPass::runOnOperation() {
