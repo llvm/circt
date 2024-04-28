@@ -21,7 +21,7 @@
 // CHECK-NEXT: 8000ps 0d 0e  root/sig1  0x00000003
 // CHECK-NEXT: 9000ps 0d 0e  root/sig1  0x00000000
 // CHECK-NEXT: 9000ps 0d 0e  root/sig2  0x00000000
-llhd.entity @root () -> () {
+hw.module @root() {
   %0 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   %t1 = llhd.constant_time #llhd.time<2ns, 0d, 0e>
   %1 = hw.constant 0 : i1

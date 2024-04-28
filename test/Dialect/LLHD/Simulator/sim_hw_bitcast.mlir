@@ -15,7 +15,7 @@
 // CHECK-NEXT: 1000ps 0d 0e  root/int[0]  0x0000
 // CHECK-NEXT: 1000ps 0d 0e  root/int[1]  0xffff
 // CHECK-NEXT: 1000ps 0d 0e  root/struct  0x0000ff00
-llhd.entity @root () -> () {
+hw.module @root() {
     %allset = hw.constant 0xffff : i16
     %allset2 = hw.constant 0xff : i8
     %zero = hw.constant 0 : i16

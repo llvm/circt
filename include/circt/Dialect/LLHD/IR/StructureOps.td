@@ -10,71 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_EntityOp : LLHD_Op<"entity", [
-    Symbol,
-    DeclareOpInterfaceMethods<FunctionOpInterface>,
-    IsolatedFromAbove,
-    SingleBlock,
-    NoTerminator,
-    DeclareOpInterfaceMethods<CallableOpInterface>
-  ]> {
-  let summary = "Create an entity.";
-  let description = [{
-    The `llhd.entity` operation defines a new entity unit. An entity
-    represents the data-flow description of how a circuit's output values
-    change in reaction to changing input values.
-    An entity contains one region with a single block and an implicit
-    `TerminatorOp` terminator. Both the block name and terminator are
-    omitted in the custom syntax. No further blocks and control-flow are
-    legal inside an entity.
-
-    Syntax:
-
-    ```
-    entity-op ::= `llhd.entity` entity-symbol `(` arg-list `)` `->`
-      `(` out-list `)` attr-dict entity-region
-    ```
-
-    Example:
-
-    ```mlir
-    llhd.entity @Foo () -> () {
-      %0 = llhd.const 0 : i1
-      %toggle = llhd.sig %0 : i1 -> !hw.inout<i1>
-      %1 = llhd.prb %toggle : !hw.inout<i1> -> i1
-      %2 = llhd.not %1 : i1
-      %dt = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-      llhd.drv %toggle, %2, %dt : !hw.inout<i1>, i1, !llhd.time
-    }
-    ```
-  }];
-
-  let arguments = (ins
-    TypeAttrOf<FunctionType>:$function_type,
-    I64Attr: $ins,
-    OptionalAttr<DictArrayAttr>:$arg_attrs,
-    OptionalAttr<DictArrayAttr>:$res_attrs
-  );
-  let regions = (region SizedRegion<1>: $body);
-
-  let hasVerifier = 1;
-
-  let extraClassDeclaration = [{
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType();
-
-    /// Verifies the body of the function.
-    LogicalResult verifyBody();
-
-    // Use FunctionOpInterface traits's getFunctionBody method.
-    using mlir::detail::FunctionOpInterfaceTrait<EntityOp>::getFunctionBody;
-
-    /// Return the block corresponding to the region.
-    Block *getBodyBlock() { return &getBody().front(); }
-  }];
-}
-
 def LLHD_ProcOp : LLHD_Op<"proc", [
     Symbol,
     DeclareOpInterfaceMethods<FunctionOpInterface>,
@@ -145,7 +80,7 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
 
 def LLHD_InstOp : LLHD_Op<"inst", [
     CallOpInterface,
-    HasParent<"EntityOp">,
+    HasParent<"hw::HWModuleOp">,
     AttrSizedOperandSegments
   ]> {
   let summary = "Instantiates a process or entity.";
@@ -213,7 +148,7 @@ def LLHD_InstOp : LLHD_Op<"inst", [
 
 def LLHD_ConnectOp : LLHD_Op<"con", [
     SameTypeOperands,
-    HasParent<"EntityOp">
+    HasParent<"hw::HWModuleOp">
   ]> {
   let summary = "Connect two signals.";
   let description = [{

@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics | circt-opt | FileCheck %s
 
 // CHECK-LABEL: @check_reg
-// CHECK-SAME: %[[IN64:.*]] : !hw.inout<i64>
-llhd.entity @check_reg (%in64 : !hw.inout<i64>) -> () {
+// CHECK-SAME: %[[IN64:.*]] : i64
+hw.module @check_reg(inout %in64 : i64) {
   // CHECK: %[[C1:.*]] = hw.constant
   %c1 = hw.constant 0 : i1
   // CHECK-NEXT: %[[C64:.*]] = hw.constant
@@ -20,4 +20,4 @@ llhd.entity @check_reg (%in64 : !hw.inout<i64>) -> () {
   "llhd.reg"(%in64, %c64, %in64, %c1, %c1, %time, %time, %c1) {modes=[0,1], gateMask=[0,1], operandSegmentSizes=array<i32: 1,2,2,2,1>} : (!hw.inout<i64>, i64, !hw.inout<i64>, i1, i1, !llhd.time, !llhd.time, i1) -> ()
 }
 
-// TODO: add verification tests in reg-errors.mlir (expected-error tests)
+// TODO: add verification tests inout reg-errors.mlir (expected-error tests)

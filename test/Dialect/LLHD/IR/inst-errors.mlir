@@ -1,8 +1,8 @@
 //RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 // Testing Objectives:
-// * inst can only be used in entities
-// * inst must always refer to a valid proc or entity (match symbol name, input and output operands)
+// * inst can only be used in hw.module
+// * inst must always refer to a valid proc (match symbol name, input and output operands)
 // * syntax: no inputs and outputs, one input zero outputs, zero inputs one output, multiple inputs and outputs
 // * check that number of inputs and number of outputs are verified separately
 
@@ -11,56 +11,27 @@ llhd.proc @empty_proc() -> () {
 }
 
 llhd.proc @fail() -> () {
-  // expected-error @+1 {{expects parent op 'llhd.entity'}}
+  // expected-error @+1 {{expects parent op 'hw.module'}}
   llhd.inst "empty" @empty_proc() -> () : () -> ()
   llhd.halt
 }
 
 // -----
 
-llhd.entity @operand_count_mismatch(%arg : !hw.inout<i32>) -> () {}
+llhd.proc @operand_count_mismatch() -> () {
+  llhd.halt
+}
 
-llhd.entity @caller(%arg : !hw.inout<i32>) -> () {
-  // expected-error @+1 {{incorrect number of inputs for entity instantiation}}
-  llhd.inst "mismatch" @operand_count_mismatch() -> (%arg) : () -> (!hw.inout<i32>)
+hw.module @caller(inout %arg : i32) {
+  // expected-error @+1 {{incorrect number of inputs for proc instantiation}}
+  llhd.inst "mismatch" @operand_count_mismatch(%arg) -> () : (!hw.inout<i32>) -> ()
 }
 
 // -----
 
-llhd.entity @caller() -> () {
-  // expected-error @+1 {{does not reference a valid proc, entity, or hw.module}}
+hw.module @caller() {
+  // expected-error @+1 {{does not reference a valid llhd.proc}}
   llhd.inst "does_not_exist" @does_not_exist() -> () : () -> ()
-}
-
-// -----
-
-llhd.entity @empty() -> () {}
-
-llhd.entity @test_uniqueness() -> () {
-  llhd.inst "inst" @empty() -> () : () -> ()
-  // expected-error @+1 {{redefinition of instance named 'inst'!}}
-  llhd.inst "inst" @empty() -> () : () -> ()
-}
-
-// -----
-
-hw.module @module(in %arg0: i2) {}
-
-llhd.entity @moduleTypeMismatch(%arg0: !hw.inout<i3>) -> () {
-  // expected-error @+1 {{input type mismatch}}
-  llhd.inst "inst" @module(%arg0) -> () : (!hw.inout<i3>) -> ()
-}
-
-// -----
-
-hw.module @module(out arg0: i2) {
-  %0 = hw.constant 0 : i2
-  hw.output %0 : i2
-}
-
-llhd.entity @moduleTypeMismatch() -> (%arg0: !hw.inout<i3>) {
-  // expected-error @+1 {{output type mismatch}}
-  llhd.inst "inst" @module() -> (%arg0) : () -> !hw.inout<i3>
 }
 
 // -----

@@ -20,7 +20,7 @@
 // CHECK-NEXT: 0ps 0d 8e  root/s1  0x00000004
 // CHECK-NEXT: 0ps 0d 10e  root/proc/s2  0x00000005
 // CHECK-NEXT: 0ps 0d 10e  root/s2  0x00000005
-llhd.entity @root () -> () {
+hw.module @root() {
   %0 = hw.constant 0 : i32
   %1 = llhd.sig "s1" %0 : i32
   %2 = llhd.sig "s2" %0 : i32

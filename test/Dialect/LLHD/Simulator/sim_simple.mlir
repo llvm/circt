@@ -11,7 +11,7 @@
 // CHECK-NEXT: 7000ps 0d 0e  Foo/toggle  0x01
 // CHECK-NEXT: 8000ps 0d 0e  Foo/toggle  0x00
 // CHECK-NEXT: 9000ps 0d 0e  Foo/toggle  0x01
-llhd.entity @Foo () -> () {
+hw.module @Foo() {
   %0 = hw.constant 0 : i1
   %toggle = llhd.sig "toggle" %0 : i1
   %1 = llhd.prb %toggle : !hw.inout<i1>

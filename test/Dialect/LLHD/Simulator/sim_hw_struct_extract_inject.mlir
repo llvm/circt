@@ -11,7 +11,7 @@
 // CHECK-NEXT: 0ps 0d 0e  root/struct  0x00000000
 // CHECK-NEXT: 1000ps 0d 0e  root/ext  0x03
 // CHECK-NEXT: 1000ps 0d 0e  root/struct  0x01050304
-llhd.entity @root () -> () {
+hw.module @root() {
     %zero = hw.constant 0 : i8
     %init = hw.constant 0 : i32
     %1 = hw.constant 1 : i8

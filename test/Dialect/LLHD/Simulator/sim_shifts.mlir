@@ -16,7 +16,7 @@
 // CHECK-NEXT: 4000ps 0d 0e  root/shl  0x00
 // CHECK-NEXT: 4000ps 0d 0e  root/shru  0x00
 
-llhd.entity @root () -> () {
+hw.module @root() {
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
   %init = hw.constant 8 : i4

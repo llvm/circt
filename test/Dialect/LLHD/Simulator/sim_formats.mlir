@@ -95,7 +95,7 @@
 // NAMED:   root/s  0xf3
 // NAMED: 5000ps
 // NAMED:   root/s  0xd9
-llhd.entity @root () -> () {
+hw.module @root() {
   %0 = hw.constant 1 : i8
   %s = llhd.sig "s" %0 : i8
   %1 = llhd.sig "1" %0 : i8

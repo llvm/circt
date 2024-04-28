@@ -13,6 +13,7 @@
 include "mlir/IR/EnumAttr.td"
 
 def LLHD_SigOp : LLHD_Op<"sig", [
+    ParentOneOf<["hw::HWModuleOp", "llhd::ProcOp"]>,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "hw::InOutType::get($_self)">
@@ -190,7 +191,7 @@ def LLHD_RegModeArrayAttr
     : TypedArrayAttrBase<LLHD_RegModeAttr, "reg mode array attribute"> {}
 
 def LLHD_RegOp : LLHD_Op<"reg", [
-    HasParent<"EntityOp">,
+    HasParent<"hw::HWModuleOp">,
     AttrSizedOperandSegments
   ]> {
   let summary = "Represents a storage element";

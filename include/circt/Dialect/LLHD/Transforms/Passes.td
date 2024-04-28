@@ -84,7 +84,7 @@ def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
     could be successfully inlined and remove the inlined functions. This
     is necessary because Structural LLHD does not allow functions. Fails in
     the case that there is still a function call left in a `llhd.proc` or
-    `llhd.entity`.
+    `hw.module`.
   }];
 
   let constructor = "circt::llhd::createFunctionEliminationPass()";
