@@ -39,7 +39,7 @@ def ScopeRefType : IbisTypeDef<"ScopeRef"> {
 }
 
 def AnyScopeRefType : Type<
-  CPred<"$_self.isa<ibis::ScopeRefType>()">,
+  CPred<"llvm::isa<ibis::ScopeRefType>($_self)">,
   "must be a !dc.classref<T?> type",
   "ibis::ScopeRefType">{
 }

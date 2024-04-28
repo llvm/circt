@@ -34,7 +34,7 @@ public:
   LogicalResult
   matchAndRewrite(InputPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType innerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType innerPortRefType = cast<PortRefType>(op.getType());
     Type innerType = innerPortRefType.getPortType();
     Direction d = innerPortRefType.getDirection();
 
@@ -117,7 +117,7 @@ public:
   LogicalResult
   matchAndRewrite(OutputPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType innerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType innerPortRefType = cast<PortRefType>(op.getType());
     Type innerType = innerPortRefType.getPortType();
     Direction d = innerPortRefType.getDirection();
 
@@ -176,9 +176,9 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
   LogicalResult
   matchAndRewrite(GetPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType outerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType outerPortRefType = cast<PortRefType>(op.getType());
     PortRefType innerPortRefType =
-        outerPortRefType.getPortType().cast<PortRefType>();
+        cast<PortRefType>(outerPortRefType.getPortType());
     Type innerType = innerPortRefType.getPortType();
 
     Direction outerDirection = outerPortRefType.getDirection();
@@ -371,19 +371,17 @@ void PortrefLoweringPass::runOnOperation() {
 
   // Ports are legal when they do not have portref types anymore.
   target.addDynamicallyLegalOp<InputPortOp, OutputPortOp>([&](auto op) {
-    PortRefType portType = cast<PortOpInterface>(op)
-                               .getPort()
-                               .getType()
-                               .template cast<PortRefType>();
-    return !portType.getPortType().isa<PortRefType>();
+    PortRefType portType =
+        cast<PortRefType>(cast<PortOpInterface>(op).getPort().getType());
+    return !isa<PortRefType>(portType.getPortType());
   });
 
   PortReadOp op;
 
   // get_port's are legal when they do not have portref types anymore.
   target.addDynamicallyLegalOp<GetPortOp>([&](GetPortOp op) {
-    PortRefType portType = op.getPort().getType().cast<PortRefType>();
-    return !portType.getPortType().isa<PortRefType>();
+    PortRefType portType = cast<PortRefType>(op.getPort().getType());
+    return !isa<PortRefType>(portType.getPortType());
   });
 
   RewritePatternSet patterns(ctx);

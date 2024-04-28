@@ -46,7 +46,7 @@ public:
   /// a StringAttr in the SymbolCache.
   void add(SymbolCache &symCache) {
     for (auto &&[attr, _] : symCache)
-      if (auto strAttr = attr.dyn_cast<StringAttr>())
+      if (auto strAttr = dyn_cast<StringAttr>(attr))
         nextIndex.insert({strAttr.getValue(), 0});
   }
 

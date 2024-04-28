@@ -18,7 +18,7 @@ using namespace circt;
 using namespace ibis;
 
 bool circt::ibis::isOpaqueScopeRefType(mlir::Type type) {
-  auto scopeRef = type.dyn_cast<ScopeRefType>();
+  auto scopeRef = dyn_cast<ScopeRefType>(type);
   if (!scopeRef)
     return false;
 
