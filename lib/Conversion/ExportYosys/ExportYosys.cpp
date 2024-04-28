@@ -23,6 +23,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Mutex.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -769,6 +770,7 @@ void ExportYosysParallelPass::runOnOperation() {
 
     if (failed(exporter.run()))
       return signalPassFailure();
+
     std::error_code ec;
     SmallString<128> fileName;
     if ((ec = llvm::sys::fs::createTemporaryFile("yosys", "rtlil", fileName))) {
@@ -791,16 +793,24 @@ void ExportYosysParallelPass::runOnOperation() {
       // mlirFile->keep();
     }
   }
-
+  llvm::sys::SmartMutex<true> mutex;
   if (failed(mlir::failableParallelForEachN(
           &getContext(), 0, results.size(), [&](auto i) {
             auto &[op, test] = results[i];
-            llvm::errs() << "Running " << i << " " << op.getModuleName() << " "
-                         << results.size() << "\n";
+            {
+              llvm::sys::SmartScopedLock<true> lock(mutex);
+              llvm::errs() << "Running " << i << " " << op.getModuleName()
+                           << " " << results.size() << "\n";
+            }
 
-            auto result = runYosys(op.getLoc(), test, "synth; write_verilog");
-            llvm::errs() << "Finished " << i << " " << op.getModuleName() << " "
-                         << results.size() << "\n";
+            auto result = runYosys(op.getLoc(), test, "synth_xilinx; write_verilog");
+
+            {
+              llvm::sys::SmartScopedLock<true> lock(mutex);
+              llvm::errs() << "Finished " << i << " " << op.getModuleName()
+                           << " " << results.size() << "\n";
+            }
+
             return result;
           })))
     return signalPassFailure();
