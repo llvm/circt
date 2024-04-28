@@ -774,7 +774,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     FunctionType funcType = funcOp.getFunctionType();
     unsigned extMemCounter = 0;
     for (auto arg : enumerate(funcOp.getArguments())) {
-      if (arg.value().getType().isa<MemRefType>()) {
+      if (isa<MemRefType>(arg.value().getType())) {
         /// External memories
         auto memName =
             "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
@@ -835,11 +835,10 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
       extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
-      unsigned nAddresses = extMemPortIndices.getFirst()
-                                .getType()
-                                .cast<MemRefType>()
-                                .getShape()
-                                .size();
+      unsigned nAddresses =
+          cast<MemRefType>(extMemPortIndices.getFirst().getType())
+              .getShape()
+              .size();
       for (unsigned j = 0; j < nAddresses; ++j)
         extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
       extMemPorts.writeEn = compOp.getArgument(outPortsIt);
@@ -964,7 +963,7 @@ class BuildPipelineRegs : public calyx::FuncOpPartialLoweringPattern {
         // Create a register for passing this result to later stages.
         Value value = operand.get();
         Type resultType = value.getType();
-        assert(resultType.isa<IntegerType>() &&
+        assert(isa<IntegerType>(resultType) &&
                "unsupported pipeline result type");
         auto name = SmallString<20>("stage_");
         name += std::to_string(stage.getStageNumber());
@@ -1125,7 +1124,7 @@ class BuildPipelineGroups : public calyx::FuncOpPartialLoweringPattern {
     // Get the group and register that is temporarily being written to.
     auto doneOp = group.getDoneOp();
     auto tempReg =
-        cast<calyx::RegisterOp>(doneOp.getSrc().cast<OpResult>().getOwner());
+        cast<calyx::RegisterOp>(cast<OpResult>(doneOp.getSrc()).getOwner());
     auto tempIn = tempReg.getIn();
     auto tempWriteEn = tempReg.getWriteEn();
 
