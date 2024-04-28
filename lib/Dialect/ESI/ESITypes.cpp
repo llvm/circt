@@ -183,7 +183,7 @@ void ESIDialect::registerTypes() {
 
 mlir::Type circt::esi::innerType(mlir::Type type) {
   circt::esi::ChannelType chan =
-      type.dyn_cast_or_null<circt::esi::ChannelType>();
+      dyn_cast_or_null<circt::esi::ChannelType>(type);
   if (chan) // Unwrap the channel if it's a channel.
     type = chan.getInner();
 

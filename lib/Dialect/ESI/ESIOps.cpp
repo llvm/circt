@@ -61,7 +61,7 @@ void ChannelBufferOp::print(OpAsmPrinter &p) {
 }
 
 circt::esi::ChannelType ChannelBufferOp::channelType() {
-  return getInput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getInput().getType());
 }
 
 //===----------------------------------------------------------------------===//
@@ -97,7 +97,7 @@ void PipelineStageOp::print(OpAsmPrinter &p) {
 }
 
 circt::esi::ChannelType PipelineStageOp::channelType() {
-  return getInput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getInput().getType());
 }
 
 //===----------------------------------------------------------------------===//
@@ -179,21 +179,21 @@ LogicalResult UnwrapValidReadyOp::verify() {
 }
 
 circt::esi::ChannelType WrapValidReadyOp::channelType() {
-  return getChanOutput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getChanOutput().getType());
 }
 
 void UnwrapValidReadyOp::build(OpBuilder &b, OperationState &state,
                                Value inChan, Value ready) {
-  auto inChanType = inChan.getType().cast<ChannelType>();
+  auto inChanType = cast<ChannelType>(inChan.getType());
   build(b, state, inChanType.getInner(), b.getI1Type(), inChan, ready);
 }
 
 circt::esi::ChannelType UnwrapValidReadyOp::channelType() {
-  return getChanInput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getChanInput().getType());
 }
 
 circt::esi::ChannelType WrapFIFOOp::channelType() {
-  return getChanOutput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getChanOutput().getType());
 }
 
 ParseResult parseWrapFIFOType(OpAsmParser &p, Type &dataType,
@@ -221,7 +221,7 @@ LogicalResult WrapFIFOOp::verify() {
 }
 
 circt::esi::ChannelType UnwrapFIFOOp::channelType() {
-  return getChanInput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getChanInput().getType());
 }
 
 LogicalResult UnwrapFIFOOp::verify() {
@@ -236,7 +236,7 @@ UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
                                mlir::OpaqueProperties, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredResulTypes) {
   inferredResulTypes.push_back(
-      operands[0].getType().cast<ChannelType>().getInner());
+      cast<ChannelType>(operands[0].getType()).getInner());
   inferredResulTypes.push_back(
       IntegerType::get(context, 1, IntegerType::Signless));
   return success();
@@ -279,25 +279,24 @@ static LogicalResult verifySVInterface(Operation *op,
 }
 
 LogicalResult WrapSVInterfaceOp::verify() {
-  auto modportType =
-      getInterfaceSink().getType().cast<circt::sv::ModportType>();
-  auto chanType = getOutput().getType().cast<ChannelType>();
+  auto modportType = cast<circt::sv::ModportType>(getInterfaceSink().getType());
+  auto chanType = cast<ChannelType>(getOutput().getType());
   return verifySVInterface(*this, modportType, chanType);
 }
 
 circt::esi::ChannelType WrapSVInterfaceOp::channelType() {
-  return getOutput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getOutput().getType());
 }
 
 LogicalResult UnwrapSVInterfaceOp::verify() {
   auto modportType =
-      getInterfaceSource().getType().cast<circt::sv::ModportType>();
-  auto chanType = getChanInput().getType().cast<ChannelType>();
+      cast<circt::sv::ModportType>(getInterfaceSource().getType());
+  auto chanType = cast<ChannelType>(getChanInput().getType());
   return verifySVInterface(*this, modportType, chanType);
 }
 
 circt::esi::ChannelType UnwrapSVInterfaceOp::channelType() {
-  return getChanInput().getType().cast<circt::esi::ChannelType>();
+  return cast<circt::esi::ChannelType>(getChanInput().getType());
 }
 
 LogicalResult WrapWindow::verify() {
@@ -312,7 +311,7 @@ UnwrapWindow::inferReturnTypes(MLIRContext *, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
                                mlir::OpaqueProperties, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto windowType = operands.front().getType().cast<WindowType>();
+  auto windowType = cast<WindowType>(operands.front().getType());
   inferredReturnTypes.push_back(windowType.getLoweredType());
   return success();
 }
@@ -514,7 +513,7 @@ LogicalResult ESIPureModuleOp::verify() {
   ESIDialect *esiDialect = getContext()->getLoadedDialect<ESIDialect>();
   Block &body = getBody().front();
   auto channelOrOutput = [](Value v) {
-    if (v.getType().isa<ChannelType, ChannelBundleType>())
+    if (isa<ChannelType, ChannelBundleType>(v.getType()))
       return true;
     if (v.getUsers().empty())
       return false;
@@ -529,7 +528,7 @@ LogicalResult ESIPureModuleOp::verify() {
     if (igraph::InstanceOpInterface inst =
             dyn_cast<igraph::InstanceOpInterface>(op)) {
       if (llvm::any_of(op.getOperands(), [](Value v) {
-            return !(v.getType().isa<ChannelType, ChannelBundleType>() ||
+            return !(isa<ChannelType, ChannelBundleType>(v.getType()) ||
                      isa<ESIPureModuleInputOp>(v.getDefiningOp()));
           }))
         return inst.emitOpError(
