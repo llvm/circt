@@ -94,12 +94,12 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
     /// Returns the argument name at the given index.
     StringAttr getArgName(unsigned idx) {
-      return getArgNames()[idx].cast<StringAttr>();
+      return llvm::cast<StringAttr>(getArgNames()[idx]);
     }
 
     /// Returns the result name at the given index.
     StringAttr getResName(unsigned idx) {
-      return getResNames()[idx].cast<StringAttr>();
+      return llvm::cast<StringAttr>(getResNames()[idx]);
     }
 
     /// Resolve argument and result names. This can be used during building of
@@ -113,7 +113,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     /// safely.
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!llvm::isa<FunctionType>(type))
         return emitOpError(
             "requires '" + getFunctionTypeAttrName().getValue() +
             "' attribute of function type");
@@ -296,7 +296,8 @@ def BufferOp : Handshake_Op<"buffer", [Pure, HasClock, SameOperandsAndResultType
       assert(getInitValues() && "initValues attribute not set");
       SmallVector<int64_t> values;
       for (auto value : (*this)->getAttrOfType<ArrayAttr>("initValues"))
-        values.push_back(value.cast<IntegerAttr>().getValue().getSExtValue());
+        values.push_back(llvm::cast<IntegerAttr>(value)
+                         .getValue().getSExtValue());
       return values;
     }
 
@@ -665,7 +666,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
 
   let extraClassDeclaration = [{
     mlir::MemRefType getMemRefType() {
-      return getMemref().getType().cast<mlir::MemRefType>();
+      return llvm::cast<mlir::MemRefType>(getMemref().getType());
     }
 
     llvm::SmallVector<handshake::MemLoadInterface> getLoadPorts();
@@ -793,7 +794,7 @@ def UnpackOp : Handshake_Op<"unpack", [
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"result types match element types of 'tuple'",
                      "input", "results",
-                     "$_self.cast<TupleType>().getTypes()">
+                     "llvm::cast<TupleType>($_self).getTypes()">
 ]> {
   let summary = "unpacks a tuple";
   let description = [{
@@ -815,7 +816,7 @@ def UnpackOp : Handshake_Op<"unpack", [
   let builders = [OpBuilder<(ins "Value":$input), [{
     $_state.addOperands(input);
 
-    TupleType type = input.getType().dyn_cast_or_null<TupleType>();
+    TupleType type = llvm::dyn_cast_or_null<TupleType>(input.getType());
     assert(type && "expect unpack to have a 'TupleType' operand");
     $_state.addTypes(type.getTypes());
   }]>];
@@ -828,7 +829,7 @@ def PackOp : Handshake_Op<"pack", [
   DeclareOpInterfaceMethods<GeneralOpInterface>,
   TypesMatchWith<"input types match element types of 'tuple'",
                    "result", "inputs",
-                   "$_self.cast<TupleType>().getTypes()">
+                   "llvm::cast<TupleType>($_self).getTypes()">
 ]> {
 
   let summary = "packs a tuple";

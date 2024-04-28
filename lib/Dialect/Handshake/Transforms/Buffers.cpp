@@ -51,7 +51,7 @@ struct HandshakeRemoveBuffersPass
 static bool shouldBufferArgument(BlockArgument arg) {
   // At the moment, buffers only make sense on arguments which we know
   // will lower down to a handshake bundle.
-  return arg.getType().isIntOrFloat() || arg.getType().isa<NoneType>();
+  return arg.getType().isIntOrFloat() || isa<NoneType>(arg.getType());
 }
 
 static bool isUnbufferedChannel(Operation *definingOp, Operation *usingOp) {

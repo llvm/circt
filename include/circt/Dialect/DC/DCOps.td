@@ -67,7 +67,7 @@ def BufferOp : DCOp<"buffer",
   let extraClassDeclaration = [{
     // Returns the data type of this buffer, if any.
     std::optional<TypeRange> getInnerType() {
-      if(auto type = getInput().getType().dyn_cast<ValueType>())
+      if(auto type = llvm::dyn_cast<ValueType>(getInput().getType()))
         return type.getInnerType();
       return std::nullopt;
     }

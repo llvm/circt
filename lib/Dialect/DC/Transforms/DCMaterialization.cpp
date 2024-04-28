@@ -19,7 +19,7 @@ using namespace dc;
 using namespace mlir;
 
 static bool isDCTyped(Value v) {
-  return v.getType().isa<dc::TokenType, dc::ValueType>();
+  return isa<dc::TokenType, dc::ValueType>(v.getType());
 }
 
 static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
@@ -33,7 +33,7 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
 // Adds a sink to the provided token or value-typed Value `v`.
 static void insertSink(Value v, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(v);
-  if (v.getType().isa<ValueType>()) {
+  if (isa<ValueType>(v.getType())) {
     // Unpack before sinking
     v = rewriter.create<UnpackOp>(v.getLoc(), v).getToken();
   }
@@ -49,7 +49,7 @@ static void insertFork(Value result, OpBuilder &rewriter) {
   for (auto &u : result.getUses())
     opsToProcess.push_back(u.getOwner());
 
-  bool isValue = result.getType().isa<ValueType>();
+  bool isValue = isa<ValueType>(result.getType());
   Value token = result;
   Value value;
   if (isValue) {
