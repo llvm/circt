@@ -144,12 +144,12 @@ def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
     unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
     unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
     hw::ArrayType getInputArrayType() {
-      return getInput().getType().cast<llhd::SigType>().getUnderlyingType()
-        .cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::SigType>(
+        getInput().getType()).getUnderlyingType());
     }
     hw::ArrayType getResultArrayType() {
-      return getResult().getType().cast<llhd::SigType>().getUnderlyingType()
-        .cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::SigType>(
+        getResult().getType()).getUnderlyingType());
     }
   }];
   let hasFolder = true;
@@ -195,12 +195,12 @@ def LLHD_PtrArraySliceOp : LLHD_Op<"ptr.array_slice",
     unsigned getResultWidth()  { return getLLHDTypeWidth(getResult().getType()); }
     unsigned getInputWidth() { return getLLHDTypeWidth(getInput().getType()); }
     hw::ArrayType getInputArrayType() {
-      return getInput().getType().cast<llhd::PtrType>().getUnderlyingType()
-        .cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::PtrType>(
+        getInput().getType()).getUnderlyingType());
     }
     hw::ArrayType getResultArrayType() {
-      return getResult().getType().cast<llhd::PtrType>().getUnderlyingType()
-        .cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::PtrType>(
+        getResult().getType()).getUnderlyingType());
     }
   }];
   let hasFolder = true;
@@ -233,8 +233,8 @@ def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
-      return getInput().getType().cast<llhd::SigType>()
-      .getUnderlyingType().cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::SigType>(
+        getInput().getType()).getUnderlyingType());
     }
   }];
 }
@@ -265,8 +265,8 @@ def LLHD_PtrArrayGetOp : LLHD_Op<"ptr.array_get",
 
   let extraClassDeclaration = [{
     hw::ArrayType getArrayType() {
-      return getInput().getType().cast<llhd::PtrType>()
-      .getUnderlyingType().cast<hw::ArrayType>();
+      return llvm::cast<hw::ArrayType>(llvm::cast<llhd::PtrType>(
+        getInput().getType()).getUnderlyingType());
     }
   }];
 }
@@ -299,8 +299,8 @@ def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract", [Pure,
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return getInput().getType().cast<llhd::SigType>().getUnderlyingType()
-        .cast<hw::StructType>();
+      return llvm::cast<hw::StructType>(llvm::cast<llhd::SigType>(
+        getInput().getType()).getUnderlyingType());
     }
   }];
 }
@@ -329,8 +329,8 @@ def LLHD_PtrStructExtractOp : LLHD_Op<"ptr.struct_extract", [Pure,
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return getInput().getType().cast<llhd::PtrType>().getUnderlyingType()
-        .cast<hw::StructType>();
+      return llvm::cast<hw::StructType>(llvm::cast<llhd::PtrType>(
+        getInput().getType()).getUnderlyingType());
     }
   }];
 }

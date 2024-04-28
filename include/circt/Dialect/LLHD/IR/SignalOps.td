@@ -55,7 +55,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
 def LLHD_PrbOp : LLHD_Op<"prb", [
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
-      "signal", "result", "$_self.cast<SigType>().getUnderlyingType()">
+      "signal", "result", "llvm::cast<SigType>($_self).getUnderlyingType()">
   ]> {
   let summary = "Probe a signal.";
   let description = [{
@@ -128,7 +128,7 @@ def LLHD_OutputOp : LLHD_Op<"output", [
 def LLHD_DrvOp : LLHD_Op<"drv", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'signal' have to match.",
-      "signal", "value", "$_self.cast<SigType>().getUnderlyingType()">
+      "signal", "value", "llvm::cast<SigType>($_self).getUnderlyingType()">
   ]> {
   let summary = "Drive a value into a signal.";
   let description = [{
@@ -286,19 +286,22 @@ def LLHD_RegOp : LLHD_Op<"reg", [
 
     bool hasGate(unsigned index) {
       assert(index < getGateMask().getValue().size() && "Index out of range.");
-      return getGateMask().getValue()[index].cast<IntegerAttr>().getInt() != 0;
+      return llvm::cast<IntegerAttr>(
+        getGateMask().getValue()[index]).getInt() != 0;
     }
 
     Value getGateAt(unsigned index) {
       assert(index < getGateMask().getValue().size() && "Index out of range.");
       if (!hasGate(index)) return Value();
       return
-        getGates()[getGateMask().getValue()[index].cast<IntegerAttr>().getInt()-1];
+        getGates()[llvm::cast<IntegerAttr>(
+          getGateMask().getValue()[index]).getInt()-1];
     }
 
     RegMode getRegModeAt(unsigned index) {
       assert(index < getModes().getValue().size() && "Index out of range.");
-      return (RegMode)getModes().getValue()[index].cast<IntegerAttr>().getInt();
+      return (RegMode) llvm::cast<IntegerAttr>(
+        getModes().getValue()[index]).getInt();
     }
   }];
 

@@ -40,7 +40,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // last point where it could have been observed. As we've already checked
     // that, we can fail here. This includes for example llhd.sig
     if (llvm::none_of(op->getOperands(), [](Value arg) {
-          return arg.getType().isa<llhd::SigType>();
+          return isa<llhd::SigType>(arg.getType());
         }))
       return failure();
 
@@ -49,7 +49,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // they are covered by that probe. As soon as we find a signal that is not
     // observed no matter how far we backtrack, we fail.
     return success(llvm::all_of(op->getOperands(), [&](Value arg) {
-      return !arg.getType().isa<llhd::SigType>() ||
+      return !isa<llhd::SigType>(arg.getType()) ||
              succeeded(checkSignalsAreObserved(obs, arg));
     }));
   }

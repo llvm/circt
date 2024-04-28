@@ -245,12 +245,11 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
                          const TypeConverter *converter,
                          ConversionPatternRewriter &rewriter, Type stateTy,
                          int &i, Value state, Value persist) {
-  auto elemTy = stateTy.cast<LLVM::LLVMStructType>()
-                    .getBody()[3]
-                    .cast<LLVM::LLVMStructType>()
+  auto elemTy = cast<LLVM::LLVMStructType>(
+                    cast<LLVM::LLVMStructType>(stateTy).getBody()[3])
                     .getBody()[i];
 
-  if (auto arg = persist.dyn_cast<BlockArgument>()) {
+  if (auto arg = dyn_cast<BlockArgument>(persist)) {
     rewriter.setInsertionPointToStart(arg.getParentBlock());
   } else {
     rewriter.setInsertionPointAfter(persist.getDefiningOp());
@@ -262,11 +261,11 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   auto gep0 = gepPersistenceState(dialect, loc, rewriter, stateTy, i, state);
 
   Value toStore;
-  if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
+  if (auto ptr = dyn_cast<PtrType>(persist.getType())) {
     // Unwrap the pointer and store it's value.
     auto elemTy = converter->convertType(ptr.getUnderlyingType());
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, convPersist);
-  } else if (persist.getType().isa<SigType>()) {
+  } else if (isa<SigType>(persist.getType())) {
     // Unwrap and store the signal struct.
     toStore = rewriter.create<LLVM::LoadOp>(loc, getLLVMSigType(dialect),
                                             convPersist);
@@ -281,7 +280,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   // use with it, whenever it is in a different block.
   for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
     auto user = use.getOwner();
-    if (persist.getType().isa<PtrType>() && user != toStore.getDefiningOp() &&
+    if (isa<PtrType>(persist.getType()) && user != toStore.getDefiningOp() &&
         user != convPersist.getDefiningOp() &&
         persist.getParentBlock() == user->getBlock()) {
       // Redirect uses of the pointer in the same block to the pointer in the
@@ -304,7 +303,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
           gepPersistenceState(dialect, loc, rewriter, stateTy, i, state);
       // Use the pointer in the state struct directly for pointer and signal
       // types.
-      if (persist.getType().isa<PtrType, SigType>()) {
+      if (isa<PtrType, SigType>(persist.getType())) {
         use.set(gep1);
       } else {
         auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
@@ -507,8 +506,8 @@ static Value recursiveCloneInit(OpBuilder &initBuilder, IRMapping &mapping,
 /// Check if the given type is either of LLHD's ArrayType, StructType, or LLVM
 /// array or struct type.
 static bool isArrayOrStruct(Type type) {
-  return type.isa<LLVM::LLVMArrayType, LLVM::LLVMStructType, hw::ArrayType,
-                  hw::StructType>();
+  return isa<LLVM::LLVMArrayType, LLVM::LLVMStructType, hw::ArrayType,
+             hw::StructType>(type);
 }
 
 /// Shift an integer signal pointer to obtain a view of the underlying value as
@@ -1017,11 +1016,10 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Zero-initialize reg state entries.
       for (size_t i = 0,
-                  e = regStateTy.cast<LLVM::LLVMStructType>().getBody().size();
+                  e = cast<LLVM::LLVMStructType>(regStateTy).getBody().size();
            i < e; ++i) {
-        size_t f = regStateTy.cast<LLVM::LLVMStructType>()
-                       .getBody()[i]
-                       .cast<LLVM::LLVMArrayType>()
+        size_t f = cast<LLVM::LLVMArrayType>(
+                       cast<LLVM::LLVMStructType>(regStateTy).getBody()[i])
                        .getNumElements();
         for (size_t j = 0; j < f; ++j) {
           auto regGep = initBuilder.create<LLVM::GEPOp>(
@@ -1085,7 +1083,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         // Get the amount of bytes required to represent an integer underlying
         // type. Use the whole size of the type if not an integer.
         Value passSize;
-        if (auto intTy = underlyingTy.dyn_cast<IntegerType>()) {
+        if (auto intTy = dyn_cast<IntegerType>(underlyingTy)) {
           auto byteWidth = llvm::divideCeil(intTy.getWidth(), 8);
           passSize = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i64Ty, rewriter.getI64IntegerAttr(byteWidth));
@@ -1102,7 +1100,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
                 .getResult();
 
         // Add structured underlying type information.
-        if (auto arrayTy = underlyingTy.dyn_cast<LLVM::LLVMArrayType>()) {
+        if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(underlyingTy)) {
           auto numElements = initBuilder.create<LLVM::ConstantOp>(
               op.getLoc(), i32Ty,
               rewriter.getI32IntegerAttr(arrayTy.getNumElements()));
@@ -1120,7 +1118,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
               op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigElemFunc),
               ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
         } else if (auto structTy =
-                       underlyingTy.dyn_cast<LLVM::LLVMStructType>()) {
+                       dyn_cast<LLVM::LLVMStructType>(underlyingTy)) {
           auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
           for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
             // Get pointer offset.
@@ -1296,7 +1294,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
     auto sigDetail = getSignalDetail(rewriter, &getDialect(), op->getLoc(),
                                      transformed.getSignal());
 
-    if (resTy.isa<IntegerType>()) {
+    if (isa<IntegerType>(resTy)) {
       // Get the amount of bytes to load. An extra byte is always loaded to
       // cover the case where a subsignal spans halfway in the last byte.
       int resWidth = resTy.getIntOrFloatBitWidth();
@@ -1315,7 +1313,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
       return success();
     }
 
-    if (resTy.isa<hw::ArrayType, hw::StructType>()) {
+    if (isa<hw::ArrayType, hw::StructType>(resTy)) {
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, sigDetail[0]);
 
       return success();
