@@ -29,7 +29,6 @@
 #include "circt/Conversion/FSMToSV.h"
 #include "circt/Conversion/HWArithToHW.h"
 #include "circt/Conversion/HWToBTOR2.h"
-#include "circt/Conversion/HWToLLHD.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Conversion/HWToSV.h"

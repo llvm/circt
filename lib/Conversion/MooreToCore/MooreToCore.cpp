@@ -163,7 +163,7 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
 
     if (!init)
       init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, llhd::SigType::get(resultType),
+    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, hw::InOutType::get(resultType),
                                              op.getNameAttr(), init);
     return success();
   }
