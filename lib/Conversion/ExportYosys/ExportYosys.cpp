@@ -23,8 +23,8 @@
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Mutex.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Mutex.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -179,19 +179,7 @@ struct ModuleConverter
   }
 
   // HW type op.
-  RTLIL::Const getConstant(IntegerAttr attr) {
-    auto width = attr.getValue().getBitWidth();
-    if (width <= 32)
-      return RTLIL::Const(attr.getValue().getZExtValue(),
-                          attr.getValue().getBitWidth());
-
-    // TODO: Use more efficient encoding.
-    std::vector<bool> result(width, false);
-    for (size_t i = 0; i < width; ++i)
-      result[i] = attr.getValue()[i];
-
-    return RTLIL::Const(result);
-  }
+  RTLIL::Const getConstant(IntegerAttr attr);
 
   LogicalResult visitTypeOp(ConstantOp op) {
     return setLowering(op, getConstant(op.getValueAttr()));
@@ -302,6 +290,20 @@ struct YosysCircuitImporter {
 };
 } // namespace
 
+RTLIL::Const ModuleConverter::getConstant(IntegerAttr attr) {
+  auto width = attr.getValue().getBitWidth();
+  if (width <= 32)
+    return RTLIL::Const(attr.getValue().getZExtValue(),
+                        attr.getValue().getBitWidth());
+
+  // TODO: Use more efficient encoding.
+  std::vector<bool> result(width, false);
+  for (size_t i = 0; i < width; ++i)
+    result[i] = attr.getValue()[i];
+
+  return RTLIL::Const(result);
+}
+
 LogicalResult ModuleConverter::lowerPorts() {
   ModulePortInfo ports(module.getPortList());
   size_t inputPos = 0;
@@ -339,7 +341,7 @@ LogicalResult ModuleConverter::lowerBody() {
 
   auto result =
       module
-          .walk<mlir::WalkOrder::PostOrder>([this](Operation *op) {
+          .walk([this](Operation *op) {
             if (module == op)
               return WalkResult::advance();
 
@@ -744,7 +746,7 @@ void ExportYosysParallelPass::runOnOperation() {
   init_yosys();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
 
-  auto dut = StringAttr::get(&getContext(), "DigitalTop");
+  auto dut = StringAttr::get(&getContext(), "FPU");
   auto designs = designSet(theInstanceGraph, dut);
   auto isInDesign = [&](StringAttr mod) -> bool {
     if (designs.empty())
@@ -803,7 +805,8 @@ void ExportYosysParallelPass::runOnOperation() {
                            << " " << results.size() << "\n";
             }
 
-            auto result = runYosys(op.getLoc(), test, "synth_xilinx; write_verilog");
+            auto result =
+                runYosys(op.getLoc(), test, "synth_xilinx; write_verilog");
 
             {
               llvm::sys::SmartScopedLock<true> lock(mutex);
