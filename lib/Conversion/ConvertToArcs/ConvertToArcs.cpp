@@ -345,7 +345,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
       arc.getResetMutable().assign(reset);
     }
     if (tapRegisters && llvm::any_of(absorbedNames, [](auto name) {
-          return !name.template cast<StringAttr>().getValue().empty();
+          return !cast<StringAttr>(name).getValue().empty();
         }))
       arc->setAttr("names", ArrayAttr::get(module.getContext(), absorbedNames));
     for (auto [arcResult, reg] : llvm::zip(arc.getResults(), absorbedRegs)) {
@@ -417,7 +417,7 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
     if (reset)
       arcOp.getResetMutable().assign(reset);
     if (tapRegisters && llvm::any_of(names, [](auto name) {
-          return !name.template cast<StringAttr>().getValue().empty();
+          return !cast<StringAttr>(name).getValue().empty();
         }))
       arcOp->setAttr("names", builder.getArrayAttr(names));
     for (auto [reg, resultIdx] : llvm::zip(regOps, regToOutputMapping)) {

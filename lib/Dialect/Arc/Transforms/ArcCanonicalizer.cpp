@@ -146,7 +146,7 @@ private:
   FailureOr<Operation *> maybeGetDefinition(Operation *op) {
     if (auto callOp = dyn_cast<mlir::CallOpInterface>(op)) {
       auto symAttr =
-          callOp.getCallableForCallee().dyn_cast<mlir::SymbolRefAttr>();
+          dyn_cast<mlir::SymbolRefAttr>(callOp.getCallableForCallee());
       if (!symAttr)
         return failure();
       if (auto *def = handler->getDefinition(symAttr.getLeafReference()))
@@ -368,7 +368,7 @@ RemoveUnusedArcs::matchAndRewrite(DefineOp op,
                                   PatternRewriter &rewriter) const {
   if (symbolCache.useEmpty(op)) {
     op.getBody().walk([&](mlir::CallOpInterface user) {
-      if (auto symbol = user.getCallableForCallee().dyn_cast<SymbolRefAttr>())
+      if (auto symbol = dyn_cast<SymbolRefAttr>(user.getCallableForCallee()))
         if (auto *defOp = symbolCache.getDefinition(symbol.getLeafReference()))
           symbolCache.removeUser(defOp, user);
     });

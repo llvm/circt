@@ -58,7 +58,7 @@ void SimplifyVariadicOpsPass::simplifyOp(Operation *op) {
   auto *block = op->getBlock();
   SmallVector<Value> operands;
   for (auto operand : op->getOperands()) {
-    if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
+    if (auto blockArg = dyn_cast<BlockArgument>(operand)) {
       if (blockArg.getOwner() != block) {
         ++numOpsSkippedMultipleBlocks;
         return;
@@ -78,8 +78,8 @@ void SimplifyVariadicOpsPass::simplifyOp(Operation *op) {
   // appear in the block.
   llvm::sort(operands, [](auto a, auto b) {
     // Sort block args by the arg number.
-    auto aBlockArg = a.template dyn_cast<BlockArgument>();
-    auto bBlockArg = b.template dyn_cast<BlockArgument>();
+    auto aBlockArg = dyn_cast<BlockArgument>(a);
+    auto bBlockArg = dyn_cast<BlockArgument>(b);
     if (aBlockArg && bBlockArg)
       return aBlockArg.getArgNumber() < bBlockArg.getArgNumber();
 

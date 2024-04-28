@@ -271,8 +271,8 @@ private:
 
       // Handle the case where one or both values are block arguments.
       if (!opA || !opB) {
-        auto argA = valueA.dyn_cast<BlockArgument>();
-        auto argB = valueB.dyn_cast<BlockArgument>();
+        auto argA = dyn_cast<BlockArgument>(valueA);
+        auto argB = dyn_cast<BlockArgument>(valueB);
         if (argA && argB) {
           divergences.insert(values);
           if (argA.getArgNumber() != argB.getArgNumber())
@@ -579,8 +579,8 @@ void DedupPass::runOnOperation() {
     // (putting constants at the back), and then considers the order of
     // operations and op operands.
     llvm::stable_sort(outlineOperands, [](auto &a, auto &b) {
-      auto argA = a.first->get().template dyn_cast<BlockArgument>();
-      auto argB = b.first->get().template dyn_cast<BlockArgument>();
+      auto argA = dyn_cast<BlockArgument>(a.first->get());
+      auto argB = dyn_cast<BlockArgument>(b.first->get());
       if (argA && !argB)
         return true;
       if (!argA && argB)
@@ -619,7 +619,7 @@ void DedupPass::runOnOperation() {
         arg = defineOp.getBodyBlock().addArgument(value.getType(),
                                                   value.getLoc());
         newInputTypes.push_back(arg.getType());
-        if (auto blockArg = value.dyn_cast<BlockArgument>())
+        if (auto blockArg = dyn_cast<BlockArgument>(value))
           newOperands.push_back(blockArg.getArgNumber());
         else {
           auto *op = value.getDefiningOp();
@@ -673,7 +673,7 @@ void DedupPass::runOnOperation() {
 
       bool mappingFailed = false;
       for (auto [operand, otherOperand] : equiv.divergences) {
-        auto arg = operand->get().dyn_cast<BlockArgument>();
+        auto arg = dyn_cast<BlockArgument>(operand->get());
         if (!arg || !isOutlinable(*otherOperand)) {
           mappingFailed = true;
           break;
@@ -682,7 +682,7 @@ void DedupPass::runOnOperation() {
         // Determine how the other arc's operand maps to the new connection
         // scheme of the current arc.
         std::variant<Operation *, unsigned> newOperand;
-        if (auto otherArg = otherOperand->get().dyn_cast<BlockArgument>())
+        if (auto otherArg = dyn_cast<BlockArgument>(otherOperand->get()))
           newOperand = otherArg.getArgNumber();
         else
           newOperand = otherOperand->get().getDefiningOp();
