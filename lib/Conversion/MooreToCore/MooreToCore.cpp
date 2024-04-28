@@ -423,7 +423,7 @@ struct AShrOpConversion : public OpConversionPattern<AShrOp> {
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
-static bool isMooreType(Type type) { return type.isa<UnpackedType>(); }
+static bool isMooreType(Type type) { return isa<UnpackedType>(type); }
 
 static bool hasMooreType(TypeRange types) {
   return llvm::any_of(types, isMooreType);

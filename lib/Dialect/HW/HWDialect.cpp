@@ -91,13 +91,13 @@ void HWDialect::initialize() {
 Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                           Type type, Location loc) {
   // Integer constants can materialize into hw.constant
-  if (auto intType = type.dyn_cast<IntegerType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>())
+  if (auto intType = dyn_cast<IntegerType>(type))
+    if (auto attrValue = dyn_cast<IntegerAttr>(value))
       return builder.create<ConstantOp>(loc, type, attrValue);
 
   // Aggregate constants.
-  if (auto arrayAttr = value.dyn_cast<ArrayAttr>()) {
-    if (type.isa<StructType, ArrayType, UnpackedArrayType>())
+  if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
+    if (isa<StructType, ArrayType, UnpackedArrayType>(type))
       return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
   }
 

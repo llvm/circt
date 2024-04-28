@@ -37,7 +37,7 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
       ::llvm::SmallVector<::llvm::StringRef, 1> targetNames;
       for (::mlir::Attribute targetNameAttr : $_op.getReferencedModuleNamesAttr())
         targetNames.push_back(
-            targetNameAttr.cast<::mlir::StringAttr>().getValue());
+            llvm::cast<::mlir::StringAttr>(targetNameAttr).getValue());
       return targetNames;
     }]>,
 

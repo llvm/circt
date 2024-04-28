@@ -120,7 +120,7 @@ static bool isSignednessType(Type type) {
 }
 
 static bool isSignednessAttr(Attribute attr) {
-  if (auto typeAttr = attr.dyn_cast<TypeAttr>())
+  if (auto typeAttr = dyn_cast<TypeAttr>(attr))
     return isSignednessType(typeAttr.getValue());
   return false;
 }
@@ -175,9 +175,9 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto isLhsTypeSigned =
-        op.getOperand(0).getType().template cast<IntegerType>().isSigned();
-    auto rhsType = op.getOperand(1).getType().template cast<IntegerType>();
-    auto targetType = op.getResult().getType().template cast<IntegerType>();
+        cast<IntegerType>(op.getOperand(0).getType()).isSigned();
+    auto rhsType = cast<IntegerType>(op.getOperand(1).getType());
+    auto targetType = cast<IntegerType>(op.getResult().getType());
 
     // comb.div* needs identical bitwidths for its operands and its result.
     // Hence, we need to calculate the minimal bitwidth that can be used to
@@ -227,10 +227,10 @@ struct CastOpLowering : public OpConversionPattern<CastOp> {
   LogicalResult
   matchAndRewrite(CastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto sourceType = op.getIn().getType().cast<IntegerType>();
+    auto sourceType = cast<IntegerType>(op.getIn().getType());
     auto sourceWidth = sourceType.getWidth();
     bool isSourceTypeSigned = sourceType.isSigned();
-    auto targetWidth = op.getOut().getType().cast<IntegerType>().getWidth();
+    auto targetWidth = cast<IntegerType>(op.getOut().getType()).getWidth();
 
     Value replaceValue;
     if (sourceWidth == targetWidth) {
@@ -286,8 +286,8 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
   LogicalResult
   matchAndRewrite(ICmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto lhsType = op.getLhs().getType().cast<IntegerType>();
-    auto rhsType = op.getRhs().getType().cast<IntegerType>();
+    auto lhsType = cast<IntegerType>(op.getLhs().getType());
+    auto rhsType = cast<IntegerType>(op.getRhs().getType());
     IntegerType::SignednessSemantics cmpSignedness;
     const unsigned cmpWidth =
         inferAddResultType(cmpSignedness, lhsType, rhsType) - 1;
@@ -320,11 +320,10 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto isLhsTypeSigned =
-        op.getOperand(0).getType().template cast<IntegerType>().isSigned();
+        cast<IntegerType>(op.getOperand(0).getType()).isSigned();
     auto isRhsTypeSigned =
-        op.getOperand(1).getType().template cast<IntegerType>().isSigned();
-    auto targetWidth =
-        op.getResult().getType().template cast<IntegerType>().getWidth();
+        cast<IntegerType>(op.getOperand(1).getType()).isSigned();
+    auto targetWidth = cast<IntegerType>(op.getResult().getType()).getWidth();
 
     Value lhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[0],
                                      targetWidth, isLhsTypeSigned);

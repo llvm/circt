@@ -78,7 +78,7 @@ static StringRef getModuleArgumentName(Operation *module, size_t argNo) {
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
   // Tolerate malformed IR here to enable debug printing etc.
   if (argNames && argNo < argNames.size())
-    return argNames[argNo].cast<StringAttr>().getValue();
+    return cast<StringAttr>(argNames[argNo]).getValue();
   return StringRef();
 }
 
@@ -91,7 +91,7 @@ static StringRef getModuleResultName(Operation *module, size_t resultNo) {
   auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
   // Tolerate malformed IR here to enable debug printing etc.
   if (resultNames && resultNo < resultNames.size())
-    return resultNames[resultNo].cast<StringAttr>().getValue();
+    return cast<StringAttr>(resultNames[resultNo]).getValue();
   return StringRef();
 }
 

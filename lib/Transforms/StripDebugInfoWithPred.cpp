@@ -35,7 +35,7 @@ struct StripDebugInfoWithPred
     if (pred(loc))
       return UnknownLoc::get(loc.getContext());
 
-    if (auto fusedLoc = loc.dyn_cast<FusedLoc>()) {
+    if (auto fusedLoc = dyn_cast<FusedLoc>(loc)) {
       SmallVector<mlir::Location> newLocations;
       newLocations.reserve(fusedLoc.getLocations().size());
       for (auto loc : fusedLoc.getLocations())
@@ -71,7 +71,7 @@ void StripDebugInfoWithPred::runOnOperation() {
   // strip file info with that suffix.
   if (!pred && !dropSuffix.empty()) {
     pred = [&](mlir::Location loc) {
-      if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+      if (auto fileLoc = dyn_cast<FileLineColLoc>(loc))
         return fileLoc.getFilename().getValue().ends_with(dropSuffix);
       return false;
     };

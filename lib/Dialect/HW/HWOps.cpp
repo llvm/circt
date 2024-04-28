@@ -47,7 +47,7 @@ ModulePort::Direction hw::flip(ModulePort::Direction direction) {
 
 bool hw::isValidIndexBitWidth(Value index, Value array) {
   hw::ArrayType arrayType =
-      hw::getCanonicalType(array.getType()).dyn_cast<hw::ArrayType>();
+      dyn_cast<hw::ArrayType>(hw::getCanonicalType(array.getType()));
   assert(arrayType && "expected array type");
   unsigned indexWidth = index.getType().getIntOrFloatBitWidth();
   auto requiredWidth = llvm::Log2_64_Ceil(arrayType.getNumElements());
@@ -131,12 +131,12 @@ LogicalResult hw::checkParameterInContext(
     bool disallowParamRefs) {
   // Literals are always ok.  Their types are already known to match
   // expectations.
-  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
+  if (isa<IntegerAttr>(value) || isa<FloatAttr>(value) ||
+      isa<StringAttr>(value) || isa<ParamVerbatimAttr>(value))
     return success();
 
   // Check both subexpressions of an expression.
-  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+  if (auto expr = dyn_cast<ParamExprAttr>(value)) {
     for (auto op : expr.getOperands())
       if (failed(checkParameterInContext(op, moduleParameters, instanceError,
                                          disallowParamRefs)))
@@ -146,7 +146,7 @@ LogicalResult hw::checkParameterInContext(
 
   // Parameter references need more analysis to make sure they are valid within
   // this module.
-  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
+  if (auto parameterRef = dyn_cast<ParamDeclRefAttr>(value)) {
     auto nameAttr = parameterRef.getName();
 
     // Don't allow references to parameters from the default values of a
@@ -162,7 +162,7 @@ LogicalResult hw::checkParameterInContext(
 
     // Find the corresponding attribute in the module.
     for (auto param : moduleParameters) {
-      auto paramAttr = param.cast<ParamDeclAttr>();
+      auto paramAttr = cast<ParamDeclAttr>(param);
       if (paramAttr.getName() != nameAttr)
         continue;
 
@@ -278,7 +278,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 LogicalResult ConstantOp::verify() {
   // If the result type has a bitwidth, then the attribute must match its width.
-  if (getValue().getBitWidth() != getType().cast<IntegerType>().getWidth())
+  if (getValue().getBitWidth() != cast<IntegerType>(getType()).getWidth())
     return emitError(
         "hw.constant attribute bitwidth doesn't match return type");
 
@@ -308,7 +308,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 /// an int64_t.  Use APInt's instead.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
-  auto numBits = type.cast<IntegerType>().getWidth();
+  auto numBits = cast<IntegerType>(type).getWidth();
   build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
 }
 
@@ -318,7 +318,7 @@ void ConstantOp::getAsmResultNames(
   auto intCst = getValue();
 
   // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.cast<IntegerType>().getWidth() == 1)
+  if (cast<IntegerType>(intTy).getWidth() == 1)
     return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
   // Otherwise, build a complex name with the value and type.
@@ -396,11 +396,11 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
   // If this is a type alias, get the underlying type.
-  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+  if (auto typeAlias = dyn_cast<TypeAliasType>(type))
     type = typeAlias.getCanonicalType();
 
-  if (auto structType = type.dyn_cast<StructType>()) {
-    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+  if (auto structType = dyn_cast<StructType>(type)) {
+    auto arrayAttr = dyn_cast<ArrayAttr>(attr);
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
@@ -414,8 +414,8 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       if (failed(checkAttributes(op, attr, fieldInfo.type)))
         return failure();
     }
-  } else if (auto arrayType = type.dyn_cast<ArrayType>()) {
-    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+  } else if (auto arrayType = dyn_cast<ArrayType>(type)) {
+    auto arrayAttr = dyn_cast<ArrayAttr>(attr);
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
@@ -429,8 +429,8 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       if (failed(checkAttributes(op, attr, elementType)))
         return failure();
     }
-  } else if (auto arrayType = type.dyn_cast<UnpackedArrayType>()) {
-    auto arrayAttr = attr.dyn_cast<ArrayAttr>();
+  } else if (auto arrayType = dyn_cast<UnpackedArrayType>(type)) {
+    auto arrayAttr = dyn_cast<ArrayAttr>(attr);
     if (!arrayAttr)
       return op->emitOpError("expected array attribute for constant of type ")
              << type;
@@ -445,14 +445,14 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
       if (failed(checkAttributes(op, attr, elementType)))
         return failure();
     }
-  } else if (auto enumType = type.dyn_cast<EnumType>()) {
-    auto stringAttr = attr.dyn_cast<StringAttr>();
+  } else if (auto enumType = dyn_cast<EnumType>(type)) {
+    auto stringAttr = dyn_cast<StringAttr>(attr);
     if (!stringAttr)
       return op->emitOpError("expected string attribute for constant of type ")
              << type;
-  } else if (auto intType = type.dyn_cast<IntegerType>()) {
+  } else if (auto intType = dyn_cast<IntegerType>(type)) {
     // Check the attribute kind is correct.
-    auto intAttr = attr.dyn_cast<IntegerAttr>();
+    auto intAttr = dyn_cast<IntegerAttr>(attr);
     if (!intAttr)
       return op->emitOpError("expected integer attribute for constant of type ")
              << type;
@@ -522,9 +522,8 @@ FunctionType hw::getModuleType(Operation *moduleOrInstance) {
       .Case<HWModuleLike>(
           [](auto mod) { return mod.getHWModuleType().getFuncType(); })
       .Default([](Operation *op) {
-        return cast<mlir::FunctionOpInterface>(op)
-            .getFunctionType()
-            .cast<FunctionType>();
+        return cast<FunctionType>(
+            cast<mlir::FunctionOpInterface>(op).getFunctionType());
       });
 }
 
@@ -619,7 +618,7 @@ static void modifyModuleArgs(
     while (!insertArgs.empty() && insertArgs[0].first == argIdx) {
       auto port = insertArgs[0].second;
       if (port.dir == ModulePort::Direction::InOut &&
-          !port.type.isa<InOutType>())
+          !isa<InOutType>(port.type))
         port.type = InOutType::get(port.type);
       auto sym = port.getSym();
       Attribute attr =
@@ -741,7 +740,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   for (auto port : ports.getInputs()) {
     auto loc = port.loc ? Location(port.loc) : unknownLoc;
     auto type = port.type;
-    if (port.isInOut() && !type.isa<InOutType>())
+    if (port.isInOut() && !isa<InOutType>(type))
       type = InOutType::get(type);
     body->addArgument(type, loc);
   }
@@ -1010,9 +1009,8 @@ ParseResult HWModuleGeneratedOp::parse(OpAsmParser &parser,
 FunctionType getHWModuleOpType(Operation *op) {
   if (auto mod = dyn_cast<HWModuleLike>(op))
     return mod.getHWModuleType().getFuncType();
-  return cast<mlir::FunctionOpInterface>(op)
-      .getFunctionType()
-      .cast<FunctionType>();
+  return cast<FunctionType>(
+      cast<mlir::FunctionOpInterface>(op).getFunctionType());
 }
 
 template <typename ModuleTy>
@@ -1079,7 +1077,7 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
 
   // Check parameter default values are sensible.
   for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
+    auto paramAttr = cast<ParamDeclAttr>(param);
 
     // Check that we don't have any redundant parameter names.  These are
     // resolved by string name: reuse of the same name would cause ambiguities.
@@ -1092,7 +1090,7 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
     if (!value)
       continue;
 
-    auto typedValue = value.dyn_cast<TypedAttr>();
+    auto typedValue = dyn_cast<TypedAttr>(value);
     if (!typedValue)
       return module->emitOpError("parameter ")
              << paramAttr << " should have a typed value; has value " << value;
@@ -1391,7 +1389,7 @@ HWModuleGeneratedOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto paramRef = referencedKindOp.getRequiredAttrs();
   auto dict = (*this)->getAttrDictionary();
   for (auto str : paramRef) {
-    auto strAttr = str.dyn_cast<StringAttr>();
+    auto strAttr = dyn_cast<StringAttr>(str);
     if (!strAttr)
       return emitError("Unknown attribute type, expected a string");
     if (!dict.get(strAttr.getValue()))
@@ -1581,9 +1579,8 @@ LogicalResult
 InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   for (Attribute name : getModuleNamesAttr()) {
     if (failed(instance_like_impl::verifyInstanceOfHWModule(
-            *this, name.cast<FlatSymbolRefAttr>(), getInputs(),
-            getResultTypes(), getArgNames(), getResultNames(), getParameters(),
-            symbolTable))) {
+            *this, cast<FlatSymbolRefAttr>(name), getInputs(), getResultTypes(),
+            getArgNames(), getResultNames(), getParameters(), symbolTable))) {
       return failure();
     }
   }
@@ -1711,7 +1708,7 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
 ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
   SmallVector<Attribute> moduleNames;
   for (Attribute attr : getModuleNamesAttr()) {
-    moduleNames.push_back(attr.cast<FlatSymbolRefAttr>().getAttr());
+    moduleNames.push_back(cast<FlatSymbolRefAttr>(attr).getAttr());
   }
   return ArrayAttr::get(getContext(), moduleNames);
 }
@@ -1815,7 +1812,7 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 }
 
 LogicalResult ArrayCreateOp::verify() {
-  unsigned returnSize = getType().cast<ArrayType>().getNumElements();
+  unsigned returnSize = cast<ArrayType>(getType()).getNumElements();
   if (getInputs().size() != returnSize)
     return failure();
   return success();
@@ -2090,19 +2087,19 @@ static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
 void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
                           ValueRange values) {
   assert(!values.empty() && "Cannot build array of zero elements");
-  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
+  ArrayType arrayTy = cast<ArrayType>(values[0].getType());
   Type elemTy = arrayTy.getElementType();
   assert(llvm::all_of(values,
                       [elemTy](Value v) -> bool {
-                        return v.getType().isa<ArrayType>() &&
-                               v.getType().cast<ArrayType>().getElementType() ==
+                        return isa<ArrayType>(v.getType()) &&
+                               cast<ArrayType>(v.getType()).getElementType() ==
                                    elemTy;
                       }) &&
          "All values must be of ArrayType with the same element type.");
 
   uint64_t resultSize = 0;
   for (Value val : values)
-    resultSize += val.getType().cast<ArrayType>().getNumElements();
+    resultSize += cast<ArrayType>(val.getType()).getNumElements();
   build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
@@ -2112,7 +2109,7 @@ OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
   for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
     if (!inputs[i])
       return {};
-    llvm::copy(inputs[i].cast<ArrayAttr>(), std::back_inserter(array));
+    llvm::copy(cast<ArrayAttr>(inputs[i]), std::back_inserter(array));
   }
   return ArrayAttr::get(getContext(), array);
 }
@@ -2407,7 +2404,7 @@ LogicalResult StructExplodeOp::fold(FoldAdaptor adaptor,
   auto input = adaptor.getInput();
   if (!input)
     return failure();
-  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(results));
+  llvm::copy(cast<ArrayAttr>(input), std::back_inserter(results));
   return success();
 }
 
@@ -2435,7 +2432,7 @@ void StructExplodeOp::getAsmResultNames(
 
 void StructExplodeOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                             Value input) {
-  StructType inputType = input.getType().dyn_cast<StructType>();
+  StructType inputType = dyn_cast<StructType>(input.getType());
   assert(inputType);
   SmallVector<Type, 16> fieldTypes;
   for (auto field : inputType.getElements())
@@ -2649,7 +2646,7 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
   if (!input || !newValue)
     return {};
   SmallVector<Attribute> array;
-  llvm::copy(input.cast<ArrayAttr>(), std::back_inserter(array));
+  llvm::copy(cast<ArrayAttr>(input), std::back_inserter(array));
   array[getFieldIndex()] = newValue;
   return ArrayAttr::get(getContext(), array);
 }
@@ -2812,8 +2809,8 @@ void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 // the index. If the array is constructed from a constant by a bitcast
 // operation, we can fold into a constant.
 OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
-  auto inputCst = adaptor.getInput().dyn_cast_or_null<ArrayAttr>();
-  auto indexCst = adaptor.getIndex().dyn_cast_or_null<IntegerAttr>();
+  auto inputCst = dyn_cast_or_null<ArrayAttr>(adaptor.getInput());
+  auto indexCst = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex());
 
   if (inputCst) {
     // Constant array index.
@@ -2832,7 +2829,7 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
 
   // array_get(bitcast(c), i) -> c[i*w+w-1:i*w]
   if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
-    auto intTy = getType().dyn_cast<IntegerType>();
+    auto intTy = dyn_cast<IntegerType>(getType());
     if (!intTy)
       return {};
     auto bitcastInputOp = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
@@ -2993,13 +2990,13 @@ bool HierPathOp::dropModule(StringAttr moduleToDrop) {
   bool updateMade = false;
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
       if (ref.getModule() == moduleToDrop)
         updateMade = true;
       else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+      if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == moduleToDrop)
         updateMade = true;
       else
         newPath.push_back(nameRef);
@@ -3016,7 +3013,7 @@ bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
   StringRef inlinedInstanceName = "";
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
       if (ref.getModule() == moduleToDrop) {
         inlinedInstanceName = ref.getName().getValue();
         updateMade = true;
@@ -3029,7 +3026,7 @@ bool HierPathOp::inlineModule(StringAttr moduleToDrop) {
       } else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == moduleToDrop)
+      if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == moduleToDrop)
         updateMade = true;
       else
         newPath.push_back(nameRef);
@@ -3045,14 +3042,14 @@ bool HierPathOp::updateModule(StringAttr oldMod, StringAttr newMod) {
   bool updateMade = false;
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
       if (ref.getModule() == oldMod) {
         newPath.push_back(hw::InnerRefAttr::get(newMod, ref.getName()));
         updateMade = true;
       } else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == oldMod) {
+      if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == oldMod) {
         newPath.push_back(FlatSymbolRefAttr::get(newMod));
         updateMade = true;
       } else
@@ -3075,7 +3072,7 @@ bool HierPathOp::updateModuleAndInnerRef(
   bool updateMade = false;
   // Break from the loop if the module is found, since it can occur only once.
   for (auto &element : namepathNew) {
-    if (auto innerRef = element.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(element)) {
       if (innerRef.getModule() != oldMod)
         continue;
       auto symName = innerRef.getName();
@@ -3105,7 +3102,7 @@ bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
   bool updateMade = false;
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
       if (ref.getModule() == atMod) {
         updateMade = true;
         if (includeMod)
@@ -3113,7 +3110,7 @@ bool HierPathOp::truncateAtModule(StringAttr atMod, bool includeMod) {
       } else
         newPath.push_back(ref);
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == atMod && !includeMod)
+      if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == atMod && !includeMod)
         updateMade = true;
       else
         newPath.push_back(nameRef);
@@ -3143,11 +3140,11 @@ StringAttr HierPathOp::root() {
 bool HierPathOp::hasModule(StringAttr modName) {
   for (auto nameRef : getNamepath()) {
     // nameRef is either an InnerRefAttr or a FlatSymbolRefAttr.
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef)) {
       if (ref.getModule() == modName)
         return true;
     } else {
-      if (nameRef.cast<FlatSymbolRefAttr>().getAttr() == modName)
+      if (cast<FlatSymbolRefAttr>(nameRef).getAttr() == modName)
         return true;
     }
   }
@@ -3157,7 +3154,7 @@ bool HierPathOp::hasModule(StringAttr modName) {
 /// Return true if the NLA has the InnerSym .
 bool HierPathOp::hasInnerSym(StringAttr modName, StringAttr symName) const {
   for (auto nameRef : const_cast<HierPathOp *>(this)->getNamepath())
-    if (auto ref = nameRef.dyn_cast<hw::InnerRefAttr>())
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(nameRef))
       if (ref.getName() == symName && ref.getModule() == modName)
         return true;
 
@@ -3222,7 +3219,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     for (size_t i = 0; i < n; ++i) {
       if (i != 0)
         diag << ((i + 1 == n) ? " or " : ", ");
-      diag << expectedModuleNames[i].cast<StringAttr>();
+      diag << cast<StringAttr>(expectedModuleNames[i]);
     }
     diag << ". Instead found: " << name;
     return diag;
@@ -3231,7 +3228,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (!getNamepath() || getNamepath().empty())
     return emitOpError() << "the instance path cannot be empty";
   for (unsigned i = 0, s = getNamepath().size() - 1; i < s; ++i) {
-    hw::InnerRefAttr innerRef = getNamepath()[i].dyn_cast<hw::InnerRefAttr>();
+    hw::InnerRefAttr innerRef = dyn_cast<hw::InnerRefAttr>(getNamepath()[i]);
     if (!innerRef)
       return emitOpError()
              << "the instance path can only contain inner sym reference"
@@ -3250,7 +3247,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
   // The instance path has been verified. Now verify the last element.
   auto leafRef = getNamepath()[getNamepath().size() - 1];
-  if (auto innerRef = leafRef.dyn_cast<hw::InnerRefAttr>()) {
+  if (auto innerRef = dyn_cast<hw::InnerRefAttr>(leafRef)) {
     if (!ns.lookup(innerRef)) {
       return emitOpError() << " operation with symbol: " << innerRef
                            << " was not found ";
@@ -3258,7 +3255,7 @@ LogicalResult HierPathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     if (failed(checkExpectedModule(innerRef.getModule())))
       return failure();
   } else if (failed(checkExpectedModule(
-                 leafRef.cast<FlatSymbolRefAttr>().getAttr()))) {
+                 cast<FlatSymbolRefAttr>(leafRef).getAttr()))) {
     return failure();
   }
   return success();
@@ -3276,12 +3273,12 @@ void HierPathOp::print(OpAsmPrinter &p) {
   p.printSymbolName(getSymName());
   p << " [";
   llvm::interleaveComma(getNamepath().getValue(), p, [&](Attribute attr) {
-    if (auto ref = attr.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto ref = dyn_cast<hw::InnerRefAttr>(attr)) {
       p.printSymbolName(ref.getModule().getValue());
       p << "::";
       p.printSymbolName(ref.getName().getValue());
     } else {
-      p.printSymbolName(attr.cast<FlatSymbolRefAttr>().getValue());
+      p.printSymbolName(cast<FlatSymbolRefAttr>(attr).getValue());
     }
   });
   p << "]";

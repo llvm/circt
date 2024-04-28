@@ -29,7 +29,7 @@ class MapArithTypeConverter : public mlir::TypeConverter {
 public:
   MapArithTypeConverter() {
     addConversion([](Type type) {
-      if (type.isa<mlir::IntegerType>())
+      if (isa<mlir::IntegerType>(type))
         return type;
 
       return Type();
