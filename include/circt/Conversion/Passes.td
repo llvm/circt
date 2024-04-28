@@ -738,7 +738,7 @@ def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
 
 def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
   let summary = "Translate core dialects into yosys's RTL IR";
-  let constructor = "createExportYosys()";
+  let constructor = "createExportYosysParallel()";
   let options = [
     Option<"commands", "commmands", "std::string",
             "", "yosys commands to run">,

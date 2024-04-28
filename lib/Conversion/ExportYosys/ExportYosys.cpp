@@ -22,6 +22,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "kernel/rtlil.h"
 #include "kernel/yosys.h"
@@ -35,9 +36,14 @@ using namespace Yosys;
 
 namespace {
 #define GEN_PASS_DEF_EXPORTYOSYS
+#define GEN_PASS_DEF_EXPORTYOSYSPARALLEL
 #include "circt/Conversion/Passes.h.inc"
 
 struct ExportYosysPass : public impl::ExportYosysBase<ExportYosysPass> {
+  void runOnOperation() override;
+};
+struct ExportYosysParallelPass
+    : public impl::ExportYosysParallelBase<ExportYosysParallelPass> {
   void runOnOperation() override;
 };
 
@@ -103,18 +109,20 @@ struct ModuleConverter
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  LogicalResult lowerPorts(bool isDecaration = false);
+  LogicalResult lowerPorts();
   LogicalResult lowerBody();
 
   ModuleConverter(YosysCircuitImporter &circuitConverter,
-                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleLike module)
+                  Yosys::RTLIL::Module *rtlilModule, hw::HWModuleLike module,
+                  bool definedAsBlackBox)
       : circuitConverter(circuitConverter), rtlilModule(rtlilModule),
-        module(module) {}
+        module(module), definedAsBlackBox(definedAsBlackBox) {}
 
   YosysCircuitImporter &circuitConverter;
 
   DenseMap<Value, RTLIL::Wire *> mapping;
   SmallVector<RTLIL::Wire *> outputs;
+  const bool definedAsBlackBox;
 
   LogicalResult setLowering(Value value, SigSpec s) {
     auto it = mapping.find(value);
@@ -260,27 +268,22 @@ struct YosysCircuitImporter {
                        InstanceGraph *instanceGraph)
       : design(design), instanceGraph(instanceGraph) {}
   llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
-  LogicalResult addModule(hw::HWModuleOp op) {
-    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
-    if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
-      return failure();
-    converter.emplace_back(*this, newModule, cast<hw::HWModuleLike>(*op));
-    return converter.back().lowerPorts();
-  }
 
-  LogicalResult addModule(hw::HWModuleExternOp op) {
+  LogicalResult addModule(hw::HWModuleLike op, bool defineAsBlackBox = false) {
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
     if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
       return failure();
-    newModule->set_bool_attribute(ID::blackbox);
-    converter.emplace_back(*this, newModule, cast<hw::HWModuleLike>(*op));
-    return converter.back().lowerPorts(true);
+    defineAsBlackBox |= isa<hw::HWModuleExternOp>(op);
+    if (defineAsBlackBox)
+      newModule->set_bool_attribute(ID::blackbox);
+    converter.emplace_back(*this, newModule, op, defineAsBlackBox);
+    return converter.back().lowerPorts();
   }
 
   SmallVector<ModuleConverter> converter;
   LogicalResult run() {
     for (auto &c : converter)
-      if (failed(c.lowerBody()))
+      if (!c.definedAsBlackBox && failed(c.lowerBody()))
         return failure();
     return success();
   }
@@ -290,7 +293,7 @@ struct YosysCircuitImporter {
 };
 } // namespace
 
-LogicalResult ModuleConverter::lowerPorts(bool isDeclaration) {
+LogicalResult ModuleConverter::lowerPorts() {
   ModulePortInfo ports(module.getPortList());
   size_t inputPos = 0;
   for (auto [idx, port] : llvm::enumerate(ports)) {
@@ -303,7 +306,7 @@ LogicalResult ModuleConverter::lowerPorts(bool isDeclaration) {
       wire->port_output = true;
       outputs.push_back(wire);
     } else if (port.isInput()) {
-      if (!isDeclaration)
+      if (!definedAsBlackBox)
         setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
       wire->port_input = true;
     } else {
@@ -620,7 +623,8 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
                            getConstant(constOp.getValueAttr()));
       return success();
     }
-    return op.emitError() << "lowering for non-constant reset value is currently not implemented";
+    return op.emitError() << "lowering for non-constant reset value is "
+                             "currently not implemented";
   }
 
   rtlilModule->addDff(getNewName(op.getName()), clock.value(), next.value(),
@@ -666,11 +670,7 @@ void ExportYosysPass::runOnOperation() {
   auto *design = theDesign.get();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
   YosysCircuitImporter exporter(design, &theInstanceGraph);
-  for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
-    if (failed(exporter.addModule(op)))
-      return signalPassFailure();
-  }
-  for (auto op : getOperation().getOps<hw::HWModuleExternOp>()) {
+  for (auto op : getOperation().getOps<hw::HWModuleLike>()) {
     if (failed(exporter.addModule(op)))
       return signalPassFailure();
   }
@@ -685,9 +685,45 @@ void ExportYosysPass::runOnOperation() {
   // RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
+void ExportYosysParallelPass::runOnOperation() {
+  // Set up yosys.
+  Yosys::log_streams.push_back(&std::cerr);
+  Yosys::log_error_stderr = true;
+  Yosys::yosys_setup();
+  auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
+  for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
+    auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
+    auto *design = theDesign.get();
+    YosysCircuitImporter exporter(design, &theInstanceGraph);
+
+    if (failed(exporter.addModule(op)))
+      return signalPassFailure();
+
+    auto *node = theInstanceGraph.lookup(op.getModuleNameAttr());
+    for (auto instance : *node) {
+      auto mod = instance->getTarget()->getModule<hw::HWModuleLike>();
+      if (failed(exporter.addModule(mod, true)))
+        return signalPassFailure();
+    }
+
+    if (failed(exporter.run()))
+      return signalPassFailure();
+    auto t = llvm::sys::fs::TempFile::create("nya");
+    if (!t) {
+      return signalPassFailure();
+    }
+    auto &file = t.get();
+    RTLIL_BACKEND::dump_design(std::cout, design, false);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 std::unique_ptr<mlir::Pass> circt::createExportYosys() {
   return std::make_unique<ExportYosysPass>();
+}
+
+std::unique_ptr<mlir::Pass> circt::createExportYosysParallel() {
+  return std::make_unique<ExportYosysParallelPass>();
 }

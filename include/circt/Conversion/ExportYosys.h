@@ -24,9 +24,11 @@ class Pass;
 namespace circt {
 
 #define GEN_PASS_DECL_EXPORTYOSYS
+#define GEN_PASS_DECL_EXPORTYOSYSPARALLEL
 #include "circt/Conversion/Passes.h.inc"
 
 std::unique_ptr<mlir::Pass> createExportYosys();
+std::unique_ptr<mlir::Pass> createExportYosysParallel();
 
 } // namespace circt
 
