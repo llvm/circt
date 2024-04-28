@@ -783,16 +783,9 @@ void ExportYosysParallelPass::runOnOperation() {
     results.emplace_back(op, fileName);
 
     {
-      // std::string mlirOutError;
-      // auto mlirFile = mlir::openOutputFile(fileName.str(), &mlirOutError);
-      // if (!mlirFile) {
-      //   op.emitError() << mlirOutError;
-      //   return signalPassFailure();
-      // }
       std::ofstream myfile(fileName.c_str());
       RTLIL_BACKEND::dump_design(myfile, design, false);
       myfile.close();
-      // mlirFile->keep();
     }
   }
   llvm::sys::SmartMutex<true> mutex;
