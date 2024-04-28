@@ -11,6 +11,7 @@ hw.module @zeroWidthPAssign(in %arg0 : i0, in %clk: i1, out out: i0) {
   %1 = sv.read_inout %0 : !hw.inout<i0>
   hw.output %1 : i0
 }
+
 // CHECK-LABEL: module zeroWidthLogic(
 // CHECK-NOT: reg
 hw.module @zeroWidthLogic(in %arg0 : i0, in %sel : i1, in %clk : i1, out out : i0) {
@@ -18,6 +19,14 @@ hw.module @zeroWidthLogic(in %arg0 : i0, in %sel : i1, in %clk : i1, out out : i
   %rr = sv.read_inout %r : !hw.inout<i0>
   %2 = comb.mux %sel, %rr, %arg0 : i0
   hw.output %2 : i0
+}
+
+// CHECK-LABEL: module zeroWidthArith(
+hw.module @zeroWidthArith(in %arg0 : i0, in %arg1 : i0, out out : i0) {
+  %add = comb.add %arg0, %arg1 : i0
+  %sub = comb.sub %arg0, %arg1 : i0
+  %and = comb.and %add, %sub : i0
+  hw.output %and : i0
 }
 
 // CHECK-LABEL: module Concat(
