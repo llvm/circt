@@ -291,10 +291,10 @@ class UnpackedStructType;
 class UnpackedType : public SVType {
 public:
   static bool classof(Type type) {
-    return type.isa<PackedType>() || type.isa<StringType>() ||
-           type.isa<ChandleType>() || type.isa<EventType>() ||
-           type.isa<RealType>() || type.isa<UnpackedIndirectType>() ||
-           type.isa<UnpackedDim>() || type.isa<UnpackedStructType>();
+    return llvm::isa<PackedType>(type) || llvm::isa<StringType>(type) ||
+           llvm::isa<ChandleType>(type) || llvm::isa<EventType>(type) ||
+           llvm::isa<RealType>(type) || llvm::isa<UnpackedIndirectType>(type) ||
+           llvm::isa<UnpackedDim>(type) || llvm::isa<UnpackedStructType>(type);
   }
 
   /// Resolve one level of name or type reference indirection.
@@ -423,9 +423,9 @@ class PackedStructType;
 class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
-    return type.isa<VoidType>() || type.isa<IntType>() ||
-           type.isa<PackedIndirectType>() || type.isa<PackedDim>() ||
-           type.isa<EnumType>() || type.isa<PackedStructType>();
+    return llvm::isa<VoidType>(type) || llvm::isa<IntType>(type) ||
+           llvm::isa<PackedIndirectType>(type) || llvm::isa<PackedDim>(type) ||
+           llvm::isa<EnumType>(type) || llvm::isa<PackedStructType>(type);
   }
 
   /// Resolve one level of name or type reference indirection.
@@ -680,7 +680,7 @@ protected:
 public:
   /// Get the type this indirection wraps.
   BaseTy getInner() const {
-    return detail::getIndirectTypeInner(this->impl).template cast<BaseTy>();
+    return cast<BaseTy>(detail::getIndirectTypeInner(this->impl));
   }
 
   /// Get the location in the source text where the indirection was generated.
@@ -749,7 +749,7 @@ public:
 class PackedIndirectType : public IndirectTypeBase<PackedType> {
 public:
   static bool classof(Type type) {
-    return type.isa<PackedNamedType>() || type.isa<PackedRefType>();
+    return llvm::isa<PackedNamedType>(type) || llvm::isa<PackedRefType>(type);
   }
 
 protected:
@@ -760,7 +760,8 @@ protected:
 class UnpackedIndirectType : public IndirectTypeBase<UnpackedType> {
 public:
   static bool classof(Type type) {
-    return type.isa<UnpackedNamedType>() || type.isa<UnpackedRefType>();
+    return llvm::isa<UnpackedNamedType>(type) ||
+           llvm::isa<UnpackedRefType>(type);
   }
 
 protected:
@@ -817,7 +818,7 @@ class PackedUnsizedDim;
 class PackedDim : public PackedType {
 public:
   static bool classof(Type type) {
-    return type.isa<PackedRangeDim>() || type.isa<PackedUnsizedDim>();
+    return llvm::isa<PackedRangeDim>(type) || llvm::isa<PackedUnsizedDim>(type);
   }
 
   /// Get the element type of the dimension. This is the `x` in `x[a:b]`.
@@ -902,9 +903,11 @@ class UnpackedQueueDim;
 class UnpackedDim : public UnpackedType {
 public:
   static bool classof(Type type) {
-    return type.isa<UnpackedUnsizedDim>() || type.isa<UnpackedArrayDim>() ||
-           type.isa<UnpackedRangeDim>() || type.isa<UnpackedAssocDim>() ||
-           type.isa<UnpackedQueueDim>();
+    return llvm::isa<UnpackedUnsizedDim>(type) ||
+           llvm::isa<UnpackedArrayDim>(type) ||
+           llvm::isa<UnpackedRangeDim>(type) ||
+           llvm::isa<UnpackedAssocDim>(type) ||
+           llvm::isa<UnpackedQueueDim>(type);
   }
 
   /// Get the element type of the dimension. This is the `x` in `x[a:b]`.

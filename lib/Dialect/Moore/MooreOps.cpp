@@ -123,7 +123,7 @@ LogicalResult ConstantOp::verify() {
 
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        const APInt &value) {
-  auto sbvt = type.cast<UnpackedType>().getSimpleBitVector();
+  auto sbvt = cast<UnpackedType>(type).getSimpleBitVector();
   assert(sbvt.size == value.getBitWidth() &&
          "APInt width must match simple bit vector's bit width");
   build(builder, result, type,
@@ -136,7 +136,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
 /// `int64_t`.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
-  auto sbvt = type.cast<UnpackedType>().getSimpleBitVector();
+  auto sbvt = cast<UnpackedType>(type).getSimpleBitVector();
   build(builder, result, type,
         APInt(sbvt.size, (uint64_t)value, /*isSigned=*/true));
 }
@@ -152,7 +152,7 @@ LogicalResult ConcatOp::inferReturnTypes(
   Domain domain = Domain::TwoValued;
   unsigned size = 0;
   for (auto operand : operands) {
-    auto type = operand.getType().cast<UnpackedType>().getSimpleBitVector();
+    auto type = cast<UnpackedType>(operand.getType()).getSimpleBitVector();
     if (type.domain == Domain::FourValued)
       domain = Domain::FourValued;
     size += type.size;
