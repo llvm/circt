@@ -46,7 +46,7 @@ namespace {
 /// Emit the builtin integer type to native C integer types.
 struct IntegerTypeEmitter : TypeEmissionPattern<IntegerType> {
   bool match(Type type) override {
-    if (!type.isa<IntegerType>())
+    if (!isa<IntegerType>(type))
       return false;
 
     unsigned bw = type.getIntOrFloatBitWidth();
@@ -100,7 +100,7 @@ struct IntegerAttrEmitter : AttrEmissionPattern<IntegerAttr> {
       p << (val.getBoolValue() ? "true" : "false");
     } else {
       bool isSigned = false;
-      if (auto integer = attr.getType().dyn_cast<IntegerType>())
+      if (auto integer = dyn_cast<IntegerType>(attr.getType()))
         isSigned = integer.isSigned();
 
       SmallString<128> strValue;
