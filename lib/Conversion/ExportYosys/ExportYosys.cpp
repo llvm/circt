@@ -275,10 +275,13 @@ struct YosysCircuitImporter {
   llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
 
   LogicalResult addModule(hw::HWModuleLike op, bool defineAsBlackBox = false) {
+    defineAsBlackBox |= isa<hw::HWModuleExternOp>(op);
+    if (design->has(getEscapedName(op.getModuleName()))) {
+      return success(defineAsBlackBox);
+    }
     auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
     if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
       return failure();
-    defineAsBlackBox |= isa<hw::HWModuleExternOp>(op);
     if (defineAsBlackBox)
       newModule->set_bool_attribute(ID::blackbox);
     converter.emplace_back(*this, newModule, op, defineAsBlackBox);
@@ -344,7 +347,7 @@ LogicalResult ModuleConverter::lowerBody() {
               LLVM_DEBUG(llvm::dbgs() << "Visiting " << *op << "\n");
               if (failed(visitOp(op))) {
                 op->emitError() << "lowering failed";
-                return WalkResult::interrupt();
+                // return WalkResult::interrupt();
               }
               LLVM_DEBUG(llvm::dbgs() << "Success \n");
             } else {
@@ -373,6 +376,9 @@ LogicalResult ModuleConverter::visitStmt(OutputOp op) {
 }
 
 LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
+  // Ignore bound.
+  if (op->hasAttr("doNotPrint") || op.getNumResults() == 0)
+    return success();
   auto it =
       circuitConverter.moduleMapping.find(op.getModuleNameAttr().getAttr());
   IdString id;
@@ -388,7 +394,7 @@ LogicalResult ModuleConverter::visitStmt(InstanceOp op) {
     id = it->second->name;
   }
 
-  auto *cell = rtlilModule->addCell(getEscapedName(op.getInstanceName()), id);
+  auto *cell = rtlilModule->addCell(getNewName(op.getInstanceName()), id);
   auto connect = [&](ArrayAttr names, auto values) -> LogicalResult {
     for (auto [portName, value] :
          llvm::zip(names.getAsRange<StringAttr>(), values)) {
@@ -696,31 +702,65 @@ void ExportYosysPass::runOnOperation() {
 }
 
 LogicalResult runYosys(Location loc, StringRef inputFilePath,
-                       llvm::Twine command) {
+                       std::string command) {
   auto yosysPath = llvm::sys::findProgramByName("yosys");
   if (!yosysPath)
     return mlir::emitError(loc) << yosysPath.getError().message();
-    SmallString<16> commandStr;
-  ArrayRef<StringRef> commands{"-p", command.toStringRef(commandStr)};
-  llvm::errs() << commandStr << "\n";
+  StringRef commands[] = {"-g", "-p", command, "-f", "rtlil", inputFilePath};
   auto exitCode = llvm::sys::ExecuteAndWait(yosysPath.get(), commands);
   return success(exitCode == 0);
+}
+
+static llvm::DenseSet<mlir::StringAttr> designSet(InstanceGraph &instanceGraph,
+                                                  StringAttr dut) {
+  auto dutModule = instanceGraph.lookup(dut);
+  if (!dutModule)
+    return {};
+  SmallVector<circt::igraph::InstanceGraphNode *, 8> worklist{dutModule};
+  DenseSet<StringAttr> visited;
+  while (!worklist.empty()) {
+    auto *mod = worklist.pop_back_val();
+    if (!mod)
+      continue;
+    if (!visited.insert(mod->getModule().getModuleNameAttr()).second)
+      continue;
+    for (auto inst : *mod) {
+      if (!inst)
+        continue;
+
+      igraph::InstanceOpInterface t = inst->getInstance();
+      assert(t);
+      if (t->hasAttr("doNotPrint") || t->getNumResults() == 0)
+        continue;
+      worklist.push_back(inst->getTarget());
+    }
+  }
+  return visited;
 }
 
 void ExportYosysParallelPass::runOnOperation() {
   // Set up yosys.
   init_yosys();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
+
+  auto dut = StringAttr::get(&getContext(), "DigitalTop");
+  auto designs = designSet(theInstanceGraph, dut);
+  auto isInDesign = [&](StringAttr mod) -> bool {
+    if (designs.empty())
+      return true;
+    return designs.count(mod);
+  };
   SmallVector<std::pair<hw::HWModuleOp, std::string>> results;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
     auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
     auto *design = theDesign.get();
     YosysCircuitImporter exporter(design, &theInstanceGraph);
-
+    auto *node = theInstanceGraph.lookup(op.getModuleNameAttr());
+    if (!isInDesign(op.getModuleNameAttr()))
+      continue;
     if (failed(exporter.addModule(op)))
       return signalPassFailure();
 
-    auto *node = theInstanceGraph.lookup(op.getModuleNameAttr());
     for (auto instance : *node) {
       auto mod = instance->getTarget()->getModule<hw::HWModuleLike>();
       if (failed(exporter.addModule(mod, true)))
@@ -729,35 +769,39 @@ void ExportYosysParallelPass::runOnOperation() {
 
     if (failed(exporter.run()))
       return signalPassFailure();
-    results.emplace_back(op, "");
-    std::ostringstream stream;
-    RTLIL_BACKEND::dump_design(stream, design, false);
-    results.back().second = std::move(stream.str());
+    std::error_code ec;
+    SmallString<128> fileName;
+    if ((ec = llvm::sys::fs::createTemporaryFile("yosys", "rtlil", fileName))) {
+      op.emitError() << ec.message();
+      return signalPassFailure();
+    }
+
+    results.emplace_back(op, fileName);
+
+    {
+      // std::string mlirOutError;
+      // auto mlirFile = mlir::openOutputFile(fileName.str(), &mlirOutError);
+      // if (!mlirFile) {
+      //   op.emitError() << mlirOutError;
+      //   return signalPassFailure();
+      // }
+      std::ofstream myfile(fileName.c_str());
+      RTLIL_BACKEND::dump_design(myfile, design, false);
+      myfile.close();
+      // mlirFile->keep();
+    }
   }
 
-  if (failed(mlir::failableParallelForEach(
-          &getContext(), results, [&](auto &pair) {
-            SmallString<128> fileName;
-            auto &[op, test] = pair;
+  if (failed(mlir::failableParallelForEachN(
+          &getContext(), 0, results.size(), [&](auto i) {
+            auto &[op, test] = results[i];
+            llvm::errs() << "Running " << i << " " << op.getModuleName() << " "
+                         << results.size() << "\n";
 
-            std::error_code ec;
-            if ((ec = llvm::sys::fs::createTemporaryFile("yosys", "rtlil",
-                                                         fileName))) {
-              op.emitError() << ec.message();
-              return failure();
-            }
-
-            std::string mlirOutError;
-            auto mlirFile = mlir::openOutputFile(fileName.str(), &mlirOutError);
-            if (!mlirFile) {
-              op.emitError() << mlirOutError;
-              return failure();
-            }
-            mlirFile->os() << pair.second;
-            mlirFile->keep();
-            return runYosys(op.getLoc(), fileName.str(),
-                     llvm::Twine("\"read_rtlil ") + fileName.str() +
-                         "; synth; write_verilog\"");
+            auto result = runYosys(op.getLoc(), test, "synth; write_verilog");
+            llvm::errs() << "Finished " << i << " " << op.getModuleName() << " "
+                         << results.size() << "\n";
+            return result;
           })))
     return signalPassFailure();
 }
