@@ -562,7 +562,7 @@ void FirRegLowering::initializeRegisterElements(Location loc,
                                                 OpBuilder &builder, Value reg,
                                                 Value randomSource,
                                                 unsigned &pos) {
-  auto type = reg.getType().cast<sv::InOutType>().getElementType();
+  auto type = cast<sv::InOutType>(reg.getType()).getElementType();
   if (auto intTy = hw::type_dyn_cast<IntegerType>(type)) {
     // Use randomSource[pos-1:pos-width] as a random value.
     pos -= intTy.getWidth();

@@ -68,7 +68,7 @@ getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
       if (!backwardSlice.contains(definingOp))
         for (auto newOperand : llvm::reverse(definingOp->getOperands()))
           worklist.push_back(newOperand);
-    } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
+    } else if (auto blockArg = dyn_cast<BlockArgument>(operand)) {
       Block *block = blockArg.getOwner();
       Operation *parentOp = block->getParentOp();
       // TODO: determine whether we want to recurse backward into the other
@@ -142,8 +142,8 @@ getBackwardSlice(hw::HWModuleOp module,
 
 static StringAttr getNameForPort(Value val,
                                  SmallVector<mlir::Attribute> modulePorts) {
-  if (auto bv = val.dyn_cast<BlockArgument>())
-    return modulePorts[bv.getArgNumber()].cast<StringAttr>();
+  if (auto bv = dyn_cast<BlockArgument>(val))
+    return cast<StringAttr>(modulePorts[bv.getArgNumber()]);
 
   if (auto *op = val.getDefiningOp()) {
     if (auto readinout = dyn_cast<ReadInOutOp>(op)) {
@@ -154,7 +154,7 @@ static StringAttr getNameForPort(Value val,
           return reg.getNameAttr();
       }
     } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-      auto index = val.cast<mlir::OpResult>().getResultNumber();
+      auto index = cast<mlir::OpResult>(val).getResultNumber();
       SmallString<64> portName = inst.getInstanceName();
       portName += ".";
       auto resultName = inst.getResultName(index);

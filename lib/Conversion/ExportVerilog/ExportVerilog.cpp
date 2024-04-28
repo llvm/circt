@@ -297,21 +297,21 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 // NOLINTBEGIN(misc-no-recursion)
 bool ExportVerilog::isZeroBitType(Type type) {
   type = getCanonicalType(type);
-  if (auto intType = type.dyn_cast<IntegerType>())
+  if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth() == 0;
-  if (auto inout = type.dyn_cast<hw::InOutType>())
+  if (auto inout = dyn_cast<hw::InOutType>(type))
     return isZeroBitType(inout.getElementType());
-  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
+  if (auto uarray = dyn_cast<hw::UnpackedArrayType>(type))
     return uarray.getNumElements() == 0 ||
            isZeroBitType(uarray.getElementType());
-  if (auto array = type.dyn_cast<hw::ArrayType>())
+  if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements() == 0 || isZeroBitType(array.getElementType());
-  if (auto structType = type.dyn_cast<hw::StructType>())
+  if (auto structType = dyn_cast<hw::StructType>(type))
     return llvm::all_of(structType.getElements(),
                         [](auto elem) { return isZeroBitType(elem.type); });
-  if (auto enumType = type.dyn_cast<hw::EnumType>())
+  if (auto enumType = dyn_cast<hw::EnumType>(type))
     return enumType.getFields().empty();
-  if (auto unionType = type.dyn_cast<hw::UnionType>())
+  if (auto unionType = dyn_cast<hw::UnionType>(type))
     return hw::getBitWidth(unionType) == 0;
 
   // We have an open type system, so assume it is ok.
@@ -353,21 +353,21 @@ static StringRef getVerilogDeclWord(Operation *op,
     // structs. In this case, according to spec section 6.8, the "reg" prefix
     // should be left off.
     auto elementType =
-        op->getResult(0).getType().cast<InOutType>().getElementType();
-    if (elementType.isa<StructType>())
+        cast<InOutType>(op->getResult(0).getType()).getElementType();
+    if (isa<StructType>(elementType))
       return "";
-    if (elementType.isa<UnionType>())
+    if (isa<UnionType>(elementType))
       return "";
-    if (elementType.isa<EnumType>())
+    if (isa<EnumType>(elementType))
       return "";
-    if (auto innerType = elementType.dyn_cast<ArrayType>()) {
-      while (innerType.getElementType().isa<ArrayType>())
-        innerType = innerType.getElementType().cast<ArrayType>();
-      if (innerType.getElementType().isa<StructType>() ||
-          innerType.getElementType().isa<TypeAliasType>())
+    if (auto innerType = dyn_cast<ArrayType>(elementType)) {
+      while (isa<ArrayType>(innerType.getElementType()))
+        innerType = cast<ArrayType>(innerType.getElementType());
+      if (isa<StructType>(innerType.getElementType()) ||
+          isa<TypeAliasType>(innerType.getElementType()))
         return "";
     }
-    if (elementType.isa<TypeAliasType>())
+    if (isa<TypeAliasType>(elementType))
       return "";
 
     return "reg";
@@ -691,7 +691,7 @@ private:
       flcLocs.reserve(locationSet.size());
       otherLocs.reserve(locationSet.size());
       for (Attribute loc : locationSet) {
-        if (auto flcLoc = loc.dyn_cast<FileLineColLoc>())
+        if (auto flcLoc = dyn_cast<FileLineColLoc>(loc))
           flcLocs.push_back(flcLoc);
         else
           otherLocs.push_back(loc);
@@ -746,7 +746,7 @@ private:
 /// result of this expression.  It is conservatively correct to return false.
 static bool isOkToBitSelectFrom(Value v) {
   // Module ports are always ok to bit select from.
-  if (v.isa<BlockArgument>())
+  if (isa<BlockArgument>(v))
     return true;
 
   // Read_inout is valid to inline for bit-select. See `select` syntax on
@@ -1011,7 +1011,7 @@ StringRef getVerilogValueName(Value val) {
   if (auto *op = val.getDefiningOp())
     return getSymOpName(op);
 
-  if (auto port = val.dyn_cast<BlockArgument>()) {
+  if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
     if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
       return forOp->getAttrOfType<StringAttr>("hw.verilogName");
@@ -1286,7 +1286,7 @@ void EmitterBase::emitTextWithSubstitutions(
         unsigned symOpNum = operandNo - op->getNumOperands();
         auto sym = symAttrs[symOpNum];
         StringRef symVerilogName;
-        if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>()) {
+        if (auto fsym = dyn_cast<FlatSymbolRefAttr>(sym)) {
           if (auto *symOp = state.symbolCache.getDefinition(fsym)) {
             if (auto globalRef = dyn_cast<HierPathOp>(symOp)) {
               auto namepath = globalRef.getNamepathAttr().getValue();
@@ -1304,7 +1304,7 @@ void EmitterBase::emitTextWithSubstitutions(
               symVerilogName = namify(sym, symOp);
             }
           }
-        } else if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+        } else if (auto isym = dyn_cast<InnerRefAttr>(sym)) {
           auto symOp = state.symbolCache.getInnerDefinition(isym.getModule(),
                                                             isym.getName());
           symVerilogName = namify(sym, symOp);
@@ -1403,7 +1403,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
     return inferStructuralNameForTemporary(read.getInput());
 
   // Module ports carry names!
-  if (auto blockArg = expr.dyn_cast<BlockArgument>()) {
+  if (auto blockArg = dyn_cast<BlockArgument>(expr)) {
     auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
     StringRef name = getPortVerilogName(moduleOp, blockArg.getArgNumber());
     result = StringAttr::get(expr.getContext(), name);
@@ -1441,7 +1441,7 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
             if (auto operandName =
                     inferStructuralNameForTemporary(extract.getInput())) {
               unsigned numBits =
-                  extract.getType().cast<IntegerType>().getWidth();
+                  cast<IntegerType>(extract.getType()).getWidth();
               if (numBits == 1)
                 result = StringAttr::get(extract.getContext(),
                                          operandName.strref() + "_" +
@@ -1573,7 +1573,7 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
     os << "<<invalid type>>";
     return;
   }
-  if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
+  if (auto intAttr = dyn_cast<IntegerAttr>(width)) {
     if (intAttr.getValue().isZero()) {
       os << "/*Zero Width*/";
     } else {
@@ -1590,7 +1590,7 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
 
   // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
   // attribute so it gets printed in canonical form.
-  auto typedAttr = width.dyn_cast<TypedAttr>();
+  auto typedAttr = dyn_cast<TypedAttr>(width);
   if (!typedAttr) {
     mlir::emitError(loc, "untyped dimension attribute ") << width;
     return;
@@ -1847,8 +1847,8 @@ SubExprInfo
 ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
                                VerilogPrecedence parenthesizeIfLooserThan,
                                function_ref<InFlightDiagnostic()> emitError) {
-  if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-    IntegerType intTy = intAttr.getType().cast<IntegerType>();
+  if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    IntegerType intTy = cast<IntegerType>(intAttr.getType());
     APInt value = intAttr.getValue();
 
     // We omit the width specifier if the value is <= 32-bits in size, which
@@ -1867,22 +1867,22 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     value.print(os, intTy.isSigned());
     return {Symbol, intTy.isSigned() ? IsSigned : IsUnsigned};
   }
-  if (auto strAttr = value.dyn_cast<StringAttr>()) {
+  if (auto strAttr = dyn_cast<StringAttr>(value)) {
     os << '"';
     os.write_escaped(strAttr.getValue());
     os << '"';
     return {Symbol, IsUnsigned};
   }
-  if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+  if (auto fpAttr = dyn_cast<FloatAttr>(value)) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
     return {Symbol, IsUnsigned};
   }
-  if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
+  if (auto verbatimParam = dyn_cast<ParamVerbatimAttr>(value)) {
     os << verbatimParam.getValue().getValue();
     return {Symbol, IsUnsigned};
   }
-  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
+  if (auto parameterRef = dyn_cast<ParamDeclRefAttr>(value)) {
     // Get the name of this parameter (in case it got renamed).
     os << state.globalNames.getParameterVerilogName(currentModuleOp,
                                                     parameterRef.getName());
@@ -1892,7 +1892,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
   }
 
   // Handle nested expressions.
-  auto expr = value.dyn_cast<ParamExprAttr>();
+  auto expr = dyn_cast<ParamExprAttr>(value);
   if (!expr) {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
     emitError() << " = " << value;
@@ -2023,7 +2023,7 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     // Handle the special case of (a + b + -42) as (a + b - 42).
     // TODO: Also handle (a + b + x*-1).
     if (expr.getOpcode() == PEO::Add) {
-      if (auto integer = op.dyn_cast<IntegerAttr>()) {
+      if (auto integer = dyn_cast<IntegerAttr>(op)) {
         const APInt &value = integer.getValue();
         if (value.isNegative() && !value.isMinSignedValue()) {
           os << " - ";
@@ -2545,7 +2545,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   bool bitCastAdded = false;
   if (state.options.explicitBitcast && isa<AddOp, MulOp, SubOp>(op))
     if (auto inType =
-            (op->getResult(0).getType().dyn_cast_or_null<IntegerType>())) {
+            dyn_cast_or_null<IntegerType>(op->getResult(0).getType())) {
       ps.addAsString(inType.getWidth());
       ps << "'(" << PP::ibox0;
       bitCastAdded = true;
@@ -2670,7 +2670,7 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
     emitError(op, "SV attributes emission is unimplemented for the op");
 
   unsigned loBit = op.getLowBit();
-  unsigned hiBit = loBit + op.getType().cast<IntegerType>().getWidth() - 1;
+  unsigned hiBit = loBit + cast<IntegerType>(op.getType()).getWidth() - 1;
 
   auto x = emitSubExpr(op.getInput(), LowestPrecedence);
   assert((x.precedence == Symbol ||
@@ -2735,7 +2735,7 @@ SubExprInfo ExprEmitter::visitSV(XMROp op) {
   if (op.getIsRooted())
     ps << "$root.";
   for (auto s : op.getPath())
-    ps << PPExtString(s.cast<StringAttr>().getValue()) << ".";
+    ps << PPExtString(cast<StringAttr>(s).getValue()) << ".";
   ps << PPExtString(op.getTerminal());
   return {Selection, IsUnsigned};
 }
@@ -2880,7 +2880,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
     return {Unary, IsUnsigned};
   }
 
-  return printConstantScalar(value, op.getType().cast<IntegerType>());
+  return printConstantScalar(value, cast<IntegerType>(op.getType()));
 }
 
 void ExprEmitter::printConstantArray(ArrayAttr elementValues, Type elementType,
@@ -2957,7 +2957,7 @@ void ExprEmitter::printConstantAggregate(Attribute attr, Type type,
                                isAssignmentLikeContext, op);
 
   if (auto intType = hw::type_dyn_cast<IntegerType>(type)) {
-    auto value = attr.cast<IntegerAttr>().getValue();
+    auto value = cast<IntegerAttr>(attr).getValue();
     printConstantScalar(value, intType);
     return;
   }
@@ -4382,7 +4382,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
       Attribute patternAttr = patterns[i];
 
       startStatement();
-      if (!patternAttr.isa<mlir::TypedAttr>())
+      if (!isa<mlir::TypedAttr>(patternAttr))
         ps << "default";
       else
         ps.invokeWithStringOS([&](auto &os) {
@@ -4392,7 +4392,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
         });
 
       StringRef legalName =
-          legalizeName(caseNames[i].cast<StringAttr>().getValue(), nextGenIds,
+          legalizeName(cast<StringAttr>(caseNames[i]).getValue(), nextGenIds,
                        options.caseInsensitiveKeywords);
       ps << ": begin: " << PPExtString(legalName);
       setPendingNewline();
@@ -4789,7 +4789,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
     llvm::interleave(
         op.getEvents(),
         [&](Attribute eventAttr) {
-          auto event = sv::EventControl(eventAttr.cast<IntegerAttr>().getInt());
+          auto event = sv::EventControl(cast<IntegerAttr>(eventAttr).getInt());
           comment += stringifyEventControl(event);
         },
         [&]() { comment += ", "; });
@@ -4939,7 +4939,7 @@ LogicalResult StmtEmitter::visitSV(CaseOp op) {
           })
           .Case<CaseEnumPattern>([&](auto enumPattern) {
             ps << PPExtString(emitter.fieldNameResolver.getEnumFieldName(
-                enumPattern->attr().template cast<hw::EnumFieldAttr>()));
+                cast<hw::EnumFieldAttr>(enumPattern->attr())));
           })
           .Case<CaseDefaultPattern>([&](auto) { ps << "default"; })
           .Default([&](auto) { assert(false && "unhandled case pattern"); });
@@ -4992,8 +4992,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     for (auto params :
          llvm::zip(op.getParameters(),
                    moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
-      auto param = std::get<0>(params).cast<ParamDeclAttr>();
-      auto modParam = std::get<1>(params).cast<ParamDeclAttr>();
+      auto param = cast<ParamDeclAttr>(std::get<0>(params));
+      auto modParam = cast<ParamDeclAttr>(std::get<1>(params));
       // Ignore values that line up with their default.
       if (param.getValue() == modParam.getValue())
         continue;
@@ -5230,7 +5230,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 
   // TODO: revisit, better breaks/grouping.
   llvm::interleaveComma(op.getPorts(), ps, [&](const Attribute &portAttr) {
-    auto port = portAttr.cast<ModportStructAttr>();
+    auto port = cast<ModportStructAttr>(portAttr);
     ps << PPExtString(stringifyEnum(port.getDirection().getValue())) << " ";
     auto *signalDecl = state.symbolCache.getDefinition(port.getSignal());
     ps << PPExtString(getSymOpName(signalDecl));
@@ -5266,7 +5266,7 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
   if (decl.getArgs()) {
     ps << "(";
     llvm::interleaveComma(*decl.getArgs(), ps, [&](const Attribute &name) {
-      ps << name.cast<StringAttr>();
+      ps << cast<StringAttr>(name);
     });
     ps << ")";
   }
@@ -5786,14 +5786,14 @@ void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
     // If there is a default value like "32" then just print without type at
     // all.
     if (defaultValue) {
-      if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
+      if (auto intAttr = dyn_cast<IntegerAttr>(defaultValue))
         if (intAttr.getValue().getBitWidth() == 32)
           return;
-      if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
+      if (auto fpAttr = dyn_cast<FloatAttr>(defaultValue))
         if (fpAttr.getType().isF64())
           return;
     }
-    if (type.isa<NoneType>())
+    if (isa<NoneType>(type))
       return;
 
     // Classic Verilog parser don't allow a type in the parameter declaration.
@@ -5817,7 +5817,7 @@ void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
   size_t maxTypeWidth = 0;
   SmallString<8> scratch;
   for (auto param : params) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
+    auto paramAttr = cast<ParamDeclAttr>(param);
     // Measure the type length by printing it to a temporary string.
     printParamType(paramAttr.getType(), paramAttr.getValue(), scratch);
     maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
@@ -5832,7 +5832,7 @@ void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
       llvm::interleave(
           params,
           [&](Attribute param) {
-            auto paramAttr = param.cast<ParamDeclAttr>();
+            auto paramAttr = cast<ParamDeclAttr>(param);
             auto defaultValue = paramAttr.getValue(); // may be null if absent.
             ps << "parameter ";
             printParamType(paramAttr.getType(), defaultValue, scratch);
@@ -6188,7 +6188,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       if (!p.attrs || p.attrs.empty())
         continue;
       for (NamedAttribute portAttr : p.attrs) {
-        if (auto sym = portAttr.getValue().dyn_cast<InnerSymAttr>()) {
+        if (auto sym = dyn_cast<InnerSymAttr>(portAttr.getValue())) {
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getSymName(),
                                     moduleOp, i);
         }
