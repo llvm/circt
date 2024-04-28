@@ -20,9 +20,12 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Program.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 #include "kernel/rtlil.h"
 #include "kernel/yosys.h"
@@ -181,10 +184,11 @@ struct ModuleConverter
       return RTLIL::Const(attr.getValue().getZExtValue(),
                           attr.getValue().getBitWidth());
 
+    // TODO: Use more efficient encoding.
     std::vector<bool> result(width, false);
-    for (size_t i = 0; i < width; i++) {
+    for (size_t i = 0; i < width; ++i)
       result[i] = attr.getValue()[i];
-    }
+
     return RTLIL::Const(result);
   }
 
@@ -253,9 +257,10 @@ struct ModuleConverter
     return setLowering(op->getResult(0),
                        fn(getNewName(), lhs.value(), rhs.value()));
   }
+
   template <typename UnaryFn>
   LogicalResult emitUnaryOp(Operation *op, UnaryFn fn) {
-    assert(op->getNumOperands() == 1 && "only expect binary op");
+    assert(op->getNumOperands() == 1 && "only expect unary op");
     auto input = getValue(op->getOperand(0));
     if (failed(input))
       return failure();
@@ -661,11 +666,16 @@ LogicalResult ModuleConverter::visitSeq(seq::ToClockOp op) {
   return setLowering(op, result.value());
 }
 
-void ExportYosysPass::runOnOperation() {
+static void init_yosys() {
   // Set up yosys.
+  Yosys::log_streams.clear();
   Yosys::log_streams.push_back(&std::cerr);
   Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
+}
+
+void ExportYosysPass::runOnOperation() {
+  init_yosys();
   auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
   auto *design = theDesign.get();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
@@ -685,12 +695,23 @@ void ExportYosysPass::runOnOperation() {
   // RTLIL_BACKEND::dump_design(std::cout, design, false);
 }
 
+LogicalResult runYosys(Location loc, StringRef inputFilePath,
+                       llvm::Twine command) {
+  auto yosysPath = llvm::sys::findProgramByName("yosys");
+  if (!yosysPath)
+    return mlir::emitError(loc) << yosysPath.getError().message();
+    SmallString<16> commandStr;
+  ArrayRef<StringRef> commands{"-p", command.toStringRef(commandStr)};
+  llvm::errs() << commandStr << "\n";
+  auto exitCode = llvm::sys::ExecuteAndWait(yosysPath.get(), commands);
+  return success(exitCode == 0);
+}
+
 void ExportYosysParallelPass::runOnOperation() {
   // Set up yosys.
-  Yosys::log_streams.push_back(&std::cerr);
-  Yosys::log_error_stderr = true;
-  Yosys::yosys_setup();
+  init_yosys();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
+  SmallVector<std::pair<hw::HWModuleOp, std::string>> results;
   for (auto op : getOperation().getOps<hw::HWModuleOp>()) {
     auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
     auto *design = theDesign.get();
@@ -708,13 +729,38 @@ void ExportYosysParallelPass::runOnOperation() {
 
     if (failed(exporter.run()))
       return signalPassFailure();
-    auto t = llvm::sys::fs::TempFile::create("nya");
-    if (!t) {
-      return signalPassFailure();
-    }
-    auto &file = t.get();
-    RTLIL_BACKEND::dump_design(std::cout, design, false);
+    results.emplace_back(op, "");
+    std::ostringstream stream;
+    RTLIL_BACKEND::dump_design(stream, design, false);
+    results.back().second = std::move(stream.str());
   }
+
+  if (failed(mlir::failableParallelForEach(
+          &getContext(), results, [&](auto &pair) {
+            SmallString<128> fileName;
+            auto &[op, test] = pair;
+
+            std::error_code ec;
+            if ((ec = llvm::sys::fs::createTemporaryFile("yosys", "rtlil",
+                                                         fileName))) {
+              op.emitError() << ec.message();
+              return failure();
+            }
+
+            std::string mlirOutError;
+            auto mlirFile = mlir::openOutputFile(fileName.str(), &mlirOutError);
+            if (!mlirFile) {
+              op.emitError() << mlirOutError;
+              return failure();
+            }
+            mlirFile->os() << pair.second;
+            mlirFile->keep();
+            runYosys(op.getLoc(), fileName.str(),
+                     llvm::Twine("read_rtlil ") + fileName.str() +
+                         "; synth; write_verilog");
+            return success();
+          })))
+    return signalPassFailure();
 }
 
 //===----------------------------------------------------------------------===//
