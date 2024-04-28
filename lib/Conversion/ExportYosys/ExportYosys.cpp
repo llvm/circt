@@ -755,10 +755,9 @@ void ExportYosysParallelPass::runOnOperation() {
             }
             mlirFile->os() << pair.second;
             mlirFile->keep();
-            runYosys(op.getLoc(), fileName.str(),
-                     llvm::Twine("read_rtlil ") + fileName.str() +
-                         "; synth; write_verilog");
-            return success();
+            return runYosys(op.getLoc(), fileName.str(),
+                     llvm::Twine("\"read_rtlil ") + fileName.str() +
+                         "; synth; write_verilog\"");
           })))
     return signalPassFailure();
 }
