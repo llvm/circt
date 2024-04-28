@@ -364,7 +364,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         if (auto instOp = dyn_cast<InstanceOp>(destOp)) {
           auto modOpIt = createdInstances.find(instOp);
           if (modOpIt != createdInstances.end()) {
-            auto portNum = port.cast<OpResult>().getResultNumber();
+            auto portNum = cast<OpResult>(port).getResultNumber();
             loc = modOpIt->getSecond().getPortLocation(portNum);
           }
         }
@@ -474,7 +474,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         // Create an output port.
         if (!dstInLayerBlock) {
           createOutputPort(dst, src);
-          if (!dst.getType().isa<RefType>())
+          if (!isa<RefType>(dst.getType()))
             connect.erase();
           continue;
         }
@@ -586,7 +586,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
               newModule.getPortLocationAttr(portNum), src);
         builder.create<StrictConnectOp>(newModule.getPortLocationAttr(portNum),
                                         instanceOp.getResult(portNum), src);
-      } else if (instanceOp.getResult(portNum).getType().isa<RefType>() &&
+      } else if (isa<RefType>(instanceOp.getResult(portNum).getType()) &&
                  connectValues[portNum].kind == ConnectKind::Ref)
         builder.create<RefDefineOp>(getPortLoc(connectValues[portNum].value),
                                     connectValues[portNum].value,

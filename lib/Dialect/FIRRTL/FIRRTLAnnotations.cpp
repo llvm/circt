@@ -412,7 +412,7 @@ bool AnnotationSet::removeAnnotations(Operation *op, StringRef className) {
 bool AnnotationSet::removePortAnnotations(
     Operation *module,
     llvm::function_ref<bool(unsigned, Annotation)> predicate) {
-  auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
+  auto ports = dyn_cast_or_null<ArrayAttr>(module->getAttr("portAnnotations"));
   if (!ports || ports.empty())
     return false;
 

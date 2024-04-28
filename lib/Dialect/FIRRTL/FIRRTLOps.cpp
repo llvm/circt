@@ -1118,9 +1118,9 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (!portSyms[i].cast<hw::InnerSymAttr>().empty()) {
+      if (!cast<hw::InnerSymAttr>(portSyms[i]).empty()) {
         p << " sym ";
-        portSyms[i].cast<hw::InnerSymAttr>().print(p);
+        cast<hw::InnerSymAttr>(portSyms[i]).print(p);
       }
     }
 
@@ -2521,20 +2521,20 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
   auto moduleNames = getModuleNamesAttr();
   auto caseNames = getCaseNamesAttr();
 
-  p.printSymbolName(moduleNames[0].cast<FlatSymbolRefAttr>().getValue());
+  p.printSymbolName(cast<FlatSymbolRefAttr>(moduleNames[0]).getValue());
 
   p << " alternatives ";
   p.printSymbolName(
-      caseNames[0].cast<SymbolRefAttr>().getRootReference().getValue());
+      cast<SymbolRefAttr>(caseNames[0]).getRootReference().getValue());
   p << " { ";
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
     if (i != 0)
       p << ", ";
 
-    auto symbol = caseNames[i].cast<SymbolRefAttr>();
+    auto symbol = cast<SymbolRefAttr>(caseNames[i]);
     p.printSymbolName(symbol.getNestedReferences()[0].getValue());
     p << " -> ";
-    p.printSymbolName(moduleNames[i + 1].cast<FlatSymbolRefAttr>().getValue());
+    p.printSymbolName(cast<FlatSymbolRefAttr>(moduleNames[i + 1]).getValue());
   }
 
   p << " } ";
@@ -2651,7 +2651,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
 void InstanceChoiceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   StringRef base = getName().empty() ? "inst" : getName();
   for (auto [result, name] : llvm::zip(getResults(), getPortNames()))
-    setNameFn(result, (base + "_" + name.cast<StringAttr>().getValue()).str());
+    setNameFn(result, (base + "_" + cast<StringAttr>(name).getValue()).str());
 }
 
 LogicalResult InstanceChoiceOp::verify() {
@@ -2685,13 +2685,13 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
   for (auto moduleName : getModuleNamesAttr()) {
     if (failed(instance_like_impl::verifyReferencedModule(
-            *this, symbolTable, moduleName.cast<FlatSymbolRefAttr>())))
+            *this, symbolTable, cast<FlatSymbolRefAttr>(moduleName))))
       return failure();
   }
 
-  auto root = caseNames[0].cast<SymbolRefAttr>().getRootReference();
+  auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
-    auto ref = caseNames[i].cast<SymbolRefAttr>();
+    auto ref = cast<SymbolRefAttr>(caseNames[i]);
     auto refRoot = ref.getRootReference();
     if (ref.getRootReference() != root)
       return emitOpError() << "case " << ref
@@ -2713,9 +2713,9 @@ FlatSymbolRefAttr
 InstanceChoiceOp::getTargetOrDefaultAttr(OptionCaseOp option) {
   auto caseNames = getCaseNamesAttr();
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
-    StringAttr caseSym = caseNames[i].cast<SymbolRefAttr>().getLeafReference();
+    StringAttr caseSym = cast<SymbolRefAttr>(caseNames[i]).getLeafReference();
     if (caseSym == option.getSymName())
-      return getModuleNamesAttr()[i + 1].cast<FlatSymbolRefAttr>();
+      return cast<FlatSymbolRefAttr>(getModuleNamesAttr()[i + 1]);
   }
   return getDefaultTargetAttr();
 }
@@ -2726,8 +2726,8 @@ InstanceChoiceOp::getTargetChoices() {
   auto moduleNames = getModuleNamesAttr();
   SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> choices;
   for (size_t i = 0; i < caseNames.size(); ++i) {
-    choices.emplace_back(caseNames[i].cast<SymbolRefAttr>(),
-                         moduleNames[i + 1].cast<FlatSymbolRefAttr>());
+    choices.emplace_back(cast<SymbolRefAttr>(caseNames[i]),
+                         cast<FlatSymbolRefAttr>(moduleNames[i + 1]));
   }
 
   return choices;
@@ -5453,11 +5453,11 @@ LogicalResult HWStructCastOp::verify() {
   BundleType bundleType;
   hw::StructType structType;
   if ((bundleType = type_dyn_cast<BundleType>(getOperand().getType()))) {
-    structType = getType().dyn_cast<hw::StructType>();
+    structType = dyn_cast<hw::StructType>(getType());
     if (!structType)
       return emitError("result type must be a struct");
   } else if ((bundleType = type_dyn_cast<BundleType>(getType()))) {
-    structType = getOperand().getType().dyn_cast<hw::StructType>();
+    structType = dyn_cast<hw::StructType>(getOperand().getType());
     if (!structType)
       return emitError("operand type must be a struct");
   } else {

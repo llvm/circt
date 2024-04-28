@@ -617,7 +617,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           module.getPortDirection(portIndex) != Direction::Out)
         continue;
       auto portValue =
-          module.getArgument(portIndex).cast<mlir::TypedValue<RefType>>();
+          cast<mlir::TypedValue<RefType>>(module.getArgument(portIndex));
       mlir::FlatSymbolRefAttr ref;
       SmallString<128> stringLeaf;
       if (failed(resolveReferencePath(portValue, declBuilder, ref, stringLeaf)))

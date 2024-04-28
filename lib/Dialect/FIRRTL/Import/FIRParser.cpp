@@ -3249,7 +3249,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
 
   // Figure out what we have, and parse indexing.
   Value result;
-  if (auto unbundledId = symtabEntry.dyn_cast<UnbundledID>()) {
+  if (auto unbundledId = dyn_cast<UnbundledID>(symtabEntry)) {
     // This means we have an instance.
     auto &ubEntry = moduleContext.getUnbundledEntry(unbundledId - 1);
 
