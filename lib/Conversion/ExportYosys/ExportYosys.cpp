@@ -786,7 +786,7 @@ LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {
   auto width = builder.getI32IntegerAttr(firmem.getType().getWidth());
   SmallVector<std::pair<llvm::StringRef, Attribute>> parameters{
       {"ABITS", widthConst},
-      {"CLK_ENABLE", op.getEnable()? trueConst: falseConst},
+      {"CLK_ENABLE", op.getEnable() ? trueConst : falseConst},
       {"CLK_POLARITY", falseConst},
       // {"TRANSPARENCY_MASK", falseConst},
       {"TRANSPARENT", falseConst},
@@ -893,9 +893,12 @@ void ExportYosysParallelPass::runOnOperation() {
   // Set up yosys.
   init_yosys();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
+  auto &table = getAnalysis<mlir::SymbolTable>();
 
   auto dut = StringAttr::get(&getContext(), "DigitalTop");
-  auto designs = designSet(theInstanceGraph, dut);
+  DenseSet<StringAttr> designs;
+  if (table.lookup(dut))
+    designs = designSet(theInstanceGraph, dut);
   auto isInDesign = [&](StringAttr mod) -> bool {
     if (designs.empty())
       return true;
@@ -946,8 +949,7 @@ void ExportYosysParallelPass::runOnOperation() {
                            << " " << results.size() << "\n";
             }
 
-            auto result =
-                runYosys(op.getLoc(), test, "synth; write_verilog");
+            auto result = runYosys(op.getLoc(), test, "synth; write_verilog");
 
             {
               llvm::sys::SmartScopedLock<true> lock(mutex);
