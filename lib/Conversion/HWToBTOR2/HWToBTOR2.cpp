@@ -52,7 +52,7 @@ private:
   raw_ostream &os;
 
   // Create a counter that attributes a unique id to each generated btor2 line
-  size_t lid = 1;          // btor2 line identifiers usually start at 1
+  size_t lid = 1; // btor2 line identifiers usually start at 1
   size_t nclocks = 0;
 
   // Create maps to keep track of lid associations
@@ -770,12 +770,38 @@ public:
     // Genrate the bad btor2 intruction
     genBad(op);
   }
+
   // Assumptions are converted to a btor2 constraint instruction
   void visitSV(sv::AssumeOp op) {
     // Extract the expression that we want our constraint to be about
     Value expr = op.getExpression();
     genConstraint(expr);
   }
+
+  // Assertions are sometimes encoded using a combination of fatal and error, we
+  // thus need to find the parenting condition and generate a bad statement
+  // using that
+  void visitEncodedAssert(Operation *op) {
+    genSort("bitvec", 1);
+
+    // Fatal simply fails, so we need to find in which case we are failing
+    // For some reason Chisel assertions are sometimes encoded using a fatal and
+    // an error
+    if (auto ifop = dyn_cast<sv::IfOp>(((Operation *)op)->getParentOp())) {
+      Value cond = ifop.getOperand();
+      // Generate the expression inversion
+      genUnaryOp(op, cond, "not", 1);
+
+      // Genrate the bad btor2 intruction
+      genBad(op);
+    }
+  }
+
+  // Given an sv.fatal, sv.error, or sv.exit look for a parenting sv.if and use
+  // that condition in a bad statement
+  void visitSV(sv::FatalOp op) { visitEncodedAssert(op); }
+  void visitSV(sv::ErrorOp op) { visitEncodedAssert(op); }
+  void visitSV(sv::ExitOp op) { visitEncodedAssert(op); }
 
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
@@ -815,7 +841,8 @@ public:
     StringRef regName = reg.getName().value();
     int64_t w = requireSort(reg.getType());
 
-    // Check for initial values which must be emitted before the state in btor2
+    // Check for initial values which must be emitted before the state in
+    // btor2
     Value pov = reg.getPowerOnValue();
     if (pov) {
       // Check that the powerOn value is a non-null constant
@@ -856,8 +883,9 @@ public:
     // failure)
     TypeSwitch<Operation *, void>(op)
         // All explicitly ignored operations are defined here
-        .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
-              sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
+        .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::MacroRefExprOp,
+              sv::MacroRefExprSEOp, sv::VerbatimOp, sv::VerbatimExprOp,
+              sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
               sv::AlwaysFFOp, seq::FromClockOp, hw::OutputOp, hw::HWModuleOp>(
             [&](auto expr) { ignore(op); })
