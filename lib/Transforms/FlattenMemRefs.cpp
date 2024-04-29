@@ -200,11 +200,13 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    auto newCallOp = rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
+    auto newCallOp = rewriter.create<func::CallOp>(
+        op.getLoc(), adaptor.getCallee(), convResTypes, adaptor.getOperands());
 
-    if (!rewriteFunctions)
+    if (!rewriteFunctions) {
+      rewriter.replaceOp(op, newCallOp);
       return success();
+    }
 
     // Override any definition corresponding to the updated signature.
     // It is up to users of this pass to define how these rewritten functions
@@ -221,6 +223,7 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
       newFuncOp =
           rewriter.create<func::FuncOp>(op.getLoc(), op.getCallee(), funcType);
     newFuncOp.setVisibility(SymbolTable::Visibility::Private);
+    rewriter.replaceOp(op, newCallOp);
 
     return success();
   }
