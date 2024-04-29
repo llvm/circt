@@ -22,6 +22,10 @@ hw.module @zeroWidthLogic(in %arg0 : i0, in %sel : i1, in %clk : i1, out out : i
 }
 
 // CHECK-LABEL: module zeroWidthArith(
+// CHECK-NEXT:    // input  /*Zero Width*/ arg0,
+// CHECK-NEXT:    //                       arg1,
+// CHECK-NEXT:    // output /*Zero Width*/ out
+// CHECK-NEXT:  );
 hw.module @zeroWidthArith(in %arg0 : i0, in %arg1 : i0, out out : i0) {
   %add = comb.add %arg0, %arg1 : i0
   %sub = comb.sub %arg0, %arg1 : i0
