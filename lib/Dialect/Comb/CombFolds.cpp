@@ -88,7 +88,7 @@ template <typename NewOpTy, typename OldOpTy, typename... Args>
 static NewOpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
                                              OldOpTy op, Args &&...args) {
   auto newOp =
-      rewriter.replaceOpWithNewOp<NewOpTy>(op, std::forward<Args>(args)...);
+      rewriter.create<NewOpTy>(op.getLoc(), std::forward<Args>(args)...);
 
   if constexpr (std::is_same<NewOpTy, OldOpTy>::value) {
     rewriter.modifyOpInPlace(
@@ -99,6 +99,7 @@ static NewOpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
       rewriter.modifyOpInPlace(newOp,
                                [&] { newOp->setAttr("sv.namehint", name); });
   }
+  rewriter.replaceOp(op, newOp);
 
   return newOp;
 }
