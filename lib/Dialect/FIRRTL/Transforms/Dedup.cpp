@@ -1294,7 +1294,7 @@ private:
       // If this fromPort doesn't have a symbol, move on to the next one.
       if (!fromPortSyms[portNo])
         continue;
-      auto fromSym = fromPortSyms[portNo].cast<hw::InnerSymAttr>();
+      auto fromSym = cast<hw::InnerSymAttr>(fromPortSyms[portNo]);
 
       // If this toPort doesn't have a symbol, assign one.
       hw::InnerSymAttr toSym;
@@ -1308,7 +1308,7 @@ private:
             StringAttr::get(context, moduleNamespace.newName(symName)));
         newPortSyms[portNo] = toSym;
       } else
-        toSym = newPortSyms[portNo].cast<hw::InnerSymAttr>();
+        toSym = cast<hw::InnerSymAttr>(newPortSyms[portNo]);
 
       // Record the renaming.
       renameMap[fromSym.getSymName()] = toSym.getSymName();

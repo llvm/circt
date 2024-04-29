@@ -202,7 +202,7 @@ LogicalResult LutCalculator::computeTableEntries(LutOp lut) {
       SmallVector<Attribute> &ref = vals[operation.getResult(i)];
       for (int j = (1U << bw) - 1; j >= 0; j--) {
         Attribute foldAttr;
-        if (!(foldAttr = results[j][i].dyn_cast<Attribute>()))
+        if (!(foldAttr = dyn_cast<Attribute>(results[j][i])))
           foldAttr = vals[results[j][i].get<Value>()][j];
         ref[j] = foldAttr;
       }
@@ -213,7 +213,7 @@ LogicalResult LutCalculator::computeTableEntries(LutOp lut) {
   // cache.
   auto outValue = lut.getBodyBlock()->getTerminator()->getOperand(0);
   for (int j = (1U << bw) - 1; j >= 0; j--)
-    table.push_back(vals[outValue][j].cast<IntegerAttr>());
+    table.push_back(cast<IntegerAttr>(vals[outValue][j]));
 
   return success();
 }
@@ -242,7 +242,7 @@ void LutCalculator::getTableEntriesAsConstValues(
 uint32_t LutCalculator::getInputBitWidth() {
   unsigned bw = 0;
   for (auto val : lut.getInputs())
-    bw += val.getType().cast<IntegerType>().getWidth();
+    bw += cast<IntegerType>(val.getType()).getWidth();
   return bw;
 }
 

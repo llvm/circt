@@ -71,7 +71,7 @@ public:
   template <typename TSrcTerm, typename TDstTerm>
   LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter,
                                    Value entryCtrl) {
-    assert(entryCtrl.getType().isa<NoneType>() &&
+    assert(isa<NoneType>(entryCtrl.getType()) &&
            "Expected NoneType for entry control value");
     // Creates start and end points of the control-only path
     Block *entryBlock = &r.front();

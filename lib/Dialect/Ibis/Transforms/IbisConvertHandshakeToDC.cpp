@@ -69,7 +69,7 @@ struct StaticBlockOpConversion
 
 } // anonymous namespace
 
-static bool isDCType(Type t) { return t.isa<dc::ValueType, dc::TokenType>(); }
+static bool isDCType(Type t) { return isa<dc::ValueType, dc::TokenType>(t); }
 
 static bool isDCTypedOp(Operation *op) {
   return llvm::all_of(op->getOperandTypes(), isDCType) &&

@@ -91,6 +91,7 @@ LogicalResult scheduling::computeChainBreakingDependences(
 }
 
 LogicalResult scheduling::computeStartTimesInCycle(ChainingProblem &prob) {
+  prob.clearStartTimeInCycle();
   return handleOperationsInTopologicalOrder(prob, [&](Operation *op) {
     // `op` will start within its abstract time step as soon as all operand
     // values have reached it.

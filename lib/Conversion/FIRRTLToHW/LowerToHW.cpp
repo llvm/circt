@@ -144,7 +144,7 @@ static Value castToFIRRTLType(Value val, Type type,
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
 
-  if (hw::StructType structTy = type.dyn_cast<hw::StructType>()) {
+  if (hw::StructType structTy = dyn_cast<hw::StructType>(type)) {
     // Strip off Flip type if needed.
     val =
         builder
@@ -1217,7 +1217,7 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   auto connectSrc = connectOp->getOperand(1);
 
   // Directly forward foreign types.
-  if (!connectSrc.getType().isa<FIRRTLType>()) {
+  if (!isa<FIRRTLType>(connectSrc.getType())) {
     connectOp->erase();
     return connectSrc;
   }
@@ -2007,12 +2007,12 @@ Value FIRRTLLowering::getOrCreateZConstant(Type type) {
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
   // Block arguments are considered lowered.
-  if (value.isa<BlockArgument>())
+  if (isa<BlockArgument>(value))
     return value;
 
   // If we lowered this value, then return the lowered value, otherwise fail.
   if (auto lowering = valueMapping.lookup(value)) {
-    assert(!lowering.getType().isa<FIRRTLType>() &&
+    assert(!isa<FIRRTLType>(lowering.getType()) &&
            "Lowered value should be a non-FIRRTL value");
     return lowering;
   }
@@ -2029,7 +2029,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
-  if (result.getType().isa<hw::InOutType>())
+  if (isa<hw::InOutType>(result.getType()))
     return getReadValue(result);
 
   return result;
@@ -2189,7 +2189,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     }
   }
   // Aggregates values
-  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+  if (isa<hw::ArrayType, hw::StructType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2200,7 +2200,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
         /* allowTruncate */ false);
   }
 
-  if (result.getType().isa<seq::ClockType>()) {
+  if (isa<seq::ClockType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2267,7 +2267,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   }
 
   // Aggregates values
-  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+  if (isa<hw::ArrayType, hw::StructType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2572,7 +2572,7 @@ LogicalResult FIRRTLLowering::emitGuards(Location loc,
     emit();
     return success();
   }
-  auto guard = guards[0].dyn_cast<StringAttr>();
+  auto guard = dyn_cast<StringAttr>(guards[0]);
   if (!guard)
     return mlir::emitError(loc,
                            "elements in `guards` array must be `StringAttr`");
@@ -2694,7 +2694,7 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   Value cst;
-  if (op.getType().isa<ClockType>()) {
+  if (isa<ClockType>(op.getType())) {
     cst = getOrCreateClockConstant(op.getValue() ? seq::ClockConst::High
                                                  : seq::ClockConst::Low);
   } else {
@@ -2713,7 +2713,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -2736,7 +2736,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise, lower the op to array indexing.
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
@@ -2756,7 +2756,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
@@ -3098,8 +3098,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     auto addInput = [&](StringRef field, Value backedge) {
       for (auto a : getAllFieldAccesses(op.getResult(i), field)) {
-        if (a.getType()
-                .cast<FIRRTLBaseType>()
+        if (cast<FIRRTLBaseType>(a.getType())
                 .getPassiveType()
                 .getBitWidthOrSentinel() > 0)
           (void)setLowering(a, backedge);
@@ -3384,7 +3383,7 @@ LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
 LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // Conversions from hw struct types to FIRRTL types are lowered as the
   // input operand.
-  if (auto opStructType = op.getOperand().getType().dyn_cast<hw::StructType>())
+  if (auto opStructType = dyn_cast<hw::StructType>(op.getOperand().getType()))
     return setLowering(op, op.getOperand());
 
   // Otherwise must be a conversion from FIRRTL bundle type to hw struct
@@ -3910,7 +3909,7 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
-  if (op.getType().isa<ClockType>())
+  if (isa<ClockType>(op.getType()))
     return setLoweringTo<seq::ClockMuxOp>(op, cond, ifTrue, ifFalse);
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse,
                                     true);
@@ -4156,7 +4155,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   builder.create<sv::AssignOp>(destVal, srcVal);
@@ -4184,7 +4183,7 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   builder.create<sv::AssignOp>(destVal, srcVal);
@@ -4200,7 +4199,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal)
     return failure();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   // #ifndef SYNTHESIS
@@ -4646,7 +4645,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       continue;
     }
 
-    if (!inoutValues.back().getType().isa<hw::InOutType>())
+    if (!isa<hw::InOutType>(inoutValues.back().getType()))
       return op.emitError("operand isn't an inout type");
   }
 

@@ -155,6 +155,42 @@ def NotNot : Pat <
   (MoveNameHint $old, (AsUIntPrimOp $x)),
   []>;
 
+// not(eq(x,y)) -> neq(x,y)
+def NotEq : Pat <
+  (NotPrimOp:$old (EQPrimOp $x, $y)),
+  (MoveNameHint $old, (NEQPrimOp $x, $y)),
+  []>;
+
+// not(neq(x,y)) -> eq(x,y)
+def NotNeq : Pat <
+  (NotPrimOp:$old (NEQPrimOp $x, $y)),
+  (MoveNameHint $old, (EQPrimOp $x, $y)),
+  []>;
+
+// not(leq(x,y)) -> gt(x,y)
+def NotLeq : Pat <
+  (NotPrimOp:$old (LEQPrimOp $x, $y)),
+  (MoveNameHint $old, (GTPrimOp $x, $y)),
+  []>;
+
+// not(lt(x,y)) -> geq(x,y)
+def NotLt : Pat <
+  (NotPrimOp:$old (LTPrimOp $x, $y)),
+  (MoveNameHint $old, (GEQPrimOp $x, $y)),
+  []>;
+
+// not(geq(x,y)) -> lt(x,y)
+def NotGeq : Pat <
+  (NotPrimOp:$old (GEQPrimOp $x, $y)),
+  (MoveNameHint $old, (LTPrimOp $x, $y)),
+  []>;
+
+// not(gt(x,y)) -> leq(x,y)
+def NotGt : Pat <
+  (NotPrimOp:$old (GTPrimOp $x, $y)),
+  (MoveNameHint $old, (LEQPrimOp $x, $y)),
+  []>;
+
 // connect(a:t,b:t) -> strictconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
@@ -314,6 +350,8 @@ def AndOfPad : Pat <
   (MoveNameHint $old, (PadPrimOp (AndPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y), $n)),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
+
+
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
   (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
@@ -348,6 +386,13 @@ def OrOfPad : Pat <
   (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
                                  (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
+
+/// or(a, orr(x)) -> orr(cat(a, x))
+def OrOrr : Pat <
+  (OrPrimOp:$old $a, (OrRPrimOp $x)),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (AsUIntPrimOp $a), (AsUIntPrimOp $x)))),
+  // No type extension in the Or
+  [(IntTypeWidthLTX<2> $a)]>;
 
 // xor(x, 0) -> x, fold can't handle all cases
 def XorOfZero : Pat <
@@ -398,6 +443,18 @@ def OrRPadU : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGEQ32 $pad, $x)]>;
 
+/// orr(cat(y, orr(z))) -> orr(cat(y,z))
+def OrRCatOrR_left : Pat <
+  (OrRPrimOp:$old (CatPrimOp $y, (OrRPrimOp $z))),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  []>;
+
+/// orr(cat(orr(z),y)) -> orr(cat(z,y))
+def OrRCatOrR_right : Pat <
+  (OrRPrimOp:$old (CatPrimOp (OrRPrimOp $z), $y)),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  []>;
+
 /// xorr(asSInt(x)) -> xorr(x)
 def XorRasSInt : Pat <
   (XorRPrimOp:$old (AsSIntPrimOp $x)),
@@ -427,6 +484,19 @@ def XorRPadU : Pat <
   (XorRPrimOp:$old (PadPrimOp:$pad $x, $n)),
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGEQ32 $pad, $x)]>;
+
+/// xorr(cat(y, xorr(z))) -> xorr(cat(y,z))
+def XorRCatXorR_left : Pat <
+  (XorRPrimOp:$old (CatPrimOp $y, (XorRPrimOp $z))),
+  (MoveNameHint $old, (XorRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  []>;
+
+/// xorr(cat(xorr(z),y)) -> xorr(cat(z,y))
+def XorRCatXorR_right : Pat <
+  (XorRPrimOp:$old (CatPrimOp (XorRPrimOp $z), $y)),
+  (MoveNameHint $old, (XorRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  []>;
+
 
 /// andr(asSInt(x)) -> andr(x)
 def AndRasSInt : Pat <
@@ -475,6 +545,18 @@ def AndRPadS : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (SIntTypes $x)]>;
+
+/// andr(cat(y, andr(z))) -> andr(cat(y,z))
+def AndRCatAndR_left : Pat <
+  (AndRPrimOp:$old (CatPrimOp $y, (AndRPrimOp $z))),
+  (MoveNameHint $old, (AndRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  []>;
+
+/// andr(cat(andr(z),y)) -> andr(cat(z,y))
+def AndRCatAndR_right : Pat <
+  (AndRPrimOp:$old (CatPrimOp (AndRPrimOp $z), $y)),
+  (MoveNameHint $old, (AndRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  []>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
 def BitsOfBits : Pat<

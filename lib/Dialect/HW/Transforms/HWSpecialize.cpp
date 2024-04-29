@@ -38,8 +38,8 @@ static std::string generateModuleName(Namespace &ns, hw::HWModuleOp moduleOp,
   assert(parameters.size() != 0);
   std::string name = moduleOp.getName().str();
   for (auto param : parameters) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
-    int64_t paramValue = paramAttr.getValue().cast<IntegerAttr>().getInt();
+    auto paramAttr = cast<ParamDeclAttr>(param);
+    int64_t paramValue = cast<IntegerAttr>(paramAttr.getValue()).getInt();
     name += "_" + paramAttr.getName().str() + "_" + std::to_string(paramValue);
   }
 
@@ -59,7 +59,7 @@ static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
                                                 Value value) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointAfterValue(value);
-  auto arrayType = array.getType().cast<hw::ArrayType>();
+  auto arrayType = cast<hw::ArrayType>(array.getType());
   unsigned hiBit = llvm::Log2_64_Ceil(arrayType.getNumElements());
 
   return hiBit == 0
@@ -227,7 +227,7 @@ static LogicalResult registerNestedParametricInstanceOps(
     llvm::SmallVector<Attribute> evaluatedInstanceParameters;
     evaluatedInstanceParameters.reserve(instanceParameters.size());
     for (auto instanceParameter : instanceParameters) {
-      auto instanceParameterDecl = instanceParameter.cast<hw::ParamDeclAttr>();
+      auto instanceParameterDecl = cast<hw::ParamDeclAttr>(instanceParameter);
       auto instanceParameterValue = instanceParameterDecl.getValue();
       auto evaluated = evaluateParametricAttr(target.getLoc(), parameters,
                                               instanceParameterValue);

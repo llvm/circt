@@ -306,7 +306,9 @@ def HLMemOp : SeqOp<"hlmem", [
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
-    HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
+    HLMemType getMemType() {
+      return llvm::cast<HLMemType>(getHandle().getType());
+    }
   }];
 
   let builders = [
@@ -320,7 +322,7 @@ def HLMemOp : SeqOp<"hlmem", [
 class HLMemTypeValueConstraint<string hlmemvalue, string value>
   : TypesMatchWith<"type of 'value' matches element type of 'hlmemvalue'",
                      hlmemvalue, value,
-                     "$_self.cast<HLMemType>().getElementType()">;
+                     "llvm::cast<HLMemType>($_self).getElementType()">;
 
 class HLMemTypeIndexingConstraint<string hlmemvalue, string addresses>
   : PredOpTrait<"address bit widths should be identical to the clog2 of the shape of the HLMemType",

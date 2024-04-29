@@ -19,7 +19,9 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Sequential, seq, circt::seq::SeqDialect)
 
 void registerSeqPasses() { circt::seq::registerPasses(); }
 
-bool seqTypeIsAClock(MlirType type) { return unwrap(type).isa<ClockType>(); }
+bool seqTypeIsAClock(MlirType type) {
+  return llvm::isa<ClockType>(unwrap(type));
+}
 
 MlirType seqClockTypeGet(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));

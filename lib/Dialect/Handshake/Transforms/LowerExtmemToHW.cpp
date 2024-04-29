@@ -58,7 +58,7 @@ struct StoreNames {
 } // namespace
 
 static Type indexToMemAddr(Type t, MemRefType memRef) {
-  assert(t.isa<IndexType>() && "Expected index type");
+  assert(isa<IndexType>(t) && "Expected index type");
   auto shape = memRef.getShape();
   assert(shape.size() == 1 && "Expected 1D memref");
   unsigned addrWidth = llvm::Log2_64_Ceil(shape[0]);
@@ -67,13 +67,13 @@ static Type indexToMemAddr(Type t, MemRefType memRef) {
 
 static HandshakeMemType getMemTypeForExtmem(Value v) {
   auto *ctx = v.getContext();
-  assert(v.getType().isa<mlir::MemRefType>() && "Value is not a memref type");
+  assert(isa<mlir::MemRefType>(v.getType()) && "Value is not a memref type");
   auto extmemOp = cast<handshake::ExternalMemoryOp>(*v.getUsers().begin());
   HandshakeMemType memType;
   llvm::SmallVector<hw::detail::FieldInfo> inFields, outFields;
 
   // Add memory type.
-  memType.memRefType = v.getType().cast<MemRefType>();
+  memType.memRefType = cast<MemRefType>(v.getType());
   memType.loadPorts = extmemOp.getLdCount();
   memType.storePorts = extmemOp.getStCount();
 
@@ -295,7 +295,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 // lowering.
 static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
                                    MemRefType memRefType) {
-  assert(v.getType().isa<IndexType>() && "Expected an index-typed value");
+  assert(isa<IndexType>(v.getType()) && "Expected an index-typed value");
   auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
   return b.create<arith::IndexCastOp>(loc, b.getIntegerType(addrWidth), v);
 }
@@ -330,7 +330,7 @@ static Value plumbStorePort(Location loc, OpBuilder &b,
       truncateToMemoryWidth(loc, b, stif.addressIn, memrefType), stif.dataIn};
 
   return b
-      .create<hw::StructCreateOp>(loc, outType.cast<hw::StructType>(),
+      .create<hw::StructCreateOp>(loc, cast<hw::StructType>(outType),
                                   structArgs)
       .getResult();
 }
@@ -377,7 +377,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   // iterated from lo to hi indices.
   std::map<unsigned, Value> memrefArgs;
   for (auto [i, arg] : llvm::enumerate(func.getArguments()))
-    if (arg.getType().isa<MemRefType>())
+    if (isa<MemRefType>(arg.getType()))
       memrefArgs[i] = arg;
 
   if (memrefArgs.empty())
@@ -403,7 +403,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
     // Add memory input - this is the output of the extmemory op.
     auto memIOTypes = getMemTypeForExtmem(arg);
-    MemRefType memrefType = arg.getType().cast<MemRefType>();
+    MemRefType memrefType = cast<MemRefType>(arg.getType());
 
     auto oldReturnOp =
         cast<handshake::ReturnOp>(func.getBody().front().getTerminator());

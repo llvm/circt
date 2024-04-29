@@ -51,7 +51,7 @@ struct HandshakeLegalizeMemrefsPass
       auto loc = copy.getLoc();
       auto src = copy.getSource();
       auto dst = copy.getTarget();
-      auto memrefType = src.getType().cast<MemRefType>();
+      auto memrefType = cast<MemRefType>(src.getType());
       if (!isUniDimensional(memrefType)) {
         llvm::errs() << "Cannot legalize multi-dimensional memref operation "
                      << copy

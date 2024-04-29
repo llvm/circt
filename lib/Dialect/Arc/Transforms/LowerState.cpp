@@ -338,9 +338,9 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     auto name = moduleOp.getArgName(blockArg.getArgNumber());
     auto argTy = blockArg.getType();
     IntegerType innerTy;
-    if (argTy.isa<seq::ClockType>()) {
+    if (isa<seq::ClockType>(argTy)) {
       innerTy = IntegerType::get(context, 1);
-    } else if (auto intType = argTy.dyn_cast<IntegerType>()) {
+    } else if (auto intType = dyn_cast<IntegerType>(argTy)) {
       innerTy = intType;
     } else {
       return mlir::emitError(blockArg.getLoc(), "input ")
@@ -364,9 +364,9 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
     for (auto [outputArg, name] :
          llvm::zip(outputOperands, moduleOp.getOutputNames())) {
       IntegerType innerTy;
-      if (outputArg.getType().isa<seq::ClockType>()) {
+      if (isa<seq::ClockType>(outputArg.getType())) {
         innerTy = IntegerType::get(context, 1);
-      } else if (auto intType = outputArg.getType().dyn_cast<IntegerType>()) {
+      } else if (auto intType = dyn_cast<IntegerType>(outputArg.getType())) {
         innerTy = intType;
       } else {
         return mlir::emitError(outputOp.getLoc(), "output ")
@@ -374,7 +374,7 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
       }
       auto value = passThrough.materializeValue(outputArg);
       auto state = stateBuilder.create<RootOutputOp>(
-          outputOp.getLoc(), StateType::get(innerTy), name.cast<StringAttr>(),
+          outputOp.getLoc(), StateType::get(innerTy), cast<StringAttr>(name),
           storageArg);
       if (isa<seq::ClockType>(value.getType()))
         value = passThrough.builder.createOrFold<seq::FromClockOp>(
@@ -460,7 +460,7 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
 
     for (auto [alloc, resTy] :
          llvm::zip(allocatedStates, stateOp.getResultTypes())) {
-      if (!resTy.isa<IntegerType>())
+      if (!isa<IntegerType>(resTy))
         stateOp->emitOpError("Non-integer result not supported yet!");
 
       auto thenBuilder = ifOp.getThenBodyBuilder();
@@ -559,7 +559,7 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
 
 // Add state for taps into the passthrough block.
 LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
-  auto intType = tapOp.getValue().getType().dyn_cast<IntegerType>();
+  auto intType = dyn_cast<IntegerType>(tapOp.getValue().getType());
   if (!intType)
     return mlir::emitError(tapOp.getLoc(), "tapped value ")
            << tapOp.getNameAttr() << " is of non-integer type "
@@ -604,7 +604,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
        llvm::zip(instOp.getOperands(), instOp.getArgNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Input " << name << " : " << operand.getType() << "\n");
-    auto intType = operand.getType().dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(operand.getType());
     if (!intType)
       return mlir::emitError(operand.getLoc(), "input ")
              << name << " of extern module " << instOp.getModuleNameAttr()
@@ -626,7 +626,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
        llvm::zip(instOp.getResults(), instOp.getResultNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Output " << name << " : " << result.getType() << "\n");
-    auto intType = result.getType().dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(result.getType());
     if (!intType)
       return mlir::emitError(result.getLoc(), "output ")
              << name << " of extern module " << instOp.getModuleNameAttr()

@@ -29,7 +29,7 @@ namespace {
 struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
   using OpEmissionPattern::OpEmissionPattern;
   MatchResult matchInlinable(Value value) override {
-    if (value.isa<BlockArgument>() &&
+    if (isa<BlockArgument>(value) &&
         value.getParentRegion()->getParentOfType<SCModuleOp>())
       return Precedence::VAR;
     return {};
@@ -39,7 +39,7 @@ struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
     auto module = value.getParentRegion()->getParentOfType<SCModuleOp>();
     for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
       if (module.getArgument(i) == value) {
-        p << module.getPortNames()[i].cast<StringAttr>().getValue();
+        p << cast<StringAttr>(module.getPortNames()[i]).getValue();
         return;
       }
     }
@@ -53,7 +53,7 @@ struct SCModuleEmitter : OpEmissionPattern<SCModuleOp> {
     for (size_t i = 0, e = module.getNumArguments(); i < e; ++i) {
       p.emitType(module.getArgument(i).getType());
 
-      auto portName = module.getPortNames()[i].cast<StringAttr>().getValue();
+      auto portName = cast<StringAttr>(module.getPortNames()[i]).getValue();
       p << " " << portName << ";\n";
     }
 
@@ -103,7 +103,7 @@ struct NewEmitter : OpEmissionPattern<NewOp> {
 
   void emitInlined(Value value, EmissionPrinter &p) override {
     p << "new ";
-    p.emitType(value.getType().cast<mlir::emitc::PointerType>().getPointee());
+    p.emitType(cast<mlir::emitc::PointerType>(value.getType()).getPointee());
 
     auto newOp = value.getDefiningOp<NewOp>();
     if (newOp.getArgs().empty())
@@ -370,7 +370,7 @@ struct FuncEmitter : OpEmissionPattern<FuncOp> {
   MatchResult matchInlinable(Value value) override {
     // Note that the verifier of systemc::FuncOp guarantees that whenever the
     // function has a body, argNames is present and of the correct length
-    if (value.isa<BlockArgument>() &&
+    if (isa<BlockArgument>(value) &&
         value.getParentRegion()->getParentOfType<FuncOp>())
       return Precedence::VAR;
 
@@ -382,7 +382,7 @@ struct FuncEmitter : OpEmissionPattern<FuncOp> {
     for (auto [arg, name] :
          llvm::zip(func.getArguments(), func.getArgNames())) {
       if (arg == value) {
-        p << name.cast<StringAttr>().getValue();
+        p << cast<StringAttr>(name).getValue();
         return;
       }
     }
@@ -414,7 +414,7 @@ struct FuncEmitter : OpEmissionPattern<FuncOp> {
           llvm::zip(func.getFunctionType().getInputs(), func.getArgNames()), p,
           [&](std::tuple<Type, Attribute> arg) {
             p.emitType(std::get<0>(arg));
-            p << " " << std::get<1>(arg).cast<StringAttr>().getValue();
+            p << " " << cast<StringAttr>(std::get<1>(arg)).getValue();
           });
 
     p << ")";

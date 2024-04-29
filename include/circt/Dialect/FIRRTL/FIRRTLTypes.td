@@ -39,7 +39,7 @@ def FIRRTLType : FIRRTLDialectTypeHelper<"FIRRTLType", "FIRRTLType", [{
   }]>;
 
 def FIRRTLBaseType : FIRRTLDialectType<
-  CPred<"$_self.isa<FIRRTLBaseType>()">,
+  CPred<"llvm::isa<FIRRTLBaseType>($_self)">,
   "a base type", "::circt::firrtl::FIRRTLBaseType", [{
     A base FIRRTL type, such as a clock, integer, or wire.
 

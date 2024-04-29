@@ -92,7 +92,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     InterfaceMethod<"Get a port name",
     "StringAttr", "getPortNameAttr", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
-      return $_op.getPortNames()[portIndex].template cast<StringAttr>();
+      return llvm::cast<StringAttr>($_op.getPortNames()[portIndex]);
     }]>,
 
     InterfaceMethod<"Get a port name",
@@ -121,7 +121,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     InterfaceMethod<"Get a port type",
     "TypeAttr", "getPortTypeAttr", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
-      return $_op.getPortTypes()[portIndex].template cast<TypeAttr>();
+      return llvm::cast<TypeAttr>($_op.getPortTypes()[portIndex]);
     }]>,
 
     InterfaceMethod<"Get a port type",
@@ -154,7 +154,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
       auto annos = $_op.getPortAnnotationsAttr();
       if (annos.empty())
         return annos; // annos already is an empty array
-      return annos[portIndex].template cast<ArrayAttr>();
+      return llvm::cast<ArrayAttr>(annos[portIndex]);
     }]>,
 
     InterfaceMethod<"Get a port's annotations",
@@ -192,16 +192,16 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     "bool", "hasPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
         return  (!syms.empty() &&
-        !syms[portIndex].template cast<hw::InnerSymAttr>().empty());
+        !llvm::cast<hw::InnerSymAttr>(syms[portIndex]).empty());
     }]>,
 
     InterfaceMethod<"Get the port symbol attribute",
     "circt::hw::InnerSymAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}], [{
       auto syms = $_op.getPortSymbols();
       if (syms.empty() ||
-          syms[portIndex].template cast<hw::InnerSymAttr>().empty())
+          llvm::cast<hw::InnerSymAttr>(syms[portIndex]).empty())
         return hw::InnerSymAttr();
-      return syms[portIndex].template cast<hw::InnerSymAttr>();
+      return llvm::cast<hw::InnerSymAttr>(syms[portIndex]);
     }]>,
 
     // Setters
@@ -279,8 +279,7 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
     InterfaceMethod<"Get a port's location attribute",
     "LocationAttr", "getPortLocationAttr", (ins "size_t":$portIndex), [{}],
     /*defaultImplementation=*/[{
-      return $_op.getPortLocationsAttr()[portIndex].
-        template cast<LocationAttr>();
+      return llvm::cast<LocationAttr>($_op.getPortLocationsAttr()[portIndex]);
     }]>,
 
     InterfaceMethod<"Get a port's location",

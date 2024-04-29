@@ -56,7 +56,7 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
   }
   auto portDirections =
       instanceOp->getAttrOfType<mlir::DenseBoolArrayAttr>("portDirections");
-  if (portDirections.size() != numExpected)
+  if (static_cast<size_t>(portDirections.size()) != numExpected)
     return emitNote(
         instanceOp->emitOpError("the number of port directions should be "
                                 "equal to the number of results"));

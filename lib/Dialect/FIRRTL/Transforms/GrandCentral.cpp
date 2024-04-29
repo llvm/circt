@@ -200,7 +200,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // the underlying type.  The dimensions need to be reversed as this
       // unwrapping happens in reverse order of the final representation.
       auto tpe = op.signal.getType();
-      while (auto vector = tpe.dyn_cast<hw::UnpackedArrayType>()) {
+      while (auto vector = dyn_cast<hw::UnpackedArrayType>(tpe)) {
         dimensions.push_back(vector.getNumElements());
         tpe = vector.getElementType();
       }
@@ -1900,7 +1900,7 @@ void GrandCentralPass::runOnOperation() {
                   continue;
                 // Do not allow any outputs in the drop mode.
                 auto ty = result.getType();
-                if (ty.isa<RefType>() && companionMode != CompanionMode::Drop)
+                if (isa<RefType>(ty) && companionMode != CompanionMode::Drop)
                   continue;
                 op.emitOpError()
                     << "companion instance cannot have output ports";
@@ -2090,9 +2090,7 @@ void GrandCentralPass::runOnOperation() {
         llvm::dbgs() << "\n";
       } else {
         llvm::dbgs() << "  - " << id.getValue() << ": "
-                     << value.getDefiningOp()
-                            ->getAttr("name")
-                            .cast<StringAttr>()
+                     << cast<StringAttr>(value.getDefiningOp()->getAttr("name"))
                             .getValue();
         if (fieldID)
           llvm::dbgs() << ", fieldID=" << fieldID;

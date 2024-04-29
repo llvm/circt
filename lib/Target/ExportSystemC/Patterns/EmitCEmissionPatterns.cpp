@@ -108,8 +108,8 @@ private:
       });
     } else {
       llvm::interleaveComma(callOp.getArgs().value(), p, [&](Attribute attr) {
-        if (auto idx = attr.dyn_cast<IntegerAttr>()) {
-          if (idx.getType().isa<IndexType>()) {
+        if (auto idx = dyn_cast<IntegerAttr>(attr)) {
+          if (isa<IndexType>(idx.getType())) {
             p.getInlinable(callOp.getOperands()[idx.getInt()])
                 .emitWithParensOnLowerPrecedence(Precedence::COMMA);
             return;

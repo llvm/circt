@@ -361,7 +361,7 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::ValueMap &mergePairs,
     // thanks to prior SSA maximization
     for (auto &arg : block.getArguments()) {
       // No merges on memref block arguments; these are handled separately
-      if (arg.getType().isa<mlir::MemRefType>())
+      if (isa<mlir::MemRefType>(arg.getType()))
         continue;
 
       auto mergeInfo = insertMerge(&block, arg, edgeBuilder, rewriter);
@@ -383,7 +383,7 @@ static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
   // The block terminator is either a cf-level branch or cf-level conditional
   // branch. In either case, identify the value passed to the block using its
   // index in the list of block arguments
-  unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
+  unsigned index = cast<BlockArgument>(srcVal).getArgNumber();
   Operation *termOp = predBlock->getTerminator();
   if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
     // Block should be one of the two destinations of the conditional branch
@@ -699,7 +699,7 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
              std::back_inserter(branches));
 
   auto *findRes = llvm::find_if(branches, [](auto br) {
-    return br.getDataOperand().getType().template isa<NoneType>();
+    return llvm::isa<NoneType>(br.getDataOperand().getType());
   });
 
   assert(findRes && "expected one branch for the ctrl signal");
@@ -1212,7 +1212,7 @@ struct BlockControlTerm {
   BlockControlTerm(Operation *op, Value ctrlOperand)
       : op(op), ctrlOperand(ctrlOperand) {
     assert(op && ctrlOperand);
-    assert(ctrlOperand.getType().isa<NoneType>() &&
+    assert(isa<NoneType>(ctrlOperand.getType()) &&
            "Control operand must be a NoneType");
   }
 
@@ -1515,10 +1515,10 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
 
     // A memory is external if the memref that defines it is provided as a
     // function (block) argument.
-    bool isExternalMemory = memrefOperand.isa<BlockArgument>();
+    bool isExternalMemory = isa<BlockArgument>(memrefOperand);
 
     mlir::MemRefType memrefType =
-        memrefOperand.getType().cast<mlir::MemRefType>();
+        cast<mlir::MemRefType>(memrefOperand.getType());
     if (failed(isValidMemrefType(memrefOperand.getLoc(), memrefType)))
       return failure();
 
@@ -1650,7 +1650,7 @@ namespace {
 class HandshakeLoweringSSAStrategy : public SSAMaximizationStrategy {
   /// Filters out block arguments of type MemRefType
   bool maximizeArgument(BlockArgument arg) override {
-    return !arg.getType().isa<mlir::MemRefType>();
+    return !isa<mlir::MemRefType>(arg.getType());
   }
 
   /// Filters out allocation operations

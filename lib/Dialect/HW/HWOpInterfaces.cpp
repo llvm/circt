@@ -46,7 +46,7 @@ void hw::PortInfo::setSym(InnerSymAttr sym, MLIRContext *ctx) {
 StringRef hw::PortInfo::getVerilogName() const {
   if (attrs)
     if (auto updatedName = attrs.get("hw.verilogName"))
-      return updatedName.cast<StringAttr>().getValue();
+      return cast<StringAttr>(updatedName).getValue();
   return name.getValue();
 }
 

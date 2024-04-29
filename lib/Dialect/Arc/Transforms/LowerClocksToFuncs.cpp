@@ -148,7 +148,7 @@ LogicalResult LowerClocksToFuncsPass::isolateClock(Operation *clockOp,
         operand.set(clockStorageArg);
         continue;
       }
-      if (operand.get().isa<BlockArgument>()) {
+      if (isa<BlockArgument>(operand.get())) {
         auto d = op->emitError(
             "operation in clock tree uses external block argument");
         d.attachNote() << "clock trees can only use external constant values";

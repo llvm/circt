@@ -253,7 +253,7 @@ parseImplicitInitType(OpAsmParser &p, mlir::Type regType,
   if (!initValue.has_value())
     return success();
 
-  hw::InOutType ioType = regType.dyn_cast<hw::InOutType>();
+  hw::InOutType ioType = dyn_cast<hw::InOutType>(regType);
   if (!ioType)
     return p.emitError(p.getCurrentLocation(), "expected inout type for reg");
 
@@ -558,7 +558,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
-  return Condition{EventControl(getEvents()[idx].cast<IntegerAttr>().getInt()),
+  return Condition{EventControl(cast<IntegerAttr>(getEvents()[idx]).getInt()),
                    getOperand(idx)};
 }
 
@@ -814,7 +814,7 @@ auto CaseOp::getCases() -> SmallVector<CaseInfo, 4> {
 }
 
 StringRef CaseEnumPattern::getFieldValue() const {
-  return enumAttr.cast<hw::EnumFieldAttr>().getField();
+  return cast<hw::EnumFieldAttr>(enumAttr).getField();
 }
 
 /// Parse case op.
@@ -855,7 +855,7 @@ ParseResult CaseOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Check the integer type.
   Type canonicalCondType = hw::getCanonicalType(condType);
-  hw::EnumType enumType = canonicalCondType.dyn_cast<hw::EnumType>();
+  hw::EnumType enumType = dyn_cast<hw::EnumType>(canonicalCondType);
   unsigned condWidth = 0;
   if (!enumType) {
     if (!result.operands[0].getType().isSignlessInteger())
@@ -1024,7 +1024,7 @@ void CaseOp::build(
 LogicalResult CaseOp::canonicalize(CaseOp op, PatternRewriter &rewriter) {
   if (op.getCaseStyle() == CaseStmtType::CaseStmt)
     return failure();
-  if (op.getCond().getType().isa<hw::EnumType>())
+  if (isa<hw::EnumType>(op.getCond().getType()))
     return failure();
 
   auto caseInfo = op.getCases();
@@ -1385,7 +1385,7 @@ static ParseResult parseModportStructs(OpAsmParser &parser,
       return failure();
 
     ports.push_back(ModportStructAttr::get(
-        context, direction.cast<ModportDirectionAttr>(), signal));
+        context, cast<ModportDirectionAttr>(direction), signal));
     return success();
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
@@ -1400,7 +1400,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
                                 ArrayAttr portsAttr) {
   p << "(";
   llvm::interleaveComma(portsAttr, p, [&](Attribute attr) {
-    auto port = attr.cast<ModportStructAttr>();
+    auto port = cast<ModportStructAttr>(attr);
     p << stringifyEnum(port.getDirection().getValue());
     p << ' ';
     p.printSymbolName(port.getSignal().getRootReference().getValue());
@@ -1481,7 +1481,7 @@ LogicalResult GetModportOp::verify() {
 
 void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
                          StringRef field) {
-  auto ifaceTy = value.getType().dyn_cast<InterfaceType>();
+  auto ifaceTy = dyn_cast<InterfaceType>(value.getType());
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
   auto modportSym =
@@ -1500,7 +1500,7 @@ GetModportOp::getReferencedDecl(const hw::HWSymbolCache &cache) {
 
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
                                   Value iface, StringRef signalName) {
-  auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
+  auto ifaceTy = dyn_cast<InterfaceType>(iface.getType());
   assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), signalName);
   InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
@@ -1533,7 +1533,7 @@ ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
 
 void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
                              FlatSymbolRefAttr signalName) {
-  InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
+  InterfaceType ifaceTy = dyn_cast<InterfaceType>(type);
   assert(ifaceTy && "Expected an InterfaceType");
   auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
                                 {signalName});
@@ -1541,7 +1541,7 @@ void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
 }
 
 LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
-  auto ifaceTy = ifaceVal.getType().dyn_cast<InterfaceType>();
+  auto ifaceTy = dyn_cast<InterfaceType>(ifaceVal.getType());
   if (!ifaceTy)
     return failure();
   InterfaceOp iface = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
@@ -1647,7 +1647,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     // value shall be high-impedance (z) unless the net is a trireg"
     connected = rewriter.create<ConstantZOp>(
         wire.getLoc(),
-        wire.getResult().getType().cast<InOutType>().getElementType());
+        cast<InOutType>(wire.getResult().getType()).getElementType());
   } else if (isa<hw::HWModuleOp>(write->getParentOp()))
     connected = write.getSrc();
   else
@@ -1679,12 +1679,12 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
 // A helper function to infer a return type of IndexedPartSelectInOutOp.
 static Type getElementTypeOfWidth(Type type, int32_t width) {
-  auto elemTy = type.cast<hw::InOutType>().getElementType();
-  if (elemTy.isa<IntegerType>())
+  auto elemTy = cast<hw::InOutType>(type).getElementType();
+  if (isa<IntegerType>(elemTy))
     return hw::InOutType::get(IntegerType::get(type.getContext(), width));
-  if (elemTy.isa<hw::ArrayType>())
+  if (isa<hw::ArrayType>(elemTy))
     return hw::InOutType::get(hw::ArrayType::get(
-        elemTy.cast<hw::ArrayType>().getElementType(), width));
+        cast<hw::ArrayType>(elemTy).getElementType(), width));
   return {};
 }
 
@@ -1696,9 +1696,9 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
   if (!width)
     return failure();
 
-  auto typ = getElementTypeOfWidth(
-      operands[0].getType(),
-      width.cast<IntegerAttr>().getValue().getZExtValue());
+  auto typ =
+      getElementTypeOfWidth(operands[0].getType(),
+                            cast<IntegerAttr>(width).getValue().getZExtValue());
   if (!typ)
     return failure();
   results.push_back(typ);
@@ -1708,16 +1708,16 @@ LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
 LogicalResult IndexedPartSelectInOutOp::verify() {
   unsigned inputWidth = 0, resultWidth = 0;
   auto opWidth = getWidth();
-  auto inputElemTy = getInput().getType().cast<InOutType>().getElementType();
-  auto resultElemTy = getType().cast<InOutType>().getElementType();
-  if (auto i = inputElemTy.dyn_cast<IntegerType>())
+  auto inputElemTy = cast<InOutType>(getInput().getType()).getElementType();
+  auto resultElemTy = cast<InOutType>(getType()).getElementType();
+  if (auto i = dyn_cast<IntegerType>(inputElemTy))
     inputWidth = i.getWidth();
   else if (auto i = hw::type_cast<hw::ArrayType>(inputElemTy))
     inputWidth = i.getNumElements();
   else
     return emitError("input element type must be Integer or Array");
 
-  if (auto resType = resultElemTy.dyn_cast<IntegerType>())
+  if (auto resType = dyn_cast<IntegerType>(resultElemTy))
     resultWidth = resType.getWidth();
   else if (auto resType = hw::type_cast<hw::ArrayType>(resultElemTy))
     resultWidth = resType.getNumElements();
@@ -1750,15 +1750,15 @@ LogicalResult IndexedPartSelectOp::inferReturnTypes(
     return failure();
 
   results.push_back(
-      IntegerType::get(context, width.cast<IntegerAttr>().getInt()));
+      IntegerType::get(context, cast<IntegerAttr>(width).getInt()));
   return success();
 }
 
 LogicalResult IndexedPartSelectOp::verify() {
   auto opWidth = getWidth();
 
-  unsigned resultWidth = getType().cast<IntegerType>().getWidth();
-  unsigned inputWidth = getInput().getType().cast<IntegerType>().getWidth();
+  unsigned resultWidth = cast<IntegerType>(getType()).getWidth();
+  unsigned inputWidth = cast<IntegerType>(getInput().getType()).getWidth();
 
   if (opWidth > inputWidth)
     return emitError("slice width should not be greater than input width");
@@ -1780,7 +1780,7 @@ LogicalResult StructFieldInOutOp::inferReturnTypes(
     return failure();
   auto structType =
       hw::type_cast<hw::StructType>(getInOutElementType(operands[0].getType()));
-  auto resultType = structType.getFieldType(field.cast<StringAttr>());
+  auto resultType = structType.getFieldType(cast<StringAttr>(field));
   if (!resultType)
     return failure();
 
@@ -1944,7 +1944,7 @@ ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
   if (succeeded(ret)) {
     pathAttr = parser.getBuilder().getArrayAttr(
         ArrayRef<Attribute>(strings).drop_back());
-    terminalAttr = (*strings.rbegin()).cast<StringAttr>();
+    terminalAttr = cast<StringAttr>(*strings.rbegin());
   }
   return ret;
 }
@@ -2087,7 +2087,7 @@ LogicalResult GenerateCaseOp::verify() {
 
   StringSet<> usedNames;
   for (Attribute name : getCaseNames()) {
-    StringAttr nameStr = name.dyn_cast<StringAttr>();
+    StringAttr nameStr = dyn_cast<StringAttr>(name);
     if (!nameStr)
       return emitOpError("caseNames must all be string attributes");
     if (usedNames.contains(nameStr.getValue()))

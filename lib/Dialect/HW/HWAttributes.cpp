@@ -196,7 +196,7 @@ EnumFieldAttr EnumFieldAttr::get(Location loc, StringAttr value,
     emitError(loc) << "expected enum type";
 
   // Check whether the provided value is a member of the enum type.
-  EnumType enumType = getCanonicalType(type).cast<EnumType>();
+  EnumType enumType = llvm::cast<EnumType>(getCanonicalType(type));
   if (!enumType.contains(value.getValue())) {
     emitError(loc) << "enum value '" << value.getValue()
                    << "' is not a member of enum type " << enumType;
@@ -441,8 +441,8 @@ static TypedAttr foldBinaryOp(
     ArrayRef<TypedAttr> operands,
     llvm::function_ref<APInt(const APInt &, const APInt &)> calculate) {
   assert(operands.size() == 2 && "binary operator always has two operands");
-  if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
-    if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto lhs = dyn_cast<IntegerAttr>(operands[0]))
+    if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
       return IntegerAttr::get(lhs.getType(),
                               calculate(lhs.getValue(), rhs.getValue()));
   return {};
@@ -454,7 +454,7 @@ static TypedAttr
 foldUnaryOp(ArrayRef<TypedAttr> operands,
             llvm::function_ref<APInt(const APInt &)> calculate) {
   assert(operands.size() == 1 && "unary operator always has one operand");
-  if (auto intAttr = operands[0].dyn_cast<IntegerAttr>())
+  if (auto intAttr = dyn_cast<IntegerAttr>(operands[0]))
     return IntegerAttr::get(intAttr.getType(), calculate(intAttr.getValue()));
   return {};
 }
@@ -462,7 +462,7 @@ foldUnaryOp(ArrayRef<TypedAttr> operands,
 /// If the specified attribute is a ParamExprAttr with the specified opcode,
 /// return it.  Otherwise return null.
 static ParamExprAttr dyn_castPE(PEO opcode, Attribute value) {
-  if (auto expr = value.dyn_cast<ParamExprAttr>())
+  if (auto expr = dyn_cast<ParamExprAttr>(value))
     if (expr.getOpcode() == opcode)
       return expr;
   return {};
@@ -481,38 +481,38 @@ static bool paramExprOperandSortPredicate(Attribute lhs, Attribute rhs) {
     return false;
 
   // All expressions are "less than" a constant, since they appear on the right.
-  if (rhs.isa<IntegerAttr>()) {
+  if (isa<IntegerAttr>(rhs)) {
     // We don't bother to order constants w.r.t. each other since they will be
     // folded - they can all compare equal.
-    return !lhs.isa<IntegerAttr>();
+    return !isa<IntegerAttr>(lhs);
   }
-  if (lhs.isa<IntegerAttr>())
+  if (isa<IntegerAttr>(lhs))
     return false;
 
   // Next up are named parameters.
-  if (auto rhsParam = rhs.dyn_cast<ParamDeclRefAttr>()) {
+  if (auto rhsParam = dyn_cast<ParamDeclRefAttr>(rhs)) {
     // Parameters are sorted lexically w.r.t. each other.
-    if (auto lhsParam = lhs.dyn_cast<ParamDeclRefAttr>())
+    if (auto lhsParam = dyn_cast<ParamDeclRefAttr>(lhs))
       return lhsParam.getName().getValue() < rhsParam.getName().getValue();
     // They otherwise appear on the right of other things.
     return true;
   }
-  if (lhs.isa<ParamDeclRefAttr>())
+  if (isa<ParamDeclRefAttr>(lhs))
     return false;
 
   // Next up are verbatim parameters.
-  if (auto rhsParam = rhs.dyn_cast<ParamVerbatimAttr>()) {
+  if (auto rhsParam = dyn_cast<ParamVerbatimAttr>(rhs)) {
     // Verbatims are sorted lexically w.r.t. each other.
-    if (auto lhsParam = lhs.dyn_cast<ParamVerbatimAttr>())
+    if (auto lhsParam = dyn_cast<ParamVerbatimAttr>(lhs))
       return lhsParam.getValue().getValue() < rhsParam.getValue().getValue();
     // They otherwise appear on the right of other things.
     return true;
   }
-  if (lhs.isa<ParamVerbatimAttr>())
+  if (isa<ParamVerbatimAttr>(lhs))
     return false;
 
   // The only thing left are nested expressions.
-  auto lhsExpr = lhs.cast<ParamExprAttr>(), rhsExpr = rhs.cast<ParamExprAttr>();
+  auto lhsExpr = cast<ParamExprAttr>(lhs), rhsExpr = cast<ParamExprAttr>(rhs);
   // Sort by the string form of the opcode, e.g. add, .. mul,... then xor.
   if (lhsExpr.getOpcode() != rhsExpr.getOpcode())
     return stringifyPEO(lhsExpr.getOpcode()) <
@@ -569,16 +569,16 @@ static TypedAttr simplifyAssocOp(
   llvm::stable_sort(operands, paramExprOperandSortPredicate);
 
   // Merge any constants, they will appear at the back of the operand list now.
-  if (operands.back().isa<IntegerAttr>()) {
+  if (isa<IntegerAttr>(operands.back())) {
     while (operands.size() >= 2 &&
-           operands[operands.size() - 2].isa<IntegerAttr>()) {
-      APInt c1 = operands.pop_back_val().cast<IntegerAttr>().getValue();
-      APInt c2 = operands.pop_back_val().cast<IntegerAttr>().getValue();
+           isa<IntegerAttr>(operands[operands.size() - 2])) {
+      APInt c1 = cast<IntegerAttr>(operands.pop_back_val()).getValue();
+      APInt c2 = cast<IntegerAttr>(operands.pop_back_val()).getValue();
       auto resultConstant = IntegerAttr::get(type, calculateFn(c1, c2));
       operands.push_back(resultConstant);
     }
 
-    auto resultCst = operands.back().cast<IntegerAttr>();
+    auto resultCst = cast<IntegerAttr>(operands.back());
 
     // If the resulting constant is the destructive constant (e.g. `x*0`), then
     // return it.
@@ -600,7 +600,7 @@ static TypedAttr simplifyAssocOp(
 /// null as the second (standin for "multiplication by 1").
 static std::pair<TypedAttr, TypedAttr> decomposeAddend(TypedAttr operand) {
   if (auto mul = dyn_castPE(PEO::Mul, operand))
-    if (auto cst = mul.getOperands().back().dyn_cast<IntegerAttr>()) {
+    if (auto cst = dyn_cast<IntegerAttr>(mul.getOperands().back())) {
       auto nonCst = ParamExprAttr::get(PEO::Mul, mul.getOperands().drop_back());
       return {nonCst, cst};
     }
@@ -713,9 +713,9 @@ static TypedAttr simplifyXor(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyShl(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
 
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1])) {
     // Constant fold simple integers.
-    if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
+    if (auto lhs = dyn_cast<IntegerAttr>(operands[0]))
       return IntegerAttr::get(lhs.getType(),
                               lhs.getValue().shl(rhs.getValue()));
 
@@ -732,7 +732,7 @@ static TypedAttr simplifyShl(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyShrU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isZero())
       return operands[0];
 
@@ -742,7 +742,7 @@ static TypedAttr simplifyShrU(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyShrS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x >> 0`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isZero())
       return operands[0];
 
@@ -752,7 +752,7 @@ static TypedAttr simplifyShrS(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyDivU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isOne())
       return operands[0];
 
@@ -762,7 +762,7 @@ static TypedAttr simplifyDivU(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyDivS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x/1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isOne())
       return operands[0];
 
@@ -772,7 +772,7 @@ static TypedAttr simplifyDivS(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyModU(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isOne())
       return IntegerAttr::get(rhs.getType(), 0);
 
@@ -782,7 +782,7 @@ static TypedAttr simplifyModU(SmallVector<TypedAttr, 4> &operands) {
 static TypedAttr simplifyModS(SmallVector<TypedAttr, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
   // Implement support for identities like `x%1`.
-  if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+  if (auto rhs = dyn_cast<IntegerAttr>(operands[1]))
     if (rhs.getValue().isOne())
       return IntegerAttr::get(rhs.getType(), 0);
 
@@ -814,7 +814,7 @@ static TypedAttr simplifyStrConcat(SmallVector<TypedAttr, 4> &operands) {
   };
 
   for (TypedAttr op : operands) {
-    if (auto strOp = op.dyn_cast<StringAttr>()) {
+    if (auto strOp = dyn_cast<StringAttr>(op)) {
       // Queue up adjacent strings.
       stringsToCombine.push_back(strOp);
     } else {
@@ -938,11 +938,11 @@ static FailureOr<Attribute>
 replaceDeclRefInExpr(Location loc,
                      const std::map<std::string, Attribute> &parameters,
                      Attribute paramAttr, bool emitErrors) {
-  if (paramAttr.dyn_cast<IntegerAttr>()) {
+  if (dyn_cast<IntegerAttr>(paramAttr)) {
     // Nothing to do, constant value.
     return paramAttr;
   }
-  if (auto paramRefAttr = paramAttr.dyn_cast<hw::ParamDeclRefAttr>()) {
+  if (auto paramRefAttr = dyn_cast<hw::ParamDeclRefAttr>(paramAttr)) {
     // Get the value from the provided parameters.
     auto it = parameters.find(paramRefAttr.getName().str());
     if (it == parameters.end()) {
@@ -954,7 +954,7 @@ replaceDeclRefInExpr(Location loc,
     }
     return it->second;
   }
-  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+  if (auto paramExprAttr = dyn_cast<hw::ParamExprAttr>(paramAttr)) {
     // Recurse into all operands of the expression.
     llvm::SmallVector<TypedAttr, 4> replacedOperands;
     for (auto operand : paramExprAttr.getOperands()) {
@@ -977,7 +977,7 @@ FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
   // Create a map of the provided parameters for faster lookup.
   std::map<std::string, Attribute> parameterMap;
   for (auto param : parameters) {
-    auto paramDecl = param.cast<ParamDeclAttr>();
+    auto paramDecl = cast<ParamDeclAttr>(param);
     parameterMap[paramDecl.getName().str()] = paramDecl.getValue();
   }
 
@@ -990,9 +990,9 @@ FailureOr<TypedAttr> hw::evaluateParametricAttr(Location loc,
   paramAttr = *paramAttrRes;
 
   // Then, evaluate the parametric attribute.
-  if (paramAttr.isa<IntegerAttr, hw::ParamDeclRefAttr>())
-    return paramAttr.cast<TypedAttr>();
-  if (auto paramExprAttr = paramAttr.dyn_cast<hw::ParamExprAttr>()) {
+  if (isa<IntegerAttr, hw::ParamDeclRefAttr>(paramAttr))
+    return cast<TypedAttr>(paramAttr);
+  if (auto paramExprAttr = dyn_cast<hw::ParamExprAttr>(paramAttr)) {
     // Since any ParamDeclRefAttr was replaced within the expression,
     // we re-evaluate the expression through the existing ParamExprAttr
     // canonicalizer.
@@ -1018,7 +1018,7 @@ FailureOr<Type> evaluateParametricArrayType(Location loc, ArrayAttr parameters,
 
   // If the size was evaluated to a constant, use a 64-bit integer
   // attribute version of it
-  if (auto intAttr = size->template dyn_cast<IntegerAttr>())
+  if (auto intAttr = dyn_cast<IntegerAttr>(*size))
     return TArray::get(
         arrayType.getContext(), *elementType,
         IntegerAttr::get(IntegerType::get(arrayType.getContext(), 64),

@@ -1044,7 +1044,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     FunctionType funcType = funcOp.getFunctionType();
     unsigned extMemCounter = 0;
     for (auto arg : enumerate(funcOp.getArguments())) {
-      if (arg.value().getType().isa<MemRefType>()) {
+      if (isa<MemRefType>(arg.value().getType())) {
         /// External memories
         auto memName =
             "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
@@ -1119,11 +1119,10 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
       extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
-      unsigned nAddresses = extMemPortIndices.getFirst()
-                                .getType()
-                                .cast<MemRefType>()
-                                .getShape()
-                                .size();
+      unsigned nAddresses =
+          cast<MemRefType>(extMemPortIndices.getFirst().getType())
+              .getShape()
+              .size();
       for (unsigned j = 0; j < nAddresses; ++j)
         extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
       extMemPorts.writeEn = compOp.getArgument(outPortsIt);

@@ -41,13 +41,13 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
   llvm::SmallVector<NamedAttribute, 4> newAttrs;
   newAttrs.reserve(op->getAttrs().size());
   for (auto attr : op->getAttrs()) {
-    if (auto typeAttr = attr.getValue().dyn_cast<TypeAttr>()) {
+    if (auto typeAttr = dyn_cast<TypeAttr>(attr.getValue())) {
       auto innerType = typeAttr.getValue();
       // TypeConvert::convertType doesn't handle function types, so we need to
       // handle them manually.
-      if (auto funcType = innerType.dyn_cast<FunctionType>())
+      if (auto funcType = dyn_cast<FunctionType>(innerType))
         innerType = convertFunctionType(*typeConverter, funcType);
-      else if (auto modType = innerType.dyn_cast<hw::ModuleType>())
+      else if (auto modType = dyn_cast<hw::ModuleType>(innerType))
         innerType = convertModuleType(*typeConverter, modType);
       else
         innerType = typeConverter->convertType(innerType);

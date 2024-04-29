@@ -214,12 +214,12 @@ struct FIRRTLModuleExternalizer : public OpReduction<firrtl::FModuleOp> {
 static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
                               SmallDenseMap<Type, Value, 8> &invalidCache,
                               bool flip = false) {
-  auto type = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  auto type = dyn_cast<firrtl::FIRRTLType>(value.getType());
   if (!type)
     return;
 
   // Descend into bundles by creating subfield ops.
-  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+  if (auto bundleType = dyn_cast<firrtl::BundleType>(type)) {
     for (auto element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
@@ -232,7 +232,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   }
 
   // Descend into vectors by creating subindex ops.
-  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+  if (auto vectorType = dyn_cast<firrtl::FVectorType>(type)) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
       auto subindex = builder.createOrFold<firrtl::SubindexOp>(value, i);
       invalidateOutputs(builder, subindex, invalidCache, flip);
@@ -256,23 +256,23 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 /// Connect a value to every leave of a destination value.
 static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
                            Value value) {
-  auto type = dest.getType().dyn_cast<firrtl::FIRRTLBaseType>();
+  auto type = dyn_cast<firrtl::FIRRTLBaseType>(dest.getType());
   if (!type)
     return;
-  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+  if (auto bundleType = dyn_cast<firrtl::BundleType>(type)) {
     for (auto element : llvm::enumerate(bundleType.getElements()))
       connectToLeafs(builder,
                      builder.create<firrtl::SubfieldOp>(dest, element.index()),
                      value);
     return;
   }
-  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+  if (auto vectorType = dyn_cast<firrtl::FVectorType>(type)) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
       connectToLeafs(builder, builder.create<firrtl::SubindexOp>(dest, i),
                      value);
     return;
   }
-  auto valueType = value.getType().dyn_cast<firrtl::FIRRTLBaseType>();
+  auto valueType = dyn_cast<firrtl::FIRRTLBaseType>(value.getType());
   if (!valueType)
     return;
   auto destWidth = type.getBitWidthOrSentinel();
@@ -290,17 +290,17 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
 
 /// Reduce all leaf fields of a value through an XOR tree.
 static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
-  auto type = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  auto type = dyn_cast<firrtl::FIRRTLType>(value.getType());
   if (!type)
     return;
-  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+  if (auto bundleType = dyn_cast<firrtl::BundleType>(type)) {
     for (auto element : llvm::enumerate(bundleType.getElements()))
       reduceXor(
           builder, into,
           builder.createOrFold<firrtl::SubfieldOp>(value, element.index()));
     return;
   }
-  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+  if (auto vectorType = dyn_cast<firrtl::FVectorType>(type)) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
       reduceXor(builder, into,
                 builder.createOrFold<firrtl::SubindexOp>(value, i));
@@ -453,7 +453,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
       if (!isa<firrtl::RefType>(result.getType())) {
         // Reduce all input ports to a single one through an XOR tree.
         unsigned numFields =
-            wire.getType().cast<firrtl::BundleType>().getNumElements();
+            cast<firrtl::BundleType>(wire.getType()).getNumElements();
         for (unsigned i = 0; i != numFields; ++i) {
           if (i != 2 && i != 3 && i != 5)
             reduceXor(builder, xorInputs,
@@ -500,9 +500,9 @@ struct FIRRTLOperandForwarder : public Reduction {
     if (isFlowSensitiveOp(op))
       return 0;
     auto resultTy =
-        op->getResult(0).getType().dyn_cast<firrtl::FIRRTLBaseType>();
+        dyn_cast<firrtl::FIRRTLBaseType>(op->getResult(0).getType());
     auto opTy =
-        op->getOperand(OpNum).getType().dyn_cast<firrtl::FIRRTLBaseType>();
+        dyn_cast<firrtl::FIRRTLBaseType>(op->getOperand(OpNum).getType());
     return resultTy && opTy &&
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
            (resultTy.getBitWidthOrSentinel() == -1) ==
@@ -514,8 +514,8 @@ struct FIRRTLOperandForwarder : public Reduction {
     ImplicitLocOpBuilder builder(op->getLoc(), op);
     auto result = op->getResult(0);
     auto operand = op->getOperand(OpNum);
-    auto resultTy = result.getType().cast<firrtl::FIRRTLBaseType>();
-    auto operandTy = operand.getType().cast<firrtl::FIRRTLBaseType>();
+    auto resultTy = cast<firrtl::FIRRTLBaseType>(result.getType());
+    auto operandTy = cast<firrtl::FIRRTLBaseType>(operand.getType());
     auto resultWidth = resultTy.getBitWidthOrSentinel();
     auto operandWidth = operandTy.getBitWidthOrSentinel();
     Value newOp;
@@ -544,13 +544,13 @@ struct FIRRTLConstantifier : public Reduction {
       return 0;
     if (isFlowSensitiveOp(op))
       return 0;
-    auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLBaseType>();
+    auto type = dyn_cast<firrtl::FIRRTLBaseType>(op->getResult(0).getType());
     return isa_and_nonnull<firrtl::UIntType, firrtl::SIntType>(type);
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     OpBuilder builder(op);
-    auto type = op->getResult(0).getType().cast<firrtl::FIRRTLBaseType>();
+    auto type = cast<firrtl::FIRRTLBaseType>(op->getResult(0).getType());
     auto width = type.getBitWidthOrSentinel();
     if (width == -1)
       width = 64;
@@ -571,7 +571,7 @@ struct ConnectInvalidator : public Reduction {
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
       return 0;
-    auto type = op->getOperand(1).getType().dyn_cast<firrtl::FIRRTLBaseType>();
+    auto type = dyn_cast<firrtl::FIRRTLBaseType>(op->getOperand(1).getType());
     return type && type.isPassive() &&
            !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
   }
@@ -766,9 +766,9 @@ struct ConnectSourceOperandForwarder : public Reduction {
     if (!srcOp || OpNum >= srcOp->getNumOperands())
       return 0;
 
-    auto resultTy = dest.getType().dyn_cast<firrtl::FIRRTLBaseType>();
+    auto resultTy = dyn_cast<firrtl::FIRRTLBaseType>(dest.getType());
     auto opTy =
-        srcOp->getOperand(OpNum).getType().dyn_cast<firrtl::FIRRTLBaseType>();
+        dyn_cast<firrtl::FIRRTLBaseType>(srcOp->getOperand(OpNum).getType());
 
     return resultTy && opTy &&
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&

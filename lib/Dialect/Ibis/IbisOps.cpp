@@ -262,7 +262,7 @@ LogicalResult GetVarOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 }
 
 VarOp GetVarOp::getVar(const hw::InnerRefNamespace &ns) {
-  ScopeRefType parentType = getInstance().getType().cast<ScopeRefType>();
+  ScopeRefType parentType = cast<ScopeRefType>(getInstance().getType());
   auto scopeRefOp = ns.lookupOp<ScopeOpInterface>(parentType.getScopeRef());
 
   if (!scopeRefOp)
@@ -295,9 +295,7 @@ LogicalResult GetPortOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   if (!portOp)
     return emitOpError() << "port '@" << getPortSymbol()
                          << "' does not exist in @"
-                         << getInstance()
-                                .getType()
-                                .cast<ScopeRefType>()
+                         << cast<ScopeRefType>(getInstance().getType())
                                 .getScopeRef()
                                 .getName()
                                 .getValue();
@@ -315,7 +313,7 @@ LogicalResult GetPortOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 PortOpInterface GetPortOp::getPort(const hw::InnerRefNamespace &ns) {
   // Lookup the target module type of the instance class reference.
   auto targetScope = ns.lookupOp<ScopeOpInterface>(
-      getInstance().getType().cast<ScopeRefType>().getScopeRef());
+      cast<ScopeRefType>(getInstance().getType()).getScopeRef());
 
   if (!targetScope)
     return nullptr;
@@ -412,11 +410,11 @@ LogicalResult PathOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto path = attrs.get("path").cast<ArrayAttr>();
+  auto path = cast<ArrayAttr>(attrs.get("path"));
   if (path.empty())
     return failure();
 
-  auto lastStep = path.getValue().back().cast<PathStepAttr>();
+  auto lastStep = cast<PathStepAttr>(path.getValue().back());
   results.push_back(lastStep.getType());
   return success();
 }
@@ -432,7 +430,7 @@ LogicalResult PathStepAttr::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "ibis.step 'child' must specify an instance name";
 
   // Only allow scoperefs
-  auto scoperefType = type.dyn_cast<ScopeRefType>();
+  auto scoperefType = llvm::dyn_cast<ScopeRefType>(type);
   if (!scoperefType)
     return emitError() << "ibis.step type must be an !ibis.scoperef type";
 
@@ -447,7 +445,7 @@ LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   // Verify that each referenced child symbol actually exists at the module
   // level.
   for (PathStepAttr step : getPathAsRange()) {
-    auto scoperefType = step.getType().cast<ScopeRefType>();
+    auto scoperefType = cast<ScopeRefType>(step.getType());
     hw::InnerRefAttr scopeRefSym = scoperefType.getScopeRef();
     if (!scopeRefSym)
       continue;
@@ -461,7 +459,7 @@ LogicalResult PathOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
   // Verify that the last step is fully typed.
   PathStepAttr lastStep = *std::prev(getPathAsRange().end());
-  ScopeRefType lastStepType = lastStep.getType().cast<ScopeRefType>();
+  ScopeRefType lastStepType = cast<ScopeRefType>(lastStep.getType());
   if (!lastStepType.getScopeRef())
     return emitOpError()
            << "last ibis.step in path must specify a symbol for the scoperef";
@@ -684,7 +682,7 @@ void DCBlockOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   auto *region = odsState.addRegion();
   llvm::SmallVector<Type> resTypes;
   for (auto output : outputs) {
-    dc::ValueType dcType = output.dyn_cast<dc::ValueType>();
+    dc::ValueType dcType = dyn_cast<dc::ValueType>(output);
     assert(dcType && "DCBlockOp outputs must be dc::ValueType");
     resTypes.push_back(dcType);
   }
@@ -694,7 +692,7 @@ void DCBlockOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   llvm::SmallVector<Type> argTypes;
   for (auto input : inputs) {
     argLocs.push_back(input.getLoc());
-    dc::ValueType dcType = input.getType().dyn_cast<dc::ValueType>();
+    dc::ValueType dcType = dyn_cast<dc::ValueType>(input.getType());
     assert(dcType && "DCBlockOp inputs must be dc::ValueType");
     argTypes.push_back(dcType.getInnerType());
   }
@@ -707,7 +705,7 @@ LogicalResult DCBlockOp::verify() {
 
   for (auto [arg, barg] :
        llvm::zip(getInputs(), getBodyBlock()->getArguments())) {
-    dc::ValueType dcType = arg.getType().dyn_cast<dc::ValueType>();
+    dc::ValueType dcType = dyn_cast<dc::ValueType>(arg.getType());
     if (!dcType)
       return emitOpError("DCBlockOp inputs must be dc::ValueType but got ")
              << arg.getType();
@@ -723,7 +721,7 @@ LogicalResult DCBlockOp::verify() {
 ParseResult DCBlockOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseBlockLikeOp<DCBlockOp>(
       parser, result, [&](OpAsmParser::Argument &arg) -> LogicalResult {
-        dc::ValueType valueType = arg.type.dyn_cast<dc::ValueType>();
+        dc::ValueType valueType = dyn_cast<dc::ValueType>(arg.type);
         if (!valueType)
           return parser.emitError(parser.getCurrentLocation(),
                                   "DCBlockOp inputs must be dc::ValueType");

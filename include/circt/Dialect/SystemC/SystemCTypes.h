@@ -63,8 +63,8 @@ std::optional<size_t> getBitWidth(Type type);
 class ValueBaseType : public Type {
 public:
   static bool classof(Type type) {
-    return type.isa<SignedType, UnsignedType, IntBaseType, UIntBaseType,
-                    BigIntType, BigUIntType, IntType, UIntType>();
+    return llvm::isa<SignedType, UnsignedType, IntBaseType, UIntBaseType,
+                     BigIntType, BigUIntType, IntType, UIntType>(type);
   }
 
   bool isSigned() { return isa<SignedType, IntBaseType>(); }
@@ -82,7 +82,7 @@ class IntBaseType
     : public Type::TypeBase<IntBaseType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<IntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<IntType>(type);
   }
   static IntBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "int_base"; }
@@ -120,7 +120,7 @@ class UIntBaseType
     : public Type::TypeBase<UIntBaseType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<UIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<UIntType>(type);
   }
   static UIntBaseType get(MLIRContext *context);
 
@@ -160,7 +160,7 @@ class SignedType
     : public Type::TypeBase<SignedType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BigIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BigIntType>(type);
   }
   static SignedType get(MLIRContext *context);
 
@@ -199,7 +199,7 @@ class UnsignedType
     : public Type::TypeBase<UnsignedType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BigUIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BigUIntType>(type);
   }
   static UnsignedType get(MLIRContext *context);
 
@@ -243,7 +243,7 @@ class BitVectorBaseType
     : public Type::TypeBase<BitVectorBaseType, Type, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BitVectorType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BitVectorType>(type);
   }
   static BitVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "bv_base"; }
@@ -282,7 +282,7 @@ class LogicVectorBaseType
     : public Type::TypeBase<LogicVectorBaseType, Type, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<LogicVectorType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<LogicVectorType>(type);
   }
   static LogicVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "lv_base"; }

@@ -326,7 +326,7 @@ def DCBlockOp : BlockLikeOp<"sblock.dc", [
     llvm::SmallVector<Type> getInternalResultTypes() {
       llvm::SmallVector<Type> innerRes;
       for(Type outerRes : getResultTypes())
-        innerRes.push_back(outerRes.cast<dc::ValueType>().getInnerType());
+        innerRes.push_back(llvm::cast<dc::ValueType>(outerRes).getInnerType());
       return innerRes;
     }
   }];
@@ -726,7 +726,7 @@ def GetPortOp : IbisOp<"get_port", [
   let extraClassDeclaration = [{
     // Returns the direction requested by this get_port op.
     ibis::Direction getDirection() {
-      return getPort().getType().cast<PortRefType>().getDirection();
+      return llvm::cast<PortRefType>(getPort().getType()).getDirection();
     }
 
     // Returns the port op that this operation is referencing.
@@ -774,8 +774,9 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
-      results.push_back(PortRefType::get(context, attrs.get("type")
-        .cast<TypeAttr>().getValue(), getPortDirection()));
+      results.push_back(PortRefType::get(context,
+        llvm::cast<TypeAttr>(attrs.get("type")).getValue(),
+        getPortDirection()));
       return success();
     }
   }];
@@ -785,7 +786,7 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
   code extraPortClassDefinition = ?;
   let extraClassDefinition =  extraPortClassDefinition # [{
     LogicalResult $cppClass::verify() {
-      if(getType().isa<ScopeRefType>())
+      if(llvm::isa<ScopeRefType>(getType()))
         return emitOpError("port type cannot be a scope reference");
 
       return success();
@@ -857,7 +858,7 @@ class InnerTypeToPortrefTypeConstraint<string lhs, string rhs, string dir>
 
 class PortRefToInnerTypeConstraint<string lhs, string rhs>
   : TypesMatchWith<"the inner type of the lhs portref type dictates the rhs type",
-    lhs, rhs, "$_self.cast<PortRefType>().getPortType()">;
+    lhs, rhs, "llvm::cast<PortRefType>($_self).getPortType()">;
 
 def InputWireOp : WireLikeOp<"wire.input", [
   InnerTypeToPortrefTypeConstraint<"output", "port", "Input">

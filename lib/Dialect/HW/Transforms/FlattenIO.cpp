@@ -16,11 +16,11 @@ using namespace mlir;
 using namespace circt;
 
 static bool isStructType(Type type) {
-  return hw::getCanonicalType(type).isa<hw::StructType>();
+  return isa<hw::StructType>(hw::getCanonicalType(type));
 }
 
 static hw::StructType getStructType(Type type) {
-  return hw::getCanonicalType(type).dyn_cast<hw::StructType>();
+  return dyn_cast<hw::StructType>(hw::getCanonicalType(type));
 }
 
 // Legal if no in- or output type is a struct.
@@ -63,8 +63,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     }
 
     // And replace.
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
     opVisited->insert(op->getParentOp());
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
     return success();
   }
   DenseSet<Operation *> *opVisited;

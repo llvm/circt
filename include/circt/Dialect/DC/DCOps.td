@@ -67,7 +67,7 @@ def BufferOp : DCOp<"buffer",
   let extraClassDeclaration = [{
     // Returns the data type of this buffer, if any.
     std::optional<TypeRange> getInnerType() {
-      if(auto type = getInput().getType().dyn_cast<ValueType>())
+      if(auto type = llvm::dyn_cast<ValueType>(getInput().getType()))
         return type.getInnerType();
       return std::nullopt;
     }
@@ -94,6 +94,14 @@ def JoinOp : DCOp<"join", [Commutative]> {
 
   let assemblyFormat = "$tokens attr-dict";
   let hasFolder = 1;
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::ValueRange":$ins), [{
+      assert(ins.size() > 0 && "expected at least one input");
+      $_state.addOperands(ins);
+      $_state.addTypes(dc::TokenType::get($_builder.getContext()));
+    }]>
+  ];
 }
 
 def ForkOp : DCOp<"fork"> {

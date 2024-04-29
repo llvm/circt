@@ -27,7 +27,7 @@ def AnnotationArrayAttr
 def PortAnnotationsAttr : ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
-      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+      CPred<"llvm::isa<::mlir::ArrayAttr>($_self)">,
       // Guarantee all elements are an array or a dictionary.
       CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
             "[&](::mlir::Attribute attr) { return isa<"

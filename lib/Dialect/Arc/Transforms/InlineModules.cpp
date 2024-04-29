@@ -82,7 +82,7 @@ struct PrefixingInliner : public InlinerInterface {
       SmallVector<Attribute> names(namesAttr.getValue().begin(),
                                    namesAttr.getValue().end());
       for (auto &name : names)
-        if (auto nameStr = name.dyn_cast<StringAttr>())
+        if (auto nameStr = dyn_cast<StringAttr>(name))
           name = updateName(nameStr);
       op->setAttr("names", ArrayAttr::get(namesAttr.getContext(), names));
     }

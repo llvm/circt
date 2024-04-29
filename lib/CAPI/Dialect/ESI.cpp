@@ -27,7 +27,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(ESI, esi, circt::esi::ESIDialect)
 void registerESIPasses() { circt::esi::registerESIPasses(); }
 
 bool circtESITypeIsAChannelType(MlirType type) {
-  return unwrap(type).isa<ChannelType>();
+  return isa<ChannelType>(unwrap(type));
 }
 
 MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
@@ -39,21 +39,21 @@ MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
-  return wrap(unwrap(channelType).cast<ChannelType>().getInner());
+  return wrap(cast<ChannelType>(unwrap(channelType)).getInner());
 }
 uint32_t circtESIChannelGetSignaling(MlirType channelType) {
-  return (uint32_t)unwrap(channelType).cast<ChannelType>().getSignaling();
+  return (uint32_t)cast<ChannelType>(unwrap(channelType)).getSignaling();
 }
 
 bool circtESITypeIsAnAnyType(MlirType type) {
-  return unwrap(type).isa<AnyType>();
+  return isa<AnyType>(unwrap(type));
 }
 MlirType circtESIAnyTypeGet(MlirContext ctxt) {
   return wrap(AnyType::get(unwrap(ctxt)));
 }
 
 bool circtESITypeIsAListType(MlirType type) {
-  return unwrap(type).isa<ListType>();
+  return isa<ListType>(unwrap(type));
 }
 
 MlirType circtESIListTypeGet(MlirType inner) {
@@ -62,7 +62,7 @@ MlirType circtESIListTypeGet(MlirType inner) {
 }
 
 MlirType circtESIListTypeGetElementType(MlirType list) {
-  return wrap(unwrap(list).cast<ListType>().getElementType());
+  return wrap(cast<ListType>(unwrap(list)).getElementType());
 }
 
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
@@ -132,7 +132,7 @@ CirctESIBundleTypeBundleChannel circtESIBundleTypeGetChannel(MlirType bundle,
 //===----------------------------------------------------------------------===//
 
 bool circtESIAttributeIsAnAppIDAttr(MlirAttribute attr) {
-  return unwrap(attr).isa<AppIDAttr>();
+  return isa<AppIDAttr>(unwrap(attr));
 }
 
 MlirAttribute circtESIAppIDAttrGet(MlirContext ctxt, MlirStringRef name,
@@ -145,10 +145,10 @@ MlirAttribute circtESIAppIDAttrGetNoIdx(MlirContext ctxt, MlirStringRef name) {
       unwrap(ctxt), StringAttr::get(unwrap(ctxt), unwrap(name)), std::nullopt));
 }
 MlirStringRef circtESIAppIDAttrGetName(MlirAttribute attr) {
-  return wrap(unwrap(attr).cast<AppIDAttr>().getName().getValue());
+  return wrap(cast<AppIDAttr>(unwrap(attr)).getName().getValue());
 }
 bool circtESIAppIDAttrGetIndex(MlirAttribute attr, uint64_t *indexOut) {
-  std::optional<uint64_t> index = unwrap(attr).cast<AppIDAttr>().getIndex();
+  std::optional<uint64_t> index = cast<AppIDAttr>(unwrap(attr)).getIndex();
   if (!index)
     return false;
   *indexOut = index.value();
