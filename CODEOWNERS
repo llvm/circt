@@ -42,6 +42,11 @@ tools/llhd-sim @fabianschuiki @maerhart
 # HW
 # **/Dialect/HW
 
+# SMT
+**/Dialect/SMT @maerhart
+lib/Conversion/SMTToZ3LLVM @maerhart
+lib/Target/ExportSMTLIB @maerhart
+
 # SV
 # **/Dialect/SV
 
