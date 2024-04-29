@@ -1,4 +1,5 @@
-//===- InlineModules.cpp --------------------------------------------------===//
+//===- FlattenModules.cpp
+//--------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/ArcOps.h"
-#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -17,24 +17,23 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "arc-inline-modules"
+#define DEBUG_TYPE "hw-flatten-modules"
 
 namespace circt {
-namespace arc {
-#define GEN_PASS_DEF_INLINEMODULES
-#include "circt/Dialect/Arc/ArcPasses.h.inc"
-} // namespace arc
+namespace hw {
+#define GEN_PASS_DEF_FLATTENMODULES
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
 } // namespace circt
 
 using namespace circt;
-using namespace arc;
 using namespace hw;
 using namespace igraph;
 using mlir::InlinerInterface;
 
 namespace {
-struct InlineModulesPass
-    : public arc::impl::InlineModulesBase<InlineModulesPass> {
+struct FlattenModulesPass
+    : public circt::hw::impl::FlattenModulesBase<FlattenModulesPass> {
   void runOnOperation() override;
 };
 
@@ -90,7 +89,7 @@ struct PrefixingInliner : public InlinerInterface {
 };
 } // namespace
 
-void InlineModulesPass::runOnOperation() {
+void FlattenModulesPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
   DenseSet<Operation *> handled;
 
@@ -144,6 +143,6 @@ void InlineModulesPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<Pass> arc::createInlineModulesPass() {
-  return std::make_unique<InlineModulesPass>();
+std::unique_ptr<Pass> circt::hw::createFlattenModulesPass() {
+  return std::make_unique<FlattenModulesPass>();
 }
