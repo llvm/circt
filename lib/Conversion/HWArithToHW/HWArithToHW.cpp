@@ -208,7 +208,9 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
                       ->getOpResult(0);
 
     // Carry over any attributes from the original div op.
-    divResult.getDefiningOp()->setDialectAttrs(op->getDialectAttrs());
+    auto *divOp = divResult.getDefiningOp();
+    rewriter.modifyOpInPlace(
+        divOp, [&]() { divOp->setDialectAttrs(op->getDialectAttrs()); });
 
     // finally truncate back to the expected result size!
     Value truncateResult = extractBits(rewriter, loc, divResult, /*startBit=*/0,
@@ -302,9 +304,11 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getRhs(), cmpWidth,
                                      rhsType.isSigned());
 
-    auto newOp = rewriter.replaceOpWithNewOp<comb::ICmpOp>(
-        op, combPred, lhsValue, rhsValue, false);
-    newOp->setDialectAttrs(op->getDialectAttrs());
+    auto newOp = rewriter.create<comb::ICmpOp>(op->getLoc(), combPred, lhsValue,
+                                               rhsValue, false);
+    rewriter.modifyOpInPlace(
+        newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
+    rewriter.replaceOp(op, newOp);
 
     return success();
   }
@@ -330,8 +334,11 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
     auto newOp =
-        rewriter.replaceOpWithNewOp<ReplaceOp>(op, lhsValue, rhsValue, false);
-    newOp->setDialectAttrs(op->getDialectAttrs());
+        rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue, false);
+    rewriter.modifyOpInPlace(
+        newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
+    rewriter.replaceOp(op, newOp);
+
     return success();
   }
 };
