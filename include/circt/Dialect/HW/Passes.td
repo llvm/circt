@@ -48,12 +48,11 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
   let summary = "Eagerly inline private modules";
   let description = [{
     This pass eagerly inlines private HW modules into their instantiation sites.
-    After outlining combinational logic and registers into arcs, module bodies
-    become fairly lightweight. Since arc definitions now fulfill the purpose of
-    code reuse by allowing a single definition to be called multiple times, the
-    module hierarchy degenerates into a purely cosmetic construct. At that point
-    it is beneficial to fully flatten the module hierarchy to simplify further
-    analysis and optimization of state transfer arcs.
+    This is necessary for verification purposes, as model checking backends do not 
+    require or support the use of module hierarchy. For simulation, module hierarchies 
+    degenerate into a purely cosmetic construct, at which point it is beneficial
+    to fully flatten the module hierarchy to simplify further analysis and 
+    optimization of state transfer arcs.
   }];
   let constructor = "circt::hw::createFlattenModulesPass()";
 }

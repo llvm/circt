@@ -67,7 +67,6 @@
 
 using namespace mlir;
 using namespace circt;
-using namespace hw;
 using namespace arc;
 
 //===----------------------------------------------------------------------===//
