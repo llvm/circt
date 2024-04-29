@@ -15,7 +15,7 @@ hw.module @err(in %a: i1, in %b: i1) {
 // -----
 
 hw.module @err(in %a: i0) {
-  // expected-error @+1 {{op replicate does not take zero bit integer}}
+  // expected-error @+1 {{op replicate must produce integer multiple of operand}}
   %0 = comb.replicate %a : (i0) -> i16
 }
 

@@ -185,14 +185,13 @@ LogicalResult ReplicateOp::verify() {
   // multiple of it.  Both are already known to be signless integers.
   auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
   auto dstWidth = getType().cast<IntegerType>().getWidth();
-  if (srcWidth == 0)
-    return emitOpError("replicate does not take zero bit integer");
 
   if (srcWidth > dstWidth)
     return emitOpError("replicate cannot shrink bitwidth of operand"),
            failure();
 
-  if (dstWidth % srcWidth)
+  if ((srcWidth == 0 && dstWidth != 0) ||
+      (srcWidth != 0 && dstWidth % srcWidth))
     return emitOpError("replicate must produce integer multiple of operand"),
            failure();
 
