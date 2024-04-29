@@ -68,7 +68,13 @@ TODO: describe why add/xor/or are variadic
 
 ### Operators carry signs instead of types
 
-TODO: describe why we have divu/divs but not addu/adds, and not sint vs uint.
+Operators, in LLVM-2.0 style, which have consistent behavior in module 
+arithmetic with respect to signedness are not modeled with sign.  `comb` 
+operates on signless types with signless operations.  This is in accordance
+with LLVM's approach.
+
+Some operations, such as `divu` and `divs`, have different behaviors for signed
+v.s. unsigned types, thus they are modeled with different ops.
 
 ### Selectable truth-table
 
@@ -176,6 +182,24 @@ move has some advantages and disadvantages:
 We agreed that we'd revisit in the future if there were a specific reason to
 add it.  Until then we represent the `array_create`/`array_get` pattern for
 frontends that want to generate this.
+
+
+### Undefined behavior for division
+
+`divu` and `divs` have undefined behavior when the numerator is 0.  It is 
+expected that a frontend will use additional operations to implement the 
+semantics required for that language.  For example, system verilog returns an 
+`x` on divide by zero, thus its representation may be
+`mux(denominator == 0, sv.constantx, divu(numerator,denominator))` whereas VHDL
+has a runtime-trap in simulation, thus it may require 
+`if(denominator==0) { assert() } else { divu(numerator,denominator)} ` and
+FIRRTL requires division by zero to return 0, so it may require
+`mux(denominator==0, 0, divu(numerator,denominator))`.
+
+Since division in general is very rare in real synthesizable HW, circt doesn't 
+make much effort to optimize divide by zero (nor even division in general, as 
+previously mentioned).  Any guard to implement a specific semantic should by 
+itself cause the actual divide by constant zero to be dead code.
 
 ## Endianness: operand ordering and internal representation
 
