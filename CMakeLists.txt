@@ -602,9 +602,9 @@ if(CIRCT_YOSYS_INTEGRATION_ENABLED)
     BINARY_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
     INSTALL_DIR "${CMAKE_BINARY_DIR}/third-party/yosys"
     # CONFIGURE_COMMAND sed -i "s/ENABLE_LIBYOSYS := 0/ENABLE_LIBYOSYS := 1/" Makefile && make config-gcc # TODO: Switch `make config-clang` or `make config-gcc` based on CXX_COMPILER
-    CONFIGURE_COMMAND make config-gcc && echo "ENABLE_LIBYOSYS := 1" >> Makefile.conf
-    BUILD_COMMAND make --jobs=12 # TODO: Make the number of workers configurable. We cannot get it from ninja.
-    INSTALL_COMMAND "" # skip install
+    CONFIGURE_COMMAND make config-gcc && echo "ENABLE_LIBYOSYS := 1" >> Makefile.conf && echo "PREFIX := ${CMAKE_BINARY_DIR}" >> Makefile.conf
+    BUILD_COMMAND make # TODO: Make the number of workers configurable.
+    INSTALL_COMMAND make install
     TEST_COMMAND ""
     BUILD_BYPRODUCTS "${CMAKE_BINARY_DIR}/third-party/yosys/libyosys.so"
   )
