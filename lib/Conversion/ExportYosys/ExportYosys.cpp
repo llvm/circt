@@ -894,7 +894,7 @@ void ExportYosysParallelPass::runOnOperation() {
   init_yosys();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
 
-  auto dut = StringAttr::get(&getContext(), "FPU");
+  auto dut = StringAttr::get(&getContext(), "DigitalTop");
   auto designs = designSet(theInstanceGraph, dut);
   auto isInDesign = [&](StringAttr mod) -> bool {
     if (designs.empty())
