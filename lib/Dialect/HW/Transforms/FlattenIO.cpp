@@ -63,8 +63,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     }
 
     // And replace.
-    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
     opVisited->insert(op->getParentOp());
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
     return success();
   }
   DenseSet<Operation *> *opVisited;
