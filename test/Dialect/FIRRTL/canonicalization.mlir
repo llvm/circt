@@ -455,6 +455,7 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
                    out %out4: !firrtl.uint<4>,
                    out %outcst: !firrtl.uint<8>,
                    out %outcst2: !firrtl.uint<8>,
+                   out %outu8: !firrtl.uint<8>,
                    in %in0 : !firrtl.uint<0>,
                    out %outpt1: !firrtl.uint<4>,
                    out %outpt2 : !firrtl.uint<4>) {
@@ -490,6 +491,12 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   %9  = firrtl.cat %c0_si2, %sin4 : (!firrtl.sint<2>, !firrtl.sint<4>) -> !firrtl.uint<6>
   %10 = firrtl.cat %c0_ui2, %9 : (!firrtl.uint<2>, !firrtl.uint<6>) -> !firrtl.uint<8>
   firrtl.connect %outcst, %10 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  // CHECK: %[[fixedsign:.*]] = firrtl.cat %sin4, %sin4
+  // CHECK-NEXT: firrtl.strictconnect %outu8, %[[fixedsign]]
+  %tcast = firrtl.asUInt %sin4 : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %11 = firrtl.cat %tcast, %tcast : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  firrtl.strictconnect %outu8, %11 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @Bits

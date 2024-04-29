@@ -47,6 +47,9 @@ def EqualTypes : Constraint<CPred<"areAnonymousTypesEquivalent($0.getType(), $1.
 // Constraint that enforces equal type sizes
 def EqualIntSize : Constraint<CPred<"type_cast<IntType>($0.getType()).getWidth() == type_cast<IntType>($1.getType()).getWidth()">>;
 
+// Constraint that enforces equal type signedness
+def EqualSigns : Constraint<CPred<"type_cast<IntType>($0.getType()).isSigned() == type_cast<IntType>($1.getType()).isSigned()">>;
+
 // sizeof(0) >= sizeof(1)
 def IntTypeWidthGEQ32 : Constraint<CPred<
   "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() >= type_cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
@@ -683,6 +686,12 @@ def CatDoubleConst : Pat <
   (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
   (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, (AsUIntPrimOp $cst2)), (AsUIntPrimOp $v))),
   [(KnownWidth $v), (AnyConstantOp $cst1), (AnyConstantOp $cst2)]>;
+
+// cat(asUint(x), asUint(y)) -> cat(x,y)
+def CatCast : Pat <
+  (CatPrimOp:$old (AsUIntPrimOp $x), (AsUIntPrimOp $y)),
+  (MoveNameHint $old, (CatPrimOp $x, $y)),
+  [(EqualSigns $x, $y)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<

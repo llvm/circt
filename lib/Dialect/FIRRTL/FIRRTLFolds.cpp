@@ -1201,7 +1201,7 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 namespace {
 // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-// consequtive in the input.
+// consecutive in the input.
 struct CatBitsBits : public mlir::RewritePattern {
   CatBitsBits(MLIRContext *context)
       : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
@@ -1228,7 +1228,8 @@ struct CatBitsBits : public mlir::RewritePattern {
 
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits, patterns::CatDoubleConst>(context);
+  results.insert<CatBitsBits, patterns::CatDoubleConst, patterns::CatCast>(
+      context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
