@@ -68,13 +68,13 @@ TODO: describe why add/xor/or are variadic
 
 ### Operators carry signs instead of types
 
-Operators, in LLVM-2.0 style, which have consistent behavior in module 
+Operators, in [LLVM-2.0 style](https://mlir.llvm.org/docs/Rationale/Rationale/#integer-signedness-semantics), which have consistent behavior in module 
 arithmetic with respect to signedness are not modeled with sign.  `comb` 
 operates on signless types with signless operations.  This is in accordance
 with LLVM's approach.
 
-Some operations, such as `divu` and `divs`, have different behaviors for signed
-v.s. unsigned types, thus they are modeled with different ops.
+Some operations, such as division, have different behaviors for signed v.s. 
+unsigned types, thus they are modeled with different ops (`divu` and `divs`).
 
 ### Selectable truth-table
 
@@ -192,9 +192,9 @@ semantics required for that language.  For example, system verilog returns an
 `x` on divide by zero, thus its representation may be
 `mux(denominator == 0, sv.constantx, divu(numerator,denominator))` whereas VHDL
 has a runtime-trap in simulation, thus it may require 
-`if(denominator==0) { assert() } else { divu(numerator,denominator)} ` and
-FIRRTL requires division by zero to return 0, so it may require
-`mux(denominator==0, 0, divu(numerator,denominator))`.
+`if(denominator==0) { assert() } else { divu(numerator,denominator)} `.
+Some vendor division blocks produce 0 in this case and
+that could be modeled as `mux(denominator==0, 0, divu(numerator,denominator))`.
 
 Since division in general is very rare in real synthesizable HW, circt doesn't 
 make much effort to optimize divide by zero (nor even division in general, as 
