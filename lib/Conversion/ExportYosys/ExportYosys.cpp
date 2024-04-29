@@ -855,8 +855,11 @@ void ExportYosysPass::runOnOperation() {
 LogicalResult runYosys(Location loc, StringRef inputFilePath,
                        std::string command) {
   auto yosysPath = llvm::sys::findProgramByName("yosys");
-  if (!yosysPath)
-    return mlir::emitError(loc) << yosysPath.getError().message();
+  if (!yosysPath) {
+    return mlir::emitError(loc) << "cannot find 'yosys' executable. Please add "
+                                   "yosys to PATH. Error message='"
+                                << yosysPath.getError().message() << "'";
+  }
   StringRef commands[] = {"-g", "-p", command, "-f", "rtlil", inputFilePath};
   auto exitCode = llvm::sys::ExecuteAndWait(yosysPath.get(), commands);
   return success(exitCode == 0);
