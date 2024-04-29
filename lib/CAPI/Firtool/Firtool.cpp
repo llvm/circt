@@ -6,8 +6,6 @@
 
 #include "circt-c/Firtool/Firtool.h"
 #include "circt/Firtool/Firtool.h"
-
-#include "circt/Firtool/Firtool.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Pass.h"
 #include "mlir/CAPI/Support.h"
@@ -376,4 +374,14 @@ MlirLogicalResult
 circtFirtoolPopulateFinalizeIR(MlirPassManager pm,
                                CirctFirtoolFirtoolOptions options) {
   return wrap(firtool::populateFinalizeIR(*unwrap(pm), *unwrap(options)));
+}
+
+MlirLogicalResult
+circtFirtoolpopulateHWToBTOR2(MlirPassManager pm,
+                              CirctFirtoolFirtoolOptions options,
+                              MlirStringCallback callback, void *userData) {
+  auto stream =
+      std::make_unique<mlir::detail::CallbackOstream>(callback, userData);
+  return wrap(firtool::populateHWToBTOR2(*unwrap(pm), *unwrap(options),
+                                         *std::move(stream)));
 }

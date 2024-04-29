@@ -172,6 +172,7 @@ enum OutputFormatKind {
   OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
+  OutputBTOR2,
   OutputSplitVerilog,
   OutputDisabled
 };
@@ -188,6 +189,7 @@ static cl::opt<OutputFormatKind> outputFormat(
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+        clEnumValN(OutputBTOR2, "btor2", "Emit BTOR2"),
         clEnumValN(OutputSplitVerilog, "split-verilog",
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
@@ -407,12 +409,18 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Lower if we are going to verilog or if lowering was specifically requested.
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
   if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+        return failure();
+    // Add passes specific to btor2 emission
+    if (outputFormat == OutputBTOR2)
+      if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                            (*outputFile)->os())))
         return failure();
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
@@ -717,6 +725,7 @@ int main(int argc, char **argv) {
     registerLowerSeqToSVPass();
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerConvertHWToBTOR2Pass();
   }
 
   // Register any pass manager command line options.
