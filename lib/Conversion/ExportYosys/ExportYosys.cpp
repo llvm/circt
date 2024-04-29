@@ -69,6 +69,10 @@ struct ModuleConverter
       public comb::CombinationalVisitor<ModuleConverter, LogicalResult>,
       public seq::SeqOpVisitor<ModuleConverter, LogicalResult> {
 
+  FailureOr<RTLIL::Cell *>
+  createCell(llvm::StringRef cellName, llvm::StringRef instanceName,
+             ArrayRef<std::pair<llvm::StringRef, mlir::Attribute>> parameters,
+             ArrayRef<std::pair<llvm::StringRef, mlir::Value>> ports);
   Yosys::Wire *createWire(Type type, StringAttr name) {
     int64_t width = getBitWidthSeq(type);
 
@@ -125,6 +129,11 @@ struct ModuleConverter
   YosysCircuitImporter &circuitConverter;
 
   DenseMap<Value, RTLIL::Wire *> mapping;
+  struct MemoryInfo {
+    RTLIL::Memory *mem;
+    unsigned portId;
+  };
+  DenseMap<seq::FirMemOp, MemoryInfo> memoryMapping;
   SmallVector<RTLIL::Wire *> outputs;
   const bool definedAsBlackBox;
 
@@ -178,8 +187,11 @@ struct ModuleConverter
     return visitUnhandledExpr(op);
   }
 
+  FailureOr<RTLIL::Const> getParameter(Attribute attr);
+
   // HW type op.
   RTLIL::Const getConstant(IntegerAttr attr);
+  RTLIL::Const getConstant(const APInt &attr);
 
   LogicalResult visitTypeOp(ConstantOp op) {
     return setLowering(op, getConstant(op.getValueAttr()));
@@ -290,18 +302,29 @@ struct YosysCircuitImporter {
 };
 } // namespace
 
-RTLIL::Const ModuleConverter::getConstant(IntegerAttr attr) {
-  auto width = attr.getValue().getBitWidth();
+RTLIL::Const ModuleConverter::getConstant(const APInt &value) {
+  auto width = value.getBitWidth();
   if (width <= 32)
-    return RTLIL::Const(attr.getValue().getZExtValue(),
-                        attr.getValue().getBitWidth());
+    return RTLIL::Const(value.getZExtValue(), value.getBitWidth());
 
   // TODO: Use more efficient encoding.
   std::vector<bool> result(width, false);
   for (size_t i = 0; i < width; ++i)
-    result[i] = attr.getValue()[i];
+    result[i] = value[i];
 
   return RTLIL::Const(result);
+}
+
+RTLIL::Const ModuleConverter::getConstant(IntegerAttr attr) {
+  return getConstant(attr.getValue());
+}
+
+FailureOr<RTLIL::Const> ModuleConverter::getParameter(Attribute attr) {
+  return TypeSwitch<Attribute, FailureOr<RTLIL::Const>>(attr)
+      .Case<IntegerAttr>([&](auto a) { return getConstant(a); })
+      .Case<StringAttr>(
+          [&](StringAttr a) { return RTLIL::Const(a.getValue().str()); })
+      .Default([](auto) { return failure(); });
 }
 
 LogicalResult ModuleConverter::lowerPorts() {
@@ -350,11 +373,11 @@ LogicalResult ModuleConverter::lowerBody() {
               LLVM_DEBUG(llvm::dbgs() << "Visiting " << *op << "\n");
               if (failed(visitOp(op))) {
                 op->emitError() << "lowering failed";
-                // return WalkResult::interrupt();
+                return WalkResult::interrupt();
               }
               LLVM_DEBUG(llvm::dbgs() << "Success \n");
             } else {
-              // Ignore Verif, LTL, SV and so on.
+              // Ignore Verif, LTL and Sim etc.
             }
             return WalkResult::advance();
           })
@@ -647,15 +670,140 @@ LogicalResult ModuleConverter::visitSeq(seq::FirRegOp op) {
 }
 
 LogicalResult ModuleConverter::visitSeq(seq::FirMemOp op) {
-  return op.emitError()
-         << "firmem lowering is unimplmented yet. Use MemToRegOfVec instead.";
+  auto *mem = new RTLIL::Memory();
+  mem->width = op.getType().getWidth();
+  mem->size = op.getType().getDepth();
+  mem->name = getNewName("Memory");
+  rtlilModule->memories[mem->name] = mem;
+  MemoryInfo memInfo;
+  memInfo.mem = mem;
+  memInfo.portId = 0;
+  memoryMapping.insert({op, memInfo});
+  return success();
+}
+
+FailureOr<RTLIL::Cell *> ModuleConverter::createCell(
+    llvm::StringRef cellName, llvm::StringRef instanceName,
+    ArrayRef<std::pair<StringRef, mlir::Attribute>> parameters,
+    ArrayRef<std::pair<StringRef, mlir::Value>> ports) {
+  auto *cell =
+      rtlilModule->addCell(getNewName(instanceName), getEscapedName(cellName));
+  for (auto [portName, value] : ports) {
+    auto loweredValue = getValue(value);
+    if (failed(loweredValue))
+      return failure();
+    cell->connections_.insert({getEscapedName(portName), loweredValue.value()});
+  }
+  for (auto [portName, value] : parameters) {
+    auto loweredValue = getParameter(value);
+    if (failed(loweredValue))
+      return failure();
+    cell->parameters.insert({getEscapedName(portName), loweredValue.value()});
+  }
+  return cell;
 }
 
 LogicalResult ModuleConverter::visitSeq(seq::FirMemWriteOp op) {
-  return failure();
+  // cell $memwr_v2 $auto$proc_memwr.cc:45:proc_memwr$49
+  //   parameter \ABITS 5
+  //   parameter \CLK_ENABLE 1'1
+  //   parameter \CLK_POLARITY 1'1
+  //   parameter \MEMID "\\Memory"
+  //   parameter \PORTID 1
+  //   parameter \PRIORITY_MASK 1'1
+  //   parameter \WIDTH 65
+  //   connect \ADDR $1$memwr$\Memory$mem.sv:29$2_ADDR[4:0]$15
+  //   connect \CLK \W0_clk
+  //   connect \DATA $1$memwr$\Memory$mem.sv:29$2_DATA[64:0]$16
+  //   connect \EN $1$memwr$\Memory$mem.sv:29$2_EN[64:0]$17
+  // end
+  auto firmem = op.getMemory().getDefiningOp<seq::FirMemOp>();
+  if (!firmem)
+    return failure();
+  SmallVector<std::pair<llvm::StringRef, mlir::Value>> ports{
+      {"ADDR", op.getAddress()},
+      {"CLK", op.getClk()},
+      {"DATA", op.getData()},
+      {"EN", op.getData()}};
+  OpBuilder builder(module.getContext());
+  auto trueConst = builder.getIntegerAttr(builder.getI1Type(), 1);
+  auto widthConst = builder.getI32IntegerAttr(
+      llvm::Log2_64_Ceil(firmem.getType().getDepth()));
+
+  auto it = memoryMapping.find(firmem);
+  assert(it != memoryMapping.end() && "firmem should be visited");
+  auto memName = builder.getStringAttr(it->second.mem->name.str());
+  auto portId = builder.getI32IntegerAttr(++it->second.portId);
+  auto width = builder.getI32IntegerAttr(firmem.getType().getWidth());
+  SmallVector<std::pair<llvm::StringRef, Attribute>> parameters{
+      {"ABITS", widthConst},       {"CLK_ENABLE", trueConst},
+      {"CLK_POLARITY", trueConst}, {"MEMID", memName},
+      {"PORTID", portId},          {"WIDTH", width},
+      {"PRIORITY_MASK", trueConst}};
+
+  auto cell = createCell("$memwr_v2", "mem_write", parameters, ports);
+  if (failed(cell))
+    return cell;
+
+  if (op.getEnable()) {
+    auto enable = getValue(op.getEnable());
+  }
+
+  return success();
 }
 LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {
-  return failure();
+  // rtlilModule->addCell("$memrd", id)
+  // Memrd
+  // cell $memrd
+  //   parameter \ABITS 5
+  //   parameter \CLK_ENABLE 0
+  //   parameter \CLK_POLARITY 0
+  //   parameter \MEMID "\\Memory"
+  //   parameter \TRANSPARENT 0
+  //   parameter \WIDTH 65
+  //   connect \ADDR \R0_addr
+  //   connect \CLK 1'x
+  //   connect \DATA $memrd$\Memory$mem.sv:45$18_DATA
+  //   connect \EN 1'x
+  // end
+  auto firmem = op.getMemory().getDefiningOp<seq::FirMemOp>();
+  if (!firmem)
+    return failure();
+  SmallVector<std::pair<llvm::StringRef, mlir::Value>> ports{
+      {"ADDR", op.getAddress()}, {"CLK", op.getClk()}, {"DATA", op.getData()}};
+  if (op.getEnable())
+    ports.emplace_back("EN", op.getEnable());
+  OpBuilder builder(module.getContext());
+  auto trueConst = builder.getIntegerAttr(builder.getI1Type(), 1);
+  auto falseConst = builder.getIntegerAttr(builder.getI1Type(), 0);
+
+  auto widthConst = builder.getI32IntegerAttr(
+      llvm::Log2_64_Ceil(firmem.getType().getDepth()));
+
+  auto it = memoryMapping.find(firmem);
+  assert(it != memoryMapping.end() && "firmem should be visited");
+  auto memName = builder.getStringAttr(it->second.mem->name.str());
+  auto width = builder.getI32IntegerAttr(firmem.getType().getWidth());
+  SmallVector<std::pair<llvm::StringRef, Attribute>> parameters{
+      {"ABITS", widthConst},
+      {"CLK_ENABLE", op.getEnable()? trueConst: falseConst},
+      {"CLK_POLARITY", falseConst},
+      // {"TRANSPARENCY_MASK", falseConst},
+      {"TRANSPARENT", falseConst},
+      // {"COLLISION_X_MASK", falseConst},
+      // {"CE_OVER_SRST", falseConst},
+      {"MEMID", memName},
+      {"WIDTH", width}};
+
+  auto cell = createCell("$memrd", "mem_read", parameters, ports);
+  if (failed(cell))
+    return cell;
+  if (!op.getEnable()) {
+    (*cell)->connections_.insert(
+        {getEscapedName("EN"), SigSpec(getConstant(APInt(1, 1)))});
+  }
+
+  return success();
 }
 LogicalResult ModuleConverter::visitSeq(seq::FirMemReadWriteOp op) {
   return failure();
@@ -697,7 +845,7 @@ void ExportYosysPass::runOnOperation() {
   if (failed(exporter.run()))
     return signalPassFailure();
 
-  // RTLIL_BACKEND::dump_design(std::cout, design, false);
+  RTLIL_BACKEND::dump_design(std::cout, design, false);
   // Yosys::run_pass("hierarchy -top DigitalTop", design);
   Yosys::run_pass("synth", design);
   Yosys::run_pass("write_verilog synth.v", design);
@@ -799,7 +947,7 @@ void ExportYosysParallelPass::runOnOperation() {
             }
 
             auto result =
-                runYosys(op.getLoc(), test, "synth_xilinx; write_verilog");
+                runYosys(op.getLoc(), test, "synth; write_verilog");
 
             {
               llvm::sys::SmartScopedLock<true> lock(mutex);
