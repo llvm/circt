@@ -32,6 +32,12 @@ substrate that may be extended with higher level dialects mixed into it.
 TODO: Simple integer types, eventually parametrically wide integer type
 `hw.int<width>`.  Supports type aliases.  See HW rationale for more info.
 
+Operations in the `comb` dialect support zero-width integers.  Any well-defined
+value of type `i0` is assumed to be of zero value, from which sign semantics
+can be infered for signed operations.  In particular, division on `i0` is
+undefined, as it would only yield division by zero.  Similarly, replication of
+an `i0` value cannot yield a non-zero-width integer.
+
 ## Comb Operations
 
 This section contains notes about design decisions relating to
