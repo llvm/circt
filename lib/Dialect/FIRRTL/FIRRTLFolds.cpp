@@ -603,8 +603,8 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
-                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad>(
-      context);
+                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad,
+                 patterns::OrOrr>(context);
 }
 
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
@@ -879,7 +879,6 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
                 .getResult();
           }
         }
-
         return {};
       });
 }
@@ -1079,7 +1078,9 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
 
 void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::NotNot>(context);
+  results.insert<patterns::NotNot, patterns::NotEq, patterns::NotNeq,
+                 patterns::NotLeq, patterns::NotLt, patterns::NotGeq,
+                 patterns::NotGt>(context);
 }
 
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1106,7 +1107,8 @@ void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results
       .insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRPadU,
               patterns::AndRPadS, patterns::AndRCatOneL, patterns::AndRCatOneR,
-              patterns::AndRCatZeroL, patterns::AndRCatZeroR>(context);
+              patterns::AndRCatZeroL, patterns::AndRCatZeroR,
+              patterns::AndRCatAndR_left, patterns::AndRCatAndR_right>(context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1131,7 +1133,8 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRPadU,
-                 patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
+                 patterns::OrRCatZeroH, patterns::OrRCatZeroL,
+                 patterns::OrRCatOrR_left, patterns::OrRCatOrR_right>(context);
 }
 
 OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1155,7 +1158,9 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRPadU,
-                 patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
+                 patterns::XorRCatZeroH, patterns::XorRCatZeroL,
+                 patterns::XorRCatXorR_left, patterns::XorRCatXorR_right>(
+      context);
 }
 
 //===----------------------------------------------------------------------===//
