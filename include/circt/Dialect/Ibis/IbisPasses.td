@@ -14,9 +14,9 @@ include "mlir/Pass/PassBase.td"
 def IbisCallPrep : Pass<"ibis-call-prep", "DesignOp"> {
   let summary = "Convert ibis method calls to use `dc.value`";
 
-  let constructor = "circt::ibis::createCallPrepPass()";
+  let constructor = "::circt::ibis::createCallPrepPass()";
   let dependentDialects = [
-    "circt::hw::HWDialect"];
+    "::circt::hw::HWDialect"];
 }
 
 
@@ -25,7 +25,7 @@ def IbisContainerize : Pass<"ibis-containerize", "DesignOp"> {
   let description = [{
     Convert Ibis classes to containers, and outlines containers inside classes.
   }];
-  let constructor = "circt::ibis::createContainerizePass()";
+  let constructor = "::circt::ibis::createContainerizePass()";
 }
 
 def IbisTunneling : Pass<"ibis-tunneling", "DesignOp"> {
@@ -44,7 +44,7 @@ def IbisTunneling : Pass<"ibis-tunneling", "DesignOp"> {
     write accesses, and the suffixes must be different (in this case, the suffixes
     will be appended to the target port name, and thus de-alias the resulting ports).
   }];
-  let constructor = "circt::ibis::createTunnelingPass()";
+  let constructor = "::circt::ibis::createTunnelingPass()";
   let options = [
     Option<"readSuffix", "read-suffix", "std::string", "\".rd\"",
            "Suffix to be used for the port when a port is tunneled for read access">,
@@ -53,7 +53,7 @@ def IbisTunneling : Pass<"ibis-tunneling", "DesignOp"> {
   ];
 }
 
-def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
+def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "::mlir::ModuleOp"> {
   let summary = "Ibis portref lowering pass";
   let description = [{
     Lower `ibis.portref<portref <T>>` to T (i.e. portref resolution).
@@ -78,7 +78,7 @@ def IbisPortrefLowering : Pass<"ibis-lower-portrefs", "mlir::ModuleOp"> {
     portref lowering can be done on an `ibis.container` granularity, allowing
     for a bit of parallelism in the flow.
   }];
-  let constructor = "circt::ibis::createPortrefLoweringPass()";
+  let constructor = "::circt::ibis::createPortrefLoweringPass()";
 }
 
 def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "DesignOp"> {
@@ -90,17 +90,17 @@ def IbisCleanSelfdrivers : Pass<"ibis-clean-selfdrivers", "DesignOp"> {
     container.
   }];
 
-  let constructor = "circt::ibis::createCleanSelfdriversPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let constructor = "::circt::ibis::createCleanSelfdriversPass()";
+  let dependentDialects = ["::circt::hw::HWDialect"];
 }
 
-def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "mlir::ModuleOp"> {
+def IbisContainersToHW : Pass<"ibis-convert-containers-to-hw", "::mlir::ModuleOp"> {
   let summary = "Ibis containers to hw conversion pass";
   let description = [{
     Converts `ibis.container` ops to `hw.module` ops.
   }];
-  let constructor = "circt::ibis::createContainersToHWPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let constructor = "::circt::ibis::createContainersToHWPass()";
+  let dependentDialects = ["::circt::hw::HWDialect"];
 }
 
 def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
@@ -110,7 +110,7 @@ def IbisArgifyBlocks : Pass<"ibis-argify-blocks"> {
     the `ibis.sblock` to a block argument. As a result, `ibis.sblock.isolated`
     are produced.
   }];
-  let constructor = "circt::ibis::createArgifyBlocksPass()";
+  let constructor = "::circt::ibis::createArgifyBlocksPass()";
 }
 
 def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
@@ -148,7 +148,7 @@ def IbisReblock : Pass<"ibis-reblock", "ibis::MethodOp"> {
       cf.br ^bb_bar(%v_outer : i32)
     ```
   }];
-  let constructor = "circt::ibis::createReblockPass()";
+  let constructor = "::circt::ibis::createReblockPass()";
 }
 
 def IbisInlineSBlocks : Pass<"ibis-inline-sblocks", "ibis::MethodOp"> {
@@ -165,8 +165,8 @@ def IbisInlineSBlocks : Pass<"ibis-inline-sblocks", "ibis::MethodOp"> {
     - Value: a dictionary of attributes. As a minimum this will contain a
       `loc`-keyed attribute specifying the location of the block.
   }];
-  let constructor = "circt::ibis::createInlineSBlocksPass()";
-  let dependentDialects = ["mlir::cf::ControlFlowDialect"];
+  let constructor = "::circt::ibis::createInlineSBlocksPass()";
+  let dependentDialects = ["::mlir::cf::ControlFlowDialect"];
 }
 
 def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::ClassOp"> {
@@ -177,8 +177,8 @@ def IbisConvertCFToHandshake : Pass<"ibis-convert-cf-to-handshake", "ibis::Class
     control flow through the `handshake` fine grained dataflow operations.
   }];
 
-  let constructor = "circt::ibis::createConvertCFToHandshakePass()";
-  let dependentDialects = ["circt::handshake::HandshakeDialect", "mlir::cf::ControlFlowDialect"];
+  let constructor = "::circt::ibis::createConvertCFToHandshakePass()";
+  let dependentDialects = ["::circt::handshake::HandshakeDialect", "::mlir::cf::ControlFlowDialect"];
 }
 
 def IbisConvertHandshakeToDC : Pass<"ibis-convert-handshake-to-dc", "ibis::ClassOp"> {
@@ -187,11 +187,11 @@ def IbisConvertHandshakeToDC : Pass<"ibis-convert-handshake-to-dc", "ibis::Class
     Converts an `ibis.method.df` from using `handshake` operations to
     `dc` operations.
   }];
-  let constructor = "circt::ibis::createConvertHandshakeToDCPass()";
+  let constructor = "::circt::ibis::createConvertHandshakeToDCPass()";
   let dependentDialects = [
-    "circt::dc::DCDialect",
-    "circt::handshake::HandshakeDialect",
-    "mlir::arith::ArithDialect"
+    "::circt::dc::DCDialect",
+    "::circt::handshake::HandshakeDialect",
+    "::mlir::arith::ArithDialect"
   ];
 }
 
@@ -203,23 +203,23 @@ def IbisPrepareScheduling : Pass<"ibis-prepare-scheduling", "ibis::IsolatedStati
     - moving operations of an `ibis.sblock` into a `pipeline.unscheduled`
       operation, which is connected to the pipeline header.
   }];
-  let constructor = "circt::ibis::createPrepareSchedulingPass()";
-  let dependentDialects = ["circt::pipeline::PipelineDialect"];
+  let constructor = "::circt::ibis::createPrepareSchedulingPass()";
+  let dependentDialects = ["::circt::pipeline::PipelineDialect"];
 }
 
 def IbisConvertMethodsToContainers : Pass<"ibis-convert-methods-to-containers", "ibis::ClassOp"> {
   let summary = "Converts `ibis.method.df` to `ibis.container`s";
-  let constructor = "circt::ibis::createConvertMethodsToContainersPass()";
+  let constructor = "::circt::ibis::createConvertMethodsToContainersPass()";
 }
 
-def IbisAddOperatorLibrary : Pass<"ibis-add-operator-library", "mlir::ModuleOp"> {
+def IbisAddOperatorLibrary : Pass<"ibis-add-operator-library", "::mlir::ModuleOp"> {
   let summary = "Injects the Ibis operator library into the IR";
   let description = [{
     Injects the Ibis operator library into the IR, which contains the
     definitions of the Ibis operators.
   }];
-  let constructor = "circt::ibis::createAddOperatorLibraryPass()";
-  let dependentDialects = ["circt::ssp::SSPDialect"];
+  let constructor = "::circt::ibis::createAddOperatorLibraryPass()";
+  let dependentDialects = ["::circt::ssp::SSPDialect"];
 }
 
 #endif // CIRCT_DIALECT_IBIS_PASSES_TD
