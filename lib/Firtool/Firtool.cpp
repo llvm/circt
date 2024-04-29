@@ -324,7 +324,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   if (opt.shouldStripFirDebugInfo())
     pm.addPass(circt::createStripDebugInfoWithPredPass([](mlir::Location loc) {
-      if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+      if (auto fileLoc = dyn_cast<FileLineColLoc>(loc))
         return fileLoc.getFilename().getValue().ends_with(".fir");
       return false;
     }));

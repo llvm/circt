@@ -55,7 +55,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // Ensure the input and output types have all been converted already. This
     // is handled separately by the upstream FunctionLikeTypeConversionPattern.
     if (!llvm::all_of(entityTypes,
-                      [](Type type) { return type.isa<SigType>(); }))
+                      [](Type type) { return isa<SigType>(type); }))
       return rewriter.notifyMatchFailure(module, "Not all ports had SigType");
 
     // Create the entity. Note that LLHD does not support parameterized
@@ -118,7 +118,7 @@ struct ConvertOutput : public OpConversionPattern<hw::OutputOp> {
         continue;
 
       // If the source has a signal type, connect it.
-      if (auto sigTy = src.getType().dyn_cast<SigType>()) {
+      if (auto sigTy = dyn_cast<SigType>(src.getType())) {
         rewriter.create<llhd::ConnectOp>(output.getLoc(), dest, src);
         continue;
       }
@@ -154,7 +154,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
     for (auto arg : adaptor.getOperands()) {
       // Connect signals directly.
       auto argType = arg.getType();
-      if (argType.isa<SigType>()) {
+      if (isa<SigType>(argType)) {
         arguments.push_back(arg);
         continue;
       }
@@ -173,7 +173,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // done, the materializer can insert buffers with no delay and have them
       // collected in a canonicalization later where appropriate.
       // See github.com/llvm/circt/pull/988 for a discussion.
-      if (!argType.isa<IntegerType>())
+      if (!isa<IntegerType>(argType))
         return rewriter.notifyMatchFailure(instance, [&](Diagnostic &diag) {
           diag << "argument type " << argType << " is not supported";
         });
@@ -199,7 +199,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
     SmallVector<Value, 4> resultValues;
     for (auto result : instance.getResults()) {
       auto resultType = result.getType();
-      if (!resultType.isa<IntegerType>())
+      if (!isa<IntegerType>(resultType))
         return rewriter.notifyMatchFailure(instance, [&](Diagnostic &diag) {
           diag << "result type " << resultType << " is not supported";
         });

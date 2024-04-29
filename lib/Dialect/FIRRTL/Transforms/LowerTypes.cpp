@@ -645,7 +645,7 @@ bool TypeLoweringVisitor::lowerProducer(
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
     loweredName = nameAttr.getValue();
   auto baseNameLen = loweredName.size();
-  auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+  auto oldAnno = dyn_cast_or_null<ArrayAttr>(op->getAttr("annotations"));
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
@@ -1454,7 +1454,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
-            context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
+            context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
             field);
         newPortAnno.push_back(annos);
       }

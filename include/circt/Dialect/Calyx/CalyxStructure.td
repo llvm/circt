@@ -15,7 +15,7 @@ include "mlir/IR/EnumAttr.td"
 // "Forward-declare" these HW attributes rather than including or duplicating
 // them here. This lets us to refer to them in ODS, but delegates to HW in C++.
 // These are used to represent parameters for the PrimitiveOp.
-def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
+def ParamDeclAttr : Attr<CPred<"llvm::isa<hw::ParamDeclAttr>($_self)">>;
 def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
 
 def UndefinedOp : CalyxOp<"undef", [
@@ -104,7 +104,7 @@ def ComponentOp : CalyxOp<"component", [
       /// an error if the attribute is invalid.
       LogicalResult verifyType() {
         auto type = getFunctionTypeAttr().getValue();
-        if (!type.isa<FunctionType>())
+        if (!llvm::isa<FunctionType>(type))
           return emitOpError("requires '" +
 	                     getFunctionTypeAttrName().getValue() +
                              "' attribute of function type");
@@ -215,7 +215,7 @@ def CombComponentOp : CalyxOp<"comb_component", [
       /// an error if the attribute is invalid.
       LogicalResult verifyType() {
         auto type = getFunctionTypeAttr().getValue();
-        if (!type.isa<FunctionType>())
+        if (!llvm::isa<FunctionType>(type))
           return emitOpError("requires '" +
 	                     getFunctionTypeAttrName().getValue() +
                              "' attribute of function type");

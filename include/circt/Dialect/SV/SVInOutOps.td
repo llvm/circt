@@ -47,7 +47,7 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return getResult().getType().cast<InOutType>().getElementType();
+      return llvm::cast<InOutType>(getResult().getType()).getElementType();
     }
   }];
 }
@@ -84,7 +84,7 @@ def RegOp : SVOp<"reg", [
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return getResult().getType().cast<InOutType>().getElementType();
+      return llvm::cast<InOutType>(getResult().getType()).getElementType();
     }
   }];
 }
@@ -264,7 +264,7 @@ def LogicOp : SVOp<"logic", [
 
   let extraClassDeclaration = [{
     Type getElementType() {
-      return getResult().getType().cast<InOutType>().getElementType();
+      return llvm::cast<InOutType>(getResult().getType()).getElementType();
     }
   }];
 }

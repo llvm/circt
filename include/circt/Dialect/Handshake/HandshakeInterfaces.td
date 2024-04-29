@@ -69,7 +69,7 @@ def SOSTInterface : OpInterface<"SOSTInterface"> {
         auto concreteOp = mlir::cast<ConcreteOp>($_op);
         // The operation is a control operation if its single data type is a 
         // NoneType.
-        return concreteOp.getDataType().template isa<mlir::NoneType>();
+        return llvm::isa<mlir::NoneType>(concreteOp.getDataType());
       }]
     >,
     InterfaceMethod<[{

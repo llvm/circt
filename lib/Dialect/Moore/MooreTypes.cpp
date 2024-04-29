@@ -168,7 +168,7 @@ SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
       .Case<PackedRangeDim>([](auto rangeType) {
         // Inner type must be an integer.
         auto innerType =
-            rangeType.getInner().fullyResolved().template dyn_cast<IntType>();
+            llvm::dyn_cast<IntType>(rangeType.getInner().fullyResolved());
         if (!innerType)
           return SimpleBitVectorType{};
 
@@ -197,7 +197,7 @@ SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
 
   // All packed types with a known size (i.e., with no `[]` dimensions) can be
   // cast to an SBVT.
-  auto packed = fullyResolved().dyn_cast<PackedType>();
+  auto packed = llvm::dyn_cast<PackedType>(fullyResolved());
   if (!packed)
     return {};
   auto bitSize = packed.getBitSize();
@@ -737,7 +737,7 @@ struct RangeDimStorage : DimStorage {
 } // namespace circt
 
 PackedType PackedDim::getInner() const {
-  return getImpl()->inner.cast<PackedType>();
+  return llvm::cast<PackedType>(getImpl()->inner);
 }
 
 void PackedDim::format(llvm::raw_ostream &os) const {
@@ -745,7 +745,7 @@ void PackedDim::format(llvm::raw_ostream &os) const {
   dims.push_back(*this);
   for (;;) {
     PackedType inner = dims.back().getInner();
-    if (auto dim = inner.dyn_cast<PackedDim>()) {
+    if (auto dim = llvm::dyn_cast<PackedDim>(inner)) {
       dims.push_back(dim);
     } else {
       inner.format(os);
@@ -767,11 +767,11 @@ void PackedDim::formatDim(llvm::raw_ostream &os) const {
 }
 
 PackedType PackedDim::resolved() const {
-  return getImpl()->resolved.cast<PackedType>();
+  return llvm::cast<PackedType>(getImpl()->resolved);
 }
 
 PackedType PackedDim::fullyResolved() const {
-  return getImpl()->fullyResolved.cast<PackedType>();
+  return llvm::cast<PackedType>(getImpl()->fullyResolved);
 }
 
 std::optional<Range> PackedDim::getRange() const {
@@ -853,7 +853,7 @@ void UnpackedDim::format(
   dims.push_back(*this);
   for (;;) {
     UnpackedType inner = dims.back().getInner();
-    if (auto dim = inner.dyn_cast<UnpackedDim>()) {
+    if (auto dim = llvm::dyn_cast<UnpackedDim>(inner)) {
       dims.push_back(dim);
     } else {
       inner.format(os);
@@ -1127,7 +1127,7 @@ PackedStructType PackedStructType::get(StructKind kind,
                                        std::optional<Sign> sign) {
   assert(llvm::all_of(members,
                       [](const StructMember &member) {
-                        return member.type.isa<PackedType>();
+                        return llvm::isa<PackedType>(member.type);
                       }) &&
          "packed struct members must be packed");
   return Base::get(loc.getContext(),
@@ -1294,7 +1294,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       return failure();
     return yieldImplied(
         [&]() {
-          return PackedNamedType::get(inner.cast<PackedType>(), name, loc);
+          return PackedNamedType::get(cast<PackedType>(inner), name, loc);
         },
         [&]() { return UnpackedNamedType::get(inner, name, loc); });
   }
@@ -1306,7 +1306,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
         parser.parseGreater())
       return failure();
     return yieldImplied(
-        [&]() { return PackedRefType::get(inner.cast<PackedType>(), loc); },
+        [&]() { return PackedRefType::get(cast<PackedType>(inner), loc); },
         [&]() { return UnpackedRefType::get(inner, loc); });
   }
 
@@ -1317,7 +1317,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
         parser.parseGreater())
       return failure();
     return yieldImplied(
-        [&]() { return PackedUnsizedDim::get(inner.cast<PackedType>()); },
+        [&]() { return PackedUnsizedDim::get(cast<PackedType>(inner)); },
         [&]() { return UnpackedUnsizedDim::get(inner); });
   }
   if (mnemonic == "range") {
@@ -1330,7 +1330,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       return failure();
     return yieldImplied(
         [&]() {
-          return PackedRangeDim::get(inner.cast<PackedType>(), left, right);
+          return PackedRangeDim::get(cast<PackedType>(inner), left, right);
         },
         [&]() { return UnpackedRangeDim::get(inner, left, right); });
   }
@@ -1437,10 +1437,13 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
   // If we are printing a type that may be both packed or unpacked, emit a
   // wrapping `packed<...>` or `unpacked<...>` accordingly if not done so
   // previously, in order to disambiguate between the two.
-  if (type.isa<PackedDim>() || type.isa<UnpackedDim>() ||
-      type.isa<PackedIndirectType>() || type.isa<UnpackedIndirectType>() ||
-      type.isa<PackedStructType>() || type.isa<UnpackedStructType>()) {
-    auto needed = type.isa<PackedType>() ? Subset::Packed : Subset::Unpacked;
+  if (llvm::isa<PackedDim>(type) || llvm::isa<UnpackedDim>(type) ||
+      llvm::isa<PackedIndirectType>(type) ||
+      llvm::isa<UnpackedIndirectType>(type) ||
+      llvm::isa<PackedStructType>(type) ||
+      llvm::isa<UnpackedStructType>(type)) {
+    auto needed =
+        llvm::isa<PackedType>(type) ? Subset::Packed : Subset::Unpacked;
     if (needed != subset.implied) {
       printer << (needed == Subset::Packed ? "packed" : "unpacked") << "<";
       printMooreType(type, printer, {needed, true});
@@ -1550,7 +1553,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
         printer << getMnemonicFromStructKind(strukt.kind) << "<";
         if (strukt.name)
           printer << strukt.name << ", ";
-        auto packed = type.template dyn_cast<PackedStructType>();
+        auto packed = llvm::dyn_cast<PackedStructType>(type);
         if (packed && packed.isSignExplicit())
           printer << packed.getSign() << ", ";
         printer << "{";

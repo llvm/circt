@@ -60,7 +60,7 @@ public:
       return success();
 
     // If the operation has the static attribute, verify it is zero.
-    APInt staticValue = staticAttribute.cast<IntegerAttr>().getValue();
+    APInt staticValue = cast<IntegerAttr>(staticAttribute).getValue();
     assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
 
     return success();

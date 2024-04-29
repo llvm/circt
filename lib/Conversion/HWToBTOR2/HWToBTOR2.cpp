@@ -581,7 +581,7 @@ public:
     // Separate the inputs from outputs and generate the first btor2 lines for
     // input declaration We only consider ports with an explicit bit-width (so
     // ignore clocks)
-    if (port.isInput() && !port.type.isa<seq::ClockType>()) {
+    if (port.isInput() && !isa<seq::ClockType>(port.type)) {
       // Generate the associated btor declaration for the inputs
       StringRef iName = port.getName();
 

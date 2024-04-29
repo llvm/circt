@@ -38,7 +38,7 @@ struct PortInfo {
   GetPortOp getPortOp;
 
   PortRefType getType() {
-    return getPortOp.getPort().getType().cast<PortRefType>();
+    return cast<PortRefType>(getPortOp.getPort().getType());
   }
   Type getInnerType() { return getType().getPortType(); }
   Direction getRequestedDirection() { return getType().getDirection(); }
@@ -195,7 +195,7 @@ LogicalResult Tunneler::tunnelDispatch(InstanceGraphNode *currentContainer,
 Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
                                     PortInfo &portInfo) {
   Direction actualDir =
-      actualPort.getPort().getType().cast<PortRefType>().getDirection();
+      cast<PortRefType>(actualPort.getPort().getType()).getDirection();
   Direction requestedDir = portInfo.getRequestedDirection();
 
   // Match - just return the port itself.

@@ -86,7 +86,7 @@ LogicalResult RefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 LogicalResult FileListOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   for (auto sym : getFiles()) {
     Operation *op = symbolTable.lookupNearestSymbolFrom(
-        getOperation(), sym.cast<FlatSymbolRefAttr>());
+        getOperation(), cast<FlatSymbolRefAttr>(sym));
     if (!op)
       return emitError("invalid symbol reference: ") << sym;
 

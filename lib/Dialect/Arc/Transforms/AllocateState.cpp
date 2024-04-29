@@ -89,7 +89,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
       auto storage = op->getOperand(0);
-      unsigned numBytes = result.getType().cast<StateType>().getByteWidth();
+      unsigned numBytes = cast<StateType>(result.getType()).getByteWidth();
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       gettersToCreate.emplace_back(result, storage, offset);
@@ -149,7 +149,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   // Create the substorage accessor at the beginning of the block.
   Operation *storageOwner = storage.getDefiningOp();
   if (!storageOwner)
-    storageOwner = storage.cast<BlockArgument>().getOwner()->getParentOp();
+    storageOwner = cast<BlockArgument>(storage).getOwner()->getParentOp();
 
   if (storageOwner->isProperAncestor(block->getParentOp())) {
     auto substorage = builder.create<AllocStorageOp>(

@@ -70,9 +70,9 @@ Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
 
 Block *circt::pipeline::getParentStageInPipeline(ScheduledPipelineOp pipeline,
                                                  Value v) {
-  if (v.isa<BlockArgument>())
+  if (isa<BlockArgument>(v))
     return getParentStageInPipeline(pipeline,
-                                    v.cast<BlockArgument>().getOwner());
+                                    cast<BlockArgument>(v).getOwner());
   return getParentStageInPipeline(pipeline, v.getDefiningOp());
 }
 
@@ -108,7 +108,7 @@ static void printOutputList(OpAsmPrinter &p, TypeRange types, ArrayAttr names) {
   p << "(";
   llvm::interleaveComma(llvm::zip(types, names), p, [&](auto it) {
     auto [type, name] = it;
-    p.printKeywordOrString(name.template cast<StringAttr>().str());
+    p.printKeywordOrString(cast<StringAttr>(name).str());
     p << " : " << type;
   });
   p << ")";
@@ -371,7 +371,7 @@ getPipelineAsmBlockArgumentNames(TPipelineOp op, mlir::Region &region,
         auto arg = block.getArguments()[regI];
 
         if (regNames) {
-          auto nameAttr = (*regNames)[regI].dyn_cast<StringAttr>();
+          auto nameAttr = dyn_cast<StringAttr>((*regNames)[regI]);
           if (nameAttr && !nameAttr.strref().empty()) {
             setNameFn(arg, nameAttr);
             continue;
@@ -387,7 +387,7 @@ getPipelineAsmBlockArgumentNames(TPipelineOp op, mlir::Region &region,
 
         if (passthroughNames) {
           auto nameAttr =
-              (*passthroughNames)[passthroughI].dyn_cast<StringAttr>();
+              dyn_cast<StringAttr>((*passthroughNames)[passthroughI]);
           if (nameAttr && !nameAttr.strref().empty()) {
             setNameFn(arg, nameAttr);
             continue;
@@ -543,7 +543,7 @@ LogicalResult ScheduledPipelineOp::verify() {
     bool err = true;
     if (block.getNumArguments() != 0) {
       auto lastArgType =
-          block.getArguments().back().getType().dyn_cast<IntegerType>();
+          dyn_cast<IntegerType>(block.getArguments().back().getType());
       err = !lastArgType || lastArgType.getWidth() != 1;
     }
     if (err)
@@ -631,7 +631,7 @@ StageKind ScheduledPipelineOp::getStageKind(size_t stageIndex) {
 
   if (stageIndex < stallability->size()) {
     bool stageIsStallable =
-        (*stallability)[stageIndex].cast<BoolAttr>().getValue();
+        cast<BoolAttr>((*stallability)[stageIndex]).getValue();
     if (!stageIsStallable) {
       // This is a non-stallable stage.
       return StageKind::NonStallable;
@@ -786,14 +786,13 @@ void printStageRegisters(OpAsmPrinter &p, Operation *op, ValueRange registers,
         size_t idx = it.index();
         auto &[reg, type, nClockGatesAttr] = it.value();
         if (names) {
-          if (auto nameAttr = names[idx].dyn_cast<StringAttr>();
+          if (auto nameAttr = dyn_cast<StringAttr>(names[idx]);
               nameAttr && !nameAttr.strref().empty())
             p << nameAttr << " = ";
         }
 
         p << reg << " : " << type;
-        int64_t nClockGates =
-            nClockGatesAttr.template cast<IntegerAttr>().getInt();
+        int64_t nClockGates = cast<IntegerAttr>(nClockGatesAttr).getInt();
         if (nClockGates == 0)
           return;
         p << " gated by [";
@@ -818,7 +817,7 @@ void printPassthroughs(OpAsmPrinter &p, Operation *op, ValueRange passthroughs,
         size_t idx = it.index();
         auto &[reg, type] = it.value();
         if (names) {
-          if (auto nameAttr = names[idx].dyn_cast<StringAttr>();
+          if (auto nameAttr = dyn_cast<StringAttr>(names[idx]);
               nameAttr && !nameAttr.strref().empty())
             p << nameAttr << " = ";
         }

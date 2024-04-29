@@ -41,15 +41,15 @@ static Attribute constFoldUnaryOp(ArrayRef<Attribute> operands,
   if (!operands[0])
     return {};
 
-  if (auto val = operands[0].dyn_cast<AttrElementT>()) {
+  if (auto val = dyn_cast<AttrElementT>(operands[0])) {
     return AttrElementT::get(val.getType(), calculate(val.getValue()));
-  } else if (auto val = operands[0].dyn_cast<SplatElementsAttr>()) {
+  } else if (auto val = dyn_cast<SplatElementsAttr>(operands[0])) {
     // Operand is a splat so we can avoid expanding the value out and
     // just fold based on the splat value.
     auto elementResult = calculate(val.getSplatValue<ElementValueT>());
     return DenseElementsAttr::get(val.getType(), elementResult);
   }
-  if (auto val = operands[0].dyn_cast<ElementsAttr>()) {
+  if (auto val = dyn_cast<ElementsAttr>(operands[0])) {
     // Operand is ElementsAttr-derived; perform an element-wise fold by
     // expanding the values.
     auto valIt = val.getValues<ElementValueT>().begin();
@@ -72,37 +72,37 @@ static Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
   if (!operands[0] || !operands[1] || !operands[2])
     return {};
 
-  if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>() &&
-      operands[2].isa<AttrElementT>()) {
-    auto fst = operands[0].cast<AttrElementT>();
-    auto snd = operands[1].cast<AttrElementT>();
-    auto trd = operands[2].cast<AttrElementT>();
+  if (isa<AttrElementT>(operands[0]) && isa<AttrElementT>(operands[1]) &&
+      isa<AttrElementT>(operands[2])) {
+    auto fst = cast<AttrElementT>(operands[0]);
+    auto snd = cast<AttrElementT>(operands[1]);
+    auto trd = cast<AttrElementT>(operands[2]);
 
     return AttrElementT::get(
         fst.getType(),
         calculate(fst.getValue(), snd.getValue(), trd.getValue()));
   }
-  if (operands[0].isa<SplatElementsAttr>() &&
-      operands[1].isa<SplatElementsAttr>() &&
-      operands[2].isa<SplatElementsAttr>()) {
+  if (isa<SplatElementsAttr>(operands[0]) &&
+      isa<SplatElementsAttr>(operands[1]) &&
+      isa<SplatElementsAttr>(operands[2])) {
     // Operands are splats so we can avoid expanding the values out and
     // just fold based on the splat value.
-    auto fst = operands[0].cast<SplatElementsAttr>();
-    auto snd = operands[1].cast<SplatElementsAttr>();
-    auto trd = operands[2].cast<SplatElementsAttr>();
+    auto fst = cast<SplatElementsAttr>(operands[0]);
+    auto snd = cast<SplatElementsAttr>(operands[1]);
+    auto trd = cast<SplatElementsAttr>(operands[2]);
 
     auto elementResult = calculate(fst.getSplatValue<ElementValueT>(),
                                    snd.getSplatValue<ElementValueT>(),
                                    trd.getSplatValue<ElementValueT>());
     return DenseElementsAttr::get(fst.getType(), elementResult);
   }
-  if (operands[0].isa<ElementsAttr>() && operands[1].isa<ElementsAttr>() &&
-      operands[2].isa<ElementsAttr>()) {
+  if (isa<ElementsAttr>(operands[0]) && isa<ElementsAttr>(operands[1]) &&
+      isa<ElementsAttr>(operands[2])) {
     // Operands are ElementsAttr-derived; perform an element-wise fold by
     // expanding the values.
-    auto fst = operands[0].cast<ElementsAttr>();
-    auto snd = operands[1].cast<ElementsAttr>();
-    auto trd = operands[2].cast<ElementsAttr>();
+    auto fst = cast<ElementsAttr>(operands[0]);
+    auto snd = cast<ElementsAttr>(operands[1]);
+    auto trd = cast<ElementsAttr>(operands[2]);
 
     auto fstIt = fst.getValues<ElementValueT>().begin();
     auto sndIt = snd.getValues<ElementValueT>().begin();
@@ -130,23 +130,23 @@ struct constant_int_all_ones_matcher {
 } // anonymous namespace
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
-  if (auto sig = type.dyn_cast<llhd::SigType>())
+  if (auto sig = dyn_cast<llhd::SigType>(type))
     type = sig.getUnderlyingType();
-  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
     type = ptr.getUnderlyingType();
-  if (auto array = type.dyn_cast<hw::ArrayType>())
+  if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
-  if (auto tup = type.dyn_cast<hw::StructType>())
+  if (auto tup = dyn_cast<hw::StructType>(type))
     return tup.getElements().size();
   return type.getIntOrFloatBitWidth();
 }
 
 Type circt::llhd::getLLHDElementType(Type type) {
-  if (auto sig = type.dyn_cast<llhd::SigType>())
+  if (auto sig = dyn_cast<llhd::SigType>(type))
     type = sig.getUnderlyingType();
-  else if (auto ptr = type.dyn_cast<llhd::PtrType>())
+  else if (auto ptr = dyn_cast<llhd::PtrType>(type))
     type = ptr.getUnderlyingType();
-  if (auto array = type.dyn_cast<hw::ArrayType>())
+  if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
 }
@@ -184,7 +184,7 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 
   // llhd.sig.extract(input, 0) with inputWidth == resultWidth => input
   if (op.getResultWidth() == op.getInputWidth() &&
-      operands[1].cast<IntegerAttr>().getValue().isZero())
+      cast<IntegerAttr>(operands[1]).getValue().isZero())
     return op.getInput();
 
   return nullptr;
@@ -210,7 +210,7 @@ static OpFoldResult foldSigPtrArraySliceOp(Op op,
 
   // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
   if (op.getResultWidth() == op.getInputWidth() &&
-      operands[1].cast<IntegerAttr>().getValue().isZero())
+      cast<IntegerAttr>(operands[1]).getValue().isZero())
     return op.getInput();
 
   return nullptr;
@@ -267,15 +267,11 @@ static LogicalResult inferReturnTypesOfStructExtractOp(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  Type type = operands[0]
-                  .getType()
-                  .cast<SigPtrType>()
-                  .getUnderlyingType()
-                  .template cast<hw::StructType>()
-                  .getFieldType(attrs.getNamed("field")
-                                    ->getValue()
-                                    .cast<StringAttr>()
-                                    .getValue());
+  Type type =
+      cast<hw::StructType>(
+          cast<SigPtrType>(operands[0].getType()).getUnderlyingType())
+          .getFieldType(
+              cast<StringAttr>(attrs.getNamed("field")->getValue()).getValue());
   if (!type) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
@@ -472,7 +468,7 @@ LogicalResult llhd::EntityOp::verify() {
 
   // Check that all block arguments are of signal type
   for (size_t i = 0; i < numArgs; ++i)
-    if (!getArgument(i).getType().isa<llhd::SigType>())
+    if (!isa<llhd::SigType>(getArgument(i).getType()))
       return emitError("usage of invalid argument type. Got ")
              << getArgument(i).getType() << ", expected LLHD signal type";
 
@@ -489,7 +485,7 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
   // Check that all operands are of signal type
   for (Type inputType : type.getInputs())
-    if (!inputType.isa<llhd::SigType>())
+    if (!isa<llhd::SigType>(inputType))
       return emitOpError("usage of invalid argument type. Got ")
              << inputType << ", expected LLHD signal type";
 
@@ -557,7 +553,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
 
   // Check that all operands are of signal type
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
-    if (!getArgument(i).getType().isa<llhd::SigType>()) {
+    if (!isa<llhd::SigType>(getArgument(i).getType())) {
       return emitOpError("usage of invalid argument type, was ")
              << getArgument(i).getType() << ", expected LLHD signal type";
     }
@@ -784,16 +780,15 @@ LogicalResult llhd::InstOp::verify() {
 
     // Check input types
     for (size_t i = 0, e = module.getNumInputPorts(); i != e; ++i) {
-      if (getOperand(i).getType().cast<llhd::SigType>().getUnderlyingType() !=
+      if (cast<llhd::SigType>(getOperand(i).getType()).getUnderlyingType() !=
           module.getInputTypes()[i])
         return emitOpError("input type mismatch");
     }
 
     // Check output types
     for (size_t i = 0, e = module.getNumOutputPorts(); i != e; ++i) {
-      if (getOperand(module.getNumInputPorts() + i)
-              .getType()
-              .cast<llhd::SigType>()
+      if (cast<llhd::SigType>(
+              getOperand(module.getNumInputPorts() + i).getType())
               .getUnderlyingType() != module.getOutputTypes()[i])
         return emitOpError("output type mismatch");
     }
@@ -921,7 +916,7 @@ void llhd::RegOp::print(OpAsmPrinter &printer) {
   printer << " " << getSignal();
   for (size_t i = 0, e = getValues().size(); i < e; ++i) {
     std::optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
-        getModes().getValue()[i].cast<IntegerAttr>().getInt());
+        cast<IntegerAttr>(getModes().getValue()[i]).getInt());
     if (!mode) {
       emitError("invalid RegMode");
       return;
@@ -979,7 +974,7 @@ LogicalResult llhd::RegOp::verify() {
   unsigned counter = 0;
   unsigned prevElement = 0;
   for (Attribute maskElem : getGateMask().getValue()) {
-    int64_t val = maskElem.cast<IntegerAttr>().getInt();
+    int64_t val = cast<IntegerAttr>(maskElem).getInt();
     if (val < 0)
       return emitError("Element in 'gateMask' must not be negative!");
     if (val == 0)
@@ -1000,7 +995,7 @@ LogicalResult llhd::RegOp::verify() {
   for (auto val : getValues()) {
     if (val.getType() != getSignal().getType() &&
         val.getType() !=
-            getSignal().getType().cast<llhd::SigType>().getUnderlyingType()) {
+            cast<llhd::SigType>(getSignal().getType()).getUnderlyingType()) {
       return emitOpError(
           "type of each 'value' has to be either the same as the "
           "type of 'signal' or the underlying type of 'signal'");

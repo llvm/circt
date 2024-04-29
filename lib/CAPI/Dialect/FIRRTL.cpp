@@ -58,14 +58,14 @@ MlirType firrtlTypeGetAnalog(MlirContext ctx, int32_t width) {
 }
 
 MlirType firrtlTypeGetVector(MlirContext ctx, MlirType element, size_t count) {
-  auto baseType = unwrap(element).cast<FIRRTLBaseType>();
+  auto baseType = cast<FIRRTLBaseType>(unwrap(element));
   assert(baseType && "element must be base type");
 
   return wrap(FVectorType::get(baseType, count));
 }
 
 bool firrtlTypeIsAOpenBundle(MlirType type) {
-  return unwrap(type).isa<OpenBundleType>();
+  return isa<OpenBundleType>(unwrap(type));
 }
 
 MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
@@ -77,7 +77,7 @@ MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
 
   for (size_t i = 0; i < count; i++) {
     auto field = fields[i];
-    auto type = unwrap(field.type).cast<FIRRTLType>();
+    auto type = cast<FIRRTLType>(unwrap(field.type));
     bundleFields.emplace_back(unwrap(field.name), field.isFlip, type);
     bundleCompatible &= isa<BundleType::ElementType>(type);
   }
@@ -96,9 +96,9 @@ MlirType firrtlTypeGetBundle(MlirContext ctx, size_t count,
 
 unsigned firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName) {
   std::optional<unsigned> fieldIndex;
-  if (auto bundleType = unwrap(type).dyn_cast<BundleType>()) {
+  if (auto bundleType = dyn_cast<BundleType>(unwrap(type))) {
     fieldIndex = bundleType.getElementIndex(unwrap(fieldName));
-  } else if (auto bundleType = unwrap(type).dyn_cast<OpenBundleType>()) {
+  } else if (auto bundleType = dyn_cast<OpenBundleType>(unwrap(type))) {
     fieldIndex = bundleType.getElementIndex(unwrap(fieldName));
   } else {
     llvm_unreachable("must be a bundle type");
@@ -108,7 +108,7 @@ unsigned firrtlTypeGetBundleFieldIndex(MlirType type, MlirStringRef fieldName) {
 }
 
 MlirType firrtlTypeGetRef(MlirType target, bool forceable) {
-  auto baseType = unwrap(target).dyn_cast<FIRRTLBaseType>();
+  auto baseType = dyn_cast<FIRRTLBaseType>(unwrap(target));
   assert(baseType && "target must be base type");
 
   return wrap(RefType::get(baseType, forceable));
@@ -139,7 +139,7 @@ MlirType firrtlTypeGetPath(MlirContext ctx) {
 }
 
 MlirType firrtlTypeGetList(MlirContext ctx, MlirType elementType) {
-  auto type = unwrap(elementType).dyn_cast<PropertyType>();
+  auto type = dyn_cast<PropertyType>(unwrap(elementType));
   assert(type && "element must be property type");
 
   return wrap(ListType::get(unwrap(ctx), type));
@@ -148,7 +148,7 @@ MlirType firrtlTypeGetList(MlirContext ctx, MlirType elementType) {
 MlirType firrtlTypeGetClass(MlirContext ctx, MlirAttribute name,
                             size_t numberOfElements,
                             const FIRRTLClassElement *elements) {
-  auto nameSymbol = unwrap(name).dyn_cast<FlatSymbolRefAttr>();
+  auto nameSymbol = dyn_cast<FlatSymbolRefAttr>(unwrap(name));
   assert(nameSymbol && "name must be FlatSymbolRefAttr");
 
   SmallVector<ClassElement, 4> classElements;

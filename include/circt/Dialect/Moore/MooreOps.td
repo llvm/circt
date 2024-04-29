@@ -354,7 +354,7 @@ def NotOp : MooreOp<"not", [Pure, SameOperandsAndResultType]> {
 class ReduceOpBase<string mnemonic, string operatorName> : MooreOp<mnemonic, [
   Pure,
   TypesMatchWith<"result is single bit of input", "input", "result", [{
-    $_self.cast<UnpackedType>()
+    llvm::cast<UnpackedType>($_self)
       .getSimpleBitVector()
       .toSingleBit()
       .getType($_self.getContext())
@@ -385,7 +385,7 @@ def BoolCastOp : MooreOp<"bool_cast", [
   TypesMatchWith<"result is single bit matching input domain",
     "input", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let summary = "Cast a value to a single bit boolean";
@@ -571,7 +571,7 @@ class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{
@@ -628,7 +628,7 @@ class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{
@@ -661,7 +661,7 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{

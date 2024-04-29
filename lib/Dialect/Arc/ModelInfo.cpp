@@ -78,7 +78,7 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
       }
       stateInfo.name = opName.getValue();
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
-      stateInfo.numBits = result.getType().cast<StateType>().getBitWidth();
+      stateInfo.numBits = cast<StateType>(result.getType()).getBitWidth();
       continue;
     }
 
@@ -107,7 +107,7 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
                                         SmallVector<ModelInfo> &models) {
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
-    auto storageType = storageArg.getType().cast<StorageType>();
+    auto storageType = cast<StorageType>(storageArg.getType());
 
     SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states)))

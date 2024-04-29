@@ -47,9 +47,9 @@ struct DCTuple {
 
 // Unpack a !dc.value<...> into a DCTuple.
 static DCTuple unpack(OpBuilder &b, Value v) {
-  if (v.getType().isa<dc::ValueType>())
+  if (isa<dc::ValueType>(v.getType()))
     return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
-  assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
+  assert(isa<dc::TokenType>(v.getType()) && "Expected a dc::TokenType");
   return DCTuple(v, {});
 }
 
@@ -63,7 +63,7 @@ class DCTypeConverter : public TypeConverter {
 public:
   DCTypeConverter() {
     addConversion([](Type type) -> Type {
-      if (type.isa<NoneType>())
+      if (isa<NoneType>(type))
         return dc::TokenType::get(type.getContext());
       return dc::ValueType::get(type.getContext(), type);
     });
@@ -78,12 +78,12 @@ public:
             return std::nullopt;
 
           // Materialize !dc.value<> -> !dc.token
-          if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().isa<dc::ValueType>())
+          if (isa<dc::TokenType>(resultType) &&
+              isa<dc::ValueType>(inputs.front().getType()))
             return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
-          auto vt = resultType.dyn_cast<dc::ValueType>();
+          auto vt = dyn_cast<dc::ValueType>(resultType);
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
@@ -98,12 +98,12 @@ public:
             return std::nullopt;
 
           // Materialize !dc.value<> -> !dc.token
-          if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().isa<dc::ValueType>())
+          if (isa<dc::TokenType>(resultType) &&
+              isa<dc::ValueType>(inputs.front().getType()))
             return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
-          auto vt = resultType.dyn_cast<dc::ValueType>();
+          auto vt = dyn_cast<dc::ValueType>(resultType);
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
@@ -238,7 +238,7 @@ public:
 
     // if the original op used `index` as the select operand type, we need to
     // index-cast the unpacked select operand
-    if (op.getIndex().getType().isa<IndexType>()) {
+    if (isa<IndexType>(op.getIndex().getType())) {
       selValue = rewriter.create<arith::IndexCastOp>(
           op.getLoc(), rewriter.getIndexType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
@@ -433,9 +433,9 @@ public:
     auto select = unpack(rewriter, adaptor.getSelectOperand());
     auto selectData = select.data;
     auto selectToken = select.token;
-    bool isIndexType = selectData.getType().isa<IndexType>();
+    bool isIndexType = isa<IndexType>(selectData.getType());
 
-    bool withData = !op.getResult().getType().isa<NoneType>();
+    bool withData = !isa<NoneType>(op.getResult().getType());
 
     llvm::SmallVector<DCTuple> inputs;
     for (auto input : adaptor.getDataOperands())
@@ -461,7 +461,7 @@ public:
       if (isIndexType) {
         cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
       } else {
-        size_t width = selectData.getType().cast<IntegerType>().getWidth();
+        size_t width = cast<IntegerType>(selectData.getType()).getWidth();
         cmpIndex = rewriter.create<arith::ConstantIntOp>(op.getLoc(), i, width);
       }
       auto inputSelected = rewriter.create<arith::CmpIOp>(

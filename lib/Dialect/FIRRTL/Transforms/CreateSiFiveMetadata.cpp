@@ -124,11 +124,11 @@ struct ObjectModelIR {
         FIntegerType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
-        ListType::get(context, PathType::get(context).cast<PropertyType>()),
+        ListType::get(context, cast<PropertyType>(PathType::get(context))),
         BoolType::get(context),
         ListType::get(context,
-                      detail::getInstanceTypeForClassLike(extraPortsClass)
-                          .cast<PropertyType>())};
+                      cast<PropertyType>(detail::getInstanceTypeForClassLike(
+                          extraPortsClass)))};
 
     memorySchemaClass =
         buildSimpleClassOp(builderOM, unknownLoc, "MemorySchema",
@@ -266,7 +266,7 @@ struct ObjectModelIR {
       memoryHierPaths.emplace_back(createPathRef(finalInst, nla, builderOM));
     }
     auto hierpaths = builderOM.create<ListCreateOp>(
-        ListType::get(context, PathType::get(context).cast<PropertyType>()),
+        ListType::get(context, cast<PropertyType>(PathType::get(context))),
         memoryHierPaths);
     SmallVector<Value> memFields;
 

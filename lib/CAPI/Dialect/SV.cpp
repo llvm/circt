@@ -20,7 +20,7 @@ void registerSVPasses() { registerPasses(); }
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv, SVDialect)
 
 bool svAttrIsASVAttributeAttr(MlirAttribute cAttr) {
-  return unwrap(cAttr).isa<SVAttributeAttr>();
+  return llvm::isa<SVAttributeAttr>(unwrap(cAttr));
 }
 
 MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt, MlirStringRef cName,
@@ -36,19 +36,18 @@ MlirAttribute svSVAttributeAttrGet(MlirContext cCtxt, MlirStringRef cName,
 }
 
 MlirStringRef svSVAttributeAttrGetName(MlirAttribute cAttr) {
-  return wrap(unwrap(cAttr).cast<SVAttributeAttr>().getName().getValue());
+  return wrap(llvm::cast<SVAttributeAttr>(unwrap(cAttr)).getName().getValue());
 }
 
 MlirStringRef svSVAttributeAttrGetExpression(MlirAttribute cAttr) {
-  auto expr = unwrap(cAttr).cast<SVAttributeAttr>().getExpression();
+  auto expr = llvm::cast<SVAttributeAttr>(unwrap(cAttr)).getExpression();
   if (expr)
     return wrap(expr.getValue());
   return {nullptr, 0};
 }
 
 bool svSVAttributeAttrGetEmitAsComment(MlirAttribute attribute) {
-  return unwrap(attribute)
-      .cast<SVAttributeAttr>()
+  return llvm::cast<SVAttributeAttr>(unwrap(attribute))
       .getEmitAsComment()
       .getValue();
 }

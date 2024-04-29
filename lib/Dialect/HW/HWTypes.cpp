@@ -40,7 +40,7 @@ using namespace circt::hw::detail;
 
 mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
   Type canonicalType;
-  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+  if (auto typeAlias = dyn_cast<TypeAliasType>(type))
     canonicalType = typeAlias.getCanonicalType();
   else
     canonicalType = type;
@@ -52,10 +52,10 @@ mlir::Type circt::hw::getCanonicalType(mlir::Type type) {
 bool circt::hw::isHWIntegerType(mlir::Type type) {
   Type canonicalType = getCanonicalType(type);
 
-  if (canonicalType.isa<hw::IntType>())
+  if (isa<hw::IntType>(canonicalType))
     return true;
 
-  auto intType = canonicalType.dyn_cast<IntegerType>();
+  auto intType = dyn_cast<IntegerType>(canonicalType);
   if (!intType || !intType.isSignless())
     return false;
 
@@ -63,7 +63,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
 }
 
 bool circt::hw::isHWEnumType(mlir::Type type) {
-  return getCanonicalType(type).isa<hw::EnumType>();
+  return isa<hw::EnumType>(getCanonicalType(type));
 }
 
 /// Return true if the specified type can be used as an HW value type, that is
@@ -71,24 +71,24 @@ bool circt::hw::isHWEnumType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType, IntType, EnumType>())
+  if (isa<IntegerType, IntType, EnumType>(type))
     return true;
 
-  if (auto array = type.dyn_cast<ArrayType>())
+  if (auto array = dyn_cast<ArrayType>(type))
     return isHWValueType(array.getElementType());
 
-  if (auto array = type.dyn_cast<UnpackedArrayType>())
+  if (auto array = dyn_cast<UnpackedArrayType>(type))
     return isHWValueType(array.getElementType());
 
-  if (auto t = type.dyn_cast<StructType>())
+  if (auto t = dyn_cast<StructType>(type))
     return llvm::all_of(t.getElements(),
                         [](auto f) { return isHWValueType(f.type); });
 
-  if (auto t = type.dyn_cast<UnionType>())
+  if (auto t = dyn_cast<UnionType>(type))
     return llvm::all_of(t.getElements(),
                         [](auto f) { return isHWValueType(f.type); });
 
-  if (auto t = type.dyn_cast<TypeAliasType>())
+  if (auto t = dyn_cast<TypeAliasType>(type))
     return isHWValueType(t.getCanonicalType());
 
   return false;
@@ -141,21 +141,21 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
 bool circt::hw::hasHWInOutType(Type type) {
-  if (auto array = type.dyn_cast<ArrayType>())
+  if (auto array = dyn_cast<ArrayType>(type))
     return hasHWInOutType(array.getElementType());
 
-  if (auto array = type.dyn_cast<UnpackedArrayType>())
+  if (auto array = dyn_cast<UnpackedArrayType>(type))
     return hasHWInOutType(array.getElementType());
 
-  if (auto t = type.dyn_cast<StructType>()) {
+  if (auto t = dyn_cast<StructType>(type)) {
     return std::any_of(t.getElements().begin(), t.getElements().end(),
                        [](const auto &f) { return hasHWInOutType(f.type); });
   }
 
-  if (auto t = type.dyn_cast<TypeAliasType>())
+  if (auto t = dyn_cast<TypeAliasType>(type))
     return hasHWInOutType(t.getCanonicalType());
 
-  return type.isa<InOutType>();
+  return isa<InOutType>(type);
 }
 
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
@@ -193,12 +193,12 @@ static void printHWElementType(Type element, AsmPrinter &p) {
 
 Type IntType::get(mlir::TypedAttr width) {
   // The width expression must always be a 32-bit wide integer type itself.
-  auto widthWidth = width.getType().dyn_cast<IntegerType>();
+  auto widthWidth = llvm::dyn_cast<IntegerType>(width.getType());
   assert(widthWidth && widthWidth.getWidth() == 32 &&
          "!hw.int width must be 32-bits");
   (void)widthWidth;
 
-  if (auto cstWidth = width.dyn_cast<IntegerAttr>())
+  if (auto cstWidth = llvm::dyn_cast<IntegerAttr>(width))
     return IntegerType::get(width.getContext(),
                             cstWidth.getValue().getZExtValue());
 
@@ -520,7 +520,7 @@ Type EnumType::parse(AsmParser &p) {
 void EnumType::print(AsmPrinter &p) const {
   p << '<';
   llvm::interleaveComma(getFields(), p, [&](Attribute enumerator) {
-    p << enumerator.cast<StringAttr>().getValue();
+    p << llvm::cast<StringAttr>(enumerator).getValue();
   });
   p << ">";
 }
@@ -531,7 +531,7 @@ bool EnumType::contains(mlir::StringRef field) {
 
 std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   for (auto it : llvm::enumerate(getFields()))
-    if (it.value().cast<StringAttr>().getValue() == field)
+    if (llvm::cast<StringAttr>(it.value()).getValue() == field)
       return it.index();
   return {};
 }
@@ -559,7 +559,7 @@ static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
   else if (!p.parseOptionalAttribute(dim, int64Type).has_value())
     return failure();
 
-  if (!dim.isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>()) {
+  if (!isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>(dim)) {
     p.emitError(p.getNameLoc(), "unsupported dimension kind in hw.array");
     return failure();
   }
@@ -594,7 +594,7 @@ void ArrayType::print(AsmPrinter &p) const {
 }
 
 size_t ArrayType::getNumElements() const {
-  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+  if (auto intAttr = llvm::dyn_cast<IntegerAttr>(getSizeAttr()))
     return intAttr.getInt();
   return -1;
 }
@@ -679,7 +679,7 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 size_t UnpackedArrayType::getNumElements() const {
-  if (auto intAttr = getSizeAttr().dyn_cast<IntegerAttr>())
+  if (auto intAttr = llvm::dyn_cast<IntegerAttr>(getSizeAttr()))
     return intAttr.getInt();
   return -1;
 }

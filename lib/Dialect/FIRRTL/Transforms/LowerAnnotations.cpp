@@ -91,7 +91,7 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
 
   auto portRef = ref.cast<PortAnnoTarget>();
   auto portAnnoRaw = ref.getOp()->getAttr(getPortAnnotationAttrName());
-  ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
+  ArrayAttr portAnno = dyn_cast_or_null<ArrayAttr>(portAnnoRaw);
   if (!portAnno || portAnno.size() != getNumPorts(ref.getOp())) {
     SmallVector<Attribute> emptyPortAttr(
         getNumPorts(ref.getOp()),

@@ -19,7 +19,7 @@ using namespace dc;
 using namespace mlir;
 
 bool circt::dc::isI1ValueType(Type t) {
-  auto vt = t.dyn_cast<ValueType>();
+  auto vt = dyn_cast<ValueType>(t);
   if (!vt)
     return false;
   auto innerWidth = vt.getInnerType().getIntOrFloatBitWidth();
@@ -242,7 +242,7 @@ LogicalResult UnpackOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto inputType = operands.front().getType().cast<ValueType>();
+  auto inputType = cast<ValueType>(operands.front().getType());
   results.push_back(TokenType::get(context));
   results.push_back(inputType.getInnerType());
   return success();
@@ -331,7 +331,7 @@ FailureOr<SmallVector<int64_t>> BufferOp::getInitValueArray() {
   assert(getInitValues() && "initValues attribute not set");
   SmallVector<int64_t> values;
   for (auto value : getInitValuesAttr()) {
-    if (auto iValue = value.dyn_cast<IntegerAttr>()) {
+    if (auto iValue = dyn_cast<IntegerAttr>(value)) {
       values.push_back(iValue.getValue().getSExtValue());
     } else {
       return emitError() << "initValues attribute must be an array of integers";
@@ -362,7 +362,7 @@ LogicalResult ToESIOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Type channelEltType;
-  if (auto valueType = operands.front().getType().dyn_cast<ValueType>())
+  if (auto valueType = dyn_cast<ValueType>(operands.front().getType()))
     channelEltType = valueType.getInnerType();
   else {
     // dc.token => esi.channel<i0>
@@ -382,8 +382,8 @@ LogicalResult FromESIOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto innerType =
-      operands.front().getType().cast<esi::ChannelType>().getInner();
-  if (auto intType = innerType.dyn_cast<IntegerType>(); intType.getWidth() == 0)
+      cast<esi::ChannelType>(operands.front().getType()).getInner();
+  if (auto intType = dyn_cast<IntegerType>(innerType); intType.getWidth() == 0)
     results.push_back(dc::TokenType::get(context));
   else
     results.push_back(dc::ValueType::get(context, innerType));

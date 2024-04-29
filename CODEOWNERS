@@ -12,6 +12,9 @@ tools/arcilator @fabianschuiki @maerhart
 **/Conversion/CalyxNative @rachitnigam
 **/Conversion/LoopScheduleToCalyx @andrewb1999 @mikeurbach
 
+# Comb
+**/Dialect/Comb @darthscsi
+
 # DC
 **/Dialect/DC @mortbopet
 
@@ -40,10 +43,15 @@ tools/llhd-sim @fabianschuiki @maerhart
 **/Handshake* @Dinistro @mortbopet @RamirezLucas
 
 # HW
-# **/Dialect/HW
+**/Dialect/HW @darthscsi
+
+# SMT
+**/Dialect/SMT @maerhart
+lib/Conversion/SMTToZ3LLVM @maerhart
+lib/Target/ExportSMTLIB @maerhart
 
 # SV
-# **/Dialect/SV
+**/Dialect/SV @darthscsi
 
 # Ibis
 **/Dialect/Ibis @teqdruid @mortbopet @blakep-msft

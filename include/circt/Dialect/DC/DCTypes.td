@@ -41,7 +41,7 @@ def I1ValueType : Type<
 }
 
 def ValueOrTokenType : Type<
-  CPred<"$_self.isa<dc::ValueType, dc::TokenType>()">,
+  CPred<"llvm::isa<dc::ValueType, dc::TokenType>($_self)">,
   "must be a !dc.value or !dc.token type"> {
 }
 

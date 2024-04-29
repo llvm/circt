@@ -41,7 +41,7 @@ static LogicalResult verifyUniqueNamesInRegion(
   bool portsVerified = true;
 
   for (auto arg : llvm::zip(argNames, operation->getRegion(0).getArguments())) {
-    StringRef argName = std::get<0>(arg).cast<StringAttr>().getValue();
+    StringRef argName = cast<StringAttr>(std::get<0>(arg)).getValue();
     BlockArgument argValue = std::get<1>(arg);
 
     if (portNames.count(argName)) {
@@ -120,7 +120,7 @@ SmallVector<::circt::hw::PortInfo> SCModuleOp::getPortList() {
   SmallVector<hw::PortInfo> ports;
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
     hw::PortInfo info;
-    info.name = getPortNames()[i].cast<StringAttr>();
+    info.name = cast<StringAttr>(getPortNames()[i]);
     info.type = getSignalBaseType(getArgument(i).getType());
     info.dir = getDirection(info.type);
     ports.push_back(info);
@@ -220,7 +220,7 @@ ArrayRef<Type> SCModuleOp::getResultTypes() {
 }
 
 static Type wrapPortType(Type type, hw::ModulePort::Direction direction) {
-  if (auto inoutTy = type.dyn_cast<hw::InOutType>())
+  if (auto inoutTy = dyn_cast<hw::InOutType>(type))
     type = inoutTy.getElementType();
 
   switch (direction) {
@@ -286,7 +286,7 @@ void SCModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 
   ArrayAttr portNames = getPortNames();
   for (size_t i = 0, e = getNumArguments(); i != e; ++i) {
-    auto str = portNames[i].cast<StringAttr>().getValue();
+    auto str = cast<StringAttr>(portNames[i]).getValue();
     setNameFn(getArgument(i), str);
   }
 }
@@ -306,7 +306,7 @@ LogicalResult SCModuleOp::verify() {
   }
 
   for (auto portName : getPortNames()) {
-    if (portName.cast<StringAttr>().getValue().empty())
+    if (cast<StringAttr>(portName).getValue().empty())
       return emitOpError("port name must not be empty");
   }
 
@@ -375,37 +375,37 @@ OpFoldResult ConvertOp::fold(FoldAdaptor) {
 
     // Either both the input and intermediate types are signed or both are
     // unsigned.
-    bool inputSigned = inputType.isa<SignedType, IntBaseType>();
-    bool intermediateSigned = intermediateType.isa<SignedType, IntBaseType>();
+    bool inputSigned = isa<SignedType, IntBaseType>(inputType);
+    bool intermediateSigned = isa<SignedType, IntBaseType>(intermediateType);
     if (inputSigned ^ intermediateSigned)
       return {};
 
     // Converting 4-valued to 2-valued and back may lose information.
-    if (inputType.isa<LogicVectorBaseType, LogicType>() &&
-        !intermediateType.isa<LogicVectorBaseType, LogicType>())
+    if (isa<LogicVectorBaseType, LogicType>(inputType) &&
+        !isa<LogicVectorBaseType, LogicType>(intermediateType))
       return {};
 
     auto inputBw = getBitWidth(inputType);
     auto intermediateBw = getBitWidth(intermediateType);
 
     if (!inputBw && intermediateBw) {
-      if (inputType.isa<IntBaseType, UIntBaseType>() && *intermediateBw >= 64)
+      if (isa<IntBaseType, UIntBaseType>(inputType) && *intermediateBw >= 64)
         return other.getInput();
       // We cannot support input types of signed, unsigned, and vector types
       // since they have no upper bound for the bit-width.
     }
 
     if (!intermediateBw) {
-      if (intermediateType.isa<BitVectorBaseType, LogicVectorBaseType>())
+      if (isa<BitVectorBaseType, LogicVectorBaseType>(intermediateType))
         return other.getInput();
 
-      if (!inputBw && inputType.isa<IntBaseType, UIntBaseType>() &&
-          intermediateType.isa<SignedType, UnsignedType>())
+      if (!inputBw && isa<IntBaseType, UIntBaseType>(inputType) &&
+          isa<SignedType, UnsignedType>(intermediateType))
         return other.getInput();
 
       if (inputBw && *inputBw <= 64 &&
-          intermediateType
-              .isa<IntBaseType, UIntBaseType, SignedType, UnsignedType>())
+          isa<IntBaseType, UIntBaseType, SignedType, UnsignedType>(
+              intermediateType))
         return other.getInput();
 
       // We have to be careful with the signed and unsigned types as they often
@@ -582,7 +582,7 @@ ParseResult BindPortOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(channel, types[1], result.operands))
     return failure();
 
-  if (auto moduleType = types[0].dyn_cast<ModuleType>()) {
+  if (auto moduleType = dyn_cast<ModuleType>(types[0])) {
     auto ports = moduleType.getPorts();
     uint64_t index = 0;
     for (auto port : ports) {
@@ -604,9 +604,7 @@ ParseResult BindPortOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void BindPortOp::print(OpAsmPrinter &p) {
   p << " " << getInstance() << "["
-    << getInstance()
-           .getType()
-           .cast<ModuleType>()
+    << cast<ModuleType>(getInstance().getType())
            .getPorts()[getPortId().getZExtValue()]
            .name
     << "] to " << getChannel();
@@ -615,7 +613,7 @@ void BindPortOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult BindPortOp::verify() {
-  auto ports = getInstance().getType().cast<ModuleType>().getPorts();
+  auto ports = cast<ModuleType>(getInstance().getType()).getPorts();
   if (getPortId().getZExtValue() >= ports.size())
     return emitOpError("port #")
            << getPortId().getZExtValue() << " does not exist, there are only "
@@ -629,8 +627,8 @@ LogicalResult BindPortOp::verify() {
                          << channelType << " channel due to base type mismatch";
 
   // Verify that the port/channel directions are valid.
-  if ((portType.isa<InputType>() && channelType.isa<OutputType>()) ||
-      (portType.isa<OutputType>() && channelType.isa<InputType>()))
+  if ((isa<InputType>(portType) && isa<OutputType>(channelType)) ||
+      (isa<OutputType>(portType) && isa<InputType>(channelType)))
     return emitOpError() << portType << " port cannot be bound to "
                          << channelType
                          << " channel due to port direction mismatch";
@@ -639,9 +637,7 @@ LogicalResult BindPortOp::verify() {
 }
 
 StringRef BindPortOp::getPortName() {
-  return getInstance()
-      .getType()
-      .cast<ModuleType>()
+  return cast<ModuleType>(getInstance().getType())
       .getPorts()[getPortId().getZExtValue()]
       .name.getValue();
 }
@@ -1090,7 +1086,7 @@ void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
     return;
 
   for (auto [arg, name] : llvm::zip(getArguments(), getArgNames()))
-    setNameFn(arg, name.cast<StringAttr>().getValue());
+    setNameFn(arg, cast<StringAttr>(name).getValue());
 }
 
 LogicalResult FuncOp::verify() {
@@ -1105,7 +1101,7 @@ LogicalResult FuncOp::verify() {
     return emitOpError("incorrect number of argument names");
 
   for (auto portName : getArgNames()) {
-    if (portName.cast<StringAttr>().getValue().empty())
+    if (cast<StringAttr>(portName).getValue().empty())
       return emitOpError("arg name must not be empty");
   }
 

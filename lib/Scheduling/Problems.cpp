@@ -454,8 +454,8 @@ std::optional<unsigned> Dependence::getSourceIndex() const {
   if (!isDefUse())
     return std::nullopt;
 
-  assert(defUse->get().isa<OpResult>() && "source is not an operation");
-  return defUse->get().dyn_cast<OpResult>().getResultNumber();
+  assert(isa<OpResult>(defUse->get()) && "source is not an operation");
+  return dyn_cast<OpResult>(defUse->get()).getResultNumber();
 }
 
 std::optional<unsigned> Dependence::getDestinationIndex() const {
