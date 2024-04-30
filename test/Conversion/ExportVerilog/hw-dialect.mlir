@@ -171,9 +171,9 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 // CHECK-NEXT:      assign r2 = a - b;
 // CHECK-NEXT:      assign r4 = a * b;
 // CHECK-NEXT:      assign r6 = a / b;
-// CHECK-NEXT:      assign r7 = $signed(a) / $signed(b);
+// CHECK-NEXT:      assign r7 = $signed($signed(a) / $signed(b));
 // CHECK-NEXT:      assign r8 = a % b;
-// CHECK-NEXT:      assign r9 = $signed(a) % $signed(b);
+// CHECK-NEXT:      assign r9 = $signed($signed(a) % $signed(b));
 // CHECK-NEXT:      assign r10 = a << b;
 // CHECK-NEXT:      assign r11 = a >> b;
 // CHECK-NEXT:      assign r12 = $signed($signed(a) >>> b);
@@ -437,16 +437,17 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] awire;
 
-  // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
-  // CHECK:                $unsigned($signed(in3) / $signed(in4));
+  // CHECK:      assign awire =
+  // CHECK-NEXT:   $unsigned($signed($signed(in1) / $signed(in2)))
+  // CHECK-NEXT:   / $unsigned($signed($signed(in3) / $signed(in4)));
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
   sv.assign %awire, %a3: i4
 
   // CHECK:       assign awire =
-  // CHECK-NEXT:    $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2))
-  // CHECK-NEXT:    / $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
+  // CHECK-NEXT:    $unsigned($signed($signed(in1) / $signed(in2)) + $signed($signed(in1) / $signed(in2)))
+  // CHECK-NEXT:    / $unsigned($signed($signed(in1) / $signed(in2)) * $signed($signed(in1) / $signed(in2)));
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -457,7 +458,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   sv.assign %awire, %b4: i4
 
   // https://github.com/llvm/circt/issues/369
-  // CHECK: assign awire = 4'sh5 / -4'sh3;
+  // CHECK: assign awire = $signed(4'sh5 / -4'sh3);
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
