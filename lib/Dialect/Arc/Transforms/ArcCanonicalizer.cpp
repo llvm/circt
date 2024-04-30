@@ -561,10 +561,10 @@ CompRegCanonicalizer::matchAndRewrite(seq::CompRegOp op,
     return failure();
 
   // Because Arcilator supports constant zero reset values, skip them.
-  if (auto *resetValueDefiningOp = op.getResetValue().getDefiningOp())
-    if (auto constant = dyn_cast<hw::ConstantOp>(resetValueDefiningOp))
-      if (constant.getValue() == 0)
-        return failure();
+  APInt constant;
+  if (mlir::matchPattern(op.getResetValue(), mlir::m_ConstantInt(&constant)))
+    if (constant.isZero())
+      return failure();
 
   Value newInput = rewriter.create<comb::MuxOp>(
       op->getLoc(), op.getReset(), op.getResetValue(), op.getInput());
