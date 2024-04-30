@@ -4,6 +4,8 @@
 ; - test/scala/firrtl/extractverif/ExtractAssertsSpec.scala
 
 circuit Foo:
+  ; expected-warning @below {{module contains 10 printf-encoded verification operation(s), which are deprecated and will be removed in the future}}
+  ; expected-note @below {{For more information, see https://github.com/llvm/circt/issues/6970}}
   module Foo:
     input clock : Clock
     input reset : AsyncReset
@@ -39,7 +41,7 @@ circuit Foo:
 
     ; SVA: wire _GEN = ~enable | predicate1 | reset;
     ; SVA-NEXT: assert__verif_library: assert property (@(posedge clock) _GEN) else $error("Assertion failed (verification library): ");
-
+    ; expected-note @+2 {{example printf here, will just be a printf in the future}}
     when not(or(predicate1, asUInt(reset))) :
       printf(clock, enable, "foo [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"format\":{\"type\":\"ifElseFatal\"},\"baseMsg\":\"Assertion failed (verification library): \"}</extraction-summary> bar")
       stop(clock, enable, 1)

@@ -5392,16 +5392,37 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
 
   // Convert print-encoded verifications after parsing.
 
-  // It is dangerous to modify IR in the walk, so accumulate printFOp to
-  // buffer.
-  SmallVector<PrintFOp> buffer;
-  deferredModule.moduleOp.walk(
-      [&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
+  {
+    // Gather PrintFOps and then process to avoid walking while mutating.
+    SmallVector<PrintFOp> buffer;
+    deferredModule.moduleOp.walk(
+        [&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
 
-  for (auto printFOp : buffer) {
-    auto result = circt::firrtl::foldWhenEncodedVerifOp(printFOp);
-    if (failed(result))
-      return result;
+    size_t numVerifPrintfs = 0;
+    std::optional<Location> printfLoc;
+    for (auto printFOp : buffer) {
+      auto loc = printFOp.getLoc();
+      auto result = circt::firrtl::foldWhenEncodedVerifOp(printFOp);
+      if (failed(result))
+        return failure();
+      if (*result) {
+        ++numVerifPrintfs;
+        if (!printfLoc)
+          printfLoc = loc;
+      }
+    }
+    if (numVerifPrintfs > 0) {
+      auto diag =
+          mlir::emitWarning(deferredModule.moduleOp.getLoc(),
+                            "module contains ")
+          << numVerifPrintfs
+          << " printf-encoded verification operation(s), which are deprecated "
+             "and will be removed in the future";
+      diag.attachNote(*printfLoc)
+          << "example printf here, will just be a printf in the future";
+      diag.attachNote() << "For more information, see "
+                           "https://github.com/llvm/circt/issues/6970";
+    }
   }
 
   // Demote any forceable operations that aren't being forced.
