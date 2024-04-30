@@ -141,6 +141,19 @@ hw.module @HoistCompRegReset(in %clock: !seq.clock, in %input: i32, in %reset: i
   hw.output %reg : i32
 }
 
+// CHECK-LABEL: hw.module @NoHoistCompRegZeroResetValue
+// CHECK-SAME: in %[[CLOCK:[^ ]*]] : !seq.clock, in %[[INPUT:[^ ]*]] : i32, in %[[RESET:[^ ]*]] : i1
+hw.module @NoHoistCompRegZeroResetValue(in %clock: !seq.clock, in %input: i32, in %reset: i1, out out: i32) {
+  // CHECK: %[[ZERO:.*]] = hw.constant 0 : i32
+  %zero = hw.constant 0 : i32
+
+  // CHECK: %[[REG:.*]] = seq.compreg %[[INPUT]], %[[CLOCK]] reset %[[RESET]], %[[ZERO]] : i32
+  %reg = seq.compreg %input, %clock reset %reset, %zero : i32
+
+  // CHECK: hw.output %[[REG]] : i32
+  hw.output %reg : i32
+}
+
 //===----------------------------------------------------------------------===//
 // RemoveUnusedArcArguments
 //===----------------------------------------------------------------------===//
