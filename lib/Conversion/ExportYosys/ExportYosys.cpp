@@ -941,17 +941,26 @@ void ExportYosysParallelPass::runOnOperation() {
             auto &[op, test] = results[i];
             {
               llvm::sys::SmartScopedLock<true> lock(mutex);
-              llvm::errs() << "Running " << i << " " << op.getModuleName()
-                           << " " << results.size() << "\n";
+              llvm::errs() << "[yosys-optimizer] Running [" << i + 1 << "/"
+                           << results.size() << "] " << op.getModuleName()
+                           << "\n";
             }
 
             auto result = runYosys(op.getLoc(), test, "synth; write_verilog");
 
             {
               llvm::sys::SmartScopedLock<true> lock(mutex);
-              llvm::errs() << "Finished " << i << " " << op.getModuleName()
-                           << " " << results.size() << "\n";
+              llvm::errs() << "[yosys-optimizer] Finished [" << i + 1 << "/"
+                           << results.size() << "] " << op.getModuleName()
+                           << "\n";
             }
+
+            // Remove temporary rtlil if success.
+            if (succeeded(result))
+              llvm::sys::fs::remove(test);
+            else
+              op.emitError() << "Found error in yosys"
+                             << "\n";
 
             return result;
           })))
