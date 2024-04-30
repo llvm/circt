@@ -106,7 +106,7 @@ firrtl.circuit "FooBar" attributes {
       target = "FooBar.FooBar.io.in",
       pin = "foo_out"
     }]} {
-  // expected-note @below {{source or sink here}}
+  // expected-note @below {{sink here}}
   firrtl.module private @Foo(out %out: !firrtl.uint<1>) {
   }
   // expected-error @below {{cannot wire port through this public module}}
@@ -114,6 +114,7 @@ firrtl.circuit "FooBar" attributes {
       %foo_out = firrtl.instance foo interesting_name  @Foo(out out: !firrtl.uint<1>)
       firrtl.strictconnect %out, %foo_out : !firrtl.uint<1>
   }
+  // expected-note @below {{source here}}
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<in flip: uint<1>, out: uint<1>>
       %bar_out = firrtl.instance bar interesting_name  @Bar(out out: !firrtl.uint<1>)

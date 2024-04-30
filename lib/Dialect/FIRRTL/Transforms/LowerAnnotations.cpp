@@ -881,11 +881,13 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
         auto inst = cast<InstanceOp>(*instNode);
         auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
         if (mod.isPublic()) {
-          if (!allowAddingPortsOnPublic)
-            return emitError(mod.getLoc(),
-                             "cannot wire port through this public module")
-                       .attachNote(val.getLoc())
-                   << "source or sink here";
+          if (!allowAddingPortsOnPublic) {
+            auto diag = emitError(
+                mod.getLoc(), "cannot wire port through this public module");
+            diag.attachNote(source.getLoc()) << "source here";
+            diag.attachNote(sink.getLoc()) << "sink here";
+            return diag;
+          }
           ++numPublicPortsWired;
         }
         if (name.empty()) {
