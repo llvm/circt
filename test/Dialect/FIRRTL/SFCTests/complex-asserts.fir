@@ -5,6 +5,7 @@
 
 circuit Foo:
   ; expected-warning @below {{module contains 10 printf-encoded verification operation(s), which are deprecated and will be removed in the future}}
+  ; expected-note @below {{For more information, see https://github.com/llvm/circt/issues/6970}}
   module Foo:
     input clock : Clock
     input reset : AsyncReset
