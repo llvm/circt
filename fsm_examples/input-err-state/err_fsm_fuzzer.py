@@ -2,7 +2,7 @@
 
 import numpy as np
 
-num_fsm = range(10, 500, 10)
+num_fsm = [5]#range(10, 500, 10)
 
 guard_type = ["comb.icmp ult %", "comb.icmp uge %"]
 
@@ -88,13 +88,13 @@ for n in num_fsm:
                 if guards[i]!="NULL":
                     f.write("\n\t\t\tguard {")
                     f.write("\n\t\t\t\t%tmp1 = "+guards[i]+" : i16")
-                    f.write("\n\t\t\t\t%tmp2 = comb.eq %err, %c0 : i16")
+                    f.write("\n\t\t\t\t%tmp2 = comb.icmp eq %err, %c0 : i16")
                     f.write("\n\t\t\t\t%tmp3 = comb.and %tmp1, %tmp2 : i16")
                     f.write("\n\t\t\t\tfsm.return %tmp3")
                     f.write("\n\t\t\t} action {")
                 else: #default guard: not error 
                     f.write("\n\t\t\tguard {")
-                    f.write("\n\t\t\t\t%tmp1 = comb.eq %err, %c0 : i16")
+                    f.write("\n\t\t\t\t%tmp1 = comb.icmp eq %err, %c0 : i16")
                     f.write("\n\t\t\t\tfsm.return %tmp1")
                     f.write("\n\t\t\t} action {")
                     f.write("\n\t\t\t\t%tmp = "+actions[i]+" : i16")
@@ -103,14 +103,14 @@ for n in num_fsm:
         # always add error transition
         f.write("\n\t\tfsm.transition @ERR")
         f.write("\n\t\t\tguard {")
-        f.write("\n\t\t\t\t%tmp1 = comb.eq %err, %c1 : i16")
+        f.write("\n\t\t\t\t%tmp1 = comb.icmp eq %err, %c1 : i16")
         f.write("\n\t\t\t\tfsm.return %tmp1")
         f.write("\n\t\t\t}")
         f.write("\n\t}")
     
     # last state
     f.write("\n\n\tfsm.state @_"+str(n)+" output {\n\t} transitions {\n\t}")
-    f.write("\n\n\tfsm.state @_ERR output {\n\t} transitions {\n\t}")
+    f.write("\n\n\tfsm.state @ERR output {\n\t} transitions {\n\t}")
         
     # non reachable state
 

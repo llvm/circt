@@ -12,7 +12,7 @@ col = [#"#f0f9e8",
 "#43a2ca",
 "#0868ac"]
 
-lines = open("output.txt", "r").readlines()
+lines = open("output_withcorrecttb.txt", "r").readlines()
 
 
 
@@ -69,5 +69,5 @@ plt.ylabel('time [s]')
 plt.legend(ncol = 2)
 
 
-plt.savefig("reachability-massive-tests.png", dpi = 300)
+plt.savefig("reachability-massive-tests-correct.png", dpi = 300)
 
