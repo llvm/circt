@@ -79,6 +79,8 @@ set(ESI_RUNTIME_SRCS
   runtime/cpp/include/esi/Ports.h
   runtime/cpp/include/esi/Services.h
   runtime/cpp/include/esi/Common.h
+  runtime/cpp/include/esi/Design.h
+  runtime/cpp/include/esi/Context.h
   runtime/cpp/lib/backends/Cosim.cpp
   runtime/cpp/lib/backends/Trace.cpp
   runtime/cpp/lib/Utils.cpp
@@ -86,6 +88,9 @@ set(ESI_RUNTIME_SRCS
   runtime/cpp/lib/Services.cpp
   runtime/cpp/lib/Accelerator.cpp
   runtime/cpp/lib/Ports.cpp
+  runtime/cpp/lib/Common.cpp
+  runtime/cpp/lib/Design.cpp
+  runtime/cpp/lib/Context.cpp
   runtime/cpp/tools/esiquery.cpp
   runtime/cosim/CMakeLists.txt
   runtime/cosim/Cosim_MMIO.sv

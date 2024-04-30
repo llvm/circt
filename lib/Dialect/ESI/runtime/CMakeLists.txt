@@ -40,19 +40,19 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
-include_directories(cpp/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 
 set(ESIRuntimeSources
-  cpp/lib/Accelerator.cpp
-  cpp/lib/Context.cpp
-  cpp/lib/Common.cpp
-  cpp/lib/Design.cpp
-  cpp/lib/Manifest.cpp
-  cpp/lib/Services.cpp
-  cpp/lib/Ports.cpp
-  cpp/lib/Utils.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
 
-  cpp/lib/backends/Trace.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
 set(ESIRuntimeLinkLibraries
   ZLIB::ZLIB
