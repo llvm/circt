@@ -41,7 +41,7 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">,
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,
-    Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public", "bool", "false",
+    Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public-modules", "bool", "false",
       "Allow public modules to gain additional ports as a result of wiring.">,
   ];
   let dependentDialects = ["hw::HWDialect"];

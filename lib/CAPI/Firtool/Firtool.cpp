@@ -51,6 +51,11 @@ void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
   unwrap(options)->setLowerAnnotationsNoRefTypePorts(value);
 }
 
+void circtFirtoolOptionsSetAllowAddingPortsOnPublic(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setAllowAddingPortsOnPublic(value);
+}
+
 void circtFirtoolOptionsSetPreserveAggregate(
     CirctFirtoolFirtoolOptions options,
     CirctFirtoolPreserveAggregateMode value) {

@@ -424,7 +424,7 @@ struct FirtoolCmdOptions {
       llvm::cl::init(false), llvm::cl::Hidden};
 
   llvm::cl::opt<bool> allowAddingPortsOnPublic{
-      "allow-adding-ports-on-public",
+      "allow-adding-ports-on-public-modules",
       llvm::cl::desc("Allow adding ports to public modules"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
