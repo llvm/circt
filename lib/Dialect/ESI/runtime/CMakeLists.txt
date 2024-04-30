@@ -74,41 +74,44 @@ IF(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-# If Cap'nProto hasn't been explicitly disabled, find it.
-option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
-if (CAPNP_DISABLE)
-  message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
-elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
-  else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+if(ESI_COSIM)
+  # If Cap'nProto hasn't been explicitly disabled, find it.
+  option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
+  if (CAPNP_DISABLE)
+    message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
+  elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
+    if(DEFINED CAPNP_PATH)
+      set(ENV{PKG_CONFIG_PATH}
+        "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+      find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
+    else()
+      set(ENV{PKG_CONFIG_PATH}
+        "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+      find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
+    endif()
   endif()
-endif()
 
-# If Cap'nProto has been found, generate the headers and definitions.
-if(CapnProto_FOUND)
-  set(ESI_COSIM true)
-  message("-- ESI cosim enabled")
+  # If Cap'nProto has been found, generate the headers and definitions.
+  if(CapnProto_FOUND)
+    message("-- ESI cosim enabled")
 
-  message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-  set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
-  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
+    set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-  add_subdirectory(cosim)
+    add_subdirectory(cosim)
 
-  set(ESIRuntimeSources
-    ${ESIRuntimeSources}
-    cpp/lib/backends/Cosim.cpp
-  )
-  set(ESIRuntimeLinkLibraries
-    ${ESIRuntimeLinkLibraries}
-    EsiCosimCapnp
-  )
+    set(ESIRuntimeSources
+      ${ESIRuntimeSources}
+      cpp/lib/backends/Cosim.cpp
+    )
+    set(ESIRuntimeLinkLibraries
+      ${ESIRuntimeLinkLibraries}
+      EsiCosimCapnp
+    )
+  else()
+    message(FATAL_ERROR "Cap'nProto not found. Required for ESI_COSIM.")
+  endif()
 endif()
 
 option(XRT_PATH "Path to XRT lib.")

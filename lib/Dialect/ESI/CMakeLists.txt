@@ -110,6 +110,7 @@ set(ESI_RUNTIME_SRCS
   runtime/cosim/esi-cosim.py
   runtime/python/esi/__init__.py
   runtime/python/esi/accelerator.py
+  runtime/python/esi/types.py
   runtime/python/esi/esiCppAccel.cpp
   runtime/python/esi/esiCppAccel.pyi
   runtime/CMakeLists.txt
