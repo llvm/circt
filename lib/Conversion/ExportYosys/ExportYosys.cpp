@@ -102,13 +102,6 @@ struct ModuleConverter
     return failure();
   }
 
-  RTLIL::Wire *getValueWire(Value value) {
-    auto it = mapping.find(value);
-    if (it != mapping.end())
-      return it->second;
-    return nullptr;
-  }
-
   circt::Namespace moduleNameSpace;
   RTLIL::IdString getNewName(StringRef name = "") {
     if (name.empty())
