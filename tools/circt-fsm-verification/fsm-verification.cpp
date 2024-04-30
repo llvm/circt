@@ -27,21 +27,21 @@ using namespace z3;
  
 */
 void printSolverAssertions(z3::solver& solver) {
-  llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  llvm::outs()<<solver.to_smt2()<<"\n";
-  llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
-  llvm::outs()<<solver.check()<<"\n";
+  // llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
+  // llvm::outs()<<solver.to_smt2()<<"\n";
+  // llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  // llvm::outs()<<solver.check()<<"\n";
   const auto start{std::chrono::steady_clock::now()};
-  // int sat = solver.check();
+  int sat = solver.check();
   const auto end{std::chrono::steady_clock::now()};
 
   const std::chrono::duration<double> elapsed_seconds{end - start};
 
 
-  llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
+  // llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
-  llvm::outs()<<solver.get_model().to_string()<<"\n";
-  llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  // llvm::outs()<<solver.get_model().to_string()<<"\n";
+  // llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
   // llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
 	ofstream outfile;
 	outfile.open("output.txt", ios::app);
@@ -580,8 +580,6 @@ void parse_fsm(string input_file, int time_bound, string to_check){
   // initial condition
   s.add(nestedForall(*solverVars, body, 0));
 
-  // llvm::outs()<<s.to_smt2()<<"\n";
-
 
   for(auto t: *transitions){
 
@@ -589,16 +587,10 @@ void parse_fsm(string input_file, int time_bound, string to_check){
 
     copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
     solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
-    // update input arguments
 
     for(int i=0; i<argInputs->size(); i++){
-      // solverVars->at(i) = argInputs->at(i)(solverVars->at(solverVars->size()-1));
       solverVarsAfter->at(i) = array[solverVars->at(solverVars->size()-1)+1];
     }
-
-    // if(VERBOSE){
-      // llvm::outs()<<"\n\n\nafter cursed line transition from "<<t.from<<" to "<<t.to<<"\n";
-    // }
 
     if(t.isGuard && t.isAction){
       expr body = implies(findMyFun(t.from, stateInvMap_fun)(solverVars->size(), solverVars->data()) && t.guard(*solverVars), findMyFun(t.to, stateInvMap_fun)(t.action(*solverVarsAfter).size(), t.action(*solverVarsAfter).data()));
@@ -618,44 +610,28 @@ void parse_fsm(string input_file, int time_bound, string to_check){
 
   vector<expr> *solverVarsAfter = new vector<expr>;
 
-
+  // input args
   copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
   solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
-  // update input arguments
 
   for(int i=0; i<argInputs->size(); i++){
-    // solverVars->at(i) = argInputs->at(i)(solverVars->at(solverVars->size()-1));
     solverVarsAfter->at(i) = array[solverVars->at(solverVars->size()-1)+1];
   }
-  // for(int i=0; i<argInputs->size(); i++){
-  //   solverVarsAfter->at(i) = argInputs->at(i)(solverVars->at(solverVars->size()-1)+1);
-  // }
 
-  // for(int i=0; i<argInputs->size(); i++){
-  //   body = solverVars->at(i)=argInputs->at(i)(solverVars->at(solverVars->size()-1));
-  //   s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound-1), nestedForall(*solverVars, body, 1))));
-  //   //   solverVars->at(i) = argInputs->at(i)(solverVars->at(solverVars->size()-1));
-  //   //   solverVarsAfter->at(i) = argInputs->at(i)(solverVars->at(solverVars->size()-1)+1);
-  // }
-  
-  // // err signal triggers error state sat
+  // err signal triggers error state sat
 
-  // body = ((exists(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound-1), solverVars->at(0)==1))) && (forall(solverVars->at(solverVars->size()-1), implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), !(findMyFun(to_check, stateInvMap_fun)(solverVars->size(), solverVars->data()))))));
-  // s.add(nestedForall(*solverVars, body, 1));
+  body = (!(solverVars->at(0)==1) || ((findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
 
-  // s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound-1), nestedForall(*solverVars, body, 1))));
+  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars, body, 0))));
 
-  // // err signal triggers error state unsat
+  // body = ((solverVars->at(0)==1) && (!(findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
 
-  body = ((solverVars->at(0)==1)&& (!(findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
-
-  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound-1), nestedForall(*solverVars, body, 0))));
+  // s.add(exists(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars, body, 0))));
 
 
   // body = (( !(argInputs->at(0)(solverVars->at(solverVars->size()-1))==1)&&((findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))) || ((argInputs->at(0)(solverVars->at(solverVars->size()-1))==1)&&!(findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))) ));
 
   // s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound-1), nestedForall(*solverVars, body, 1))));
-
 
   // reachability unsat
 

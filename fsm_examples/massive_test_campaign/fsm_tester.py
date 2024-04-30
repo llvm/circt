@@ -2,7 +2,7 @@ import numpy as np
 import subprocess 
 import os
 
-reps = 10
+reps = 5
 
 time = 10000
 
