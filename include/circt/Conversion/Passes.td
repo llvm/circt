@@ -731,8 +731,11 @@ def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
   let options = [
     Option<"commands", "commmands", "std::string",
             "", "yosys commands to run">,
-    Option<"importResult", "import-result", "bool",
-            "false", "Import Yosys's result and replace it with the input.">
+    Option<"topModule", "top-module", "std::string",
+            "", "top module name">,
+    Option<"runParallel", "run-parallel", "bool",
+            "false",
+            "Launch yosys subprocess per module">
   ];
 }
 
