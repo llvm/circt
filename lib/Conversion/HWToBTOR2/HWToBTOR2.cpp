@@ -88,6 +88,9 @@ private:
   // This is necessary, as we need to wait for the `next` operation to
   // have been converted to btor2 before we can emit the transition.
   SmallVector<Operation *> regOps;
+  // Stores all of the emitted assertions via their LID. This allows us to avoid
+  // emitting the same assertion twice.
+  DenseSet<size_t> badLIDs;
 
   // Used to perform a DFS search through the module to declare all operands
   // before they are used
@@ -780,15 +783,39 @@ public:
 
   // Assertions are sometimes encoded using a combination of fatal and error, we
   // thus need to find the parenting condition and generate a bad statement
-  // using that
+  // using that.
   void visitEncodedAssert(Operation *op) {
     genSort("bitvec", 1);
 
     // Fatal simply fails, so we need to find in which case we are failing
     // For some reason Chisel assertions are sometimes encoded using a fatal and
-    // an error
+    // an error.
     if (auto ifop = dyn_cast<sv::IfOp>(((Operation *)op)->getParentOp())) {
       Value cond = ifop.getOperand();
+
+      // Check that the operand is a condition and not an sv macro, otherwise
+      // look for another parent. Some functions like printf will be converted
+      // using additional macros as first level conditions to allow for more
+      // error-reporting control later down the road. To do this we simply make
+      // sure that it's not part of the sv dialect, given that at this point a
+      // condition should not be expressed using operations from that dialect.
+      if (cond.getDefiningOp()->getDialect() == op->getDialect()) {
+        if (auto parentif =
+                dyn_cast<sv::IfOp>(((Operation *)ifop)->getParentOp())) {
+          cond = parentif.getOperand();
+        } else {
+          op->emitOpError("Unsupported Assertion encoding pattern!");
+          return signalPassFailure();
+        }
+      }
+
+      // Make sure that we don't emit the assertion twice
+      size_t condlid = getOpLID(cond);
+
+      if (badLIDs.contains(condlid))
+        return;
+      badLIDs.insert(condlid);
+
       // Generate the expression inversion
       genUnaryOp(op, cond, "not", 1);
 
@@ -797,8 +824,8 @@ public:
     }
   }
 
-  // Given an sv.fatal, sv.error, or sv.exit look for a parenting sv.if and use
-  // that condition in a bad statement
+  // Given an sv.fatal, sv.error, or sv.exit look for a parenting sv.if and
+  // use that condition in a bad statement
   void visitSV(sv::FatalOp op) { visitEncodedAssert(op); }
   void visitSV(sv::ErrorOp op) { visitEncodedAssert(op); }
   void visitSV(sv::ExitOp op) { visitEncodedAssert(op); }
@@ -988,6 +1015,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   regOps.clear();
   handledOps.clear();
   worklist.clear();
+  badLIDs.clear();
 }
 
 // Constructor with a custom ostream
