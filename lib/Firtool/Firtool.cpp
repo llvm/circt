@@ -33,7 +33,8 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       opt.shouldDisableUnknownAnnotations(),
       opt.shouldDisableClasslessAnnotations(),
-      opt.shouldLowerNoRefTypePortAnnotations()));
+      opt.shouldLowerNoRefTypePortAnnotations(),
+      opt.shouldAllowAddingPortsOnPublic()));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
@@ -422,6 +423,11 @@ struct FirtoolCmdOptions {
           "wiring problems inside the LowerAnnotations pass"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
+  llvm::cl::opt<bool> allowAddingPortsOnPublic{
+      "allow-adding-ports-on-public-modules",
+      llvm::cl::desc("Allow adding ports to public modules"),
+      llvm::cl::init(false), llvm::cl::Hidden};
+
   llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
       preserveAggregate{
           "preserve-aggregate",
@@ -703,6 +709,7 @@ void circt::firtool::registerFirtoolCLOptions() {
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
+      allowAddingPortsOnPublic(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
@@ -729,6 +736,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
   disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
+  allowAddingPortsOnPublic = clOptions->allowAddingPortsOnPublic;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
   enableDebugInfo = clOptions->enableDebugInfo;

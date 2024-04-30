@@ -14,16 +14,16 @@ firrtl.circuit "FooBar" attributes {
       target = "FooBar.FooBar.io.in",
       pin = "foo_out"
     }]} {
-  // CHECK: firrtl.module @Foo
+  // CHECK: firrtl.module private @Foo
   // The real port type of the source should be bored
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module@Foo(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
       firrtl.skip
   }
-  // CHECK: firrtl.module @Bar
+  // CHECK: firrtl.module private @Bar
   // The real port type of the source should be bored in the parent
   // CHECK-SAME: in %foo_io_out__bore: !firrtl.uint<1>
-  firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
       // CHECK: firrtl.instance foo
       // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
@@ -68,23 +68,23 @@ firrtl.circuit "FooBar" attributes {
       target = "FooBar.Bar.io.out",
       pin = "in"
     }]} {
-  // CHECK: firrtl.module @Foo
+  // CHECK: firrtl.module private @Foo
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Foo_1
+  // CHECK: firrtl.module private @Foo_1
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Bar
+  // CHECK: firrtl.module private @Bar
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
