@@ -15,6 +15,7 @@ add_circt_library(CIRCTFirtool
   CIRCTTransforms
   CIRCTVerifToSV
   CIRCTHWToBTOR2
+  CIRCTLTLToCore
 
   MLIRIR
   MLIRSupport
