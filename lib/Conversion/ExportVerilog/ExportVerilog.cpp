@@ -2302,13 +2302,15 @@ private:
     return emitBinary(op, Multiply, "/", EB_RequireUnsignedOperands);
   }
   SubExprInfo visitComb(DivSOp op) {
-    return emitBinary(op, Multiply, "/", EB_RequireSignedOperands);
+    return emitBinary(op, Multiply, "/",
+                      EB_RequireSignedOperands | EB_ForceResultSigned);
   }
   SubExprInfo visitComb(ModUOp op) {
     return emitBinary(op, Multiply, "%", EB_RequireUnsignedOperands);
   }
   SubExprInfo visitComb(ModSOp op) {
-    return emitBinary(op, Multiply, "%", EB_RequireSignedOperands);
+    return emitBinary(op, Multiply, "%",
+                      EB_RequireSignedOperands | EB_ForceResultSigned);
   }
   SubExprInfo visitComb(ShlOp op) {
     return emitBinary(op, Shift, "<<", EB_RHS_UnsignedWithSelfDeterminedWidth);
