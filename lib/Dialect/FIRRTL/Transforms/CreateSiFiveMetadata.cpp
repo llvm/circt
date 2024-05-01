@@ -735,11 +735,8 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 LogicalResult
 CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
-  // Any extmodule with these annotations or one of these ScalaClass classes
-  // should be excluded from the blackbox list.
-  std::array<StringRef, 3> classBlackList = {
-      "freechips.rocketchip.util.BlackBoxedROM",
-      "sifive.enterprise.grandcentral.MemTap"};
+  // Any extmodule with these annotations should be excluded from the blackbox
+  // list.
   std::array<StringRef, 6> blackListedAnnos = {
       blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
       dataTapsBlackboxClass, memTapBlackboxClass};
