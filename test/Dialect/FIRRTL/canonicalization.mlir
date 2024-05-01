@@ -3463,6 +3463,7 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   }
 }
 
+// CHECK-LABEL: Probes
 firrtl.module @Probes(in %clock: !firrtl.clock) {
   // CHECK-NOT: firrtl.int.fpga_probe %clock, %zero_width : !firrtl.uint<0>
   %zero_width = firrtl.wire : !firrtl.uint<0>
@@ -3471,5 +3472,24 @@ firrtl.module @Probes(in %clock: !firrtl.clock) {
   %empty_bundle = firrtl.wire : !firrtl.bundle<a: uint<0>>
   firrtl.int.fpga_probe %clock, %empty_bundle : !firrtl.bundle<a: uint<0>>
 }
+
+// CHECK-LABEL: sizeof
+firrtl.module @sizeof(in %clock: !firrtl.clock,
+                      in %vec: !firrtl.vector<uint<3>,3>,
+                      in %bundle: !firrtl.bundle<a: uint<2>, b: uint<2>>) {
+  // CHECK: %c4_ui32 = firrtl.constant 4 : !firrtl.uint<32> 
+  // CHECK: %c9_ui32 = firrtl.constant 9 : !firrtl.uint<32> 
+  // CHECK: %c1_ui32 = firrtl.constant 1 : !firrtl.uint<32> 
+  // CHECK: %n_c = firrtl.node interesting_name %c1_ui32 
+  // CHECK: %n_vec = firrtl.node interesting_name %c9_ui32
+  // CHECK: %n_bundle = firrtl.node interesting_name %c4_ui32
+  %s_c = firrtl.int.sizeof %clock : (!firrtl.clock) -> !firrtl.uint<32>
+  %n_c = firrtl.node interesting_name %s_c : !firrtl.uint<32>
+  %s_vec = firrtl.int.sizeof %vec : (!firrtl.vector<uint<3>,3>) -> !firrtl.uint<32>
+  %n_vec = firrtl.node interesting_name %s_vec : !firrtl.uint<32>
+  %s_bundle = firrtl.int.sizeof %bundle : (!firrtl.bundle<a: uint<2>, b: uint<2>>) -> !firrtl.uint<32>
+  %n_bundle = firrtl.node interesting_name %s_bundle : !firrtl.uint<32>
+}
+
 
 }
