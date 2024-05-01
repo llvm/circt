@@ -519,7 +519,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            scalaClassAnnoClass, dutAnnoClass, metadataDirectoryAttrName,
+            dutAnnoClass, metadataDirectoryAttrName,
             elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
