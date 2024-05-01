@@ -44,7 +44,7 @@ def CompRegOp : SeqOp<"compreg",
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
