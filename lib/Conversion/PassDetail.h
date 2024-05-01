@@ -108,6 +108,7 @@ class EmitDialect;
 namespace hw {
 class HWDialect;
 class HWModuleOp;
+class HWModuleLike;
 } // namespace hw
 
 namespace hwarith {

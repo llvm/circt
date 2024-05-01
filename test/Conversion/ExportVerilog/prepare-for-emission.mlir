@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(any(prepare-for-emission))' --split-input-file -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -export-verilog -split-input-file
 
 // CHECK: @namehint_variadic

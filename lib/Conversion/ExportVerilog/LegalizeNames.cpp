@@ -109,6 +109,7 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+  void legalizeFunctionNames(FuncOp func);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
   void gatherEnumPrefixes(mlir::ModuleOp topLevel);
@@ -129,15 +130,17 @@ private:
 } // namespace circt
 
 // This function legalizes local names in the given module.
-static void legalizeModuleLocalNames(HWModuleOp module,
+static void legalizeModuleLocalNames(HWModuleLike module,
                                      const LoweringOptions &options,
                                      const GlobalNameTable &globalNameTable) {
   // A resolver for a local name collison.
   NameCollisionResolver nameResolver(options);
-  // Register names used by parameters.
-  for (auto param : module.getParameters())
-    nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
-        module, cast<ParamDeclAttr>(param).getName()));
+  if (auto hwModule = dyn_cast<hw::HWModuleOp>(*module)) {
+    // Register names used by parameters.
+    for (auto param : hwModule.getParameters())
+      nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
+          module, cast<ParamDeclAttr>(param).getName()));
+  }
 
   auto *ctxt = module.getContext();
 
@@ -148,6 +151,11 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   bool updated = false;
   for (auto [idx, port] : llvm::enumerate(ports)) {
     auto verilogName = port.attrs.get(verilogNameAttr);
+    if (port.attrs.get(FuncOp::getExplicitlyReturnedAttrName())) {
+      updated = true;
+      newNames[idx] = StringAttr::get(ctxt, getSymOpName(module));
+      continue;
+    }
     if (verilogName) {
       auto newName = StringAttr::get(
           ctxt, nameResolver.getLegalName(cast<StringAttr>(verilogName)));
@@ -253,11 +261,16 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
       legalizeInterfaceNames(interface);
       continue;
     }
+
+    if (auto func = dyn_cast<FuncOp>(op)) {
+      legalizeFunctionNames(func);
+      continue;
+    }
   }
 
   // Legalize names in HW modules parallelly.
   mlir::parallelForEach(
-      topLevel.getContext(), topLevel.getOps<HWModuleOp>(), [&](auto module) {
+      topLevel.getContext(), topLevel.getOps<HWModuleLike>(), [&](auto module) {
         legalizeModuleLocalNames(module, options, globalNameTable);
       });
 
@@ -320,6 +333,18 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
       if (newName != name)
         op.setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
     }
+  }
+}
+
+void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
+  MLIRContext *ctxt = func.getContext();
+  if (auto verilogName = func.getVerilogName()) {
+    globalNameResolver.insertUsedName(*verilogName);
+    return;
+  }
+  auto newName = globalNameResolver.getLegalName(func.getName());
+  if (newName != func.getName()) {
+    func.setVerilogName(StringAttr::get(ctxt, newName));
   }
 }
 
