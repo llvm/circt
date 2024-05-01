@@ -331,6 +331,15 @@ class CombinationalArithBinaryLibraryOp<string mnemonic> :
   let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
 }
 
+class ArithBinaryFloatingPointLibraryOp<string mnemonic> : ArithBinaryLibraryOp<mnemonic, [
+  SameTypeConstraint<"left", "out">
+  ]> {
+    let results = (outs I1:$clk, I1:$reset, I1:$go, I1:$control, I1:$subOp,
+      AnyFloat:$left, AnyFloat:$right, AnySignlessInteger:$roundingMode, AnyFloat:$out,
+      AnySignlessInteger:$execptionalFlags, I1:$done);
+}
+
+def AddFNOp : ArithBinaryFloatingPointLibraryOp<"addFN"> {}
 def AddLibOp  : CombinationalArithBinaryLibraryOp<"add"> {}
 def SubLibOp  : CombinationalArithBinaryLibraryOp<"sub"> {}
 def ShruLibOp : CombinationalArithBinaryLibraryOp<"shru"> {}

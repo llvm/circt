@@ -2989,7 +2989,53 @@ LogicalResult SliceLibOp::verify() {
             DictionaryAttr::get(getContext())};                                \
   }
 
+#define ImplBinFloatingPointOpCellInterface(OpType)                            \
+  SmallVector<StringRef> OpType::portNames() {                                 \
+    return {                                                                   \
+        clkPort, resetPort,      goPort, "control",        "subOp", "left",    \
+        "right", "roundingMode", "out",  "exceptionFlags", donePort};          \
+  }                                                                            \
+                                                                               \
+  SmallVector<Direction> OpType::portDirections() {                            \
+    return {Input, Input, Input,  Input,  Input, Input,                        \
+            Input, Input, Output, Output, Output};                             \
+  }                                                                            \
+                                                                               \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }                                                                            \
+                                                                               \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    MLIRContext *context = getContext();                                       \
+    IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);     \
+    NamedAttrList go, clk, reset, done;                                        \
+    go.append(goPort, isSet);                                                  \
+    clk.append(clkPort, isSet);                                                \
+    reset.append(resetPort, isSet);                                            \
+    done.append(donePort, isSet);                                              \
+    return {                                                                   \
+        clk.getDictionary(context),   /* Clk    */                             \
+        reset.getDictionary(context), /* Reset  */                             \
+        go.getDictionary(context),    /* Go     */                             \
+        DictionaryAttr::get(context), /* Control */                            \
+        DictionaryAttr::get(context), /* subOp */                              \
+        DictionaryAttr::get(context), /* roundingMode */                       \
+        DictionaryAttr::get(context), /* Lhs    */                             \
+        DictionaryAttr::get(context), /* Rhs    */                             \
+        DictionaryAttr::get(context), /* Out    */                             \
+        done.getDictionary(context),  /* Done   */                             \
+        DictionaryAttr::get(context)  /* exceptionFlags */                     \
+    };                                                                         \
+  }                                                                            \
+  \  
+                                                                               \ 
+  bool                                                                         \
+  OpType::isCombinational() {                                                  \
+    return false;                                                              \
+  }
+
 // clang-format off
+ImplBinFloatingPointOpCellInterface(AddFNOp)
 ImplBinPipeOpCellInterface(MultPipeLibOp, "out")
 ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient")
 ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient")

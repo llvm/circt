@@ -142,6 +142,10 @@ private:
           static constexpr std::string_view sMemories = "memories/seq";
           return {sMemories};
         })
+        .Case<AddFNOp>([&](auto op) -> FailureOr<StringRef> {
+          static constexpr std::string_view sFloatingPoint = "float/addFN";
+          return {sFloatingPoint};
+        })
         .Default([&](auto op) {
           auto diag = op->emitOpError() << "not supported for emission";
           return diag;
@@ -277,7 +281,9 @@ struct Emitter {
   //   f = std_foo(1);
   void emitLibraryPrimTypedByFirstOutputPort(
       Operation *op, std::optional<StringRef> calyxLibName = {});
-  
+
+  void emitLibraryFloatingPoint(Operation *op);
+
 private:
   /// Used to track which imports are required for this program.
   ImportTracker importTracker;
@@ -650,7 +656,8 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
-          .Case<hw::ConstantOp, calyx::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<hw::ConstantOp, calyx::ConstantOp>(
+              [&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -658,6 +665,7 @@ void Emitter::emitComponent(ComponentInterface op) {
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
                 NotLibOp, OrLibOp, XorLibOp, WireLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
+          .Case<AddFNOp>([&](auto op) { emitLibraryFloatingPoint(op); })
           .Case<MuxLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstOutputPort(op); })
           .Case<MultPipeLibOp>(
@@ -947,6 +955,33 @@ void Emitter::emitLibraryPrimTypedByFirstOutputPort(
            << space() << equals() << space()
            << (calyxLibName ? *calyxLibName : removeCalyxPrefix(opName))
            << LParen() << bitWidth << RParen() << semicolonEndL();
+}
+
+void Emitter::emitLibraryFloatingPoint(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitWidth =
+      cell.getOutputPorts()[0].getType().getIntOrFloatBitWidth();
+  unsigned expWidth, sigWidth;
+  if (bitWidth == 16) {
+    expWidth = 5;
+    sigWidth = 11;
+  } else if (bitWidth == 32) {
+    expWidth = 8;
+    sigWidth = 24;
+  } else if (bitWidth == 64) {
+    expWidth = 11;
+    sigWidth = 53;
+  } else if (bitWidth == 128) {
+    expWidth = 15;
+    sigWidth = 113;
+  } else {
+    op->emitError("Unsupported floating point width");
+  }
+  StringRef opName = op->getName().getStringRef();
+  indent() << getAttributes(op, /*atFormat=*/true) << cell.instanceName()
+           << space() << equals() << space() << removeCalyxPrefix(opName)
+           << LParen() << expWidth << comma() << sigWidth << comma() << bitWidth
+           << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
