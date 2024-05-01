@@ -65,8 +65,10 @@ firrtl.module @Foo(in %clock: !firrtl.clock) {
   firrtl.strictconnect %inst_clock, %clock : !firrtl.clock
 }
 
+// CHECK-LABEL: firrtl.layer @LayerA bind
+// CHECK-NEXT:    firrtl.layer @LayerB inline
 firrtl.layer @LayerA bind {
-  firrtl.layer @LayerB bind {}
+  firrtl.layer @LayerB inline {}
 }
 
 // CHECK-LABEL: firrtl.module @Layers
