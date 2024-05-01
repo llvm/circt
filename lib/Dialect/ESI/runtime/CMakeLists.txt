@@ -40,8 +40,6 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-
 set(ESIRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
@@ -151,8 +149,9 @@ endif()
 add_library(ESIRuntime SHARED
   ${ESIRuntimeSources}
 )
+
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
-target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
+target_include_directories(ESIRuntime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
 target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
 target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
