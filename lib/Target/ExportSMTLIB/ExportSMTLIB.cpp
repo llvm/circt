@@ -20,6 +20,7 @@
 #include "mlir/Support/IndentedOstream.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/ScopedHashTable.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Format.h"
 
 using namespace circt;
@@ -302,8 +303,10 @@ struct ExpressionVisitor
 
     llvm::ScopedHashTableScope<Value, std::string> scope(info.valueMap);
     info.stream << "(" << operatorString << " (";
-
     StringLiteral delimiter = "";
+
+    SmallVector<StringRef> argNames;
+
     for (auto [i, arg] : llvm::enumerate(op.getBody().getArguments())) {
       // Generate and register a new unique name.
       StringRef prefix =
@@ -312,6 +315,8 @@ struct ExpressionVisitor
                     .getValue()
               : "tmp";
       StringRef name = names.newName(prefix);
+      argNames.push_back(name);
+
       info.valueMap.insert(arg, name.str());
 
       // Print the bound variable declaration.
@@ -320,6 +325,9 @@ struct ExpressionVisitor
       info.stream << ")";
       delimiter = " ";
     }
+
+
+
 
     info.stream << ")\n";
 
@@ -335,8 +343,11 @@ struct ExpressionVisitor
     worklist.push_back(yieldedValue);
     unsigned indentExt = operatorString.size() + 2;
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + indentExt, 0);
-    newInfo.stream.indent(newInfo.indentLevel);
+                        info.indentLevel + indentExt, info.openParens);
+    if(weight !=0 || !patterns.empty())
+      newInfo.stream.indent(0);
+    else 
+      newInfo.stream.indent(info.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
 
@@ -346,30 +357,44 @@ struct ExpressionVisitor
       info.stream << ")";
 
     if (weight != 0)
-      info.stream << " :weight " << weight << ")";
+      info.stream << " :weight " << weight;
     if(!patterns.empty()){
-      info.stream << " :pattern (";
+      info.stream << "\n :pattern (";
       for(auto &p: patterns){
 
+        for (auto [i, arg] : llvm::enumerate(p.getArguments())) {
 
+          // retrieve argument name from the body region
+          info.valueMap.insert(arg, argNames[i].str());
 
+        }
         SmallVector<Value> worklist;
+
         Value yieldedValue = p.front().getTerminator()->getOperand(0);
+
         worklist.push_back(yieldedValue);
+
         unsigned indentExt = operatorString.size() + 2;
+
         VisitorInfo newInfo(info.stream, info.valueMap,
-                            info.indentLevel + indentExt, 0);
-        newInfo.stream.indent(newInfo.indentLevel);
-        if (failed(printExpression(worklist, newInfo)))
+                            info.indentLevel + indentExt, info.openParens);
+        
+        info.stream.indent(0);
+
+        if (failed(printExpression(worklist, info)))
           return failure();
 
         info.stream << info.valueMap.lookup(yieldedValue);
+        for (unsigned j = 0; j < newInfo.openParens; ++j)
+          info.stream << ")";
+        info.stream << ")";
 
-
-        // info.stream<<" ("<<p<<") ";
       }
       info.stream << ")";
     }
+
+    if(weight !=0 || !patterns.empty())
+      info.stream << ")";
 
     info.stream << ")";
 
