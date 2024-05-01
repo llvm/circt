@@ -329,9 +329,7 @@ struct ExpressionVisitor
 
     info.stream << ")\n";
 
-    if (weight != 0)
-      info.stream << "( ! ";
-    else if(!patterns.empty())
+    if (weight != 0 || !patterns.empty())
       info.stream << "( ! ";
 
     // Print the quantifier body. This assumes that quantifiers are not deeply
