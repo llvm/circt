@@ -1910,7 +1910,7 @@ circuit GenericIntrinsics:
     ; CHECK-NEXT: %[[PAT:.+]] = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "bar"> : () -> !firrtl.uint<3>
     ; CHECK-NEXT: %n2 = firrtl.node interesting_name %[[PAT]]
     node n2 = intrinsic(circt_plusargs_test<FORMAT = "bar"> : UInt<3>)
- 
+
 
     ; Statement with unused return value.
     ; CHECK-NEXT: firrtl.int.generic "circt_clock_gate" %clock, %c : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
