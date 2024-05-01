@@ -338,6 +338,44 @@ private:
               op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), extsi});
         })
+        .Case([&](SeqMemoryOp op) {
+          auto clk =
+              wireIn(op.clk(), op.instanceName(), op.portName(op.clk()), b);
+          auto rst =
+              wireIn(op.reset(), op.instanceName(), op.portName(op.reset()), b);
+
+          SmallVector<int64_t> shape;
+          for (auto size : op.getSizes())
+            shape.push_back(dyn_cast<IntegerAttr>(size).getInt());
+
+          seq::HLMemOp hlMem = b.create<seq::HLMemOp>(
+              clk, rst, b.getStringAttr(op.instanceName() + "_mem"), shape,
+              op.readData().getType());
+
+          auto inData = wireIn(op.writeData(), op.instanceName(),
+                               op.portName(op.writeData()), b);
+          auto wrEn = wireIn(op.writeEn(), op.instanceName(),
+                             op.portName(op.writeEn()), b);
+
+          auto rdEn = wireIn(op.contentEn(), op.instanceName(),
+                             op.portName(op.contentEn()), b);
+
+          SmallVector<Value> addresses;
+          for (auto addrPort : op.addrPorts())
+            addresses.push_back(addrPort);
+
+          seq::ReadPortOp readPort =
+              b.create<seq::ReadPortOp>(hlMem, addresses, rdEn, /*latency=*/1);
+
+          auto en = b.create<OrOp>(wrEn, rdEn);
+          auto doneReg = reg(en, clk, rst, op.instanceName() + "_done_reg", b);
+          auto done = wireOut(doneReg, op.instanceName(), "", b);
+          auto readData = wireOut(readPort, op.instanceName(), "", b);
+
+          wires.append(addresses);
+          wires.append({inData.getInput(), wrEn.getInput(), clk.getInput(),
+                        rst.getInput(), readData, rdEn.getInput(), done});
+        })
         .Default([](Operation *) { return SmallVector<Value>(); });
   }
 

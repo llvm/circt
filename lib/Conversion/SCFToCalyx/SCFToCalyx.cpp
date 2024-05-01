@@ -379,7 +379,7 @@ private:
 
     return success();
   }
-
+  
   /// Creates assignments within the provided group to the address ports of the
   /// memoryOp based on the provided addressValues.
   void assignAddressPorts(PatternRewriter &rewriter, Location loc,
@@ -458,6 +458,17 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memoryInterface.contentEn(), oneI1);
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeEn(),
                                      zeroI1);
+    // Writing to calyx.seq_mem even when content_en = 1 and write_en = 0. 
+    // This is because calyx.seq_mem has write_together attribute for write_en and write_data.
+    // But since the value of write_data doesn't matter, we just create bitvector with 0's.
+    if (memoryInterface.isSeqMem()) {
+      auto memOperand = llvm::cast<MemRefType>(loadOp.getOperand(0).getType());
+      auto floatType = cast<FloatType>(memOperand.getElementType());
+      auto wrZeroFlt = rewriter.getFloatAttr(memOperand.getElementType(), APFloat::getZero(floatType.getFloatSemantics()));
+      auto calyxFloat = rewriter.create<calyx::ConstantOp>(loadOp.getLoc(), wrZeroFlt);
+      rewriter.create<calyx::AssignOp>(loadOp.getLoc(), memoryInterface.writeData(), calyxFloat);
+    }
+   
     regWriteEn = memoryInterface.done();
     if (calyx::noStoresToMemory(memref) &&
         calyx::singleLoadFromMemory(memref)) {
@@ -497,6 +508,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memoryInterface.readData());
     rewriter.create<calyx::AssignOp>(loadOp.getLoc(), reg.getWriteEn(),
                                      regWriteEn);
+    
     rewriter.create<calyx::GroupDoneOp>(loadOp.getLoc(), reg.getDone());
     loadOp.getResult().replaceAllUsesWith(reg.getOut());
     res = reg.getOut();

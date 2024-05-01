@@ -10,12 +10,48 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/BuiltinAttributeInterfaces.td"
+
 /// Base class for Calyx primitives.
 class CalyxPrimitive<string mnemonic, list<Trait> traits = []> :
   CalyxCell<mnemonic, traits> {
     let assemblyFormat = "$sym_name attr-dict `:` qualified(type(results))";
     let arguments = (ins SymbolNameAttr:$sym_name);
     let skipDefaultBuilders = 1;
+}
+
+def ConstantOp: CalyxOp<"constant",
+    [Pure, ConstantLike, FirstAttrDerivedResultType,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    AllTypesMatch<["value", "result"]>
+    ]> {
+  let summary = "integer or floating point constant";
+  let description = [{
+    The `constant` operation produces an SSA value equal to some integer or
+    floating-point constant specified by an attribute.
+
+    Example:
+
+    ```
+    // Integer constant
+    %1 = calyx.constant 42 : i32
+
+    // Equivalent generic form
+    %1 = "calyx.constant"() {value = 42 : i32} : () -> i32
+    ```
+  }];
+  let arguments = (ins TypedAttrInterface:$value);
+
+  let results = (outs SignlessIntegerOrFloatLike:$result);
+
+  let builders = [
+    /// Build a ConstantOp from a prebuilt attribute.
+    OpBuilder<(ins "FloatAttr":$attr)>
+  ];
+
+  let hasFolder = 1;
+  let assemblyFormat = "attr-dict $value";
+  let hasVerifier = 1;
 }
 
 /// The n-bit, undef op which only provides the out signal

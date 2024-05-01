@@ -169,6 +169,13 @@ MemoryInterface::MemoryInterface(const MemoryPortsImpl &ports) : impl(ports) {
 MemoryInterface::MemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
 MemoryInterface::MemoryInterface(calyx::SeqMemoryOp memOp) : impl(memOp) {}
 
+bool MemoryInterface::isSeqMem() {
+  if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
+    return true;
+  }
+  return false;
+}
+
 Value MemoryInterface::readData() {
   auto readData = readDataOpt();
   assert(readData.has_value() && "Memory does not have readData");
@@ -657,10 +664,10 @@ void InlineCombGroups::recurseInlineCombGroups(
     //   LateSSAReplacement)
     if (isa<BlockArgument>(src) ||
         isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
-            hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
-            calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
-            calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp>(
-            src.getDefiningOp()))
+            calyx::ConstantOp, hw::ConstantOp, mlir::arith::ConstantOp,
+            calyx::MultPipeLibOp, calyx::DivUPipeLibOp, calyx::DivSPipeLibOp,
+            calyx::RemSPipeLibOp, calyx::RemUPipeLibOp, mlir::scf::WhileOp,
+            calyx::InstanceOp>(src.getDefiningOp()))
       continue;
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
