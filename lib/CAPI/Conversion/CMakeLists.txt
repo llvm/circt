@@ -27,6 +27,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTHWToSystemC
   CIRCTLLHDToLLVM
   CIRCTLoopScheduleToCalyx
+  CIRCTLTLToCore
   CIRCTMooreToCore
   CIRCTPipelineToHW
   CIRCTSCFToCalyx
@@ -36,5 +37,4 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTCFToHandshake
   CIRCTVerifToSMT
   CIRCTVerifToSV
-  CIRCTLTLToCore
 )

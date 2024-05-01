@@ -161,8 +161,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
   matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Value ltlClock, disableCond, disableInput, antecedent, consequent,
-        disableVal;
+    Value ltlClock, disableCond, disableInput, disableVal;
     ltl::ClockOp clockOp;
     ltl::DisableOp disableOp;
 
@@ -178,19 +177,6 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     if (!matchedProperty)
       return rewriter.notifyMatchFailure(
           op, " verif.assert used outside of an assert property!");
-
-    // Make sure that a disable was found
-    if (!disableOp) {
-      // Try to retrieve the disable op if none of the patterns matched
-      disableOp = dyn_cast<ltl::DisableOp>(clockOp.getInput().getDefiningOp());
-      if (!disableOp)
-        return rewriter.notifyMatchFailure(op, " Assertion must be disabled!");
-    }
-
-    // Sanity check, we should have found a clock
-    if (!clockOp)
-      return rewriter.notifyMatchFailure(
-          op, "verif.assert property is not associated to a clock! ");
 
     // Then visit the disable op
     disableVal = visit(disableOp, rewriter, disableInput);
