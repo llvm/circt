@@ -3648,6 +3648,14 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   if (!input)
     return failure();
 
+  if (!isa<IntType>(input.getType())) {
+    auto srcType = op.getArg().getType();
+    auto bitwidth = firrtl::getBitWidth(type_cast<FIRRTLBaseType>(srcType));
+    assert(bitwidth && "Unknown width");
+    auto intType = builder.getIntegerType(*bitwidth);
+    input = builder.createOrFold<hw::BitcastOp>(intType, input);
+  }
+
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
