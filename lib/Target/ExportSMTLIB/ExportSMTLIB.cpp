@@ -298,8 +298,6 @@ struct ExpressionVisitor
     // TODO: add support
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
-    // if (!op.getPatterns().empty())
-    //   return op.emitError() << "patterns not supported yet";
 
     llvm::ScopedHashTableScope<Value, std::string> scope(info.valueMap);
     info.stream << "(" << operatorString << " (";
