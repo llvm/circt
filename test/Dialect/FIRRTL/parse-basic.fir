@@ -1470,14 +1470,14 @@ circuit Layers:
     layer B, bind:
       layer C, bind:
       layer D, bind:
-        layer E, bind:
+        layer E, inline:
     layer F, bind:
     ; CHECK-NEXT: firrtl.layer @A bind {
     ; CHECK-NEXT:   firrtl.layer @B bind {
     ; CHECK-NEXT:     firrtl.layer @C bind {
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:     firrtl.layer @D bind {
-    ; CHECK-NEXT:       firrtl.layer @E bind {
+    ; CHECK-NEXT:       firrtl.layer @E inline {
     ; CHECK-NEXT:       }
     ; CHECK-NEXT:     }
     ; CHECK-NEXT:   }

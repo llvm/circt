@@ -692,14 +692,14 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    layer GroupB, bind :
   // CHECK-NEXT:      layer GroupC, bind :
   // CHECK-NEXT:      layer GroupD, bind :
-  // CHECK-NEXT:        layer GroupE, bind :
+  // CHECK-NEXT:        layer GroupE, inline :
   // CHECK-NEXT:    layer GroupF, bind :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
       }
       firrtl.layer @GroupD bind {
-        firrtl.layer @GroupE bind {
+        firrtl.layer @GroupE inline {
         }
       }
     }

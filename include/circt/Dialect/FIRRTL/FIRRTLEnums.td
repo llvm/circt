@@ -51,7 +51,9 @@ def ConventionAttr : EnumAttr<FIRRTLDialect, Convention, "convention">;
 //===----------------------------------------------------------------------===//
 
 def LayerConvention : I32EnumAttr<"LayerConvention", "layer convention", [
-  I32EnumAttrCase<"Bind", 0, "bind">]> {
+  I32EnumAttrCase<"Bind", 0, "bind">,
+  I32EnumAttrCase<"Inline", 1, "inline">
+]> {
 
   let genSpecializedAttr = 0;
 }
