@@ -127,7 +127,9 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     reg.setValue(rewriter.create<seq::CompRegOp>(
         op.getLoc(), orReset,
         rewriter.createOrFold<seq::ToClockOp>(op.getLoc(), adaptor.getClock()),
-        reset, resetval, llvm::StringRef("hbr"), constZero));
+        rewriter.getStringAttr("hbr"), reset, resetval, constZero,
+        InnerSymAttr{} // inner_sym
+        ));
 
     // We also need to consider the case where we are currently in a reset cycle
     // in which case our hbr register should be down-
