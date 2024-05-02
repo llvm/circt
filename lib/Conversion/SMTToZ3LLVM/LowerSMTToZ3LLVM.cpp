@@ -859,7 +859,7 @@ struct QuantifierLowering : public SMTLoweringPattern<QuantifierOp> {
     Type ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
 
     // no-pattern attribute not supported yet because the Z3 CAPI allows more
-    // fine-grained control where a list patterns to be banned can be given.
+    // fine-grained control where a list of patterns to be banned can be given.
     // This means, the no-pattern attribute is equivalent to providing a list of
     // all possible sub-expressions in the quantifier body to the CAPI.
     if (adaptor.getNoPattern())
