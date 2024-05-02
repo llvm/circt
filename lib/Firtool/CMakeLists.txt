@@ -7,6 +7,7 @@ add_circt_library(CIRCTFirtool
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTHWTransforms
+  CIRCTLTLToCore
   CIRCTOMTransforms
   CIRCTSeqToSV
   CIRCTSimToSV
@@ -15,7 +16,6 @@ add_circt_library(CIRCTFirtool
   CIRCTTransforms
   CIRCTVerifToSV
   CIRCTHWToBTOR2
-  CIRCTLTLToCore
 
   MLIRIR
   MLIRSupport
