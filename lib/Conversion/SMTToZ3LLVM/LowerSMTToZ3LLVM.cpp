@@ -109,6 +109,8 @@ private:
     if (auto iter = cache.find(block); iter != cache.end())
       return iter->getSecond();
 
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(block);
     Value globalAddr = builder.create<LLVM::AddressOfOp>(loc, global);
     return cache[block] = builder.create<LLVM::LoadOp>(
                loc, LLVM::LLVMPointerType::get(builder.getContext()),
@@ -803,6 +805,161 @@ struct CheckOpLowering : public SMTLoweringPattern<CheckOp> {
   }
 };
 
+/// Lower `smt.forall` and `smt.exists` operations to the following Z3 API call.
+/// ```
+/// Z3_ast Z3_API Z3_mk_{forall|exists}_const(
+///     Z3_context c,
+///     unsigned weight,
+///     unsigned num_bound,
+///     Z3_app const bound[],
+///     unsigned num_patterns,
+///     Z3_pattern const patterns[],
+///     Z3_ast body
+///     );
+/// ```
+/// All nested regions are inlined into the parent region and the block
+/// arguments are replaced with new `smt.declare_fun` constants that are also
+/// passed to the `bound` argument of above API function. Patterns are created
+/// with the following API function.
+/// ```
+/// Z3_pattern Z3_API Z3_mk_pattern(Z3_context c, unsigned num_patterns,
+///                                 Z3_ast const terms[]);
+/// ```
+/// Where each operand of the `smt.yield` in a pattern region is a 'term'.
+template <typename QuantifierOp>
+struct QuantifierLowering : public SMTLoweringPattern<QuantifierOp> {
+  using SMTLoweringPattern<QuantifierOp>::SMTLoweringPattern;
+  using SMTLoweringPattern<QuantifierOp>::typeConverter;
+  using SMTLoweringPattern<QuantifierOp>::buildPtrAPICall;
+  using OpAdaptor = typename QuantifierOp::Adaptor;
+
+  Value createStorageForValueList(ValueRange values, Location loc,
+                                  ConversionPatternRewriter &rewriter) const {
+    Type ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Type arrTy = LLVM::LLVMArrayType::get(ptrTy, values.size());
+    Value constOne =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), 1);
+    Value storage =
+        rewriter.create<LLVM::AllocaOp>(loc, ptrTy, arrTy, constOne);
+    Value array = rewriter.create<LLVM::UndefOp>(loc, arrTy);
+
+    for (auto [i, val] : llvm::enumerate(values))
+      array = rewriter.create<LLVM::InsertValueOp>(loc, array, val,
+                                                   ArrayRef<int64_t>(i));
+
+    rewriter.create<LLVM::StoreOp>(loc, array, storage);
+
+    return storage;
+  }
+
+  LogicalResult
+  matchAndRewrite(QuantifierOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Type ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    // no-pattern attribute not supported yet because the Z3 CAPI allows more
+    // fine-grained control where a list of patterns to be banned can be given.
+    // This means, the no-pattern attribute is equivalent to providing a list of
+    // all possible sub-expressions in the quantifier body to the CAPI.
+    if (adaptor.getNoPattern())
+      return rewriter.notifyMatchFailure(
+          op, "no-pattern attribute not yet supported!");
+
+    rewriter.setInsertionPoint(op);
+
+    // Weight attribute
+    Value weight = rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(),
+                                                     adaptor.getWeight());
+
+    // Bound variables
+    unsigned numDecls = op.getBody().getNumArguments();
+    Value numDeclsVal =
+        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI32Type(), numDecls);
+
+    // We replace the block arguments with constant symbolic values and inform
+    // the quantifier API call which constants it should treat as bound
+    // variables. We also need to make sure that we use the exact same SSA
+    // values in the pattern regions since we lower constant declaration
+    // operation to always produce fresh constants.
+    SmallVector<Value> repl;
+    for (auto [i, arg] : llvm::enumerate(op.getBody().getArguments())) {
+      Value newArg;
+      if (adaptor.getBoundVarNames().has_value())
+        newArg = rewriter.create<smt::DeclareFunOp>(
+            loc, arg.getType(),
+            cast<StringAttr>((*adaptor.getBoundVarNames())[i]));
+      else
+        newArg = rewriter.create<smt::DeclareFunOp>(loc, arg.getType());
+      repl.push_back(typeConverter->materializeTargetConversion(
+          rewriter, loc, typeConverter->convertType(arg.getType()), newArg));
+    }
+
+    Value boundStorage = createStorageForValueList(repl, loc, rewriter);
+
+    // Body Expression
+    auto yieldOp = cast<smt::YieldOp>(op.getBody().front().getTerminator());
+    Value bodyExp = yieldOp.getValues()[0];
+    rewriter.setInsertionPointAfterValue(bodyExp);
+    bodyExp = typeConverter->materializeTargetConversion(
+        rewriter, loc, typeConverter->convertType(bodyExp.getType()), bodyExp);
+    rewriter.eraseOp(yieldOp);
+
+    rewriter.inlineBlockBefore(&op.getBody().front(), op, repl);
+    rewriter.setInsertionPoint(op);
+
+    // Patterns
+    unsigned numPatterns = adaptor.getPatterns().size();
+    Value numPatternsVal = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI32Type(), numPatterns);
+
+    Value patternStorage;
+    if (numPatterns > 0) {
+      SmallVector<Value> patterns;
+      for (Region *patternRegion : adaptor.getPatterns()) {
+        auto yieldOp =
+            cast<smt::YieldOp>(patternRegion->front().getTerminator());
+        auto patternTerms = yieldOp.getOperands();
+
+        rewriter.setInsertionPoint(yieldOp);
+        SmallVector<Value> patternList;
+        for (auto val : patternTerms)
+          patternList.push_back(typeConverter->materializeTargetConversion(
+              rewriter, loc, typeConverter->convertType(val.getType()), val));
+
+        rewriter.eraseOp(yieldOp);
+        rewriter.inlineBlockBefore(&patternRegion->front(), op, repl);
+
+        rewriter.setInsertionPoint(op);
+        Value numTerms = rewriter.create<LLVM::ConstantOp>(
+            loc, rewriter.getI32Type(), patternTerms.size());
+        Value patternTermStorage =
+            createStorageForValueList(patternList, loc, rewriter);
+        Value pattern = buildPtrAPICall(rewriter, loc, "Z3_mk_pattern",
+                                        {numTerms, patternTermStorage});
+
+        patterns.emplace_back(pattern);
+      }
+      patternStorage = createStorageForValueList(patterns, loc, rewriter);
+    } else {
+      // If we set the num_patterns parameter to 0, we can just pass a nullptr
+      // as storage.
+      patternStorage = rewriter.create<LLVM::ZeroOp>(loc, ptrTy);
+    }
+
+    StringRef apiCallName = "Z3_mk_forall_const";
+    if (std::is_same_v<QuantifierOp, ExistsOp>)
+      apiCallName = "Z3_mk_exists_const";
+    Value quantifierExp =
+        buildPtrAPICall(rewriter, loc, apiCallName,
+                        {weight, numDeclsVal, boundStorage, numPatternsVal,
+                         patternStorage, bodyExp});
+
+    rewriter.replaceOp(op, quantifierExp);
+    return success();
+  }
+};
+
 /// Lower `smt.bv.repeat` operations to Z3 API function calls of the form
 /// ```
 /// Z3_ast Z3_API Z3_mk_repeat(Z3_context c, unsigned i, Z3_ast t1);
@@ -1222,8 +1379,9 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                YieldOpLowering, RepeatOpLowering, ExtractOpLowering,
                BoolConstantOpLowering, IntConstantOpLowering,
                ArrayBroadcastOpLowering, BVCmpOpLowering, IntCmpOpLowering,
-               IntAbsOpLowering>(converter, patterns.getContext(), globals,
-                                 options);
+               IntAbsOpLowering, QuantifierLowering<ForallOp>,
+               QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
+                                             globals, options);
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {

@@ -519,7 +519,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            scalaClassAnnoClass, dutAnnoClass, metadataDirectoryAttrName,
+            dutAnnoClass, metadataDirectoryAttrName,
             elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
@@ -3647,6 +3647,14 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   auto input = getLoweredNonClockValue(op.getArg());
   if (!input)
     return failure();
+
+  if (!isa<IntType>(input.getType())) {
+    auto srcType = op.getArg().getType();
+    auto bitwidth = firrtl::getBitWidth(type_cast<FIRRTLBaseType>(srcType));
+    assert(bitwidth && "Unknown width");
+    auto intType = builder.getIntegerType(*bitwidth);
+    input = builder.createOrFold<hw::BitcastOp>(intType, input);
+  }
 
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,

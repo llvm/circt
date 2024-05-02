@@ -122,7 +122,6 @@ firrtl.circuit "Foo" attributes {annotations = [
         {class = "firrtl.transforms.NoDedupAnnotation"},
         {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
-        {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"},
         {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
     // Non-local annotations should not produce errors either.

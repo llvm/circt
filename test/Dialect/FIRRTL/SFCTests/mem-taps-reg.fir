@@ -1,4 +1,4 @@
-; RUN: firtool --verilog %s | FileCheck %s
+; RUN: firtool --verilog --allow-adding-ports-on-public-modules %s | FileCheck %s
 
 circuit Top : %[[
   {

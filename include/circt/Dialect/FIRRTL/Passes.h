@@ -30,7 +30,8 @@ std::unique_ptr<mlir::Pass> createResolvePathsPass();
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
-                                 bool noRefTypePorts = false);
+                                 bool noRefTypePorts = false,
+                                 bool allowAddingPortsOnPublic = false);
 
 std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
 

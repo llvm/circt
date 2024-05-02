@@ -838,26 +838,6 @@ Example:
 }
 ```
 
-### ScalaClassAnnotation
-
-| Property   | Type   | Description                                     |
-| ---------- | ------ | -------------                                   |
-| class      | string | `sifive.enterprise.firrtl.ScalaClassAnnotation` |
-| target     | string | Reference target                                |
-| className  | string | The corresponding class name                    |
-
-This annotation records the name of the Java or Scala class which corresponds
-to the module.
-
-Example:
-```json
-{
-  "class":"sifive.enterprise.firrtl.ScalaClassAnnotation",
-  "target":"Top.ClockGroupAggregator",
-  "className":"freechips.rocketchip.prci.ClockGroupAggregator"
-}
-```
-
 ### SitestBlackBoxAnnotation
 
 | Property   | Type   | Description                                         |
