@@ -112,6 +112,46 @@ func.func @entry() {
     smt.yield
   }
 
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %0 = smt.exists {
+    ^bb0(%arg0: !smt.int):
+      %1 = smt.forall {
+      ^bb1(%arg1: !smt.int):
+        %2 = smt.int.mul %arg0, %arg1
+        %3 = smt.int.constant 0
+        %4 = smt.eq %2, %3 : !smt.int
+        smt.yield %4 : !smt.bool
+      }
+      smt.yield %1 : !smt.bool
+    }
+    func.call @check(%0) : (!smt.bool) -> ()
+    smt.yield
+  }
+
+  // CHECK: sat
+  // CHECK: Res: 1
+  smt.solver () : () -> () {
+    %0 = smt.declare_fun : !smt.func<(!smt.sort<"A">) !smt.sort<"B">>
+    %1 = smt.forall {
+    ^bb0(%arg0: !smt.sort<"A">, %arg1: !smt.sort<"A">):
+      %2 = smt.apply_func %0(%arg0) : !smt.func<(!smt.sort<"A">) !smt.sort<"B">>
+      %3 = smt.apply_func %0(%arg1) : !smt.func<(!smt.sort<"A">) !smt.sort<"B">>
+      %4 = smt.eq %2, %3 : !smt.sort<"B">
+      %5 = smt.eq %arg0, %arg1 : !smt.sort<"A">
+      %6 = smt.eq %4, %5 : !smt.bool
+      smt.yield %6 : !smt.bool
+    } patterns {
+    ^bb0(%arg0: !smt.sort<"A">, %arg1: !smt.sort<"A">):
+      %2 = smt.apply_func %0(%arg0) : !smt.func<(!smt.sort<"A">) !smt.sort<"B">>
+      %3 = smt.apply_func %0(%arg1) : !smt.func<(!smt.sort<"A">) !smt.sort<"B">>
+      smt.yield %2, %3 : !smt.sort<"B">, !smt.sort<"B">
+    }
+    func.call @check(%1) : (!smt.bool) -> ()
+    smt.yield
+  }
+
   return
 }
 

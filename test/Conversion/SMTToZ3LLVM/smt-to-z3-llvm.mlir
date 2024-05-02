@@ -42,9 +42,12 @@ llvm.mlir.global internal @solver() {alignment = 8 : i64} : !llvm.ptr {
 func.func @test(%arg0: i32) {
   %0 = smt.solver (%arg0) : (i32) -> (i32) {
   ^bb0(%arg1: i32):
-    // CHECK: [[STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
+    // CHECK: [[S_ADDR:%.+]] = llvm.mlir.addressof @solver_0 : !llvm.ptr
+    // CHECK: [[S:%.+]] = llvm.load [[S_ADDR]] : !llvm.ptr -> !llvm.ptr
     // CHECK: [[CTX_ADDR:%.+]] = llvm.mlir.addressof @ctx_0 : !llvm.ptr
     // CHECK: [[CTX:%.+]] = llvm.load [[CTX_ADDR]] : !llvm.ptr -> !llvm.ptr
+
+    // CHECK: [[STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK: [[INT_SORT:%.+]] = llvm.call @Z3_mk_int_sort([[CTX]]) : (!llvm.ptr) -> !llvm.ptr
     // CHECK: [[BOOL_SORT:%.+]] = llvm.call @Z3_mk_bool_sort([[CTX]]) : (!llvm.ptr) -> !llvm.ptr
     // CHECK: [[ARRAY_SORT:%.+]] = llvm.call @Z3_mk_array_sort([[CTX]], [[INT_SORT]], [[BOOL_SORT]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
@@ -132,8 +135,6 @@ func.func @test(%arg0: i32) {
     // CHECK: [[AND:%.+]] = llvm.call @Z3_mk_and([[CTX]], [[C3]], [[STORAGE]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
     %7 = smt.and %4, %5, %6
 
-    // CHECK: [[S_ADDR:%.+]] = llvm.mlir.addressof @solver_0 : !llvm.ptr
-    // CHECK: [[S:%.+]] = llvm.load [[S_ADDR]] : !llvm.ptr -> !llvm.ptr
     // CHECK: llvm.call @Z3_solver_assert([[CTX]], [[S]], [[AND]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
     smt.assert %7
 
@@ -340,7 +341,63 @@ func.func @test(%arg0: i32) {
     smt.int.cmp ge %10, %10
     // CHECK-NEXT: llvm.call @Z3_mk_gt({{%[0-9a-zA-Z_]+}}, [[C123]], [[C123]]) : (!llvm.ptr, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
     smt.int.cmp gt %10, %10
-    
+
+    // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
+    // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
+    // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_fresh_const({{[^ ]*}}, [[ZERO]], {{[^ ]*}})
+    // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_fresh_const({{[^ ]*}}, [[ZERO]], {{[^ ]*}})
+    // CHECK: [[BOUND_STORAGE:%.+]] = llvm.alloca {{[^ ]*}} x !llvm.array<2 x ptr>
+    // CHECK: llvm.call @Z3_mk_eq
+    // CHECK: [[NUM_MULTI_PATTERNS:%.+]] = llvm.mlir.constant(2 : i32)
+    // CHECK: llvm.call @Z3_mk_add
+    // CHECK: [[NUM_PATTERNS:%.+]] = llvm.mlir.constant(1 : i32)
+    // CHECK: [[PATTERN_STORAGE:%.+]] = llvm.alloca {{[^ ]*}} x !llvm.array<1 x ptr>
+    // CHECK: llvm.call @Z3_mk_pattern({{[^ ]*}}, [[NUM_PATTERNS]], [[PATTERN_STORAGE]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_add
+    // CHECK: llvm.call @Z3_mk_sub
+    // CHECK: [[NUM_PATTERNS:%.+]] = llvm.mlir.constant(2 : i32)
+    // CHECK: [[PATTERN_STORAGE:%.+]] = llvm.alloca {{[^ ]*}} x !llvm.array<2 x ptr>
+    // CHECK: llvm.call @Z3_mk_pattern({{[^ ]*}}, [[NUM_PATTERNS]], [[PATTERN_STORAGE]]) : (!llvm.ptr, i32, !llvm.ptr) -> !llvm.ptr
+    // CHECK: [[MULTI_PATTERN_STORAGE:%.+]] = llvm.alloca {{[^ ]*}} x !llvm.array<2 x ptr> : (i32) -> !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_forall_const({{[^ ]*}}, [[C0]], [[C2]], [[BOUND_STORAGE]], [[NUM_MULTI_PATTERNS]], [[MULTI_PATTERN_STORAGE]], {{[^ ]*}}) : (!llvm.ptr, i32, i32, !llvm.ptr, i32, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    %58 = smt.forall {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+      %59 = smt.eq %arg2, %arg3 : !smt.int
+      smt.yield %59 : !smt.bool
+    } patterns {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+      %59 = smt.int.add %arg2, %arg3
+      smt.yield %59 : !smt.int
+    }, {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+      %59 = smt.int.add %arg2, %arg3
+      %60 = smt.int.sub %arg2, %arg3
+      smt.yield %59, %60 : !smt.int, !smt.int
+    }
+
+    // CHECK: [[C42:%.+]] = llvm.mlir.constant(42 : i32)
+    // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
+    // CHECK: [[STR:%.+]] = llvm.mlir.addressof @{{[^ ]*}} : !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_fresh_const({{[^ ]*}}, [[STR]]
+    // CHECK: [[STR:%.+]] = llvm.mlir.addressof @{{[^ ]*}} : !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_fresh_const({{[^ ]*}}, [[STR]]
+    // CHECK: [[BOUND_STORAGE:%.+]] = llvm.alloca {{[^ ]*}} x !llvm.array<2 x ptr>
+    // CHECK: llvm.mlir.undef : !llvm.array<2 x ptr>
+    // CHECK: llvm.insertvalue
+    // CHECK: llvm.insertvalue
+    // CHECK: llvm.store {{[^ ]*}}, [[BOUND_STORAGE]]
+    // CHECK: llvm.call @Z3_mk_eq
+    // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i32)
+    // CHECK: [[NULL_PTR:%.+]] = llvm.mlir.zero : !llvm.ptr
+    // CHECK: llvm.call @Z3_mk_exists_const({{[^ ]*}}, [[C42]], [[C2]], [[BOUND_STORAGE]], [[ZERO]], [[NULL_PTR]], {{[^ ]*}}) : (!llvm.ptr, i32, i32, !llvm.ptr, i32, !llvm.ptr, !llvm.ptr) -> !llvm.ptr
+    %59 = smt.exists ["a", "b"] weight 42 {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+      %60 = smt.eq %arg2, %arg3 : !smt.int
+      smt.yield %60 : !smt.bool
+    }
+
     smt.yield %8 : i32
   }
 
