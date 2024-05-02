@@ -184,12 +184,13 @@ add it.  Until then we represent the `array_create`/`array_get` pattern for
 frontends that want to generate this.
 
 
-### Undefined behavior for division
+### Undefined value for division
 
-`divu` and `divs` have undefined behavior when the numerator is 0.  It is 
-expected that a frontend will use additional operations to implement the 
-semantics required for that language.  For example, system verilog returns an 
-`x` on divide by zero, thus its representation may be
+`divu` and `divs` result in [Undefined Values][] when the 
+denominator is 0.  It is expected that a frontend will use additional 
+operations to implement the semantics required for that language.  For 
+example, system verilog returns an `x` on divide by zero, thus its 
+representation may be
 `mux(denominator == 0, sv.constantx, divu(numerator,denominator))` whereas VHDL
 has a runtime-trap in simulation, thus it may require 
 `if(denominator==0) { assert() } else { divu(numerator,denominator)} `.
@@ -200,6 +201,20 @@ Since division in general is very rare in real synthesizable HW, circt doesn't
 make much effort to optimize divide by zero (nor even division in general, as 
 previously mentioned).  Any guard to implement a specific semantic should by 
 itself cause the actual divide by constant zero to be dead code.
+
+## Undefined Values
+
+An operation which produces an undefined value (as produced by `divu`, for example) 
+under some conditions is considered to have an instance-specific, static, pure function
+which takes as arguments the operands of the operation and produces a result.  This
+function is potentially unique to each instance of the operation, may be different
+between compilations, is opaque, and return any value in the target's type system.  It
+is guaranteed that repeated evaluation of the same operation with the same operands will
+return the same result.
+
+A dividision by zero, for example, could return any constant, either of its input, 
+`x` or `z` (in SV or VHDL), the sum of its input, or the result of any other 
+combinatorial function.
 
 ## Endianness: operand ordering and internal representation
 
