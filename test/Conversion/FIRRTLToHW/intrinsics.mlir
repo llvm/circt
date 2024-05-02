@@ -2,7 +2,10 @@
 
 firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
-  firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
+  firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>,
+                            in %b: !firrtl.vector<uint<2>, 3>,
+                            in %c: !firrtl.bundle<a: uint<3>, b: uint<3>>) {
+    // CHECK-NEXT: %x_i6 = sv.constantX : i6
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     // CHECK-NEXT: [[T0:%.+]] = comb.icmp bin ceq %a, %x_i1
@@ -24,6 +27,19 @@ firrtl.circuit "Intrinsics" {
     %x2 = firrtl.node interesting_name %2 : !firrtl.uint<1>
     %x3 = firrtl.node interesting_name %3 : !firrtl.uint<1>
     %x4 = firrtl.node interesting_name %4 : !firrtl.uint<5>
+
+    // CHECK-NEXT: %[[vecCast:.*]] = hw.bitcast %b
+    // CHECK-NEXT: comb.icmp bin ceq %[[vecCast]], %x_i6
+    // CHECK-NEXT: %x5 = hw.wire
+    %5 = firrtl.int.isX %b : !firrtl.vector<uint<2>,3>
+    %x5 = firrtl.node interesting_name %5 : !firrtl.uint<1>
+
+    // CHECK-NEXT: %[[bundleCast:.*]] = hw.bitcast %c
+    // CHECK-NEXT: comb.icmp bin ceq %[[bundleCast]], %x_i6
+    // CHECK-NEXT: %x6 = hw.wire
+    %6 = firrtl.int.isX %c : !firrtl.bundle<a: uint<3>, b: uint<3>>
+    %x6 = firrtl.node interesting_name %6 : !firrtl.uint<1>
+
   }
 
   // CHECK-LABEL: hw.module @ClockGate

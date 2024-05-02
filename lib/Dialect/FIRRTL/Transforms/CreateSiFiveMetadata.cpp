@@ -735,11 +735,8 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 LogicalResult
 CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
-  // Any extmodule with these annotations or one of these ScalaClass classes
-  // should be excluded from the blackbox list.
-  std::array<StringRef, 3> classBlackList = {
-      "freechips.rocketchip.util.BlackBoxedROM",
-      "sifive.enterprise.grandcentral.MemTap"};
+  // Any extmodule with these annotations should be excluded from the blackbox
+  // list.
   std::array<StringRef, 6> blackListedAnnos = {
       blackBoxAnnoClass, blackBoxInlineAnnoClass, blackBoxPathAnnoClass,
       dataTapsBlackboxClass, memTapBlackboxClass};
@@ -775,14 +772,6 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
           return annos.hasAnnotation(blackListedAnno);
         }))
       continue;
-
-    // If its a blacklisted scala class, skip it.
-    if (auto scalaAnno = annos.getAnnotation(scalaClassAnnoClass)) {
-      auto scalaClass = scalaAnno.getMember<StringAttr>("className");
-      if (scalaClass &&
-          llvm::is_contained(classBlackList, scalaClass.getValue()))
-        continue;
-    }
 
     // Record the defname of the module.
     if (!dutMod || dutModuleSet.contains(extModule)) {
@@ -824,10 +813,6 @@ CreateSiFiveMetadataPass::emitSitestBlackboxMetadata(ObjectModelIR &omir) {
 
   createOutput(testModules, testFilename);
   createOutput(dutModules, dutFilename);
-
-  // Clean up all ScalaClassAnnotations, which are no longer needed.
-  for (auto op : circuitOp.getOps<FModuleLike>())
-    AnnotationSet::removeAnnotations(op, scalaClassAnnoClass);
 
   return success();
 }

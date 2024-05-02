@@ -153,8 +153,6 @@ constexpr const char *prefixModulesAnnoClass =
     "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation";
 constexpr const char *dontObfuscateModuleAnnoClass =
     "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
-constexpr const char *scalaClassAnnoClass =
-    "sifive.enterprise.firrtl.ScalaClassAnnotation";
 constexpr const char *elaborationArtefactsDirectoryAnnoClass =
     "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
 constexpr const char *testHarnessPathAnnoClass =

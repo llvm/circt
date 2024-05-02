@@ -85,6 +85,9 @@ MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAnnotationsClassless(
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
     CirctFirtoolFirtoolOptions options, bool value);
 
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetAllowAddingPortsOnPublic(
+    CirctFirtoolFirtoolOptions options, bool value);
+
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetPreserveAggregate(
     CirctFirtoolFirtoolOptions options,
     CirctFirtoolPreserveAggregateMode value);

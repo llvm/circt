@@ -958,9 +958,9 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult SizeOfIntrinsicOp::fold(FoldAdaptor) {
   auto base = getInput().getType();
-  auto w = base.getBitWidthOrSentinel();
-  if (w >= 0)
-    return getIntAttr(getType(), APInt(32, w));
+  auto w = getBitWidth(base);
+  if (w)
+    return getIntAttr(getType(), APInt(32, *w));
   return {};
 }
 

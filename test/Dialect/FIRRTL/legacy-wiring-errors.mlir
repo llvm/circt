@@ -90,3 +90,34 @@ firrtl.circuit "Foo" attributes {
     firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Error on wiring through public
+firrtl.circuit "FooBar" attributes {
+  rawAnnotations = [
+    {
+      class = "firrtl.passes.wiring.SinkAnnotation",
+      target = "FooBar.Foo.out",
+      pin = "foo_out"
+    },
+    {
+      class = "firrtl.passes.wiring.SourceAnnotation",
+      target = "FooBar.FooBar.io.in",
+      pin = "foo_out"
+    }]} {
+  // expected-note @below {{sink here}}
+  firrtl.module private @Foo(out %out: !firrtl.uint<1>) {
+  }
+  // expected-error @below {{cannot wire port through this public module}}
+  firrtl.module public @Bar(out %out: !firrtl.uint<1>) {
+      %foo_out = firrtl.instance foo interesting_name  @Foo(out out: !firrtl.uint<1>)
+      firrtl.strictconnect %out, %foo_out : !firrtl.uint<1>
+  }
+  // expected-note @below {{source here}}
+  firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out: uint<1>>) {
+      %0 = firrtl.subfield %io[out] : !firrtl.bundle<in flip: uint<1>, out: uint<1>>
+      %bar_out = firrtl.instance bar interesting_name  @Bar(out out: !firrtl.uint<1>)
+      firrtl.strictconnect %0, %bar_out : !firrtl.uint<1>
+  }
+}
