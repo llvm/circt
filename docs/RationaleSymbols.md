@@ -71,7 +71,9 @@ in languages are usually a human convenience, and not necessarily a good IR
 construct. In general, front-ends will generate fully qualified names early in
 the compilation process suitable for use in the IR. And if references truly are
 relative, then using a dataflow (SSA) representation is more appropriate.
-Specifically, references which are relative to an instance hierarchy are dynamically scoped, which is a different implementation than symbols, which are lexically scoped.
+Specifically, references which are relative to an instance hierarchy are
+dynamically scoped, which is a different implementation than symbols, which are
+lexically scoped.
 
 ## Inner Symbol Reference Attribute
 
@@ -128,7 +130,6 @@ utility for `InnerRefNamespace`.
 This is also both a class and a trait.
 
 #### Class
-
 
 Combines `InnerSymbolTableCollection` with a `SymbolTable` for resolution of
 `InnerRefAttr`s, primarily used during verification as argument to the
