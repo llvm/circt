@@ -222,7 +222,8 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "StringRef":$stateName)>
+    OpBuilder<(ins "StringRef":$stateName)>,
+    OpBuilder<(ins "StringRef":$stateName, "ValueRange":$outputs)>
   ];
 
   let skipDefaultBuilders = 1;
@@ -302,7 +303,10 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
 
   let builders = [
     OpBuilder<(ins "StringRef":$nextState)>,
-    OpBuilder<(ins "fsm::StateOp":$nextState)>
+    // OpBuilder<(ins "fsm::StateOp":$nextState)>,
+    OpBuilder<(ins "fsm::StateOp":$nextState,
+                   CArg<"std::function<void()>", "{}">:$guardCtor,
+                   CArg<"std::function<void()>", "{}">:$actionCtor)>
   ];
 
   let skipDefaultBuilders = 1;

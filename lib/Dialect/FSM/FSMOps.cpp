@@ -321,6 +321,18 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
   state.addAttribute("sym_name", builder.getStringAttr(stateName));
 }
 
+void StateOp::build(OpBuilder &builder, OperationState &state,
+                    StringRef stateName, ValueRange outputs) {
+  OpBuilder::InsertionGuard guard(builder);
+  Region *output = state.addRegion();
+  output->push_back(new Block());
+  builder.setInsertionPointToEnd(&output->back());
+  builder.create<fsm::OutputOp>(state.location, outputs);
+  Region *transitions = state.addRegion();
+  transitions->push_back(new Block());
+  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+}
+
 SetVector<StateOp> StateOp::getNextStates() {
   SmallVector<StateOp> nextStates;
   llvm::transform(
@@ -409,9 +421,28 @@ void TransitionOp::build(OpBuilder &builder, OperationState &state,
                      FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
 }
 
+// void TransitionOp::build(OpBuilder &builder, OperationState &state,
+//                          StateOp nextState) {
+//   build(builder, state, nextState.getName());
+// }
+
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StateOp nextState) {
+                         StateOp nextState, std::function<void()> guardCtor,
+                         std::function<void()> actionCtor) {
   build(builder, state, nextState.getName());
+  OpBuilder::InsertionGuard guard(builder);
+
+  Region *guardRegion = state.addRegion(); // guard
+  if (guardCtor) {
+    builder.createBlock(guardRegion);
+    guardCtor();
+  }
+
+  Region *actionRegion = state.addRegion(); // guard
+  if (actionCtor) {
+    builder.createBlock(actionRegion);
+    actionCtor();
+  }
 }
 
 Block *TransitionOp::ensureGuard(OpBuilder &builder) {
