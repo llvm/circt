@@ -117,10 +117,8 @@ struct StructuralHasher {
       : constants(constants){};
 
   std::pair<std::array<uint8_t, 32>, SmallVector<StringAttr>>
-  getHashAndModuleNames(FModuleLike module, StringAttr group) {
+  getHashAndModuleNames(FModuleLike module) {
     update(&(*module));
-    if (group)
-      sha.update(group.str());
     auto hash = sha.final();
     return {hash, referredModuleNames};
   }
@@ -337,7 +335,7 @@ struct Equivalence {
   Equivalence(MLIRContext *context, InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {
     noDedupClass = StringAttr::get(context, noDedupAnnoClass);
-    dedupGroupClass = StringAttr::get(context, dedupGroupAnnoClass);
+    dedupGroupAttrName = StringAttr::get(context, "firrtl.dedup_group");
     portDirectionsAttr = StringAttr::get(context, "portDirections");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "name"));
@@ -762,14 +760,10 @@ struct Equivalence {
       diag.attachNote(b->getLoc()) << "module marked NoDedup";
       return;
     }
-    auto aGroup = aAnnos.hasAnnotation(dedupGroupClass)
-                      ? aAnnos.getAnnotation(dedupGroupClass)
-                            .getMember<StringAttr>("group")
-                      : StringAttr();
-    auto bGroup = bAnnos.hasAnnotation(dedupGroupClass)
-                      ? bAnnos.getAnnotation(dedupGroupClass)
-                            .getMember<StringAttr>("group")
-                      : StringAttr();
+    auto aGroup =
+        dyn_cast_or_null<StringAttr>(a->getDiscardableAttr(dedupGroupAttrName));
+    auto bGroup = dyn_cast_or_null<StringAttr>(
+        b->getAttrOfType<StringAttr>(dedupGroupAttrName));
     if (aGroup != bGroup) {
       if (bGroup) {
         diag.attachNote(b->getLoc())
@@ -795,8 +789,9 @@ struct Equivalence {
   StringAttr portDirectionsAttr;
   // This is a cached "NoDedup" annotation class string attr.
   StringAttr noDedupClass;
-  // This is a cached "DedupGroup" annotation class string attr.
-  StringAttr dedupGroupClass;
+  // This is a cached string attr for the dedup group attribute.
+  StringAttr dedupGroupAttrName;
+
   // This is a set of every attribute we should ignore.
   DenseSet<Attribute> nonessentialAttributes;
   InstanceGraph &instanceGraph;
@@ -1612,6 +1607,32 @@ class DedupPass : public DedupBase<DedupPass> {
         hashesAndModuleNames(modules.size());
     StructuralHasherSharedConstants hasherConstants(&getContext());
 
+    // Attribute name used to store dedup_group for this pass.
+    auto dedupGroupAttrName = StringAttr::get(context, "firrtl.dedup_group");
+
+    // Move dedup group annotations to attributes on the module.
+    // This results in the desired behavior (included in hash),
+    // and avoids unnecessary processing of these as annotations
+    // that need to be tracked, made non-local, so on.
+    for (auto module : modules) {
+      llvm::SmallSetVector<StringAttr, 1> groups;
+      AnnotationSet::removeAnnotations(
+          module, [&groups, dedupGroupClass](Annotation annotation) {
+            if (annotation.getClassAttr() != dedupGroupClass)
+              return false;
+            groups.insert(annotation.getMember<StringAttr>("group"));
+            return true;
+          });
+      if (groups.size() > 1) {
+        module.emitError("module belongs to multiple dedup groups: ") << groups;
+        return signalPassFailure();
+      }
+      assert(!module->hasAttr(dedupGroupAttrName) &&
+             "unexpected existing use of temporary dedup group attribute");
+      if (!groups.empty())
+        module->setDiscardableAttr(dedupGroupAttrName, groups.front());
+    }
+
     // Calculate module information parallelly.
     auto result = mlir::failableParallelForEach(
         context, llvm::seq(modules.size()), [&](unsigned idx) {
@@ -1640,22 +1661,9 @@ class DedupPass : public DedupBase<DedupPass> {
             return success();
           }
 
-          llvm::SmallSetVector<StringAttr, 1> groups;
-          for (auto annotation : annotations) {
-            if (annotation.getClass() == dedupGroupClass)
-              groups.insert(annotation.getMember<StringAttr>("group"));
-          }
-          if (groups.size() > 1) {
-            module.emitError("module belongs to multiple dedup groups: ")
-                << groups;
-            return failure();
-          }
-          auto dedupGroup = groups.empty() ? StringAttr() : groups.front();
-
           StructuralHasher hasher(hasherConstants);
           // Calculate the hash of the module and referred module names.
-          hashesAndModuleNames[idx] =
-              hasher.getHashAndModuleNames(module, dedupGroup);
+          hashesAndModuleNames[idx] = hasher.getHashAndModuleNames(module);
           return success();
         });
 
@@ -1775,8 +1783,9 @@ class DedupPass : public DedupBase<DedupPass> {
     if (failed)
       return signalPassFailure();
 
-    for (auto module : circuit.getOps<FModuleOp>())
-      AnnotationSet::removeAnnotations(module, dedupGroupClass);
+    // Remove all dedup group attributes, they only exist during this pass.
+    for (auto module : circuit.getOps<FModuleLike>())
+      module->removeDiscardableAttr(dedupGroupAttrName);
 
     // Walk all the modules and fixup the instance operation to return the
     // correct type. We delay this fixup until the end because doing it early
