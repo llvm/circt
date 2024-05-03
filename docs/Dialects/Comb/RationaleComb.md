@@ -212,7 +212,7 @@ between compilations, is opaque, and return any value in the target's type syste
 is guaranteed that repeated evaluation of the same operation with the same operands will
 return the same result.
 
-A dividision by zero, for example, could return any constant, either of its input, 
+A division by zero, for example, could return any constant, either of its input, 
 `x` or `z` (in SV or VHDL), the sum of its input, or the result of any other 
 combinatorial function.
 
