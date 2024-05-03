@@ -1784,7 +1784,7 @@ class DedupPass : public DedupBase<DedupPass> {
       return signalPassFailure();
 
     // Remove all dedup group attributes, they only exist during this pass.
-    for (auto module : circuit.getOps<FModuleOp>())
+    for (auto module : circuit.getOps<FModuleLike>())
       module->removeDiscardableAttr(dedupGroupAttrName);
 
     // Walk all the modules and fixup the instance operation to return the
