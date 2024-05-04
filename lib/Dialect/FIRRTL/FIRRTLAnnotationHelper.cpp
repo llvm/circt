@@ -733,7 +733,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   if (!tapsAttr || tapsAttr.empty())
     return mlir::emitError(loc, "sink must have at least one entry");
 
-  auto tap = tapsAttr[0].dyn_cast_or_null<StringAttr>();
+  auto tap = dyn_cast_or_null<StringAttr>(tapsAttr[0]);
   if (!tap) {
     return mlir::emitError(
                loc, "Annotation '" + Twine(memTapClass) +

@@ -44,7 +44,7 @@ def CompRegOp : SeqOp<"compreg",
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -101,7 +101,7 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -165,7 +165,7 @@ def ShiftRegOp : SeqOp<"shiftreg", [
 
   let assemblyFormat = [{
     `[` $numElements `]`
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -306,7 +306,9 @@ def HLMemOp : SeqOp<"hlmem", [
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
-    HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
+    HLMemType getMemType() {
+      return llvm::cast<HLMemType>(getHandle().getType());
+    }
   }];
 
   let builders = [
@@ -320,7 +322,7 @@ def HLMemOp : SeqOp<"hlmem", [
 class HLMemTypeValueConstraint<string hlmemvalue, string value>
   : TypesMatchWith<"type of 'value' matches element type of 'hlmemvalue'",
                      hlmemvalue, value,
-                     "$_self.cast<HLMemType>().getElementType()">;
+                     "llvm::cast<HLMemType>($_self).getElementType()">;
 
 class HLMemTypeIndexingConstraint<string hlmemvalue, string addresses>
   : PredOpTrait<"address bit widths should be identical to the clog2 of the shape of the HLMemType",
@@ -448,11 +450,11 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
     ```
   }];
 
-  let arguments = (ins ClockType:$clockIn, I8Attr:$pow2);
-  let results = (outs ClockType:$clockOut);
+  let arguments = (ins ClockType:$input, I64Attr:$pow2);
+  let results = (outs ClockType:$output);
 
   let assemblyFormat = [{
-    $clockIn `by` $pow2 attr-dict
+    $input `by` $pow2 attr-dict
   }];
 }
 

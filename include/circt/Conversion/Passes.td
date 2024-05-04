@@ -438,8 +438,20 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
-    Option<"emitChiselAssertsAsSVA", "emit-chisel-asserts-as-sva",
-           "bool", "false","Convert all Chisel asserts to SVA">
+    Option<"verificationFlavor", "verification-flavor",
+           "circt::firrtl::VerificationFlavor", 
+           "circt::firrtl::VerificationFlavor::None", 
+           "Specify a verification flavor used in the lowering", 
+           [{::llvm::cl::values(
+            clEnumValN(circt::firrtl::VerificationFlavor::None, 
+              "none", "Use the flavor specified by the op"),
+            clEnumValN(circt::firrtl::VerificationFlavor::IfElseFatal,
+              "if-else-fatal", "Use Use `if(cond) else $fatal(..)` format"),
+            clEnumValN(circt::firrtl::VerificationFlavor::Immediate, 
+              "immediate", "Use immediate verif statements"),
+            clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
+          )}]
+           >
   ];
 }
 
@@ -606,6 +618,23 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// LTLToCore
+//===----------------------------------------------------------------------===//
+
+def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
+  let summary = "Convert LTL and Verif to Core";
+  let description = [{
+    This pass converts ltl and verif operations to core ones. This can be done directly
+    without going through FSM if we're only working with overlapping properties (no delays).
+  }];
+  let constructor = "circt::createLowerLTLToCorePass()";
+  let dependentDialects = [
+    "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
+    "seq::SeqDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // VerifToSV
 //===----------------------------------------------------------------------===//
 
@@ -689,7 +718,7 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
 
 def ConvertHWToSMT : Pass<"convert-hw-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert HW ops and constants to SMT ops";
-  let dependentDialects = ["smt::SMTDialect"];
+  let dependentDialects = ["smt::SMTDialect", "mlir::func::FuncDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -714,6 +743,23 @@ def LowerArcToLLVM : Pass<"lower-arc-to-llvm", "mlir::ModuleOp"> {
     "mlir::LLVM::LLVMDialect",
     "mlir::scf::SCFDialect",
     "mlir::func::FuncDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertSMTToZ3LLVM
+//===----------------------------------------------------------------------===//
+
+def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
+  let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
+  let dependentDialects = [
+    "smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
+    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"
+  ];
+  let options = [
+    Option<"debug", "debug", "bool", "false",
+           "Insert additional printf calls printing the solver's state to "
+           "stdout (e.g. at check-sat operations) for debugging purposes">,
   ];
 }
 

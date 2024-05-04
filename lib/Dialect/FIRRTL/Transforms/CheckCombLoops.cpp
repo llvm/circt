@@ -80,7 +80,7 @@ public:
     for (auto port : module.getArguments()) {
       if (module.getPortDirection(port.getArgNumber()) != Direction::Out)
         continue;
-      walkGroundTypes(port.getType().cast<FIRRTLType>(),
+      walkGroundTypes(cast<FIRRTLType>(port.getType()),
                       [&](uint64_t index, FIRRTLBaseType t, auto isFlip) {
                         getOrAddNode(FieldRef(port, index));
                       });
@@ -687,7 +687,7 @@ public:
           auto probeVal = drivenBy[probe].first;
           // If the probe is a port, then record the path from the probe to the
           // input port.
-          if (probeVal.getValue().isa<BlockArgument>()) {
+          if (isa<BlockArgument>(probeVal.getValue())) {
             inputPortPaths.insert(probeVal);
           }
         }

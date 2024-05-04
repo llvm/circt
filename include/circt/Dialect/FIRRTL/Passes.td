@@ -41,6 +41,8 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">,
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,
+    Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public-modules", "bool", "false",
+      "Allow public modules to gain additional ports as a result of wiring.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
@@ -54,6 +56,8 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Number of unhandled annotations">,
     Statistic<"numReusedHierPathOps", "num-reused-hierpath",
       "Number of reused HierPathOp's">,
+    Statistic<"numPublicPortsWired", "num-public-ports-wired",
+      "Number of ports on public modules added due to wiring">,
   ];
 }
 
@@ -659,6 +663,16 @@ def RandomizeRegisterInit :
   let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
+def CreateCompanionAssume : Pass<"firrtl-create-companion-assume", "firrtl::FModuleOp"> {
+  let summary = "Create companion assume statements for assertions";
+  let description = [{
+    This pass generates companion assume statements gated by macros to assertions.
+    If the assertion is UNR only one, a special form of assume (AssumeEdgedPredicateIntrinsicOp)
+    is used. Otherwise a concurrent assume is used
+  }];
+  let constructor = "circt::firrtl::createCreateCompanionAssume()";
+}
+
 def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   let summary = "Lower ref ports to XMR";
   let description = [{
@@ -671,17 +685,32 @@ def LowerXMR : Pass<"firrtl-lower-xmr", "firrtl::CircuitOp"> {
   ];
 }
 
-def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::CircuitOp"> {
-  let summary = "Lower intrinsics";
+def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
+  let summary = "Lower instances instances of intrinsic modules to ops.";
   let description = [{
-    This pass lowers intrinsics encoded as extmodule with annotation and
-    intmodule to their implementation or op.
+    This pass replaces instances of intrinsic modules (intmodule) with 
+    `firrtl.int.generic` operations, and removes the intmodule's from
+    the circuit.
+ 
+    Use this before running LowerIntrinsics.
   }];
-  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let constructor = "circt::firrtl::createLowerIntmodulesPass()";
   let options = [
     Option<"fixupEICGWrapper", "fixup-eicg-wrapper", "bool", "false",
       "Lower `EICG_wrapper` modules into clock gate intrinsics">,
   ];
+  let statistics = [
+    Statistic<"numInstances", "num-instances", "Number of intmodules instances lowered">,
+    Statistic<"numIntmodules", "num-intmodules", "Number of intmodules lowered">,
+  ];
+}
+
+def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
+  let summary = "Lower intrinsics";
+  let description = [{
+    This pass lowers generic intrinsic ops to their implementation or op.
+  }];
+  let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {

@@ -77,9 +77,9 @@ def InterfaceOp : SVOp<"interface",
 
 def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
   let predicate = And<[
-      CPred<"$_self.isa<::mlir::TypeAttr>()">,
+      CPred<"llvm::isa<::mlir::TypeAttr>($_self)">,
       CPred<"::circt::hw::getBitWidth(" #
-              "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">
+              "llvm::cast<::mlir::TypeAttr>($_self).getValue()) != -1">
   ]>;
 }
 
@@ -240,7 +240,9 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
-    InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
+    InterfaceType getInterfaceType() {
+      return llvm::cast<InterfaceType>(getType());
+    }
 
     /// Lookup the interface that this is an instance of.  This returns null on
     /// invalid IR.

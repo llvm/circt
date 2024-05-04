@@ -33,7 +33,7 @@ void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
                                   SmallVectorImpl<calyx::PortInfo> &outPorts) {
-  MemRefType memrefType = memref.getType().cast<MemRefType>();
+  MemRefType memrefType = cast<MemRefType>(memref.getType());
 
   // Ports constituting a memory interface are added a set of attributes under
   // a "mem : {...}" dictionary. These attributes allows for deducing which
@@ -375,7 +375,7 @@ calyx::RegisterOp ComponentLoweringStateInterface::getReturnReg(unsigned idx) {
 
 void ComponentLoweringStateInterface::registerMemoryInterface(
     Value memref, const calyx::MemoryInterface &memoryInterface) {
-  assert(memref.getType().isa<MemRefType>());
+  assert(isa<MemRefType>(memref.getType()));
   assert(memories.find(memref) == memories.end() &&
          "Memory already registered for memref");
   memories[memref] = memoryInterface;
@@ -383,7 +383,7 @@ void ComponentLoweringStateInterface::registerMemoryInterface(
 
 calyx::MemoryInterface
 ComponentLoweringStateInterface::getMemoryInterface(Value memref) {
-  assert(memref.getType().isa<MemRefType>());
+  assert(isa<MemRefType>(memref.getType()));
   auto it = memories.find(memref);
   assert(it != memories.end() && "No memory registered for memref");
   return it->second;
@@ -655,7 +655,7 @@ void InlineCombGroups::recurseInlineCombGroups(
     //   return values have at the current point of conversion not yet
     //   been rewritten to their register outputs, see comment in
     //   LateSSAReplacement)
-    if (src.isa<BlockArgument>() ||
+    if (isa<BlockArgument>(src) ||
         isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
             hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
             calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
@@ -730,7 +730,7 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
     for (auto arg : enumerate(block->getArguments())) {
       Type argType = arg.value().getType();
-      assert(argType.isa<IntegerType>() && "unsupported block argument type");
+      assert(isa<IntegerType>(argType) && "unsupported block argument type");
       unsigned width = argType.getIntOrFloatBitWidth();
       std::string index = std::to_string(arg.index());
       std::string name = loweringState().blockName(block) + "_arg" + index;
@@ -753,7 +753,7 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 
   for (auto argType : enumerate(funcOp.getResultTypes())) {
     auto convArgType = calyx::convIndexType(rewriter, argType.value());
-    assert(convArgType.isa<IntegerType>() && "unsupported return type");
+    assert(isa<IntegerType>(convArgType) && "unsupported return type");
     unsigned width = convArgType.getIntOrFloatBitWidth();
     std::string name = "ret_arg" + std::to_string(argType.index());
     auto reg =

@@ -56,7 +56,7 @@ static void addHierarchy(hw::HierPathOp path, FModuleOp dut,
                                               getInnerSymName(wrapperInst)));
 
   // Add the extra level of hierarchy.
-  if (auto dutRef = namepath[nlaIdx].dyn_cast<hw::InnerRefAttr>())
+  if (auto dutRef = dyn_cast<hw::InnerRefAttr>(namepath[nlaIdx]))
     newNamepath.push_back(hw::InnerRefAttr::get(
         wrapperInst.getModuleNameAttr().getAttr(), dutRef.getName()));
   else
@@ -255,7 +255,7 @@ void InjectDUTHierarchy::runOnOperation() {
       assert(namepath.size() > 1 && "namepath size must be greater than one");
       SmallVector<Attribute> newNamepath{hw::InnerRefAttr::get(
           wrapper.getNameAttr(),
-          namepath.front().cast<hw::InnerRefAttr>().getName())};
+          cast<hw::InnerRefAttr>(namepath.front()).getName())};
       auto tail = namepath.drop_front();
       newNamepath.append(tail.begin(), tail.end());
       nla->setAttr("namepath", b.getArrayAttr(newNamepath));

@@ -276,7 +276,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
 
         for (size_t i = 0, e = args.size(); i < e; ++i) {
           // The signal comes from an instance's argument.
-          if (auto blockArg = args[i].dyn_cast<BlockArgument>()) {
+          if (auto blockArg = dyn_cast<BlockArgument>(args[i])) {
             auto detail = child.sensitivityList[blockArg.getArgNumber()];
             detail.instIndex = i;
             newChild.sensitivityList.push_back(detail);

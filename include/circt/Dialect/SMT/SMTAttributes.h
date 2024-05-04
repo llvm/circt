@@ -13,6 +13,16 @@
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
+namespace circt {
+namespace smt {
+namespace detail {
+
+struct BitVectorAttrStorage;
+
+} // namespace detail
+} // namespace smt
+} // namespace circt
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SMT/SMTAttributes.h.inc"
 

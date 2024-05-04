@@ -46,6 +46,39 @@ module Basic;
   int v1;
   int v2 = v1;
 
+  // CHECK: %w0 = moore.net wire : !moore.logic
+  // CHECK: %w1 = moore.net wire %w0 : !moore.logic
+  wire w0;
+  wire w1 = w0;
+  // CHECK: %w2 = moore.net uwire %w0 : !moore.logic
+  uwire w2 = w0;
+  // CHECK: %w3 = moore.net tri %w0 : !moore.logic
+  tri w3 = w0;
+  // CHECK: %w4 = moore.net triand %w0 : !moore.logic
+  triand w4 = w0;
+  // CHECK: %w5 = moore.net trior %w0 : !moore.logic  
+  trior w5 = w0;
+  // CHECK: %w6 = moore.net wand %w0 : !moore.logic
+  wand w6 = w0;
+  // CHECK: %w7 = moore.net wor %w0 : !moore.logic
+  wor w7 = w0;
+  // CHECK: %w8 = moore.net trireg %w0 : !moore.logic
+  trireg w8 = w0;
+  // CHECK: %w9 = moore.net tri0 %w0 : !moore.logic
+  tri0 w9 = w0;
+  // CHECK: %w10 = moore.net tri1 %w0 : !moore.logic 
+  tri1 w10 = w0;
+  // CHECK: %w11 = moore.net supply0 : !moore.logic  
+  supply0 w11;
+  // CHECK: %w12 = moore.net supply1 : !moore.logic  
+  supply1 w12;
+
+  // CHECK: %b1 = moore.variable : !moore.packed<range<bit, 0:0>>
+  // CHECK: [[TMP:%.+]] = moore.conversion %b1 : !moore.packed<range<bit, 0:0>> -> !moore.bit
+  // CHECK: %b2 = moore.variable [[TMP]] : !moore.bit
+  bit [0:0] b1;
+  bit b2 = b1;
+
   // CHECK: moore.procedure initial {
   // CHECK: }
   initial;
@@ -130,6 +163,57 @@ module Statements;
     end
 
     //===------------------------------------------------------------------===//
+    // Case statements
+
+    // CHECK: [[TMP1:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP2]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP3:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP4:%.+]] = moore.eq %x, %y : !moore.bit -> !moore.bit
+    // CHECK: [[TMP5:%.+]] = moore.or [[TMP3]], [[TMP4]] : !moore.bit
+    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP6]] {
+    // CHECK:   moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: }
+    case (x)
+      x: x = x;
+      x, y: x = y;
+    endcase
+
+    // CHECK: [[TMP1:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP2]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP3:%.+]] = moore.eq %x, %x : !moore.bit -> !moore.bit
+    // CHECK: [[TMP4:%.+]] = moore.eq %x, %y : !moore.bit -> !moore.bit
+    // CHECK: [[TMP5:%.+]] = moore.or [[TMP3]], [[TMP4]] : !moore.bit
+    // CHECK: [[TMP6:%.+]] = moore.conversion [[TMP5]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP6]] {
+    // CHECK:   moore.blocking_assign %x, %y : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP7:%.+]] = moore.eq %x, %z : !moore.bit -> !moore.bit
+    // CHECK: [[TMP8:%.+]] = moore.conversion [[TMP7]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP8]] {
+    // CHECK:   moore.blocking_assign %x, %z : !moore.bit
+    // CHECK: }
+    // CHECK: [[TMP9:%.+]] = moore.or [[TMP5]], [[TMP7]] : !moore.bit
+    // CHECK: [[TMP10:%.+]] = moore.or [[TMP1]], [[TMP9]] : !moore.bit
+    // CHECK: [[TMP11:%.+]] = moore.not [[TMP10]] : !moore.bit
+    // CHECK: [[TMP12:%.+]] = moore.conversion [[TMP11]] : !moore.bit -> i1
+    // CHECK: scf.if [[TMP12]] {
+    // CHECK:   moore.blocking_assign %x, %x : !moore.bit
+    // CHECK: }
+    case (x)
+      x: x = x;
+      x, y: x = y;
+      z: x = z;
+      default x = x;
+    endcase
+
+    //===------------------------------------------------------------------===//
     // Loop statements
 
     // CHECK: moore.blocking_assign %y, %x
@@ -209,6 +293,10 @@ module Expressions;
   integer d, e, f;
   bit x;
   logic y;
+  logic [31:0] vec_1;
+  logic [0:31] vec_2;
+  bit [4:1] arr [1:3][2:7];
+  bit [3:2] s;
 
   initial begin
     // CHECK: moore.constant 0 : !moore.packed<range<bit, 31:0>>
@@ -225,6 +313,43 @@ module Expressions;
     a = {a, b, c};
     // CHECK: moore.concat %d, %e : (!moore.integer, !moore.integer) -> !moore.packed<range<logic, 63:0>>
     d = {d, e};
+    // CHECK: %[[VAL_1:.*]] = moore.constant false : !moore.packed<range<bit, 0:0>>
+    // CHECK: %[[VAL_2:.*]] = moore.concat %[[VAL_1]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 0:0>>
+    // CHECK: %[[VAL_3:.*]] = moore.replicate %[[VAL_2]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 31:0>>
+    a = {32{1'b0}};
+    // CHECK: %[[VAL:.*]] = moore.constant 1 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 3:1>>
+    y = vec_1[3:1];
+    // CHECK: %[[VAL:.*]] = moore.constant 2 : !moore.int
+    // CHECK: moore.extract %vec_2 from %[[VAL]] : !moore.packed<range<logic, 0:31>>, !moore.int -> !moore.packed<range<logic, 2:3>>
+    y = vec_2[2:3];
+    // CHECK: moore.extract %d from %x : !moore.integer, !moore.bit -> !moore.logic
+    y = d[x];
+    // CHECK: moore.extract %a from %x : !moore.int, !moore.bit -> !moore.bit
+    y = a[x];
+    // CHECK: %[[VAL:.*]] = moore.constant 15 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.logic
+    y = vec_1[15];
+    // CHECK: %[[VAL:.*]] = moore.constant 15 : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 15:15>>
+    y = vec_1[15+:1];
+    // CHECK: %[[VAL:.*]] = moore.constant 0 : !moore.int
+    // CHECK: moore.extract %vec_2 from %[[VAL]] : !moore.packed<range<logic, 0:31>>, !moore.int -> !moore.packed<range<logic, 0:0>>
+    y = vec_2[0+:1];
+    // CHECK: %[[VAL_1:.*]] = moore.constant 1 : !moore.int
+    // CHECK: %[[VAL_2:.*]] = moore.mul %[[VAL_1]], %a : !moore.int
+    // CHECK: moore.extract %vec_1 from %[[VAL_2]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 31:31>>
+    y = vec_1[1*a-:1];
+    // CHECK: %[[VAL_1:.*]] = moore.constant 3 : !moore.int
+    // CHECK: %[[VAL_2:.*]] = moore.extract %arr from %[[VAL_1]] : !moore.unpacked<range<range<packed<range<bit, 4:1>>, 2:7>, 1:3>>, !moore.int -> !moore.unpacked<range<packed<range<bit, 4:1>>, 2:7>>
+    // CHECK: %[[VAL_3:.*]] = moore.constant 7 : !moore.int
+    // CHECK: %[[VAL_4:.*]] = moore.extract %[[VAL_2]] from %[[VAL_3]] : !moore.unpacked<range<packed<range<bit, 4:1>>, 2:7>>, !moore.int -> !moore.packed<range<bit, 4:1>>
+    // CHECK: %[[VAL_5:.*]] = moore.constant 3 : !moore.int
+    // CHECK: moore.extract %[[VAL_4]] from %[[VAL_5]] : !moore.packed<range<bit, 4:1>>, !moore.int -> !moore.packed<range<bit, 4:3>>
+    s = arr[3][7][4:3];
+    // CHECK: moore.extract %vec_1 from %s : !moore.packed<range<logic, 31:0>>, !moore.packed<range<bit, 3:2>> -> !moore.logic
+    y = vec_1[s];
+
 
     //===------------------------------------------------------------------===//
     // Unary operators

@@ -84,7 +84,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
     // Register the sensitivities of above SC_METHOD registration.
     SmallVector<Value> sensitivityValues(
         llvm::make_filter_range(scModule.getArguments(), [](BlockArgument arg) {
-          return !arg.getType().isa<OutputType>();
+          return !isa<OutputType>(arg.getType());
         }));
     if (!sensitivityValues.empty())
       rewriter.create<SensitiveOp>(scModule.getLoc(), sensitivityValues);
@@ -109,7 +109,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
 
     SmallVector<Value> outPorts;
     for (auto val : scModule.getArguments()) {
-      if (val.getType().isa<OutputType>())
+      if (isa<OutputType>(val.getType()))
         outPorts.push_back(val);
     }
 
@@ -146,11 +146,11 @@ private:
       Type ty = std::get<0>(inPort).getType();
       systemc::ModuleType::PortInfo info;
 
-      if (ty.isa<hw::InOutType>())
+      if (isa<hw::InOutType>(ty))
         return failure();
 
       info.type = typeConverter->convertType(PortTy::get(ty));
-      info.name = std::get<1>(inPort).cast<StringAttr>();
+      info.name = cast<StringAttr>(std::get<1>(inPort));
       portInfo.push_back(info);
     }
 

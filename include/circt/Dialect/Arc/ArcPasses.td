@@ -97,20 +97,6 @@ def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
   ];
 }
 
-def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
-  let summary = "Eagerly inline private modules";
-  let description = [{
-    This pass eagerly inlines private HW modules into their instantiation sites.
-    After outlining combinational logic and registers into arcs, module bodies
-    become fairly lightweight. Since arc definitions now fulfill the purpose of
-    code reuse by allowing a single definition to be called multiple times, the
-    module hierarchy degenerates into a purely cosmetic construct. At that point
-    it is beneficial to fully flatten the module hierarchy to simplify further
-    analysis and optimization of state transfer arcs.
-  }];
-  let constructor = "circt::arc::createInlineModulesPass()";
-}
-
 def InferStateProperties : Pass<"arc-infer-state-properties",
                                 "mlir::ModuleOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
@@ -287,6 +273,10 @@ def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numArcsCreated", "created", "Arcs created during the splitting">,
+    Statistic<"numArcsRemoved", "removed", "Arcs removed during the splitting">,
+  ];
 }
 
 def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {

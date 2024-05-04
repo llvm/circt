@@ -86,7 +86,7 @@ static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
   unsigned indexWidth;
 
   // Determine the bitwidth of the indexing value
-  if (auto integerType = indexType.dyn_cast<IntegerType>())
+  if (auto integerType = dyn_cast<IntegerType>(indexType))
     indexWidth = integerType.getWidth();
   else if (indexType.isIndex())
     indexWidth = IndexType::kInternalStorageBitWidth;
@@ -107,7 +107,7 @@ static LogicalResult verifyIndexWideEnough(Operation *op, Value indexVal,
 static bool isControlCheckTypeAndOperand(Type dataType, Value operand) {
   // The operation is a control operation if its operand data type is a
   // NoneType.
-  if (dataType.isa<NoneType>())
+  if (isa<NoneType>(dataType))
     return true;
 
   // Otherwise, the operation is a control operation if the operation's
@@ -396,7 +396,7 @@ MuxOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
   return success();
 }
 
-bool MuxOp::isControl() { return getResult().getType().isa<NoneType>(); }
+bool MuxOp::isControl() { return isa<NoneType>(getResult().getType()); }
 
 std::string handshake::MuxOp::getOperandName(unsigned int idx) {
   return idx == 0 ? "select" : defaultOperandName(idx - 1);
@@ -520,7 +520,7 @@ LogicalResult FuncOp::verify() {
                            << ".";
 
     if (llvm::any_of(portNames,
-                     [&](Attribute attr) { return !attr.isa<StringAttr>(); }))
+                     [&](Attribute attr) { return !isa<StringAttr>(attr); }))
       return emitOpError() << "expected all entries in attribute '" << attrName
                            << "' to be strings.";
 
@@ -533,7 +533,7 @@ LogicalResult FuncOp::verify() {
 
   // Verify that all memrefs have a corresponding extmemory operation
   for (auto arg : entryBlock.getArguments()) {
-    if (!arg.getType().isa<MemRefType>())
+    if (!isa<MemRefType>(arg.getType()))
       continue;
     if (arg.getUsers().empty() ||
         !isa<ExternalMemoryOp>(*arg.getUsers().begin()))
@@ -620,9 +620,8 @@ void handshake::FuncOp::resolveArgAndResNames() {
                           StringRef attrName) {
     for (auto fallbackName : llvm::enumerate(fallbackNames)) {
       if (actualNames.size() <= fallbackName.index())
-        addStringToStringArrayAttr(
-            builder, this->getOperation(), attrName,
-            fallbackName.value().template cast<StringAttr>());
+        addStringToStringArrayAttr(builder, this->getOperation(), attrName,
+                                   cast<StringAttr>(fallbackName.value()));
     }
   };
   resolveNames(fallbackArgNames, argNames, "argNames");
@@ -871,7 +870,7 @@ void SourceOp::print(OpAsmPrinter &p) {
 
 LogicalResult ConstantOp::verify() {
   // Verify that the type of the provided value is equal to the result type.
-  auto typedValue = getValue().dyn_cast<mlir::TypedAttr>();
+  auto typedValue = dyn_cast<mlir::TypedAttr>(getValue());
   if (!typedValue)
     return emitOpError("constant value must be a typed attribute; value is ")
            << getValue();
@@ -1045,13 +1044,13 @@ LogicalResult MemoryOp::verify() {
   }
   for (unsigned i = 0; i < opStCount; i++) {
     Type syncType = outputType[opLdCount + i];
-    if (!syncType.isa<NoneType>())
+    if (!isa<NoneType>(syncType))
       return emitOpError("data type for sync port for store port ")
              << i << ":" << syncType << " is not 'none'";
   }
   for (unsigned i = 0; i < opLdCount; i++) {
     Type syncType = outputType[opLdCount + opStCount + i];
-    if (!syncType.isa<NoneType>())
+    if (!isa<NoneType>(syncType))
       return emitOpError("data type for sync port for load port ")
              << i << ":" << syncType << " is not 'none'";
   }
@@ -1078,7 +1077,7 @@ void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
   llvm::append_range(ops, inputs);
   result.addOperands(ops);
 
-  auto memrefType = memref.getType().cast<MemRefType>();
+  auto memrefType = cast<MemRefType>(memref.getType());
 
   // Data outputs (get their type from memref)
   result.types.append(ldCount, memrefType.getElementType());
@@ -1108,7 +1107,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      bool lsq, int id, Value memref) {
   result.addOperands(operands);
 
-  auto memrefType = memref.getType().cast<MemRefType>();
+  auto memrefType = cast<MemRefType>(memref.getType());
 
   // Data outputs (get their type from memref)
   result.types.append(outputs, memrefType.getElementType());
@@ -1166,9 +1165,9 @@ bool handshake::MemoryOp::allocateMemory(
   mlir::Type elementType = type.getElementType();
   int width = elementType.getIntOrFloatBitWidth();
   for (int i = 0; i < allocationSize; i++) {
-    if (elementType.isa<mlir::IntegerType>()) {
+    if (isa<mlir::IntegerType>(elementType)) {
       store[ptr][i] = APInt(width, 0);
-    } else if (elementType.isa<mlir::FloatType>()) {
+    } else if (isa<mlir::FloatType>(elementType)) {
       store[ptr][i] = APFloat(0.0);
     } else {
       llvm_unreachable("Unknown result type!\n");
@@ -1207,7 +1206,7 @@ void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
   result.addOperands(indices);
 
   // Data type
-  auto memrefType = memref.getType().cast<MemRefType>();
+  auto memrefType = cast<MemRefType>(memref.getType());
 
   // Data output (from load to successor ops)
   result.types.push_back(memrefType.getElementType());

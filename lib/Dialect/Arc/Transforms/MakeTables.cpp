@@ -58,7 +58,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
   // Determine the number of input bits.
   unsigned numInputBits = 0;
   for (auto &type : defineOp.getArgumentTypes()) {
-    auto intType = type.dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(type);
     if (!intType)
       return;
     numInputBits += intType.getWidth();
@@ -76,7 +76,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
   unsigned numOutputBits = 0;
   auto outputOp = cast<arc::OutputOp>(defineOp.getBodyBlock().getTerminator());
   for (auto type : outputOp.getOperandTypes()) {
-    auto intType = type.dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(type);
     if (!intType)
       return;
     numOutputBits += intType.getWidth();
@@ -132,7 +132,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
     values.clear();
     unsigned bits = 0;
     for (auto arg : defineOp.getArguments()) {
-      auto w = arg.getType().dyn_cast<IntegerType>().getWidth();
+      auto w = dyn_cast<IntegerType>(arg.getType()).getWidth();
       values[arg] = builder.getIntegerAttr(arg.getType(),
                                            bitsGet(input, bits, bits + w - 1));
       bits += w;
@@ -153,9 +153,9 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
 
       for (auto [result, resultValue] :
            llvm::zip(operation->getResults(), resultValues)) {
-        auto attr = resultValue.dyn_cast<Attribute>();
+        auto attr = dyn_cast<Attribute>(resultValue);
         if (!attr)
-          attr = values[resultValue.dyn_cast<Value>()];
+          attr = values[dyn_cast<Value>(resultValue)];
         values[result] = attr;
       }
     }
@@ -163,7 +163,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
     // Add the evaluated values to the output tables.
     for (auto [table, outputOperand] :
          llvm::zip(tables, outputOp->getOpOperands())) {
-      table.push_back(values[outputOperand.get()].dyn_cast<Attribute>());
+      table.push_back(dyn_cast<Attribute>(values[outputOperand.get()]));
     }
   }
 

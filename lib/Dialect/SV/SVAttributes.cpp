@@ -48,13 +48,13 @@ ArrayAttr sv::getSVAttributes(Operation *op) {
   auto attrs = op->getAttr(SVAttributeAttr::getSVAttributesAttrName());
   if (!attrs)
     return {};
-  auto arrayAttr = attrs.dyn_cast<ArrayAttr>();
+  auto arrayAttr = dyn_cast<ArrayAttr>(attrs);
   if (!arrayAttr) {
     op->emitOpError("'sv.attributes' must be an array attribute");
     return {};
   }
   for (auto attr : arrayAttr) {
-    if (!attr.isa<SVAttributeAttr>()) {
+    if (!isa<SVAttributeAttr>(attr)) {
       op->emitOpError("'sv.attributes' elements must be `SVAttributeAttr`s");
       return {};
     }

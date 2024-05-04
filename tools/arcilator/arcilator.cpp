@@ -20,6 +20,7 @@
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ModelInfoExport.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
@@ -256,7 +257,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   }
   if (shouldDedup)
     pm.addPass(arc::createDedupPass());
-  pm.addPass(arc::createInlineModulesPass());
+  pm.addPass(hw::createFlattenModulesPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 

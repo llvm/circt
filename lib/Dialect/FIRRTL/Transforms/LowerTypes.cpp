@@ -372,7 +372,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(Mux2CellIntrinsicOp op);
   bool visitExpr(Mux4CellIntrinsicOp op);
-  bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
@@ -382,8 +381,15 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
   bool visitStmt(LayerBlockOp op);
+  bool visitUnrealizedConversionCast(mlir::UnrealizedConversionCastOp op);
 
   bool isFailed() const { return encounteredError; }
+
+  bool visitInvalidOp(Operation *op) {
+    if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      return visitUnrealizedConversionCast(castOp);
+    return false;
+  }
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -639,7 +645,7 @@ bool TypeLoweringVisitor::lowerProducer(
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
     loweredName = nameAttr.getValue();
   auto baseNameLen = loweredName.size();
-  auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+  auto oldAnno = dyn_cast_or_null<ArrayAttr>(op->getAttr("annotations"));
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
@@ -1304,7 +1310,8 @@ bool TypeLoweringVisitor::visitExpr(Mux4CellIntrinsicOp op) {
 }
 
 // Expand UnrealizedConversionCastOp of aggregates
-bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
+bool TypeLoweringVisitor::visitUnrealizedConversionCast(
+    mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getOperand(0), field.index);
@@ -1447,7 +1454,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
-            context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
+            context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
             field);
         newPortAnno.push_back(annos);
       }

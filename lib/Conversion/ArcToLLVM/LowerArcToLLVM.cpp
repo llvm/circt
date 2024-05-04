@@ -182,7 +182,7 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
                                         Value address, MemoryType type,
                                         ConversionPatternRewriter &rewriter) {
   auto zextAddrType = rewriter.getIntegerType(
-      address.getType().cast<IntegerType>().getWidth() + 1);
+      cast<IntegerType>(address.getType()).getWidth() + 1);
   Value addr = rewriter.create<LLVM::ZExtOp>(loc, zextAddrType, address);
   Value addrLimit = rewriter.create<LLVM::ConstantOp>(
       loc, zextAddrType, rewriter.getI32IntegerAttr(type.getNumWords()));
@@ -200,7 +200,7 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
   matchAndRewrite(arc::MemoryReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto type = typeConverter->convertType(op.getType());
-    auto memoryType = op.getMemory().getType().cast<MemoryType>();
+    auto memoryType = cast<MemoryType>(op.getMemory().getType());
     auto access =
         prepareMemoryAccess(op.getLoc(), adaptor.getMemory(),
                             adaptor.getAddress(), memoryType, rewriter);
@@ -230,7 +230,7 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
                   ConversionPatternRewriter &rewriter) const final {
     auto access = prepareMemoryAccess(
         op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
-        op.getMemory().getType().cast<MemoryType>(), rewriter);
+        cast<MemoryType>(op.getMemory().getType()), rewriter);
     auto enable = access.withinBounds;
     if (adaptor.getEnable())
       enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),

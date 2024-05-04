@@ -38,7 +38,7 @@ struct PortInfo {
   GetPortOp getPortOp;
 
   PortRefType getType() {
-    return getPortOp.getPort().getType().cast<PortRefType>();
+    return cast<PortRefType>(getPortOp.getPort().getType());
   }
   Type getInnerType() { return getType().getPortType(); }
   Direction getRequestedDirection() { return getType().getDirection(); }
@@ -195,7 +195,7 @@ LogicalResult Tunneler::tunnelDispatch(InstanceGraphNode *currentContainer,
 Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
                                     PortInfo &portInfo) {
   Direction actualDir =
-      actualPort.getPort().getType().cast<PortRefType>().getDirection();
+      cast<PortRefType>(actualPort.getPort().getType()).getDirection();
   Direction requestedDir = portInfo.getRequestedDirection();
 
   // Match - just return the port itself.
@@ -262,14 +262,15 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
                                    PortRefMapping &portMapping) {
   // Locate the instance that we're tunneling into
   Operation *parentOp = currentContainer->getModule().getOperation();
-  auto parentSymbolOp = dyn_cast<SymbolOpInterface>(parentOp);
+  auto parentSymbolOp = dyn_cast<hw::InnerSymbolOpInterface>(parentOp);
   assert(parentSymbolOp && "expected current container to be a symbol op");
   FailureOr<ContainerInstanceOp> locateRes =
       locateInstanceIn(parentOp, tunnelInto);
   if (failed(locateRes))
     return op->emitOpError()
-           << "expected an instance named " << tunnelInto << " in "
-           << parentSymbolOp.getNameAttr() << " but found none";
+           << "expected an instance named " << tunnelInto << " in @"
+           << parentSymbolOp.getInnerSymAttr().getSymName().getValue()
+           << " but found none";
   ContainerInstanceOp tunnelInstance = *locateRes;
 
   if (path.empty()) {
@@ -288,14 +289,15 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   // We're not in the target, but tunneling into a child instance.
   // Create output ports in the child instance for the requested ports.
   auto *tunnelScopeNode =
-      ig.lookup(tunnelInstance.getTargetNameAttr().getAttr());
+      ig.lookup(tunnelInstance.getTargetNameAttr().getName());
   auto tunnelScope = tunnelScopeNode->getModule<ScopeOpInterface>();
 
   rewriter.setInsertionPointToEnd(tunnelScope.getBodyBlock());
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
   for (PortInfo &pi : portInfos) {
     outputPortOps[pi.portName] = rewriter.create<OutputPortOp>(
-        op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName), pi.getType());
+        op.getLoc(), pi.portName, circt::hw::InnerSymAttr::get(pi.portName),
+        pi.getType());
   }
 
   // Recurse into the tunnel instance container.
@@ -374,7 +376,8 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
   for (PortInfo &pi : portInfos) {
     auto inputPort = rewriter.create<InputPortOp>(
-        op.getLoc(), hw::InnerSymAttr::get(pi.portName), pi.getType());
+        op.getLoc(), pi.portName, hw::InnerSymAttr::get(pi.portName),
+        pi.getType());
     // Read the input port of the current container to forward the portref.
 
     portMapping[&pi] =

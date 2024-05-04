@@ -77,11 +77,14 @@ IF(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-# If Cap'nProto hasn't been explicitly disabled, find it.
-option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
-if (CAPNP_DISABLE)
-  message (STATUS "Disabling Cap'nProto (needed for cosimulation).")
-elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
+option(ESI_COSIM "Enable ESI cosimulation." ON)
+if(ESI_COSIM)
+  # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
+  # backends should only need to be linked in.
+  # TODO: Once the hack in the python bindings is remidied, remove this.
+  add_compile_definitions(ESI_COSIM)
+
+  # Try to find Cap'nProto. If the user has set CAPNP_PATH, use that.
   if(DEFINED CAPNP_PATH)
     set(ENV{PKG_CONFIG_PATH}
       "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
@@ -91,24 +94,28 @@ elseif(NOT CapnProto_FOUND) # Check if someone else already imported.
       "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
     find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
   endif()
-endif()
 
-# If Cap'nProto has been found, generate the headers and definitions.
-if(CapnProto_FOUND)
-  set(ESI_COSIM true)
-  message("-- ESI cosim enabled")
+  # If Cap'nProto has been found, generate the headers and definitions.
+  if(CapnProto_FOUND)
+    message("-- ESI cosim enabled")
 
-  message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-  add_subdirectory(cosim)
+    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
+    add_subdirectory(cosim)
 
-  set(ESIRuntimeSources
-    ${ESIRuntimeSources}
-    cpp/lib/backends/Cosim.cpp
-  )
-  set(ESIRuntimeLinkLibraries
-    ${ESIRuntimeLinkLibraries}
-    EsiCosimCapnp
-  )
+    set(ESIRuntimeSources
+      ${ESIRuntimeSources}
+      cpp/lib/backends/Cosim.cpp
+    )
+    set(ESIRuntimeLinkLibraries
+      ${ESIRuntimeLinkLibraries}
+      EsiCosimCapnp
+    )
+  else()
+    message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
+                        Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
+  endif()
+else()
+  message("-- ESI cosim disabled")
 endif()
 
 option(XRT_PATH "Path to XRT lib.")

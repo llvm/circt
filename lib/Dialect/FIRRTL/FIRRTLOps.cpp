@@ -180,16 +180,13 @@ constexpr const char *toString(Flow flow) {
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> Flow {
-    return swapFlow(accumulatedFlow);
-  };
 
   if (auto blockArg = dyn_cast<BlockArgument>(val)) {
     auto *op = val.getParentBlock()->getParentOp();
     if (auto moduleLike = dyn_cast<FModuleLike>(op)) {
       auto direction = moduleLike.getPortDirection(blockArg.getArgNumber());
       if (direction == Direction::Out)
-        return swap();
+        return swapFlow(accumulatedFlow);
     }
     return accumulatedFlow;
   }
@@ -198,8 +195,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp, OpenSubfieldOp>([&](auto op) {
-        return foldFlow(op.getInput(),
-                        op.isFieldFlipped() ? swap() : accumulatedFlow);
+        return foldFlow(op.getInput(), op.isFieldFlipped()
+                                           ? swapFlow(accumulatedFlow)
+                                           : accumulatedFlow);
       })
       .Case<SubindexOp, SubaccessOp, OpenSubindexOp, RefSubOp>(
           [&](auto op) { return foldFlow(op.getInput(), accumulatedFlow); })
@@ -210,13 +208,13 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         auto resultNo = cast<OpResult>(val).getResultNumber();
         if (inst.getPortDirection(resultNo) == Direction::Out)
           return accumulatedFlow;
-        return swap();
+        return swapFlow(accumulatedFlow);
       })
       .Case<MemOp>([&](auto op) {
         // only debug ports with RefType have source flow.
         if (type_isa<RefType>(val.getType()))
           return Flow::Source;
-        return swap();
+        return swapFlow(accumulatedFlow);
       })
       .Case<ObjectSubfieldOp>([&](ObjectSubfieldOp op) {
         auto input = op.getInput();
@@ -719,8 +717,7 @@ static void insertPorts(FModuleLike op,
   unsigned newNumArgs = oldNumArgs + ports.size();
 
   // Add direction markers and names for new ports.
-  SmallVector<Direction> existingDirections =
-      direction::unpackAttribute(op.getPortDirectionsAttr());
+  auto existingDirections = op.getPortDirectionsAttr();
   ArrayRef<Attribute> existingNames = op.getPortNames();
   ArrayRef<Attribute> existingTypes = op.getPortTypes();
   ArrayRef<Attribute> existingLocs = op.getPortLocations();
@@ -738,7 +735,7 @@ static void insertPorts(FModuleLike op,
     assert(internalPaths.size() == oldNumArgs);
   }
 
-  SmallVector<Direction> newDirections;
+  SmallVector<bool> newDirections;
   SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
       newInternalPaths;
   newDirections.reserve(newNumArgs);
@@ -769,7 +766,7 @@ static void insertPorts(FModuleLike op,
     auto idx = pair.value().first;
     auto &port = pair.value().second;
     migrateOldPorts(idx);
-    newDirections.push_back(port.direction);
+    newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
     newTypes.push_back(TypeAttr::get(port.type));
     auto annos = port.annotations.getArrayAttr();
@@ -815,8 +812,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
     return;
 
   // Drop the direction markers for dead ports.
-  SmallVector<Direction> portDirections =
-      direction::unpackAttribute(op.getPortDirectionsAttr());
+  ArrayRef<bool> portDirections = op.getPortDirectionsAttr().asArrayRef();
   ArrayRef<Attribute> portNames = op.getPortNames();
   ArrayRef<Attribute> portTypes = op.getPortTypes();
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
@@ -831,8 +827,8 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   assert(portSyms.size() == numPorts || portSyms.empty());
   assert(portLocs.size() == numPorts);
 
-  SmallVector<Direction> newPortDirections =
-      removeElementsAtIndices<Direction>(portDirections, portIndices);
+  SmallVector<bool> newPortDirections =
+      removeElementsAtIndices<bool>(portDirections, portIndices);
   SmallVector<Attribute> newPortNames, newPortTypes, newPortAnnos, newPortSyms,
       newPortLocs;
   newPortNames = removeElementsAtIndices(portNames, portIndices);
@@ -1076,13 +1072,11 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
 /// values.  If there is a reason the printed SSA values can't match the true
 /// port name, then this function will return true.  When this happens, the
 /// caller should print the port names as a part of the `attr-dict`.
-static bool printModulePorts(OpAsmPrinter &p, Block *block,
-                             ArrayRef<Direction> portDirections,
-                             ArrayRef<Attribute> portNames,
-                             ArrayRef<Attribute> portTypes,
-                             ArrayRef<Attribute> portAnnotations,
-                             ArrayRef<Attribute> portSyms,
-                             ArrayRef<Attribute> portLocs) {
+static bool
+printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
+                 ArrayRef<Attribute> portNames, ArrayRef<Attribute> portTypes,
+                 ArrayRef<Attribute> portAnnotations,
+                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
@@ -1098,7 +1092,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
       p << ", ";
 
     // Print the port direction.
-    p << portDirections[i] << " ";
+    p << direction::get(portDirections[i]) << " ";
 
     // Print the port name.  If there is a valid block, we print it as a block
     // argument.
@@ -1124,9 +1118,9 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
 
     // Print the optional port symbol.
     if (!portSyms.empty()) {
-      if (!portSyms[i].cast<hw::InnerSymAttr>().empty()) {
+      if (!cast<hw::InnerSymAttr>(portSyms[i]).empty()) {
         p << " sym ";
-        portSyms[i].cast<hw::InnerSymAttr>().print(p);
+        cast<hw::InnerSymAttr>(portSyms[i]).print(p);
       }
     }
 
@@ -1255,7 +1249,8 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 }
 
 /// Print a paramter list for a module or instance.
-static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
+static void printParameterList(OpAsmPrinter &p, Operation *op,
+                               ArrayAttr parameters) {
   if (!parameters || parameters.empty())
     return;
 
@@ -1283,7 +1278,7 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p.printSymbolName(op.getModuleName());
 
   // Print the parameter list (if non-empty).
-  printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
+  printParameterList(p, op, op->getAttrOfType<ArrayAttr>("parameters"));
 
   // Both modules and external modules have a body, but it is always empty for
   // external modules.
@@ -1291,10 +1286,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (!op->getRegion(0).empty())
     body = &op->getRegion(0).front();
 
-  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
-
   auto needPortNamesAttr = printModulePorts(
-      p, body, portDirections, op.getPortNames(), op.getPortTypes(),
+      p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
       op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
 
   SmallVector<StringRef, 12> omittedAttrs = {
@@ -1370,6 +1363,18 @@ parseOptionalParameters(OpAsmParser &parser,
             builder.getContext(), builder.getStringAttr(name), type, value));
         return success();
       });
+}
+
+/// Shim to use with assemblyFormat, custom<ParameterList>.
+static ParseResult parseParameterList(OpAsmParser &parser,
+                                      ArrayAttr &parameters) {
+  SmallVector<Attribute> parseParameters;
+  if (failed(parseOptionalParameters(parser, parseParameters)))
+    return failure();
+
+  parameters = ArrayAttr::get(parser.getContext(), parseParameters);
+
+  return success();
 }
 
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
@@ -1878,11 +1883,9 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
   if (!region.empty())
     body = &region.front();
 
-  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
-
   auto needPortNamesAttr = printModulePorts(
-      p, body, portDirections, op.getPortNames(), op.getPortTypes(), {},
-      op.getPortSymbols(), op.getPortLocations());
+      p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
+      {}, op.getPortSymbols(), op.getPortLocations());
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
@@ -2356,8 +2359,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
+  printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
                    getPortAnnotations().getValue(), {}, {});
 }
@@ -2519,20 +2521,20 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
   auto moduleNames = getModuleNamesAttr();
   auto caseNames = getCaseNamesAttr();
 
-  p.printSymbolName(moduleNames[0].cast<FlatSymbolRefAttr>().getValue());
+  p.printSymbolName(cast<FlatSymbolRefAttr>(moduleNames[0]).getValue());
 
   p << " alternatives ";
   p.printSymbolName(
-      caseNames[0].cast<SymbolRefAttr>().getRootReference().getValue());
+      cast<SymbolRefAttr>(caseNames[0]).getRootReference().getValue());
   p << " { ";
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
     if (i != 0)
       p << ", ";
 
-    auto symbol = caseNames[i].cast<SymbolRefAttr>();
+    auto symbol = cast<SymbolRefAttr>(caseNames[i]);
     p.printSymbolName(symbol.getNestedReferences()[0].getValue());
     p << " -> ";
-    p.printSymbolName(moduleNames[i + 1].cast<FlatSymbolRefAttr>().getValue());
+    p.printSymbolName(cast<FlatSymbolRefAttr>(moduleNames[i + 1]).getValue());
   }
 
   p << " } ";
@@ -2542,8 +2544,7 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
-  auto portDirections = direction::unpackAttribute(getPortDirectionsAttr());
-  printModulePorts(p, /*block=*/nullptr, portDirections,
+  printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
                    getPortAnnotations().getValue(), {}, {});
 }
@@ -2650,7 +2651,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
 void InstanceChoiceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   StringRef base = getName().empty() ? "inst" : getName();
   for (auto [result, name] : llvm::zip(getResults(), getPortNames()))
-    setNameFn(result, (base + "_" + name.cast<StringAttr>().getValue()).str());
+    setNameFn(result, (base + "_" + cast<StringAttr>(name).getValue()).str());
 }
 
 LogicalResult InstanceChoiceOp::verify() {
@@ -2684,13 +2685,13 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
   for (auto moduleName : getModuleNamesAttr()) {
     if (failed(instance_like_impl::verifyReferencedModule(
-            *this, symbolTable, moduleName.cast<FlatSymbolRefAttr>())))
+            *this, symbolTable, cast<FlatSymbolRefAttr>(moduleName))))
       return failure();
   }
 
-  auto root = caseNames[0].cast<SymbolRefAttr>().getRootReference();
+  auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
-    auto ref = caseNames[i].cast<SymbolRefAttr>();
+    auto ref = cast<SymbolRefAttr>(caseNames[i]);
     auto refRoot = ref.getRootReference();
     if (ref.getRootReference() != root)
       return emitOpError() << "case " << ref
@@ -2712,9 +2713,9 @@ FlatSymbolRefAttr
 InstanceChoiceOp::getTargetOrDefaultAttr(OptionCaseOp option) {
   auto caseNames = getCaseNamesAttr();
   for (size_t i = 0, n = caseNames.size(); i < n; ++i) {
-    StringAttr caseSym = caseNames[i].cast<SymbolRefAttr>().getLeafReference();
+    StringAttr caseSym = cast<SymbolRefAttr>(caseNames[i]).getLeafReference();
     if (caseSym == option.getSymName())
-      return getModuleNamesAttr()[i + 1].cast<FlatSymbolRefAttr>();
+      return cast<FlatSymbolRefAttr>(getModuleNamesAttr()[i + 1]);
   }
   return getDefaultTargetAttr();
 }
@@ -2725,8 +2726,8 @@ InstanceChoiceOp::getTargetChoices() {
   auto moduleNames = getModuleNamesAttr();
   SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1> choices;
   for (size_t i = 0; i < caseNames.size(); ++i) {
-    choices.emplace_back(caseNames[i].cast<SymbolRefAttr>(),
-                         moduleNames[i + 1].cast<FlatSymbolRefAttr>());
+    choices.emplace_back(cast<SymbolRefAttr>(caseNames[i]),
+                         cast<FlatSymbolRefAttr>(moduleNames[i + 1]));
   }
 
   return choices;
@@ -5452,11 +5453,11 @@ LogicalResult HWStructCastOp::verify() {
   BundleType bundleType;
   hw::StructType structType;
   if ((bundleType = type_dyn_cast<BundleType>(getOperand().getType()))) {
-    structType = getType().dyn_cast<hw::StructType>();
+    structType = dyn_cast<hw::StructType>(getType());
     if (!structType)
       return emitError("result type must be a struct");
   } else if ((bundleType = type_dyn_cast<BundleType>(getType()))) {
-    structType = getOperand().getType().dyn_cast<hw::StructType>();
+    structType = dyn_cast<hw::StructType>(getOperand().getType());
     if (!structType)
       return emitError("operand type must be a struct");
   } else {
@@ -5762,6 +5763,9 @@ void GEQPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void GTPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void GenericIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void HeadPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

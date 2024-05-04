@@ -133,8 +133,8 @@ static std::string valueName(Operation *scopeOp, Value v) {
 /// port on a cell interface.
 static bool isPort(Value value) {
   Operation *definingOp = value.getDefiningOp();
-  return value.isa<BlockArgument>() ||
-         (definingOp && isa<CellInterface>(definingOp));
+  return isa<BlockArgument>(value) ||
+         isa_and_nonnull<CellInterface>(definingOp);
 }
 
 /// Gets the port for a given BlockArgument.
@@ -357,7 +357,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
       rewriter.eraseOp(group);
   }
   // Check the conditional after the Group, since it will be driven within.
-  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+  if (!isa<BlockArgument>(cond) && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
 }
 
@@ -374,7 +374,7 @@ static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
   rewriter.eraseOp(op);
 
   // Check if conditional is still needed, and remove if it isn't
-  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+  if (!isa<BlockArgument>(cond) && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
 }
 
@@ -628,7 +628,7 @@ static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
   ArrayAttr portNames = op.getPortNames();
 
   for (size_t i = 0, e = portNames.size(); i != e; ++i) {
-    auto portName = portNames[i].cast<StringAttr>();
+    auto portName = cast<StringAttr>(portNames[i]);
     if (portName.getValue() == name)
       return op.getBodyBlock()->getArgument(i);
   }
@@ -666,10 +666,9 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
 
   SmallVector<PortInfo> results;
   for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
-                               portTypes[i],
+    results.push_back(PortInfo{cast<StringAttr>(portNamesAttr[i]), portTypes[i],
                                direction::get(portDirectionsAttr[i]),
-                               portAttrs[i].cast<DictionaryAttr>()});
+                               cast<DictionaryAttr>(portAttrs[i])});
   }
   return results;
 }
@@ -771,7 +770,7 @@ void ComponentOp::getAsmBlockArgumentNames(
   auto ports = getPortNames();
   auto *block = &getRegion()->front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+    setNameFn(block->getArgument(i), cast<StringAttr>(ports[i]).getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -785,10 +784,9 @@ SmallVector<PortInfo> CombComponentOp::getPortInfo() {
 
   SmallVector<PortInfo> results;
   for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
-                               portTypes[i],
+    results.push_back(PortInfo{cast<StringAttr>(portNamesAttr[i]), portTypes[i],
                                direction::get(portDirectionsAttr[i]),
-                               portAttrs[i].cast<DictionaryAttr>()});
+                               cast<DictionaryAttr>(portAttrs[i])});
   }
   return results;
 }
@@ -884,7 +882,7 @@ void CombComponentOp::getAsmBlockArgumentNames(
   auto ports = getPortNames();
   auto *block = &getRegion()->front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+    setNameFn(block->getArgument(i), cast<StringAttr>(ports[i]).getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1430,12 +1428,12 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 static LogicalResult verifyPortDirection(Operation *op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
-  bool isComponentPort = value.isa<BlockArgument>(),
-       isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
+  bool isComponentPort = isa<BlockArgument>(value),
+       isCellInterfacePort = isa_and_nonnull<CellInterface>(definingOp);
   assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
   PortInfo port = isComponentPort
-                      ? getPortInfo(value.cast<BlockArgument>())
+                      ? getPortInfo(cast<BlockArgument>(value))
                       : cast<CellInterface>(definingOp).portInfo(value);
 
   bool isSource = !isDestination;
@@ -1624,7 +1622,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 SmallVector<StringRef> InstanceOp::portNames() {
   SmallVector<StringRef> portNames;
   for (Attribute name : getReferencedComponent().getPortNames())
-    portNames.push_back(name.cast<StringAttr>().getValue());
+    portNames.push_back(cast<StringAttr>(name).getValue());
   return portNames;
 }
 
@@ -1695,8 +1693,8 @@ verifyPrimitiveOpType(PrimitiveOp instance,
            << " but got " << numParams;
 
   for (size_t i = 0; i != numExpected; ++i) {
-    auto param = parameters[i].cast<circt::hw::ParamDeclAttr>();
-    auto modParam = modParameters[i].cast<circt::hw::ParamDeclAttr>();
+    auto param = cast<circt::hw::ParamDeclAttr>(parameters[i]);
+    auto modParam = cast<circt::hw::ParamDeclAttr>(modParameters[i]);
 
     auto paramName = param.getName();
     if (paramName != modParam.getName())
@@ -1884,7 +1882,7 @@ static void printParameterList(OpAsmPrinter &p, Operation *op,
 
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<hw::ParamDeclAttr>();
+    auto paramAttr = cast<hw::ParamDeclAttr>(param);
     p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
     if (auto value = paramAttr.getValue()) {
       p << " = ";
@@ -2066,8 +2064,8 @@ LogicalResult MemoryOp::verify() {
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = cast<IntegerAttr>(opSizes[i]).getInt();
+    int64_t addrSize = cast<IntegerAttr>(opAddrSizes[i]).getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
       return emitOpError("address size (")
              << addrSize << ") for dimension " << i
@@ -2169,8 +2167,8 @@ LogicalResult SeqMemoryOp::verify() {
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = cast<IntegerAttr>(opSizes[i]).getInt();
+    int64_t addrSize = cast<IntegerAttr>(opAddrSizes[i]).getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
       return emitOpError("address size (")
              << addrSize << ") for dimension " << i
@@ -2794,7 +2792,7 @@ LogicalResult InvokeOp::verify() {
     // inputs are required to be destination ports.
     if (failed(verifyInvokeOpValue(*this, port, true)))
       return emitOpError() << "'@" << callee << "' has input '"
-                           << portName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(portName).getValue()
                            << "', which is a source port. The inputs are "
                               "required to be destination ports.";
     // The go port should not appear in the parameter list.
@@ -2804,12 +2802,12 @@ LogicalResult InvokeOp::verify() {
     // Check the direction of these source ports.
     if (failed(verifyInvokeOpValue(*this, input, false)))
       return emitOpError() << "'@" << callee << "' has output '"
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(inputName).getValue()
                            << "', which is a destination port. The inputs are "
                               "required to be source ports.";
     if (failed(verifyComplexLogic(*this, input)))
       return emitOpError() << "'@" << callee << "' has '"
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(inputName).getValue()
                            << "', which is not a port or constant. Complex "
                               "logic should be conducted in the guard.";
     if (input == doneValue)
@@ -2818,8 +2816,8 @@ LogicalResult InvokeOp::verify() {
     // Check if the connection uses the callee's port.
     if (port.getDefiningOp() != operation && input.getDefiningOp() != operation)
       return emitOpError() << "the connection "
-                           << portName.cast<StringAttr>().getValue() << " = "
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(portName).getValue() << " = "
+                           << cast<StringAttr>(inputName).getValue()
                            << " is not defined as an input port of '@" << callee
                            << "'.";
   }

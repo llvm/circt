@@ -57,16 +57,16 @@ StateOp MachineOp::getInitialStateOp() {
 
 StringAttr MachineOp::getArgName(size_t i) {
   if (auto args = getArgNames())
-    return (*args)[i].cast<StringAttr>();
-  else
-    return StringAttr::get(getContext(), "in" + std::to_string(i));
+    return cast<StringAttr>((*args)[i]);
+
+  return StringAttr::get(getContext(), "in" + std::to_string(i));
 }
 
 StringAttr MachineOp::getResName(size_t i) {
   if (auto resNameAttrs = getResNames())
-    return (*resNameAttrs)[i].cast<StringAttr>();
-  else
-    return StringAttr::get(getContext(), "out" + std::to_string(i));
+    return cast<StringAttr>((*resNameAttrs)[i]);
+
+  return StringAttr::get(getContext(), "out" + std::to_string(i));
 }
 
 /// Get the port information of the machine.
@@ -183,7 +183,7 @@ SmallVector<::circt::hw::PortInfo> MachineOp::getPortList() {
     bool isInOut = false;
     auto type = argTypes[i];
 
-    if (auto inout = type.dyn_cast<hw::InOutType>()) {
+    if (auto inout = dyn_cast<hw::InOutType>(type)) {
       isInOut = true;
       type = inout.getElementType();
     }
@@ -192,7 +192,7 @@ SmallVector<::circt::hw::PortInfo> MachineOp::getPortList() {
                              : hw::ModulePort::Direction::Input;
 
     ports.push_back(
-        {{argNames ? (*argNames)[i].cast<StringAttr>()
+        {{argNames ? cast<StringAttr>((*argNames)[i])
                    : StringAttr::get(getContext(), Twine("input") + Twine(i)),
           type, direction},
          i,
@@ -203,7 +203,7 @@ SmallVector<::circt::hw::PortInfo> MachineOp::getPortList() {
   auto resultNames = getResNames();
   auto resultTypes = getFunctionType().getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    ports.push_back({{resultNames ? (*resultNames)[i].cast<StringAttr>()
+    ports.push_back({{resultNames ? cast<StringAttr>((*resultNames)[i])
                                   : StringAttr::get(getContext(),
                                                     Twine("output") + Twine(i)),
                       resultTypes[i], hw::ModulePort::Direction::Output},
@@ -450,7 +450,7 @@ bool TransitionOp::isAlwaysTaken() {
 
   if (auto constantOp =
           guardReturn.getOperand().getDefiningOp<mlir::arith::ConstantOp>())
-    return constantOp.getValue().cast<BoolAttr>().getValue();
+    return cast<BoolAttr>(constantOp.getValue()).getValue();
 
   return false;
 }
@@ -463,7 +463,7 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
       if (auto constantOp = guardReturn.getOperand()
                                 .getDefiningOp<mlir::arith::ConstantOp>()) {
         // Simplify when the guard region returns a constant value.
-        if (constantOp.getValue().cast<BoolAttr>().getValue()) {
+        if (cast<BoolAttr>(constantOp.getValue()).getValue()) {
           // Replace the original return op with a new one without any operands
           // if the constant is TRUE.
           rewriter.setInsertionPoint(guardReturn);

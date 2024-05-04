@@ -232,7 +232,7 @@ void InferMemoriesPass::runOnOperation() {
       readOp = builder.create<comb::MuxOp>(readEnable, readOp, zero);
 
       if (writeMask) {
-        unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
+        unsigned maskWidth = cast<IntegerType>(writeMask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
           Value bit = builder.create<comb::ExtractOp>(writeMask, i, 1);
@@ -284,7 +284,7 @@ void InferMemoriesPass::runOnOperation() {
       }
 
       if (mask) {
-        unsigned maskWidth = mask.getType().cast<IntegerType>().getWidth();
+        unsigned maskWidth = cast<IntegerType>(mask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
           Value bit = builder.create<comb::ExtractOp>(mask, i, 1);

@@ -447,7 +447,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   llvm::DenseMap<VariableOp, sv::RegOp> variableNextStateWires;
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
-    auto initValueAttr = variableOp.getInitValueAttr().dyn_cast<IntegerAttr>();
+    auto initValueAttr = dyn_cast<IntegerAttr>(variableOp.getInitValueAttr());
     if (!initValueAttr)
       return variableOp.emitOpError() << "expected an integer attribute "
                                          "for the initial value.";

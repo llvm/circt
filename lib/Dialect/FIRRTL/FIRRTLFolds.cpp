@@ -228,9 +228,9 @@ static Attribute constFoldFIRRTLBinaryOp(
       type_cast<IntType>(op->getOperand(0).getType()).getWidthOrSentinel();
   auto rhsWidth =
       type_cast<IntType>(op->getOperand(1).getType()).getWidthOrSentinel();
-  if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
+  if (auto lhs = dyn_cast_or_null<IntegerAttr>(operands[0]))
     lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
-  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
+  if (auto rhs = dyn_cast_or_null<IntegerAttr>(operands[1]))
     rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
 
   // Compares extend the operands to the widest of the operand types, not to the
@@ -465,7 +465,7 @@ OpFoldResult DivPrimOp::fold(FoldAdaptor adaptor) {
   /// UInt division by one returns the numerator. SInt division can't
   /// be folded here because it increases the return type bitwidth by
   /// one and requires sign extension (a new op).
-  if (auto rhsCst = adaptor.getRhs().dyn_cast_or_null<IntegerAttr>())
+  if (auto rhsCst = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs()))
     if (rhsCst.getValue().isOne() && getLhs().getType() == getType())
       return getLhs();
 
@@ -603,8 +603,8 @@ OpFoldResult OrPrimOp::fold(FoldAdaptor adaptor) {
 void OrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::extendOr, patterns::moveConstOr, patterns::OrOfZero,
-                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad>(
-      context);
+                 patterns::OrOfAllOne, patterns::OrOfSelf, patterns::OrOfPad,
+                 patterns::OrOrr>(context);
 }
 
 OpFoldResult XorPrimOp::fold(FoldAdaptor adaptor) {
@@ -879,7 +879,6 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
                 .getResult();
           }
         }
-
         return {};
       });
 }
@@ -959,9 +958,9 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult SizeOfIntrinsicOp::fold(FoldAdaptor) {
   auto base = getInput().getType();
-  auto w = base.getBitWidthOrSentinel();
-  if (w >= 0)
-    return getIntAttr(getType(), APInt(32, w));
+  auto w = getBitWidth(base);
+  if (w)
+    return getIntAttr(getType(), APInt(32, *w));
   return {};
 }
 
@@ -1079,7 +1078,9 @@ OpFoldResult NotPrimOp::fold(FoldAdaptor adaptor) {
 
 void NotPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::NotNot>(context);
+  results.insert<patterns::NotNot, patterns::NotEq, patterns::NotNeq,
+                 patterns::NotLeq, patterns::NotLt, patterns::NotGeq,
+                 patterns::NotGt>(context);
 }
 
 OpFoldResult AndRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1106,7 +1107,8 @@ void AndRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results
       .insert<patterns::AndRasSInt, patterns::AndRasUInt, patterns::AndRPadU,
               patterns::AndRPadS, patterns::AndRCatOneL, patterns::AndRCatOneR,
-              patterns::AndRCatZeroL, patterns::AndRCatZeroR>(context);
+              patterns::AndRCatZeroL, patterns::AndRCatZeroR,
+              patterns::AndRCatAndR_left, patterns::AndRCatAndR_right>(context);
 }
 
 OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1131,7 +1133,8 @@ OpFoldResult OrRPrimOp::fold(FoldAdaptor adaptor) {
 void OrRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::OrRasSInt, patterns::OrRasUInt, patterns::OrRPadU,
-                 patterns::OrRCatZeroH, patterns::OrRCatZeroL>(context);
+                 patterns::OrRCatZeroH, patterns::OrRCatZeroL,
+                 patterns::OrRCatOrR_left, patterns::OrRCatOrR_right>(context);
 }
 
 OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
@@ -1155,7 +1158,9 @@ OpFoldResult XorRPrimOp::fold(FoldAdaptor adaptor) {
 void XorRPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::XorRasSInt, patterns::XorRasUInt, patterns::XorRPadU,
-                 patterns::XorRCatZeroH, patterns::XorRCatZeroL>(context);
+                 patterns::XorRCatZeroH, patterns::XorRCatZeroL,
+                 patterns::XorRCatXorR_left, patterns::XorRCatXorR_right>(
+      context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1196,7 +1201,7 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 namespace {
 // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-// consequtive in the input.
+// consecutive in the input.
 struct CatBitsBits : public mlir::RewritePattern {
   CatBitsBits(MLIRContext *context)
       : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
@@ -1223,7 +1228,8 @@ struct CatBitsBits : public mlir::RewritePattern {
 
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits, patterns::CatDoubleConst>(context);
+  results.insert<CatBitsBits, patterns::CatDoubleConst, patterns::CatCast>(
+      context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1476,10 +1482,22 @@ public:
 
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
-              patterns::MuxEQOperandsSwapped, patterns::MuxNEQ,
-              patterns::MuxNot, patterns::MuxSameTrue, patterns::MuxSameFalse,
-              patterns::NarrowMuxLHS, patterns::NarrowMuxRHS>(context);
+  results
+      .add<MuxPad, MuxSharedCond, patterns::MuxEQOperands,
+           patterns::MuxEQOperandsSwapped, patterns::MuxNEQ, patterns::MuxNot,
+           patterns::MuxSameTrue, patterns::MuxSameFalse,
+           patterns::NarrowMuxLHS, patterns::NarrowMuxRHS, patterns::MuxPadSel>(
+          context);
+}
+
+void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::Mux2PadSel>(context);
+}
+
+void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::Mux4PadSel>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
@@ -2114,14 +2132,14 @@ void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult SubindexOp::fold(FoldAdaptor adaptor) {
-  auto attr = adaptor.getInput().dyn_cast_or_null<ArrayAttr>();
+  auto attr = dyn_cast_or_null<ArrayAttr>(adaptor.getInput());
   if (!attr)
     return {};
   return attr[getIndex()];
 }
 
 OpFoldResult SubfieldOp::fold(FoldAdaptor adaptor) {
-  auto attr = adaptor.getInput().dyn_cast_or_null<ArrayAttr>();
+  auto attr = dyn_cast_or_null<ArrayAttr>(adaptor.getInput());
   if (!attr)
     return {};
   auto index = getFieldIndex();
@@ -3170,6 +3188,11 @@ void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add(canonicalizeImmediateVerifOp<AssumeOp>);
+}
+
+void UnclockedAssumeIntrinsicOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add(canonicalizeImmediateVerifOp<UnclockedAssumeIntrinsicOp>);
 }
 
 void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,

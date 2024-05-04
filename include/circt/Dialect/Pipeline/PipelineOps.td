@@ -25,7 +25,6 @@ include "circt/Dialect/Seq/SeqTypes.td"
 
 class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
-      Pure,
       RegionKindInterface,
       AttrSizedOperandSegments,
       DeclareOpInterfaceMethods<OpAsmOpInterface, [
@@ -297,7 +296,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     // Returns the register name for a given register index.
     StringAttr getRegisterName(unsigned regIdx) {
       if(auto names = getOperation()->getAttrOfType<ArrayAttr>("registerNames")) {
-        auto name = names[regIdx].cast<StringAttr>();
+        auto name = llvm::cast<StringAttr>(names[regIdx]);
         if(!name.strref().empty())
           return name;
       }
@@ -308,7 +307,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     // Returns the passthrough name for a given passthrough index.
     StringAttr getPassthroughName(unsigned passthroughIdx) {
       if(auto names = getOperation()->getAttrOfType<ArrayAttr>("passthroughNames")) {
-        auto name = names[passthroughIdx].cast<StringAttr>();
+        auto name = llvm::cast<StringAttr>(names[passthroughIdx]);
         if(!name.strref().empty())
           return name;
       }

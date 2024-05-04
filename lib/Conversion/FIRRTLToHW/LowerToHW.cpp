@@ -144,7 +144,7 @@ static Value castToFIRRTLType(Value val, Type type,
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
 
-  if (hw::StructType structTy = type.dyn_cast<hw::StructType>()) {
+  if (hw::StructType structTy = dyn_cast<hw::StructType>(type)) {
     // Strip off Flip type if needed.
     val =
         builder
@@ -215,11 +215,11 @@ struct CircuitLoweringState {
   std::atomic<bool> usedStopCond{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
-                       bool emitChiselAssertsAsSVA,
+                       firrtl::VerificationFlavor verificationFlavor,
                        InstanceGraph &instanceGraph, NLATable *nlaTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        emitChiselAssertsAsSVA(emitChiselAssertsAsSVA), nlaTable(nlaTable) {
+        verificationFlavor(verificationFlavor), nlaTable(nlaTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -369,7 +369,7 @@ private:
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
-  const bool emitChiselAssertsAsSVA;
+  const firrtl::VerificationFlavor verificationFlavor;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -519,9 +519,8 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            scalaClassAnnoClass, dutAnnoClass, metadataDirectoryAttrName,
+            dutAnnoClass, metadataDirectoryAttrName,
             elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
-            subCircuitsTargetDirectoryAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             blackBoxAnnoClass,
@@ -549,7 +548,8 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
-  void setEmitChiselAssertAsSVA() { emitChiselAssertsAsSVA = true; }
+
+  using LowerFIRRTLToHWBase<FIRRTLModuleLowering>::verificationFlavor;
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -578,14 +578,13 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 bool emitChiselAssertsAsSVA) {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
+    bool enableAnnotationWarning,
+    firrtl::VerificationFlavor verificationFlavor) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
-  if (emitChiselAssertsAsSVA)
-    pass->setEmitChiselAssertAsSVA();
+  pass->verificationFlavor = verificationFlavor;
   return pass;
 }
 
@@ -611,9 +610,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(
-      circuit, enableAnnotationWarning, emitChiselAssertsAsSVA,
-      getAnalysis<InstanceGraph>(), &getAnalysis<NLATable>());
+  CircuitLoweringState state(circuit, enableAnnotationWarning,
+                             verificationFlavor, getAnalysis<InstanceGraph>(),
+                             &getAnalysis<NLATable>());
 
   SmallVector<hw::HWModuleOp, 32> modulesToProcess;
 
@@ -1218,7 +1217,7 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   auto connectSrc = connectOp->getOperand(1);
 
   // Directly forward foreign types.
-  if (!connectSrc.getType().isa<FIRRTLType>()) {
+  if (!isa<FIRRTLType>(connectSrc.getType())) {
     connectOp->erase();
     return connectSrc;
   }
@@ -1294,7 +1293,6 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
 
   // Insert argument casts, and re-vector users in the old body to use them.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<hw::PortInfo> hwPorts = newModule.getPortList();
   assert(oldModule.getBody().getNumArguments() == firrtlPorts.size() &&
          "port count mismatch");
 
@@ -1365,7 +1363,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
-      if (auto sym = hwPorts[hwPortIndex].getSym()) {
+      if (auto sym = newModule.getPort(hwPortIndex).getSym()) {
         newArg.setInnerSymAttr(sym);
         newModule.setPortSymbolAttr(hwPortIndex, {});
       }
@@ -1417,6 +1415,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredNonClockValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
+  Value getLoweredFmtOperand(Value operand);
   LogicalResult setLowering(Value orig, Value result);
   LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
@@ -1472,6 +1471,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                      std::function<void(void)>());
   }
 
+  LogicalResult emitGuards(Location loc, ArrayRef<Attribute> guards,
+                           std::function<void(void)> emit);
   void addToIfDefBlock(StringRef cond, std::function<void(void)> thenCtor,
                        std::function<void(void)> elseCtor = {});
   void addToInitialBlock(std::function<void(void)> body);
@@ -1502,7 +1503,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
-  LogicalResult visitInvalidOp(Operation *op) { return failure(); }
+  LogicalResult visitInvalidOp(Operation *op) {
+    if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      return visitUnrealizedConversionCast(castOp);
+    return failure();
+  }
 
   // Declarations.
   LogicalResult visitDecl(WireOp op);
@@ -1522,7 +1527,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   LogicalResult visitExpr(HWStructCastOp op);
   LogicalResult visitExpr(BitCastOp op);
-  LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
+  LogicalResult
+  visitUnrealizedConversionCast(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -1599,12 +1605,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ModSOp, comb::ModUOp>(op);
   }
 
-  // Verif Operations
+  // Intrinsic Operations
   LogicalResult visitExpr(IsXIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsTestIntrinsicOp op);
   LogicalResult visitExpr(PlusArgsValueIntrinsicOp op);
-  LogicalResult visitExpr(FPGAProbeIntrinsicOp op);
+  LogicalResult visitStmt(FPGAProbeIntrinsicOp op);
   LogicalResult visitExpr(ClockInverterIntrinsicOp op);
+  LogicalResult visitExpr(ClockDividerIntrinsicOp op);
   LogicalResult visitExpr(SizeOfIntrinsicOp op);
   LogicalResult visitExpr(ClockGateIntrinsicOp op);
   LogicalResult visitExpr(LTLAndIntrinsicOp op);
@@ -1620,6 +1627,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
+  LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -1999,12 +2007,12 @@ Value FIRRTLLowering::getOrCreateZConstant(Type type) {
 /// does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
   // Block arguments are considered lowered.
-  if (value.isa<BlockArgument>())
+  if (isa<BlockArgument>(value))
     return value;
 
   // If we lowered this value, then return the lowered value, otherwise fail.
   if (auto lowering = valueMapping.lookup(value)) {
-    assert(!lowering.getType().isa<FIRRTLType>() &&
+    assert(!isa<FIRRTLType>(lowering.getType()) &&
            "Lowered value should be a non-FIRRTL value");
     return lowering;
   }
@@ -2021,7 +2029,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
-  if (result.getType().isa<hw::InOutType>())
+  if (isa<hw::InOutType>(result.getType()))
     return getReadValue(result);
 
   return result;
@@ -2181,7 +2189,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     }
   }
   // Aggregates values
-  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+  if (isa<hw::ArrayType, hw::StructType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2192,7 +2200,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
         /* allowTruncate */ false);
   }
 
-  if (result.getType().isa<seq::ClockType>()) {
+  if (isa<seq::ClockType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2259,7 +2267,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   }
 
   // Aggregates values
-  if (result.getType().isa<hw::ArrayType, hw::StructType>()) {
+  if (isa<hw::ArrayType, hw::StructType>(result.getType())) {
     // Types already match.
     if (destType == value.getType())
       return result;
@@ -2292,6 +2300,28 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
+}
+
+/// Return a lowered version of 'operand' suitable for use with substitution /
+/// format strings. Zero bit operands are rewritten as one bit zeros and signed
+/// integers are wrapped in $signed().
+Value FIRRTLLowering::getLoweredFmtOperand(Value operand) {
+  auto loweredValue = getLoweredValue(operand);
+  if (!loweredValue) {
+    // If this is a zero bit operand, just pass a one bit zero.
+    if (!isZeroBitFIRRTLType(operand.getType()))
+      return nullptr;
+    loweredValue = getOrCreateIntConstant(1, 0);
+  }
+
+  // If the operand was an SInt, we want to give the user the option to print
+  // it as signed decimal and have to wrap it in $signed().
+  if (auto intTy = firrtl::type_cast<IntType>(operand.getType()))
+    if (intTy.isSigned())
+      loweredValue = builder.create<sv::SystemFunctionOp>(
+          loweredValue.getType(), "signed", loweredValue);
+
+  return loweredValue;
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -2535,6 +2565,27 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                        builder.getInsertionPoint());
 }
 
+LogicalResult FIRRTLLowering::emitGuards(Location loc,
+                                         ArrayRef<Attribute> guards,
+                                         std::function<void(void)> emit) {
+  if (guards.empty()) {
+    emit();
+    return success();
+  }
+  auto guard = dyn_cast<StringAttr>(guards[0]);
+  if (!guard)
+    return mlir::emitError(loc,
+                           "elements in `guards` array must be `StringAttr`");
+
+  // Record the guard macro to emit a declaration for it.
+  circuitState.addMacroDecl(builder.getStringAttr(guard.getValue()));
+  LogicalResult result = LogicalResult::failure();
+  addToIfDefBlock(guard.getValue(), [&]() {
+    result = emitGuards(loc, guards.drop_front(), emit);
+  });
+  return result;
+}
+
 void FIRRTLLowering::addToIfDefBlock(StringRef cond,
                                      std::function<void(void)> thenCtor,
                                      std::function<void(void)> elseCtor) {
@@ -2643,7 +2694,7 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   Value cst;
-  if (op.getType().isa<ClockType>()) {
+  if (isa<ClockType>(op.getType())) {
     cst = getOrCreateClockConstant(op.getValue() ? seq::ClockConst::High
                                                  : seq::ClockConst::Low);
   } else {
@@ -2662,7 +2713,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -2685,7 +2736,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise, lower the op to array indexing.
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, valueIdx);
   else
     result = createArrayIndexing(input, valueIdx);
@@ -2705,7 +2756,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
   auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
                    .getElementName(op.getFieldIndex());
   Value result;
-  if (input.getType().isa<sv::InOutType>())
+  if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
   else
     result = builder.createOrFold<hw::StructExtractOp>(input, field);
@@ -3047,8 +3098,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
     auto addInput = [&](StringRef field, Value backedge) {
       for (auto a : getAllFieldAccesses(op.getResult(i), field)) {
-        if (a.getType()
-                .cast<FIRRTLBaseType>()
+        if (cast<FIRRTLBaseType>(a.getType())
                 .getPassiveType()
                 .getBitWidthOrSentinel() > 0)
           (void)setLowering(a, backedge);
@@ -3290,7 +3340,8 @@ LogicalResult FIRRTLLowering::visitExpr(AsClockPrimOp op) {
   return setLoweringTo<seq::ToClockOp>(op, getLoweredValue(op.getInput()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
+LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
+    mlir::UnrealizedConversionCastOp op) {
   // General lowering for non-unary casts.
   if (op.getNumOperands() != 1 || op.getNumResults() != 1)
     return failure();
@@ -3332,7 +3383,7 @@ LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
 LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // Conversions from hw struct types to FIRRTL types are lowered as the
   // input operand.
-  if (auto opStructType = op.getOperand().getType().dyn_cast<hw::StructType>())
+  if (auto opStructType = dyn_cast<hw::StructType>(op.getOperand().getType()))
     return setLowering(op, op.getOperand());
 
   // Otherwise must be a conversion from FIRRTL bundle type to hw struct
@@ -3597,12 +3648,20 @@ LogicalResult FIRRTLLowering::visitExpr(IsXIntrinsicOp op) {
   if (!input)
     return failure();
 
+  if (!isa<IntType>(input.getType())) {
+    auto srcType = op.getArg().getType();
+    auto bitwidth = firrtl::getBitWidth(type_cast<FIRRTLBaseType>(srcType));
+    assert(bitwidth && "Unknown width");
+    auto intType = builder.getIntegerType(*bitwidth);
+    input = builder.createOrFold<hw::BitcastOp>(intType, input);
+  }
+
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ceq, input,
       getOrCreateXConstant(input.getType().getIntOrFloatBitWidth()), true);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(FPGAProbeIntrinsicOp op) {
+LogicalResult FIRRTLLowering::visitStmt(FPGAProbeIntrinsicOp op) {
   auto operand = getLoweredValue(op.getInput());
   builder.create<hw::WireOp>(operand);
   return success();
@@ -3644,6 +3703,11 @@ LogicalResult FIRRTLLowering::visitExpr(ClockGateIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(ClockInverterIntrinsicOp op) {
   auto operand = getLoweredValue(op.getInput());
   return setLoweringTo<seq::ClockInverterOp>(op, operand);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ClockDividerIntrinsicOp op) {
+  auto operand = getLoweredValue(op.getInput());
+  return setLoweringTo<seq::ClockDividerOp>(op, operand, op.getPow2());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLAndIntrinsicOp op) {
@@ -3853,7 +3917,7 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
-  if (op.getType().isa<ClockType>())
+  if (isa<ClockType>(op.getType()))
     return setLoweringTo<seq::ClockMuxOp>(op, cond, ifTrue, ifFalse);
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue, ifFalse,
                                     true);
@@ -4099,7 +4163,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   builder.create<sv::AssignOp>(destVal, srcVal);
@@ -4127,7 +4191,7 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   if (updateIfBackedge(destVal, srcVal))
     return success();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   builder.create<sv::AssignOp>(destVal, srcVal);
@@ -4143,7 +4207,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal)
     return failure();
 
-  if (!destVal.getType().isa<hw::InOutType>())
+  if (!isa<hw::InOutType>(destVal.getType()))
     return op.emitError("destination isn't an inout type");
 
   // #ifndef SYNTHESIS
@@ -4243,13 +4307,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   SmallVector<Value, 4> operands;
   operands.reserve(op.getSubstitutions().size());
   for (auto operand : op.getSubstitutions()) {
-    operands.push_back(getLoweredValue(operand));
-    if (!operands.back()) {
-      // If this is a zero bit operand, just pass a one bit zero.
-      if (!isZeroBitFIRRTLType(operand.getType()))
-        return failure();
-      operands.back() = getOrCreateIntConstant(1, 0);
-    }
+    Value loweredValue = getLoweredFmtOperand(operand);
+    if (!loweredValue)
+      return failure();
+    operands.push_back(loweredValue);
   }
 
   // Emit an "#ifndef SYNTHESIS" guard into the always block.
@@ -4357,18 +4418,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
     guards = guardsAttr.getValue();
 
-  auto isAssert = opName == "assert";
-  auto isCover = opName == "cover";
-
-  // TODO : Need to figure out if there is a cleaner way to get the string which
-  // indicates the assert is UNR only. Or better - not rely on this at all -
-  // ideally there should have been some other attribute which indicated that
-  // this assert for UNR only.
-  auto isUnrOnlyAssert = llvm::any_of(guards, [](Attribute attr) {
-    StringAttr strAttr = dyn_cast<StringAttr>(attr);
-    return strAttr && strAttr.getValue() == "USE_UNR_ONLY_CONSTRAINTS";
-  });
-
+  auto isCover = isa<CoverOp>(op);
   auto clock = getLoweredNonClockValue(opClock);
   auto enable = getLoweredValue(opEnable);
   auto predicate = getLoweredValue(opPredicate);
@@ -4385,32 +4435,50 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   StringAttr message;
   SmallVector<Value> messageOps;
+  VerificationFlavor flavor = circuitState.verificationFlavor;
+
+  // For non-assertion, rollback to per-op configuration.
+  if (flavor == VerificationFlavor::IfElseFatal && !isa<AssertOp>(op))
+    flavor = VerificationFlavor::None;
+
+  if (flavor == VerificationFlavor::None) {
+    // TODO: This should *not* be part of the op, but rather a lowering
+    // option that the user of this pass can choose.
+
+    auto format = op->getAttrOfType<StringAttr>("format");
+    // if-else-fatal iff concurrent and the format is specified.
+    if (isConcurrent && format && format.getValue() == "ifElseFatal") {
+      if (!isa<AssertOp>(op))
+        return op->emitError()
+               << "ifElseFatal format cannot be used for non-assertions";
+      flavor = VerificationFlavor::IfElseFatal;
+    } else if (isConcurrent)
+      flavor = VerificationFlavor::SVA;
+    else
+      flavor = VerificationFlavor::Immediate;
+  }
+
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     message = opMessageAttr;
     for (auto operand : opOperands) {
-      auto loweredValue = getLoweredValue(operand);
-      if (!loweredValue) {
-        // If this is a zero bit operand, just pass a one bit zero.
-        if (!isZeroBitFIRRTLType(operand.getType()))
-          return failure();
-        loweredValue = getOrCreateIntConstant(1, 0);
-      }
-      // Wrap any message ops in $sampled() to guarantee that these will print
-      // with the same value as when the assertion triggers.  (See SystemVerilog
-      // 2017 spec section 16.9.3 for more information.)  The custom
-      // "ifElseFatal" variant is special cased because this isn't actually a
-      // concurrent assertion.
-      auto format = op->getAttrOfType<StringAttr>("format");
-      if (isConcurrent && (!format || format.getValue() != "ifElseFatal" ||
-                           circuitState.emitChiselAssertsAsSVA))
+      auto loweredValue = getLoweredFmtOperand(operand);
+      if (!loweredValue)
+        return failure();
+
+      // For SVA assert/assume statements, wrap any message ops in $sampled() to
+      // guarantee that these will print with the same value as when the
+      // assertion triggers.  (See SystemVerilog 2017 spec section 16.9.3 for
+      // more information.)
+      if (flavor == VerificationFlavor::SVA)
         loweredValue = builder.create<sv::SampledOp>(loweredValue);
       messageOps.push_back(loweredValue);
     }
   }
 
   auto emit = [&]() {
-    // Handle the purely procedural flavor of the operation.
-    if (!isConcurrent && !circuitState.emitChiselAssertsAsSVA) {
+    switch (flavor) {
+    case VerificationFlavor::Immediate: {
+      // Handle the purely procedural flavor of the operation.
       auto deferImmediate = circt::sv::DeferAssertAttr::get(
           builder.getContext(), circt::sv::DeferAssert::Immediate);
       addToAlwaysBlock(clock, [&]() {
@@ -4421,16 +4489,11 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       });
       return;
     }
-
-    auto boolType = IntegerType::get(builder.getContext(), 1);
-
-    // Handle the `ifElseFatal` format, which does not emit an SVA but
-    // rather a process that uses $error and $fatal to perform the checks.
-    // TODO: This should *not* be part of the op, but rather a lowering
-    // option that the user of this pass can choose.
-    auto format = op->template getAttrOfType<StringAttr>("format");
-    if (format && (format.getValue() == "ifElseFatal" &&
-                   !circuitState.emitChiselAssertsAsSVA)) {
+    case VerificationFlavor::IfElseFatal: {
+      assert(isa<AssertOp>(op) && "only assert is expected");
+      // Handle the `ifElseFatal` format, which does not emit an SVA but
+      // rather a process that uses $error and $fatal to perform the checks.
+      auto boolType = IntegerType::get(builder.getContext(), 1);
       predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
 
@@ -4456,90 +4519,48 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       });
       return;
     }
+    case VerificationFlavor::SVA: {
+      // Formulate the `enable -> predicate` as `!enable | predicate`.
+      // Except for covers, combine them: enable & predicate
+      if (!isCover) {
+        auto notEnable =
+            comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+        predicate =
+            builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
+      } else {
+        predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+      }
 
-    // Formulate the `enable -> predicate` as `!enable | predicate`.
-    // Except for covers, combine them: enable & predicate
-    if (!isCover) {
-      auto notEnable =
-          comb::createOrFoldNot(enable, builder, /*twoState=*/true);
-      predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
-    } else {
-      predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
+      // Handle the regular SVA case.
+      sv::EventControl event;
+      switch (opEventControl) {
+      case EventControl::AtPosEdge:
+        event = circt::sv::EventControl::AtPosEdge;
+        break;
+      case EventControl::AtEdge:
+        event = circt::sv::EventControl::AtEdge;
+        break;
+      case EventControl::AtNegEdge:
+        event = circt::sv::EventControl::AtNegEdge;
+        break;
+      }
+
+      buildConcurrentVerifOp(
+          builder, opName,
+          circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
+          predicate, prefixedLabel, message, messageOps);
+      return;
     }
-
-    // Handle the regular SVA case.
-    sv::EventControl event;
-    switch (opEventControl) {
-    case EventControl::AtPosEdge:
-      event = circt::sv::EventControl::AtPosEdge;
-      break;
-    case EventControl::AtEdge:
-      event = circt::sv::EventControl::AtEdge;
-      break;
-    case EventControl::AtNegEdge:
-      event = circt::sv::EventControl::AtNegEdge;
-      break;
-    }
-
-    buildConcurrentVerifOp(
-        builder, opName,
-        circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, prefixedLabel, message, messageOps);
-
-    // Assertions gain a companion `assume` behind a
-    // `USE_PROPERTY_AS_CONSTRAINT` guard.
-    if (isAssert) {
-      StringAttr assumeLabel;
-      if (label)
-        assumeLabel = StringAttr::get(builder.getContext(),
-                                      "assume__" + label.getValue());
-
-      circuitState.addMacroDecl(
-          builder.getStringAttr("USE_PROPERTY_AS_CONSTRAINT"));
-      addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
-        if (!isUnrOnlyAssert) {
-          builder.create<sv::AssumeConcurrentOp>(
-              circt::sv::EventControlAttr::get(builder.getContext(), event),
-              clock, predicate, assumeLabel);
-        } else {
-          builder.create<sv::AlwaysOp>(
-              ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
-                buildImmediateVerifOp(builder, "assume", predicate,
-                                      circt::sv::DeferAssertAttr::get(
-                                          builder.getContext(),
-                                          circt::sv::DeferAssert::Immediate),
-                                      assumeLabel);
-              });
-        }
-      });
+    case VerificationFlavor::None:
+      llvm_unreachable(
+          "flavor `None` must be converted into one of concreate flavors");
     }
   };
 
   // Wrap the verification statement up in the optional preprocessor
   // guards. This is a bit awkward since we want to translate an array of
   // guards  into a recursive call to `addToIfDefBlock`.
-  bool anyFailed = false;
-  std::function<void()> emitWrapped = [&]() {
-    if (guards.empty()) {
-      emit();
-      return;
-    }
-    auto guard = guards[0].dyn_cast<StringAttr>();
-    if (!guard) {
-      op->emitOpError("elements in `guards` array must be `StringAttr`");
-      anyFailed = true;
-      return;
-    }
-
-    // Record the guard macro to emit a declaration for it.
-    circuitState.addMacroDecl(builder.getStringAttr(guard.getValue()));
-    guards = guards.drop_front();
-    addToIfDefBlock(guard.getValue(), emitWrapped);
-  };
-  emitWrapped();
-  if (anyFailed)
-    return failure();
-  return success();
+  return emitGuards(op->getLoc(), guards, emit);
 }
 
 // Lower an assert to SystemVerilog.
@@ -4566,6 +4587,56 @@ LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
       op.getIsConcurrent(), op.getEventControl());
 }
 
+// Lower an UNR only assume to a specific style of SV assume.
+LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
+  // TODO : Need to figure out if there is a cleaner way to get the string which
+  // indicates the assert is UNR only. Or better - not rely on this at all -
+  // ideally there should have been some other attribute which indicated that
+  // this assert for UNR only.
+  auto guardsAttr = op->getAttrOfType<mlir::ArrayAttr>("guards");
+  ArrayRef<Attribute> guards =
+      guardsAttr ? guardsAttr.getValue() : ArrayRef<Attribute>();
+
+  auto label = op.getNameAttr();
+  StringAttr assumeLabel;
+  if (label)
+    assumeLabel =
+        StringAttr::get(builder.getContext(), "assume__" + label.getValue());
+  auto predicate = getLoweredValue(op.getPredicate());
+  auto enable = getLoweredValue(op.getEnable());
+  auto notEnable = comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+  predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
+
+  SmallVector<Value> messageOps;
+  for (auto operand : op.getSubstitutions()) {
+    auto loweredValue = getLoweredValue(operand);
+    if (!loweredValue) {
+      // If this is a zero bit operand, just pass a one bit zero.
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      loweredValue = getOrCreateIntConstant(1, 0);
+    }
+    messageOps.push_back(loweredValue);
+  }
+  return emitGuards(op.getLoc(), guards, [&]() {
+    builder.create<sv::AlwaysOp>(
+        ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
+          if (op.getMessageAttr().getValue().empty())
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel);
+          else
+            buildImmediateVerifOp(
+                builder, "assume", predicate,
+                circt::sv::DeferAssertAttr::get(
+                    builder.getContext(), circt::sv::DeferAssert::Immediate),
+                assumeLabel, op.getMessageAttr(), messageOps);
+        });
+  });
+}
+
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   // Don't emit anything for a zero or one operand attach.
   if (op.getAttached().size() < 2)
@@ -4582,7 +4653,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       continue;
     }
 
-    if (!inoutValues.back().getType().isa<hw::InOutType>())
+    if (!isa<hw::InOutType>(inoutValues.back().getType()))
       return op.emitError("operand isn't an inout type");
   }
 

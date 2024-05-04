@@ -71,7 +71,7 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
 }
 
 std::string FieldNameResolver::getEnumFieldName(hw::EnumFieldAttr attr) {
-  auto aliasType = attr.getType().getValue().dyn_cast<hw::TypeAliasType>();
+  auto aliasType = dyn_cast<hw::TypeAliasType>(attr.getType().getValue());
   if (!aliasType)
     return attr.getField().getValue().str();
 
@@ -137,7 +137,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   // Register names used by parameters.
   for (auto param : module.getParameters())
     nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
-        module, param.cast<ParamDeclAttr>().getName()));
+        module, cast<ParamDeclAttr>(param).getName()));
 
   auto *ctxt = module.getContext();
 
@@ -150,7 +150,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
     auto verilogName = port.attrs.get(verilogNameAttr);
     if (verilogName) {
       auto newName = StringAttr::get(
-          ctxt, nameResolver.getLegalName(verilogName.cast<StringAttr>()));
+          ctxt, nameResolver.getLegalName(cast<StringAttr>(verilogName)));
       newNames[idx] = newName;
       if (verilogName != newName)
         updated = true;
@@ -270,7 +270,7 @@ void GlobalNameResolver::gatherEnumPrefixes(mlir::ModuleOp topLevel) {
   auto *ctx = topLevel.getContext();
   for (auto typeScope : topLevel.getOps<hw::TypeScopeOp>()) {
     for (auto typeDecl : typeScope.getOps<hw::TypedeclOp>()) {
-      auto enumType = typeDecl.getType().dyn_cast<hw::EnumType>();
+      auto enumType = dyn_cast<hw::EnumType>(typeDecl.getType());
       if (!enumType)
         continue;
 
@@ -297,7 +297,7 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   NameCollisionResolver nameResolver(options);
   // Legalize the parameter names.
   for (auto param : module.getParameters()) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
+    auto paramAttr = cast<ParamDeclAttr>(param);
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);

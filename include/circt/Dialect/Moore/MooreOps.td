@@ -146,7 +146,60 @@ def VariableOp : MooreOp<"variable", [
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
   let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `:` type($result)
+  }];
+}
+
+def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
+    I32EnumAttrCase<"Supply0", 0, "supply0">,
+    I32EnumAttrCase<"Supply1", 1, "supply1">,
+    I32EnumAttrCase<"Tri", 2, "tri">,
+    I32EnumAttrCase<"TriAnd", 3, "triand">,
+    I32EnumAttrCase<"TriOr", 4, "trior">,
+    I32EnumAttrCase<"TriReg", 5, "trireg">,
+    I32EnumAttrCase<"Tri0", 6, "tri0">,
+    I32EnumAttrCase<"Tri1", 7, "tri1">,
+    I32EnumAttrCase<"UWire", 8, "uwire">,
+    I32EnumAttrCase<"Wire", 9, "wire">,
+    I32EnumAttrCase<"WAnd", 10, "wand">,
+    I32EnumAttrCase<"WOr", 11, "wor">,
+    I32EnumAttrCase<"Interconnect", 12, "interconnect">,
+    I32EnumAttrCase<"UserDefined", 13, "userdefined">,
+    I32EnumAttrCase<"Unknown", 14, "unknown">,
+  ]> {
+  let cppNamespace = "::circt::moore";
+}
+
+def NetOp : MooreOp<"net", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  OptionalTypesMatchWith<"assigned value and variable types match",
+    "result", "assignment", "$_self">,
+]> {
+  let summary = "A net declaration";
+  let description = [{
+    The `moore.net' operation is a net declaration. Net types defines different types
+    of net connection in SV. There are twelve built-in net types defined in the official
+    standard construct of the operation:
+    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`, `uwire`,
+    `wire`, `wand`, `wor`.
+    Optional assignment argument allows net operation to be initialized with specific
+    values as soon as it is created. Only one net declaration assignment can be made for
+    a particular net. See IEEE 1800-2017 § 10.3.1 "The net declaration assignment" for
+    the differences between net declaration assignments and continuous assign statements.
+    It has some features that are not supported: declaring an interconnect net and using
+    user-defined types in the net operation.
+    
+    See IEEE 1800-2017 § 6.7 "Net declarations".
+  }];
+  let arguments = (ins
+    StrAttr:$name,
+    NetKindAttr:$kind,
+    Optional<UnpackedType>:$assignment
+  );
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    ``custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
 }
@@ -301,7 +354,7 @@ def NotOp : MooreOp<"not", [Pure, SameOperandsAndResultType]> {
 class ReduceOpBase<string mnemonic, string operatorName> : MooreOp<mnemonic, [
   Pure,
   TypesMatchWith<"result is single bit of input", "input", "result", [{
-    $_self.cast<UnpackedType>()
+    llvm::cast<UnpackedType>($_self)
       .getSimpleBitVector()
       .toSingleBit()
       .getType($_self.getContext())
@@ -332,7 +385,7 @@ def BoolCastOp : MooreOp<"bool_cast", [
   TypesMatchWith<"result is single bit matching input domain",
     "input", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let summary = "Cast a value to a single bit boolean";
@@ -518,7 +571,7 @@ class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{
@@ -575,7 +628,7 @@ class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{
@@ -608,7 +661,7 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   TypesMatchWith<"result is single bit matching input domain",
     "lhs", "result", [{
     IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
+      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
   }]>
 ]> {
   let description = [{
@@ -655,5 +708,66 @@ def ConcatOp : MooreOp<"concat", [
     $values attr-dict `:` functional-type($values, $result)
   }];
 }
+
+def ReplicateOp : MooreOp<"replicate", [
+  Pure
+]> {
+  let summary = "Multiple concatenation of expressions";
+  let description = [{
+    This operation indicates a joining together of that many copies of the 
+    concatenation `{constant{w}}`. Which enclosed together within brace.
+    The 'constant' must a non-negative, non-x, and non-z constant expression.
+    The 'constant' may be a value of zero, but it only exists in parameterized
+    code, and it will be ignored(type is changed to the void).
+
+    Example:
+    ```
+      {0{w}}   // empty! ignore it.
+      {4{w}}   // the same as {w, w, w, w}
+    ```
+    See IEEE 1800-2017 §11.4.12 "Concatenation operators".
+  }];
+  let arguments = (ins SimpleBitVectorType:$value);
+  let results = (outs SimpleBitVectorType:$result);
+  let assemblyFormat = [{
+    $value attr-dict `:` functional-type($value, $result)
+  }];
+}
+
+def ExtractOp : MooreOp<"extract"> {
+  let summary = "Addressing operation";
+  let description = [{
+    This operation includes the vector bit/part-select, array, and memory 
+    addressing.If the address is invalid--out of bounds or has x or z bit--
+    then it will produce x for 4-state or 0 for 2-state.
+    Bit-select results are unsigned, regardless of the operands.
+    Part-select results are unsigned, regardless of the operands even if 
+    the part-select specifies the entire vector.
+    See IEEE 1800-2017 § 11.8.1 "Rules for expression types"
+
+    Example:
+    ```
+    logic v [7:0];
+    v[1];                      // the bit-select addressing
+    v[3:0];                    // the part-select addressing
+    v[3-:4];  v[0+:4];         // They are equivalent to v[3:0]
+    ```
+    See IEEE 1800-2017 § 11.5.1 "Vector bit-select and part-select addressing".
+
+    Example:
+    ```
+    // an array of 256-by-256 8-bit elements
+    logic [7:0] twod_array [0:255][0:255];
+    logic [7:0] mem_name [0:1023];      // a memory of 1024 8-bit words
+    ```
+    See IEEE 1800-2017 § 11.5.2 "Array and memory addressing".
+  }];
+  let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` 
+    type($input) `,` type($lowBit) `->` type($result)
+  }];
+} 
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

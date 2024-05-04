@@ -31,6 +31,50 @@ struct ModulePort {
   Direction dir;
 };
 
+static bool operator==(const ModulePort &a, const ModulePort &b) {
+  return a.dir == b.dir && a.name == b.name && a.type == b.type;
+}
+static llvm::hash_code hash_value(const ModulePort &port) {
+  return llvm::hash_combine(port.dir, port.name, port.type);
+}
+
+namespace detail {
+struct ModuleTypeStorage : public TypeStorage {
+  ModuleTypeStorage(ArrayRef<ModulePort> inPorts);
+
+  using KeyTy = ArrayRef<ModulePort>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return std::equal(key.begin(), key.end(), ports.begin(), ports.end());
+  }
+
+  /// Define a hash function for the key type.
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine_range(key.begin(), key.end());
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static ModuleTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                      const KeyTy &key) {
+    return new (allocator.allocate<ModuleTypeStorage>()) ModuleTypeStorage(key);
+  }
+
+  /// Construct an instance of the key from this storage class.
+  KeyTy getAsKey() const { return ports; }
+
+  ArrayRef<ModulePort> getPorts() const { return ports; }
+
+  /// The parametric data held by the storage class.
+  SmallVector<ModulePort> ports;
+  // Cache of common lookups
+  SmallVector<size_t> inputToAbs;
+  SmallVector<size_t> outputToAbs;
+  SmallVector<size_t> absToInput;
+  SmallVector<size_t> absToOutput;
+};
+} // namespace detail
+
 class HWSymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
@@ -96,11 +140,11 @@ bool hasHWInOutType(mlir::Type type);
 template <typename... BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.
-  if (type.isa<BaseTy...>())
+  if (isa<BaseTy...>(type))
     return true;
 
   // Then check if it is a type alias wrapping the requested type.
-  if (auto alias = type.dyn_cast<TypeAliasType>())
+  if (auto alias = dyn_cast<TypeAliasType>(type))
     return type_isa<BaseTy...>(alias.getInnerType());
 
   return false;
@@ -119,11 +163,11 @@ BaseTy type_cast(Type type) {
   assert(type_isa<BaseTy>(type) && "type must convert to requested type");
 
   // If the type is the requested type, return it.
-  if (type.isa<BaseTy>())
-    return type.cast<BaseTy>();
+  if (isa<BaseTy>(type))
+    return cast<BaseTy>(type);
 
   // Otherwise, it must be a type alias wrapping the requested type.
-  return type_cast<BaseTy>(type.cast<TypeAliasType>().getInnerType());
+  return type_cast<BaseTy>(cast<TypeAliasType>(type).getInnerType());
 }
 
 template <typename BaseTy>

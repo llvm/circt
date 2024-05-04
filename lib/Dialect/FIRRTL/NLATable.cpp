@@ -60,7 +60,7 @@ void NLATable::addNLA(hw::HierPathOp nla) {
   for (auto ent : nla.getNamepath()) {
     if (auto mod = dyn_cast<FlatSymbolRefAttr>(ent))
       nodeMap[mod.getAttr()].push_back(nla);
-    else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
+    else if (auto inr = dyn_cast<hw::InnerRefAttr>(ent))
       nodeMap[inr.getModule()].push_back(nla);
   }
 }
@@ -70,7 +70,7 @@ void NLATable::erase(hw::HierPathOp nla, SymbolTable *symbolTable) {
   for (auto ent : nla.getNamepath())
     if (auto mod = dyn_cast<FlatSymbolRefAttr>(ent))
       llvm::erase(nodeMap[mod.getAttr()], nla);
-    else if (auto inr = ent.dyn_cast<hw::InnerRefAttr>())
+    else if (auto inr = dyn_cast<hw::InnerRefAttr>(ent))
       llvm::erase(nodeMap[inr.getModule()], nla);
   if (symbolTable)
     symbolTable->erase(nla);

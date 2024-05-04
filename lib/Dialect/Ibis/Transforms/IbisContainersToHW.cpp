@@ -14,16 +14,13 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace ibis;
-
-static llvm::StringRef getScopeRefModuleName(Type type) {
-  return type.cast<ScopeRefType>().getScopeRef().getAttr().strref();
-}
 
 namespace {
 
@@ -38,30 +35,40 @@ struct ContainerPortInfo {
   // A mapping between the port name and the port op within the container.
   llvm::DenseMap<StringAttr, OutputPortOp> opOutputs;
 
-  ContainerPortInfo() = default;
-  ContainerPortInfo(ContainerOpInterface container) {
-    SmallVector<hw::PortInfo, 4> inputs, outputs;
+  // A mapping between port symbols and their corresponding port name.
+  llvm::DenseMap<StringAttr, StringAttr> portSymbolsToPortName;
 
-    // Copies all attributes from a port, except for the port symbol and type.
-    auto copyPortAttrs = [](auto port) {
+  ContainerPortInfo() = default;
+  ContainerPortInfo(ContainerOp container) {
+    SmallVector<hw::PortInfo, 4> inputs, outputs;
+    auto *ctx = container.getContext();
+
+    // Copies all attributes from a port, except for the port symbol, name, and
+    // type.
+    auto copyPortAttrs = [ctx](auto port) {
       llvm::DenseSet<StringAttr> elidedAttrs;
       elidedAttrs.insert(port.getInnerSymAttrName());
       elidedAttrs.insert(port.getTypeAttrName());
+      elidedAttrs.insert(port.getNameAttrName());
       llvm::SmallVector<NamedAttribute> attrs;
       for (NamedAttribute namedAttr : port->getAttrs()) {
         if (elidedAttrs.contains(namedAttr.getName()))
           continue;
         attrs.push_back(namedAttr);
       }
-      return DictionaryAttr::get(port.getContext(), attrs);
+      return DictionaryAttr::get(ctx, attrs);
     };
 
-    // Gather in and output port ops.
+    // Gather in and output port ops to define the hw.module interface. Here, we
+    // also perform uniqueing of the port names.
+    Namespace portNs;
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
-      opInputs[input.getInnerSym().getSymName()] = input;
-
+      auto uniquePortName =
+          StringAttr::get(ctx, portNs.newName(input.getNameAttr().getValue()));
+      opInputs[uniquePortName] = input;
       hw::PortInfo portInfo;
-      portInfo.name = input.getInnerSym().getSymName();
+      portInfo.name = uniquePortName;
+      portSymbolsToPortName[input.getInnerSym().getSymName()] = uniquePortName;
       portInfo.type = cast<PortOpInterface>(input.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Input;
       portInfo.attrs = copyPortAttrs(input);
@@ -69,10 +76,13 @@ struct ContainerPortInfo {
     }
 
     for (auto output : container.getBodyBlock()->getOps<OutputPortOp>()) {
-      opOutputs[output.getInnerSym().getSymName()] = output;
+      auto uniquePortName =
+          StringAttr::get(ctx, portNs.newName(output.getNameAttr().getValue()));
+      opOutputs[uniquePortName] = output;
 
       hw::PortInfo portInfo;
-      portInfo.name = output.getInnerSym().getSymName();
+      portInfo.name = uniquePortName;
+      portSymbolsToPortName[output.getInnerSym().getSymName()] = uniquePortName;
       portInfo.type =
           cast<PortOpInterface>(output.getOperation()).getPortType();
       portInfo.dir = hw::ModulePort::Direction::Output;
@@ -83,22 +93,39 @@ struct ContainerPortInfo {
   }
 };
 
-using ContainerPortInfoMap = llvm::DenseMap<StringAttr, ContainerPortInfo>;
+using ContainerPortInfoMap =
+    llvm::DenseMap<hw::InnerRefAttr, ContainerPortInfo>;
+using ContainerHWModSymbolMap = llvm::DenseMap<hw::InnerRefAttr, StringAttr>;
 
-template <typename ContainerOp>
+static StringAttr concatNames(hw::InnerRefAttr ref) {
+  return StringAttr::get(ref.getContext(), ref.getModule().getValue() + "_" +
+                                               ref.getName().getValue());
+}
+
 struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
   ContainerOpConversionPattern(MLIRContext *ctx,
-                               ContainerPortInfoMap &portOrder)
-      : OpConversionPattern<ContainerOp>(ctx), portOrder(portOrder) {}
+                               ContainerPortInfoMap &portOrder,
+                               ContainerHWModSymbolMap &modSymMap)
+      : OpConversionPattern<ContainerOp>(ctx), portOrder(portOrder),
+        modSymMap(modSymMap) {}
 
   LogicalResult
-  matchAndRewrite(ContainerOp op, typename ContainerOp::Adaptor adaptor,
+  matchAndRewrite(ContainerOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.setInsertionPoint(op);
+    auto design = op->getParentOfType<DesignOp>();
+    rewriter.setInsertionPoint(design);
 
-    const ContainerPortInfo &cpi = portOrder.at(op.getSymNameAttr());
-    auto hwMod = rewriter.create<hw::HWModuleOp>(
-        op.getLoc(), op.getSymNameAttr(), *cpi.hwPorts);
+    // If the container is a top level container, ignore the design name.
+    StringAttr hwmodName;
+    if (op.getIsTopLevel())
+      hwmodName = op.getInnerNameAttr();
+    else
+      hwmodName = concatNames(op.getInnerRef());
+
+    const ContainerPortInfo &cpi = portOrder.at(op.getInnerRef());
+    auto hwMod =
+        rewriter.create<hw::HWModuleOp>(op.getLoc(), hwmodName, *cpi.hwPorts);
+    modSymMap[op.getInnerRef()] = hwMod.getSymNameAttr();
 
     hw::OutputOp outputOp =
         cast<hw::OutputOp>(hwMod.getBodyBlock()->getTerminator());
@@ -149,6 +176,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
   }
 
   ContainerPortInfoMap &portOrder;
+  ContainerHWModSymbolMap &modSymMap;
 };
 
 struct ThisOpConversionPattern : public OpConversionPattern<ThisOp> {
@@ -168,14 +196,19 @@ struct ContainerInstanceOpConversionPattern
     : public OpConversionPattern<ContainerInstanceOp> {
 
   ContainerInstanceOpConversionPattern(MLIRContext *ctx,
-                                       ContainerPortInfoMap &portOrder)
-      : OpConversionPattern<ContainerInstanceOp>(ctx), portOrder(portOrder) {}
+                                       ContainerPortInfoMap &portOrder,
+                                       ContainerHWModSymbolMap &modSymMap)
+      : OpConversionPattern<ContainerInstanceOp>(ctx), portOrder(portOrder),
+        modSymMap(modSymMap) {}
 
   LogicalResult
   matchAndRewrite(ContainerInstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPoint(op);
     llvm::SmallVector<Value> operands;
+
+    const ContainerPortInfo &cpi =
+        portOrder.at(op.getResult().getType().getScopeRef());
 
     // Gather the get_port ops that target the instance
     llvm::DenseMap<StringAttr, PortReadOp> outputReadsToReplace;
@@ -192,7 +225,9 @@ struct ContainerInstanceOpConversionPattern
             llvm::TypeSwitch<Operation *, LogicalResult>(user)
                 .Case<PortReadOp>([&](auto read) {
                   auto [it, inserted] = outputReadsToReplace.insert(
-                      {getPort.getPortSymbolAttr().getAttr(), read});
+                      {cpi.portSymbolsToPortName.at(
+                           getPort.getPortSymbolAttr().getAttr()),
+                       read});
                   if (!inserted)
                     return rewriter.notifyMatchFailure(
                         read, "expected only one ibis.port.read op of the "
@@ -201,7 +236,9 @@ struct ContainerInstanceOpConversionPattern
                 })
                 .Case<PortWriteOp>([&](auto write) {
                   auto [it, inserted] = inputWritesToUse.insert(
-                      {getPort.getPortSymbolAttr().getAttr(), write});
+                      {cpi.portSymbolsToPortName.at(
+                           getPort.getPortSymbolAttr().getAttr()),
+                       write});
                   if (!inserted)
                     return rewriter.notifyMatchFailure(
                         write,
@@ -222,8 +259,6 @@ struct ContainerInstanceOpConversionPattern
     }
 
     // Grab the operands in the order of the hw.module ports.
-    const ContainerPortInfo &cpi = portOrder.at(rewriter.getStringAttr(
-        getScopeRefModuleName(op.getResult().getType())));
     size_t nInputPorts = std::distance(cpi.hwPorts->getInputs().begin(),
                                        cpi.hwPorts->getInputs().end());
     if (nInputPorts != inputWritesToUse.size()) {
@@ -260,7 +295,7 @@ struct ContainerInstanceOpConversionPattern
                     [](auto port) { return port.name; });
 
     // Create the hw.instance op.
-    StringRef moduleName = getScopeRefModuleName(op.getType());
+    StringRef moduleName = modSymMap[op.getTargetNameAttr()];
     auto hwInst = rewriter.create<hw::InstanceOp>(
         op.getLoc(), retTypes, op.getInnerSym().getSymName(), moduleName,
         operands, rewriter.getArrayAttr(argNames),
@@ -292,6 +327,7 @@ struct ContainerInstanceOpConversionPattern
   }
 
   ContainerPortInfoMap &portOrder;
+  ContainerHWModSymbolMap &modSymMap;
 }; // namespace
 
 struct ContainersToHWPass : public IbisContainersToHWBase<ContainersToHWPass> {
@@ -304,13 +340,14 @@ void ContainersToHWPass::runOnOperation() {
 
   // Generate module signatures.
   ContainerPortInfoMap portOrder;
-  for (auto container : getOperation().getOps<ContainerOpInterface>())
-    portOrder.try_emplace(container.getSymNameAttr(),
-                          ContainerPortInfo(container));
+  for (auto design : getOperation().getOps<DesignOp>())
+    for (auto container : design.getOps<ContainerOp>())
+      portOrder.try_emplace(container.getInnerRef(),
+                            ContainerPortInfo(container));
 
   ConversionTarget target(*ctx);
-  target.addIllegalOp<OuterContainerOp, InnerContainerOp, ContainerInstanceOp,
-                      ThisOp>();
+  ContainerHWModSymbolMap modSymMap;
+  target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Parts of the conversion patterns will update operations in place, which in
@@ -320,14 +357,20 @@ void ContainersToHWPass::runOnOperation() {
   target.addLegalDialect<IbisDialect>();
 
   RewritePatternSet patterns(ctx);
-  patterns.add<ContainerOpConversionPattern<OuterContainerOp>,
-               ContainerOpConversionPattern<InnerContainerOp>,
-               ContainerInstanceOpConversionPattern>(ctx, portOrder);
+  patterns
+      .add<ContainerOpConversionPattern, ContainerInstanceOpConversionPattern>(
+          ctx, portOrder, modSymMap);
   patterns.add<ThisOpConversionPattern>(ctx);
 
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
+
+  // Delete empty design ops.
+  for (auto design :
+       llvm::make_early_inc_range(getOperation().getOps<DesignOp>()))
+    if (design.getBody().front().empty())
+      design.erase();
 }
 
 std::unique_ptr<Pass> circt::ibis::createContainersToHWPass() {

@@ -1281,7 +1281,7 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
       // Check MemOp and InstanceOp port annotations, special case
       TypeSwitch<Operation *>(op).Case<MemOp, InstanceOp>([&](auto op) {
         for (auto portAnnoAttr : op.getPortAnnotations())
-          scanAnnos(AnnotationSet(portAnnoAttr.template cast<ArrayAttr>()));
+          scanAnnos(AnnotationSet(cast<ArrayAttr>(portAnnoAttr)));
       });
     });
 

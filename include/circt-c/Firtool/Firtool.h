@@ -60,6 +60,14 @@ typedef enum CirctFirtoolRandomKind {
   CIRCT_FIRTOOL_RANDOM_KIND_ALL,
 } CirctFirtoolRandomKind;
 
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum CirctFirtoolVerificationFlavor {
+  CIRCT_FIRTOOL_VERIFICATION_FLAVOR_NONE,
+  CIRCT_FIRTOOL_VERIFICATION_FLAVOR_IF_ELSE_FATAL,
+  CIRCT_FIRTOOL_VERIFICATION_FLAVOR_IMMEDIATE,
+  CIRCT_FIRTOOL_VERIFICATION_FLAVOR_SVA,
+} CirctFirtoolVerificationFlavor;
+
 MLIR_CAPI_EXPORTED CirctFirtoolFirtoolOptions
 circtFirtoolOptionsCreateDefault(void);
 MLIR_CAPI_EXPORTED void
@@ -75,6 +83,9 @@ MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAnnotationsClassless(
     CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
+    CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetAllowAddingPortsOnPublic(
     CirctFirtoolFirtoolOptions options, bool value);
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetPreserveAggregate(
@@ -166,8 +177,8 @@ circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
                                     bool value);
 
 MLIR_CAPI_EXPORTED void
-circtFirtoolOptionsSetEmitChiselAssertsAsSVA(CirctFirtoolFirtoolOptions options,
-                                             bool value);
+circtFirtoolOptionsSetVerificationFlavor(CirctFirtoolFirtoolOptions options,
+                                         CirctFirtoolVerificationFlavor value);
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
     CirctFirtoolFirtoolOptions options, bool value);

@@ -1,20 +1,20 @@
-; RUN: firtool %s | FileCheck %s
+; RUN: firtool %s --add-companion-assume | FileCheck %s
 
 FIRRTL version 4.0.0
 
 circuit ChiselVerif:
-  intmodule AssertAssume:
+  intmodule Assert:
     input clock: Clock
     input predicate: UInt<1>
     input enable: UInt<1>
-    intrinsic = circt_chisel_assert_assume
+    intrinsic = circt_chisel_assert
 
-  intmodule AssertAssumeFormat:
+  intmodule AssertFormat:
     input clock: Clock
     input predicate: UInt<1>
     input enable: UInt<1>
     input val: UInt<1>
-    intrinsic = circt_chisel_assert_assume
+    intrinsic = circt_chisel_assert
     parameter format = "message: %d"
     parameter label = "label for assert with format string"
     parameter guards = "MACRO_GUARD;ASDF"
@@ -51,12 +51,10 @@ circuit ChiselVerif:
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>
-
+    ; CHECK:  wire [[GEN:.+]] = ~enable | cond;
     ; CHECK: assert property
     ; CHECK-NOT: $error
-    ; CHECK: PROPERTY_AS_CONSTRAINT
-    ; CHECK: assume
-    inst assert of AssertAssume
+    inst assert of Assert
     connect assert.clock, clock
     connect assert.predicate, cond
     connect assert.enable, enable
@@ -67,9 +65,7 @@ circuit ChiselVerif:
     ; CHECK: assert property
     ; CHECK: "message: %d"
     ; CHECK: $sampled(cond)
-    ; CHECK: PROPERTY_AS_CONSTRAINT
-    ; CHECK: assume
-    inst assertFormat of AssertAssumeFormat
+    inst assertFormat of AssertFormat
     connect assertFormat.clock, clock
     connect assertFormat.predicate, cond
     connect assertFormat.enable, enable
@@ -84,6 +80,17 @@ circuit ChiselVerif:
     connect ief.predicate, cond
     connect ief.enable, enable
     connect ief.val, enable
+    ; CHECK: `ifdef USE_PROPERTY_AS_CONSTRAINT
+    ; CHECK-NEXT:  assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:  `ifdef MACRO_GUARD
+    ; CHECK-NEXT:    `ifdef ASDF
+    ; CHECK-NEXT:      assume__label_for_assert_with_format_string:
+    ; CHECK-NEXT:        assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:      assume__label_for_ifelsefatal_assert:
+    ; CHECK-SAME:        assume property (@(posedge clock) [[GEN]]);
+    ; CHECK-NEXT:    `endif
+    ; CHECK-NEXT:  `endif
+    ; CHECK-NEXT:`endif
 
     ; CHECK: label_for_assume
     ; CHECK: assume property

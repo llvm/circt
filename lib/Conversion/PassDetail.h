@@ -10,6 +10,7 @@
 #ifndef CONVERSION_PASSDETAIL_H
 #define CONVERSION_PASSDETAIL_H
 
+#include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -144,6 +145,10 @@ class SystemCDialect;
 namespace verif {
 class VerifDialect;
 } // namespace verif
+
+namespace ltl {
+class LTLDialect;
+} // namespace ltl
 
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES

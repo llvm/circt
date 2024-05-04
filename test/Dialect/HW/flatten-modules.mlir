@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-inline-modules | FileCheck %s
+// RUN: circt-opt %s --hw-flatten-modules | FileCheck %s
 
 
 // CHECK-LABEL: hw.module @SimpleA

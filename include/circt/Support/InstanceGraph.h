@@ -333,6 +333,8 @@ struct InstancePathCache {
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
+  ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op,
+                                          InstanceGraphNode *top);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(InstanceOpInterface oldOp, InstanceOpInterface newOp);

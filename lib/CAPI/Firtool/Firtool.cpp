@@ -6,8 +6,6 @@
 
 #include "circt-c/Firtool/Firtool.h"
 #include "circt/Firtool/Firtool.h"
-
-#include "circt/Firtool/Firtool.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Pass.h"
 #include "mlir/CAPI/Support.h"
@@ -51,6 +49,11 @@ void circtFirtoolOptionsSetDisableAnnotationsClassless(
 void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setLowerAnnotationsNoRefTypePorts(value);
+}
+
+void circtFirtoolOptionsSetAllowAddingPortsOnPublic(
+    CirctFirtoolFirtoolOptions options, bool value) {
+  unwrap(options)->setAllowAddingPortsOnPublic(value);
 }
 
 void circtFirtoolOptionsSetPreserveAggregate(
@@ -253,9 +256,9 @@ void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setAddMuxPragmas(value);
 }
 
-void circtFirtoolOptionsSetEmitChiselAssertsAsSVA(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEmitChiselAssertsAsSVA(value);
+void circtFirtoolOptionsSetVerificationFlavor(
+    CirctFirtoolFirtoolOptions options, firrtl::VerificationFlavor value) {
+  unwrap(options)->setVerificationFlavor(value);
 }
 
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
@@ -376,4 +379,14 @@ MlirLogicalResult
 circtFirtoolPopulateFinalizeIR(MlirPassManager pm,
                                CirctFirtoolFirtoolOptions options) {
   return wrap(firtool::populateFinalizeIR(*unwrap(pm), *unwrap(options)));
+}
+
+MlirLogicalResult
+circtFirtoolpopulateHWToBTOR2(MlirPassManager pm,
+                              CirctFirtoolFirtoolOptions options,
+                              MlirStringCallback callback, void *userData) {
+  auto stream =
+      std::make_unique<mlir::detail::CallbackOstream>(callback, userData);
+  return wrap(firtool::populateHWToBTOR2(*unwrap(pm), *unwrap(options),
+                                         *std::move(stream)));
 }

@@ -252,25 +252,21 @@ them.
 To get set up for this:
 
 1) Follow the "[How to Contribute](https://mlir.llvm.org/getting_started/Contributing/)"
-instructions, and install the right tools, e.g. 'arcanist' and `clang-format`.
-2) Get an LLVM Phabricator account
-3) [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access),
-the barrier is low.
+instructions, and install the right tools, e.g. `clang-format`.
+2) Optional: [Ask for LLVM commit access](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access),
+the barrier is low. Alternatively, you can ask one of the reviewers on the
+GitHub pull-request to merge for you.
 
 ### Submitting a patch
 
-The patch flow goes like this:
+Patches are submitted to LLVM/MLIR via GitHub pull-requests, the basic flow is as follows:
 
-1) Check out the LLVM mono repo (as described above).
-2) Make changes to your codebase.
+1) Check out the LLVM mono repo (as described above) or your fork of the same.
+2) Make changes to your codebase in a dedicated branch for your patch.
 3) Stage your changes with `git add`.
-4) Run clang-format to tidy up the details of the patch with `git clang-format origin/main`
-5) Create a [patch in Phabricator](https://llvm.org/docs/Phabricator.html) with `arc diff`.
-6) Iterate on review, changing your code and sending another patch with `arc diff`.
+4) Run clang-format to tidy up the patch with `git clang-format origin/main`.
+5) Run tests with `ninja check-mlir`  (or whatever other target makes sense).
+6) Publish the branch on your fork of the repository and create a GitHub pull-request.
 
-When your review converges and your patch is approved, do the following:
-
-1) commit your changes with `git commit`
-2) rebase your changes with `git pull --rebase`
-3) retest your patch with `ninja check-mlir`  (or whatever other target makes sense)
-4) push your changes with `git push`
+When your review converges and your patch is approved, it can be merged directly on GitHub.
+If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.

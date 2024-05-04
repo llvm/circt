@@ -68,8 +68,8 @@ void EmissionPrinter::emitAttr(Attribute attr) {
 }
 
 InlineEmitter EmissionPrinter::getInlinable(Value value) {
-  auto *op = value.isa<BlockArgument>() ? value.getParentRegion()->getParentOp()
-                                        : value.getDefiningOp();
+  auto *op = isa<BlockArgument>(value) ? value.getParentRegion()->getParentOp()
+                                       : value.getDefiningOp();
   Location requestLoc = currentLoc;
   currentLoc = op->getLoc();
   auto patterns = opPatterns.getSpecificNativePatterns().lookup(op->getName());

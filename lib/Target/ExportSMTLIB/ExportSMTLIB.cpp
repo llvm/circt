@@ -158,7 +158,7 @@ struct ExpressionVisitor
     info.stream << "(let ((" << name << " ";
 
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + 7 + name.size(), info.openParens);
+                        info.indentLevel + 8 + name.size(), 0);
     if (failed(Base::dispatchSMTOpVisitor(op, newInfo)))
       return failure();
 
@@ -292,9 +292,8 @@ struct ExpressionVisitor
   template <typename OpTy>
   LogicalResult quantifierHelper(OpTy op, StringRef operatorString,
                                  VisitorInfo &info) {
+    auto weight = op.getWeight();
     // TODO: add support
-    if (op.getWeight() != 0)
-      return op.emitError() << "non-zero weights not supported yet";
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
     if (!op.getPatterns().empty())
@@ -323,6 +322,9 @@ struct ExpressionVisitor
 
     info.stream << ")\n";
 
+    if (weight != 0)
+      info.stream << "( ! ";
+
     // Print the quantifier body. This assumes that quantifiers are not deeply
     // nested (at least not enough that recursive calls could become a problem).
     SmallVector<Value> worklist;
@@ -330,13 +332,20 @@ struct ExpressionVisitor
     worklist.push_back(yieldedValue);
     unsigned indentExt = operatorString.size() + 2;
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + indentExt, info.openParens);
+                        info.indentLevel + indentExt, 0);
     newInfo.stream.indent(newInfo.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
+
     info.stream << info.valueMap.lookup(yieldedValue);
-    for (unsigned k = 0; k < newInfo.openParens + 1; ++k)
+
+    for (unsigned j = 0; j < newInfo.openParens; ++j)
       info.stream << ")";
+
+    if (weight != 0)
+      info.stream << " :weight " << weight << ")";
+
+    info.stream << ")";
 
     return success();
   }

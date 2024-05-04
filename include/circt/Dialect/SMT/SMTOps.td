@@ -247,7 +247,7 @@ def EqOp : SMTOp<"eq", [Pure, SameTypeOperands]> {
     `and (and (= a b) (= b c)) (= c d)`.
   }];
 
-  let arguments = (ins Variadic<AnySMTType>:$inputs);
+  let arguments = (ins Variadic<AnyNonFuncSMTType>:$inputs);
   let results = (outs BoolType:$result);
 
   let builders = [
@@ -288,7 +288,7 @@ def DistinctOp : SMTOp<"distinct", [Pure, SameTypeOperands]> {
     ```
   }];
 
-  let arguments = (ins Variadic<AnySMTType>:$inputs);
+  let arguments = (ins Variadic<AnyNonFuncSMTType>:$inputs);
   let results = (outs BoolType:$result);
 
   let builders = [

@@ -91,7 +91,7 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
 
   auto portRef = ref.cast<PortAnnoTarget>();
   auto portAnnoRaw = ref.getOp()->getAttr(getPortAnnotationAttrName());
-  ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
+  ArrayAttr portAnno = dyn_cast_or_null<ArrayAttr>(portAnnoRaw);
   if (!portAnno || portAnno.size() != getNumPorts(ref.getOp())) {
     SmallVector<Attribute> emptyPortAttr(
         getNumPorts(ref.getOp()),
@@ -475,7 +475,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {verifBlackBoxAnnoClass,
      {stdResolve, applyWithoutTarget<false, FExtModuleOp>}},
     {elaborationArtefactsDirectoryAnnoClass, NoTargetAnnotation},
-    {subCircuitsTargetDirectoryAnnoClass, NoTargetAnnotation},
     {retimeModulesFileAnnoClass, NoTargetAnnotation},
     {retimeModuleAnnoClass,
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
@@ -486,7 +485,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {testHarnessHierAnnoClass, NoTargetAnnotation},
     {testHarnessPathAnnoClass, NoTargetAnnotation},
     {prefixInterfacesAnnoClass, NoTargetAnnotation},
-    {subCircuitDirAnnotation, NoTargetAnnotation},
     {extractAssertAnnoClass, NoTargetAnnotation},
     {extractAssumeAnnoClass, NoTargetAnnotation},
     {extractCoverageAnnoClass, NoTargetAnnotation},
@@ -547,6 +545,7 @@ struct LowerAnnotationsPass
   LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
+  using LowerFIRRTLAnnotationsBase::allowAddingPortsOnPublic;
   using LowerFIRRTLAnnotationsBase::ignoreAnnotationClassless;
   using LowerFIRRTLAnnotationsBase::ignoreAnnotationUnknown;
   using LowerFIRRTLAnnotationsBase::noRefTypePorts;
@@ -876,11 +875,21 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
 
     // Record module modifications related to adding ports to modules.
     auto addPorts = [&](igraph::InstancePath insts, Value val, Type tpe,
-                        Direction dir) {
+                        Direction dir) -> LogicalResult {
       StringRef name, instName;
       for (auto instNode : llvm::reverse(insts)) {
         auto inst = cast<InstanceOp>(*instNode);
         auto mod = inst.getReferencedModule<FModuleOp>(instanceGraph);
+        if (mod.isPublic()) {
+          if (!allowAddingPortsOnPublic) {
+            auto diag = emitError(
+                mod.getLoc(), "cannot wire port through this public module");
+            diag.attachNote(source.getLoc()) << "source here";
+            diag.attachNote(sink.getLoc()) << "sink here";
+            return diag;
+          }
+          ++numPublicPortsWired;
+        }
         if (name.empty()) {
           if (problem.newNameHint.empty())
             name = state.getNamespace(mod).newName(
@@ -899,11 +908,13 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
             {index, {StringAttr::get(context, name), tpe, dir}});
         instName = inst.getInstanceName();
       }
+      return success();
     };
 
     // Record the addition of ports.
-    addPorts(sources, source, sourceType, Direction::Out);
-    addPorts(sinks, sink, sinkType, Direction::In);
+    if (failed(addPorts(sources, source, sourceType, Direction::Out)) ||
+        failed(addPorts(sinks, sink, sinkType, Direction::In)))
+      return failure();
   }
 
   // Iterate over modules from leaves to roots, applying ModuleModifications to
@@ -1055,13 +1066,13 @@ void LowerAnnotationsPass::runOnOperation() {
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerFIRRTLAnnotationsPass(bool ignoreAnnotationUnknown,
-                                                bool ignoreAnnotationClassless,
-                                                bool noRefTypePorts) {
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
+    bool ignoreAnnotationUnknown, bool ignoreAnnotationClassless,
+    bool noRefTypePorts, bool allowAddingPortsOnPublic) {
   auto pass = std::make_unique<LowerAnnotationsPass>();
   pass->ignoreAnnotationUnknown = ignoreAnnotationUnknown;
   pass->ignoreAnnotationClassless = ignoreAnnotationClassless;
   pass->noRefTypePorts = noRefTypePorts;
+  pass->allowAddingPortsOnPublic = allowAddingPortsOnPublic;
   return pass;
 }

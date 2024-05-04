@@ -186,3 +186,29 @@ firrtl.circuit "NoWidthEnum" {
   firrtl.module @NoWidthEnum(out %o: !firrtl.enum<Some: uint>) {
   }
 }
+
+// -----
+
+firrtl.circuit "MuxSelBackProp" {
+  firrtl.module @MuxSelBackProp() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // expected-error @below {{uninferred width: wire is unconstrained}}
+    %0 = firrtl.wire : !firrtl.uint
+    %1 = firrtl.mux(%0, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "MuxSelTooWide" {
+  firrtl.module @MuxSelTooWide() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+    // expected-error @below {{uninferred width: wire cannot satisfy all width requirements}}
+    %0 = firrtl.wire : !firrtl.uint
+    // expected-note @below {{width is constrained to be at most 1 here:}}
+    %1 = firrtl.mux(%0, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-note @below {{width is constrained to be at least 2 here:}}
+    firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
+  }
+}

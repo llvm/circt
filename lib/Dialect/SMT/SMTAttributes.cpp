@@ -21,6 +21,42 @@ using namespace circt::smt;
 // BitVectorAttr
 //===----------------------------------------------------------------------===//
 
+namespace circt {
+namespace smt {
+namespace detail {
+struct BitVectorAttrStorage : public mlir::AttributeStorage {
+  using KeyTy = APInt;
+  BitVectorAttrStorage(APInt value) : value(std::move(value)) {}
+
+  KeyTy getAsKey() const { return value; }
+
+  // NOTE: the implementation of this operator is the reason we need to define
+  // the storage manually. The auto-generated version would just do the direct
+  // equality check of the APInt, but that asserts the bitwidth of both to be
+  // the same, leading to a crash. This implementation, therefore, checks for
+  // matching bit-width beforehand.
+  bool operator==(const KeyTy &key) const {
+    return (value.getBitWidth() == key.getBitWidth() && value == key);
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_value(key);
+  }
+
+  static BitVectorAttrStorage *
+  construct(mlir::AttributeStorageAllocator &allocator, KeyTy &&key) {
+    return new (allocator.allocate<BitVectorAttrStorage>())
+        BitVectorAttrStorage(std::move(key));
+  }
+
+  APInt value;
+};
+} // namespace detail
+} // namespace smt
+} // namespace circt
+
+APInt BitVectorAttr::getValue() const { return getImpl()->value; }
+
 LogicalResult BitVectorAttr::verify(
     function_ref<InFlightDiagnostic()> emitError,
     APInt value) { // NOLINT(performance-unnecessary-value-param)
@@ -86,16 +122,16 @@ BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
   return Base::getChecked(emitError, context, *maybeValue);
 }
 
-BitVectorAttr BitVectorAttr::get(MLIRContext *context, unsigned value,
+BitVectorAttr BitVectorAttr::get(MLIRContext *context, uint64_t value,
                                  unsigned width) {
   return Base::get(context, APInt(width, value));
 }
 
 BitVectorAttr
 BitVectorAttr::getChecked(function_ref<InFlightDiagnostic()> emitError,
-                          MLIRContext *context, unsigned value,
+                          MLIRContext *context, uint64_t value,
                           unsigned width) {
-  if ((~((1U << width) - 1U) & value) != 0U) {
+  if (width < 64 && value >= (UINT64_C(1) << width)) {
     emitError() << "value does not fit in a bit-vector of desired width";
     return {};
   }
@@ -117,14 +153,20 @@ Attribute BitVectorAttr::parse(AsmParser &odsParser, Type odsType) {
   }
 
   unsigned width = llvm::cast<BitVectorType>(odsType).getWidth();
-  if (width > val.getBitWidth())
-    val = val.sext(width);
 
-  if (width < val.getBitWidth()) {
-    if ((val.isNegative() && val.getSignificantBits() > width) ||
-        val.getActiveBits() > width) {
+  if (width > val.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the
+    // top bits if it is a positive number.
+    val = val.sext(width);
+  } else if (width < val.getBitWidth()) {
+    // The parser can return an unnecessarily wide result.
+    // This isn't a problem, but truncating off bits is bad.
+    unsigned neededBits =
+        val.isNegative() ? val.getSignificantBits() : val.getActiveBits();
+    if (width < neededBits) {
       odsParser.emitError(loc)
-          << "integer value out of range for given bit-vector type";
+          << "integer value out of range for given bit-vector type " << odsType;
       return {};
     }
     val = val.trunc(width);

@@ -110,6 +110,59 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle case statements.
+  LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
+    auto caseExpr = context.convertExpression(caseStmt.expr);
+    auto items = caseStmt.items;
+    // Used to generate the condition of the default case statement.
+    SmallVector<Value> defaultConds;
+    // Traverse the case items.
+    for (auto item : items) {
+      // One statement will be matched with multi-conditions.
+      // Like case(cond) 0, 1 : y = x; endcase.
+      SmallVector<Value> allConds;
+      for (const auto *expr : item.expressions) {
+        auto itemExpr = context.convertExpression(*expr);
+        auto newEqOp = builder.create<moore::EqOp>(loc, caseExpr, itemExpr);
+        allConds.push_back(newEqOp);
+      }
+      // Bound all conditions of an item into one.
+      auto cond = allConds.back();
+      allConds.pop_back();
+      while (!allConds.empty()) {
+        cond = builder.create<moore::OrOp>(loc, allConds.back(), cond);
+        allConds.pop_back();
+      }
+      // Gather all items' conditions.
+      defaultConds.push_back(cond);
+      cond =
+          builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+      auto ifOp = builder.create<mlir::scf::IfOp>(loc, cond);
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPoint(ifOp.thenYield());
+      if (failed(context.convertStatement(*item.stmt)))
+        return failure();
+    }
+    // Handle the 'default case' statement if it exists.
+    if (caseStmt.defaultCase) {
+      auto cond = defaultConds.back();
+      defaultConds.pop_back();
+      while (!defaultConds.empty()) {
+        cond = builder.create<moore::OrOp>(loc, defaultConds.back(), cond);
+        defaultConds.pop_back();
+      }
+      cond = builder.create<moore::NotOp>(loc, cond);
+      cond =
+          builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
+      auto ifOp = builder.create<mlir::scf::IfOp>(loc, cond);
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPoint(ifOp.thenYield());
+      if (failed(context.convertStatement(*caseStmt.defaultCase)))
+        return failure();
+    }
+    return success();
+  }
+
   // Handle `for` loops.
   LogicalResult visit(const slang::ast::ForLoopStatement &stmt) {
     if (!stmt.loopVars.empty())

@@ -59,7 +59,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
@@ -188,7 +188,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let arguments = (ins FlatSymbolRefArrayAttr:$moduleNames,
                        SymbolRefArrayAttr:$caseNames,
                        StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
@@ -212,12 +212,12 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
-      return getModuleNamesAttr()[0].cast<FlatSymbolRefAttr>();
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
     }
 
     /// Return the name of the option group.
     StringAttr getOptionNameAttr() {
-      return getCaseNames()[0].cast<SymbolRefAttr>().getRootReference();
+      return llvm::cast<SymbolRefAttr>(getCaseNames()[0]).getRootReference();
     }
 
     /// Return the target for an option or the default if none specified.

@@ -692,14 +692,14 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    layer GroupB, bind :
   // CHECK-NEXT:      layer GroupC, bind :
   // CHECK-NEXT:      layer GroupD, bind :
-  // CHECK-NEXT:        layer GroupE, bind :
+  // CHECK-NEXT:        layer GroupE, inline :
   // CHECK-NEXT:    layer GroupF, bind :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
       }
       firrtl.layer @GroupD bind {
-        firrtl.layer @GroupE bind {
+        firrtl.layer @GroupE inline {
         }
       }
     }
@@ -845,5 +845,53 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:    ASIC => ASICTarget
     firrtl.instance_choice inst @DefaultTarget alternatives @Platform
       { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } ()
+  }
+
+  // CHECK-LABEL: public module GenericIntrinsic :
+  firrtl.module public @GenericIntrinsic(in %clk: !firrtl.clock,
+                                         in %c : !firrtl.uint<1>,
+                                         out %s: !firrtl.uint<32>,
+                                         out %io1: !firrtl.uint<1>,
+                                         out %io2: !firrtl.uint<1>,
+                                         out %io3: !firrtl.uint<1>,
+                                         out %io4: !firrtl.uint<5>) {
+    // Common case should be emitted inline.
+    // CHECK: connect s, intrinsic(circt_sizeof : UInt<32>, clk)
+    %0 = firrtl.int.generic "circt_sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
+    firrtl.strictconnect %s, %0 : !firrtl.uint<32>
+    // CHECK-NEXT: connect io1, intrinsic(circt_isX : UInt<1>, clk)
+    %1 = firrtl.int.generic "circt_isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
+    // CHECK-NEXT: connect io2, intrinsic(circt_plusargs_test<FORMAT = "foo"> : UInt<1>)
+    %2 = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
+    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
+
+    // CHECK-NOT: =
+    // CHECK-NEXT: intrinsic(circt_clock_gate : Clock, clk, c)
+    firrtl.int.generic "circt_clock_gate" %clk, %c : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
+
+    // Materialize node as needed when used multiple times.
+    // CHECK-NEXT: node [[PAV:.+]]
+    // CHECK-NEXT:   = intrinsic(circt_plusargs_value<FORMAT = "foo">
+    // CHECK-NEXT:                 : { found : UInt<1>, result : UInt<5> }
+    %3 = firrtl.int.generic "circt_plusargs_value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
+    // CHECK-NEXT: connect io3, [[PAV]].found
+    // CHECK-NEXT: connect io4, [[PAV]].result
+    %4 = firrtl.subfield %3[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
+    %5 = firrtl.subfield %3[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
+    firrtl.strictconnect %io3, %4 : !firrtl.uint<1>
+    firrtl.strictconnect %io4, %5 : !firrtl.uint<5>
+
+    // Nested once should be inlined.
+    // CHECK-NEXT: intrinsic(circt_verif_assert, intrinsic(circt_isX : UInt<1>, c))
+    %6 = firrtl.int.generic "circt_isX"  %c : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_verif_assert"  %6 : (!firrtl.uint<1>) -> ()
+
+    // Spill if nested > 1 for simplicity.
+    // CHECK-NEXT: node [[ISX:.+]] = intrinsic(circt_isX : UInt<1>, c)
+    // CHECK-NEXT: intrinsic(circt_verif_assert, intrinsic(circt_isX : UInt<1>, [[ISX]]))
+    %7 = firrtl.int.generic "circt_isX"  %c : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %8 = firrtl.int.generic "circt_isX"  %7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_verif_assert"  %8 : (!firrtl.uint<1>) -> ()
   }
 }

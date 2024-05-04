@@ -128,6 +128,11 @@ static cl::opt<bool>
                            cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    scalarizeIntModules("scalarize-internal-modules",
+                        cl::desc("Scalarize the ports of any internal modules"),
+                        cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
@@ -167,6 +172,7 @@ enum OutputFormatKind {
   OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
+  OutputBTOR2,
   OutputSplitVerilog,
   OutputDisabled
 };
@@ -183,6 +189,7 @@ static cl::opt<OutputFormatKind> outputFormat(
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+        clEnumValN(OutputBTOR2, "btor2", "Emit BTOR2"),
         clEnumValN(OutputSplitVerilog, "split-verilog",
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
@@ -348,6 +355,7 @@ static LogicalResult processBuffer(
     options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
     options.scalarizePublicModules = scalarizePublicModules;
+    options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
@@ -401,12 +409,18 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Lower if we are going to verilog or if lowering was specifically requested.
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
   if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+        return failure();
+    // Add passes specific to btor2 emission
+    if (outputFormat == OutputBTOR2)
+      if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                            (*outputFile)->os())))
         return failure();
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
@@ -711,6 +725,8 @@ int main(int argc, char **argv) {
     registerLowerSeqToSVPass();
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerLowerLTLToCorePass();
+    registerConvertHWToBTOR2Pass();
   }
 
   // Register any pass manager command line options.

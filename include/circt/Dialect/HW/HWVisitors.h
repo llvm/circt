@@ -129,7 +129,7 @@ public:
   // Basic nodes.
   HANDLE(OutputOp, Unhandled);
   HANDLE(InstanceOp, Unhandled);
-  HANDLE(InstanceChoiceOp, Uhandled);
+  HANDLE(InstanceChoiceOp, Unhandled);
   HANDLE(TypeScopeOp, Unhandled);
   HANDLE(TypedeclOp, Unhandled);
 #undef HANDLE

@@ -1596,12 +1596,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
         auto *sel = getExpr(op.getSel());
-        constrainTypes(sel, solver.known(1));
+        constrainTypes(solver.known(1), sel, /*imposeUpperBounds=*/true);
         maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
       })
       .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
         auto *sel = getExpr(op.getSel());
-        constrainTypes(sel, solver.known(2));
+        constrainTypes(solver.known(2), sel, /*imposeUpperBounds=*/true);
         maximumOfTypes(op.getResult(), op.getV3(), op.getV2());
         maximumOfTypes(op.getResult(), op.getResult(), op.getV1());
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
@@ -1640,8 +1640,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the no-ops that don't interact with width inference.
-      .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
-          [&](auto) {})
+      .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp,
+            UnclockedAssumeIntrinsicOp, CoverOp>([&](auto) {})
 
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {

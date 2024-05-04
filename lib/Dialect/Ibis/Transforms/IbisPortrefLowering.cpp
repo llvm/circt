@@ -34,7 +34,7 @@ public:
   LogicalResult
   matchAndRewrite(InputPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType innerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType innerPortRefType = cast<PortRefType>(op.getType());
     Type innerType = innerPortRefType.getPortType();
     Direction d = innerPortRefType.getDirection();
 
@@ -66,7 +66,7 @@ public:
     if (d == Direction::Input) {
       // references to inputs becomes outputs (write from this container)
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
 
       // Replace writes to the unwrapped port with writes to the new port.
       for (auto *unwrappedPortUser :
@@ -81,8 +81,8 @@ public:
       }
     } else {
       // References to outputs becomes inputs (read from this container)
-      auto rawInput = rewriter.create<InputPortOp>(op.getLoc(),
-                                                   op.getInnerSym(), innerType);
+      auto rawInput = rewriter.create<InputPortOp>(
+          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
       // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
       // DialectConversion. Using it may lead to assertions about mutating
       // replaced/erased ops. For now, do this RAUW directly, until
@@ -117,7 +117,7 @@ public:
   LogicalResult
   matchAndRewrite(OutputPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType innerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType innerPortRefType = cast<PortRefType>(op.getType());
     Type innerType = innerPortRefType.getPortType();
     Direction d = innerPortRefType.getDirection();
 
@@ -146,8 +146,8 @@ public:
       // Outputs of inputs are inputs (external driver into this container).
       // Create the raw input port and write the input port reference with a
       // read of the raw input port.
-      auto rawInput = rewriter.create<InputPortOp>(op.getLoc(),
-                                                   op.getInnerSym(), innerType);
+      auto rawInput = rewriter.create<InputPortOp>(
+          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
       rewriter.create<PortWriteOp>(
           op.getLoc(), portWrapper.getValue(),
           rewriter.create<PortReadOp>(op.getLoc(), rawInput));
@@ -155,7 +155,7 @@ public:
       // Outputs of outputs are outputs (external driver out of this container).
       // Create the raw output port and do a read of the input port reference.
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
       rewriter.create<PortWriteOp>(
           op.getLoc(), rawOutput,
           rewriter.create<PortReadOp>(op.getLoc(), portWrapper.getValue()));
@@ -176,9 +176,9 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
   LogicalResult
   matchAndRewrite(GetPortOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    PortRefType outerPortRefType = op.getType().cast<PortRefType>();
+    PortRefType outerPortRefType = cast<PortRefType>(op.getType());
     PortRefType innerPortRefType =
-        outerPortRefType.getPortType().cast<PortRefType>();
+        cast<PortRefType>(outerPortRefType.getPortType());
     Type innerType = innerPortRefType.getPortType();
 
     Direction outerDirection = outerPortRefType.getDirection();
@@ -296,10 +296,9 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
           // this pattern to recurse and eventually reach the case where the
           // forwarding is resolved through reading/writing the intermediate
           // inputs.
+          auto fwPortName = rewriter.getStringAttr(portName.strref() + "_fw");
           auto forwardedInputPort = rewriter.create<InputPortOp>(
-              op.getLoc(),
-              hw::InnerSymAttr::get(
-                  rewriter.getStringAttr(portName.strref() + "_fw")),
+              op.getLoc(), fwPortName, hw::InnerSymAttr::get(fwPortName),
               innerType);
 
           // TODO: RewriterBase::replaceAllUsesWith is not currently supported
@@ -372,19 +371,17 @@ void PortrefLoweringPass::runOnOperation() {
 
   // Ports are legal when they do not have portref types anymore.
   target.addDynamicallyLegalOp<InputPortOp, OutputPortOp>([&](auto op) {
-    PortRefType portType = cast<PortOpInterface>(op)
-                               .getPort()
-                               .getType()
-                               .template cast<PortRefType>();
-    return !portType.getPortType().isa<PortRefType>();
+    PortRefType portType =
+        cast<PortRefType>(cast<PortOpInterface>(op).getPort().getType());
+    return !isa<PortRefType>(portType.getPortType());
   });
 
   PortReadOp op;
 
   // get_port's are legal when they do not have portref types anymore.
   target.addDynamicallyLegalOp<GetPortOp>([&](GetPortOp op) {
-    PortRefType portType = op.getPort().getType().cast<PortRefType>();
-    return !portType.getPortType().isa<PortRefType>();
+    PortRefType portType = cast<PortRefType>(op.getPort().getType());
+    return !isa<PortRefType>(portType.getPortType());
   });
 
   RewritePatternSet patterns(ctx);

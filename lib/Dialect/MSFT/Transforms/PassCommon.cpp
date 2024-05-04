@@ -28,7 +28,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
     Operation *modOp = syms.getDefinition(inst.getModuleNameAttr());
     if (modOp) { // If modOp isn't in the cache, it's probably a new module;
       assert(isa<hw::HWModuleLike>(modOp) && "Instance must point to a module");
-      OpResult instResult = v.cast<OpResult>();
+      OpResult instResult = cast<OpResult>(v);
       auto mod = cast<hw::HWModuleLike>(modOp);
       buff.clear();
       llvm::raw_string_ostream os(buff);
@@ -39,7 +39,7 @@ StringRef circt::msft::getValueName(Value v, const SymbolCache &syms,
       return buff;
     }
   }
-  if (auto blockArg = v.dyn_cast<BlockArgument>()) {
+  if (auto blockArg = dyn_cast<BlockArgument>(v)) {
     hw::ModulePortInfo portInfo(
         cast<hw::PortList>(blockArg.getOwner()->getParent()->getParentOp())
             .getPortList());
@@ -77,7 +77,7 @@ void PassCommon::getAndSortModulesVisitor(
     auto targetNameAttrs = inst.getReferencedModuleNamesAttr();
     for (auto targetNameAttr : targetNameAttrs) {
       Operation *modOp =
-          topLevelSyms.getDefinition(targetNameAttr.cast<StringAttr>());
+          topLevelSyms.getDefinition(cast<StringAttr>(targetNameAttr));
       assert(modOp);
       moduleInstantiations[modOp].push_back(inst);
       if (auto modLike = dyn_cast<hw::HWModuleLike>(modOp))

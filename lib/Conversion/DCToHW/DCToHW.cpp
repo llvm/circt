@@ -45,7 +45,7 @@ static Type tupleToStruct(TupleType tuple) {
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
   for (auto [i, innerType] : llvm::enumerate(tuple)) {
     Type convertedInnerType = innerType;
-    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+    if (auto tupleInnerType = dyn_cast<TupleType>(innerType))
       convertedInnerType = tupleToStruct(tupleInnerType);
     hwfields.push_back(
         {StringAttr::get(ctx, "field" + Twine(i)), convertedInnerType});
@@ -393,7 +393,7 @@ struct RTLBuilder {
     // Start the mux tree with zero value.
     auto dataType = inputs[0].getType();
     unsigned width =
-        dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
+        isa<NoneType>(dataType) ? 0 : dataType.getIntOrFloatBitWidth();
     Value muxValue = constant(width, 0);
 
     // Iteratively chain together muxes from the high bit to the low bit.
@@ -413,9 +413,9 @@ struct RTLBuilder {
 };
 
 static bool isZeroWidthType(Type type) {
-  if (auto intType = type.dyn_cast<IntegerType>())
+  if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth() == 0;
-  return type.isa<NoneType>();
+  return isa<NoneType>(type);
 }
 
 static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
@@ -785,7 +785,7 @@ public:
 
 } // namespace
 
-static bool isDCType(Type type) { return type.isa<TokenType, ValueType>(); }
+static bool isDCType(Type type) { return isa<TokenType, ValueType>(type); }
 
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
@@ -814,7 +814,7 @@ public:
     // Check whether this precondition is met, and if not, exit.
     auto walkRes = parent->walk([&](Operation *op) {
       for (auto res : op->getResults()) {
-        if (res.getType().isa<dc::TokenType, dc::ValueType>()) {
+        if (isa<dc::TokenType, dc::ValueType>(res.getType())) {
           if (res.use_empty()) {
             op->emitOpError() << "DCToHW: value " << res << " is unused.";
             return WalkResult::interrupt();

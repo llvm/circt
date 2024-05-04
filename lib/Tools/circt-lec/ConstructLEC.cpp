@@ -13,6 +13,7 @@
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/TopologicalSortUtils.h"
 
 using namespace mlir;
 using namespace circt;
@@ -108,22 +109,36 @@ void ConstructLECPass::runOnOperation() {
   }
 
   builder.createBlock(&entryFunc.getBody());
-  auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
-  auto *outputOpA = moduleA.getBodyBlock()->getTerminator();
-  auto *outputOpB = moduleB.getBodyBlock()->getTerminator();
-  lecOp.getFirstCircuit().takeBody(moduleA.getBody());
-  lecOp.getSecondCircuit().takeBody(moduleB.getBody());
-  moduleA->erase();
-  moduleB->erase();
 
-  {
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPoint(outputOpA);
-    builder.create<verif::YieldOp>(loc, outputOpA->getOperands());
-    outputOpA->erase();
-    builder.setInsertionPoint(outputOpB);
-    builder.create<verif::YieldOp>(loc, outputOpB->getOperands());
-    outputOpB->erase();
+  Value areEquivalent;
+  if (moduleA == moduleB) {
+    // Trivially equivalent
+    areEquivalent =
+        builder.create<LLVM::ConstantOp>(loc, builder.getI1Type(), 1);
+    moduleA->erase();
+  } else {
+    auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
+    areEquivalent = lecOp.getAreEquivalent();
+    auto *outputOpA = moduleA.getBodyBlock()->getTerminator();
+    auto *outputOpB = moduleB.getBodyBlock()->getTerminator();
+    lecOp.getFirstCircuit().takeBody(moduleA.getBody());
+    lecOp.getSecondCircuit().takeBody(moduleB.getBody());
+
+    moduleA->erase();
+    moduleB->erase();
+
+    {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPoint(outputOpA);
+      builder.create<verif::YieldOp>(loc, outputOpA->getOperands());
+      outputOpA->erase();
+      builder.setInsertionPoint(outputOpB);
+      builder.create<verif::YieldOp>(loc, outputOpB->getOperands());
+      outputOpB->erase();
+    }
+
+    sortTopologically(&lecOp.getFirstCircuit().front());
+    sortTopologically(&lecOp.getSecondCircuit().front());
   }
 
   // TODO: we should find a more elegant way of reporting the result than
@@ -133,7 +148,7 @@ void ConstructLECPass::runOnOperation() {
   Value neqFormatString =
       lookupOrCreateStringGlobal(builder, getOperation(), "c1 != c2\n");
   Value formatString = builder.create<LLVM::SelectOp>(
-      loc, lecOp.getAreEquivalent(), eqFormatString, neqFormatString);
+      loc, areEquivalent, eqFormatString, neqFormatString);
   builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
 
   builder.create<func::ReturnOp>(loc, ValueRange{});

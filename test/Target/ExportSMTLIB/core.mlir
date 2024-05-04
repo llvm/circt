@@ -89,6 +89,29 @@ smt.solver () : () -> () {
   }
   smt.assert %2
 
+  // Test: make sure that open parens from outside quantifier bodies are not
+  // propagated into the body.
+  // CHECK: (assert (let (([[V15:.+]] (exists (([[V16:.+]] Int) ([[V17:.+]] Int)){{$}}
+  // CHECK:                                   (let (([[V18:.+]] (= [[V16]] [[V17]]))){{$}}
+  // CHECK:                                   [[V18]])))){{$}}
+  // CHECK:         (let (([[V19:.+]] (exists (([[V20:.+]] Int) ([[V21:.+]] Int)){{$}}
+  // CHECK:                                   (let (([[V22:.+]] (= [[V20]] [[V21]]))){{$}}
+  // CHECK:                                   [[V22]])))){{$}}
+  // CHECK:         (let (([[V23:.+]] (and [[V19]] [[V15]]))){{$}}
+  // CHECK:         [[V23]])))){{$}}
+  %3 = smt.exists {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %5 = smt.eq %arg2, %arg3 : !smt.int
+    smt.yield %5 : !smt.bool
+  }
+  %5 = smt.exists {
+  ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %6 = smt.eq %arg2, %arg3 : !smt.int
+    smt.yield %6 : !smt.bool
+  }
+  %6 = smt.and %3, %5
+  smt.assert %6
+
   // CHECK: (check-sat)
   // CHECK-INLINED: (check-sat)
   smt.check sat {} unknown {} unsat {}

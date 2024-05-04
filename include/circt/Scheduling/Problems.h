@@ -373,6 +373,7 @@ public:
   void setStartTimeInCycle(Operation *op, float time) {
     startTimeInCycle[op] = time;
   }
+  void clearStartTimeInCycle() { startTimeInCycle.clear(); }
 
   virtual PropertyStringVector getProperties(Operation *op) override;
   virtual PropertyStringVector getProperties(OperatorType opr) override;

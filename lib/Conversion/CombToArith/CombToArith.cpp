@@ -33,8 +33,7 @@ struct CombReplicateOpConversion : OpConversionPattern<ReplicateOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Type inputType = op.getInput().getType();
-    if (inputType.isa<IntegerType>() &&
-        inputType.getIntOrFloatBitWidth() == 1) {
+    if (isa<IntegerType>(inputType) && inputType.getIntOrFloatBitWidth() == 1) {
       Type outType = rewriter.getIntegerType(op.getMultiple());
       rewriter.replaceOpWithNewOp<ExtSIOp>(op, outType, adaptor.getInput());
       return success();

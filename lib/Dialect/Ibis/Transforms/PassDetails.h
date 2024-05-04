@@ -19,13 +19,7 @@
 
 #include "mlir/Pass/Pass.h"
 
-namespace circt {
-namespace ibis {
-
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/Ibis/Ibis.h.inc"
-
-} // namespace ibis
-} // namespace circt
 
 #endif // DIALECT_IBIS_TRANSFORMS_PASSDETAILS_H

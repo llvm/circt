@@ -158,7 +158,7 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
 }
 
 def ModportType:
-  Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
+  Type<CPred<"llvm::isa<::circt::sv::ModportType>($_self)">, "sv.interface">;
 
 def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
     DeclareOpInterfaceMethods<ChannelOpInterface>

@@ -24,8 +24,8 @@ using namespace comb;
 /// or larger integer type.
 Value comb::createOrFoldSExt(Location loc, Value value, Type destTy,
                              OpBuilder &builder) {
-  IntegerType valueType = value.getType().dyn_cast<IntegerType>();
-  assert(valueType && destTy.isa<IntegerType>() &&
+  IntegerType valueType = dyn_cast<IntegerType>(value.getType());
+  assert(valueType && isa<IntegerType>(destTy) &&
          valueType.getWidth() <= destTy.getIntOrFloatBitWidth() &&
          valueType.getWidth() != 0 && "invalid sext operands");
   // If already the right size, we are done.
@@ -183,8 +183,8 @@ bool ICmpOp::isNotEqualZero() {
 LogicalResult ReplicateOp::verify() {
   // The source must be equal or smaller than the dest type, and an even
   // multiple of it.  Both are already known to be signless integers.
-  auto srcWidth = getOperand().getType().cast<IntegerType>().getWidth();
-  auto dstWidth = getType().cast<IntegerType>().getWidth();
+  auto srcWidth = cast<IntegerType>(getOperand().getType()).getWidth();
+  auto dstWidth = cast<IntegerType>(getType()).getWidth();
   if (srcWidth == 0)
     return emitOpError("replicate does not take zero bit integer");
 
@@ -243,7 +243,7 @@ static unsigned getTotalWidth(ValueRange inputs) {
 }
 
 LogicalResult ConcatOp::verify() {
-  unsigned tyWidth = getType().cast<IntegerType>().getWidth();
+  unsigned tyWidth = cast<IntegerType>(getType()).getWidth();
   unsigned operandsTotalWidth = getTotalWidth(getInputs());
   if (tyWidth != operandsTotalWidth)
     return emitOpError("ConcatOp requires operands total width to "
@@ -258,7 +258,7 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
                      ValueRange tl) {
   result.addOperands(ValueRange{hd});
   result.addOperands(tl);
-  unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
+  unsigned hdWidth = cast<IntegerType>(hd.getType()).getWidth();
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 
@@ -276,8 +276,8 @@ LogicalResult ConcatOp::inferReturnTypes(
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExtractOp::verify() {
-  unsigned srcWidth = getInput().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = getType().cast<IntegerType>().getWidth();
+  unsigned srcWidth = cast<IntegerType>(getInput().getType()).getWidth();
+  unsigned dstWidth = cast<IntegerType>(getType()).getWidth();
   if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
     return emitOpError("from bit too large for input"), failure();
 
