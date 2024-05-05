@@ -280,7 +280,7 @@ LogicalResult ExtractOp::verify() {
   unsigned dstWidth = cast<IntegerType>(getType()).getWidth();
 
   bool checkAddWillOverflow =
-      getLowBit() > std::numeric_limits<typeof(dstWidth)>::max() - dstWidth;
+      getLowBit() > std::numeric_limits<decltype(dstWidth)>::max() - dstWidth;
 
   // Checks that all extracted bits from the source are well-defined.
   // While it is well-defined to extract i0 outside of the bounds of another
