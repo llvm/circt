@@ -324,9 +324,6 @@ struct ExpressionVisitor
       delimiter = " ";
     }
 
-
-
-
     info.stream << ")\n";
 
     if (weight != 0 || !patterns.empty())
@@ -340,9 +337,9 @@ struct ExpressionVisitor
     unsigned indentExt = operatorString.size() + 2;
     VisitorInfo newInfo(info.stream, info.valueMap,
                         info.indentLevel + indentExt, info.openParens);
-    if(weight !=0 || !patterns.empty())
+    if (weight != 0 || !patterns.empty())
       newInfo.stream.indent(0);
-    else 
+    else
       newInfo.stream.indent(info.indentLevel);
     if (failed(printExpression(worklist, newInfo)))
       return failure();
@@ -354,9 +351,9 @@ struct ExpressionVisitor
 
     if (weight != 0)
       info.stream << " :weight " << weight;
-    if(!patterns.empty()){
+    if (!patterns.empty()) {
       info.stream << "\n :pattern (";
-      for(auto &p: patterns){
+      for (auto &p : patterns) {
 
         // retrieve argument name from the body region
         for (auto [i, arg] : llvm::enumerate(p.getArguments())) {
@@ -371,8 +368,8 @@ struct ExpressionVisitor
         unsigned indentExt = operatorString.size() + 2;
 
         VisitorInfo newInfo2(info.stream, info.valueMap,
-                            info.indentLevel + indentExt, info.openParens);
-        
+                             info.indentLevel + indentExt, info.openParens);
+
         info.stream.indent(0);
 
         if (failed(printExpression(worklist, info)))
@@ -382,12 +379,11 @@ struct ExpressionVisitor
         for (unsigned j = 0; j < newInfo2.openParens; ++j)
           info.stream << ")";
         info.stream << ")";
-
       }
       info.stream << ")";
     }
 
-    if(weight !=0 || !patterns.empty())
+    if (weight != 0 || !patterns.empty())
       info.stream << ")";
 
     info.stream << ")";
