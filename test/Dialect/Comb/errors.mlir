@@ -21,7 +21,17 @@ hw.module @err(in %a: i0) {
 
 // -----
 
+// This constraint is not absolutely necessary, and is enforced only to help diagnose bugs.
+// See https://github.com/llvm/circt/pull/6959#discussion_r1588142448
 hw.module @err(in %a: i0) {
   // expected-error @+1 {{from bit too large for input}}
-  %0 = comb.extract %a from 0 : (i0) -> i0
+  %0 = comb.extract %a from 1000 : (i0) -> i0
+}
+
+// -----
+
+// Checks extract verifier does not overflow.
+hw.module @err(in %a: i16) {
+  // expected-error @+1 {{from bit too large for input}}
+  %0 = comb.extract %a from 0xFFFFFFFF : (i16) -> i8
 }

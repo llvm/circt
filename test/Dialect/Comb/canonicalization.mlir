@@ -1678,8 +1678,8 @@ hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4
 // CHECK-DAG: %[[ICMP_NE:.*]] = comb.icmp ne %[[I0_VAL]], %[[ZERO]] : i0
 // CHECK-DAG: %[[MODS:.*]] = comb.mods %[[I0_VAL]], %[[ZERO]] : i0
 // CHECK-DAG: %[[MODU:.*]] = comb.modu %[[I0_VAL]], %[[ZERO]] : i0
-// CHECK-DAG: hw.output %[[I0_VAL]], %[[I0_VAL]], %[[ZERO]], %[[ZERO]], %[[I0_VAL]], %[[ZERO]], %[[CONCAT]], %[[CONCAT_REVERSE]], %[[CONCAT_REMAINS]], %[[CONCAT_ITSELF]], %[[DIVS]], %[[DIVU]], %[[ICMP_EQ]], %[[ICMP_NE]], %[[MODS]], %[[MODU]], %[[FALSE]], %[[ZERO]], %[[I0_VAL]], %[[I0_VAL]], %[[I0_VAL]] : i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0, i0, i1, i1, i0, i0, i1, i0, i0, i0, i0
-hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i0, out sub: i0, out mul: i0, out or: i0, out xor: i0, out and: i0, out concat: i32, out concat_reverse: i32, out concat_remains: i33, out concat_itself: i0, out divs: i0, out divu: i0, out icmp_eq: i1, out icmp_ne: i1, out mods: i0, out modu: i0, out parity: i1, out replicate: i0, out shl: i0, out shrs: i0, out shru: i0) {
+// CHECK-DAG: hw.output %[[I0_VAL]], %[[I0_VAL]], %[[ZERO]], %[[ZERO]], %[[I0_VAL]], %[[ZERO]], %[[CONCAT]], %[[CONCAT_REVERSE]], %[[CONCAT_REMAINS]], %[[CONCAT_ITSELF]], %[[DIVS]], %[[DIVU]], %[[ICMP_EQ]], %[[ICMP_NE]], %[[MODS]], %[[MODU]], %[[FALSE]], %[[ZERO]], %[[ZERO]], %[[I0_VAL]], %[[I0_VAL]], %[[I0_VAL]] : i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0, i0, i1, i1, i0, i0, i1, i0, i0, i0, i0, i0
+hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i0, out sub: i0, out mul: i0, out or: i0, out xor: i0, out and: i0, out concat: i32, out concat_reverse: i32, out concat_remains: i33, out concat_itself: i0, out divs: i0, out divu: i0, out icmp_eq: i1, out icmp_ne: i1, out mods: i0, out modu: i0, out parity: i1, out replicate: i0, out extract: i0, out shl: i0, out shrs: i0, out shru: i0) {
   %zero = hw.constant 0 : i0
 
   %add = comb.add %i0_val, %zero : i0
@@ -1706,6 +1706,7 @@ hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i
 
   %parity = comb.parity %zero : i0
   %replicate = comb.replicate %zero : (i0) -> i0
+  %extract = comb.extract %zero from 0 : (i0) -> i0
 
   %shl = comb.shl %i0_val, %zero : i0
   %shrs = comb.shrs %i0_val, %zero : i0
@@ -1714,7 +1715,7 @@ hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i
   hw.output %add, %sub, %mul, %or, %xor, %and, %concat,
             %concat_reverse, %concat_remains, %concat_itself,
             %divs, %divu, %icmp_eq, %icmp_ne, %mods, %modu,
-            %parity, %replicate, %shl, %shrs, %shru :
+            %parity, %replicate, %extract, %shl, %shrs, %shru :
             i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0,
-            i0, i1, i1, i0, i0, i1, i0, i0, i0, i0
+            i0, i1, i1, i0, i0, i1, i0, i0, i0, i0, i0
 }

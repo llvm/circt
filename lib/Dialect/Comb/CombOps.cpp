@@ -16,6 +16,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <limits>
 
 using namespace circt;
 using namespace comb;
@@ -277,7 +278,17 @@ LogicalResult ConcatOp::inferReturnTypes(
 LogicalResult ExtractOp::verify() {
   unsigned srcWidth = cast<IntegerType>(getInput().getType()).getWidth();
   unsigned dstWidth = cast<IntegerType>(getType()).getWidth();
-  if (getLowBit() >= srcWidth || srcWidth - getLowBit() < dstWidth)
+
+  bool checkAddWillOverflow =
+      getLowBit() > std::numeric_limits<typeof(dstWidth)>::max() - dstWidth;
+
+  // Checks that all extracted bits from the source are well-defined.
+  // While it is well-defined to extract i0 outside of the bounds of another
+  // integer (because i0 contains no bits and they are therefore all
+  // well-defined), the verifier will refuse it except for right after the input
+  // value, as it is otherwise likely a bug in user code. This constraint can be
+  // lifted and tested for if it proves useful to do so.
+  if (checkAddWillOverflow || getLowBit() + dstWidth > srcWidth)
     return emitOpError("from bit too large for input"), failure();
 
   return success();
