@@ -1299,7 +1299,7 @@ InferResetsPass::collectAnnos(FModuleOp module) {
     Value arg = module.getArgument(argNum);
     if (anno.isClass(fullAsyncResetAnnoClass)) {
       if (!isa<AsyncResetType>(arg.getType())) {
-        mlir::emitError(arg.getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+        mlir::emitError(arg.getLoc(), "'FullAsyncResetAnnotation' must "
                                       "target async reset, but targets ")
             << arg.getType();
         anyFailed = true;
@@ -1342,7 +1342,7 @@ InferResetsPass::collectAnnos(FModuleOp module) {
       auto resultType = op->getResult(0).getType();
       if (anno.isClass(fullAsyncResetAnnoClass)) {
         if (!isa<AsyncResetType>(resultType)) {
-          mlir::emitError(op->getLoc(), "'IgnoreFullAsyncResetAnnotation' must "
+          mlir::emitError(op->getLoc(), "'FullAsyncResetAnnotation' must "
                                         "target async reset, but targets ")
               << resultType;
           anyFailed = true;

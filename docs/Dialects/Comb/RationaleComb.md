@@ -68,7 +68,13 @@ TODO: describe why add/xor/or are variadic
 
 ### Operators carry signs instead of types
 
-TODO: describe why we have divu/divs but not addu/adds, and not sint vs uint.
+Operators, in [LLVM-2.0 style](https://mlir.llvm.org/docs/Rationale/Rationale/#integer-signedness-semantics), which have consistent behavior in module 
+arithmetic with respect to signedness are not modeled with sign.  `comb` 
+operates on signless types with signless operations.  This is in accordance
+with LLVM's approach.
+
+Some operations, such as division, have different behaviors for signed v.s. 
+unsigned types, thus they are modeled with different ops (`divu` and `divs`).
 
 ### Selectable truth-table
 
@@ -176,6 +182,39 @@ move has some advantages and disadvantages:
 We agreed that we'd revisit in the future if there were a specific reason to
 add it.  Until then we represent the `array_create`/`array_get` pattern for
 frontends that want to generate this.
+
+
+### Undefined value for division
+
+`divu` and `divs` result in [Undefined Values][] when the 
+denominator is 0.  It is expected that a frontend will use additional 
+operations to implement the semantics required for that language.  For 
+example, system verilog returns an `x` on divide by zero, thus its 
+representation may be
+`mux(denominator == 0, sv.constantx, divu(numerator,denominator))` whereas VHDL
+has a runtime-trap in simulation, thus it may require 
+`if(denominator==0) { assert() } else { divu(numerator,denominator)} `.
+Some vendor division blocks produce 0 in this case and
+that could be modeled as `mux(denominator==0, 0, divu(numerator,denominator))`.
+
+Since division in general is very rare in real synthesizable HW, circt doesn't 
+make much effort to optimize divide by zero (nor even division in general, as 
+previously mentioned).  Any guard to implement a specific semantic should by 
+itself cause the actual divide by constant zero to be dead code.
+
+## Undefined Values
+
+An operation which produces an undefined value (as produced by `divu`, for example) 
+under some conditions is considered to have an instance-specific, static, pure function
+which takes as arguments the operands of the operation and produces a result.  This
+function is potentially unique to each instance of the operation, may be different
+between compilations, is opaque, and return any value in the target's type system.  It
+is guaranteed that repeated evaluation of the same operation with the same operands will
+return the same result.
+
+A division by zero, for example, could return any constant, either of its input, 
+`x` or `z` (in SV or VHDL), the sum of its input, or the result of any other 
+combinatorial function.
 
 ## Endianness: operand ordering and internal representation
 
