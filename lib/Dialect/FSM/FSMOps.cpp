@@ -413,23 +413,24 @@ LogicalResult OutputOp::verify() {
 // TransitionOp
 //===----------------------------------------------------------------------===//
 
-void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StringRef nextState) {
-  state.addRegion(); // guard
-  state.addRegion(); // action
-  state.addAttribute("nextState",
-                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
-}
-
 // void TransitionOp::build(OpBuilder &builder, OperationState &state,
-//                          StateOp nextState) {
-//   build(builder, state, nextState.getName());
+//                          StringRef nextState) {
+//   state.addRegion(); // guard
+//   state.addRegion(); // action
+//   state.addAttribute("nextState",
+//                      FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
 // }
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StateOp nextState, std::function<void()> guardCtor,
-                         std::function<void()> actionCtor) {
+                         StateOp nextState) {
   build(builder, state, nextState.getName());
+}
+
+void TransitionOp::build(OpBuilder &builder, OperationState &state,
+                         StringRef nextState, std::function<void()> guardCtor,
+                         std::function<void()> actionCtor) {
+  state.addAttribute("nextState",
+                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
   OpBuilder::InsertionGuard guard(builder);
 
   Region *guardRegion = state.addRegion(); // guard

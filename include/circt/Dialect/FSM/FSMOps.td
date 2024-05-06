@@ -302,9 +302,9 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "StringRef":$nextState)>,
-    // OpBuilder<(ins "fsm::StateOp":$nextState)>,
-    OpBuilder<(ins "fsm::StateOp":$nextState,
+    // OpBuilder<(ins "StringRef":$nextState)>,
+    OpBuilder<(ins "fsm::StateOp":$nextState)>,
+    OpBuilder<(ins "StringRef":$nextState,
                    CArg<"std::function<void()>", "{}">:$guardCtor,
                    CArg<"std::function<void()>", "{}">:$actionCtor)>
   ];
