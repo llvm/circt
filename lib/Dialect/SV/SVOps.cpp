@@ -979,7 +979,7 @@ void CaseOp::print(OpAsmPrinter &p) {
 
     p << ": ";
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/true, /*printEmptyBlock*/true);
+                  /*printBlockTerminators=*/true, /*printEmptyBlock=*/true);
   }
 }
 
