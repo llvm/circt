@@ -427,8 +427,9 @@ void TransitionOp::build(OpBuilder &builder, OperationState &state,
 }
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StringRef nextState, const std::function<void()>& guardCtor,
-                         const std::function<void()>& actionCtor) {
+                         StringRef nextState,
+                         const std::function<void()> &guardCtor,
+                         const std::function<void()> &actionCtor) {
   state.addAttribute("nextState",
                      FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
   OpBuilder::InsertionGuard guard(builder);
