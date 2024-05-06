@@ -725,6 +725,7 @@ int main(int argc, char **argv) {
     registerLowerSeqToSVPass();
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerLowerLTLToCorePass();
     registerConvertHWToBTOR2Pass();
   }
 

@@ -19,8 +19,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-using namespace mlir;
-
 namespace circt {
 
 std::unique_ptr<mlir::Pass> createLowerLTLToCorePass();
