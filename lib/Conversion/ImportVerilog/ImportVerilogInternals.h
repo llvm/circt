@@ -79,7 +79,8 @@ struct Context {
   std::map<slang::SourceLocation, Operation *> orderedRootOps;
   /// Mapping port address with its direction that is convenient to sort ports
   /// of different types in handling instance logic.
-  DenseMap<const slang::SourceLocation *, slang::ast::ArgumentDirection>
+  DenseMap<const slang::SourceLocation *,
+           std::pair<slang::ast::ArgumentDirection, Type>>
       instancePortInfo;
   /// How we have lowered modules to MLIR.
   DenseMap<const slang::ast::InstanceBodySymbol *, moore::SVModuleOp> moduleOps;

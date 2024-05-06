@@ -195,6 +195,21 @@ def ProcedureOp : MooreOp<"procedure", [
   }];
 }
 
+def UnconnectedOp : MooreOp<"unconnected"> {
+  let summary = "Refer to no connect behavior";
+  let description = [{
+    The `moore.unconnected` operation represents no connect in circuit design.
+
+    See IEEE 1800 - 2017 § 23.3.2.1 through 23.3.2.4
+  }];
+
+  let arguments = (ins DirectionAttr:$direction);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $direction attr-dict `:` type($result)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -243,17 +258,18 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different types
-    of net connection in SV. There are twelve built-in net types defined in the official
-    standard construct of the operation:
-    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`, `uwire`,
-    `wire`, `wand`, `wor`.
-    Optional assignment argument allows net operation to be initialized with specific
-    values as soon as it is created. Only one net declaration assignment can be made for
-    a particular net. See IEEE 1800-2017 § 10.3.1 "The net declaration assignment" for
-    the differences between net declaration assignments and continuous assign statements.
-    It has some features that are not supported: declaring an interconnect net and using
-    user-defined types in the net operation.
+    The `moore.net' operation is a net declaration. Net types defines different
+    types of net connection in SV. There are twelve built-in net types defined
+    in the official standard construct of the operation:
+    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
+    `uwire`, `wire`, `wand`, `wor`.
+    Optional assignment argument allows net operation to be initialized with
+    specific values as soon as it is created. Only one net declaration assignment
+    can be made for a particular net. See IEEE 1800-2017 § 10.3.1 "The net
+    declaration assignment" for the differences between net declaration
+    assignments and continuous assign statements. It has some features that are
+    not supported: declaring an interconnect net and using user-defined types in
+    the net operation.
     
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];

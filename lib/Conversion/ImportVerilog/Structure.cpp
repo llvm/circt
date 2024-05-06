@@ -71,6 +71,20 @@ static moore::NetKind convertNetKind(slang::ast::NetType::NetKind kind) {
   llvm_unreachable("all net kinds handled");
 }
 
+static moore::Direction
+convertDirection(slang::ast::ArgumentDirection direction) {
+  switch (direction) {
+  case slang::ast::ArgumentDirection::In:
+    return moore::Direction::In;
+  case slang::ast::ArgumentDirection::InOut:
+    return moore::Direction::InOut;
+  case slang::ast::ArgumentDirection::Out:
+    return moore::Direction::Out;
+  case slang::ast::ArgumentDirection::Ref:
+    return moore::Direction::Ref;
+  }
+}
+
 namespace {
 struct MemberVisitor {
   Context &context;
@@ -99,26 +113,35 @@ struct MemberVisitor {
     auto targetModule = context.convertModuleHeader(&instNode.body);
     if (!targetModule)
       return failure();
+
     const auto *instBodySymbol =
         instNode.body.as_if<slang::ast::InstanceBodySymbol>();
     for (auto &member : instBodySymbol->members())
       if (member.kind == slang::ast::SymbolKind::Port) {
         const auto *p = member.as_if<slang::ast::PortSymbol>();
-        context.instancePortInfo[&p->location] = p->direction;
+        context.instancePortInfo[&p->location] =
+            std::make_pair(p->direction, context.convertType(p->getType()));
       }
+
     SmallVector<Value> inPorts, outPorts;
     SmallVector<Attribute> inputNames, outputNames;
     for (auto *connections : instNode.getPortConnections()) {
       Value port;
+
+      // TODO: Support interface in the module instance.
+      if (connections->getIfaceInstance())
+        return mlir::emitError(loc, "unsupported construct: ")
+               << slang::ast::toString(connections->port.kind);
+
       if (auto *expr = connections->getExpression()) {
         if (auto *aexpr = expr->as_if<slang::ast::AssignmentExpression>()) {
           port = context.convertExpression(aexpr->left());
         } else {
-
           port = context.convertExpression(*expr);
         }
+
         auto it = context.instancePortInfo.find(&connections->port.location);
-        if (it->second != slang::ast::ArgumentDirection::Out) {
+        if (it->getSecond().first != slang::ast::ArgumentDirection::Out) {
           inPorts.push_back(port);
           inputNames.push_back(
               StringAttr::get(builder.getContext(), connections->port.name));
@@ -128,8 +151,20 @@ struct MemberVisitor {
               StringAttr::get(builder.getContext(), connections->port.name));
         }
       } else {
-        // TODO: connect interface to mudule instance.
-        return failure();
+        auto it = context.instancePortInfo.find(&connections->port.location);
+        auto nc = builder.create<moore::UnconnectedOp>(
+            loc, it->getSecond().second,
+            convertDirection(it->getSecond().first));
+
+        if (it->getSecond().first != slang::ast::ArgumentDirection::Out) {
+          inPorts.push_back(nc);
+          inputNames.push_back(
+              StringAttr::get(builder.getContext(), connections->port.name));
+        } else {
+          outPorts.push_back(nc);
+          outputNames.push_back(
+              StringAttr::get(builder.getContext(), connections->port.name));
+        }
       }
     }
     builder.create<moore::InstanceOp>(
