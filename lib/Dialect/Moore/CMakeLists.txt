@@ -21,3 +21,5 @@ add_circt_dialect_library(CIRCTMoore
 )
 
 add_dependencies(circt-headers MLIRMooreIncGen)
+
+add_subdirectory(Transforms)
