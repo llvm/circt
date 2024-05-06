@@ -2,13 +2,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-# Cap'nProto MUST be built with exceptions enabled.
-if (MSVC)
-  string(REPLACE "/EHs-c-" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
-else ()
-  string(REPLACE "-fno-exceptions" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-endif ()
+
 
 # Compile Capnp file.
 add_definitions(${CAPNP_DEFINITIONS})
@@ -33,6 +27,13 @@ target_link_libraries(EsiCosimCapnp PUBLIC
   CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip
   CapnProto::capnp CapnProto::capnp-rpc 
 )
+
+# Cap'nProto MUST be built with exceptions enabled.
+if (MSVC)
+  target_compile_options(EsiCosimCapnp PRIVATE /EHsc)
+else()
+  target_compile_options(EsiCosimCapnp PRIVATE -fexceptions)
+endif()
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_subdirectory(cosim_dpi_server)

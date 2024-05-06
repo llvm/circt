@@ -57,10 +57,10 @@ set(ESIRuntimeLinkLibraries
   nlohmann_json::nlohmann_json
 )
 set(ESIPythonRuntimeSources
-  python/esi/__init__.py
-  python/esi/accelerator.py
-  python/esi/types.py
-  python/esi/esiCppAccel.pyi
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esi/__init__.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esi/accelerator.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esi/types.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esi/esiCppAccel.pyi
 )
 set(ESIRuntimeIncludeDirs)
 set(ESIRuntimeCxxFlags)
@@ -101,7 +101,7 @@ if(ESI_COSIM)
 
     set(ESIRuntimeSources
       ${ESIRuntimeSources}
-      cpp/lib/backends/Cosim.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
     )
     set(ESIRuntimeLinkLibraries
       ${ESIRuntimeLinkLibraries}
@@ -118,7 +118,7 @@ if (XRT_PATH)
 
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
-    cpp/lib/backends/Xrt.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
   )
   set(ESIRuntimeIncludeDirs
     ${ESIRuntimeIncludeDirs}
@@ -162,7 +162,7 @@ endif()
 
 # The esiquery tool is a simple wrapper around the SysInfo API.
 add_executable(esiquery
-  cpp/tools/esiquery.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
 
@@ -203,7 +203,7 @@ if(Python_FOUND)
     message (STATUS "Could not find pybind11. Disabling Python API.")
   else()
     # Compile Pybind11 module and copy to the correct python directory.
-    pybind11_add_module(esiCppAccel python/esi/esiCppAccel.cpp)
+    pybind11_add_module(esiCppAccel ${CMAKE_CURRENT_SOURCE_DIR}/python/esi/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
     add_custom_command(
         TARGET esiCppAccel
