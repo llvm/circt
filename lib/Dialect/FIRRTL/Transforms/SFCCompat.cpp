@@ -55,12 +55,11 @@ void SFCCompatPass::runOnOperation() {
       getOperation(), [&](unsigned argNum, Annotation anno) {
         return isFullAsyncResetAnno(anno);
       });
-  if (!fullAsyncResetExists) {
-    getOperation()->walk([&](Operation *op) {
-      fullAsyncResetExists |=
-          AnnotationSet::removeAnnotations(op, isFullAsyncResetAnno);
-    });
-  }
+  getOperation()->walk(
+      [isFullAsyncResetAnno, &fullAsyncResetExists](Operation *op) {
+        fullAsyncResetExists |=
+            AnnotationSet::removeAnnotations(op, isFullAsyncResetAnno);
+      });
   madeModifications |= fullAsyncResetExists;
 
   auto result = getOperation()->walk([&](Operation *op) {
