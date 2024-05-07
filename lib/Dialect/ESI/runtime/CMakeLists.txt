@@ -42,30 +42,28 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
-include_directories(cpp/include)
 
 set(ESIRuntimeSources
-  cpp/lib/Accelerator.cpp
-  cpp/lib/Context.cpp
-  cpp/lib/Common.cpp
-  cpp/lib/Design.cpp
-  cpp/lib/Manifest.cpp
-  cpp/lib/Services.cpp
-  cpp/lib/Ports.cpp
-  cpp/lib/Utils.cpp
-
-  cpp/lib/backends/Trace.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
 set(ESIRuntimeLinkLibraries
   ZLIB::ZLIB
   nlohmann_json::nlohmann_json
 )
 set(ESIPythonRuntimeSources
-  python/esiaccel/__init__.py
-  python/esiaccel/accelerator.py
-  python/esiaccel/types.py
-  python/esiaccel/utils.py
-  python/esiaccel/esiCppAccel.pyi
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/__init__.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/accelerator.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/types.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/utils.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.pyi
 )
 set(ESIRuntimeIncludeDirs)
 set(ESIRuntimeCxxFlags)
@@ -104,7 +102,7 @@ if(ESI_COSIM)
 
     set(ESIRuntimeSources
       ${ESIRuntimeSources}
-      cpp/lib/backends/Cosim.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
     )
     set(ESIRuntimeLinkLibraries
       ${ESIRuntimeLinkLibraries}
@@ -124,7 +122,7 @@ if (XRT_PATH)
 
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
-    cpp/lib/backends/Xrt.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
   )
   set(ESIRuntimeIncludeDirs
     ${ESIRuntimeIncludeDirs}
@@ -155,6 +153,8 @@ endif()
 add_library(ESIRuntime SHARED
   ${ESIRuntimeSources}
 )
+target_include_directories(ESIRuntime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
@@ -182,7 +182,7 @@ endif()
 
 # The esiquery tool is a simple wrapper around the SysInfo API.
 add_executable(esiquery
-  cpp/tools/esiquery.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
 install(TARGETS esiquery
@@ -235,7 +235,8 @@ if(Python3_FOUND)
     endif()
   else()
     # Compile Pybind11 module and copy to the correct python directory.
-    pybind11_add_module(esiCppAccel python/esiaccel/esiCppAccel.cpp)
+    pybind11_add_module(esiCppAccel
+      ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
 
     if (WHEEL_BUILD)
