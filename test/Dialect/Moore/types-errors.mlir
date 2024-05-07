@@ -1,13 +1,5 @@
 // RUN: circt-opt --verify-diagnostics --split-input-file %s
 
-// expected-error @+1 {{ambiguous packing; wrap `named` in `packed<...>` or `unpacked<...>` to disambiguate}}
-func.func @Foo(%arg0: !moore.named<"foo", bit, loc(unknown)>) { return }
-
-// -----
-// expected-error @+1 {{ambiguous packing; wrap `ref` in `packed<...>` or `unpacked<...>` to disambiguate}}
-func.func @Foo(%arg0: !moore.ref<bit, loc(unknown)>) { return }
-
-// -----
 // expected-error @+1 {{ambiguous packing; wrap `unsized` in `packed<...>` or `unpacked<...>` to disambiguate}}
 func.func @Foo(%arg0: !moore.unsized<bit>) { return }
 

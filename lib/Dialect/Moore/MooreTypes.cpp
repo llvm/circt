@@ -34,8 +34,7 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<IntType, RealType, PackedNamedType, PackedRefType, UnpackedNamedType,
-           UnpackedRefType, PackedUnsizedDim, PackedRangeDim,
+  addTypes<IntType, RealType, PackedUnsizedDim, PackedRangeDim,
            UnpackedUnsizedDim, UnpackedArrayDim, UnpackedRangeDim,
            UnpackedAssocDim, UnpackedQueueDim, PackedStructType,
            UnpackedStructType>();
@@ -98,25 +97,10 @@ PackedType SimpleBitVectorType::getType(MLIRContext *context) const {
 // Unpacked Type
 //===----------------------------------------------------------------------===//
 
-UnpackedType UnpackedType::resolved() const {
-  return TypeSwitch<UnpackedType, UnpackedType>(*this)
-      .Case<PackedType, UnpackedIndirectType, UnpackedDim>(
-          [&](auto type) { return type.resolved(); })
-      .Default([](auto type) { return type; });
-}
-
-UnpackedType UnpackedType::fullyResolved() const {
-  return TypeSwitch<UnpackedType, UnpackedType>(*this)
-      .Case<PackedType, UnpackedIndirectType, UnpackedDim>(
-          [&](auto type) { return type.fullyResolved(); })
-      .Default([](auto type) { return type; });
-}
-
 Domain UnpackedType::getDomain() const {
   return TypeSwitch<UnpackedType, Domain>(*this)
       .Case<PackedType>([](auto type) { return type.getDomain(); })
-      .Case<UnpackedIndirectType, UnpackedDim>(
-          [&](auto type) { return type.getInner().getDomain(); })
+      .Case<UnpackedDim>([&](auto type) { return type.getInner().getDomain(); })
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().domain; })
       .Default([](auto) { return Domain::TwoValued; });
@@ -125,8 +109,7 @@ Domain UnpackedType::getDomain() const {
 Sign UnpackedType::getSign() const {
   return TypeSwitch<UnpackedType, Sign>(*this)
       .Case<PackedType>([](auto type) { return type.getSign(); })
-      .Case<UnpackedIndirectType, UnpackedDim>(
-          [&](auto type) { return type.getInner().getSign(); })
+      .Case<UnpackedDim>([&](auto type) { return type.getInner().getSign(); })
       .Default([](auto) { return Sign::Unsigned; });
 }
 
@@ -144,8 +127,6 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
           return (*size) * type.getRange().size;
         return {};
       })
-      .Case<UnpackedIndirectType>(
-          [](auto type) { return type.getInner().getBitSize(); })
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
       .Default([](auto) { return std::nullopt; });
@@ -160,15 +141,14 @@ static SimpleBitVectorType getSimpleBitVectorFromIntType(IntType type) {
 }
 
 SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
-  return TypeSwitch<UnpackedType, SimpleBitVectorType>(fullyResolved())
+  return TypeSwitch<UnpackedType, SimpleBitVectorType>(*this)
       .Case<IntType>([](auto type) {
         // Integer types trivially map to SBVTs.
         return getSimpleBitVectorFromIntType(type);
       })
       .Case<PackedRangeDim>([](auto rangeType) {
         // Inner type must be an integer.
-        auto innerType =
-            llvm::dyn_cast<IntType>(rangeType.getInner().fullyResolved());
+        auto innerType = llvm::dyn_cast<IntType>(rangeType.getInner());
         if (!innerType)
           return SimpleBitVectorType{};
 
@@ -197,7 +177,7 @@ SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
 
   // All packed types with a known size (i.e., with no `[]` dimensions) can be
   // cast to an SBVT.
-  auto packed = llvm::dyn_cast<PackedType>(fullyResolved());
+  auto packed = llvm::dyn_cast<PackedType>(*this);
   if (!packed)
     return {};
   auto bitSize = packed.getBitSize();
@@ -219,10 +199,6 @@ void UnpackedType::format(
       .Case<RealType>([&](auto type) { os << type.getKeyword(); })
       .Case<PackedType, UnpackedStructType>([&](auto type) { type.format(os); })
       .Case<UnpackedDim>([&](auto type) { type.format(os, around); })
-      .Case<UnpackedNamedType>(
-          [&](auto type) { os << type.getName().getValue(); })
-      .Case<UnpackedRefType>(
-          [&](auto type) { os << "type(" << type.getInner() << ")"; })
       .Default([](auto) { llvm_unreachable("all types should be handled"); });
 
   // In case there were no unpacked dimensions, the `around` function was never
@@ -240,26 +216,11 @@ void UnpackedType::format(
 // Packed Type
 //===----------------------------------------------------------------------===//
 
-PackedType PackedType::resolved() const {
-  return TypeSwitch<PackedType, PackedType>(*this)
-      .Case<PackedIndirectType, PackedDim>(
-          [&](auto type) { return type.resolved(); })
-      .Default([](auto type) { return type; });
-}
-
-PackedType PackedType::fullyResolved() const {
-  return TypeSwitch<PackedType, PackedType>(*this)
-      .Case<PackedIndirectType, PackedDim>(
-          [&](auto type) { return type.fullyResolved(); })
-      .Default([](auto type) { return type; });
-}
-
 Domain PackedType::getDomain() const {
   return TypeSwitch<PackedType, Domain>(*this)
       .Case<VoidType>([](auto) { return Domain::TwoValued; })
       .Case<IntType>([&](auto type) { return type.getDomain(); })
-      .Case<PackedIndirectType, PackedDim>(
-          [&](auto type) { return type.getInner().getDomain(); })
+      .Case<PackedDim>([&](auto type) { return type.getInner().getDomain(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().domain; });
 }
@@ -269,8 +230,7 @@ Sign PackedType::getSign() const {
       .Case<VoidType>([](auto) { return Sign::Unsigned; })
       .Case<IntType, PackedStructType>(
           [&](auto type) { return type.getSign(); })
-      .Case<PackedIndirectType, PackedDim>(
-          [&](auto type) { return type.getInner().getSign(); });
+      .Case<PackedDim>([&](auto type) { return type.getInner().getSign(); });
 }
 
 std::optional<unsigned> PackedType::getBitSize() const {
@@ -283,8 +243,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
           return (*size) * type.getRange().size;
         return {};
       })
-      .Case<PackedIndirectType>(
-          [](auto type) { return type.getInner().getBitSize(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
 }
@@ -294,10 +252,6 @@ void PackedType::format(llvm::raw_ostream &os) const {
       .Case<VoidType>([&](auto) { os << "void"; })
       .Case<IntType, PackedRangeDim, PackedUnsizedDim, PackedStructType>(
           [&](auto type) { type.format(os); })
-      .Case<PackedNamedType>(
-          [&](auto type) { os << type.getName().getValue(); })
-      .Case<PackedRefType>(
-          [&](auto type) { os << "type(" << type.getInner() << ")"; })
       .Default([](auto) { llvm_unreachable("all types should be handled"); });
 }
 
@@ -553,79 +507,6 @@ RealType RealType::get(MLIRContext *context, Kind kind) {
 RealType::Kind RealType::getKind() const { return getImpl()->kind; }
 
 //===----------------------------------------------------------------------===//
-// Packed Type Indirections
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-
-struct IndirectTypeStorage : TypeStorage {
-  using KeyTy = std::tuple<UnpackedType, StringAttr, LocationAttr>;
-
-  IndirectTypeStorage(KeyTy key)
-      : IndirectTypeStorage(std::get<0>(key), std::get<1>(key),
-                            std::get<2>(key)) {}
-  IndirectTypeStorage(UnpackedType inner, StringAttr name, LocationAttr loc)
-      : inner(inner), name(name), loc(loc) {}
-  bool operator==(const KeyTy &key) const {
-    return std::get<0>(key) == inner && std::get<1>(key) == name &&
-           std::get<2>(key) == loc;
-  }
-  static IndirectTypeStorage *construct(TypeStorageAllocator &allocator,
-                                        const KeyTy &key) {
-    return new (allocator.allocate<IndirectTypeStorage>())
-        IndirectTypeStorage(key);
-  }
-
-  UnpackedType inner;
-  StringAttr name;
-  LocationAttr loc;
-};
-
-UnpackedType getIndirectTypeInner(const TypeStorage *impl) {
-  return static_cast<const IndirectTypeStorage *>(impl)->inner;
-}
-
-Location getIndirectTypeLoc(const TypeStorage *impl) {
-  return static_cast<const IndirectTypeStorage *>(impl)->loc;
-}
-
-StringAttr getIndirectTypeName(const TypeStorage *impl) {
-  return static_cast<const IndirectTypeStorage *>(impl)->name;
-}
-
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-template <>
-PackedNamedType NamedTypeBase<PackedNamedType, PackedIndirectType>::get(
-    PackedType inner, StringAttr name, Location loc) {
-  return Base::get(inner.getContext(), inner, name, loc);
-}
-
-template <>
-UnpackedNamedType NamedTypeBase<UnpackedNamedType, UnpackedIndirectType>::get(
-    UnpackedType inner, StringAttr name, Location loc) {
-  return Base::get(inner.getContext(), inner, name, loc);
-}
-
-template <>
-PackedRefType
-RefTypeBase<PackedRefType, PackedIndirectType>::get(PackedType inner,
-                                                    Location loc) {
-  return Base::get(inner.getContext(), inner, StringAttr{}, loc);
-}
-
-template <>
-UnpackedRefType
-RefTypeBase<UnpackedRefType, UnpackedIndirectType>::get(UnpackedType inner,
-                                                        Location loc) {
-  return Base::get(inner.getContext(), inner, StringAttr{}, loc);
-}
-
-//===----------------------------------------------------------------------===//
 // Packed Dimensions
 //===----------------------------------------------------------------------===//
 
@@ -643,53 +524,7 @@ struct DimStorage : TypeStorage {
     return new (allocator.allocate<DimStorage>()) DimStorage(key);
   }
 
-  // Mutation function to late-initialize the resolved versions of the type.
-  LogicalResult mutate(TypeStorageAllocator &allocator,
-                       UnpackedType newResolved,
-                       UnpackedType newFullyResolved) {
-    // Cannot set change resolved types once they've been initialized.
-    if (resolved && resolved != newResolved)
-      return failure();
-    if (fullyResolved && fullyResolved != newFullyResolved)
-      return failure();
-
-    // Update the resolved types.
-    resolved = newResolved;
-    fullyResolved = newFullyResolved;
-    return success();
-  }
-
-  /// Each dimension type calls this function from its `get` method. The first
-  /// argument, `dim`, is set to the type that was constructed by the call to
-  /// `Base::get`. If that type has just been created, its `resolved` and
-  /// `fullyResolved` fields are not yet set. If that is the case, the
-  /// `finalize` method constructs the these resolved types by resolving the
-  /// inner type appropriately and wrapping it in the dimension type. These
-  /// wrapped types, which are equivalent to the `dim` itself but with the inner
-  /// type resolved, are passed to `DimStorage::mutate` which fills in the
-  /// `resolved` and `fullyResolved` fields behind a storage lock in the
-  /// MLIRContext.
-  ///
-  /// This has been inspired by https://reviews.llvm.org/D84171.
-  template <class ConcreteDim, typename... Args>
-  void finalize(ConcreteDim dim, Args... args) const {
-    if (resolved && fullyResolved)
-      return;
-    auto inner = dim.getInner();
-    auto newResolved = dim;
-    auto newFullyResolved = dim;
-    if (inner != inner.resolved())
-      newResolved = ConcreteDim::get(inner.resolved(), args...);
-    if (inner != inner.fullyResolved())
-      newFullyResolved = ConcreteDim::get(inner.fullyResolved(), args...);
-    auto result = dim.mutate(newResolved, newFullyResolved);
-    (void)result; // Supress warning
-    assert(succeeded(result));
-  }
-
   UnpackedType inner;
-  UnpackedType resolved;
-  UnpackedType fullyResolved;
 };
 
 struct UnsizedDimStorage : DimStorage {
@@ -749,14 +584,6 @@ void PackedDim::formatDim(llvm::raw_ostream &os) const {
       .Default([&](auto) { llvm_unreachable("unhandled dim type"); });
 }
 
-PackedType PackedDim::resolved() const {
-  return llvm::cast<PackedType>(getImpl()->resolved);
-}
-
-PackedType PackedDim::fullyResolved() const {
-  return llvm::cast<PackedType>(getImpl()->fullyResolved);
-}
-
 std::optional<Range> PackedDim::getRange() const {
   if (auto dim = dyn_cast<PackedRangeDim>())
     return dim.getRange();
@@ -772,15 +599,11 @@ const detail::DimStorage *PackedDim::getImpl() const {
 }
 
 PackedUnsizedDim PackedUnsizedDim::get(PackedType inner) {
-  auto type = Base::get(inner.getContext(), inner);
-  type.getImpl()->finalize<PackedUnsizedDim>(type);
-  return type;
+  return Base::get(inner.getContext(), inner);
 }
 
 PackedRangeDim PackedRangeDim::get(PackedType inner, Range range) {
-  auto type = Base::get(inner.getContext(), inner, range);
-  type.getImpl()->finalize<PackedRangeDim>(type, range);
-  return type;
+  return Base::get(inner.getContext(), inner, range);
 }
 
 Range PackedRangeDim::getRange() const { return getImpl()->range; }
@@ -878,43 +701,29 @@ void UnpackedDim::formatDim(llvm::raw_ostream &os) const {
       .Default([&](auto) { llvm_unreachable("unhandled dim type"); });
 }
 
-UnpackedType UnpackedDim::resolved() const { return getImpl()->resolved; }
-
-UnpackedType UnpackedDim::fullyResolved() const {
-  return getImpl()->fullyResolved;
-}
-
 const detail::DimStorage *UnpackedDim::getImpl() const {
   return static_cast<detail::DimStorage *>(this->impl);
 }
 
 UnpackedUnsizedDim UnpackedUnsizedDim::get(UnpackedType inner) {
-  auto type = Base::get(inner.getContext(), inner);
-  type.getImpl()->finalize<UnpackedUnsizedDim>(type);
-  return type;
+  return Base::get(inner.getContext(), inner);
 }
 
 UnpackedArrayDim UnpackedArrayDim::get(UnpackedType inner, unsigned size) {
-  auto type = Base::get(inner.getContext(), inner, size);
-  type.getImpl()->finalize<UnpackedArrayDim>(type, size);
-  return type;
+  return Base::get(inner.getContext(), inner, size);
 }
 
 unsigned UnpackedArrayDim::getSize() const { return getImpl()->size; }
 
 UnpackedRangeDim UnpackedRangeDim::get(UnpackedType inner, Range range) {
-  auto type = Base::get(inner.getContext(), inner, range);
-  type.getImpl()->finalize<UnpackedRangeDim>(type, range);
-  return type;
+  return Base::get(inner.getContext(), inner, range);
 }
 
 Range UnpackedRangeDim::getRange() const { return getImpl()->range; }
 
 UnpackedAssocDim UnpackedAssocDim::get(UnpackedType inner,
                                        UnpackedType indexType) {
-  auto type = Base::get(inner.getContext(), inner, indexType);
-  type.getImpl()->finalize<UnpackedAssocDim>(type, indexType);
-  return type;
+  return Base::get(inner.getContext(), inner, indexType);
 }
 
 UnpackedType UnpackedAssocDim::getIndexType() const {
@@ -923,9 +732,7 @@ UnpackedType UnpackedAssocDim::getIndexType() const {
 
 UnpackedQueueDim UnpackedQueueDim::get(UnpackedType inner,
                                        std::optional<unsigned> bound) {
-  auto type = Base::get(inner.getContext(), inner, bound.value_or(-1));
-  type.getImpl()->finalize<UnpackedQueueDim>(type, bound);
-  return type;
+  return Base::get(inner.getContext(), inner, bound.value_or(-1));
 }
 
 std::optional<unsigned> UnpackedQueueDim::getBound() const {
@@ -1171,34 +978,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   // `subset.implied` field is not set, which means there hasn't been any prior
   // `packed` or `unpacked`, the function will emit an error properly.
 
-  // Packed and unpacked type indirections.
-  if (mnemonic == "named") {
-    UnpackedType inner;
-    StringAttr name;
-    LocationAttr loc;
-    if (parser.parseLess() || parser.parseAttribute(name) ||
-        parser.parseComma() || parseMooreType(parser, subset, inner) ||
-        parser.parseComma() || parser.parseAttribute(loc) ||
-        parser.parseGreater())
-      return failure();
-    return yieldImplied(
-        [&]() {
-          return PackedNamedType::get(cast<PackedType>(inner), name, loc);
-        },
-        [&]() { return UnpackedNamedType::get(inner, name, loc); });
-  }
-  if (mnemonic == "ref") {
-    UnpackedType inner;
-    LocationAttr loc;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner) ||
-        parser.parseComma() || parser.parseAttribute(loc) ||
-        parser.parseGreater())
-      return failure();
-    return yieldImplied(
-        [&]() { return PackedRefType::get(cast<PackedType>(inner), loc); },
-        [&]() { return UnpackedRefType::get(inner, loc); });
-  }
-
   // Packed and unpacked ranges.
   if (mnemonic == "unsized") {
     UnpackedType inner;
@@ -1327,8 +1106,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
   // wrapping `packed<...>` or `unpacked<...>` accordingly if not done so
   // previously, in order to disambiguate between the two.
   if (llvm::isa<PackedDim>(type) || llvm::isa<UnpackedDim>(type) ||
-      llvm::isa<PackedIndirectType>(type) ||
-      llvm::isa<UnpackedIndirectType>(type) ||
       llvm::isa<PackedStructType>(type) ||
       llvm::isa<UnpackedStructType>(type)) {
     auto needed =
@@ -1352,20 +1129,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       })
       .Case<RealType>(
           [&](auto type) { return printer << type.getKeyword(), success(); })
-
-      // Type indirections
-      .Case<PackedNamedType, UnpackedNamedType>([&](auto type) {
-        printer << "named<" << type.getName() << ", ";
-        printMooreType(type.getInner(), printer, subset);
-        printer << ", " << type.getLoc() << ">";
-        return success();
-      })
-      .Case<PackedRefType, UnpackedRefType>([&](auto type) {
-        printer << "ref<";
-        printMooreType(type.getInner(), printer, subset);
-        printer << ", " << type.getLoc() << ">";
-        return success();
-      })
 
       // Packed and unpacked dimensions
       .Case<PackedUnsizedDim, UnpackedUnsizedDim>([&](auto type) {

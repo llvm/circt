@@ -235,7 +235,6 @@ Os &operator<<(Os &os, const SimpleBitVectorType &type) {
 namespace detail {
 struct RealTypeStorage;
 struct IntTypeStorage;
-struct IndirectTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
@@ -259,7 +258,6 @@ class StringType;
 class ChandleType;
 class EventType;
 class RealType;
-class UnpackedIndirectType;
 class UnpackedDim;
 class UnpackedStructType;
 
@@ -292,21 +290,9 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType>(type) || llvm::isa<StringType>(type) ||
            llvm::isa<ChandleType>(type) || llvm::isa<EventType>(type) ||
-           llvm::isa<RealType>(type) || llvm::isa<UnpackedIndirectType>(type) ||
-           llvm::isa<UnpackedDim>(type) || llvm::isa<UnpackedStructType>(type);
+           llvm::isa<RealType>(type) || llvm::isa<UnpackedDim>(type) ||
+           llvm::isa<UnpackedStructType>(type);
   }
-
-  /// Resolve one level of name or type reference indirection.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `foo`.
-  UnpackedType resolved() const;
-
-  /// Resolve all name or type reference indirections.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `int`.
-  UnpackedType fullyResolved() const;
 
   /// Get the value domain of this type.
   Domain getDomain() const;
@@ -393,7 +379,6 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, Ty type) {
 
 class VoidType;
 class IntType;
-class PackedIndirectType;
 class PackedDim;
 class PackedStructType;
 
@@ -422,21 +407,8 @@ class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
     return llvm::isa<VoidType>(type) || llvm::isa<IntType>(type) ||
-           llvm::isa<PackedIndirectType>(type) || llvm::isa<PackedDim>(type) ||
-           llvm::isa<PackedStructType>(type);
+           llvm::isa<PackedDim>(type) || llvm::isa<PackedStructType>(type);
   }
-
-  /// Resolve one level of name or type reference indirection.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `foo`.
-  PackedType resolved() const;
-
-  /// Resolve all name or type reference indirections.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `int`.
-  PackedType fullyResolved() const;
 
   /// Get the value domain of this type.
   Domain getDomain() const;
@@ -586,174 +558,6 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Packed and Unpacked Type Indirections
-//===----------------------------------------------------------------------===//
-
-class PackedNamedType;
-class PackedRefType;
-class UnpackedNamedType;
-class UnpackedRefType;
-
-namespace detail {
-UnpackedType getIndirectTypeInner(const TypeStorage *impl);
-Location getIndirectTypeLoc(const TypeStorage *impl);
-StringAttr getIndirectTypeName(const TypeStorage *impl);
-} // namespace detail
-
-/// Common base class for name and type reference indirections.
-///
-/// These handle the cases where the source text uses a `typedef` or
-/// `type(<decl>)` construct to build a type. We keep track of these
-/// indirections alongside the location in the source text where they were
-/// created, in order to be able to reproduce the exact source text type in
-/// diagnostics.
-///
-/// We use this templated base class to construct separate packed and unpacked
-/// indirect types, where holding a packed indirect type guarantees  that the
-/// inner type is a packed type as well. The resulting inheritance trees are:
-///
-/// - `PackedNamedType -> PackedIndirectType -> PackedType`
-/// - `PackedRefType -> PackedIndirectType -> PackedType`
-/// - `UnpackedNamedType -> UnpackedIndirectType -> UnpackedType`
-/// - `UnpackedRefType -> UnpackedIndirectType -> UnpackedType`
-template <class BaseTy>
-class IndirectTypeBase : public BaseTy {
-protected:
-  using InnerType = BaseTy;
-  using BaseTy::BaseTy;
-  using Base = IndirectTypeBase<BaseTy>;
-
-public:
-  /// Get the type this indirection wraps.
-  BaseTy getInner() const {
-    return cast<BaseTy>(detail::getIndirectTypeInner(this->impl));
-  }
-
-  /// Get the location in the source text where the indirection was generated.
-  Location getLoc() const { return detail::getIndirectTypeLoc(this->impl); }
-
-  /// Resolve one level of name or type reference indirection. This simply
-  /// returns the inner type, which removes the name indirection introduced by
-  /// this type. See `PackedType::resolved` and `UnpackedType::resolved`.
-  BaseTy resolved() const { return getInner(); }
-
-  /// Resolve all name or type reference indirections. This always returns the
-  /// fully resolved inner type. See `PackedType::fullyResolved` and
-  /// `UnpackedType::fullyResolved`.
-  BaseTy fullyResolved() const { return getInner().fullyResolved(); }
-};
-
-/// A named type.
-///
-/// Named types are user-defined types that are introduced with a `typedef
-/// <inner> <name>` construct in the source file. They are composed of the
-/// following information:
-///
-/// - `inner: The type that this name expands to.
-/// - `name`: How the user originally called the type.
-/// - `loc`: The location of the typedef in the source file.
-template <class ConcreteTy, class BaseTy>
-class NamedTypeBase
-    : public Type::TypeBase<ConcreteTy, BaseTy, detail::IndirectTypeStorage> {
-protected:
-  using InnerType = typename BaseTy::InnerType;
-  using Type::TypeBase<ConcreteTy, BaseTy,
-                       detail::IndirectTypeStorage>::TypeBase;
-  using NamedBase = NamedTypeBase<ConcreteTy, BaseTy>;
-
-public:
-  static ConcreteTy get(InnerType inner, StringAttr name, Location loc);
-  static ConcreteTy get(InnerType inner, StringRef name, Location loc) {
-    return get(inner, StringAttr::get(inner.getContext(), name), loc);
-  }
-
-  /// Get the name assigned to the wrapped type.
-  StringAttr getName() const { return detail::getIndirectTypeName(this->impl); }
-};
-
-/// A type reference.
-///
-/// Type references are introduced with a `type(<decl>)` construct in the source
-/// file. They are composed of the following information:
-///
-/// - `inner`: The type that this reference expands to.
-/// - `loc`: The location of the `type(...)` in the source file.
-template <class ConcreteTy, class BaseTy>
-class RefTypeBase
-    : public Type::TypeBase<ConcreteTy, BaseTy, detail::IndirectTypeStorage> {
-protected:
-  using InnerType = typename BaseTy::InnerType;
-  using Type::TypeBase<ConcreteTy, BaseTy,
-                       detail::IndirectTypeStorage>::TypeBase;
-  using RefBase = RefTypeBase<ConcreteTy, BaseTy>;
-
-public:
-  static ConcreteTy get(InnerType inner, Location loc);
-};
-
-/// A packed type indirection. See `IndirectTypeBase` for details.
-class PackedIndirectType : public IndirectTypeBase<PackedType> {
-public:
-  static bool classof(Type type) {
-    return llvm::isa<PackedNamedType>(type) || llvm::isa<PackedRefType>(type);
-  }
-
-protected:
-  using Base::Base;
-};
-
-/// An unpacked type indirection. See `IndirectTypeBase` for details.
-class UnpackedIndirectType : public IndirectTypeBase<UnpackedType> {
-public:
-  static bool classof(Type type) {
-    return llvm::isa<UnpackedNamedType>(type) ||
-           llvm::isa<UnpackedRefType>(type);
-  }
-
-protected:
-  using Base::Base;
-};
-
-/// A packed named type. See `NamedTypeBase` for details.
-class PackedNamedType
-    : public NamedTypeBase<PackedNamedType, PackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.packed_named";
-
-protected:
-  using NamedBase::NamedBase;
-};
-
-/// An unpacked named type. See `NamedTypeBase` for details.
-class UnpackedNamedType
-    : public NamedTypeBase<UnpackedNamedType, UnpackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.unpacked_named";
-
-protected:
-  using NamedBase::NamedBase;
-};
-
-/// A packed named type. See `NamedTypeBase` for details.
-class PackedRefType : public RefTypeBase<PackedRefType, PackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.packed_ref";
-
-protected:
-  using RefBase::RefBase;
-};
-
-/// An unpacked named type. See `NamedTypeBase` for details.
-class UnpackedRefType
-    : public RefTypeBase<UnpackedRefType, UnpackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.unpacked_ref";
-
-protected:
-  using RefBase::RefBase;
-};
-
-//===----------------------------------------------------------------------===//
 // Packed Dimensions
 //===----------------------------------------------------------------------===//
 
@@ -775,14 +579,6 @@ public:
   void format(llvm::raw_ostream &os) const;
   /// Format just the dimension part, `[...]`.
   void formatDim(llvm::raw_ostream &os) const;
-
-  /// Resolve one level of name or type reference indirection. See
-  /// `PackedType::resolved`.
-  PackedType resolved() const;
-
-  /// Resolve all name or type reference indirections. See
-  /// `PackedType::fullyResolved`.
-  PackedType fullyResolved() const;
 
   /// Get the dimension's range, or `None` if it is unsized.
   std::optional<Range> getRange() const;
@@ -870,14 +666,6 @@ public:
               llvm::function_ref<void(llvm::raw_ostream &)> around = {}) const;
   /// Format just the dimension part, `[...]`.
   void formatDim(llvm::raw_ostream &os) const;
-
-  /// Resolve one level of name or type reference indirection. See
-  /// `UnpackedType::resolved`.
-  UnpackedType resolved() const;
-
-  /// Resolve all name or type reference indirections. See
-  /// `UnpackedType::fullyResolved`.
-  UnpackedType fullyResolved() const;
 
 protected:
   using UnpackedType::UnpackedType;

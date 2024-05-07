@@ -80,22 +80,6 @@ func.func @RealTypes(
   %arg2: !moore.realtime
 ) { return }
 
-// CHECK-LABEL: func @IndirectTypes(
-func.func @IndirectTypes(
-  // CHECK-SAME: %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg1: !moore.packed<ref<bit, loc("foo.sv":42:9001)>>
-  %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>,
-  %arg1: !moore.packed<ref<bit, loc("foo.sv":42:9001)>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<named<"Foo", bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg3: !moore.unpacked<named<"Foo", string, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg4: !moore.unpacked<ref<bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg5: !moore.unpacked<ref<string, loc("foo.sv":42:9001)>>
-  %arg2: !moore.unpacked<named<"Foo", bit, loc("foo.sv":42:9001)>>,
-  %arg3: !moore.unpacked<named<"Foo", string, loc("foo.sv":42:9001)>>,
-  %arg4: !moore.unpacked<ref<bit, loc("foo.sv":42:9001)>>,
-  %arg5: !moore.unpacked<ref<string, loc("foo.sv":42:9001)>>
-) { return }
-
 // CHECK-LABEL: func @DimTypes(
 func.func @DimTypes(
   // CHECK-SAME: %arg0: !moore.packed<unsized<bit>>,

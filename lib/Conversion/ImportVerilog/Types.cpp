@@ -136,14 +136,8 @@ struct TypeVisitor {
 
   // Handle type defs.
   Type visit(const slang::ast::TypeAliasType &type) {
-    auto innerType = type.targetType.getType().visit(*this);
-    if (!innerType)
-      return {};
-    auto loc = context.convertLocation(type.location);
-    if (auto packedInnerType = dyn_cast<moore::PackedType>(innerType))
-      return moore::PackedNamedType::get(packedInnerType, type.name, loc);
-    return moore::UnpackedNamedType::get(cast<moore::UnpackedType>(innerType),
-                                         type.name, loc);
+    // Simply return the underlying type.
+    return type.targetType.getType().visit(*this);
   }
 
   // Handle enums.

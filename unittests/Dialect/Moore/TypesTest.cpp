@@ -211,54 +211,6 @@ TEST(TypesTest, UnpackedFormattingAroundStuff) {
             "bit [2:0] bar [42]");
 }
 
-TEST(TypesTest, Resolution) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-
-  auto loc = UnknownLoc::get(&context);
-  auto t0 = IntType::get(&context, IntType::Bit);
-  auto t1 = PackedRangeDim::get(t0, 3);
-  auto t2 = PackedNamedType::get(t1, "foo", loc);
-
-  ASSERT_EQ(t2.toString(), "foo");
-  ASSERT_EQ(t2.resolved().toString(), "bit [2:0]");
-  ASSERT_EQ(t2.fullyResolved().toString(), "bit [2:0]");
-
-  auto t3 = PackedRangeDim::get(t2, 2);
-  auto t4 = PackedNamedType::get(t3, "bar", loc);
-
-  ASSERT_EQ(t4.toString(), "bar");
-  ASSERT_EQ(t4.resolved().toString(), "foo [1:0]");
-  ASSERT_EQ(t4.fullyResolved().toString(), "bit [1:0][2:0]");
-
-  auto t5 = UnpackedArrayDim::get(t4, 4);
-  auto t6 = UnpackedNamedType::get(t5, "tony", loc);
-
-  ASSERT_EQ(t6.toString(), "tony");
-  ASSERT_EQ(t6.resolved().toString(), "bar $ [4]");
-  ASSERT_EQ(t6.fullyResolved().toString(), "bit [1:0][2:0] $ [4]");
-
-  auto t7 = UnpackedAssocDim::get(t6);
-  auto t8 = UnpackedNamedType::get(t7, "ada", loc);
-
-  ASSERT_EQ(t8.toString(), "ada");
-  ASSERT_EQ(t8.resolved().toString(), "tony $ [*]");
-  ASSERT_EQ(t8.fullyResolved().toString(), "bit [1:0][2:0] $ [*][4]");
-
-  // Type references
-  auto r0 = PackedRefType::get(t2, loc);
-
-  ASSERT_EQ(r0.toString(), "type(foo)");
-  ASSERT_EQ(r0.resolved().toString(), "foo");
-  ASSERT_EQ(r0.fullyResolved().toString(), "bit [2:0]");
-
-  auto r1 = UnpackedRefType::get(t8, loc);
-
-  ASSERT_EQ(r1.toString(), "type(ada)");
-  ASSERT_EQ(r1.resolved().toString(), "ada");
-  ASSERT_EQ(r1.fullyResolved().toString(), "bit [1:0][2:0] $ [*][4]");
-}
-
 TEST(TypesTest, NamedStructFormatting) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
