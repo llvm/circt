@@ -447,12 +447,14 @@ def ControlMergeOp : Handshake_Op<"control_merge", [
   let results = (outs AnyType : $result, AnyType : $index);
   
   let builders = [OpBuilder<
-    (ins "ValueRange":$operands), [{
+    (ins "ValueRange":$operands, CArg<"Type", "{}">:$indexType), [{
       assert(!operands.empty() && "cmerge needs at least one operand");
       $_state.addOperands(operands);
+      if(!indexType)
+        indexType = $_builder.getIndexType();
       // By default, the index result has an Index type
       $_state.addTypes(ArrayRef<Type>{operands[0].getType(),
-                                      $_builder.getIndexType()});
+                                      indexType});
   }]>];
   
   let hasCustomAssemblyFormat = 1;

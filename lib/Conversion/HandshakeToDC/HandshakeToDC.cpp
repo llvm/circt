@@ -263,6 +263,8 @@ public:
         data.push_back(up.data);
     }
 
+    bool isIndexType = op.getIndex().getType().isa<IndexType>();
+
     // control-side
     Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
     auto mergeOpUnpacked = unpack(rewriter, selectedIndex);
@@ -282,9 +284,16 @@ public:
 
     // if the original op used `index` as the select operand type, we need to
     // index-cast the unpacked select operand
-    if (isa<IndexType>(op.getIndex().getType())) {
+    if (isIndexType) {
       selValue = rewriter.create<arith::IndexCastOp>(
           op.getLoc(), rewriter.getIndexType(), selValue);
+      convertedOps->insert(selValue.getDefiningOp());
+      selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
+    } else {
+      // The cmerge had a specific type defined for the index type. dc.merge
+      // provides an i1 operand for the selected index, so we need to cast it.
+      selValue = rewriter.create<arith::ExtUIOp>(
+          op.getLoc(), op.getIndex().getType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
       selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
     }
