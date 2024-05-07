@@ -175,18 +175,6 @@ MlirType mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound) {
   return wrap(UnpackedQueueDim::get(cast<UnpackedType>(unwrap(inner)), bound));
 }
 
-/// Create a enum type without base.
-MlirType mooreEnumTypeGet(MlirAttribute name, MlirLocation loc) {
-  return wrap(EnumType::get(cast<StringAttr>(unwrap(name)), unwrap(loc)));
-}
-
-/// Create a enum type width base.
-MlirType mooreEnumTypeGetWithBase(MlirAttribute name, MlirLocation loc,
-                                  MlirType base) {
-  return wrap(EnumType::get(cast<StringAttr>(unwrap(name)), unwrap(loc),
-                            cast<PackedType>(unwrap(base))));
-}
-
 /// Create a simple bit-vector type.
 MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx, bool isFourValued,
                                      bool isSigned, unsigned size) {
