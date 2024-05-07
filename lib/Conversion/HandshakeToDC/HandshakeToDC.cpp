@@ -207,7 +207,7 @@ public:
   matchAndRewrite(handshake::MergeOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (op.getNumOperands() > 2)
-      return op.emitOpError("only two inputs supported");
+      return rewriter.notifyMatchFailure(op, "only two inputs supported");
 
     SmallVector<Value, 4> tokens, data;
 
