@@ -37,7 +37,7 @@ void MooreDialect::registerTypes() {
   addTypes<IntType, RealType, PackedNamedType, PackedRefType, UnpackedNamedType,
            UnpackedRefType, PackedUnsizedDim, PackedRangeDim,
            UnpackedUnsizedDim, UnpackedArrayDim, UnpackedRangeDim,
-           UnpackedAssocDim, UnpackedQueueDim, EnumType, PackedStructType,
+           UnpackedAssocDim, UnpackedQueueDim, PackedStructType,
            UnpackedStructType>();
 
   addTypes<
@@ -260,7 +260,6 @@ Domain PackedType::getDomain() const {
       .Case<IntType>([&](auto type) { return type.getDomain(); })
       .Case<PackedIndirectType, PackedDim>(
           [&](auto type) { return type.getInner().getDomain(); })
-      .Case<EnumType>([](auto type) { return type.getBase().getDomain(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().domain; });
 }
@@ -271,8 +270,7 @@ Sign PackedType::getSign() const {
       .Case<IntType, PackedStructType>(
           [&](auto type) { return type.getSign(); })
       .Case<PackedIndirectType, PackedDim>(
-          [&](auto type) { return type.getInner().getSign(); })
-      .Case<EnumType>([](auto type) { return type.getBase().getSign(); });
+          [&](auto type) { return type.getInner().getSign(); });
 }
 
 std::optional<unsigned> PackedType::getBitSize() const {
@@ -287,7 +285,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
       })
       .Case<PackedIndirectType>(
           [](auto type) { return type.getInner().getBitSize(); })
-      .Case<EnumType>([](auto type) { return type.getBase().getBitSize(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
 }
@@ -295,8 +292,8 @@ std::optional<unsigned> PackedType::getBitSize() const {
 void PackedType::format(llvm::raw_ostream &os) const {
   TypeSwitch<PackedType>(*this)
       .Case<VoidType>([&](auto) { os << "void"; })
-      .Case<IntType, PackedRangeDim, PackedUnsizedDim, EnumType,
-            PackedStructType>([&](auto type) { type.format(os); })
+      .Case<IntType, PackedRangeDim, PackedUnsizedDim, PackedStructType>(
+          [&](auto type) { type.format(os); })
       .Case<PackedNamedType>(
           [&](auto type) { os << type.getName().getValue(); })
       .Case<PackedRefType>(
@@ -939,66 +936,6 @@ std::optional<unsigned> UnpackedQueueDim::getBound() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Enumerations
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-
-struct EnumTypeStorage : TypeStorage {
-  using KeyTy = std::tuple<StringAttr, Location, PackedType, char>;
-
-  EnumTypeStorage(KeyTy key)
-      : name(std::get<0>(key)), loc(std::get<1>(key)), base(std::get<2>(key)),
-        explicitBase(std::get<3>(key)) {}
-  bool operator==(const KeyTy &key) const {
-    return std::get<0>(key) == name && std::get<1>(key) == loc &&
-           std::get<2>(key) == base && std::get<3>(key) == explicitBase;
-  }
-  static EnumTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<EnumTypeStorage>()) EnumTypeStorage(key);
-  }
-
-  StringAttr name;
-  Location loc;
-  PackedType base;
-  bool explicitBase;
-};
-
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-EnumType EnumType::get(StringAttr name, Location loc, PackedType base) {
-  return Base::get(loc.getContext(), name, loc,
-                   base ? base : IntType::getInt(loc.getContext()), !!base);
-}
-
-PackedType EnumType::getBase() const { return getImpl()->base; }
-
-bool EnumType::isBaseExplicit() const { return getImpl()->explicitBase; }
-
-StringAttr EnumType::getName() const { return getImpl()->name; }
-
-Location EnumType::getLoc() const { return getImpl()->loc; }
-
-void EnumType::format(llvm::raw_ostream &os) const {
-  os << "enum";
-
-  // If the enum is part of a typedefm simply print it as `enum <name>`.
-  if (auto name = getName()) {
-    os << " " << name.getValue();
-    return;
-  }
-
-  // Otherwise print `enum <base-type>` or just `enum`.
-  if (isBaseExplicit())
-    os << " " << getBase();
-}
-
-//===----------------------------------------------------------------------===//
 // Packed and Unpacked Structs
 //===----------------------------------------------------------------------===//
 
@@ -1227,31 +1164,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   if (auto kind = RealType::getKindFromKeyword(mnemonic))
     return yieldUnpacked(RealType::get(context, *kind));
 
-  // Enums
-  if (mnemonic == "enum") {
-    if (parser.parseLess())
-      return failure();
-    StringAttr name;
-    auto result = parser.parseOptionalAttribute(name);
-    if (result.has_value())
-      if (*result || parser.parseComma())
-        return failure();
-    LocationAttr loc;
-    PackedType base;
-    result = parser.parseOptionalAttribute(loc);
-    if (result.has_value()) {
-      if (*result)
-        return failure();
-    } else {
-      if (parseMooreType(parser, {Subset::Packed, false}, base) ||
-          parser.parseComma() || parser.parseAttribute(loc))
-        return failure();
-    }
-    if (parser.parseGreater())
-      return failure();
-    return yieldPacked(EnumType::get(name, loc, base));
-  }
-
   // Everything that follows can be packed or unpacked. The packing is inferred
   // from the last `packed<...>` or `unpacked<...>` that we've seen. The
   // `yieldImplied` function will call the first lambda to construct a packed
@@ -1440,19 +1352,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       })
       .Case<RealType>(
           [&](auto type) { return printer << type.getKeyword(), success(); })
-
-      // Enums
-      .Case<EnumType>([&](auto type) {
-        printer << "enum<";
-        if (type.getName())
-          printer << type.getName() << ", ";
-        if (type.isBaseExplicit()) {
-          printMooreType(type.getBase(), printer, subset);
-          printer << ", ";
-        }
-        printer << type.getLoc() << ">";
-        return success();
-      })
 
       // Type indirections
       .Case<PackedNamedType, UnpackedNamedType>([&](auto type) {

@@ -340,65 +340,6 @@ TEST(TypesTest, Structs) {
   ASSERT_EQ(s3.getBitSize(), std::nullopt);
 }
 
-TEST(TypesTest, Enums) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
-  auto foo = StringAttr::get(&context, "Foo");
-  auto intType = IntType::getInt(&context);
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto bit8Type = PackedRangeDim::get(bitType, 8);
-  auto slogicType = IntType::get(&context, IntType::Logic, Sign::Signed);
-  auto slogic8Type = PackedRangeDim::get(slogicType, 8);
-
-  auto e0 = EnumType::get({}, loc);
-  auto e1 = EnumType::get(foo, loc);
-  auto e2 = EnumType::get({}, loc, bit8Type);
-  auto e3 = EnumType::get(foo, loc, bit8Type);
-  auto e4 = EnumType::get({}, loc, slogic8Type);
-  auto e5 = EnumType::get(foo, loc, slogic8Type);
-
-  // Formatting
-  ASSERT_EQ(e0.toString(), "enum");
-  ASSERT_EQ(e1.toString(), "enum Foo");
-  ASSERT_EQ(e2.toString(), "enum bit [7:0]");
-  ASSERT_EQ(e3.toString(), "enum Foo");
-  ASSERT_EQ(e4.toString(), "enum logic signed [7:0]");
-  ASSERT_EQ(e5.toString(), "enum Foo");
-
-  // Base types
-  ASSERT_EQ(e0.getBase(), intType);
-  ASSERT_EQ(e1.getBase(), intType);
-  ASSERT_EQ(e2.getBase(), bit8Type);
-  ASSERT_EQ(e3.getBase(), bit8Type);
-  ASSERT_EQ(e4.getBase(), slogic8Type);
-  ASSERT_EQ(e5.getBase(), slogic8Type);
-
-  // Sign
-  ASSERT_EQ(e0.getSign(), Sign::Signed); // implicit int
-  ASSERT_EQ(e1.getSign(), Sign::Signed); // implicit int
-  ASSERT_EQ(e2.getSign(), Sign::Unsigned);
-  ASSERT_EQ(e3.getSign(), Sign::Unsigned);
-  ASSERT_EQ(e4.getSign(), Sign::Signed);
-  ASSERT_EQ(e5.getSign(), Sign::Signed);
-
-  // Value domain
-  ASSERT_EQ(e0.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e1.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e2.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e3.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e4.getDomain(), Domain::FourValued);
-  ASSERT_EQ(e5.getDomain(), Domain::FourValued);
-
-  // Bit size
-  ASSERT_EQ(e0.getBitSize(), 32u);
-  ASSERT_EQ(e1.getBitSize(), 32u);
-  ASSERT_EQ(e2.getBitSize(), 8u);
-  ASSERT_EQ(e3.getBitSize(), 8u);
-  ASSERT_EQ(e4.getBitSize(), 8u);
-  ASSERT_EQ(e5.getBitSize(), 8u);
-}
-
 TEST(TypesTest, SimpleBitVectorTypes) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();

@@ -80,18 +80,6 @@ func.func @RealTypes(
   %arg2: !moore.realtime
 ) { return }
 
-// CHECK-LABEL: func @EnumType(
-func.func @EnumType(
-  // CHECK-SAME: %arg0: !moore.enum<loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg1: !moore.enum<int, loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg2: !moore.enum<"Foo", loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg3: !moore.enum<"Foo", int, loc("foo.sv":42:9001)>
-  %arg0: !moore.enum<loc("foo.sv":42:9001)>,
-  %arg1: !moore.enum<int, loc("foo.sv":42:9001)>,
-  %arg2: !moore.enum<"Foo", loc("foo.sv":42:9001)>,
-  %arg3: !moore.enum<"Foo", int, loc("foo.sv":42:9001)>
-) { return }
-
 // CHECK-LABEL: func @IndirectTypes(
 func.func @IndirectTypes(
   // CHECK-SAME: %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>

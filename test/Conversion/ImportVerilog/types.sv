@@ -8,9 +8,9 @@
 module Enums;
   typedef enum shortint { MAGIC } myEnum;
 
-  // CHECK-NEXT: %e0 = moore.variable : !moore.enum<int, loc(
-  // CHECK-NEXT: %e1 = moore.variable : !moore.enum<byte, loc(
-  // CHECK-NEXT: %e2 = moore.variable : !moore.packed<named<"myEnum", enum<shortint, loc(
+  // CHECK-NEXT: %e0 = moore.variable : !moore.int
+  // CHECK-NEXT: %e1 = moore.variable : !moore.byte
+  // CHECK-NEXT: %e2 = moore.variable : !moore.packed<named<"myEnum", shortint, loc(
   enum { FOO, BAR } e0;
   enum byte { HELLO = 0, WORLD = 1 } e1;
   myEnum e2;

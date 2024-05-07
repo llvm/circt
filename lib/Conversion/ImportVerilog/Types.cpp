@@ -148,11 +148,8 @@ struct TypeVisitor {
 
   // Handle enums.
   Type visit(const slang::ast::EnumType &type) {
-    auto baseType = type.baseType.visit(*this);
-    if (!baseType)
-      return {};
-    return moore::EnumType::get(StringAttr{}, loc,
-                                cast<moore::PackedType>(baseType));
+    // Simply return the underlying type.
+    return type.baseType.visit(*this);
   }
 
   // Collect the members in a struct or union.

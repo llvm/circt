@@ -241,7 +241,6 @@ struct UnsizedDimStorage;
 struct RangeDimStorage;
 struct SizedDimStorage;
 struct AssocDimStorage;
-struct EnumTypeStorage;
 struct StructTypeStorage;
 } // namespace detail
 
@@ -396,7 +395,6 @@ class VoidType;
 class IntType;
 class PackedIndirectType;
 class PackedDim;
-class EnumType;
 class PackedStructType;
 
 /// A packed SystemVerilog type.
@@ -425,7 +423,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<VoidType>(type) || llvm::isa<IntType>(type) ||
            llvm::isa<PackedIndirectType>(type) || llvm::isa<PackedDim>(type) ||
-           llvm::isa<EnumType>(type) || llvm::isa<PackedStructType>(type);
+           llvm::isa<PackedStructType>(type);
   }
 
   /// Resolve one level of name or type reference indirection.
@@ -992,39 +990,6 @@ public:
 protected:
   using Base::Base;
   friend struct detail::DimStorage;
-};
-
-//===----------------------------------------------------------------------===//
-// Enumerations
-//===----------------------------------------------------------------------===//
-
-/// An enum type.
-class EnumType
-    : public Type::TypeBase<EnumType, PackedType, detail::EnumTypeStorage> {
-public:
-  static EnumType get(StringAttr name, Location loc, PackedType base = {});
-
-  /// Get the base type of the enumeration.
-  PackedType getBase() const;
-  /// Returns whether the base type was explicitly specified by the user. This
-  /// allows us to distinguish `enum` from `enum int`.
-  bool isBaseExplicit() const;
-  /// Get the name of the surrounding typedef, if this enum is embedded in a
-  /// typedef. Otherwise this returns a null attribute.
-  StringAttr getName() const;
-  /// Get the location in the source text where the enum was declared. This
-  /// shall be the location of the `enum` keyword or, if the enum is embedded in
-  /// a typedef, the location of the typedef name.
-  Location getLoc() const;
-
-  /// Format this enum in SystemVerilog syntax. Useful to present the enum back
-  /// to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const;
-
-  static constexpr StringLiteral name = "moore.enum";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//
