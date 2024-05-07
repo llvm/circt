@@ -382,9 +382,7 @@ updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
 /// The conversion framework seems to throw away block argument locations.  We
 /// use this function to copy the location from the original argument to the
 /// set of flattened arguments.
-static void
-updateBlockLocations(hw::HWModuleLike op,
-                     DenseMap<unsigned, hw::StructType> &structMap) {
+static void updateBlockLocations(hw::HWModuleLike op) {
   auto locs = op.getInputLocs();
   if (locs.empty() || op.getModuleBody().empty())
     return;
@@ -492,7 +490,7 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
                                            oldResLocs[op]);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
       op.setAllPortLocs(newArgLocs);
-      updateBlockLocations(op, ioInfo.argStructs);
+      updateBlockLocations(op);
     }
 
     // And likewise with the converted instance ops.
