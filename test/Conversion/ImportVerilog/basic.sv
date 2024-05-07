@@ -120,6 +120,12 @@ module Statements;
   int i;
   initial begin
     //===------------------------------------------------------------------===//
+    // local variables
+
+    // CHECK: %a = moore.variable  : !moore.int
+    automatic int a;
+    
+    //===------------------------------------------------------------------===//
     // Conditional statements
 
     // CHECK: [[COND:%.+]] = moore.conversion %x : !moore.bit -> i1
