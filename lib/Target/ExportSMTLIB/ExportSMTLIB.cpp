@@ -22,6 +22,7 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace smt;
@@ -148,6 +149,8 @@ struct ExpressionVisitor
         return failure();
 
       info.valueMap.insert(res, str);
+      llvm::outs()<<"1 inserting "<<res<<", "<<str<<"\n";
+
       return success();
     }
 
@@ -156,6 +159,8 @@ struct ExpressionVisitor
     // readability.
     auto name = names.newName("tmp");
     info.valueMap.insert(res, name.str());
+    llvm::outs()<<"2 inserting "<<res<<", "<<name.str()<<"\n";
+
     info.stream << "(let ((" << name << " ";
 
     VisitorInfo newInfo(info.stream, info.valueMap,
@@ -316,6 +321,7 @@ struct ExpressionVisitor
       argNames.push_back(name);
 
       info.valueMap.insert(arg, name.str());
+      llvm::outs()<<"3 inserting "<<arg<<", "<<name.str()<<"\n";
 
       // Print the bound variable declaration.
       info.stream << delimiter << "(" << name << " ";
@@ -355,28 +361,54 @@ struct ExpressionVisitor
       info.stream << "\n :pattern (";
       for (auto &p : patterns) {
 
+          llvm::outs()<<"pattern 1\n";
+
+
         // retrieve argument name from the body region
         for (auto [i, arg] : llvm::enumerate(p.getArguments())) {
           info.valueMap.insert(arg, argNames[i].str());
+          llvm::outs()<<"4 inserting "<<arg<<", "<<argNames[i].str()<<"\n";
+
         }
+
         SmallVector<Value> worklist;
 
-        Value yieldedValue = p.front().getTerminator()->getOperand(0);
-
-        worklist.push_back(yieldedValue);
+        for (auto opr: p.front().getTerminator()->getOperands()){
+          Value yieldedValue = opr;
+          worklist.push_back(yieldedValue);
+        }
 
         unsigned indentExt = operatorString.size() + 2;
 
         VisitorInfo newInfo2(info.stream, info.valueMap,
-                             info.indentLevel + indentExt, info.openParens);
+                        info.indentLevel + indentExt, info.openParens);
 
         info.stream.indent(0);
 
-        if (failed(printExpression(worklist, info)))
+
+        // llvm::outs()<<"info.valueMap: \n";
+
+        // for(auto it = map.begin(); it != map.end(); ++it){
+        //   llvm::outs()<<"val, name: "<<it->first<<", "<<it->second<<"\n";
+        // }
+
+        // llvm::outs()<<"newInfo.valueMap: \n";
+
+        // for(auto a: newInfo.valueMap){
+        //   llvm::outs()<<"val, name: "<<a.first<<", "<<a.second<<"\n";
+        // }
+                
+        // llvm::outs()<<"newInfo2.valueMap: \n";
+
+        // for(auto a: newInfo2.valueMap){
+        //   llvm::outs()<<"val, name: "<<a.first<<", "<<a.second<<"\n";
+        // }
+
+        if (failed(printExpression(worklist, newInfo2)))
           return failure();
 
-        info.stream << info.valueMap.lookup(yieldedValue);
-        for (unsigned j = 0; j < newInfo2.openParens; ++j)
+        info.stream << newInfo2.valueMap.lookup(yieldedValue);
+        for (unsigned j = 0; j < newInfo.openParens; ++j)
           info.stream << ")";
         info.stream << ")";
       }
@@ -444,7 +476,10 @@ struct ExpressionVisitor
   LogicalResult printExpression(SmallVector<Value> &worklist,
                                 VisitorInfo &info) {
     while (!worklist.empty()) {
+
       Value curr = worklist.back();
+      llvm::outs()<<"\nprinting "<<curr<<"\n";
+
 
       // If we already have a let-binding for the value, just print it.
       if (info.valueMap.count(curr)) {
@@ -500,6 +535,8 @@ struct StatementVisitor
   LogicalResult visitSMTOp(BVConstantOp op, mlir::raw_indented_ostream &stream,
                            ValueMap &valueMap) {
     valueMap.insert(op.getResult(), op.getValue().getValueAsString());
+    llvm::outs()<<"5 inserting "<<op.getResult()<<", "<<op.getValue().getValueAsString()<<"\n";
+    
     return success();
   }
 
@@ -507,6 +544,8 @@ struct StatementVisitor
                            mlir::raw_indented_ostream &stream,
                            ValueMap &valueMap) {
     valueMap.insert(op.getResult(), op.getValue() ? "true" : "false");
+    llvm::outs()<<"6 inserting "<<op.getResult()<<", "<<(op.getValue() ? "true" : "false")<<"\n";
+
     return success();
   }
 
@@ -515,6 +554,8 @@ struct StatementVisitor
     SmallString<16> str;
     op.getValue().toStringSigned(str);
     valueMap.insert(op.getResult(), str.str().str());
+    llvm::outs()<<"6 inserting "<<op.getResult()<<", "<<str.str().str()<<"\n";
+
     return success();
   }
 
@@ -523,6 +564,8 @@ struct StatementVisitor
     StringRef name =
         names.newName(op.getNamePrefix() ? *op.getNamePrefix() : "tmp");
     valueMap.insert(op.getResult(), name.str());
+    llvm::outs()<<"7 inserting "<<op.getResult()<<", "<<name.str()<<"\n";
+
     stream << "("
            << (isa<SMTFuncType>(op.getType()) ? "declare-fun "
                                               : "declare-const ")
