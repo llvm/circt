@@ -121,10 +121,10 @@ module Structs;
   typedef struct packed { byte a; int b; } myStructA;
   typedef struct { byte x; int y; } myStructB;
 
-  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: bit loc({{.+}}), bar: logic loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<bit, int> loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<struct<{a: byte loc({{.+}}), b: int loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<struct<{x: byte loc({{.+}}), y: int loc({{.+}})}, loc({{.+}})>>
+  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: bit, bar: logic}>>
+  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<bit, int>}>>
+  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<struct<{a: byte, b: int}>>
+  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<struct<{x: byte, y: int}>>
   struct packed { bit foo; logic bar; } s0;
   struct { bit many[int]; } s1;
   myStructA s2;

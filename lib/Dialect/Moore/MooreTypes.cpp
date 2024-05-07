@@ -766,10 +766,8 @@ std::optional<StructKind> moore::getStructKindFromMnemonic(StringRef mnemonic) {
       .Default({});
 }
 
-Struct::Struct(StructKind kind, ArrayRef<StructMember> members, StringAttr name,
-               Location loc)
-    : kind(kind), members(members.begin(), members.end()), name(name),
-      loc(loc) {
+Struct::Struct(StructKind kind, ArrayRef<StructMember> members)
+    : kind(kind), members(members.begin(), members.end()) {
   // The struct's value domain is two-valued if all members are two-valued.
   // Otherwise it is four-valued.
   domain = llvm::all_of(members,
@@ -800,12 +798,6 @@ void Struct::format(llvm::raw_ostream &os, bool packed,
   if (signing)
     os << " " << *signing;
 
-  // If the struct is part of a typedef, simply print it as `struct <name>`.
-  if (name) {
-    os << " " << name.getValue();
-    return;
-  }
-
   // Otherwise actually print the struct definition inline.
   os << " {";
   for (auto &member : members)
@@ -820,12 +812,11 @@ namespace moore {
 namespace detail {
 
 struct StructTypeStorage : TypeStorage {
-  using KeyTy =
-      std::tuple<unsigned, ArrayRef<StructMember>, StringAttr, Location>;
+  using KeyTy = std::tuple<unsigned, ArrayRef<StructMember>>;
 
   StructTypeStorage(KeyTy key)
       : strukt(static_cast<StructKind>((std::get<0>(key) >> 16) & 0xFF),
-               std::get<1>(key), std::get<2>(key), std::get<3>(key)),
+               std::get<1>(key)),
         sign(static_cast<Sign>((std::get<0>(key) >> 8) & 0xFF)),
         explicitSign((std::get<0>(key) >> 0) & 1) {}
   static unsigned pack(StructKind kind, Sign sign, bool explicitSign) {
@@ -834,8 +825,7 @@ struct StructTypeStorage : TypeStorage {
   }
   bool operator==(const KeyTy &key) const {
     return std::get<0>(key) == pack(strukt.kind, sign, explicitSign) &&
-           std::get<1>(key) == ArrayRef<StructMember>(strukt.members) &&
-           std::get<2>(key) == strukt.name && std::get<3>(key) == strukt.loc;
+           std::get<1>(key) == ArrayRef<StructMember>(strukt.members);
   }
   static StructTypeStorage *construct(TypeStorageAllocator &allocator,
                                       const KeyTy &key) {
@@ -851,19 +841,18 @@ struct StructTypeStorage : TypeStorage {
 } // namespace moore
 } // namespace circt
 
-PackedStructType PackedStructType::get(StructKind kind,
+PackedStructType PackedStructType::get(MLIRContext *context, StructKind kind,
                                        ArrayRef<StructMember> members,
-                                       StringAttr name, Location loc,
                                        std::optional<Sign> sign) {
   assert(llvm::all_of(members,
                       [](const StructMember &member) {
                         return llvm::isa<PackedType>(member.type);
                       }) &&
          "packed struct members must be packed");
-  return Base::get(loc.getContext(),
+  return Base::get(context,
                    detail::StructTypeStorage::pack(
                        kind, sign.value_or(Sign::Unsigned), sign.has_value()),
-                   members, name, loc);
+                   members);
 }
 
 Sign PackedStructType::getSign() const { return getImpl()->sign; }
@@ -874,12 +863,12 @@ bool PackedStructType::isSignExplicit() const {
 
 const Struct &PackedStructType::getStruct() const { return getImpl()->strukt; }
 
-UnpackedStructType UnpackedStructType::get(StructKind kind,
-                                           ArrayRef<StructMember> members,
-                                           StringAttr name, Location loc) {
-  return Base::get(loc.getContext(),
+UnpackedStructType UnpackedStructType::get(MLIRContext *context,
+                                           StructKind kind,
+                                           ArrayRef<StructMember> members) {
+  return Base::get(context,
                    detail::StructTypeStorage::pack(kind, Sign::Unsigned, false),
-                   members, name, loc);
+                   members);
 }
 
 const Struct &UnpackedStructType::getStruct() const {
@@ -1045,12 +1034,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
     if (parser.parseLess())
       return failure();
 
-    StringAttr name;
-    auto result = parser.parseOptionalAttribute(name);
-    if (result.has_value())
-      if (*result || parser.parseComma())
-        return failure();
-
     std::optional<Sign> sign;
     StringRef keyword;
     if (succeeded(parser.parseOptionalKeyword(&keyword))) {
@@ -1073,27 +1056,23 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
           if (parser.parseKeyword(&keyword))
             return failure();
           UnpackedType type;
-          LocationAttr loc;
-          if (parser.parseColon() || parseMooreType(parser, subset, type) ||
-              parser.parseAttribute(loc))
+          if (parser.parseColon() || parseMooreType(parser, subset, type))
             return failure();
           members.push_back(
-              {StringAttr::get(parser.getContext(), keyword), loc, type});
+              {StringAttr::get(parser.getContext(), keyword), type});
           return success();
         });
     if (result2)
       return failure();
 
-    LocationAttr loc;
-    if (parser.parseComma() || parser.parseAttribute(loc) ||
-        parser.parseGreater())
-      return failure();
-
     return yieldImplied(
         [&]() {
-          return PackedStructType::get(*kind, members, name, loc, sign);
+          return PackedStructType::get(parser.getContext(), *kind, members,
+                                       sign);
         },
-        [&]() { return UnpackedStructType::get(*kind, members, name, loc); });
+        [&]() {
+          return UnpackedStructType::get(parser.getContext(), *kind, members);
+        });
   }
 
   return {};
@@ -1172,8 +1151,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       .Case<PackedStructType, UnpackedStructType>([&](auto type) {
         const auto &strukt = type.getStruct();
         printer << getMnemonicFromStructKind(strukt.kind) << "<";
-        if (strukt.name)
-          printer << strukt.name << ", ";
         auto packed = llvm::dyn_cast<PackedStructType>(type);
         if (packed && packed.isSignExplicit())
           printer << packed.getSign() << ", ";
@@ -1181,10 +1158,8 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
         llvm::interleaveComma(strukt.members, printer, [&](const auto &member) {
           printer << member.name.getValue() << ": ";
           printMooreType(member.type, printer, subset);
-          printer << " " << member.loc;
         });
-        printer << "}, ";
-        printer << strukt.loc << ">";
+        printer << "}>";
         return success();
       })
 

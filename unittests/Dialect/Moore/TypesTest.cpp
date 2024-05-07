@@ -214,46 +214,43 @@ TEST(TypesTest, UnpackedFormattingAroundStuff) {
 TEST(TypesTest, NamedStructFormatting) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
-  auto foo = StringAttr::get(&context, "Foo");
 
-  auto s0 = UnpackedStructType::get(StructKind::Struct, {}, foo, loc);
-  auto s1 = UnpackedStructType::get(StructKind::Union, {}, foo, loc);
-  auto s2 = UnpackedStructType::get(StructKind::TaggedUnion, {}, foo, loc);
-  auto s3 = PackedStructType::get(StructKind::Struct, {}, foo, loc);
-  auto s4 = PackedStructType::get(StructKind::Union, {}, foo, loc);
-  auto s5 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc);
+  auto s0 = UnpackedStructType::get(&context, StructKind::Struct, {});
+  auto s1 = UnpackedStructType::get(&context, StructKind::Union, {});
+  auto s2 = UnpackedStructType::get(&context, StructKind::TaggedUnion, {});
+  auto s3 = PackedStructType::get(&context, StructKind::Struct, {});
+  auto s4 = PackedStructType::get(&context, StructKind::Union, {});
+  auto s5 = PackedStructType::get(&context, StructKind::TaggedUnion, {});
   auto s6 =
-      PackedStructType::get(StructKind::Struct, {}, foo, loc, Sign::Unsigned);
+      PackedStructType::get(&context, StructKind::Struct, {}, Sign::Unsigned);
   auto s7 =
-      PackedStructType::get(StructKind::Union, {}, foo, loc, Sign::Unsigned);
-  auto s8 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc,
+      PackedStructType::get(&context, StructKind::Union, {}, Sign::Unsigned);
+  auto s8 = PackedStructType::get(&context, StructKind::TaggedUnion, {},
                                   Sign::Unsigned);
   auto s9 =
-      PackedStructType::get(StructKind::Struct, {}, foo, loc, Sign::Signed);
+      PackedStructType::get(&context, StructKind::Struct, {}, Sign::Signed);
   auto s10 =
-      PackedStructType::get(StructKind::Union, {}, foo, loc, Sign::Signed);
-  auto s11 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc,
+      PackedStructType::get(&context, StructKind::Union, {}, Sign::Signed);
+  auto s11 = PackedStructType::get(&context, StructKind::TaggedUnion, {},
                                    Sign::Signed);
 
-  ASSERT_EQ(s0.toString(), "struct Foo");
-  ASSERT_EQ(s1.toString(), "union Foo");
-  ASSERT_EQ(s2.toString(), "union tagged Foo");
-  ASSERT_EQ(s3.toString(), "struct packed Foo");
-  ASSERT_EQ(s4.toString(), "union packed Foo");
-  ASSERT_EQ(s5.toString(), "union tagged packed Foo");
-  ASSERT_EQ(s6.toString(), "struct packed unsigned Foo");
-  ASSERT_EQ(s7.toString(), "union packed unsigned Foo");
-  ASSERT_EQ(s8.toString(), "union tagged packed unsigned Foo");
-  ASSERT_EQ(s9.toString(), "struct packed signed Foo");
-  ASSERT_EQ(s10.toString(), "union packed signed Foo");
-  ASSERT_EQ(s11.toString(), "union tagged packed signed Foo");
+  ASSERT_EQ(s0.toString(), "struct {}");
+  ASSERT_EQ(s1.toString(), "union {}");
+  ASSERT_EQ(s2.toString(), "union tagged {}");
+  ASSERT_EQ(s3.toString(), "struct packed {}");
+  ASSERT_EQ(s4.toString(), "union packed {}");
+  ASSERT_EQ(s5.toString(), "union tagged packed {}");
+  ASSERT_EQ(s6.toString(), "struct packed unsigned {}");
+  ASSERT_EQ(s7.toString(), "union packed unsigned {}");
+  ASSERT_EQ(s8.toString(), "union tagged packed unsigned {}");
+  ASSERT_EQ(s9.toString(), "struct packed signed {}");
+  ASSERT_EQ(s10.toString(), "union packed signed {}");
+  ASSERT_EQ(s11.toString(), "union tagged packed signed {}");
 }
 
 TEST(TypesTest, Structs) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
   auto foo = StringAttr::get(&context, "foo");
   auto bar = StringAttr::get(&context, "bar");
 
@@ -262,20 +259,17 @@ TEST(TypesTest, Structs) {
   auto bit8Type = PackedRangeDim::get(bitType, 8);
   auto bitDynArrayType = PackedUnsizedDim::get(bitType);
 
-  auto s0 = UnpackedStructType::get(StructKind::Struct,
-                                    {StructMember{foo, loc, bitType}}, {}, loc);
+  auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
+                                    {StructMember{foo, bitType}});
   auto s1 = UnpackedStructType::get(
-      StructKind::Struct,
-      {StructMember{foo, loc, bitType}, StructMember{bar, loc, bit8Type}}, {},
-      loc);
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, bit8Type}});
   auto s2 = UnpackedStructType::get(
-      StructKind::Struct,
-      {StructMember{foo, loc, bitType}, StructMember{bar, loc, logicType}}, {},
-      loc);
-  auto s3 = UnpackedStructType::get(StructKind::Struct,
-                                    {StructMember{foo, loc, bitType},
-                                     StructMember{bar, loc, bitDynArrayType}},
-                                    {}, loc);
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, logicType}});
+  auto s3 = UnpackedStructType::get(
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, bitDynArrayType}});
 
   // Member formatting
   ASSERT_EQ(s0.toString(), "struct { bit foo; }");

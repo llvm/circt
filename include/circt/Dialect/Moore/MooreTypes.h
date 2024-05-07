@@ -810,19 +810,17 @@ Os &operator<<(Os &os, const StructKind &kind) {
 struct StructMember {
   /// The name of this member.
   StringAttr name;
-  /// The location in the source text where this member was declared.
-  Location loc;
   /// The type of this member.
   UnpackedType type;
 
   bool operator==(const StructMember &other) const {
-    return name == other.name && loc == other.loc && type == other.type;
+    return name == other.name && type == other.type;
   }
 };
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const StructMember &x) {
-  return llvm::hash_combine(x.name, x.loc, x.type);
+  return llvm::hash_combine(x.name, x.type);
 }
 
 /// A struct.
@@ -843,17 +841,9 @@ struct Struct {
   /// unknown size. This is commonly the case for unpacked member types, or
   /// dimensions with unknown size such as `[]` or `[$]`.
   std::optional<unsigned> bitSize;
-  /// The name of the surrounding typedef, if this struct is embedded in a
-  /// typedef. Otherwise this is a null attribute.
-  StringAttr name;
-  /// The location in the source text where the struct was declared. This shall
-  /// be the location of the `struct` or `union` keyword, or, if the struct is
-  /// embedded in a typedef, the location of the typedef name.
-  Location loc;
 
   /// Create a new struct.
-  Struct(StructKind kind, ArrayRef<StructMember> members, StringAttr name,
-         Location loc);
+  Struct(StructKind kind, ArrayRef<StructMember> members);
 
   /// Format this struct in SystemVerilog syntax. Useful to present the struct
   /// back to the user in diagnostics.
@@ -872,12 +862,12 @@ class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
                                                detail::StructTypeStorage,
                                                ::mlir::TypeTrait::IsMutable> {
 public:
-  static PackedStructType get(StructKind kind, ArrayRef<StructMember> members,
-                              StringAttr name, Location loc,
+  static PackedStructType get(MLIRContext *context, StructKind kind,
+                              ArrayRef<StructMember> members,
                               std::optional<Sign> sign = {});
-  static PackedStructType get(const Struct &strukt,
+  static PackedStructType get(MLIRContext *context, const Struct &strukt,
                               std::optional<Sign> sign = {}) {
-    return get(strukt.kind, strukt.members, strukt.name, strukt.loc, sign);
+    return get(context, strukt.kind, strukt.members, sign);
   }
 
   /// Get the sign of this struct.
@@ -911,10 +901,10 @@ class UnpackedStructType
                             detail::StructTypeStorage,
                             ::mlir::TypeTrait::IsMutable> {
 public:
-  static UnpackedStructType get(StructKind kind, ArrayRef<StructMember> members,
-                                StringAttr name, Location loc);
-  static UnpackedStructType get(const Struct &strukt) {
-    return get(strukt.kind, strukt.members, strukt.name, strukt.loc);
+  static UnpackedStructType get(MLIRContext *context, StructKind kind,
+                                ArrayRef<StructMember> members);
+  static UnpackedStructType get(MLIRContext *context, const Struct &strukt) {
+    return get(context, strukt.kind, strukt.members);
   }
 
   /// Get the struct definition.
