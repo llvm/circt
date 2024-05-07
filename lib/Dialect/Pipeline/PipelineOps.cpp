@@ -985,6 +985,12 @@ LogicalResult LatencyOp::verify() {
     return success();
   }
 
+  // Verify that there's at least one result type. Latency ops don't make sense
+  // if they're not delaying anything, and we're not yet prepared to support
+  // side-effectful bodies.
+  if (getNumResults() == 0)
+    return emitOpError("expected at least one result type.");
+
   // Verify that the resulting values aren't referenced before they are
   // accessible.
   size_t latency = getLatency();
