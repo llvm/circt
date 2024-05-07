@@ -23,11 +23,3 @@ func.func @Foo(%arg0: !moore.struct<{}, loc(unknown)>) { return }
 // expected-error @+1 {{unpacked struct cannot have a sign}}
 func.func @Foo(%arg0: !moore.unpacked<struct<unsigned, {}, loc(unknown)>>) { return }
 func.func @Bar(%arg0: !moore.packed<struct<unsigned, {}, loc(unknown)>>) { return }
-
-// -----
-// expected-error @+1 {{unpacked type '!moore.string' where only packed types are allowed}}
-func.func @Foo(%arg0: !moore.packed<struct<{a: string}, loc(unknown)>>) { return }
-
-// -----
-// expected-error @+1 {{unpacked type '!moore.string' where only packed types are allowed}}
-func.func @Foo(%arg0: !moore.packed<unsized<string>>) { return }

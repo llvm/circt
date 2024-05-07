@@ -34,11 +34,11 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<VoidType, StringType, ChandleType, EventType, IntType, RealType,
-           PackedNamedType, PackedRefType, UnpackedNamedType, UnpackedRefType,
-           PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
-           UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
-           UnpackedQueueDim, EnumType, PackedStructType, UnpackedStructType>();
+  addTypes<IntType, RealType, PackedNamedType, PackedRefType, UnpackedNamedType,
+           UnpackedRefType, PackedUnsizedDim, PackedRangeDim,
+           UnpackedUnsizedDim, UnpackedArrayDim, UnpackedRangeDim,
+           UnpackedAssocDim, UnpackedQueueDim, EnumType, PackedStructType,
+           UnpackedStructType>();
 
   addTypes<
 #define GET_TYPEDEF_LIST
@@ -303,20 +303,6 @@ void PackedType::format(llvm::raw_ostream &os) const {
           [&](auto type) { os << "type(" << type.getInner() << ")"; })
       .Default([](auto) { llvm_unreachable("all types should be handled"); });
 }
-
-//===----------------------------------------------------------------------===//
-// Unit Types
-//===----------------------------------------------------------------------===//
-
-VoidType VoidType::get(MLIRContext *context) { return Base::get(context); }
-
-StringType StringType::get(MLIRContext *context) { return Base::get(context); }
-
-ChandleType ChandleType::get(MLIRContext *context) {
-  return Base::get(context);
-}
-
-EventType EventType::get(MLIRContext *context) { return Base::get(context); }
 
 //===----------------------------------------------------------------------===//
 // Packed Integers
@@ -1221,9 +1207,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   }
 
   // Packed primary types.
-  if (mnemonic == "void")
-    return yieldPacked(VoidType::get(context));
-
   if (auto kind = IntType::getKindFromKeyword(mnemonic)) {
     std::optional<Sign> sign;
     if (succeeded(parser.parseOptionalLess())) {
@@ -1241,12 +1224,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   }
 
   // Unpacked primary types.
-  if (mnemonic == "string")
-    return yieldUnpacked(StringType::get(context));
-  if (mnemonic == "chandle")
-    return yieldUnpacked(ChandleType::get(context));
-  if (mnemonic == "event")
-    return yieldUnpacked(EventType::get(context));
   if (auto kind = RealType::getKindFromKeyword(mnemonic))
     return yieldUnpacked(RealType::get(context, *kind));
 
@@ -1453,24 +1430,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
   }
 
   return TypeSwitch<Type, LogicalResult>(type)
-      // Unit types
-      .Case<VoidType>([&](auto) {
-        printer << "void";
-        return success();
-      })
-      .Case<StringType>([&](auto) {
-        printer << "string";
-        return success();
-      })
-      .Case<ChandleType>([&](auto) {
-        printer << "chandle";
-        return success();
-      })
-      .Case<EventType>([&](auto) {
-        printer << "event";
-        return success();
-      })
-
       // Integers and reals
       .Case<IntType>([&](auto type) {
         printer << type.getKeyword();
@@ -1575,8 +1534,9 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
-  if (parser.parseKeyword(&mnemonic))
-    return failure();
+  if (auto result = generatedTypeParser(parser, &mnemonic, type);
+      result.has_value())
+    return result.value();
 
   if (auto result = customTypeParser(parser, mnemonic, subset, loc, type);
       result.has_value())
@@ -1590,6 +1550,8 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
 /// Print a type registered with this dialect.
 static void printMooreType(Type type, DialectAsmPrinter &printer,
                            Subset subset) {
+  if (succeeded(generatedTypePrinter(type, printer)))
+    return;
   if (succeeded(customTypePrinter(type, printer, subset)))
     return;
   assert(false && "no printer for unknown `moore` dialect type");

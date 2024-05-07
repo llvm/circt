@@ -17,9 +17,44 @@ include "circt/Dialect/Moore/MooreDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
 
+class MooreTypeDef<string name, list<Trait> traits = [],
+                   string baseCppClass = "::mlir::Type">
+    : TypeDef<MooreDialect, name, traits, baseCppClass> {
+  let mnemonic = ?;
+}
 
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
+
+
+//===----------------------------------------------------------------------===//
+// Unit Types
+//===----------------------------------------------------------------------===//
+
+def VoidType : MooreTypeDef<"Void", [], "moore::PackedType"> {
+  let mnemonic = "void";
+  let summary = "the SystemVerilog `void` type";
+}
+
+def StringType : MooreTypeDef<"String", [], "moore::UnpackedType"> {
+  let mnemonic = "string";
+  let summary = "the SystemVerilog `string` type";
+}
+
+def ChandleType : MooreTypeDef<"Chandle", [], "moore::UnpackedType"> {
+  let mnemonic = "chandle";
+  let summary = "the SystemVerilog `chandle` type";
+}
+
+def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
+  let mnemonic = "event";
+  let summary = "the SystemVerilog `event` type";
+}
+
+
+//===----------------------------------------------------------------------===//
+// Constraints
+//===----------------------------------------------------------------------===//
 
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;

@@ -460,58 +460,6 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Unit Types
-//===----------------------------------------------------------------------===//
-
-/// The `void` type.
-class VoidType
-    : public Type::TypeBase<VoidType, PackedType, DefaultTypeStorage> {
-public:
-  static VoidType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.void";
-
-protected:
-  using Base::Base;
-};
-
-/// The `string` type.
-class StringType
-    : public Type::TypeBase<StringType, UnpackedType, DefaultTypeStorage> {
-public:
-  static StringType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.string";
-
-protected:
-  using Base::Base;
-};
-
-/// The `chandle` type.
-class ChandleType
-    : public Type::TypeBase<ChandleType, UnpackedType, DefaultTypeStorage> {
-public:
-  static ChandleType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.chandle";
-
-protected:
-  using Base::Base;
-};
-
-/// The `event` type.
-class EventType
-    : public Type::TypeBase<EventType, UnpackedType, DefaultTypeStorage> {
-public:
-  static EventType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.event";
-
-protected:
-  using Base::Base;
-};
-
-//===----------------------------------------------------------------------===//
 // Packed Integers
 //===----------------------------------------------------------------------===//
 
