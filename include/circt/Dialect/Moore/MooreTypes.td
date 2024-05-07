@@ -21,9 +21,6 @@ include "mlir/IR/EnumAttr.td"
 class MooreType<Pred condition, string description, string cppClassName>
   : DialectType<MooreDialect, condition, description, cppClassName>;
 
-def PackedType : MooreType<CPred<"llvm::isa<moore::PackedType>($_self)">,
-  "packed type", "moore::PackedType">;
-
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;
 
@@ -49,12 +46,5 @@ def BitType : MooreType<CPred<[{
     $_builder.getType<moore::IntType>(IntType::Kind::Bit)
   }];
 }
-
-//===----------------------------------------------------------------------===//
-// Integer atom types
-//===----------------------------------------------------------------------===//
-
-def MooreIntType : MooreType<CPred<"llvm::isa<moore::IntType>($_self)">,
-  "an SystemVerilog int", "moore::IntType">;
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES
