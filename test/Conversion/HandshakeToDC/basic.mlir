@@ -188,3 +188,27 @@ handshake.func @branch_and_merge(%0 : i1, %1 : none) -> (none, index) {
   %true, %false = cond_br %0, %1 : none
   return %out, %idx : none, index
 }
+
+// CHECK:   hw.module @datamerge(in %[[VAL_0:.*]] : !dc.value<i1>, in %[[VAL_1:.*]] : !dc.value<i1>, in %[[VAL_2:.*]] : !dc.value<i1>, out out0 : !dc.value<i1>) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i1>
+// CHECK:           %[[VAL_7:.*]] = dc.merge %[[VAL_3]], %[[VAL_5]]
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = dc.unpack %[[VAL_7]] : !dc.value<i1>
+// CHECK:           %[[VAL_10:.*]] = arith.select %[[VAL_9]], %[[VAL_4]], %[[VAL_6]] : i1
+// CHECK:           %[[VAL_11:.*]] = dc.pack %[[VAL_8]], %[[VAL_10]] : i1
+// CHECK:           hw.output %[[VAL_11]] : !dc.value<i1>
+// CHECK:         }
+handshake.func @datamerge(%arg0 : i1, %arg1 : i1, %arg2 : i1) -> i1 {
+  %out = merge %arg0, %arg1 : i1
+  return %out : i1
+}
+
+// CHECK:   hw.module @nonemerge(in %[[VAL_0:.*]] : !dc.token, in %[[VAL_1:.*]] : !dc.token, out out0 : !dc.token) {
+// CHECK:           %[[VAL_2:.*]] = dc.merge %[[VAL_0]], %[[VAL_1]]
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.unpack %[[VAL_2]] : !dc.value<i1>
+// CHECK:           hw.output %[[VAL_3]] : !dc.token
+// CHECK:         }
+handshake.func @nonemerge(%arg0 : none, %arg1 : none) -> none {
+  %out = merge %arg0, %arg1 : none
+  return %out : none
+}
