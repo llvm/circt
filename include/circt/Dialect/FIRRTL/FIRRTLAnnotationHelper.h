@@ -67,7 +67,7 @@ struct AnnoPathValue {
 
   template <typename... T>
   bool isOpOfType() const {
-    if (auto opRef = ref.dyn_cast<OpAnnoTarget>())
+    if (auto opRef = dyn_cast<OpAnnoTarget>(ref))
       return isa<T...>(opRef.getOp());
     return false;
   }
@@ -127,9 +127,9 @@ static T &operator<<(T &os, const PortAnnoTarget &target) {
 
 template <typename T>
 static T &operator<<(T &os, const AnnoTarget &target) {
-  if (auto op = target.dyn_cast<OpAnnoTarget>())
+  if (auto op = dyn_cast<OpAnnoTarget>(target))
     os << op;
-  else if (auto port = target.dyn_cast<PortAnnoTarget>())
+  else if (auto port = dyn_cast<PortAnnoTarget>(target))
     os << port;
   else
     os << "<<Unknown Anno Target>>";
@@ -481,7 +481,7 @@ template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
 static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
-  if (target.ref.isa<PortAnnoTarget>()) {
+  if (isa<PortAnnoTarget>(target.ref)) {
     if (!allowPortAnnoTarget)
       return failure();
   } else if (!target.isOpOfType<T, Tr...>())
