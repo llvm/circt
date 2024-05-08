@@ -59,7 +59,11 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   }];
 
   let constructor = "circt::seq::createHWMemSimImplPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::sv::SVDialect"];
+  let dependentDialects = [
+    "circt::emit::EmitDialect",
+    "circt::hw::HWDialect",
+    "circt::sv::SVDialect",
+  ];
 
   let options = [
     Option<"disableMemRandomization", "disable-mem-randomization", "bool", "false",
@@ -72,11 +76,11 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
            "::circt::seq::ReadEnableMode::Undefined",
            "specify the behaviour of the read enable signal", [{
               ::llvm::cl::values(
-              clEnumValN(ReadEnableMode::Ignore, "ignore",
+              clEnumValN(::circt::seq::ReadEnableMode::Ignore, "ignore",
                          "Ignore the read enable signal"),
-              clEnumValN(ReadEnableMode::Zero, "zero",
+              clEnumValN(::circt::seq::ReadEnableMode::Zero, "zero",
                          "Output zeros when reads are disabled"),
-              clEnumValN(ReadEnableMode::Undefined, "undefined",
+              clEnumValN(::circt::seq::ReadEnableMode::Undefined, "undefined",
                          "Output X when reads are disbled"))
            }]>,
     Option<"addMuxPragmas", "add-mux-pragmas", "bool", "false",

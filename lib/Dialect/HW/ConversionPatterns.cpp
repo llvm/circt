@@ -41,13 +41,13 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
   llvm::SmallVector<NamedAttribute, 4> newAttrs;
   newAttrs.reserve(op->getAttrs().size());
   for (auto attr : op->getAttrs()) {
-    if (auto typeAttr = attr.getValue().dyn_cast<TypeAttr>()) {
+    if (auto typeAttr = dyn_cast<TypeAttr>(attr.getValue())) {
       auto innerType = typeAttr.getValue();
       // TypeConvert::convertType doesn't handle function types, so we need to
       // handle them manually.
-      if (auto funcType = innerType.dyn_cast<FunctionType>())
+      if (auto funcType = dyn_cast<FunctionType>(innerType))
         innerType = convertFunctionType(*typeConverter, funcType);
-      else if (auto modType = innerType.dyn_cast<hw::ModuleType>())
+      else if (auto modType = dyn_cast<hw::ModuleType>(innerType))
         innerType = convertModuleType(*typeConverter, modType);
       else
         innerType = typeConverter->convertType(innerType);
@@ -73,16 +73,10 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
   Operation *newOp = rewriter.create(state);
 
   // Move the regions over, converting the signatures as we go.
-  rewriter.startRootUpdate(newOp);
+  rewriter.startOpModification(newOp);
   for (size_t i = 0, e = op->getNumRegions(); i < e; ++i) {
     Region &region = op->getRegion(i);
     Region *newRegion = &newOp->getRegion(i);
-
-    // TypeConverter::SignatureConversion drops argument locations, so we need
-    // to manually copy them over (a verifier in e.g. HWModule checks this).
-    llvm::SmallVector<Location, 4> argLocs;
-    for (auto arg : region.getArguments())
-      argLocs.push_back(arg.getLoc());
 
     // Move the region and convert the region args.
     rewriter.inlineRegionBefore(region, *newRegion, newRegion->begin());
@@ -92,12 +86,8 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
       return rewriter.notifyMatchFailure(op->getLoc(),
                                          "type conversion failed");
     rewriter.applySignatureConversion(newRegion, result, typeConverter);
-
-    // Apply the argument locations.
-    for (auto [arg, loc] : llvm::zip(newRegion->getArguments(), argLocs))
-      arg.setLoc(loc);
   }
-  rewriter.finalizeRootUpdate(newOp);
+  rewriter.finalizeOpModification(newOp);
 
   rewriter.replaceOp(op, newOp->getResults());
   return success();

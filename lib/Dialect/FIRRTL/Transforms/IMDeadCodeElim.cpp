@@ -12,6 +12,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -158,7 +159,7 @@ void IMDeadCodeElimPass::visitModuleOp(FModuleOp module) {
 void IMDeadCodeElimPass::visitHierPathOp(hw::HierPathOp hierPathOp) {
   // If the hierpath is alive, mark all instances on the path alive.
   for (auto path : hierPathOp.getNamepathAttr())
-    if (auto innerRef = path.dyn_cast<hw::InnerRefAttr>()) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(path)) {
       auto *op = innerRefNamespace->lookupOp(innerRef);
       if (auto instance = dyn_cast_or_null<InstanceOp>(op))
         markAlive(instance);
@@ -298,9 +299,7 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
 }
 
 void IMDeadCodeElimPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===----- Inter-module Dead Code Elimination -----==="
-                   << "\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
   auto circuits = getOperation().getOps<CircuitOp>();
   if (circuits.empty())
     return;
@@ -332,12 +331,12 @@ void IMDeadCodeElimPass::runOnOperation() {
       // If the hierpath is public or ill-formed, the verifier should have
       // caught the error. Conservatively mark the symbol as alive.
       if (hierPath.isPublic() || namePath.size() <= 1 ||
-          namePath.back().isa<hw::InnerRefAttr>())
+          isa<hw::InnerRefAttr>(namePath.back()))
         return markAlive(hierPath);
 
       if (auto instance =
               dyn_cast_or_null<firrtl::InstanceOp>(innerRefNamespace->lookupOp(
-                  namePath.drop_back().back().cast<hw::InnerRefAttr>())))
+                  cast<hw::InnerRefAttr>(namePath.drop_back().back()))))
         instanceToHierPaths[instance].push_back(hierPath);
       return;
     }
@@ -483,7 +482,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
   // Marking an instance port as alive propagates to the corresponding port of
   // the module.
   if (auto instance = value.getDefiningOp<InstanceOp>()) {
-    auto instanceResult = value.cast<mlir::OpResult>();
+    auto instanceResult = cast<mlir::OpResult>(value);
     // Update the src, when it's an instance op.
     auto module = instance.getReferencedModule<FModuleOp>(*instanceGraph);
 

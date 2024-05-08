@@ -709,7 +709,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
       return mergeLatticeValue(fieldRefDestConnected, srcValue);
     }
 
-    auto dest = fieldRefDest.getValue().cast<mlir::OpResult>();
+    auto dest = cast<mlir::OpResult>(fieldRefDest.getValue());
 
     // For wires and registers, we drive the value of the wire itself, which
     // automatically propagates to users.
@@ -974,7 +974,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     };
 
     // TODO: Replace entire aggregate.
-    auto it = latticeValues.find(getOrCacheFieldRefFromValue(value));
+    auto it = latticeValues.find(getFieldRefFromValue(value));
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
       return false;

@@ -251,7 +251,7 @@ def ReplicateOp : CombOp<"replicate", [Pure]> {
 
   let builders = [
     OpBuilder<(ins "Value":$operand, "int32_t":$multiple), [{
-      auto bitWidth = operand.getType().cast<IntegerType>().getWidth();
+      auto bitWidth = llvm::cast<IntegerType>(operand.getType()).getWidth();
       auto resultType = $_builder.getIntegerType(bitWidth*multiple);
       return build($_builder, $_state, resultType, operand);
     }]>
@@ -260,8 +260,8 @@ def ReplicateOp : CombOp<"replicate", [Pure]> {
   let extraClassDeclaration = [{
     /// Returns the number of times the operand is replicated.
     size_t getMultiple() {
-      auto opWidth = getInput().getType().cast<IntegerType>().getWidth();
-      return getType().cast<IntegerType>().getWidth()/opWidth;
+      auto opWidth = llvm::cast<IntegerType>(getInput().getType()).getWidth();
+      return llvm::cast<IntegerType>(getType()).getWidth()/opWidth;
     }
   }];
 }

@@ -327,3 +327,84 @@ firrtl.circuit "AnyCast" {
     firrtl.propassign %foo, %0 : !firrtl.anyref
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "ModuleWithPropertySubmodule"
+firrtl.circuit "ModuleWithPropertySubmodule" {
+  // CHECK: om.class @ModuleWithPropertySubmodule_Class
+  firrtl.module private @ModuleWithPropertySubmodule() {
+    %c0 = firrtl.integer 0
+    // CHECK: om.object @SubmoduleWithProperty_Class
+    %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
+    firrtl.propassign %inst.prop, %c0 : !firrtl.integer
+  }
+  // CHECK: om.class @SubmoduleWithProperty_Class
+  firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DownwardReferences"
+firrtl.circuit "DownwardReferences" {
+  firrtl.class @MyClass() {
+  }
+  firrtl.module @MyClassUser(in %myClassIn: !firrtl.class<@MyClass()>) {
+  }
+  firrtl.module @DownwardReferences() {
+    // CHECK: [[OBJ:%.+]] = om.object @MyClass
+    %myClass = firrtl.object @MyClass()
+    // CHECK: [[BP:%.+]] = om.basepath_create
+    // CHECK: om.object @MyClassUser_Class([[BP]], [[OBJ]])
+    %myClassUser.myClassIn = firrtl.instance myClassUser @MyClassUser(in myClassIn: !firrtl.class<@MyClass()>)
+    firrtl.propassign %myClassUser.myClassIn, %myClass : !firrtl.class<@MyClass()>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "IntegerArithmetic"
+firrtl.circuit "IntegerArithmetic" {
+  firrtl.module @IntegerArithmetic() {
+    %0 = firrtl.integer 1
+    %1 = firrtl.integer 2
+
+    // CHECK: om.integer.add %0, %1 : !om.integer
+    %2 = firrtl.integer.add %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.mul %0, %1 : !om.integer
+    %3 = firrtl.integer.mul %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
+    // CHECK: om.integer.shr %0, %1 : !om.integer
+    %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "AltBasePath"
+firrtl.circuit "AltBasePath" {
+  firrtl.class private @Node(in %path: !firrtl.path) {
+  }
+
+  // CHECK: om.class @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.class private @OMIR() {
+    %node = firrtl.object @Node(in path: !firrtl.path)
+    %0 = firrtl.object.subfield %node[path] : !firrtl.class<@Node(in path: !firrtl.path)>
+
+    // CHECK: om.path_create member_instance %alt_basepath_0
+    %1 = firrtl.path member_reference distinct[0]<>
+    firrtl.propassign %0, %1 : !firrtl.path
+  }
+
+  // CHECK: om.class @DUT_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module @DUT(out %omirOut: !firrtl.class<@OMIR()>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: om.object @OMIR(%basepath, %alt_basepath_0)
+    %omir = firrtl.object @OMIR()
+    firrtl.propassign %omirOut, %omir : !firrtl.class<@OMIR()>
+  }
+
+  // CHECK: om.class @AltBasePath_Class(%basepath: !om.basepath)
+  firrtl.module @AltBasePath() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: om.object @DUT_Class(%0, %basepath)
+    %dut_omirOut = firrtl.instance dut interesting_name @DUT(out omirOut: !firrtl.class<@OMIR()>)
+    firrtl.instance foo interesting_name {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @Foo()
+  }
+
+  firrtl.module private @Foo() attributes {annotations = [{class = "circt.tracker", id = distinct[1]<>}]} {
+    firrtl.skip
+  }
+}

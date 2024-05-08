@@ -14,16 +14,16 @@ firrtl.circuit "FooBar" attributes {
       target = "FooBar.FooBar.io.in",
       pin = "foo_out"
     }]} {
-  // CHECK: firrtl.module @Foo
+  // CHECK: firrtl.module private @Foo
   // The real port type of the source should be bored
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module@Foo(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
       firrtl.skip
   }
-  // CHECK: firrtl.module @Bar
+  // CHECK: firrtl.module private @Bar
   // The real port type of the source should be bored in the parent
   // CHECK-SAME: in %foo_io_out__bore: !firrtl.uint<1>
-  firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
       // CHECK: firrtl.instance foo
       // CHECK-SAME: in io_out__bore: !firrtl.uint<1>
@@ -68,23 +68,23 @@ firrtl.circuit "FooBar" attributes {
       target = "FooBar.Bar.io.out",
       pin = "in"
     }]} {
-  // CHECK: firrtl.module @Foo
+  // CHECK: firrtl.module private @Foo
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Foo_1
+  // CHECK: firrtl.module private @Foo_1
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Foo_1(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
   }
-  // CHECK: firrtl.module @Bar
+  // CHECK: firrtl.module private @Bar
   // CHECK-SAME: in %io_out__bore: !firrtl.uint<1>
-  firrtl.module @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
+  firrtl.module private @Bar(out %io: !firrtl.bundle<out: uint<1>>) {
     firrtl.skip
     // CHECK: %0 = firrtl.subfield %io[out] : !firrtl.bundle<out: uint<1>>
     // CHECK: firrtl.strictconnect %0, %io_out__bore : !firrtl.uint<1>
@@ -200,6 +200,35 @@ firrtl.circuit "IntWidths" attributes {
   // CHECK-LABEL: module @IntWidths
   firrtl.module @IntWidths() {
     // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.uint<4>
+    firrtl.instance bar interesting_name @Bar()
+    %x = firrtl.wire interesting_name : !firrtl.uint
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint
+    firrtl.connect %x, %invalid_ui1 : !firrtl.uint, !firrtl.uint
+  }
+}
+
+// -----
+
+// Check direction of compatibility using const/non-const issue encountered (#6819).
+firrtl.circuit "Issue6819" attributes {
+ rawAnnotations = [
+  {
+    class = "firrtl.passes.wiring.SourceAnnotation",
+    target = "~Issue6819|Bar>y",
+    pin = "xyz"
+  },
+  {
+    class = "firrtl.passes.wiring.SinkAnnotation",
+    target = "~Issue6819|Issue6819>x",
+    pin = "xyz"
+  }
+  ]} {
+  firrtl.module private @Bar() {
+    %y = firrtl.wire interesting_name : !firrtl.const.uint<4>
+  }
+  // CHECK-LABEL: module @Issue6819
+  firrtl.module @Issue6819() {
+    // CHECK: firrtl.connect %x, %{{[^ ]*}} : !firrtl.uint, !firrtl.const.uint<4>
     firrtl.instance bar interesting_name @Bar()
     %x = firrtl.wire interesting_name : !firrtl.uint
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint

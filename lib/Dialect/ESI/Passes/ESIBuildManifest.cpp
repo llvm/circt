@@ -115,14 +115,11 @@ void ESIBuildManifestPass::runOnOperation() {
                     ->getRegion(0)
                     .front()
                     .getTerminator());
-    b.create<CompressedManifestOp>(
-        b.getUnknownLoc(),
-        BlobAttr::get(ctxt, ArrayRef<char>(reinterpret_cast<char *>(
-                                               compressedManifest.data()),
-                                           compressedManifest.size())));
+    b.create<CompressedManifestOp>(b.getUnknownLoc(),
+                                   BlobAttr::get(ctxt, compressedManifest));
   } else {
-    mod->emitError() << "zlib not available but required for manifest support";
-    signalPassFailure();
+    mod->emitWarning()
+        << "zlib not available but required for manifest support";
   }
 }
 
@@ -193,13 +190,15 @@ std::string ESIBuildManifestPass::json() {
         continue;
       j.object([&] {
         j.attribute("symbol", sym.getValue());
+        std::optional<StringRef> typeName = svcDecl.getTypeName();
+        if (typeName)
+          j.attribute("type_name", *typeName);
         llvm::SmallVector<ServicePortInfo, 8> ports;
         svcDecl.getPortList(ports);
         j.attributeArray("ports", [&]() {
           for (auto port : ports) {
             j.object([&] {
               j.attribute("name", port.port.getName().getValue());
-              j.attribute("direction", port.directionAsString());
               j.attribute("type", json(svcDecl, TypeAttr::get(port.type)));
             });
           }
@@ -322,7 +321,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
   o["circt_name"] = circtName;
 
   int64_t width = hw::getBitWidth(type);
-  if (auto chanType = type.dyn_cast<ChannelType>())
+  if (auto chanType = dyn_cast<ChannelType>(type))
     width = hw::getBitWidth(chanType.getInner());
   if (width >= 0)
     o["hw_bitwidth"] = width;

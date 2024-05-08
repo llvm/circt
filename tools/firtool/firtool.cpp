@@ -16,6 +16,7 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -31,6 +32,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
@@ -126,6 +128,11 @@ static cl::opt<bool>
                            cl::init(true), cl::cat(mainCategory));
 
 static cl::opt<bool>
+    scalarizeIntModules("scalarize-internal-modules",
+                        cl::desc("Scalarize the ports of any internal modules"),
+                        cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
     scalarizeExtModules("scalarize-ext-modules",
                         cl::desc("Scalarize the ports of any external modules"),
                         cl::init(true), cl::cat(mainCategory));
@@ -165,6 +172,7 @@ enum OutputFormatKind {
   OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
+  OutputBTOR2,
   OutputSplitVerilog,
   OutputDisabled
 };
@@ -181,6 +189,7 @@ static cl::opt<OutputFormatKind> outputFormat(
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+        clEnumValN(OutputBTOR2, "btor2", "Emit BTOR2"),
         clEnumValN(OutputSplitVerilog, "split-verilog",
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
@@ -226,6 +235,11 @@ static cl::opt<std::string> hglddOutputDirectory(
     "hgldd-output-dir", cl::desc("Directory into which to emit HGLDD files"),
     cl::init(""), cl::value_desc("path"), cl::cat(mainCategory));
 
+static cl::opt<bool> hglddOnlyExistingFileLocs(
+    "hgldd-only-existing-file-locs",
+    cl::desc("Only consider locations in files that exist on disk"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
@@ -269,6 +283,7 @@ static debug::EmitHGLDDOptions getHGLDDOptions() {
   opts.sourceFilePrefix = hglddSourcePrefix;
   opts.outputFilePrefix = hglddOutputPrefix;
   opts.outputDirectory = hglddOutputDirectory;
+  opts.onlyExistingFileLocs = hglddOnlyExistingFileLocs;
   return opts;
 }
 
@@ -340,6 +355,7 @@ static LogicalResult processBuffer(
     options.infoLocatorHandling = infoLocHandling;
     options.numAnnotationFiles = numAnnotationFiles;
     options.scalarizePublicModules = scalarizePublicModules;
+    options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
@@ -393,12 +409,18 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Lower if we are going to verilog or if lowering was specifically requested.
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
   if (outputFormat != OutputIRFir) {
     if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
+        return failure();
+    // Add passes specific to btor2 emission
+    if (outputFormat == OutputBTOR2)
+      if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                            (*outputFile)->os())))
         return failure();
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
@@ -588,10 +610,10 @@ static LogicalResult executeFirtool(MLIRContext &context,
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {
-    if (StringRef(inputFilename).endswith(".fir"))
+    if (StringRef(inputFilename).ends_with(".fir"))
       inputFormat = InputFIRFile;
-    else if (StringRef(inputFilename).endswith(".mlir") ||
-             StringRef(inputFilename).endswith(".mlirbc") ||
+    else if (StringRef(inputFilename).ends_with(".mlir") ||
+             StringRef(inputFilename).ends_with(".mlirbc") ||
              mlir::isBytecode(*input))
       inputFormat = InputMLIRFile;
     else {
@@ -628,10 +650,11 @@ static LogicalResult executeFirtool(MLIRContext &context,
   }
 
   // Register our dialects.
-  context.loadDialect<chirrtl::CHIRRTLDialect, firrtl::FIRRTLDialect,
-                      hw::HWDialect, comb::CombDialect, seq::SeqDialect,
-                      om::OMDialect, sv::SVDialect, verif::VerifDialect,
-                      ltl::LTLDialect, debug::DebugDialect>();
+  context.loadDialect<chirrtl::CHIRRTLDialect, emit::EmitDialect,
+                      firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                      seq::SeqDialect, om::OMDialect, sv::SVDialect,
+                      verif::VerifDialect, ltl::LTLDialect, debug::DebugDialect,
+                      sim::SimDialect>();
 
   // Process the input.
   if (failed(processInput(context, firtoolOptions, ts, std::move(input),
@@ -687,6 +710,7 @@ int main(int argc, char **argv) {
     firrtl::registerPasses();
     om::registerPasses();
     sv::registerPasses();
+    hw::registerFlattenModulesPass();
 
     // Export passes:
     registerExportChiselInterfacePass();
@@ -696,10 +720,14 @@ int main(int argc, char **argv) {
 
     // Conversion passes:
     registerPrepareForEmissionPass();
+    registerHWLowerInstanceChoicesPass();
     registerLowerFIRRTLToHWPass();
     registerLegalizeAnonEnumsPass();
     registerLowerSeqToSVPass();
+    registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerLowerLTLToCorePass();
+    registerConvertHWToBTOR2Pass();
   }
 
   // Register any pass manager command line options.

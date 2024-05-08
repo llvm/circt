@@ -63,11 +63,11 @@ std::optional<size_t> getBitWidth(Type type);
 class ValueBaseType : public Type {
 public:
   static bool classof(Type type) {
-    return type.isa<SignedType, UnsignedType, IntBaseType, UIntBaseType,
-                    BigIntType, BigUIntType, IntType, UIntType>();
+    return llvm::isa<SignedType, UnsignedType, IntBaseType, UIntBaseType,
+                     BigIntType, BigUIntType, IntType, UIntType>(type);
   }
 
-  bool isSigned() { return isa<SignedType, IntBaseType>(); }
+  bool isSigned() { return mlir::isa<SignedType, IntBaseType>(*this); }
 
 protected:
   using Type::Type;
@@ -82,10 +82,12 @@ class IntBaseType
     : public Type::TypeBase<IntBaseType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<IntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<IntType>(type);
   }
   static IntBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "int_base"; }
+
+  static constexpr StringLiteral name = "systemc.int_base";
 
 protected:
   using Base::Base;
@@ -103,6 +105,8 @@ public:
   unsigned getWidth();
   static constexpr StringLiteral getMnemonic() { return "int"; }
 
+  static constexpr StringLiteral name = "systemc.int";
+
 protected:
   using Base::Base;
 };
@@ -116,11 +120,13 @@ class UIntBaseType
     : public Type::TypeBase<UIntBaseType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<UIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<UIntType>(type);
   }
   static UIntBaseType get(MLIRContext *context);
 
   static constexpr StringLiteral getMnemonic() { return "uint_base"; }
+
+  static constexpr StringLiteral name = "systemc.uint_base";
 
 protected:
   using Base::Base;
@@ -139,6 +145,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "uint"; }
 
+  static constexpr StringLiteral name = "systemc.uint";
+
 protected:
   using Base::Base;
 };
@@ -152,11 +160,13 @@ class SignedType
     : public Type::TypeBase<SignedType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BigIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BigIntType>(type);
   }
   static SignedType get(MLIRContext *context);
 
   static constexpr StringLiteral getMnemonic() { return "signed"; }
+
+  static constexpr StringLiteral name = "systemc.signed";
 
 protected:
   using Base::Base;
@@ -174,6 +184,8 @@ public:
   unsigned getWidth();
   static constexpr StringLiteral getMnemonic() { return "bigint"; }
 
+  static constexpr StringLiteral name = "systemc.bigint";
+
 protected:
   using Base::Base;
 };
@@ -187,11 +199,13 @@ class UnsignedType
     : public Type::TypeBase<UnsignedType, ValueBaseType, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BigUIntType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BigUIntType>(type);
   }
   static UnsignedType get(MLIRContext *context);
 
   static constexpr StringLiteral getMnemonic() { return "unsigned"; }
+
+  static constexpr StringLiteral name = "systemc.unsigned";
 
 protected:
   using Base::Base;
@@ -211,6 +225,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "biguint"; }
 
+  static constexpr StringLiteral name = "systemc.biguint";
+
 protected:
   using Base::Base;
 };
@@ -227,10 +243,12 @@ class BitVectorBaseType
     : public Type::TypeBase<BitVectorBaseType, Type, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<BitVectorType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<BitVectorType>(type);
   }
   static BitVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "bv_base"; }
+
+  static constexpr StringLiteral name = "systemc.bv_base";
 
 protected:
   using Base::Base;
@@ -250,6 +268,8 @@ public:
 
   static constexpr StringLiteral getMnemonic() { return "bv"; }
 
+  static constexpr StringLiteral name = "systemc.bv";
+
 protected:
   using Base::Base;
 };
@@ -262,10 +282,12 @@ class LogicVectorBaseType
     : public Type::TypeBase<LogicVectorBaseType, Type, DefaultTypeStorage> {
 public:
   static bool classof(Type type) {
-    return type.getTypeID() == getTypeID() || type.isa<LogicVectorType>();
+    return type.getTypeID() == getTypeID() || llvm::isa<LogicVectorType>(type);
   }
   static LogicVectorBaseType get(MLIRContext *context);
   static constexpr StringLiteral getMnemonic() { return "lv_base"; }
+
+  static constexpr StringLiteral name = "systemc.lv_base";
 
 protected:
   using Base::Base;
@@ -285,6 +307,8 @@ public:
   unsigned getWidth();
 
   static constexpr StringLiteral getMnemonic() { return "lv"; }
+
+  static constexpr StringLiteral name = "systemc.lv";
 
 protected:
   using Base::Base;

@@ -174,7 +174,8 @@ RefType Visitor::convertType(RefType type) {
   auto cached = typeMap.lookup(type);
   if (cached)
     return type_cast<RefType>(cached);
-  auto converted = RefType::get(convertType(type.getType()));
+  auto converted = RefType::get(convertType(type.getType()),
+                                type.getForceable(), type.getLayer());
   typeMap.insert({type, converted});
   return converted;
 }
@@ -845,7 +846,8 @@ LogicalResult Visitor::visitExpr(VectorCreateOp op) {
   }
 
   auto value = sinkVecDimIntoOperands(
-      builder, convertType(oldType.get().getElementType()), convertedOldFields);
+      builder, convertType(oldType.base().getElementType()),
+      convertedOldFields);
   valueMap[op.getResult()] = value;
   toDelete.push_back(op);
   return success();

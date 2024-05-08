@@ -56,7 +56,7 @@ LogicalResult
 circt::om::ListAttr::verify(function_ref<InFlightDiagnostic()> emitError,
                             mlir::Type elementType, mlir::ArrayAttr elements) {
   return success(llvm::all_of(elements, [&](mlir::Attribute attr) {
-    auto typedAttr = attr.dyn_cast<mlir::TypedAttr>();
+    auto typedAttr = llvm::dyn_cast<mlir::TypedAttr>(attr);
     if (!typedAttr) {
       emitError()
           << "an element of a list attribute must be a typed attr but got "

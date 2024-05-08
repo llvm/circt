@@ -25,7 +25,6 @@ include "circt/Dialect/Seq/SeqTypes.td"
 
 class PipelineBase<string mnemonic, list<Trait> traits = []> :
   Op<Pipeline_Dialect, mnemonic, !listconcat(traits, [
-      Pure,
       RegionKindInterface,
       AttrSizedOperandSegments,
       DeclareOpInterfaceMethods<OpAsmOpInterface, [
@@ -73,7 +72,7 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
       return static_cast<bool>(getStall());
     }
 
-    llvm::ArrayRef<BlockArgument> getInnerInputs() {
+    mlir::Block::BlockArgListType getInnerInputs() {
       return getEntryStage()->getArguments().take_front(getInputs().size());
     }
 
@@ -225,7 +224,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
 
     // Returns the data arguments for a stage. The stage enable signal is _not_ part
     // of the returned values.
-    llvm::ArrayRef<BlockArgument> getStageDataArgs(Block* stage) {
+    mlir::Block::BlockArgListType getStageDataArgs(Block* stage) {
       if(stage == getEntryStage())
         return getInnerInputs();
 
@@ -297,7 +296,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     // Returns the register name for a given register index.
     StringAttr getRegisterName(unsigned regIdx) {
       if(auto names = getOperation()->getAttrOfType<ArrayAttr>("registerNames")) {
-        auto name = names[regIdx].cast<StringAttr>();
+        auto name = llvm::cast<StringAttr>(names[regIdx]);
         if(!name.strref().empty())
           return name;
       }
@@ -308,7 +307,7 @@ def StageOp : Op<Pipeline_Dialect, "stage", [
     // Returns the passthrough name for a given passthrough index.
     StringAttr getPassthroughName(unsigned passthroughIdx) {
       if(auto names = getOperation()->getAttrOfType<ArrayAttr>("passthroughNames")) {
-        auto name = names[passthroughIdx].cast<StringAttr>();
+        auto name = llvm::cast<StringAttr>(names[passthroughIdx]);
         if(!name.strref().empty())
           return name;
       }

@@ -321,9 +321,6 @@ struct CHIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // namespace
 
-#define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/FIRRTL/CHIRRTLTypes.cpp.inc"
-
 #define GET_OP_CLASSES
 #include "circt/Dialect/FIRRTL/CHIRRTL.cpp.inc"
 
@@ -335,43 +332,10 @@ void CHIRRTLDialect::initialize() {
       >();
 
   // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/FIRRTL/CHIRRTLTypes.cpp.inc"
-      >();
+  registerTypes();
 
   // Register interface implementations.
   addInterfaces<CHIRRTLOpAsmDialectInterface>();
 }
 
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.cpp.inc"
-
-//===----------------------------------------------------------------------===//
-// CMemory Type
-//===----------------------------------------------------------------------===//
-
-void CMemoryType::print(AsmPrinter &printer) const {
-  printer << "<";
-  // Don't print element types with "!firrtl.".
-  firrtl::printNestedType(getElementType(), printer);
-  printer << ", " << getNumElements() << ">";
-}
-
-Type CMemoryType::parse(AsmParser &parser) {
-  FIRRTLBaseType elementType;
-  uint64_t numElements;
-  if (parser.parseLess() || firrtl::parseNestedBaseType(elementType, parser) ||
-      parser.parseComma() || parser.parseInteger(numElements) ||
-      parser.parseGreater())
-    return {};
-  return parser.getChecked<CMemoryType>(elementType, numElements);
-}
-
-LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  FIRRTLBaseType elementType,
-                                  uint64_t numElements) {
-  if (!elementType.isPassive()) {
-    return emitError() << "behavioral memory element type must be passive";
-  }
-  return success();
-}

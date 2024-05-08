@@ -12,15 +12,18 @@
 // Check if printing with very short line length, removing info locators (@[...]), no line is longer than 5x line length.
 // RUN: circt-translate --export-firrtl %s --target-line-length=10 | sed -e 's/ @\[.*\]//' | FileCheck %s --implicit-check-not "{{^(.{50})}}" --check-prefix PRETTY
 
-// CHECK-LABEL: FIRRTL version 3.3.0
+// CHECK-LABEL: FIRRTL version 4.0.0
 // CHECK-LABEL: circuit Foo :
 // PRETTY-LABEL: circuit Foo :
 firrtl.circuit "Foo" {
-  // CHECK-LABEL: module Foo :
+  // CHECK-LABEL: public module Foo :
   firrtl.module @Foo() {}
 
+  // CHECK-LABEL: {{^ *}} module PrivateModule :
+  firrtl.module private @PrivateModule() {}
+
   // CHECK-LABEL: module PortsAndTypes :
-  firrtl.module @PortsAndTypes(
+  firrtl.module private @PortsAndTypes(
     // CHECK-NEXT: input a00 : Clock
     // CHECK-NEXT: input a01 : Reset
     // CHECK-NEXT: input a02 : AsyncReset
@@ -73,7 +76,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
+  firrtl.module private @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 : !firrtl.uint<1> {
@@ -440,9 +443,9 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %out_b_0_y_2, %b_0_y_2 : !firrtl.probe<uint<2>>
   }
 
-  firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
+  firrtl.extmodule @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>) attributes {defname = "name_thing"}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
-  // CHECK-NEXT:    input in : UInt
+  // CHECK-NEXT:    input in : UInt<1>
   // CHECK-NEXT:    output out : UInt<8>
   // CHECK-NEXT:    defname = name_thing
   // CHECK-NEXT:    parameter DEFAULT = 0
@@ -469,7 +472,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter DEPTH = 32.42
 
   // CHECK-LABEL: module ConstTypes :
-  firrtl.module @ConstTypes(
+  firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
     // CHECK-NEXT: input a01 : const Reset
     // CHECK-NEXT: input a02 : const AsyncReset
@@ -510,7 +513,7 @@ firrtl.circuit "Foo" {
     in %_0: !firrtl.uint<1>
   ) attributes {portNames = ["0"]} {}
   // CHECK-LABEL: module `0Foo` :
-  firrtl.module @"0Foo"(
+  firrtl.module private @"0Foo"(
     // CHECK-NEXT: input `0` : Clock
     // CHECK-NEXT: input `1` : Reset
     // CHECK-NEXT: input `2` : AsyncReset
@@ -685,18 +688,18 @@ firrtl.circuit "Foo" {
 
   // Test optional group declaration and definition emission.
   //
-  // CHECK-LABEL: declgroup GroupA, bind :
-  // CHECK-NEXT:    declgroup GroupB, bind :
-  // CHECK-NEXT:      declgroup GroupC, bind :
-  // CHECK-NEXT:      declgroup GroupD, bind :
-  // CHECK-NEXT:        declgroup GroupE, bind :
-  // CHECK-NEXT:    declgroup GroupF, bind :
+  // CHECK-LABEL: layer GroupA, bind :
+  // CHECK-NEXT:    layer GroupB, bind :
+  // CHECK-NEXT:      layer GroupC, bind :
+  // CHECK-NEXT:      layer GroupD, bind :
+  // CHECK-NEXT:        layer GroupE, inline :
+  // CHECK-NEXT:    layer GroupF, bind :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
       }
       firrtl.layer @GroupD bind {
-        firrtl.layer @GroupE bind {
+        firrtl.layer @GroupE inline {
         }
       }
     }
@@ -704,13 +707,18 @@ firrtl.circuit "Foo" {
     }
   }
   // CHECK:      module ModuleWithGroups :
-  // CHECK-NEXT:   group GroupA :
-  // CHECK-NEXT:     group GroupB :
-  // CHECK-NEXT:       group GroupC :
-  // CHECK-NEXT:       group GroupD :
-  // CHECK-NEXT:         group GroupE :
-  // CHECK-NEXT:     group GroupF :
-  firrtl.module @ModuleWithGroups() {
+  // CHECK-NEXT:   output a : Probe<UInt<1>, GroupA>
+  // CHECK-NEXT:   output b : RWProbe<UInt<1>, GroupA.GroupB>
+  // CHECK:        layerblock GroupA :
+  // CHECK-NEXT:     layerblock GroupB :
+  // CHECK-NEXT:       layerblock GroupC :
+  // CHECK-NEXT:       layerblock GroupD :
+  // CHECK-NEXT:         layerblock GroupE :
+  // CHECK-NEXT:     layerblock GroupF :
+  firrtl.module @ModuleWithGroups(
+    out %a: !firrtl.probe<uint<1>, @GroupA>,
+    out %b: !firrtl.rwprobe<uint<1>, @GroupA::@GroupB>
+  ) {
     firrtl.layerblock @GroupA {
       firrtl.layerblock @GroupA::@GroupB {
         firrtl.layerblock @GroupA::@GroupB::@GroupC {
@@ -724,6 +732,76 @@ firrtl.circuit "Foo" {
       }
     }
   }
+
+  // Test line-breaks for very large layer associations.
+  firrtl.layer @Group1234567890 bind {
+    firrtl.layer @Group1234567890 bind {
+      firrtl.layer @Group1234567890 bind {
+        firrtl.layer @Group1234567890 bind {
+          firrtl.layer @Group1234567890 bind {
+            firrtl.layer @Group1234567890 bind {
+              firrtl.layer @Group1234567890 bind {
+               firrtl.layer @Group1234567890 bind {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // CHECK: module ModuleWithLongProbeColor
+  // CHECK-NEXT:  output o : Probe<
+  // CHECK-NEXT:    UInt<1>,
+  // CHECK-NEXT:    Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:      .Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:  >
+  firrtl.module @ModuleWithLongProbeColor(
+    out %o: !firrtl.probe<uint<1>, @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890>
+  ) {}
+
+  // CHECK: module ModuleWithEnabledLayers enablelayer GroupA enablelayer GroupA.GroupB :
+  firrtl.module private @ModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  } {}
+
+  // CHECK:      extmodule ExtModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.extmodule @ExtModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ]
+  }
+
+  // CHECK:      intmodule IntModuleWithEnabledLayers
+  // CHECK-NEXT:     enablelayer GroupA
+  // CHECK-NEXT:     enablelayer GroupA.GroupB :
+  firrtl.intmodule @IntModuleWithEnabledLayers() attributes {
+    layers = [
+      @GroupA,
+      @GroupA::@GroupB
+    ],
+    intrinsic = "test"
+  }
+
+  // CHECK:      module ModuleWithLargeEnabledLayers
+  // CHECK-NEXT:     enablelayer Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:     enablelayer
+  // CHECK-NEXT:       Group1234567890.Group1234567890.Group1234567890.Group1234567890
+  // CHECK-NEXT:         .Group1234567890.Group1234567890.Group1234567890.Group1234567890 :
+  firrtl.module @ModuleWithLargeEnabledLayers() attributes {
+    layers = [
+      @Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890,
+      @Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890::@Group1234567890
+    ]} {}
 
   // CHECK: module RWProbe :
   // CHECK-NEXT: input in : { a : UInt<1> }[2]
@@ -743,5 +821,77 @@ firrtl.circuit "Foo" {
     %q, %q_ref = firrtl.node interesting_name %read forceable : !firrtl.uint<1>
     %refcast = firrtl.ref.cast %q_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
     firrtl.ref.define %p2, %refcast : !firrtl.rwprobe<uint>
+  }
+
+  // CHECK-LABEL: option Platform :
+  firrtl.option @Platform {
+    // CHECK-NEXT: FPGA
+    firrtl.option_case @FPGA
+    // CHECK-NEXT: ASIC
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK-LABEL: extmodule DefaultTarget
+  firrtl.extmodule private @DefaultTarget()
+  // CHECK-LABEL: extmodule FPGATarget
+  firrtl.extmodule private @FPGATarget()
+  // CHECK-LABEL: extmodule ASICTarget
+  firrtl.extmodule private @ASICTarget()
+
+  // CHECK-LABEL: module InstChoice :
+  firrtl.module public @InstChoice() {
+    // CHECK: instchoice inst of DefaultTarget, Platform :
+    // CHECK-NEXT:    FPGA => FPGATarget
+    // CHECK-NEXT:    ASIC => ASICTarget
+    firrtl.instance_choice inst @DefaultTarget alternatives @Platform
+      { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } ()
+  }
+
+  // CHECK-LABEL: public module GenericIntrinsic :
+  firrtl.module public @GenericIntrinsic(in %clk: !firrtl.clock,
+                                         in %c : !firrtl.uint<1>,
+                                         out %s: !firrtl.uint<32>,
+                                         out %io1: !firrtl.uint<1>,
+                                         out %io2: !firrtl.uint<1>,
+                                         out %io3: !firrtl.uint<1>,
+                                         out %io4: !firrtl.uint<5>) {
+    // Common case should be emitted inline.
+    // CHECK: connect s, intrinsic(circt_sizeof : UInt<32>, clk)
+    %0 = firrtl.int.generic "circt_sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
+    firrtl.strictconnect %s, %0 : !firrtl.uint<32>
+    // CHECK-NEXT: connect io1, intrinsic(circt_isX : UInt<1>, clk)
+    %1 = firrtl.int.generic "circt_isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
+    // CHECK-NEXT: connect io2, intrinsic(circt_plusargs_test<FORMAT = "foo"> : UInt<1>)
+    %2 = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
+    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
+
+    // CHECK-NOT: =
+    // CHECK-NEXT: intrinsic(circt_clock_gate : Clock, clk, c)
+    firrtl.int.generic "circt_clock_gate" %clk, %c : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.clock
+
+    // Materialize node as needed when used multiple times.
+    // CHECK-NEXT: node [[PAV:.+]]
+    // CHECK-NEXT:   = intrinsic(circt_plusargs_value<FORMAT = "foo">
+    // CHECK-NEXT:                 : { found : UInt<1>, result : UInt<5> }
+    %3 = firrtl.int.generic "circt_plusargs_value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
+    // CHECK-NEXT: connect io3, [[PAV]].found
+    // CHECK-NEXT: connect io4, [[PAV]].result
+    %4 = firrtl.subfield %3[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
+    %5 = firrtl.subfield %3[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
+    firrtl.strictconnect %io3, %4 : !firrtl.uint<1>
+    firrtl.strictconnect %io4, %5 : !firrtl.uint<5>
+
+    // Nested once should be inlined.
+    // CHECK-NEXT: intrinsic(circt_verif_assert, intrinsic(circt_isX : UInt<1>, c))
+    %6 = firrtl.int.generic "circt_isX"  %c : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_verif_assert"  %6 : (!firrtl.uint<1>) -> ()
+
+    // Spill if nested > 1 for simplicity.
+    // CHECK-NEXT: node [[ISX:.+]] = intrinsic(circt_isX : UInt<1>, c)
+    // CHECK-NEXT: intrinsic(circt_verif_assert, intrinsic(circt_isX : UInt<1>, [[ISX]]))
+    %7 = firrtl.int.generic "circt_isX"  %c : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %8 = firrtl.int.generic "circt_isX"  %7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_verif_assert"  %8 : (!firrtl.uint<1>) -> ()
   }
 }

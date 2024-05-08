@@ -16,13 +16,8 @@
 #ifndef ESI_TYPES_H
 #define ESI_TYPES_H
 
-#include <any>
-#include <assert.h>
-#include <cstdint>
 #include <map>
-#include <memory>
-#include <optional>
-#include <stdexcept>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -35,7 +30,8 @@ public:
   Type(const ID &id) : id(id) {}
   virtual ~Type() = default;
 
-  ID getID() { return id; }
+  ID getID() const { return id; }
+  virtual std::ptrdiff_t getBitWidth() const { return -1; }
 
 protected:
   ID id;
@@ -50,15 +46,128 @@ public:
   enum Direction { To, From };
 
   using ChannelVector =
-      std::vector<std::tuple<std::string, Direction, const Type &>>;
+      std::vector<std::tuple<std::string, Direction, const Type *>>;
 
   BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), channels(channels) {}
 
   const ChannelVector &getChannels() const { return channels; }
+  std::ptrdiff_t getBitWidth() const override { return -1; };
 
 protected:
   ChannelVector channels;
+};
+
+/// Channels are the basic communication primitives. They are unidirectional and
+/// carry one values of one type.
+class ChannelType : public Type {
+public:
+  ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
+  const Type *getInner() const { return inner; }
+  std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
+
+private:
+  const Type *inner;
+};
+
+/// The "void" type is a special type which can be used to represent no type.
+class VoidType : public Type {
+public:
+  VoidType(const ID &id) : Type(id) {}
+  // 'void' is 1 bit by convention.
+  std::ptrdiff_t getBitWidth() const override { return 1; };
+};
+
+/// The "any" type is a special type which can be used to represent any type, as
+/// identified by the type id. Said type id is guaranteed to be present in the
+/// manifest. Importantly, the "any" type id over the wire may not be a string
+/// as it is in software.
+class AnyType : public Type {
+public:
+  AnyType(const ID &id) : Type(id) {}
+  std::ptrdiff_t getBitWidth() const override { return -1; };
+};
+
+/// Bit vectors include signed, unsigned, and signless integers.
+class BitVectorType : public Type {
+public:
+  BitVectorType(const ID &id, uint64_t width) : Type(id), width(width) {}
+
+  uint64_t getWidth() const { return width; }
+  std::ptrdiff_t getBitWidth() const override { return getWidth(); };
+
+private:
+  uint64_t width;
+};
+
+/// Bits are just an array of bits. They are not interpreted as a number but are
+/// identified in the manifest as "signless" ints.
+class BitsType : public BitVectorType {
+public:
+  using BitVectorType::BitVectorType;
+};
+
+/// Integers are bit vectors which may be signed or unsigned and are interpreted
+/// as numbers.
+class IntegerType : public BitVectorType {
+public:
+  using BitVectorType::BitVectorType;
+};
+
+/// Signed integer.
+class SIntType : public IntegerType {
+public:
+  using IntegerType::IntegerType;
+};
+
+/// Unsigned integer.
+class UIntType : public IntegerType {
+public:
+  using IntegerType::IntegerType;
+};
+
+/// Structs are an ordered collection of fields, each with a name and a type.
+class StructType : public Type {
+public:
+  using FieldVector = std::vector<std::pair<std::string, const Type *>>;
+
+  StructType(const ID &id, const FieldVector &fields)
+      : Type(id), fields(fields) {}
+
+  const FieldVector &getFields() const { return fields; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t size = 0;
+    for (auto [name, ty] : getFields()) {
+      std::ptrdiff_t fieldSize = ty->getBitWidth();
+      if (fieldSize < 0)
+        return -1;
+      size += fieldSize;
+    }
+    return size;
+  }
+
+private:
+  FieldVector fields;
+};
+
+/// Arrays have a compile time specified (static) size and an element type.
+class ArrayType : public Type {
+public:
+  ArrayType(const ID &id, const Type *elementType, uint64_t size)
+      : Type(id), elementType(elementType), size(size) {}
+
+  const Type *getElementType() const { return elementType; }
+  uint64_t getSize() const { return size; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t elementSize = elementType->getBitWidth();
+    if (elementSize < 0)
+      return -1;
+    return elementSize * size;
+  }
+
+private:
+  const Type *elementType;
+  uint64_t size;
 };
 
 } // namespace esi

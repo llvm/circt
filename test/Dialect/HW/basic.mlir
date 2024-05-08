@@ -185,9 +185,6 @@ hw.module @InOutPort(inout %arg0: i1) { }
 hw.module @argRenames(in %arg1: i32) attributes {argNames = [""]} {
 }
 
-hw.module @fileListTest(in %arg1: i32) attributes {output_filelist = #hw.output_filelist<"foo.f">} {
-}
-
 // CHECK-LABEL: hw.module @commentModule
 // CHECK-SAME: attributes {comment = "hello world"}
 hw.module @commentModule() attributes {comment = "hello world"} {}

@@ -7,7 +7,6 @@ add_circt_dialect_library(CIRCTArcTransforms
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
-  InlineModules.cpp
   IsolateClocks.cpp
   LatencyRetiming.cpp
   LegalizeStateUpdate.cpp
@@ -18,7 +17,6 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerVectorizations.cpp
   MakeTables.cpp
   MuxToControlFlow.cpp
-  PrintStateInfo.cpp
   SimplifyVariadicOps.cpp
   SplitFuncs.cpp
   SplitLoops.cpp
@@ -31,6 +29,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTArc
   CIRCTArcExternalInterfaces
   CIRCTComb
+  CIRCTEmit
   CIRCTHW
   CIRCTOM
   CIRCTSV

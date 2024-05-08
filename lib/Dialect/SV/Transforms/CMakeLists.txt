@@ -14,10 +14,12 @@ add_circt_dialect_library(CIRCTSVTransforms
 
   LINK_LIBS PUBLIC
   CIRCTComb
+  CIRCTEmit
   CIRCTHW
   CIRCTSeq
   CIRCTSupport
   CIRCTSV
+  CIRCTVerif
   MLIRIR
   MLIRPass
   MLIRTransformUtils

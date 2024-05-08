@@ -325,7 +325,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
     auto elemIndex =
-        fieldAccess.getInput().getType().get().getElementIndex(field);
+        fieldAccess.getInput().getType().base().getElementIndex(field);
     if (elemIndex && *elemIndex == fieldAccess.getFieldIndex())
       accesses.push_back(fieldAccess);
   }
@@ -477,7 +477,8 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
       op.getLoc(), portTypes, module.getNameAttr(), summary.getFirMemoryName(),
       op.getNameKind(), portDirections, portNames,
       /*annotations=*/ArrayRef<Attribute>(),
-      /*portAnnotations=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
+      /*portAnnotations=*/ArrayRef<Attribute>(),
+      /*layers=*/ArrayRef<Attribute>(), /*lowerToBind=*/false,
       op.getInnerSymAttr());
 
   // Update all users of the result of read ports

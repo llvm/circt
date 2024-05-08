@@ -7,7 +7,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "GraphFixture.h"
+#include "circt-c/Dialect/HW.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
+#include "mlir-c/BuiltinAttributes.h"
+#include "mlir/CAPI/IR.h"
+#include "mlir/CAPI/Support.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "gtest/gtest.h"
 
@@ -35,6 +39,57 @@ TEST(InstanceGraphTest, PostOrderTraversal) {
   ASSERT_EQ(graph.getTopLevelNode(), *it);
   ++it;
   ASSERT_EQ(range.end(), it);
+}
+
+TEST(InstanceGraphCAPITest, PostOrderTraversal) {
+  MLIRContext context;
+
+  HWInstanceGraph instanceGraph =
+      hwInstanceGraphGet(wrap(fixtures::createModule(&context).getOperation()));
+
+  struct Context {
+    size_t i;
+    HWInstanceGraphNode topLevelNode;
+  };
+  auto ctx = Context{0, hwInstanceGraphGetTopLevelNode(instanceGraph)};
+
+  hwInstanceGraphForEachNode(
+      instanceGraph,
+      [](HWInstanceGraphNode node, void *userData) {
+        Context *ctx = reinterpret_cast<Context *>(userData);
+        ctx->i++;
+
+        if (ctx->i == 5) {
+          ASSERT_EQ(hwInstanceGraphNodeEqual(ctx->topLevelNode, node), true);
+          return;
+        }
+
+        MlirOperation moduleOp = hwInstanceGraphNodeGetModuleOp(node);
+        MlirAttribute moduleNameAttr = mlirOperationGetAttributeByName(
+            moduleOp, mlirStringRefCreateFromCString("sym_name"));
+        StringRef moduleName = unwrap(mlirStringAttrGetValue(moduleNameAttr));
+
+        switch (ctx->i) {
+        case 1:
+          ASSERT_EQ("Cat", moduleName);
+          break;
+        case 2:
+          ASSERT_EQ("Bear", moduleName);
+          break;
+        case 3:
+          ASSERT_EQ("Alligator", moduleName);
+          break;
+        case 4:
+          ASSERT_EQ("Top", moduleName);
+          break;
+        default:
+          llvm_unreachable("unexpected i value");
+          break;
+        }
+      },
+      &ctx);
+
+  ASSERT_EQ(ctx.i, 5UL);
 }
 
 } // namespace

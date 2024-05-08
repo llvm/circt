@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -41,19 +42,24 @@ using namespace firrtl;
 
 namespace {
 
-// These macros are used to provide hard-errors if a user tries to use the YAML
+// These are used to provide hard-errors if a user tries to use the YAML
 // infrastructure improperly.  We only implement conversion to YAML and not
 // conversion from YAML.  The LLVM YAML infrastructure doesn't provide the
 // ability to differentitate this and we don't need it for the purposes of
 // Grand Central.
-#define UNIMPLEMENTED_DEFAULT(clazz)                                           \
-  llvm_unreachable("default '" clazz                                           \
-                   "' construction is an intentionally *NOT* implemented "     \
-                   "YAML feature (you should never be using this)");
-#define UNIMPLEMENTED_DENORM(clazz)                                            \
-  llvm_unreachable("conversion from YAML to a '" clazz                         \
-                   "' is intentionally *NOT* implemented (you should not be "  \
-                   "converting from YAML to an interface)");
+[[maybe_unused]] static std::string noDefault(StringRef clazz) {
+  return ("default '" + clazz +
+          "' construction is an intentionally *NOT* implemented "
+          "YAML feature (you should never be using this)")
+      .str();
+}
+
+[[maybe_unused]] static std::string deNorm(StringRef clazz) {
+  return ("conversion from YAML to a '" + clazz +
+          "' is intentionally *NOT* implemented (you should not be "
+          "converting from YAML to an interface)")
+      .str();
+}
 
 // This namespace provides YAML-related collateral that is specific to Grand
 // Central and should not be placed in the `llvm::yaml` namespace.
@@ -194,7 +200,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       // the underlying type.  The dimensions need to be reversed as this
       // unwrapping happens in reverse order of the final representation.
       auto tpe = op.signal.getType();
-      while (auto vector = tpe.dyn_cast<hw::UnpackedArrayType>()) {
+      while (auto vector = dyn_cast<hw::UnpackedArrayType>(tpe)) {
         dimensions.push_back(vector.getNumElements());
         tpe = vector.getElementType();
       }
@@ -208,11 +214,11 @@ struct MappingContextTraits<DescribedSignal, Context> {
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
-    Field(IO &io){UNIMPLEMENTED_DEFAULT("Field")}
+    Field(IO &io) { llvm_unreachable(noDefault("Field").c_str()); }
 
     /// This cannot be denomralized back to an interface op.
     DescribedSignal denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("DescribedSignal")
+      llvm_unreachable(deNorm("DescribedSignal").c_str());
     }
   };
 
@@ -260,10 +266,10 @@ struct MappingContextTraits<DescribedInstance, Context> {
       }
     }
 
-    Instance(IO &io){UNIMPLEMENTED_DEFAULT("Instance")}
+    Instance(IO &io) { llvm_unreachable(noDefault("Instance").c_str()); }
 
     DescribedInstance denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("DescribedInstance")
+      llvm_unreachable(deNorm("DescribedInstance").c_str());
     }
   };
 
@@ -366,11 +372,11 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
     }
 
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
-    Interface(IO &io){UNIMPLEMENTED_DEFAULT("Interface")}
+    Interface(IO &io) { llvm_unreachable(noDefault("Interface").c_str()); }
 
     /// This cannot be denomralized back to an interface op.
     sv::InterfaceOp denormalize(IO &) {
-      UNIMPLEMENTED_DENORM("sv::InterfaceOp")
+      llvm_unreachable(deNorm("sv::InterfaceOp").c_str());
     }
   };
 
@@ -1533,8 +1539,7 @@ GrandCentralPass::getEnclosingModule(Value value, FlatSymbolRefAttr sym) {
 
 /// This method contains the business logic of this pass.
 void GrandCentralPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running Grand Central Views/Interface Pass "
-                             "-----------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
 
   CircuitOp circuitOp = getOperation();
 
@@ -1706,27 +1711,43 @@ void GrandCentralPass::runOnOperation() {
   instancePaths = &instancePathCache;
 
   /// Contains the set of modules which are instantiated by the DUT, but not a
-  /// companion or instantiated by a companion.  If no DUT exists, treat the top
-  /// module as if it were the DUT.  This works by doing a depth-first walk of
-  /// the instance graph, starting from the "effective" DUT and stopping the
-  /// search at any modules which are known companions.
-  DenseSet<igraph::ModuleOpInterface> dutModules;
-  FModuleOp effectiveDUT = dut;
-  if (!effectiveDUT)
-    effectiveDUT = cast<FModuleOp>(
-        *instancePaths->instanceGraph.getTopLevelNode()->getModule());
-  auto dfRange =
-      llvm::depth_first(instancePaths->instanceGraph.lookup(effectiveDUT));
-  for (auto i = dfRange.begin(), e = dfRange.end(); i != e;) {
-    auto module = cast<FModuleLike>(*i->getModule());
-    if (AnnotationSet(module).hasAnnotation(companionAnnoClass)) {
-      i.skipChildren();
-      continue;
+  /// companion, instantiated by a companion, or instantiated under a bind.  If
+  /// no DUT exists, treat the top module as if it were the DUT.  This works by
+  /// doing a depth-first walk of the instance graph, starting from the
+  /// "effective" DUT and stopping the search at any modules which are known
+  /// companions or any instances which are marked "lowerToBind".
+  DenseSet<InstanceGraphNode *> dutModules;
+  InstanceGraphNode *effectiveDUT;
+  if (dut)
+    effectiveDUT = instancePaths->instanceGraph.lookup(dut);
+  else
+    effectiveDUT = instancePaths->instanceGraph.getTopLevelNode();
+  {
+    SmallVector<InstanceGraphNode *> modules({effectiveDUT});
+    while (!modules.empty()) {
+      auto *m = modules.pop_back_val();
+      for (InstanceRecord *a : *m) {
+        auto *mod = a->getTarget();
+        // Skip modules that we've visited, that are are under the companion
+        // module, or are bound/under a layer block.
+        if (auto block = a->getInstance()->getParentOfType<LayerBlockOp>()) {
+          auto diag = a->getInstance().emitOpError()
+                      << "is instantiated under a '" << block.getOperationName()
+                      << "' op which is unexpected by GrandCentral (did you "
+                         "forget to run the LowerLayers pass?)";
+          diag.attachNote(block.getLoc())
+              << "the '" << block.getOperationName() << "' op is here";
+          removalError = true;
+        }
+        auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
+        if (dutModules.contains(mod) ||
+            AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
+            (instOp && instOp.getLowerToBind()))
+          continue;
+        modules.push_back(mod);
+        dutModules.insert(mod);
+      }
     }
-    dutModules.insert(i->getModule<igraph::ModuleOpInterface>());
-    // Manually increment the iterator to avoid walking off the end from
-    // skipChildren.
-    ++i;
   }
 
   // Maybe return the lone instance of a module.  Generate errors on the op if
@@ -1760,7 +1781,6 @@ void GrandCentralPass::runOnOperation() {
   /// (2) the leafMap.  Annotations are removed as they are discovered and if
   /// they are not malformed.
   DenseSet<Operation *> modulesToDelete;
-  removalError = false;
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
@@ -1834,7 +1854,7 @@ void GrandCentralPass::runOnOperation() {
 
           // Handle annotations on the module.
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.getClass().startswith(viewAnnoClass))
+            if (!annotation.getClass().starts_with(viewAnnoClass))
               return false;
             auto isNonlocal = annotation.getMember<FlatSymbolRefAttr>(
                                   "circt.nonlocal") != nullptr;
@@ -1880,7 +1900,7 @@ void GrandCentralPass::runOnOperation() {
                   continue;
                 // Do not allow any outputs in the drop mode.
                 auto ty = result.getType();
-                if (ty.isa<RefType>() && companionMode != CompanionMode::Drop)
+                if (isa<RefType>(ty) && companionMode != CompanionMode::Drop)
                   continue;
                 op.emitOpError()
                     << "companion instance cannot have output ports";
@@ -1945,12 +1965,11 @@ void GrandCentralPass::runOnOperation() {
                 // Check to see if we should change the output directory of a
                 // module.  Only update in the following conditions:
                 //   1) The module is the companion.
-                //   2) The module is NOT instantiated by the effective DUT.
+                //   2) The module is NOT instantiated by the effective DUT or
+                //      is under a bind.
                 auto *modNode = instancePaths->instanceGraph.lookup(mod);
                 SmallVector<InstanceRecord *> instances(modNode->uses());
-                if (modNode != companionNode &&
-                    dutModules.count(
-                        modNode->getModule<igraph::ModuleOpInterface>()))
+                if (modNode != companionNode && dutModules.count(modNode))
                   continue;
 
                 LLVM_DEBUG({
@@ -2071,9 +2090,7 @@ void GrandCentralPass::runOnOperation() {
         llvm::dbgs() << "\n";
       } else {
         llvm::dbgs() << "  - " << id.getValue() << ": "
-                     << value.getDefiningOp()
-                            ->getAttr("name")
-                            .cast<StringAttr>()
+                     << cast<StringAttr>(value.getDefiningOp()->getAttr("name"))
                             .getValue();
         if (fieldID)
           llvm::dbgs() << ", fieldID=" << fieldID;

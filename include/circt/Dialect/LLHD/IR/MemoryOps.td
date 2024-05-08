@@ -42,7 +42,7 @@ def LLHD_VarOp : LLHD_Op<"var", [
 def LLHD_LoadOp : LLHD_Op<"load", [
     TypesMatchWith<
       "type of 'result' and underlying type of 'pointer' have to match.",
-      "pointer", "result", "$_self.cast<PtrType>().getUnderlyingType()">
+      "pointer", "result", "llvm::cast<PtrType>($_self).getUnderlyingType()">
   ]> {
   let summary = "Load a value.";
   let description = [{
@@ -72,7 +72,7 @@ def LLHD_LoadOp : LLHD_Op<"load", [
 def LLHD_StoreOp : LLHD_Op<"store", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'pointer' have to match.",
-      "pointer", "value", "$_self.cast<PtrType>().getUnderlyingType()">
+      "pointer", "value", "llvm::cast<PtrType>($_self).getUnderlyingType()">
   ]> {
   let summary = "Store a value.";
   let description = [{

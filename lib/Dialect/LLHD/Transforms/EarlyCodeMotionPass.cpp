@@ -73,7 +73,7 @@ void EarlyCodeMotionPass::runOnOperation() {
       for (Value operand : op.getOperands()) {
         SmallVector<Block *, 8> dominationSet;
         Block *instBlock = nullptr;
-        if (BlockArgument arg = operand.dyn_cast<BlockArgument>()) {
+        if (BlockArgument arg = dyn_cast<BlockArgument>(operand)) {
           instBlock = arg.getParentBlock();
         } else {
           instBlock = operand.getDefiningOp()->getBlock();

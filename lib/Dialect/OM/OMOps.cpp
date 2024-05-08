@@ -349,12 +349,10 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // Verify the field exists on the ClassOp.
     auto field = fields[i];
     ClassFieldLike fieldDef;
-    classDef.walk([&](SymbolOpInterface symbol) {
-      if (auto fieldLike = dyn_cast<ClassFieldLike>(symbol.getOperation())) {
-        if (symbol.getNameAttr() == field.getAttr()) {
-          fieldDef = fieldLike;
-          return WalkResult::interrupt();
-        }
+    classDef.walk([&](ClassFieldLike fieldLike) {
+      if (fieldLike.getNameAttr() == field.getAttr()) {
+        fieldDef = fieldLike;
+        return WalkResult::interrupt();
       }
       return WalkResult::advance();
     });
@@ -367,7 +365,7 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     // If there are more fields, verify the current field is of ClassType, and
     // look up the ClassOp for that field.
     if (i < e - 1) {
-      auto classType = fieldDef.getType().dyn_cast<ClassType>();
+      auto classType = dyn_cast<ClassType>(fieldDef.getType());
       if (!classType)
         return emitOpError("nested field access into ")
                << field << " requires a ClassType, but found "
@@ -465,7 +463,7 @@ LogicalResult TupleGetOp::inferReturnTypes(
   if (operands.empty() || !idx)
     return failure();
 
-  auto tupleTypes = operands[0].getType().cast<TupleType>().getTypes();
+  auto tupleTypes = cast<TupleType>(operands[0].getType()).getTypes();
   if (tupleTypes.size() <= idx.getValue().getLimitedValue()) {
     if (location)
       mlir::emitError(*location,
@@ -487,8 +485,8 @@ void circt::om::MapCreateOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperands(getInputs());
   p.printOptionalAttrDict((*this)->getAttrs());
-  p << " : " << getType().cast<circt::om::MapType>().getKeyType() << ", "
-    << getType().cast<circt::om::MapType>().getValueType();
+  p << " : " << cast<circt::om::MapType>(getType()).getKeyType() << ", "
+    << cast<circt::om::MapType>(getType()).getValueType();
 }
 
 ParseResult circt::om::MapCreateOp::parse(OpAsmParser &parser,
@@ -535,6 +533,42 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!hierPath)
     return emitOpError("invalid symbol reference");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerAddOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs + rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerMulOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  return success(lhs * rhs);
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerShrOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<llvm::APSInt>
+IntegerShrOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
+                                       const llvm::APSInt &rhs) {
+  // Check non-negative constraint from operation semantics.
+  if (!rhs.isNonNegative())
+    return emitOpError("shift amount must be non-negative");
+  // Check size constraint from implementation detail of using getExtValue.
+  if (!rhs.isRepresentableByInt64())
+    return emitOpError("shift amount must be representable in 64 bits");
+  return success(lhs >> rhs.getExtValue());
 }
 
 //===----------------------------------------------------------------------===//

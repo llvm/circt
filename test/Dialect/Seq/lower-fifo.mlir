@@ -5,8 +5,8 @@
 
 
 // CHECK:   hw.module @fifo1(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32) {
-// CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_6:.*]] = hw.constant -1 : i2
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
 // CHECK:           %[[VAL_7:.*]] = hw.constant -2 : i2
 // CHECK:           %[[VAL_8:.*]] = hw.constant 1 : i2
 // CHECK:           %[[VAL_9:.*]] = hw.constant 0 : i2
@@ -49,9 +49,9 @@ hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1
 
 // CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32, out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
 // CHECK:           %[[VAL_5:.*]] = hw.constant 2 : i3
-// CHECK:           %[[VAL_6:.*]] = hw.constant 0 : i2
-// CHECK:           %[[VAL_7:.*]] = hw.constant true
 // CHECK:           %[[VAL_8:.*]] = hw.constant -1 : i3
+// CHECK:           %[[VAL_7:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_9:.*]] = hw.constant 3 : i3
 // CHECK:           %[[VAL_10:.*]] = hw.constant 1 : i3
 // CHECK:           %[[VAL_11:.*]] = hw.constant 0 : i3

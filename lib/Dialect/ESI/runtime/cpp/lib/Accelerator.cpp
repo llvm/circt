@@ -22,25 +22,19 @@ using namespace std;
 using namespace esi;
 using namespace esi::services;
 
-CustomService::CustomService(AppIDPath idPath,
-                             const ServiceImplDetails &details,
-                             const HWClientDetails &clients)
-    : id(idPath) {
-  if (auto f = details.find("service"); f != details.end()) {
-    serviceSymbol = any_cast<string>(f->second);
-    // Strip off initial '@'.
-    serviceSymbol = serviceSymbol.substr(1);
-  }
-}
-
 namespace esi {
-services::Service *Accelerator::getService(Service::Type svcType, AppIDPath id,
-                                           std::string implName,
-                                           ServiceImplDetails details,
-                                           HWClientDetails clients) {
+
+services::Service *AcceleratorConnection::getService(Service::Type svcType,
+                                                     AppIDPath id,
+                                                     std::string implName,
+                                                     ServiceImplDetails details,
+                                                     HWClientDetails clients) {
   unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
   if (cacheEntry == nullptr) {
     Service *svc = createService(svcType, id, implName, details, clients);
+    if (!svc)
+      svc = ServiceRegistry::createService(this, svcType, id, implName, details,
+                                           clients);
     if (!svc)
       return nullptr;
     cacheEntry = unique_ptr<Service>(svc);
@@ -59,11 +53,12 @@ void registerBackend(string name, BackendCreate create) {
 }
 } // namespace internal
 
-unique_ptr<Accelerator> connect(string backend, string connection) {
+unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
+                                          string connection) {
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end())
     throw runtime_error("Backend not found");
-  return f->second(connection);
+  return f->second(ctxt, connection);
 }
 
 } // namespace registry

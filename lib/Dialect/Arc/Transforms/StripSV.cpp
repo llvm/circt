@@ -9,6 +9,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -75,15 +76,15 @@ void StripSVPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates\n");
 
-  // Remove OM dialect nodes.
+  // Remove OM and Emit dialect nodes.
   for (auto &op : llvm::make_early_inc_range(*mlirModule.getBody()))
-    if (isa<om::OMDialect>(op.getDialect()))
+    if (isa<emit::EmitDialect, om::OMDialect>(op.getDialect()))
       op.erase();
 
   // Remove `sv.*` operation attributes.
   mlirModule.walk([](Operation *op) {
     auto isSVAttr = [](NamedAttribute attr) {
-      return attr.getName().getValue().startswith("sv.");
+      return attr.getName().getValue().starts_with("sv.");
     };
     if (llvm::any_of(op->getAttrs(), isSVAttr)) {
       SmallVector<NamedAttribute> newAttrs;
@@ -158,16 +159,15 @@ void StripSVPass::runOnOperation() {
         continue;
       }
 
-      // Replace clock gate instances with the dedicated arc op and stub
-      // out other external modules.
+      // Replace clock gate instances with the dedicated `seq.clock_gate` op and
+      // stub out other external modules.
       if (auto instOp = dyn_cast<hw::InstanceOp>(&op)) {
         auto modName = instOp.getModuleNameAttr().getAttr();
         ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
         if (clockGateModuleNames.contains(modName)) {
-          auto enable = builder.createOrFold<comb::OrOp>(
-              instOp.getOperand(1), instOp.getOperand(2), true);
-          auto gated =
-              builder.create<arc::ClockGateOp>(instOp.getOperand(0), enable);
+          auto gated = builder.create<seq::ClockGateOp>(
+              instOp.getOperand(0), instOp.getOperand(1), instOp.getOperand(2),
+              hw::InnerSymAttr{});
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         }

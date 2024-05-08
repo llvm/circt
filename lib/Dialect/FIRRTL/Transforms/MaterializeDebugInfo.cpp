@@ -10,6 +10,7 @@
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Support/Naming.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/StringExtras.h"
@@ -57,7 +58,8 @@ void MaterializeDebugInfoPass::materializeVariable(OpBuilder &builder,
   if (name.getValue().starts_with("_"))
     return;
   if (auto dbgValue = convertToDebugAggregates(builder, value))
-    builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue);
+    builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue,
+                                      /*scope=*/Value{});
 }
 
 /// Unpack all aggregates in a FIRRTL value and repack them as debug aggregates.

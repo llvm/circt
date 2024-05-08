@@ -1,3 +1,5 @@
+// XFAIL: *
+// See https://github.com/llvm/circt/issues/6658
 // RUN: ibistool %s --lo --post-ibis-ir | FileCheck %s --check-prefix=CHECK-POST-IBIS
 // RUN: ibistool %s --lo --ir | FileCheck %s --check-prefix=CHECK-IR
 // RUN: ibistool %s --lo --verilog | FileCheck %s --check-prefix=CHECK-VERILOG
@@ -53,23 +55,25 @@
 // CHECK-VERILOG:   );
 // CHECK-VERILOG: endmodule
 
+ibis.design @foo {
 ibis.class @A {
   %this = ibis.this @A
-  ibis.port.input @in : i1
-  ibis.port.output @out : i1
-  ibis.port.input @clk : !seq.clock
+  ibis.port.input "in" sym @in : i1
+  ibis.port.output "out" sym @out : i1
+  ibis.port.input "clk" sym @clk : !seq.clock
   
   ibis.container@B {
     %B_this = ibis.this @B
     %parent = ibis.path [
-      #ibis.step<parent : !ibis.scoperef<@A>>
+      #ibis.step<parent : !ibis.scoperef<@foo::@A>>
     ]
-    %a_in = ibis.get_port %parent, @in : !ibis.scoperef<@A> -> !ibis.portref<out i1>
-    %a_clk = ibis.get_port %parent, @clk : !ibis.scoperef<@A> -> !ibis.portref<out !seq.clock>
-    %a_out = ibis.get_port %parent, @out : !ibis.scoperef<@A> -> !ibis.portref<in i1>
+    %a_in = ibis.get_port %parent, @in : !ibis.scoperef<@foo::@A> -> !ibis.portref<out i1>
+    %a_clk = ibis.get_port %parent, @clk : !ibis.scoperef<@foo::@A> -> !ibis.portref<out !seq.clock>
+    %a_out = ibis.get_port %parent, @out : !ibis.scoperef<@foo::@A> -> !ibis.portref<in i1>
     %in = ibis.port.read %a_in : !ibis.portref<out i1>
     %clk = ibis.port.read %a_clk : !ibis.portref<out !seq.clock>
     %r = seq.compreg %in, %clk: i1
     ibis.port.write %a_out, %r : !ibis.portref<in i1>
   }
+}
 }

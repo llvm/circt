@@ -18,11 +18,32 @@ using namespace circt;
 using namespace ibis;
 
 bool circt::ibis::isOpaqueScopeRefType(mlir::Type type) {
-  auto scopeRef = type.dyn_cast<ScopeRefType>();
+  auto scopeRef = dyn_cast<ScopeRefType>(type);
   if (!scopeRef)
     return false;
 
   return scopeRef.isOpaque();
+}
+
+Type ScopeRefType::parse(AsmParser &p) {
+  if (p.parseOptionalLess())
+    return ScopeRefType::get(p.getBuilder().getContext());
+
+  SymbolRefAttr attr;
+  if (p.parseAttribute(attr) || p.parseGreater())
+    return Type();
+  if (attr.getNestedReferences().size() != 1) {
+    p.emitError(p.getNameLoc(), "expected @outer::@inner format");
+    return Type();
+  }
+  return ScopeRefType::get(
+      p.getBuilder().getContext(),
+      hw::InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference()));
+}
+
+void ScopeRefType::print(AsmPrinter &p) const {
+  if (auto ref = getScopeRef())
+    ref.print(p);
 }
 
 #define GET_TYPEDEF_CLASSES

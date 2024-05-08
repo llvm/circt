@@ -79,8 +79,10 @@ InstanceGraph::InstanceGraph(Operation *parent) : parent(parent) {
     currentNode->module = module;
     for (auto instanceOp : instances) {
       // Add an edge to indicate that this module instantiates the target.
-      auto *targetNode = getOrAddNode(instanceOp.getReferencedModuleNameAttr());
-      currentNode->addInstance(instanceOp, targetNode);
+      for (auto targetNameAttr : instanceOp.getReferencedModuleNamesAttr()) {
+        auto *targetNode = getOrAddNode(cast<StringAttr>(targetNameAttr));
+        currentNode->addInstance(instanceOp, targetNode);
+      }
     }
   }
 }
@@ -114,30 +116,29 @@ InstanceGraphNode *InstanceGraph::lookup(ModuleOpInterface op) {
   return lookup(cast<ModuleOpInterface>(op).getModuleNameAttr());
 }
 
-ModuleOpInterface
-InstanceGraph::getReferencedModuleImpl(InstanceOpInterface op) {
-  return lookup(op.getReferencedModuleNameAttr())->getModule();
-}
-
 void InstanceGraph::replaceInstance(InstanceOpInterface inst,
                                     InstanceOpInterface newInst) {
-  assert(inst.getReferencedModuleName() == newInst.getReferencedModuleName() &&
-         "Both instances must be targeting the same module");
+  assert(inst.getReferencedModuleNamesAttr() ==
+             newInst.getReferencedModuleNamesAttr() &&
+         "Both instances must be targeting the same modules");
 
-  // Find the instance record of this instance.
-  auto *node = lookup(inst.getReferencedModuleNameAttr());
-  auto it = llvm::find_if(node->uses(), [&](InstanceRecord *record) {
-    return record->getInstance() == inst;
-  });
-  assert(it != node->usesEnd() && "Instance of module not recorded in graph");
-
-  // We can just replace the instance op in the InstanceRecord without updating
-  // any instance lists.
-  (*it)->instance = newInst;
+  // Replace all edges between the module of the instance and all targets.
+  for (Attribute targetNameAttr : inst.getReferencedModuleNamesAttr()) {
+    // Find the instance record of this instance.
+    auto *node = lookup(cast<StringAttr>(targetNameAttr));
+    for (InstanceRecord *record : node->uses()) {
+      if (record->getInstance() == inst) {
+        // We can just replace the instance op in the InstanceRecord without
+        // updating any instance lists.
+        record->instance = newInst;
+      }
+    }
+  }
 }
 
-bool InstanceGraph::isAncestor(ModuleOpInterface child,
-                               ModuleOpInterface parent) {
+bool InstanceGraph::isAncestor(
+    ModuleOpInterface child, ModuleOpInterface parent,
+    llvm::function_ref<bool(InstanceRecord *)> skipInstance) {
   DenseSet<InstanceGraphNode *> seen;
   SmallVector<InstanceGraphNode *> worklist;
   auto *cn = lookup(child);
@@ -149,6 +150,8 @@ bool InstanceGraph::isAncestor(ModuleOpInterface child,
     if (node->getModule() == parent)
       return true;
     for (auto *use : node->uses()) {
+      if (skipInstance(use))
+        continue;
       auto *mod = use->getParent();
       if (!seen.count(mod)) {
         seen.insert(mod);
@@ -224,12 +227,18 @@ InstanceGraph::getInferredTopLevelNodes() {
 
 static InstancePath empty{};
 
-// NOLINTBEGIN(misc-no-recursion)
 ArrayRef<InstancePath>
 InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
+  return getAbsolutePaths(op, instanceGraph.getTopLevelNode());
+}
+
+// NOLINTBEGIN(misc-no-recursion)
+ArrayRef<InstancePath>
+InstancePathCache::getAbsolutePaths(ModuleOpInterface op,
+                                    InstanceGraphNode *top) {
   InstanceGraphNode *node = instanceGraph[op];
 
-  if (node == instanceGraph.getTopLevelNode()) {
+  if (node == top) {
     return empty;
   }
 
@@ -268,9 +277,31 @@ InstancePathCache::getAbsolutePaths(ModuleOpInterface op) {
 
 void InstancePath::print(llvm::raw_ostream &into) const {
   into << "$root";
-  for (auto inst : path)
-    into << "/" << inst.getInstanceName() << ":"
-         << inst.getReferencedModuleName();
+  for (unsigned i = 0, n = path.size(); i < n; ++i) {
+    auto inst = path[i];
+
+    into << "/" << inst.getInstanceName() << ":";
+    auto names = inst.getReferencedModuleNamesAttr();
+    if (names.size() == 1) {
+      // If there is a unique target, print it.
+      into << cast<StringAttr>(names[0]).getValue();
+    } else {
+      if (i + 1 < n) {
+        // If this is not a leaf node, the target module should be the
+        // parent of the next instance operation in the path.
+        into << path[i + 1]
+                    ->getParentOfType<ModuleOpInterface>()
+                    .getModuleName();
+      } else {
+        // Otherwise, print the whole set of targets.
+        into << "{";
+        llvm::interleaveComma(names, into, [&](Attribute name) {
+          into << cast<StringAttr>(name).getValue();
+        });
+        into << "}";
+      }
+    }
+  }
 }
 
 InstancePath InstancePathCache::appendInstance(InstancePath path,

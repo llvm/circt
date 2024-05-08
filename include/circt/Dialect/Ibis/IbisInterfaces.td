@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_IBIS_INTERFACES_TD
 #define CIRCT_DIALECT_IBIS_INTERFACES_TD
 
+include "circt/Dialect/HW/HWOpInterfaces.td"
+
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -35,9 +37,7 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
   ];
 }
 
-// TODO: @mortbopet: should inherit from InnerSymTable once we have a way to
-// support nested symbol tables.
-def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
+def ScopeOpInterface : OpInterface<"ScopeOpInterface", [InnerSymbol]> {
   let cppNamespace = "circt::ibis";
   let description = [{
     An interface for operations which define Ibis scopes, that can be referenced
@@ -72,7 +72,7 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
       "Returns the symbol name of the scope",
       "mlir::StringAttr", "getScopeName",
       (ins), [{
-        return $_op.getNameAttr();
+        return $_op.getInnerNameAttr();
       }]
     >,
     InterfaceMethod<
@@ -86,7 +86,10 @@ def ScopeOpInterface : OpInterface<"ScopeOpInterface", [Symbol]> {
         // scope.
         // Until then, brute-force scan the inner symbol ops for a match.
         for (auto op : $_op.getBodyBlock()->template getOps<hw::InnerSymbolOpInterface>()) {
-          if (*op.getInnerName() == symName)
+          auto innerName = op.getInnerName();
+          if(!innerName)
+            continue;
+          if (*innerName == symName)
             return op;
         }
         return nullptr;

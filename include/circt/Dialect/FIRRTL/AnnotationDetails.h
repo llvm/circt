@@ -92,10 +92,6 @@ constexpr const char *metadataDirectoryAttrName =
 constexpr const char *noDedupAnnoClass = "firrtl.transforms.NoDedupAnnotation";
 constexpr const char *dedupGroupAnnoClass =
     "firrtl.transforms.DedupGroupAnnotation";
-constexpr const char *dftTestModeEnableAnnoClass =
-    "sifive.enterprise.firrtl.DFTTestModeEnableAnnotation";
-constexpr const char *dftClockDividerBypassAnnoClass =
-    "sifive.enterprise.firrtl.DFTClockDividerBypassAnnotation";
 
 // Grand Central Annotations
 constexpr const char *serializedViewAnnoClass =
@@ -143,14 +139,6 @@ constexpr const char *extractGrandCentralClass =
     "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
 constexpr const char *grandCentralHierarchyFileAnnoClass =
     "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation";
-constexpr const char *signalDriverAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation";
-constexpr const char *signalDriverTargetAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation.target"; // not in
-                                                                    // SFC
-constexpr const char *signalDriverModuleAnnoClass =
-    "sifive.enterprise.grandcentral.SignalDriverAnnotation.module"; // not in
-                                                                    // SFC
 
 // SiFive specific Annotations
 constexpr const char *dutAnnoClass =
@@ -165,16 +153,10 @@ constexpr const char *prefixModulesAnnoClass =
     "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation";
 constexpr const char *dontObfuscateModuleAnnoClass =
     "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation";
-constexpr const char *scalaClassAnnoClass =
-    "sifive.enterprise.firrtl.ScalaClassAnnotation";
 constexpr const char *elaborationArtefactsDirectoryAnnoClass =
     "sifive.enterprise.firrtl.ElaborationArtefactsDirectory";
-constexpr const char *subCircuitsTargetDirectoryAnnoClass =
-    "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory";
 constexpr const char *testHarnessPathAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
-constexpr const char *subCircuitDirAnnotation =
-    "sifive.enterprise.grandcentral.SubCircuitDirAnnotation";
 /// Annotation that marks a reset (port or wire) and domain.
 constexpr const char *fullAsyncResetAnnoClass =
     "sifive.enterprise.firrtl.FullAsyncResetAnnotation";

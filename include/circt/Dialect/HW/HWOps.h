@@ -13,7 +13,9 @@
 #ifndef CIRCT_DIALECT_HW_OPS_H
 #define CIRCT_DIALECT_HW_OPS_H
 
+#include "circt/Dialect/Emit/EmitOpInterfaces.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWEnums.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BuilderUtils.h"
@@ -37,18 +39,6 @@ class EnumFieldAttr;
 ModulePort::Direction flip(ModulePort::Direction direction);
 
 /// TODO: Move all these functions to a hw::ModuleLike interface.
-
-/// Insert and remove ports of a module. The insertion and removal indices must
-/// be in ascending order. The indices refer to the port positions before any
-/// insertion or removal occurs. Ports inserted at the same index will appear in
-/// the module in the same order as they were listed in the `insert*` array.
-/// If 'body' is provided, additionally inserts/removes the corresponding
-/// block arguments.
-void modifyModulePorts(Operation *op,
-                       ArrayRef<std::pair<unsigned, PortInfo>> insertInputs,
-                       ArrayRef<std::pair<unsigned, PortInfo>> insertOutputs,
-                       ArrayRef<unsigned> removeInputs,
-                       ArrayRef<unsigned> removeOutputs, Block *body = nullptr);
 
 // Helpers for working with modules.
 

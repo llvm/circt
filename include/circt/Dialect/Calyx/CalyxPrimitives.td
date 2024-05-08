@@ -168,7 +168,7 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
     ```mlir
       // A 1-dimensional, 32-bit memory with size dimension 1. Equivalent representation in the native compiler:
       // `m1 = seq_mem_d1(32, 1, 1)`
-      %m1.addr0, %m1.write_data, %m1.write_en, %m1.write_done, %m1.clk, %m1.read_data, %m1.read_en, %m1.read_done = calyx.memory @m1 <[1] x 32> [1] : i1, i32, i1, i1, i32, i1
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.read_en, %m1.done = calyx.memory @m1 <[1] x 32> [1] : i1, i32, i1, i1, i32, i1
 
       // A 2-dimensional, 8-bit memory with size dimensions 64 x 64. Equivalent representation in the native compiler:
       // `m2 = seq_mem_d2(8, 64, 64, 6, 6)`
@@ -210,13 +210,13 @@ def SeqMemoryOp : CalyxPrimitive<"seq_mem", []> {
       assert(i < getNumDimensions() && "index greater than number of memory address ports.");
       return getResults()[i];
     }
-    Value writeData() { return getResult(getNumDimensions()); }
-    Value writeEn()   { return getResult(getNumDimensions() + 1); }
-    Value writeDone()      { return getResult(getNumDimensions() + 2); }
-    Value clk()       { return getResult(getNumDimensions() + 3); }
-    Value readData()  { return getResult(getNumDimensions() + 4); }
-    Value readEn()  { return getResult(getNumDimensions() + 5); }
-    Value readDone()      { return getResult(getNumDimensions() + 6); }
+    Value clk() { return getResult(getNumDimensions()); }
+    Value reset()   { return getResult(getNumDimensions() + 1); }
+    Value contentEn()      { return getResult(getNumDimensions() + 2); }
+    Value writeEn()       { return getResult(getNumDimensions() + 3); }
+    Value writeData()  { return getResult(getNumDimensions() + 4); }
+    Value readData()  { return getResult(getNumDimensions() + 5); }
+    Value done()      { return getResult(getNumDimensions() + 6); }
   }];
 
   let extraClassDefinition = [{

@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --arc-allocate-state | FileCheck %s
 
-// CHECK-LABEL: arc.model "test"
-arc.model "test" {
+// CHECK-LABEL: arc.model @test
+arc.model @test io !hw.modty<input x : i1, output y : i1> {
 ^bb0(%arg0: !arc.storage):
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<5780>):
 

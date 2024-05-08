@@ -13,6 +13,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
@@ -87,7 +88,7 @@ struct HWMemSimImplPass : public impl::HWMemSimImplBase<HWMemSimImplPass> {
 static bool valueDefinedBeforeOp(Value value, Operation *op) {
   Operation *valueOp = value.getDefiningOp();
   Block *valueBlock =
-      valueOp ? valueOp->getBlock() : value.cast<BlockArgument>().getOwner();
+      valueOp ? valueOp->getBlock() : cast<BlockArgument>(value).getOwner();
   while (op->getBlock() && op->getBlock() != valueBlock)
     op = op->getParentOp();
   return valueBlock == op->getBlock() &&
@@ -109,11 +110,10 @@ static Value getMemoryRead(ImplicitLocOpBuilder &b, Value memory, Value addr,
   auto slot =
       b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(memory, addr));
   // If we don't want to add mux pragmas, just return the read value.
-  if (!addMuxPragmas || memory.getType()
-                                .cast<hw::InOutType>()
-                                .getElementType()
-                                .cast<hw::UnpackedArrayType>()
-                                .getNumElements() <= 1)
+  if (!addMuxPragmas ||
+      cast<hw::UnpackedArrayType>(
+          cast<hw::InOutType>(memory.getType()).getElementType())
+              .getNumElements() <= 1)
     return slot;
   circt::sv::setSVAttributes(
       slot, sv::SVAttributeAttr::get(b.getContext(), "cadence map_to_mux",
@@ -499,24 +499,29 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
     } else {
       OpBuilder::InsertionGuard guard(b);
 
-      // Create a new module with the readmem op.
-      b.setInsertionPointAfter(op);
-      auto boundModule = b.create<HWModuleOp>(
-          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init")),
-          ArrayRef<PortInfo>());
+      // Assign a name to the bound module.
+      StringAttr boundModuleName =
+          b.getStringAttr(mlirModuleNamespace.newName(op.getName() + "_init"));
 
-      auto filename = op->getAttrOfType<OutputFileAttr>("output_file");
-      if (filename) {
-        if (!filename.isDirectory()) {
-          SmallString<128> dir(filename.getFilename().getValue());
-          llvm::sys::path::remove_filename(dir);
-          filename = hw::OutputFileAttr::getFromDirectoryAndFilename(
-              b.getContext(), dir, boundModule.getName() + ".sv");
+      // Generate a name for the file containing the bound module and the bind.
+      StringAttr filename;
+      if (auto fileAttr = op->getAttrOfType<OutputFileAttr>("output_file")) {
+        if (!fileAttr.isDirectory()) {
+          SmallString<128> path(fileAttr.getFilename().getValue());
+          llvm::sys::path::remove_filename(path);
+          llvm::sys::path::append(path, boundModuleName.getValue() + ".sv");
+          filename = b.getStringAttr(path);
+        } else {
+          filename = fileAttr.getFilename();
         }
       } else {
-        filename = hw::OutputFileAttr::getFromFilename(
-            b.getContext(), boundModule.getName() + ".sv");
+        filename = b.getStringAttr(boundModuleName.getValue() + ".sv");
       }
+
+      // Create a new module with the readmem op.
+      b.setInsertionPointAfter(op);
+      auto boundModule =
+          b.create<HWModuleOp>(boundModuleName, ArrayRef<PortInfo>());
 
       // Build the hierpathop
       auto path = b.create<hw::HierPathOp>(
@@ -524,8 +529,6 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
           b.getArrayAttr(
               ::InnerRefAttr::get(op.getNameAttr(), reg.getInnerNameAttr())));
 
-      boundModule->setAttr("output_file", filename);
-      b.setInsertionPointToStart(op.getBodyBlock());
       b.setInsertionPointToStart(boundModule.getBodyBlock());
       b.create<sv::InitialOp>([&]() {
         auto xmr = b.create<sv::XMRRefOp>(reg.getType(), path.getSymNameAttr());
@@ -544,11 +547,13 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
               moduleNamespace.newName(boundInstance.getInstanceName()))));
       boundInstance->setAttr("doNotPrint", b.getBoolAttr(true));
 
-      // Bind the new module.
-      b.setInsertionPointAfter(boundModule);
-      auto bind = b.create<sv::BindOp>(hw::InnerRefAttr::get(
-          op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
-      bind->setAttr("output_file", filename);
+      // Build the file container and reference the module from it.
+      b.setInsertionPointAfter(op);
+      b.create<emit::FileOp>(filename, [&] {
+        b.create<emit::RefOp>(FlatSymbolRefAttr::get(boundModuleName));
+        b.create<sv::BindOp>(hw::InnerRefAttr::get(
+            op.getNameAttr(), boundInstance.getInnerSymAttr().getSymName()));
+      });
     }
   }
 
@@ -587,10 +592,9 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
         b.create<sv::IfDefProceduralOp>("RANDOMIZE_MEM_INIT", [&]() {
           auto outerLoopIndVarType =
               b.getIntegerType(llvm::Log2_64_Ceil(mem.depth + 1));
-          auto innerUpperBoundWidth = randomMemReg.getType()
-                                          .getElementType()
-                                          .cast<IntegerType>()
-                                          .getWidth();
+          auto innerUpperBoundWidth =
+              cast<IntegerType>(randomMemReg.getType().getElementType())
+                  .getWidth();
           auto innerLoopIndVarType =
               b.getIntegerType(llvm::Log2_64_Ceil(innerUpperBoundWidth + 1));
           // Construct the following nested for loops:

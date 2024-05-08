@@ -32,13 +32,13 @@ using namespace arc;
 namespace {
 struct InferMemoriesPass
     : public arc::impl::InferMemoriesBase<InferMemoriesPass> {
+  using InferMemoriesBase::InferMemoriesBase;
+
   void runOnOperation() override;
 
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 2> schemaNames;
   DenseMap<StringAttr, DictionaryAttr> memoryParams;
-
-  using InferMemoriesBase::tapPorts;
 };
 } // namespace
 
@@ -116,7 +116,7 @@ void InferMemoriesPass::runOnOperation() {
     }
     auto memType = MemoryType::get(&getContext(), depth, wordType, addressTy);
     auto memOp = builder.create<MemoryOp>(memType);
-    if (!instOp.getInstanceName().empty())
+    if (tapMemories && !instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
 
     unsigned argIdx = 0;
@@ -232,7 +232,7 @@ void InferMemoriesPass::runOnOperation() {
       readOp = builder.create<comb::MuxOp>(readEnable, readOp, zero);
 
       if (writeMask) {
-        unsigned maskWidth = writeMask.getType().cast<IntegerType>().getWidth();
+        unsigned maskWidth = cast<IntegerType>(writeMask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
           Value bit = builder.create<comb::ExtractOp>(writeMask, i, 1);
@@ -284,7 +284,7 @@ void InferMemoriesPass::runOnOperation() {
       }
 
       if (mask) {
-        unsigned maskWidth = mask.getType().cast<IntegerType>().getWidth();
+        unsigned maskWidth = cast<IntegerType>(mask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
           Value bit = builder.create<comb::ExtractOp>(mask, i, 1);
@@ -329,9 +329,6 @@ void InferMemoriesPass::runOnOperation() {
 }
 
 std::unique_ptr<Pass>
-arc::createInferMemoriesPass(std::optional<bool> tapPorts) {
-  auto pass = std::make_unique<InferMemoriesPass>();
-  if (tapPorts)
-    pass->tapPorts = *tapPorts;
-  return pass;
+arc::createInferMemoriesPass(const InferMemoriesOptions &options) {
+  return std::make_unique<InferMemoriesPass>(options);
 }

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -521,7 +522,6 @@ LogicalResult circt::firrtl::applyOMIR(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 void EmitOMIRPass::runOnOperation() {
-  MLIRContext *context = &getContext();
   anyFailures = false;
   circuitNamespace = nullptr;
   instanceGraph = nullptr;
@@ -691,12 +691,11 @@ void EmitOMIRPass::runOnOperation() {
 
   // Emit the OMIR JSON as a verbatim op.
   auto builder = circuitOp.getBodyBuilder();
-  auto verbatimOp =
-      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer);
-  auto fileAttr = hw::OutputFileAttr::getFromFilename(
-      context, *outputFilename, /*excludeFromFilelist=*/true, false);
-  verbatimOp->setAttr("output_file", fileAttr);
-  verbatimOp.setSymbolsAttr(ArrayAttr::get(context, symbols));
+  auto loc = builder.getUnknownLoc();
+  builder.create<emit::FileOp>(loc, *outputFilename, [&] {
+    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), jsonBuffer,
+                                   ValueRange{}, builder.getArrayAttr(symbols));
+  });
 
   markAnalysesPreserved<NLATable>();
 }
@@ -761,7 +760,7 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
   if (tracker.nla) {
     auto path = tracker.nla.getNamepath().getValue();
     for (auto attr : path.drop_back()) {
-      auto ref = attr.cast<hw::InnerRefAttr>();
+      auto ref = cast<hw::InnerRefAttr>(attr);
       // Find the instance referenced by the NLA.
       auto *node = instanceGraph->lookup(ref.getModule());
       auto it = llvm::find_if(*node, [&](igraph::InstanceRecord *record) {
@@ -1119,7 +1118,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     hw::InnerRefAttr instName;
     for (auto nameRef : tracker.nla.getNamepath()) {
       StringAttr modName;
-      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>())
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(nameRef))
         modName = innerRef.getModule();
       else if (auto ref = dyn_cast<FlatSymbolRefAttr>(nameRef))
         modName = ref.getAttr();
@@ -1147,7 +1146,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
       }
       target.append(addSymbol(module));
 
-      if (auto innerRef = nameRef.dyn_cast<hw::InnerRefAttr>()) {
+      if (auto innerRef = dyn_cast<hw::InnerRefAttr>(nameRef)) {
         // Find an instance with the given name in this module. Ensure it has a
         // symbol that we can refer to.
         auto instOp = instancesByName.lookup(innerRef);
@@ -1292,7 +1291,8 @@ void EmitOMIRPass::addFieldID(FIRRTLType type, unsigned fieldID,
           fieldID -= bundle.getFieldID(index);
           result.push_back('.');
           result.append(name.begin(), name.end());
-        });
+        })
+        .Default([](auto val) { llvm::report_fatal_error("invalid fieldID"); });
 }
 
 //===----------------------------------------------------------------------===//

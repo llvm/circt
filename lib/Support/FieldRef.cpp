@@ -19,6 +19,6 @@ using namespace circt;
 Operation *FieldRef::getDefiningOp() const {
   if (auto *op = value.getDefiningOp())
     return op;
-  return value.cast<BlockArgument>().getOwner()->getParentOp();
+  return cast<BlockArgument>(value).getOwner()->getParentOp();
 }
 

@@ -14,6 +14,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Analysis/CFGLoopInfo.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/Analysis/AffineAnalysis.h"
@@ -81,13 +82,15 @@ public:
 ///
 /// A partial lowering function may only replace a subset of the operations
 /// within the funcOp currently being lowered. However, the dialect conversion
-/// scheme requires the matched root operation to be replaced/updated, if the
-/// match was successful. To facilitate this, rewriter.updateRootInPlace
-/// wraps the partial update function.
-/// Next, the function operation is expected to go from illegal to legalized,
-/// after matchAndRewrite returned true. To work around this,
-/// LowerFuncOpTarget::loweredFuncs is used to communicate between the target
-/// and the conversion, to indicate that the partial lowering was completed.
+/// scheme requires the matched root operation to be replaced/updated/erased. It
+/// is the partial update function's responsibility to ensure this. The parital
+/// update function may only mutate the IR through the provided
+/// ConversionPatternRewriter, like any other ConversionPattern.
+/// Next, the function operation is expected to go
+/// from illegal to legalized, after matchAndRewrite returned true. To work
+/// around this, LowerFuncOpTarget::loweredFuncs is used to communicate between
+/// the target and the conversion, to indicate that the partial lowering was
+/// completed.
 template <typename TOp>
 struct PartialLowerOp : public ConversionPattern {
   using PartialLoweringFunc =
@@ -103,8 +106,7 @@ public:
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
     assert(isa<TOp>(op));
-    rewriter.updateRootInPlace(
-        op, [&] { loweringRes = fun(dyn_cast<TOp>(op), rewriter); });
+    loweringRes = fun(dyn_cast<TOp>(op), rewriter);
     target.loweredOps[op] = true;
     return loweringRes;
   };
@@ -171,7 +173,7 @@ public:
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.updateRootInPlace(
+    rewriter.modifyOpInPlace(
         op, [&] { loweringRes = fun(target.region, rewriter); });
 
     target.opLowered = true;
@@ -198,10 +200,6 @@ handshake::partiallyLowerRegion(const RegionLoweringFunc &loweringFunc,
       applyPartialConversion(op, target, std::move(patterns)).succeeded() &&
       partialLoweringSuccessfull.succeeded());
 }
-
-#define returnOnError(logicalResult)                                           \
-  if (failed(logicalResult))                                                   \
-    return failure();
 
 // ============================================================================
 // Start of lowering passes
@@ -248,6 +246,12 @@ void handshake::removeBasicBlocks(Region &r) {
     // Else, assume that this is a return-like terminator op.
     terminatorLike.moveBefore(entryBlock, entryBlock->end());
   }
+}
+
+LogicalResult
+HandshakeLowering::runSSAMaximization(ConversionPatternRewriter &rewriter,
+                                      Value entryCtrl) {
+  return maximizeSSA(entryCtrl, rewriter);
 }
 
 void removeBasicBlocks(handshake::FuncOp funcOp) {
@@ -357,7 +361,7 @@ HandshakeLowering::insertMergeOps(HandshakeLowering::ValueMap &mergePairs,
     // thanks to prior SSA maximization
     for (auto &arg : block.getArguments()) {
       // No merges on memref block arguments; these are handled separately
-      if (arg.getType().isa<mlir::MemRefType>())
+      if (isa<mlir::MemRefType>(arg.getType()))
         continue;
 
       auto mergeInfo = insertMerge(&block, arg, edgeBuilder, rewriter);
@@ -379,7 +383,7 @@ static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
   // The block terminator is either a cf-level branch or cf-level conditional
   // branch. In either case, identify the value passed to the block using its
   // index in the list of block arguments
-  unsigned index = srcVal.cast<BlockArgument>().getArgNumber();
+  unsigned index = cast<BlockArgument>(srcVal).getArgNumber();
   Operation *termOp = predBlock->getTerminator();
   if (mlir::cf::CondBranchOp br = dyn_cast<mlir::cf::CondBranchOp>(termOp)) {
     // Block should be one of the two destinations of the conditional branch
@@ -695,7 +699,7 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
              std::back_inserter(branches));
 
   auto *findRes = llvm::find_if(branches, [](auto br) {
-    return br.getDataOperand().getType().template isa<NoneType>();
+    return llvm::isa<NoneType>(br.getDataOperand().getType());
   });
 
   assert(findRes && "expected one branch for the ctrl signal");
@@ -1208,7 +1212,7 @@ struct BlockControlTerm {
   BlockControlTerm(Operation *op, Value ctrlOperand)
       : op(op), ctrlOperand(ctrlOperand) {
     assert(op && ctrlOperand);
-    assert(ctrlOperand.getType().isa<NoneType>() &&
+    assert(isa<NoneType>(ctrlOperand.getType()) &&
            "Control operand must be a NoneType");
   }
 
@@ -1511,10 +1515,10 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
 
     // A memory is external if the memref that defines it is provided as a
     // function (block) argument.
-    bool isExternalMemory = memrefOperand.isa<BlockArgument>();
+    bool isExternalMemory = isa<BlockArgument>(memrefOperand);
 
     mlir::MemRefType memrefType =
-        memrefOperand.getType().cast<mlir::MemRefType>();
+        cast<mlir::MemRefType>(memrefOperand.getType());
     if (failed(isValidMemrefType(memrefOperand.getLoc(), memrefType)))
       return failure();
 
@@ -1595,9 +1599,9 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
       // user-determined)
       bool control = true;
 
-      if (control)
-        returnOnError(
-            setJoinControlInputs(memory.second, newOp, ld_count, newInd));
+      if (control &&
+          setJoinControlInputs(memory.second, newOp, ld_count, newInd).failed())
+        return failure();
 
       // Set control-only inputs to each memory op
       // Ensure that op starts only after prior blocks have completed
@@ -1646,7 +1650,7 @@ namespace {
 class HandshakeLoweringSSAStrategy : public SSAMaximizationStrategy {
   /// Filters out block arguments of type MemRefType
   bool maximizeArgument(BlockArgument arg) override {
-    return !arg.getType().isa<mlir::MemRefType>();
+    return !isa<mlir::MemRefType>(arg.getType());
   }
 
   /// Filters out allocation operations
@@ -1689,29 +1693,31 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  returnOnError(partiallyLowerOp<func::FuncOp>(
-      [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
-        auto noneType = rewriter.getNoneType();
-        resTypes.push_back(noneType);
-        argTypes.push_back(noneType);
-        auto func_type = rewriter.getFunctionType(argTypes, resTypes);
-        newFuncOp = rewriter.create<handshake::FuncOp>(
-            funcOp.getLoc(), funcOp.getName(), func_type, attributes);
-        rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
-                                    newFuncOp.end());
-        if (!newFuncOp.isExternal()) {
-          newFuncOp.getBodyBlock()->addArgument(rewriter.getNoneType(),
-                                                funcOp.getLoc());
-          newFuncOp.resolveArgAndResNames();
-        }
-        rewriter.eraseOp(funcOp);
-        return success();
-      },
-      ctx, funcOp));
+  if (partiallyLowerOp<func::FuncOp>(
+          [&](func::FuncOp funcOp, PatternRewriter &rewriter) {
+            auto noneType = rewriter.getNoneType();
+            resTypes.push_back(noneType);
+            argTypes.push_back(noneType);
+            auto func_type = rewriter.getFunctionType(argTypes, resTypes);
+            newFuncOp = rewriter.create<handshake::FuncOp>(
+                funcOp.getLoc(), funcOp.getName(), func_type, attributes);
+            rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
+                                        newFuncOp.end());
+            if (!newFuncOp.isExternal()) {
+              newFuncOp.getBodyBlock()->addArgument(rewriter.getNoneType(),
+                                                    funcOp.getLoc());
+              newFuncOp.resolveArgAndResNames();
+            }
+            rewriter.eraseOp(funcOp);
+            return success();
+          },
+          ctx, funcOp)
+          .failed())
+    return failure();
 
   // Apply SSA maximization
-  returnOnError(
-      partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()));
+  if (partiallyLowerRegion(maximizeSSANoMem, ctx, newFuncOp.getBody()).failed())
+    return failure();
 
   if (!newFuncOp.isExternal()) {
     Block *bodyBlock = newFuncOp.getBodyBlock();

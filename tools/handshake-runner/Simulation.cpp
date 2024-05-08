@@ -91,7 +91,7 @@ Any readValueWithType(mlir::Type type, std::stringstream &arg) {
     int64_t width = INDEX_WIDTH;
     APInt aparg(width, x);
     return aparg;
-  } else if (type.isa<mlir::IntegerType>()) {
+  } else if (isa<mlir::IntegerType>(type)) {
     int64_t x;
     arg >> x;
     int64_t width = type.getIntOrFloatBitWidth();
@@ -107,7 +107,7 @@ Any readValueWithType(mlir::Type type, std::stringstream &arg) {
     arg >> x;
     APFloat aparg(x);
     return aparg;
-  } else if (auto tupleType = type.dyn_cast<TupleType>()) {
+  } else if (auto tupleType = dyn_cast<TupleType>(type)) {
     char tmp;
     arg >> tmp;
     assert(tmp == '(' && "tuple should start with '('");
@@ -138,13 +138,13 @@ Any readValueWithType(mlir::Type type, std::string in) {
 
 void printAnyValueWithType(llvm::raw_ostream &out, mlir::Type type,
                            Any &value) {
-  if (type.isa<mlir::IntegerType>() || type.isa<mlir::IndexType>()) {
+  if (isa<mlir::IntegerType>(type) || isa<mlir::IndexType>(type)) {
     out << any_cast<APInt>(value).getSExtValue();
-  } else if (type.isa<mlir::FloatType>()) {
+  } else if (isa<mlir::FloatType>(type)) {
     out << any_cast<APFloat>(value).convertToDouble();
-  } else if (type.isa<mlir::NoneType>()) {
+  } else if (isa<mlir::NoneType>(type)) {
     out << "none";
-  } else if (auto tupleType = type.dyn_cast<mlir::TupleType>()) {
+  } else if (auto tupleType = dyn_cast<mlir::TupleType>(type)) {
     auto values = any_cast<std::vector<llvm::Any>>(value);
     out << "(";
     llvm::interleaveComma(llvm::zip(tupleType.getTypes(), values), out,
@@ -198,9 +198,9 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
   mlir::Type elementType = type.getElementType();
   int64_t width = elementType.getIntOrFloatBitWidth();
   for (int i = 0; i < allocationSize; ++i) {
-    if (elementType.isa<mlir::IntegerType>()) {
+    if (isa<mlir::IntegerType>(elementType)) {
       store[ptr][i] = APInt(width, 0);
-    } else if (elementType.isa<mlir::FloatType>()) {
+    } else if (isa<mlir::FloatType>(elementType)) {
       store[ptr][i] = APFloat(0.0);
     } else {
       fatalValueError("Unknown result type!\n", elementType);
@@ -625,7 +625,7 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
   // Execute the instance op and create associations in the current
   // scope's value and time maps for the returned values.
 
-  if (auto funcSym = instanceOp->getAttr("module").cast<SymbolRefAttr>()) {
+  if (auto funcSym = cast<SymbolRefAttr>(instanceOp->getAttr("module"))) {
     if (handshake::FuncOp func =
             (*module)->lookupSymbol<handshake::FuncOp>(funcSym)) {
       /// Prepare an InstanceOp for execution by creating a valueMap
@@ -992,9 +992,9 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
 
   for (unsigned i = 0; i < realInputs; ++i) {
     mlir::Type type = ftype.getInput(i);
-    if (type.isa<mlir::MemRefType>()) {
+    if (isa<mlir::MemRefType>(type)) {
       // We require this memref type to be fully specified.
-      auto memreftype = type.dyn_cast<mlir::MemRefType>();
+      auto memreftype = dyn_cast<mlir::MemRefType>(type);
       std::vector<Any> nothing;
       std::string x;
       unsigned buffer = allocateMemRef(memreftype, nothing, store, storeTimes);
@@ -1041,9 +1041,9 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   // Go back through the arguments and output any memrefs.
   for (unsigned i = 0; i < realInputs; ++i) {
     mlir::Type type = ftype.getInput(i);
-    if (type.isa<mlir::MemRefType>()) {
+    if (isa<mlir::MemRefType>(type)) {
       // We require this memref type to be fully specified.
-      auto memreftype = type.dyn_cast<mlir::MemRefType>();
+      auto memreftype = dyn_cast<mlir::MemRefType>(type);
       unsigned buffer = any_cast<unsigned>(valueMap[blockArgs[i]]);
       auto elementType = memreftype.getElementType();
       for (int j = 0; j < memreftype.getNumElements(); ++j) {

@@ -1,16 +1,8 @@
-//===-- circt-c/Dialect/HW.h - C API for HW dialect ---------------*- C -*-===//
+//===- HW.h - C interface for the HW dialect ----------------------*- C -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This header declares the C interface for registering and accessing the
-// HW dialect. A dialect should be registered with a context to make it
-// available to users of the context. These users must load the dialect
-// before using any of its attributes, operations or types. Parser and pass
-// manager can load registered dialects automatically.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,6 +14,17 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define DEFINE_C_API_STRUCT(name, storage)                                     \
+  struct name {                                                                \
+    storage *ptr;                                                              \
+  };                                                                           \
+  typedef struct name name
+
+DEFINE_C_API_STRUCT(HWInstanceGraph, void);
+DEFINE_C_API_STRUCT(HWInstanceGraphNode, void);
+
+#undef DEFINE_C_API_STRUCT
 
 struct HWStructFieldInfo {
   MlirIdentifier name;
@@ -186,6 +189,34 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
     MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
+
+//===----------------------------------------------------------------------===//
+// InstanceGraph API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED HWInstanceGraph hwInstanceGraphGet(MlirOperation operation);
+
+MLIR_CAPI_EXPORTED void hwInstanceGraphDestroy(HWInstanceGraph instanceGraph);
+
+MLIR_CAPI_EXPORTED HWInstanceGraphNode
+hwInstanceGraphGetTopLevelNode(HWInstanceGraph instanceGraph);
+
+// NOLINTNEXTLINE(modernize-use-using)
+typedef void (*HWInstanceGraphNodeCallback)(HWInstanceGraphNode, void *);
+
+MLIR_CAPI_EXPORTED void
+hwInstanceGraphForEachNode(HWInstanceGraph instanceGraph,
+                           HWInstanceGraphNodeCallback callback,
+                           void *userData);
+
+MLIR_CAPI_EXPORTED bool hwInstanceGraphNodeEqual(HWInstanceGraphNode lhs,
+                                                 HWInstanceGraphNode rhs);
+
+MLIR_CAPI_EXPORTED MlirModule
+hwInstanceGraphNodeGetModule(HWInstanceGraphNode node);
+
+MLIR_CAPI_EXPORTED MlirOperation
+hwInstanceGraphNodeGetModuleOp(HWInstanceGraphNode node);
 
 #ifdef __cplusplus
 }

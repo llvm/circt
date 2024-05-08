@@ -1,4 +1,8 @@
-//===- CHIRRTL.cpp - C Interface for the CHIRRTL Dialect ------------------===//
+//===- CHIRRTL.cpp - C interface for the CHIRRTL dialect ------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,7 +28,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(CHIRRTL, chirrtl,
 
 MlirType chirrtlTypeGetCMemory(MlirContext ctx, MlirType elementType,
                                uint64_t numElements) {
-  auto baseType = unwrap(elementType).cast<firrtl::FIRRTLBaseType>();
+  auto baseType = cast<firrtl::FIRRTLBaseType>(unwrap(elementType));
   assert(baseType && "element must be base type");
 
   return wrap(CMemoryType::get(unwrap(ctx), baseType, numElements));

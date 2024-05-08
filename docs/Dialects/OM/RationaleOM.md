@@ -108,6 +108,7 @@ parameters
 * References to formal parameters
 * Primitive values like integers, strings, and symbols
 * Container values like lists
+* Expressions involving primitive and container values
 
 This modeling of Classes might be most similar to Java classes, which define
 public constructors and members. The proposed modeling of Classes is restricted
@@ -160,6 +161,29 @@ accesses accept an instance of an Object, and a list of Fields to refer to
 within the Object and potential children Objects. Object Field accesses are
 values just like other expressions, and can be assigned to named Fields in a
 Class or passed as actual parameters in Object instantiations.
+
+### Expressions
+
+The small expression grammar described under Classes includes expressions
+involving primitive and container values. This sections describes the rationale
+for such expressions.
+
+In order for a Class to effectively capture parts of a domain model, it may be
+necessary for the Class to represent computation in terms of its formal
+parameters.
+
+For example, a Class might represent a device that is attached to a bus, and
+accessible at some address. If that address is implemented as an offset relative
+to some base address, the Class could have an input integer as a formal
+parameter representing the base address, a Field representing the device
+address, and internally add some constant offset to the base address before
+assigning the resulting value into the Field.
+
+As another example, a Class might internally instantiate Objects of some other
+Classes, access Fields of those Objects, create a container holding the values
+of those fields, and assign the container to a Field. Using container
+construction expressions, this can be represented directly in the Class,
+allowing it to abstract over the Objects it creates internally.
 
 ## Alternatives Considered
 

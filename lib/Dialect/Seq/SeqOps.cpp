@@ -27,13 +27,13 @@ using namespace circt;
 using namespace seq;
 
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
-  auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
+  auto memType = cast<seq::HLMemType>(hlmemHandle.getType());
   auto shape = memType.getShape();
   if (shape.size() != addresses.size())
     return false;
 
   for (auto [dim, addr] : llvm::zip(shape, addresses)) {
-    auto addrType = addr.getType().dyn_cast<IntegerType>();
+    auto addrType = dyn_cast<IntegerType>(addr.getType());
     if (!addrType)
       return false;
     if (addrType.getIntOrFloatBitWidth() != llvm::Log2_64_Ceil(dim))
@@ -149,7 +149,7 @@ void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void ReadPortOp::build(OpBuilder &builder, OperationState &result, Value memory,
                        ValueRange addresses, Value rdEn, unsigned latency) {
-  auto memType = memory.getType().cast<seq::HLMemType>();
+  auto memType = cast<seq::HLMemType>(memory.getType());
   ReadPortOp::build(builder, result, memType.getElementType(), memory,
                     addresses, rdEn, latency);
 }
@@ -206,10 +206,10 @@ void HLMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void HLMemOp::build(OpBuilder &builder, OperationState &result, Value clk,
-                    Value rst, StringRef symName, llvm::ArrayRef<int64_t> shape,
+                    Value rst, StringRef name, llvm::ArrayRef<int64_t> shape,
                     Type elementType) {
   HLMemType t = HLMemType::get(builder.getContext(), shape, elementType);
-  HLMemOp::build(builder, result, t, clk, rst, symName);
+  HLMemOp::build(builder, result, t, clk, rst, name);
 }
 
 //===----------------------------------------------------------------------===//
@@ -434,12 +434,14 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
   }
 
-  std::optional<int64_t> presetValue;
+  std::optional<APInt> presetValue;
+  llvm::SMLoc presetValueLoc;
   if (succeeded(parser.parseOptionalKeyword("preset"))) {
-    int64_t presetInt;
-    if (parser.parseInteger(presetInt))
-      return failure();
-    presetValue = presetInt;
+    presetValueLoc = parser.getCurrentLocation();
+    OptionalParseResult presetIntResult =
+        parser.parseOptionalInteger(presetValue.emplace());
+    if (!presetIntResult.has_value() || failed(*presetIntResult))
+      return parser.emitError(loc, "expected integer value");
   }
 
   Type ty;
@@ -449,8 +451,25 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
   result.addTypes({ty});
 
   if (presetValue) {
-    result.addAttribute("preset",
-                        parser.getBuilder().getIntegerAttr(ty, *presetValue));
+    uint64_t width = 0;
+    if (hw::type_isa<seq::ClockType>(ty)) {
+      width = 1;
+    } else {
+      int64_t maybeWidth = hw::getBitWidth(ty);
+      if (maybeWidth < 0)
+        return parser.emitError(presetValueLoc,
+                                "cannot preset register of unknown width");
+      width = maybeWidth;
+    }
+
+    APInt presetResult = presetValue->sextOrTrunc(width);
+    if (presetResult.zextOrTrunc(presetValue->getBitWidth()) != *presetValue)
+      return parser.emitError(loc, "preset value too large");
+
+    auto builder = parser.getBuilder();
+    auto presetTy = builder.getIntegerType(width);
+    auto resultAttr = builder.getIntegerAttr(presetTy, presetResult);
+    result.addAttribute("preset", resultAttr);
   }
 
   setNameFromResult(parser, result);
@@ -509,8 +528,10 @@ LogicalResult FirRegOp::verify() {
       return emitOpError("register with no reset cannot be async");
   }
   if (auto preset = getPresetAttr()) {
-    if (preset.getType() != getType())
-      return emitOpError("preset type must match register type");
+    int64_t presetWidth = hw::getBitWidth(preset.getType());
+    int64_t width = hw::getBitWidth(getType());
+    if (preset.getType() != getType() && presetWidth != width)
+      return emitOpError("preset type width must match register type");
   }
   return success();
 }
@@ -560,7 +581,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       // If the register has a reset value, we can replace it with that.
       rewriter.replaceOp(op, resetValue);
     } else {
-      if (op.getType().isa<seq::ClockType>()) {
+      if (isa<seq::ClockType>(op.getType())) {
         rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
             op,
             seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
@@ -583,9 +604,9 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
       // For now only support 1d arrays.
       // TODO: Support nested arrays and bundles.
-      if (hw::type_cast<hw::ArrayType>(op.getResult().getType())
-              .getElementType()
-              .isa<IntegerType>()) {
+      if (isa<IntegerType>(
+              hw::type_cast<hw::ArrayType>(op.getResult().getType())
+                  .getElementType())) {
         SmallVector<Value> nextOperands;
         bool changed = false;
         for (const auto &[i, value] :
@@ -662,7 +683,7 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
 
   // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
-  auto intType = getType().dyn_cast<IntegerType>();
+  auto intType = dyn_cast<IntegerType>(getType());
   if (!intType)
     return {};
   return IntegerAttr::get(intType, 0);
@@ -707,8 +728,8 @@ LogicalResult ClockGateOp::canonicalize(ClockGateOp op,
   if (auto testEnable = op.getTestEnable()) {
     if (auto constOp = testEnable.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.updateRootInPlace(op,
-                                   [&] { op.getTestEnableMutable().clear(); });
+        rewriter.modifyOpInPlace(op,
+                                 [&] { op.getTestEnableMutable().clear(); });
         return success();
       }
     }
@@ -736,6 +757,25 @@ OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
+
+LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
+  // Do not change memories if symbols point to them.
+  if (op.getInnerSymAttr())
+    return failure();
+
+  // If the memory has no read ports, erase it.
+  for (auto *user : op->getUsers()) {
+    if (isa<FirMemReadOp, FirMemReadWriteOp>(user))
+      return failure();
+    assert(isa<FirMemWriteOp>(user) && "invalid seq.firmem user");
+  }
+
+  for (auto *user : llvm::make_early_inc_range(op->getUsers()))
+    rewriter.eraseOp(user);
+
+  rewriter.eraseOp(op);
+  return success();
+}
 
 void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
@@ -788,7 +828,7 @@ LogicalResult FirMemReadOp::canonicalize(FirMemReadOp op,
                                          PatternRewriter &rewriter) {
   // Remove the enable if it is constant true.
   if (isConstAllOnes(op.getEnable())) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     return success();
   }
   return failure();
@@ -806,13 +846,13 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -838,13 +878,13 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 
   // Remove the enable if it is constant true.
   if (auto enable = op.getEnable(); isConstAllOnes(enable)) {
-    rewriter.updateRootInPlace(op, [&] { op.getEnableMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().erase(0); });
     anyChanges = true;
   }
 
   // Remove the mask if it is all ones.
   if (auto mask = op.getMask(); isConstAllOnes(mask)) {
-    rewriter.updateRootInPlace(op, [&] { op.getMaskMutable().erase(0); });
+    rewriter.modifyOpInPlace(op, [&] { op.getMaskMutable().erase(0); });
     anyChanges = true;
   }
 
@@ -902,6 +942,21 @@ OpFoldResult FromClockOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ClockInverterOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockInverterOp::fold(FoldAdaptor adaptor) {
+  if (auto chainedInv = getInput().getDefiningOp<ClockInverterOp>())
+    return chainedInv.getInput();
+  if (auto clockAttr = dyn_cast_or_null<ClockConstAttr>(adaptor.getInput())) {
+    auto clockIn = clockAttr.getValue() == ClockConst::High;
+    return ClockConstAttr::get(getContext(),
+                               clockIn ? ClockConst::Low : ClockConst::High);
+  }
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // FIR memory helper
 //===----------------------------------------------------------------------===//
 
@@ -924,7 +979,7 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
   if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
     for (auto clockID : clockIDsAttr)
       writeClockIDs.push_back(
-          clockID.cast<IntegerAttr>().getValue().getZExtValue());
+          cast<IntegerAttr>(clockID).getValue().getZExtValue());
   initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
   initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
   initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();

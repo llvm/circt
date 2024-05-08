@@ -44,14 +44,14 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 ; OMIROUT-NEXT:         "value": "OMString:hello"
 ; OMIROUT-NEXT:       }
 
-; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_MEM_
-; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_REG_
-; VERILOG-IR: sv.macro.decl @INIT_RANDOM_PROLOG_
-; VERILOG-IR: sv.macro.decl @RANDOMIZE_DELAY
-; VERILOG-IR: sv.macro.decl @INIT_RANDOM
-; VERILOG-IR: sv.macro.decl @RANDOM
-; VERILOG-IR: sv.macro.decl @RANDOMIZE
 ; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros for register randomization
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_REG_
+; VERILOG-IR: sv.macro.decl @ENABLE_INITIAL_MEM_
+; VERILOG-IR: sv.macro.decl @RANDOMIZE
+; VERILOG-IR: sv.macro.decl @RANDOMIZE_DELAY
+; VERILOG-IR: sv.macro.decl @RANDOM
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM
+; VERILOG-IR: sv.macro.decl @INIT_RANDOM_PROLOG_
 
   type V3 = UInt<1>[3]
   type V2 = UInt<1>[2]
@@ -110,7 +110,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>, out %out_mux2cell_0: !firrtl.uint<1>, out %out_mux2cell_1: !firrtl.uint<1>) {{.*}}{
-; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
+; MLIR:         %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
 ; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.strictconnect %cat_c, %b : !firrtl.uint<2>

@@ -24,6 +24,7 @@
 
 using namespace mlir;
 using namespace mlir::affine;
+using namespace circt::scheduling;
 
 /// CyclicSchedulingAnalysis constructs a CyclicProblem for each AffineForOp by
 /// performing a memory dependence analysis and inserting dependences into the

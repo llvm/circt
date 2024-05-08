@@ -72,6 +72,8 @@ struct ClockLowering {
   IRMapping materializedValues;
   /// A cache of AND gates created for aggregating enable conditions.
   DenseMap<std::pair<Value, Value>, Value> andCache;
+  /// A cache of OR gates created for aggregating enable conditions.
+  DenseMap<std::pair<Value, Value>, Value> orCache;
 
   ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
       : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
@@ -81,6 +83,7 @@ struct ClockLowering {
 
   Value materializeValue(Value value);
   Value getOrCreateAnd(Value lhs, Value rhs, Location loc);
+  Value getOrCreateOr(Value lhs, Value rhs, Location loc);
 };
 
 struct GatedClockLowering {
@@ -133,15 +136,10 @@ static bool shouldMaterialize(Operation *op) {
   // Don't materialize arc uses with latency >0, since we handle these in a
   // second pass once all other operations have been moved to their respective
   // clock trees.
-  if (auto stateOp = dyn_cast<StateOp>(op); stateOp && stateOp.getLatency() > 0)
-    return false;
-
-  if (isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp, ClockTreeOp,
-          PassThroughOp, RootInputOp, RootOutputOp, StateWriteOp,
-          MemoryWritePortOp, igraph::InstanceOpInterface>(op))
-    return false;
-
-  return true;
+  return !isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp,
+              ClockTreeOp, PassThroughOp, RootInputOp, RootOutputOp,
+              StateWriteOp, MemoryWritePortOp, igraph::InstanceOpInterface,
+              StateOp>(op);
 }
 
 static bool shouldMaterialize(Value value) {
@@ -236,13 +234,27 @@ Value ClockLowering::getOrCreateAnd(Value lhs, Value rhs, Location loc) {
   return slot;
 }
 
+/// Create an OR gate if none with the given operands already exists. Note that
+/// the operands may be null, in which case the function will return the
+/// non-null operand, or null if both operands are null.
+Value ClockLowering::getOrCreateOr(Value lhs, Value rhs, Location loc) {
+  if (!lhs)
+    return rhs;
+  if (!rhs)
+    return lhs;
+  auto &slot = orCache[std::make_pair(lhs, rhs)];
+  if (!slot)
+    slot = builder.create<comb::OrOp>(loc, lhs, rhs);
+  return slot;
+}
+
 //===----------------------------------------------------------------------===//
 // Module Lowering
 //===----------------------------------------------------------------------===//
 
 GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
   // Look through clock gates.
-  if (auto ckgOp = clock.getDefiningOp<ClockGateOp>()) {
+  if (auto ckgOp = clock.getDefiningOp<seq::ClockGateOp>()) {
     // Reuse the existing lowering for this clock gate if possible.
     if (auto it = gatedClockLowerings.find(clock);
         it != gatedClockLowerings.end())
@@ -254,8 +266,11 @@ GatedClockLowering ModuleLowering::getOrCreateClockLowering(Value clock) {
     // we have to do is to add this clock gate's condition to that list.
     auto info = getOrCreateClockLowering(ckgOp.getInput());
     auto ckgEnable = info.clock.materializeValue(ckgOp.getEnable());
-    info.enable =
-        info.clock.getOrCreateAnd(info.enable, ckgEnable, ckgOp.getLoc());
+    auto ckgTestEnable = info.clock.materializeValue(ckgOp.getTestEnable());
+    info.enable = info.clock.getOrCreateAnd(
+        info.enable,
+        info.clock.getOrCreateOr(ckgEnable, ckgTestEnable, ckgOp.getLoc()),
+        ckgOp.getLoc());
     gatedClockLowerings.insert({clock, info});
     return info;
   }
@@ -323,9 +338,9 @@ LogicalResult ModuleLowering::lowerPrimaryInputs() {
     auto name = moduleOp.getArgName(blockArg.getArgNumber());
     auto argTy = blockArg.getType();
     IntegerType innerTy;
-    if (argTy.isa<seq::ClockType>()) {
+    if (isa<seq::ClockType>(argTy)) {
       innerTy = IntegerType::get(context, 1);
-    } else if (auto intType = argTy.dyn_cast<IntegerType>()) {
+    } else if (auto intType = dyn_cast<IntegerType>(argTy)) {
       innerTy = intType;
     } else {
       return mlir::emitError(blockArg.getLoc(), "input ")
@@ -349,9 +364,9 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
     for (auto [outputArg, name] :
          llvm::zip(outputOperands, moduleOp.getOutputNames())) {
       IntegerType innerTy;
-      if (outputArg.getType().isa<seq::ClockType>()) {
+      if (isa<seq::ClockType>(outputArg.getType())) {
         innerTy = IntegerType::get(context, 1);
-      } else if (auto intType = outputArg.getType().dyn_cast<IntegerType>()) {
+      } else if (auto intType = dyn_cast<IntegerType>(outputArg.getType())) {
         innerTy = intType;
       } else {
         return mlir::emitError(outputOp.getLoc(), "output ")
@@ -359,7 +374,7 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
       }
       auto value = passThrough.materializeValue(outputArg);
       auto state = stateBuilder.create<RootOutputOp>(
-          outputOp.getLoc(), StateType::get(innerTy), name.cast<StringAttr>(),
+          outputOp.getLoc(), StateType::get(innerTy), cast<StringAttr>(name),
           storageArg);
       if (isa<seq::ClockType>(value.getType()))
         value = passThrough.builder.createOrFold<seq::FromClockOp>(
@@ -374,12 +389,9 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 
 LogicalResult ModuleLowering::lowerStates() {
   SmallVector<Operation *> opsToLower;
-  for (auto &op : *moduleOp.getBodyBlock()) {
-    auto stateOp = dyn_cast<StateOp>(&op);
-    if ((stateOp && stateOp.getLatency() > 0) ||
-        isa<MemoryOp, MemoryWritePortOp, TapOp>(&op))
+  for (auto &op : *moduleOp.getBodyBlock())
+    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp>(&op))
       opsToLower.push_back(&op);
-  }
 
   for (auto *op : opsToLower) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << *op << "\n");
@@ -394,10 +406,6 @@ LogicalResult ModuleLowering::lowerStates() {
 }
 
 LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
-  // Latency zero arcs incur no state and remain in the IR unmodified.
-  if (stateOp.getLatency() == 0)
-    return success();
-
   // We don't support arcs beyond latency 1 yet. These should be easy to add in
   // the future though.
   if (stateOp.getLatency() > 1)
@@ -410,7 +418,6 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
   auto stateEnable = stateOp.getEnable();
   auto stateReset = stateOp.getReset();
   auto stateInputs = SmallVector<Value>(stateOp.getInputs());
-  stateOp->dropAllReferences();
 
   // Get the clock tree and enable condition for this state's clock. If this arc
   // carries an explicit enable condition, fold that into the enable provided by
@@ -453,7 +460,7 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
 
     for (auto [alloc, resTy] :
          llvm::zip(allocatedStates, stateOp.getResultTypes())) {
-      if (!resTy.isa<IntegerType>())
+      if (!isa<IntegerType>(resTy))
         stateOp->emitOpError("Non-integer result not supported yet!");
 
       auto thenBuilder = ifOp.getThenBodyBuilder();
@@ -466,9 +473,11 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
     nonResetBuilder = ifOp.getElseBodyBuilder();
   }
 
-  auto newStateOp = nonResetBuilder.create<StateOp>(
-      stateOp.getLoc(), stateOp.getArcAttr(), stateOp.getResultTypes(), Value{},
-      Value{}, 0, materializedOperands);
+  stateOp->dropAllReferences();
+
+  auto newStateOp = nonResetBuilder.create<CallOp>(
+      stateOp.getLoc(), stateOp.getResultTypes(), stateOp.getArcAttr(),
+      materializedOperands);
 
   // Create the write ops that write the result of the transfer function to the
   // allocated state storage.
@@ -550,7 +559,7 @@ LogicalResult ModuleLowering::lowerState(MemoryWritePortOp memWriteOp) {
 
 // Add state for taps into the passthrough block.
 LogicalResult ModuleLowering::lowerState(TapOp tapOp) {
-  auto intType = tapOp.getValue().getType().dyn_cast<IntegerType>();
+  auto intType = dyn_cast<IntegerType>(tapOp.getValue().getType());
   if (!intType)
     return mlir::emitError(tapOp.getLoc(), "tapped value ")
            << tapOp.getNameAttr() << " is of non-integer type "
@@ -595,7 +604,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
        llvm::zip(instOp.getOperands(), instOp.getArgNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Input " << name << " : " << operand.getType() << "\n");
-    auto intType = operand.getType().dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(operand.getType());
     if (!intType)
       return mlir::emitError(operand.getLoc(), "input ")
              << name << " of extern module " << instOp.getModuleNameAttr()
@@ -617,7 +626,7 @@ LogicalResult ModuleLowering::lowerExtModule(InstanceOp instOp) {
        llvm::zip(instOp.getResults(), instOp.getResultNames())) {
     LLVM_DEBUG(llvm::dbgs()
                << "  - Output " << name << " : " << result.getType() << "\n");
-    auto intType = result.getType().dyn_cast<IntegerType>();
+    auto intType = dyn_cast<IntegerType>(result.getType());
     if (!intType)
       return mlir::emitError(result.getLoc(), "output ")
              << name << " of extern module " << instOp.getModuleNameAttr()
@@ -644,8 +653,6 @@ LogicalResult ModuleLowering::cleanup() {
       return true;
     if (!op->use_empty())
       return false;
-    if (auto stateOp = dyn_cast<StateOp>(op))
-      return stateOp.getLatency() == 0;
     return false;
   };
   for (auto &op : *moduleOp.getBodyBlock())
@@ -823,7 +830,8 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
       [&](auto arg) { return arg != lowering.storageArg; });
   ImplicitLocOpBuilder builder(moduleOp.getLoc(), moduleOp);
   auto modelOp =
-      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr());
+      builder.create<ModelOp>(moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
+                              TypeAttr::get(moduleOp.getModuleType()));
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   sortTopologically(&modelOp.getBodyBlock());

@@ -62,3 +62,13 @@ llhd.entity @moduleTypeMismatch() -> (%arg0: !llhd.sig<i3>) {
   // expected-error @+1 {{output type mismatch}}
   llhd.inst "inst" @module() -> (%arg0) : () -> !llhd.sig<i3>
 }
+
+// -----
+
+// expected-error @below {{region #0 ('body') failed to verify constraint: region with at least 1 blocks}}
+llhd.proc @empty() -> () {}
+
+// -----
+
+// expected-error @below {{empty block: expect at least a terminator}}
+llhd.proc @empty(%a: !llhd.sig<i1>) -> () {}

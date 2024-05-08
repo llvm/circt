@@ -164,7 +164,7 @@ public:
       auto regIdx = it.index();
       auto regIn = it.value();
 
-      StringAttr regName = registerNames[regIdx].cast<StringAttr>();
+      StringAttr regName = cast<StringAttr>(registerNames[regIdx]);
       Value dataReg;
       if (this->clockGateRegs) {
         // Use the clock gate instead of clock enable.

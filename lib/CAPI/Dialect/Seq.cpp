@@ -1,4 +1,4 @@
-//===- Seq.cpp - C Interface for the Seq Dialect --------------------------===//
+//===- Seq.cpp - C interface for the Seq dialect --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,7 +19,9 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Sequential, seq, circt::seq::SeqDialect)
 
 void registerSeqPasses() { circt::seq::registerPasses(); }
 
-bool seqTypeIsAClock(MlirType type) { return unwrap(type).isa<ClockType>(); }
+bool seqTypeIsAClock(MlirType type) {
+  return llvm::isa<ClockType>(unwrap(type));
+}
 
 MlirType seqClockTypeGet(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));

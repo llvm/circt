@@ -1,16 +1,16 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: ls %t/hw/top.sv
+# RUN: ls %t/hw/XrtTop.sv
 # RUN: ls %t/hw/Main.sv
 # RUN: ls %t/hw/ESILoopback.tcl
 # RUN: ls %t/hw/filelist.f
 # RUN: ls %t/hw/xsim.tcl
 # RUN: ls %t/hw/xrt_package.tcl
-# RUN: ls %t/Makefile.xrt
+# RUN: ls %t/Makefile.xrt.mk
 # RUN: ls %t/xrt.ini
 # RUN: ls %t/xsim.tcl
 
-# RUN: FileCheck %s --input-file %t/hw/top.sv --check-prefix=TOP
+# RUN: FileCheck %s --input-file %t/hw/XrtTop.sv --check-prefix=TOP
 
 import pycde
 from pycde import Clock, Input, Module, generator, types
@@ -37,16 +37,16 @@ s.run_passes(debug=True)
 s.compile()
 s.package()
 
-# TOP-LABEL: module top(
+# TOP-LABEL: module XrtTop(
 # TOP:         input         ap_clk,
 # TOP:                       ap_resetn,
 # TOP:                       s_axi_control_AWVALID,
-# TOP:         input  [31:0] s_axi_control_AWADDR,
+# TOP:         input  [19:0] s_axi_control_AWADDR,
 # TOP:         input         s_axi_control_WVALID,
 # TOP:         input  [31:0] s_axi_control_WDATA,
 # TOP:         input  [3:0]  s_axi_control_WSTRB,
 # TOP:         input         s_axi_control_ARVALID,
-# TOP:         input  [31:0] s_axi_control_ARADDR,
+# TOP:         input  [19:0] s_axi_control_ARADDR,
 # TOP:         input         s_axi_control_RREADY,
 # TOP:                       s_axi_control_BREADY,
 # TOP:         output        s_axi_control_AWREADY,
@@ -58,25 +58,15 @@ s.package()
 # TOP:         output        s_axi_control_BVALID,
 # TOP:         output [1:0]  s_axi_control_BRESP
 
-# TOP:         XrtService XrtService (
-# TOP:           .clk      (ap_clk),
-# TOP:           .rst      (~ap_resetn),
-# TOP:           .axil_in  (_GEN),
-# TOP:           .axil_out (_XrtService_axil_out)
+# TOP:         __ESI_Manifest_ROM ESI_Manifest_ROM (
+# TOP:           .clk     (ap_clk),
+# TOP:           .address (rom_address),
+# TOP:           .data    (_ESI_Manifest_ROM_data)
 # TOP:         );
 
 # TOP:         Main Main (
 # TOP:           .clk (ap_clk),
-# TOP:           .rst (~ap_resetn)
+# TOP:           .rst (inv_ap_resetn)
 # TOP:         );
-
-# TOP:         assign s_axi_control_AWREADY = _XrtService_axil_out.awready;
-# TOP:         assign s_axi_control_WREADY = _XrtService_axil_out.wready;
-# TOP:         assign s_axi_control_ARREADY = _XrtService_axil_out.arready;
-# TOP:         assign s_axi_control_RVALID = _XrtService_axil_out.rvalid;
-# TOP:         assign s_axi_control_RDATA = _XrtService_axil_out.rdata;
-# TOP:         assign s_axi_control_RRESP = _XrtService_axil_out.rresp;
-# TOP:         assign s_axi_control_BVALID = _XrtService_axil_out.bvalid;
-# TOP:         assign s_axi_control_BRESP = _XrtService_axil_out.bresp;
 
 # TOP:       endmodule

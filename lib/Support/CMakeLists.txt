@@ -9,9 +9,11 @@ add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
   CustomDirectiveImpl.cpp
+  Debug.cpp
   FieldRef.cpp
   JSON.cpp
   LoweringOptions.cpp
+  Naming.cpp
   Passes.cpp
   Path.cpp
   PrettyPrinter.cpp

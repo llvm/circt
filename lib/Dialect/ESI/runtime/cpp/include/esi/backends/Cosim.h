@@ -24,17 +24,36 @@
 
 #include <memory>
 
+// Only expose this backend class directly if the cosimulation backend is
+// enabled.
+#ifdef ESI_COSIM
+
 namespace esi {
 namespace backends {
 namespace cosim {
 
 /// Connect to an ESI simulation.
-class CosimAccelerator : public esi::Accelerator {
+class CosimAccelerator : public esi::AcceleratorConnection {
 public:
   struct Impl;
 
-  CosimAccelerator(std::string hostname, uint16_t port);
-  static std::unique_ptr<Accelerator> connect(std::string connectionString);
+  CosimAccelerator(Context &, std::string hostname, uint16_t port);
+  static std::unique_ptr<AcceleratorConnection>
+  connect(Context &, std::string connectionString);
+
+  // Different ways to retrieve the manifest in Cosimulation.
+  enum ManifestMethod {
+    Cosim, // Use the backdoor cosim interface. Default.
+    MMIO,  // Use MMIO emulation.
+  };
+  // Set the way this connection will retrieve the manifest.
+  void setManifestMethod(ManifestMethod method);
+
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  virtual std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *) override;
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
@@ -44,10 +63,13 @@ protected:
 
 private:
   std::unique_ptr<Impl> impl;
+  ManifestMethod manifestMethod = Cosim;
 };
 
 } // namespace cosim
 } // namespace backends
 } // namespace esi
+
+#endif // ESI_COSIM
 
 #endif // ESI_BACKENDS_COSIM_H

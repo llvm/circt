@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -44,19 +45,37 @@ void SFCCompatPass::runOnOperation() {
 
   bool madeModifications = false;
   SmallVector<InvalidValueOp> invalidOps;
-  for (auto &op : llvm::make_early_inc_range(getOperation().getOps())) {
+
+  auto fullAsyncResetAttr =
+      StringAttr::get(&getContext(), fullAsyncResetAnnoClass);
+  auto isFullAsyncResetAnno = [fullAsyncResetAttr](Annotation anno) {
+    return anno.getClassAttr() == fullAsyncResetAttr;
+  };
+  bool fullAsyncResetExists = AnnotationSet::removePortAnnotations(
+      getOperation(), [&](unsigned argNum, Annotation anno) {
+        return isFullAsyncResetAnno(anno);
+      });
+  getOperation()->walk(
+      [isFullAsyncResetAnno, &fullAsyncResetExists](Operation *op) {
+        fullAsyncResetExists |=
+            AnnotationSet::removeAnnotations(op, isFullAsyncResetAnno);
+      });
+  madeModifications |= fullAsyncResetExists;
+
+  auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.
     if (auto inv = dyn_cast<InvalidValueOp>(op)) {
       invalidOps.push_back(inv);
-      continue;
+      return WalkResult::advance();
     }
     auto reg = dyn_cast<RegResetOp>(op);
     if (!reg)
-      continue;
+      return WalkResult::advance();
 
-    // If the `RegResetOp` has an invalidated initialization, then replace it
-    // with a `RegOp`.
-    if (walkDrivers(reg.getResetValue(), true, false, false,
+    // If the `RegResetOp` has an invalidated initialization and we
+    // are not running FART, then replace it with a `RegOp`.
+    if (!fullAsyncResetExists &&
+        walkDrivers(reg.getResetValue(), true, false, false,
                     [](FieldRef dst, FieldRef src) {
                       return src.isa<InvalidValueOp>();
                     })) {
@@ -68,14 +87,14 @@ void SFCCompatPass::runOnOperation() {
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;
-      continue;
+      return WalkResult::advance();
     }
 
     // If the `RegResetOp` has an asynchronous reset and the reset value is not
     // a module-scoped constant when looking through wires and nodes, then
     // generate an error.  This implements the SFC's CheckResets pass.
     if (!isa<AsyncResetType>(reg.getResetSignal().getType()))
-      continue;
+      return WalkResult::advance();
     if (walkDrivers(
             reg.getResetValue(), true, true, true,
             [&](FieldRef dst, FieldRef src) {
@@ -96,9 +115,12 @@ void SFCCompatPass::runOnOperation() {
                   << (rootKnown ? ("\"" + fieldName + "\"") : "here");
               return false;
             }))
-      continue;
+      return WalkResult::advance();
+    return WalkResult::interrupt();
+  });
+
+  if (result.wasInterrupted())
     return signalPassFailure();
-  }
 
   // Convert all invalid values to zero.
   for (auto inv : invalidOps) {

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
+// Manifest parsing and API creation.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -18,82 +18,21 @@
 #ifndef ESI_MANIFEST_H
 #define ESI_MANIFEST_H
 
+#include "esi/Common.h"
+#include "esi/Context.h"
 #include "esi/Types.h"
 
 #include <any>
-#include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace esi {
 
-//===----------------------------------------------------------------------===//
-// Common accelerator description types.
-//===----------------------------------------------------------------------===//
-
-struct AppID {
-  std::string name;
-  std::optional<uint32_t> idx;
-
-  AppID(const AppID &) = default;
-  AppID(std::string name, std::optional<uint32_t> idx = std::nullopt)
-      : name(name), idx(idx) {}
-
-  bool operator==(const AppID &other) const {
-    return name == other.name && idx == other.idx;
-  }
-  bool operator!=(const AppID &other) const { return !(*this == other); }
-};
-bool operator<(const AppID &a, const AppID &b);
-
-class AppIDPath : public std::vector<AppID> {
-public:
-  using std::vector<AppID>::vector;
-
-  AppIDPath operator+(const AppIDPath &b);
-  std::string toStr() const;
-};
-bool operator<(const AppIDPath &a, const AppIDPath &b);
-std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
-
-struct ModuleInfo {
-  const std::optional<std::string> name;
-  const std::optional<std::string> summary;
-  const std::optional<std::string> version;
-  const std::optional<std::string> repo;
-  const std::optional<std::string> commitHash;
-  const std::map<std::string, std::any> extra;
-};
-
-/// A description of a service port. Used pretty exclusively in setting up the
-/// design.
-struct ServicePortDesc {
-  std::string name;
-  std::string portName;
-};
-
-/// A description of a hardware client. Used pretty exclusively in setting up
-/// the design.
-struct HWClientDetail {
-  AppIDPath relPath;
-  ServicePortDesc port;
-  std::map<std::string, std::any> implOptions;
-};
-using HWClientDetails = std::vector<HWClientDetail>;
-using ServiceImplDetails = std::map<std::string, std::any>;
-
-//===----------------------------------------------------------------------===//
-// Manifest parsing and API creation.
-//===----------------------------------------------------------------------===//
-
 // Forward declarations.
-namespace internal {} // namespace internal
+class AcceleratorConnection;
 class Accelerator;
-class Design;
 
 /// Class to parse a manifest. It also constructs the dynamic API for the
 /// accelerator.
@@ -102,7 +41,7 @@ public:
   class Impl;
 
   Manifest(const Manifest &) = delete;
-  Manifest(const std::string &jsonManifest);
+  Manifest(Context &ctxt, const std::string &jsonManifest);
   ~Manifest();
 
   uint32_t getApiVersion() const;
@@ -110,24 +49,23 @@ public:
   std::vector<ModuleInfo> getModuleInfos() const;
 
   // Build a dynamic design hierarchy from the manifest.
-  std::unique_ptr<Design> buildDesign(Accelerator &acc) const;
-
-  /// Get a Type from the manifest based on its ID. Types are uniqued here.
-  std::optional<std::reference_wrapper<const Type>> getType(Type::ID id) const;
+  std::unique_ptr<Accelerator>
+  buildAccelerator(AcceleratorConnection &acc) const;
 
   /// The Type Table is an ordered list of types. The offset can be used to
   /// compactly and uniquely within a design. It does not include all of the
   /// types in a design -- just the ones listed in the 'types' section of the
   /// manifest.
-  const std::vector<std::reference_wrapper<const Type>> &getTypeTable() const;
+  const std::vector<const Type *> &getTypeTable() const;
 
 private:
-  Impl &impl;
+  Impl *impl;
 };
 
 } // namespace esi
 
+std::ostream &operator<<(std::ostream &os, const esi::AppID &id);
+std::ostream &operator<<(std::ostream &, const esi::AppIDPath &);
 std::ostream &operator<<(std::ostream &, const esi::ModuleInfo &);
-std::ostream &operator<<(std::ostream &, const esi::AppID &);
 
 #endif // ESI_MANIFEST_H

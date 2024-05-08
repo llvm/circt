@@ -10,9 +10,10 @@
 #define CIRCT_DIALECT_ARC_ARCOPS_TD
 
 include "circt/Dialect/Arc/ArcDialect.td"
-include "circt/Dialect/Arc/ArcTypes.td"
-include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
+include "circt/Dialect/Arc/ArcTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -92,7 +93,7 @@ def DefineOp : ArcOp<"define", [
     /// an error if the attribute is invalid.
     mlir::LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<mlir::FunctionType>())
+      if (!llvm::isa<mlir::FunctionType>(type))
         return emitOpError("requires '") << getFunctionTypeAttrName() <<
                            "' attribute of function type";
       return mlir::success();
@@ -132,7 +133,7 @@ def StateOp : ArcOp<"state", [
   CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   AttrSizedOperandSegments,
-  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked"]>,
+  DeclareOpInterfaceMethods<ClockedOpInterface>,
 ]> {
   let summary = "State transfer arc";
 
@@ -147,7 +148,7 @@ def StateOp : ArcOp<"state", [
 
   let assemblyFormat = [{
     $arc `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
-    (`reset` $reset^)? `lat` $latency attr-dict
+    (`reset` $reset^)? `latency` $latency attr-dict
     `:` functional-type($inputs, results)
   }];
 
@@ -230,6 +231,7 @@ def StateOp : ArcOp<"state", [
 def CallOp : ArcOp<"call", [
   MemRefsNormalizable, Pure,
   CallOpInterface,
+  DeclareOpInterfaceMethods<ClockedOpInterface, ["isClocked", "eraseClock"]>,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "calls an arc";
@@ -240,6 +242,13 @@ def CallOp : ArcOp<"call", [
   let assemblyFormat = [{
     $arc `(` $inputs `)` attr-dict `:` functional-type(operands, results)
   }];
+
+  let builders = [
+    OpBuilder<(ins "DefineOp":$arc, CArg<"mlir::ValueRange", "{}">:$inputs), [{
+      build($_builder, $_state, arc.getFunctionType().getResults(),
+            mlir::SymbolRefAttr::get(arc), inputs);
+    }]>,
+  ];
 
   let extraClassDeclaration = [{
     operand_range getArgOperands() {
@@ -260,15 +269,6 @@ def CallOp : ArcOp<"call", [
   }];
 }
 
-def ClockGateOp : ArcOp<"clock_gate", [Pure]> {
-  let summary = "Clock gate";
-  let arguments = (ins ClockType:$input, I1:$enable);
-  let results = (outs ClockType:$output);
-  let assemblyFormat = [{
-    $input `,` $enable attr-dict
-  }];
-}
-
 def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Memory";
   let results = (outs MemoryType:$memory);
@@ -277,10 +277,10 @@ def MemoryOp : ArcOp<"memory", [MemoryEffects<[MemAlloc]>]> {
 
 class MemoryAndDataTypesMatch<string mem, string data> : TypesMatchWith<
   "memory and data types must match", mem, data,
-  "$_self.cast<MemoryType>().getWordType()">;
+  "llvm::cast<MemoryType>($_self).getWordType()">;
 class MemoryAndAddressTypesMatch<string mem, string address> : TypesMatchWith<
   "memory and address types must match", mem, address,
-  "$_self.cast<MemoryType>().getAddressType()">;
+  "llvm::cast<MemoryType>($_self).getAddressType()">;
 
 def MemoryReadPortOp : ArcOp<"memory_read_port", [
   Pure,
@@ -327,7 +327,7 @@ def MemoryWritePortOp : ArcOp<"memory_write_port", [
 
   let assemblyFormat = [{
     $memory `,` $arc  `(` $inputs `)` (`clock` $clock^)?  (`enable` $enable^)?
-    (`mask` $mask^)? `lat` $latency attr-dict `:`
+    (`mask` $mask^)? `latency` $latency attr-dict `:`
     type($memory) `,` type($inputs)
   }];
 
@@ -528,7 +528,7 @@ def StorageGetOp : ArcOp<"storage.get", [Pure]> {
 
 class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
   "state and value types must match", state, value,
-  "$_self.cast<StateType>().getType()">;
+  "llvm::cast<StateType>($_self).getType()">;
 
 def StateReadOp : ArcOp<"state_read", [
   MemoryEffects<[MemRead]>,
@@ -536,7 +536,7 @@ def StateReadOp : ArcOp<"state_read", [
 ]> {
   let summary = "Get a state's current value";
   let arguments = (ins StateType:$state);
-  let results = (outs AnyInteger:$value);
+  let results = (outs AnyType:$value);
   let assemblyFormat = [{
     $state attr-dict `:` type($state)
   }];
@@ -560,11 +560,85 @@ def StateWriteOp : ArcOp<"state_write", [
     immediately without affecting correctness. This allows later lowering passes
     to treat `arc.state_write` as an immediate assignment (without defering).
   }];
-  let arguments = (ins StateType:$state, AnyInteger:$value,
+  let arguments = (ins StateType:$state, AnyType:$value,
                        Optional<I1>:$condition);
   let assemblyFormat = [{
     $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
   }];
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Orchestration
+//===----------------------------------------------------------------------===//
+
+def SimInstantiateOp : ArcOp<"sim.instantiate",
+  [MemoryEffects<[MemAlloc]>, NoTerminator,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Instantiates an Arc model for simulation";
+  let description = [{
+    Creates an instance of an Arc model in scope, in order to simulate it.
+    The model can be used from within the associated region, modelling its
+    lifetime.
+  }];
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasRegionVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
+def SimSetInputOp : ArcOp<"sim.set_input",
+  [MemoryEffects<[MemWrite]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Sets the value of an input of the model instance";
+  let description = [{
+    Sets the value of an input port in a specific instance of a model. The
+    provided input port must be of input type on the model and its type must
+    match the type of the value operand.
+  }];
+  let arguments = (ins SimModelInstance:$instance,
+                       StrAttr:$input,
+                       AnyType:$value);
+  let assemblyFormat =
+    [{ $instance `,` $input `=` $value attr-dict
+       `:` type($value) `,` qualified(type($instance)) }];
+}
+
+def SimGetPortOp : ArcOp<"sim.get_port",
+  [MemoryEffects<[MemRead]>, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Gets the value of a port of the model instance";
+  let description = [{
+    Gets the value of the given port in a specific instance of a model. The
+    provided port must be of the type of the expected value.
+  }];
+  let arguments = (ins SimModelInstance:$instance, StrAttr:$port);
+  let results = (outs AnyType:$value);
+  let assemblyFormat =
+    [{ $instance `,` $port attr-dict
+       `:` type($value) `,` qualified(type($instance)) }];
+}
+
+def SimStepOp : ArcOp<"sim.step",
+  [MemoryEffects<[MemRead, MemWrite]>,
+   DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary =
+    "Evaluates one step of the simulation for the provided model instance";
+  let description = [{
+    Evaluates one step of the simulation for the provided model instance,
+    updating ports accordingly.
+  }];
+  let arguments = (ins SimModelInstance:$instance);
+  let assemblyFormat =
+    [{ $instance attr-dict `:` qualified(type($instance)) }];
+}
+
+def SimEmitValueOp : ArcOp<"sim.emit"> {
+  let summary = "Sends a value to the simulation driver";
+  let description = [{
+    Sends a named value to the simulation driver. This is notably useful
+    for printing values during simulation.
+  }];
+  let arguments = (ins StrAttr:$valueName, AnyType:$value);
+  let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -578,13 +652,18 @@ def TapOp : ArcOp<"tap"> {
 }
 
 def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
-                              NoTerminator]> {
+                              NoTerminator, Symbol]> {
   let summary = "A model with stratified clocks";
-  let arguments = (ins StrAttr:$name);
+  let description = [{
+    A model with stratified clocks. The `io` optional attribute
+    specifies the I/O of the module associated to this model.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<ModuleType>:$io);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $name attr-dict-with-keyword $body
+    $sym_name `io` $io attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{

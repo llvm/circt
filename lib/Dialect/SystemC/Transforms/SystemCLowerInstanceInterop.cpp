@@ -104,8 +104,8 @@ private:
     Value state = updateOp.getBody()->getArguments().front();
     for (size_t i = 0; i < inputValues.size(); ++i) {
       Value member = updateBuilder.create<MemberAccessOp>(
-          loc, inputValues[i].getType(), state,
-          inputNames[i].cast<StringAttr>(), MemberAccessKind::Arrow);
+          loc, inputValues[i].getType(), state, cast<StringAttr>(inputNames[i]),
+          MemberAccessKind::Arrow);
       updateBuilder.create<AssignOp>(loc, member,
                                      updateOp.getBody()->getArgument(i + 1));
     }
@@ -125,7 +125,7 @@ private:
     for (size_t i = 0; i < resultValues.size(); ++i) {
       results.push_back(updateBuilder.create<MemberAccessOp>(
           loc, resultValues[i].getType(), state,
-          resultNames[i].cast<StringAttr>().getValue(),
+          cast<StringAttr>(resultNames[i]).getValue(),
           MemberAccessKind::Arrow));
     }
 

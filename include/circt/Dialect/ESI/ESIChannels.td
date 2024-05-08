@@ -158,7 +158,7 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
 }
 
 def ModportType:
-  Type<CPred<"$_self.isa<::circt::sv::ModportType>()">, "sv.interface">;
+  Type<CPred<"llvm::isa<::circt::sv::ModportType>($_self)">, "sv.interface">;
 
 def WrapSVInterfaceOp: ESI_Op<"wrap.iface", [
     DeclareOpInterfaceMethods<ChannelOpInterface>
@@ -236,9 +236,9 @@ def ChannelBundleType : ESI_Type<"ChannelBundle"> {
     transmitting messages from the sender to the receiver. Then, "from" means
     that the sender is getting messages from the receiver (typically responses).
 
-    When requesting a bundle from a service, the client is always considered the
-    sender. So the "to" direction is for the client to send messages to the
-    service.
+    When requesting a bundle from a service, the service is always considered
+    the sender; so, "to" means the service is sending messages to the client and
+    "from" means the service is receiving messages from the client.
   }];
 
   let mnemonic = "bundle";
@@ -515,6 +515,13 @@ def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {
   let results = (outs ChannelType:$out);
 
   let assemblyFormat = [{ attr-dict `:` qualified(type($out)) }];
+}
+
+def SinkChannelAttr : AttrDef<ESI_Dialect, "NullChannel"> {
+  let summary = "An attribute which indicates a channel is unconnected.";
+  let mnemonic = "null";
+  let parameters = (ins "TypeAttr":$type);
+  let assemblyFormat = [{ $type }];
 }
 
 #endif // CIRCT_DIALECT_ESI_CHANNELS_TD

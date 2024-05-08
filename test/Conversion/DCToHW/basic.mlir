@@ -177,3 +177,22 @@ hw.module @source(out token : !dc.token) {
     %token = dc.source
     hw.output %token : !dc.token
 }
+
+// CHECK-LABEL:   hw.module @merge(in 
+// CHECK-SAME:                        %[[VAL_0:.*]] : !esi.channel<i0>, in
+// CHECK-SAME:                        %[[VAL_1:.*]] : !esi.channel<i0>, out token : !esi.channel<i1>) {
+// CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_7:.*]] : i0
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.wrap.vr %[[VAL_10:.*]], %[[VAL_11:.*]] : i1
+// CHECK:           %[[VAL_11]] = comb.or %[[VAL_3]], %[[VAL_6]] : i1
+// CHECK:           %[[VAL_12:.*]] = hw.constant true
+// CHECK:           %[[VAL_10]] = comb.xor %[[VAL_3]], %[[VAL_12]] : i1
+// CHECK:           %[[VAL_13:.*]] = comb.and %[[VAL_11]], %[[VAL_9]] : i1
+// CHECK:           %[[VAL_4]] = comb.and %[[VAL_13]], %[[VAL_3]] : i1
+// CHECK:           %[[VAL_7]] = comb.and %[[VAL_13]], %[[VAL_10]] : i1
+// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i1>
+// CHECK:         }
+hw.module @merge(in %first : !dc.token, in %second : !dc.token, out token : !dc.value<i1>) {
+    %selected = dc.merge %first, %second
+    hw.output %selected : !dc.value<i1>
+}

@@ -74,6 +74,8 @@ def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
   let options = [
     Option<"tapPorts", "tap-ports", "bool", "true",
       "Make memory ports observable">,
+    Option<"tapMemories", "tap-memories", "bool", "true",
+      "Make memory contents observable">,
   ];
 }
 
@@ -95,25 +97,24 @@ def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
   ];
 }
 
-def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
-  let summary = "Eagerly inline private modules";
-  let description = [{
-    This pass eagerly inlines private HW modules into their instantiation sites.
-    After outlining combinational logic and registers into arcs, module bodies
-    become fairly lightweight. Since arc definitions now fulfill the purpose of
-    code reuse by allowing a single definition to be called multiple times, the
-    module hierarchy degenerates into a purely cosmetic construct. At that point
-    it is beneficial to fully flatten the module hierarchy to simplify further
-    analysis and optimization of state transfer arcs.
-  }];
-  let constructor = "circt::arc::createInlineModulesPass()";
-}
-
 def InferStateProperties : Pass<"arc-infer-state-properties",
                                 "mlir::ModuleOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
-  let constructor = "circt::arc::createInferStatePropertiesPass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let options = [
+    Option<"detectEnables", "enables", "bool", "true", "Infer enable signals">,
+    Option<"detectResets", "resets", "bool", "true", "Infer reset signals">,
+  ];
+  let statistics = [
+    Statistic<"addedEnables", "added-enables",
+      "Enables added explicitly to a StateOp">,
+    Statistic<"addedResets", "added-resets",
+      "Resets added explicitly to a StateOp">,
+    Statistic<"missedEnables", "missed-enables",
+      "Detected enables that could not be added explicitly to a StateOp">,
+    Statistic<"missedResets", "missed-resets",
+      "Detected resets that could not be added explicitly to a StateOp">,
+  ];
 }
 
 def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
@@ -253,15 +254,6 @@ def MuxToControlFlow : Pass<"arc-mux-to-control-flow", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
-def PrintStateInfo : Pass<"arc-print-state-info", "mlir::ModuleOp"> {
-  let summary = "Print the state storage layout in JSON format";
-  let constructor = "circt::arc::createPrintStateInfoPass()";
-  let options = [
-    Option<"stateFile", "state-file", "std::string", "",
-      "Emit file with state description">
-  ];
-}
-
 def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   let summary = "Convert variadic ops into distributed binary ops";
   let constructor = "circt::arc::createSimplifyVariadicOpsPass()";
@@ -291,6 +283,10 @@ def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numArcsCreated", "created", "Arcs created during the splitting">,
+    Statistic<"numArcsRemoved", "removed", "Arcs removed during the splitting">,
+  ];
 }
 
 def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {

@@ -271,8 +271,8 @@ private:
 
       // Handle the case where one or both values are block arguments.
       if (!opA || !opB) {
-        auto argA = valueA.dyn_cast<BlockArgument>();
-        auto argB = valueB.dyn_cast<BlockArgument>();
+        auto argA = dyn_cast<BlockArgument>(valueA);
+        auto argB = dyn_cast<BlockArgument>(valueB);
         if (argA && argB) {
           divergences.insert(values);
           if (argA.getArgNumber() != argB.getArgNumber())
@@ -330,11 +330,11 @@ private:
 } // namespace
 
 static void addCallSiteOperands(
-    MutableArrayRef<mlir::CallOpInterface> callSites,
+    SmallSetVector<mlir::CallOpInterface, 1> &callSites,
     ArrayRef<std::variant<Operation *, unsigned>> operandMappings) {
   SmallDenseMap<Operation *, Operation *> clonedOps;
   SmallVector<Value> newOperands;
-  for (auto &callOp : callSites) {
+  for (auto callOp : callSites) {
     OpBuilder builder(callOp);
     newOperands.clear();
     clonedOps.clear();
@@ -362,12 +362,13 @@ static bool isOutlinable(OpOperand &operand) {
 namespace {
 struct DedupPass : public arc::impl::DedupBase<DedupPass> {
   void runOnOperation() override;
-  void replaceArcWith(DefineOp oldArc, DefineOp newArc);
+  void replaceArcWith(DefineOp oldArc, DefineOp newArc,
+                      SymbolTableCollection &symbolTable);
 
   /// A mapping from arc names to arc definitions.
   DenseMap<StringAttr, DefineOp> arcByName;
   /// A mapping from arc definitions to call sites.
-  DenseMap<DefineOp, SmallVector<mlir::CallOpInterface, 1>> callSites;
+  DenseMap<DefineOp, SmallSetVector<mlir::CallOpInterface, 1>> callSites;
 };
 
 struct ArcHash {
@@ -396,10 +397,7 @@ void DedupPass::runOnOperation() {
   getOperation().walk([&](mlir::CallOpInterface callOp) {
     if (auto defOp =
             dyn_cast_or_null<DefineOp>(callOp.resolveCallable(&symbolTable)))
-      callSites[arcByName.lookup(callOp.getCallableForCallee()
-                                     .get<mlir::SymbolRefAttr>()
-                                     .getLeafReference())]
-          .push_back(callOp);
+      callSites[defOp].insert(callOp);
   });
 
   // Sort the arcs by hash such that arcs with the same hash are next to each
@@ -436,7 +434,7 @@ void DedupPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs()
                  << "- Merge " << defineOp.getSymNameAttr() << " <- "
                  << otherDefineOp.getSymNameAttr() << "\n");
-      replaceArcWith(otherDefineOp, defineOp);
+      replaceArcWith(otherDefineOp, defineOp, symbolTable);
       arcHashes[otherIdx].defineOp = {};
     }
   }
@@ -581,8 +579,8 @@ void DedupPass::runOnOperation() {
     // (putting constants at the back), and then considers the order of
     // operations and op operands.
     llvm::stable_sort(outlineOperands, [](auto &a, auto &b) {
-      auto argA = a.first->get().template dyn_cast<BlockArgument>();
-      auto argB = b.first->get().template dyn_cast<BlockArgument>();
+      auto argA = dyn_cast<BlockArgument>(a.first->get());
+      auto argB = dyn_cast<BlockArgument>(b.first->get());
       if (argA && !argB)
         return true;
       if (!argA && argB)
@@ -621,7 +619,7 @@ void DedupPass::runOnOperation() {
         arg = defineOp.getBodyBlock().addArgument(value.getType(),
                                                   value.getLoc());
         newInputTypes.push_back(arg.getType());
-        if (auto blockArg = value.dyn_cast<BlockArgument>())
+        if (auto blockArg = dyn_cast<BlockArgument>(value))
           newOperands.push_back(blockArg.getArgNumber());
         else {
           auto *op = value.getDefiningOp();
@@ -675,7 +673,7 @@ void DedupPass::runOnOperation() {
 
       bool mappingFailed = false;
       for (auto [operand, otherOperand] : equiv.divergences) {
-        auto arg = operand->get().dyn_cast<BlockArgument>();
+        auto arg = dyn_cast<BlockArgument>(operand->get());
         if (!arg || !isOutlinable(*otherOperand)) {
           mappingFailed = true;
           break;
@@ -684,7 +682,7 @@ void DedupPass::runOnOperation() {
         // Determine how the other arc's operand maps to the new connection
         // scheme of the current arc.
         std::variant<Operation *, unsigned> newOperand;
-        if (auto otherArg = otherOperand->get().dyn_cast<BlockArgument>())
+        if (auto otherArg = dyn_cast<BlockArgument>(otherOperand->get()))
           newOperand = otherArg.getArgNumber();
         else
           newOperand = otherOperand->get().getDefiningOp();
@@ -713,13 +711,14 @@ void DedupPass::runOnOperation() {
                  << "  - Merged " << defineOp.getSymNameAttr() << " <- "
                  << otherDefineOp.getSymNameAttr() << "\n");
       addCallSiteOperands(callSites[otherDefineOp], newOperands);
-      replaceArcWith(otherDefineOp, defineOp);
+      replaceArcWith(otherDefineOp, defineOp, symbolTable);
       arcHashes[otherIdx].defineOp = {};
     }
   }
 }
 
-void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
+void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc,
+                               SymbolTableCollection &symbolTable) {
   ++dedupPassNumArcsDeduped;
   auto oldArcOps = oldArc.getOps();
   dedupPassTotalOps += std::distance(oldArcOps.begin(), oldArcOps.end());
@@ -728,8 +727,14 @@ void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc) {
   auto newArcName = SymbolRefAttr::get(newArc.getSymNameAttr());
   for (auto callOp : oldUses) {
     callOp.setCalleeFromCallable(newArcName);
-    newUses.push_back(callOp);
+    newUses.insert(callOp);
   }
+
+  oldArc.walk([&](mlir::CallOpInterface callOp) {
+    if (auto defOp =
+            dyn_cast_or_null<DefineOp>(callOp.resolveCallable(&symbolTable)))
+      callSites[defOp].remove(callOp);
+  });
   callSites.erase(oldArc);
   arcByName.erase(oldArc.getSymNameAttr());
   oldArc->erase();

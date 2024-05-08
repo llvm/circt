@@ -57,14 +57,6 @@ def AppIDPathAttr : ESI_Attr<"AppIDPath"> {
   }];
 }
 
-def BundleDirection : I32EnumAttr<"BundleDirection",
-  "Direction of original request", [
-    I32EnumAttrCase<"toServer", 1>,
-    I32EnumAttrCase<"toClient", 2>,
-  ]> {
-  let cppNamespace = "::circt::esi";
-}
-
 def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
         DeclareOpInterfaceMethods<IsManifestData>,
         DeclareOpInterfaceMethods<HasAppIDOpInterface>]> {
@@ -77,12 +69,12 @@ def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
 
   let arguments = (ins AppIDAttr:$requestor,
                        InnerRefAttr:$servicePort,
-                       BundleDirection:$direction,
+                       OptionalAttr<StrAttr>:$stdService,
                        TypeAttrOf<ChannelBundleType>:$bundleType);
 
   let assemblyFormat = [{
-    qualified($requestor) `,` $servicePort `,` $direction `,` $bundleType
-    attr-dict
+    qualified($requestor) `,` $servicePort (`std` $stdService^)?
+    `,` $bundleType attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -108,11 +100,13 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
 
   let arguments = (ins AppIDAttr:$appID,
                        OptionalAttr<FlatSymbolRefAttr>:$service,
+                       OptionalAttr<StrAttr>:$stdService,
                        StrAttr:$serviceImplName,
                        DictionaryAttr:$implDetails);
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
-    qualified($appID) (`svc` $service^)? `by` $serviceImplName `with` $implDetails
+    qualified($appID) (`svc` $service^)? (`std` $stdService^)?
+   `by` $serviceImplName `with` $implDetails
     attr-dict-with-keyword custom<ServiceImplRecordReqDetails>($reqDetails)
   }];
 
@@ -206,7 +200,7 @@ def SymbolMetadataOp : ESI_Op<"manifest.sym", [
 def BlobAttr : ESI_Attr<"Blob"> {
   let summary = "A binary blob";
 
-  let parameters = (ins ArrayRefParameter<"char">:$data);
+  let parameters = (ins ArrayRefParameter<"uint8_t">:$data);
   let mnemonic = "blob";
   let hasCustomAssemblyFormat = 1;
 }

@@ -1,34 +1,34 @@
-import esi
+import esiaccel as esi
+
 import sys
+from typing import Optional
 
 platform = sys.argv[1]
-acc = esi.Accelerator(platform, sys.argv[2])
+acc = esi.AcceleratorConnection(platform, sys.argv[2])
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
 assert m.api_version == 1
 print(m.type_table)
 
-d = m.build_design(acc)
+d = acc.build_accelerator()
 
-# loopback = d.children[esi.AppID("loopback_inout", 0)]
-
-recv = d.ports[esi.AppID("loopback_inout")].channels["resp"]
+recv = d.ports[esi.AppID("loopback_add7")].read_port("result")
 recv.connect()
 
-send = d.ports[esi.AppID("loopback_inout")].channels["req"]
+send = d.ports[esi.AppID("loopback_add7")].write_port("arg")
 send.connect()
 
-data = [24, 42, 36]
+data = 10234
 send.write(data)
-resp = []
+got_data = False
+resp: Optional[int] = None
 # Reads are non-blocking, so we need to poll.
-while resp == []:
-  resp = recv.read(2)
+while not got_data:
+  (got_data, resp) = recv.read()
 
 print(f"data: {data}")
 print(f"resp: {resp}")
-assert resp[0] == data[0] + 7
-assert resp[1] == data[1]
+assert resp == data + 7
 
 print("PASS")

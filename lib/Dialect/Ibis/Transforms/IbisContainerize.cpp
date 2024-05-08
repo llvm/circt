@@ -35,14 +35,17 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
     // parent class name.
     auto parentClass =
         dyn_cast_or_null<ClassOp>(op.getOperation()->getParentOp());
-    assert(parentClass && "This pattern should never be called on a container "
+    assert(parentClass && "This pattern should never be called on a container"
                           "that is not nested within a class.");
+    auto design = parentClass.getParentOp<DesignOp>();
+    assert(design && "Parent class should be nested within a design.");
 
     rewriter.setInsertionPoint(parentClass);
     StringAttr newContainerName = rewriter.getStringAttr(
-        ns.newName(parentClass.getName() + "_" + op.getName()));
-    auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), newContainerName);
+        ns.newName(parentClass.getInnerNameAttr().strref() + "_" +
+                   op.getInnerNameAttr().strref()));
+    auto newContainer = rewriter.create<ContainerOp>(
+        op.getLoc(), newContainerName, /*isTopLevel=*/false);
 
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
 
@@ -52,13 +55,14 @@ struct OutlineContainerPattern : public OpConversionPattern<ContainerOp> {
                          .getThis()
                          .getDefiningOp());
     rewriter.setInsertionPoint(thisOp);
-    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, newContainer.getNameAttr());
+    rewriter.replaceOpWithNewOp<ThisOp>(thisOp, design.getSymNameAttr(),
+                                        newContainer.getInnerSymAttr());
 
     // Create a container instance op in the parent class.
     rewriter.setInsertionPoint(op);
     rewriter.create<ContainerInstanceOp>(
         parentClass.getLoc(), hw::InnerSymAttr::get(newContainerName),
-        newContainer.getNameAttr());
+        newContainer.getInnerRef());
     rewriter.eraseOp(op);
     return success();
   }
@@ -74,7 +78,7 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getNameAttr());
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(), false);
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();
@@ -89,8 +93,8 @@ struct InstanceToContainerInstancePattern
   matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the instance by a container instance of the same name.
-    rewriter.replaceOpWithNewOp<ContainerInstanceOp>(
-        op, op.getInnerSym(), op.getTargetNameAttr().getAttr());
+    rewriter.replaceOpWithNewOp<ContainerInstanceOp>(op, op.getInnerSym(),
+                                                     op.getTargetNameAttr());
     return success();
   }
 };
@@ -117,7 +121,14 @@ LogicalResult ContainerizePass::outlineContainers() {
   RewritePatternSet patterns(context);
 
   // Setup a namespace to ensure that the new container names are unique.
+  // Grab existing names from the InnerSymbolTable of the top-level design op.
   SymbolCache symCache;
+  (void)hw::InnerSymbolTable::walkSymbols(
+      getOperation(), [&](StringAttr name, const hw::InnerSymTarget &target) {
+        symCache.addDefinition(name, target.getOp());
+        return success();
+      });
+
   Namespace ns;
   symCache.addDefinitions(getOperation());
   ns.add(symCache);

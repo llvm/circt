@@ -59,6 +59,12 @@ struct Emitter {
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
   void emitDeclaration(LayerOp op);
+  void emitDeclaration(OptionOp op);
+  void emitEnabledLayers(ArrayRef<Attribute> layers);
+
+  void emitParamAssign(ParamDeclAttr param, Operation *op,
+                       std::optional<PPExtString> wordBeforeLHS = std::nullopt);
+  void emitGenericIntrinsic(GenericIntrinsicOp op);
 
   // Statement emission
   void emitStatementsInBlock(Block &block);
@@ -74,6 +80,7 @@ struct Emitter {
   void emitStatement(StrictConnectOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
+  void emitStatement(InstanceChoiceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
   void emitStatement(InvalidValueOp op);
@@ -88,6 +95,7 @@ struct Emitter {
   void emitStatement(RefReleaseOp op);
   void emitStatement(RefReleaseInitialOp op);
   void emitStatement(LayerBlockOp op);
+  void emitStatement(GenericIntrinsicOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -117,6 +125,7 @@ struct Emitter {
   void emitExpression(DoubleConstantOp op);
   void emitExpression(ListCreateOp op);
   void emitExpression(UnresolvedPathOp op);
+  void emitExpression(GenericIntrinsicOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -249,6 +258,18 @@ struct Emitter {
   void emitLiteralExpression(Type type, ValueRange values) {
     return emitLiteralExpression(type, values,
                                  [&](Value v) { emitSubExprIBox2(v); });
+  }
+
+  /// Emit a (potentially nested) symbol reference as `A.B.C`.
+  void emitSymbol(SymbolRefAttr symbol) {
+    ps.ibox(2, IndentStyle::Block);
+    ps << symbol.getRootReference();
+    for (auto nested : symbol.getNestedReferences()) {
+      ps.zerobreak();
+      ps << ".";
+      ps << nested.getAttr();
+    }
+    ps.end();
   }
 
 private:
@@ -384,6 +405,7 @@ void Emitter::emitCircuit(CircuitOp op) {
             ps << PP::newline;
           })
           .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
+          .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -393,11 +415,78 @@ void Emitter::emitCircuit(CircuitOp op) {
   symInfos = std::nullopt;
 }
 
+void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
+  for (auto layer : layers) {
+    ps << PP::space;
+    ps.cbox(2, IndentStyle::Block);
+    ps << "enablelayer" << PP::space;
+    emitSymbol(cast<SymbolRefAttr>(layer));
+    ps << PP::end;
+  }
+}
+
+void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
+                              std::optional<PPExtString> wordBeforeLHS) {
+  if (wordBeforeLHS) {
+    ps << *wordBeforeLHS << PP::nbsp;
+  }
+  ps << PPExtString(param.getName().strref()) << PP::nbsp << "=" << PP::nbsp;
+  TypeSwitch<Attribute>(param.getValue())
+      .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
+      .Case<FloatAttr>([&](auto attr) {
+        SmallString<16> str;
+        attr.getValue().toString(str);
+        ps << str;
+      })
+      .Case<StringAttr>(
+          [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+      .Default([&](auto attr) {
+        emitOpError(op, "with unsupported parameter attribute: ") << attr;
+        ps << "<unsupported-attr ";
+        ps.addAsString(attr);
+        ps << ">";
+      });
+}
+
+void Emitter::emitGenericIntrinsic(GenericIntrinsicOp op) {
+  ps << "intrinsic(";
+  ps.scopedBox(PP::cbox0, [&]() {
+    ps.scopedBox(PP::ibox2, [&]() {
+      ps << op.getIntrinsic();
+      ps.scopedBox(PP::ibox0, [&]() {
+        auto params = op.getParameters();
+        if (!params.empty()) {
+          ps << "<";
+          ps.scopedBox(PP::ibox0, [&]() {
+            interleaveComma(
+                params.getAsRange<ParamDeclAttr>(),
+                [&](ParamDeclAttr param) { emitParamAssign(param, op); });
+          });
+          ps << ">";
+        }
+      });
+      if (op.getNumResults() != 0)
+        emitTypeWithColon(op.getResult().getType());
+    });
+    if (op.getNumOperands() != 0) {
+      ps << "," << PP::space;
+      ps.scopedBox(PP::ibox0, [&]() { interleaveComma(op->getOperands()); });
+    }
+    ps << ")";
+  });
+}
+
 /// Emit an entire module.
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
-  ps << "module " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  if (op.isPublic())
+    ps << "public" << PP::nbsp;
+  ps << "module " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -417,8 +506,12 @@ void Emitter::emitModule(FModuleOp op) {
 /// Emit an external module.
 void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
-  ps << "extmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -441,8 +534,12 @@ void Emitter::emitModule(FExtModuleOp op) {
 /// Emit an intrinsic module
 void Emitter::emitModule(FIntModuleOp op) {
   startStatement();
-  ps << "intmodule " << PPExtString(legalize(op.getNameAttr())) << " :";
+  ps.cbox(4, IndentStyle::Block);
+  ps << "intmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitEnabledLayers(op.getLayers());
+  ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
+
   ps.scopedBox(PP::bbox2, [&]() {
     setPendingNewline();
 
@@ -450,18 +547,9 @@ void Emitter::emitModule(FIntModuleOp op) {
     auto ports = op.getPorts();
     emitModulePorts(ports);
 
-    // Emit the optional intrinsic.
-    //
-    // TODO: This really shouldn't be optional, but it is currently encoded like
-    // this.
-    if (op.getIntrinsic().has_value()) {
-      auto intrinsic = *op.getIntrinsic();
-      if (!intrinsic.empty()) {
-        startStatement();
-        ps << "intrinsic = " << PPExtString(*op.getIntrinsic());
-        setPendingNewline();
-      }
-    }
+    startStatement();
+    ps << "intrinsic = " << PPExtString(op.getIntrinsic());
+    setPendingNewline();
 
     // Emit the parameters.
     emitModuleParameters(op, op.getParameters());
@@ -488,27 +576,9 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
 }
 
 void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
-  for (auto param : llvm::map_range(parameters, [](Attribute attr) {
-         return cast<ParamDeclAttr>(attr);
-       })) {
+  for (auto param : parameters.getAsRange<ParamDeclAttr>()) {
     startStatement();
-    // TODO: AssignLike ?
-    ps << "parameter " << PPExtString(param.getName().getValue()) << " = ";
-    TypeSwitch<Attribute>(param.getValue())
-        .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
-        .Case<FloatAttr>([&](auto attr) {
-          SmallString<16> str;
-          attr.getValue().toString(str);
-          ps << str;
-        })
-        .Case<StringAttr>(
-            [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
-        .Default([&](auto attr) {
-          emitOpError(op, "with unsupported parameter attribute: ") << attr;
-          ps << "<unsupported-attr ";
-          ps.addAsString(attr);
-          ps << ">";
-        });
+    emitParamAssign(param, op, PPExtString("parameter"));
     setPendingNewline();
   }
 }
@@ -516,7 +586,7 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 /// Emit a layer definition.
 void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
-  ps << "declgroup " << PPExtString(op.getSymName()) << ", "
+  ps << "layer " << PPExtString(op.getSymName()) << ", "
      << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
@@ -531,10 +601,32 @@ void Emitter::emitDeclaration(LayerOp op) {
   });
 }
 
+/// Emit an option declaration.
+void Emitter::emitDeclaration(OptionOp op) {
+  startStatement();
+  ps << "option " << PPExtString(legalize(op.getSymNameAttr())) << " :";
+  emitLocation(op);
+  ps.scopedBox(PP::bbox2, [&] {
+    for (auto caseOp : op.getBody().getOps<OptionCaseOp>()) {
+      ps << PP::newline;
+      ps << PPExtString(legalize(caseOp.getSymNameAttr()));
+      emitLocation(caseOp);
+    }
+  });
+  ps << PP::newline << PP::newline;
+}
+
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
-  return isExpression(op) && !isa<InvalidValueOp>(op);
+  // FIRRTL expressions are statically classified as always inlineable.
+  // InvalidValueOp never is inlined, and is handled specially.
+  // GenericIntrinsicOp is inlined if has exactly one use (only emit once)
+  // that is not emitted inline.  This is to ensure it is emitted inline
+  // in common cases, but only inspect one level deep.
+  return (isExpression(op) && !isa<InvalidValueOp>(op)) ||
+         (isa<GenericIntrinsicOp>(op) && op->hasOneUse() &&
+          !isEmittedInline(*op->getUsers().begin()));
 }
 
 void Emitter::emitStatementsInBlock(Block &block) {
@@ -546,10 +638,11 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              PropAssignOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
-              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
-              MemoryPortAccessOp, RefDefineOp, RefForceOp, RefForceInitialOp,
-              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp>(
+              PropAssignOp, InstanceOp, InstanceChoiceOp, AttachOp, MemOp,
+              InvalidValueOp, SeqMemOp, CombMemOp, MemoryPortOp,
+              MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp, RefForceOp,
+              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              LayerBlockOp, GenericIntrinsicOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -803,6 +896,33 @@ void Emitter::emitStatement(InstanceOp op) {
   }
 }
 
+void Emitter::emitStatement(InstanceChoiceOp op) {
+  startStatement();
+  auto legalName = legalize(op.getNameAttr());
+  ps << "instchoice " << PPExtString(legalName) << " of "
+     << PPExtString(legalize(op.getDefaultTargetAttr().getAttr())) << ", "
+     << PPExtString(legalize(op.getOptionNameAttr())) << " :";
+  emitLocation(op);
+  ps.scopedBox(PP::bbox2, [&] {
+    for (const auto &[optSym, targetSym] : op.getTargetChoices()) {
+      ps << PP::newline;
+      ps << PPExtString(legalize(optSym.getLeafReference()));
+      ps << " => ";
+      ps << PPExtString(legalize(targetSym.getAttr()));
+    }
+  });
+  setPendingNewline();
+
+  SmallString<16> portName(legalName);
+  portName.push_back('.');
+  unsigned baseLen = portName.size();
+  for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
+    portName.append(legalize(op.getPortName(i)));
+    addValueName(op.getResult(i), portName);
+    portName.resize(baseLen);
+  }
+}
+
 void Emitter::emitStatement(AttachOp op) {
   emitStatementFunctionOp(PPExtString("attach"), op);
 }
@@ -984,7 +1104,7 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
 
 void Emitter::emitStatement(LayerBlockOp op) {
   startStatement();
-  ps << "group " << op.getLayerName().getLeafReference() << " :";
+  ps << "layerblock " << op.getLayerName().getLeafReference() << " :";
   emitLocationAndNewLine(op);
   auto *body = op.getBody();
   ps.scopedBox(PP::bbox2, [&]() { emitStatementsInBlock(*body); });
@@ -1011,6 +1131,20 @@ void Emitter::emitStatement(InvalidValueOp op) {
     ps << "invalidate " << PPExtString(name);
   else
     ps << PPExtString(name) << " is invalid";
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(GenericIntrinsicOp op) {
+  startStatement();
+  if (op.use_empty())
+    emitGenericIntrinsic(op);
+  else {
+    assert(!isEmittedInline(op));
+    auto name = circuitNamespace.newName("_gen_int");
+    addValueName(op.getResult(), name);
+    emitAssignLike([&]() { ps << "node " << PPExtString(name); },
+                   [&]() { emitGenericIntrinsic(op); });
+  }
   emitLocationAndNewLine(op);
 }
 
@@ -1041,7 +1175,7 @@ void Emitter::emitExpression(Value value) {
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp,
+          UnresolvedPathOp, GenericIntrinsicOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
           [&](auto op) {
@@ -1229,6 +1363,10 @@ void Emitter::emitExpression(UnresolvedPathOp op) {
   ps << ")";
 }
 
+void Emitter::emitExpression(GenericIntrinsicOp op) {
+  emitGenericIntrinsic(op);
+}
+
 void Emitter::emitExpression(ConstCastOp op) { emitExpression(op.getInput()); }
 
 void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
@@ -1332,8 +1470,16 @@ void Emitter::emitType(Type type, bool includeConst) {
         if (type.getForceable())
           ps << "RW";
         ps << "Probe<";
+        ps.cbox(2, IndentStyle::Block);
+        ps.zerobreak();
         emitType(type.getType());
-        ps << ">";
+        if (auto layer = type.getLayer()) {
+          ps << ",";
+          ps.space();
+          emitSymbol(type.getLayer());
+        }
+        ps << BreakToken(0, -2) << ">";
+        ps.end();
       })
       .Case<AnyRefType>([&](AnyRefType type) { ps << "AnyRef"; })
       .Case<StringType>([&](StringType type) { ps << "String"; })

@@ -14,7 +14,7 @@
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
-// CHECK-LABEL: arc.model "Trivial" {
+// CHECK-LABEL: arc.model @Trivial io !hw.modty<> {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage<42>):
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %false = hw.constant false
@@ -24,7 +24,7 @@
 // CHECK-NEXT:    func.call @Trivial_passthrough(%arg0) : (!arc.storage<42>) -> ()
 // CHECK-NEXT:  }
 
-arc.model "Trivial" {
+arc.model @Trivial io !hw.modty<> {
 ^bb0(%arg0: !arc.storage<42>):
   %true = hw.constant true
   %false = hw.constant false
@@ -48,12 +48,12 @@ arc.model "Trivial" {
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
-// CHECK-LABEL: arc.model "NestedRegions" {
+// CHECK-LABEL: arc.model @NestedRegions io !hw.modty<> {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage<42>):
 // CHECK-NEXT:    func.call @NestedRegions_passthrough(%arg0) : (!arc.storage<42>) -> ()
 // CHECK-NEXT:  }
 
-arc.model "NestedRegions" {
+arc.model @NestedRegions io !hw.modty<> {
 ^bb0(%arg0: !arc.storage<42>):
   arc.passthrough {
     %true = hw.constant true
@@ -78,8 +78,8 @@ arc.model "NestedRegions" {
 // CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
-// CHECK-LABEL: arc.model "InsertionOrderProblem" {
-arc.model "InsertionOrderProblem" {
+// CHECK-LABEL: arc.model @InsertionOrderProblem
+arc.model @InsertionOrderProblem io !hw.modty<> {
 ^bb0(%arg0: !arc.storage<42>):
   %true = hw.constant true
   %false = hw.constant false

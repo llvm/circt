@@ -58,7 +58,7 @@ struct StoreNames {
 } // namespace
 
 static Type indexToMemAddr(Type t, MemRefType memRef) {
-  assert(t.isa<IndexType>() && "Expected index type");
+  assert(isa<IndexType>(t) && "Expected index type");
   auto shape = memRef.getShape();
   assert(shape.size() == 1 && "Expected 1D memref");
   unsigned addrWidth = llvm::Log2_64_Ceil(shape[0]);
@@ -67,13 +67,13 @@ static Type indexToMemAddr(Type t, MemRefType memRef) {
 
 static HandshakeMemType getMemTypeForExtmem(Value v) {
   auto *ctx = v.getContext();
-  assert(v.getType().isa<mlir::MemRefType>() && "Value is not a memref type");
+  assert(isa<mlir::MemRefType>(v.getType()) && "Value is not a memref type");
   auto extmemOp = cast<handshake::ExternalMemoryOp>(*v.getUsers().begin());
   HandshakeMemType memType;
   llvm::SmallVector<hw::detail::FieldInfo> inFields, outFields;
 
   // Add memory type.
-  memType.memRefType = v.getType().cast<MemRefType>();
+  memType.memRefType = cast<MemRefType>(v.getType());
   memType.loadPorts = extmemOp.getLdCount();
   memType.storePorts = extmemOp.getStCount();
 
@@ -208,26 +208,26 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Load ports:
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, readPortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, readPortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, readPortInfo.type, readPortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
 
     // Store ports:
     for (unsigned i = 0; i < memType.storePorts; ++i) {
-      auto reqPack = b.create<esi::PackBundleOp>(loc, writePortInfo.type,
-                                                 (Value)backedges[resIdx]);
-      b.create<esi::RequestToServerConnectionOp>(
-          loc, writePortInfo.port, reqPack.getBundle(),
+      auto req = b.create<esi::RequestConnectionOp>(
+          loc, writePortInfo.type, writePortInfo.port,
           esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
+      auto reqUnpack = b.create<esi::UnpackBundleOp>(
+          loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
-          reqPack.getFromChannels()
+          reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
@@ -295,14 +295,14 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 // lowering.
 static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
                                    MemRefType memRefType) {
-  assert(v.getType().isa<IndexType>() && "Expected an index-typed value");
+  assert(isa<IndexType>(v.getType()) && "Expected an index-typed value");
   auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
   return b.create<arith::IndexCastOp>(loc, b.getIntegerType(addrWidth), v);
 }
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
-                           const handshake::MemLoadInterface &ldif,
-                           Value loadData, MemRefType memrefType) {
+                           handshake::MemLoadInterface &ldif, Value loadData,
+                           MemRefType memrefType) {
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
   // generate a none-typed output to drive the load done.
@@ -321,8 +321,8 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
 }
 
 static Value plumbStorePort(Location loc, OpBuilder &b,
-                            const handshake::MemStoreInterface &stif,
-                            Value done, Type outType, MemRefType memrefType) {
+                            handshake::MemStoreInterface &stif, Value done,
+                            Type outType, MemRefType memrefType) {
   stif.doneOut.replaceAllUsesWith(done);
   // Return the store address and data to be fed to the top-level output.
   // Address is truncated to the width of the memory that is accessed.
@@ -330,7 +330,7 @@ static Value plumbStorePort(Location loc, OpBuilder &b,
       truncateToMemoryWidth(loc, b, stif.addressIn, memrefType), stif.dataIn};
 
   return b
-      .create<hw::StructCreateOp>(loc, outType.cast<hw::StructType>(),
+      .create<hw::StructCreateOp>(loc, cast<hw::StructType>(outType),
                                   structArgs)
       .getResult();
 }
@@ -377,7 +377,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   // iterated from lo to hi indices.
   std::map<unsigned, Value> memrefArgs;
   for (auto [i, arg] : llvm::enumerate(func.getArguments()))
-    if (arg.getType().isa<MemRefType>())
+    if (isa<MemRefType>(arg.getType()))
       memrefArgs[i] = arg;
 
   if (memrefArgs.empty())
@@ -403,7 +403,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
     // Add memory input - this is the output of the extmemory op.
     auto memIOTypes = getMemTypeForExtmem(arg);
-    MemRefType memrefType = arg.getType().cast<MemRefType>();
+    MemRefType memrefType = cast<MemRefType>(arg.getType());
 
     auto oldReturnOp =
         cast<handshake::ReturnOp>(func.getBody().front().getTerminator());

@@ -199,12 +199,12 @@ struct TypeEmissionPattern : TypeEmissionPatternBase {
   TypeEmissionPattern() : TypeEmissionPatternBase(TypeID::get<Ty>()) {}
 
   void emitType(Type type, EmissionPrinter &p) final {
-    emitType(type.cast<Ty>(), p);
+    emitType(cast<Ty>(type), p);
   }
 
   /// Checks if this pattern is applicable to the given type. Matches to the
   /// type given as template argument by default.
-  bool match(Type type) override { return type.isa<Ty>(); }
+  bool match(Type type) override { return isa<Ty>(type); }
 
   /// Emit the given type to the emission printer.
   virtual void emitType(Ty type, EmissionPrinter &p) = 0;
@@ -217,12 +217,12 @@ struct AttrEmissionPattern : AttrEmissionPatternBase {
   AttrEmissionPattern() : AttrEmissionPatternBase(TypeID::get<A>()) {}
 
   void emitAttr(Attribute attr, EmissionPrinter &p) final {
-    emitAttr(attr.cast<A>(), p);
+    emitAttr(cast<A>(attr), p);
   }
 
   /// Checks if this pattern is applicable to the given attribute. Matches to
   /// the attribute given as template argument by default.
-  bool match(Attribute attr) override { return attr.isa<A>(); }
+  bool match(Attribute attr) override { return isa<A>(attr); }
 
   /// Emit the given attribute to the emission printer.
   virtual void emitAttr(A attr, EmissionPrinter &p) = 0;

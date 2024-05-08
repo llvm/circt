@@ -6,6 +6,7 @@ from circt.support import connect
 from circt.dialects import comb, hw
 
 from circt.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
+from circt import passmanager
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -192,3 +193,6 @@ with Context() as ctx, Location.unknown():
     # Dynamically get the Python class, and check that the op isinstance of the class.
     cls = getattr(comb, op_name)
     assert isinstance(op, cls)
+
+  # Check that the comb passes are registered.
+  pm = passmanager.PassManager.parse("builtin.module(lower-comb)")

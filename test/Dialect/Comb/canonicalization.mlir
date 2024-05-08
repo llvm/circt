@@ -22,8 +22,8 @@ hw.module @muxConstantInputs(in %cond: i1, out o: i2) {
 
 // CHECK-LABEL: @muxConstantInputs2
 hw.module @muxConstantInputs2(in %cond: i1, out o: i2) {
-// CHECK-NEXT: %true = hw.constant true
 // CHECK-NEXT: %false = hw.constant false
+// CHECK-NEXT: %true = hw.constant true
 // CHECK-NEXT: %0 = comb.xor %cond, %true : i1
 // CHECK-NEXT: %1 = comb.concat %0, %false : i1, i1
   %c0 = hw.constant 0 : i2
@@ -1554,10 +1554,10 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 }) : () -> ()
 
 // CHECK-LABEL: hw.module @combineOppositeBinCmpIntoConstant
-// CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
-// CHECK: %[[ALL_ONES:.+]] = hw.constant -1 : i4
-// CHECK: %[[FALSE:.+]] = hw.constant false
 // CHECK: %[[TRUE:.+]] = hw.constant true
+// CHECK: %[[FALSE:.+]] = hw.constant false
+// CHECK: %[[ALL_ONES:.+]] = hw.constant -1 : i4
+// CHECK: %[[ALL_ZEROS:.+]] = hw.constant 0 : i4
 // CHECK-NEXT: hw.output %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[TRUE]], %[[FALSE]], %[[ALL_ONES]], %[[ALL_ZEROS]]
 hw.module @combineOppositeBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4, out o0: i1, out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1, out o9: i1, out o10: i4, out o11: i4) {
   %op_ne = comb.icmp bin ne %tag_0, %tag_1 : i4

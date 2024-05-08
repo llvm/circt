@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
@@ -124,9 +125,10 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 
       auto builder = ImplicitLocOpBuilder::atBlockEnd(
           UnknownLoc::get(mlirModule.getContext()), mlirModule.getBody());
-      auto verbatim = builder.create<sv::VerbatimOp>(
-          jsonBuffer, ValueRange{}, builder.getArrayAttr(symbols));
-      verbatim->setAttr("output_file", file);
+      builder.create<emit::FileOp>(file.getFilename(), [&] {
+        builder.create<sv::VerbatimOp>(jsonBuffer, ValueRange{},
+                                       builder.getArrayAttr(symbols));
+      });
     }
   }
 

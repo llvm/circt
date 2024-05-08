@@ -26,18 +26,14 @@ namespace arc {
 #include "circt/Dialect/Arc/ArcPasses.h.inc"
 
 std::unique_ptr<mlir::Pass>
-createAddTapsPass(std::optional<bool> tapPorts = {},
-                  std::optional<bool> tapWires = {},
-                  std::optional<bool> tapNamedValues = {});
+createAddTapsPass(const AddTapsOptions &options = {});
 std::unique_ptr<mlir::Pass> createAllocateStatePass();
 std::unique_ptr<mlir::Pass> createArcCanonicalizerPass();
 std::unique_ptr<mlir::Pass> createDedupPass();
 std::unique_ptr<mlir::Pass> createGroupResetsAndEnablesPass();
 std::unique_ptr<mlir::Pass>
-createInferMemoriesPass(std::optional<bool> tapPorts = {});
-std::unique_ptr<mlir::Pass> createInferStatePropertiesPass();
+createInferMemoriesPass(const InferMemoriesOptions &options = {});
 std::unique_ptr<mlir::Pass> createInlineArcsPass();
-std::unique_ptr<mlir::Pass> createInlineModulesPass();
 std::unique_ptr<mlir::Pass> createIsolateClocksPass();
 std::unique_ptr<mlir::Pass> createLatencyRetimingPass();
 std::unique_ptr<mlir::Pass> createLegalizeStateUpdatePass();
@@ -49,8 +45,6 @@ std::unique_ptr<mlir::Pass> createLowerVectorizationsPass(
     LowerVectorizationsModeEnum mode = LowerVectorizationsModeEnum::Full);
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
-std::unique_ptr<mlir::Pass>
-createPrintStateInfoPass(llvm::StringRef stateFile = "");
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSplitFuncsPass(unsigned splitBound = 20000);
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();

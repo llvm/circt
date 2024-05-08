@@ -109,4 +109,53 @@ def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
   let hasFolder = true;
 }
 
+//===----------------------------------------------------------------------===//
+// Logical Equivalence Checking and Model Checking
+//===----------------------------------------------------------------------===//
+
+def LogicEquivalenceCheckingOp : VerifOp<"lec", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+]> {
+  let summary = "represents a logical equivalence checking problem";
+  let description = [{
+    This operation represents a logic equivalence checking problem explicitly in
+    the IR. There are several possiblities to perform logical equivalence
+    checking. For example, equivalence checking of combinational circuits can be
+    done by constructing a miter circuit and testing whether the result is
+    satisfiable (can be non-zero for some input), or two canonical BDDs could be
+    constructed and compared for identity, etc.
+    
+    The number and types of the inputs and outputs of the two circuits (and thus
+    also the block arguments and yielded values of both regions) have to match.
+    Otherwise, the two should be considered trivially non-equivalent.
+  }];
+
+  let results = (outs I1:$areEquivalent);
+  let regions = (region SizedRegion<1>:$firstCircuit,
+                        SizedRegion<1>:$secondCircuit);
+
+  let assemblyFormat = [{
+    attr-dict `first` $firstCircuit `second` $secondCircuit
+  }];
+
+  let hasRegionVerifier = true;
+}
+
+def YieldOp : VerifOp<"yield", [
+  Terminator,
+  ParentOneOf<["verif::LogicEquivalenceCheckingOp"]>
+]> {
+  let summary = "yields values from a region";
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let assemblyFormat = "($inputs^ `:` type($inputs))? attr-dict";
+
+  let builders = [
+    OpBuilder<(ins), [{
+      build($_builder, $_state, std::nullopt);
+    }]>,
+  ];
+}
+
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

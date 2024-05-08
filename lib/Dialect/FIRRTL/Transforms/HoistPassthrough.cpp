@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -19,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -465,8 +467,7 @@ struct HoistPassthroughPass
 } // end anonymous namespace
 
 void HoistPassthroughPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "===- Running HoistPassthrough Pass "
-                             "------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   SmallVector<FModuleOp, 0> modules(llvm::make_filter_range(

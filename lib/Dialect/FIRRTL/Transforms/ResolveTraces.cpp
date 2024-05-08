@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -398,21 +399,20 @@ void ResolveTracesPass::runOnOperation() {
   });
 
   // Write the JSON-encoded Trace Annotation to a file called
-  // "$circuitName.anno.json".  (This is implemented via an SVVerbatimOp that is
-  // inserted before the FIRRTL circuit.
-  auto b = OpBuilder::atBlockBegin(circuit.getBodyBlock());
-  auto verbatimOp = b.create<sv::VerbatimOp>(
-      b.getUnknownLoc(), jsonBuffer, ValueRange{}, b.getArrayAttr(symbols));
-  hw::OutputFileAttr fileAttr;
+  // "$circuitName.anno.json".
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(context),
+                                                    circuit.getBodyBlock());
+
+  StringAttr fileAttr;
   if (this->outputAnnotationFilename.empty())
-    fileAttr = hw::OutputFileAttr::getFromFilename(
-        context, circuit.getName() + ".anno.json",
-        /*excludeFromFilelist=*/true, false);
+    fileAttr = builder.getStringAttr(circuit.getName() + ".anno.json");
   else
-    fileAttr = hw::OutputFileAttr::getFromFilename(
-        context, outputAnnotationFilename,
-        /*excludeFromFilelist=*/true, false);
-  verbatimOp->setAttr("output_file", fileAttr);
+    fileAttr = builder.getStringAttr(outputAnnotationFilename);
+
+  builder.create<emit::FileOp>(fileAttr, [&] {
+    builder.create<sv::VerbatimOp>(jsonBuffer, ValueRange{},
+                                   builder.getArrayAttr(symbols));
+  });
 
   return markAllAnalysesPreserved();
 }

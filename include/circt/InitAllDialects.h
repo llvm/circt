@@ -20,6 +20,7 @@
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -35,9 +36,11 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
+#include "circt/Dialect/SMT/SMTDialect.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/SystemC/SystemCDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "mlir/IR/Dialect.h"
@@ -54,6 +57,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     comb::CombDialect,
     dc::DCDialect,
     debug::DebugDialect,
+    emit::EmitDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
     fsm::FSMDialect,
@@ -70,6 +74,8 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     om::OMDialect,
     pipeline::PipelineDialect,
     seq::SeqDialect,
+    sim::SimDialect,
+    smt::SMTDialect,
     ssp::SSPDialect,
     sv::SVDialect,
     systemc::SystemCDialect,

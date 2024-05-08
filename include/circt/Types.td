@@ -18,7 +18,7 @@
 // Attributes
 //===----------------------------------------------------------------------===//
 
-def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
+def APSIntAttr : Attr<CPred<"llvm::isa<::mlir::IntegerAttr>($_self)">,
                       "arbitrary integer attribute with sign"> {
   let storageType = [{ ::mlir::IntegerAttr }];
   let returnType = [{ ::llvm::APSInt }];
@@ -36,21 +36,37 @@ def ArrayRefAttr :
   let convertFromStorage = [{ $_self.getValue() }];
 }
 
-def DistinctAttr : Attr<CPred<"$_self.isa<::mlir::DistinctAttr>()">,
+// Similar to ArrayRefAttr, but requiring all elements are the same type.
+class TypedArrayRefAttrBase<Attr element, string summary>: ArrayAttrBase<
+    And<[
+      CPred<"::llvm::isa<::mlir::ArrayAttr>($_self)">,
+      Concat<"::llvm::all_of(::llvm::cast<::mlir::ArrayAttr>($_self), "
+                            "[&](::mlir::Attribute attr) { return attr && (",
+                               SubstLeaves<"$_self", "attr", element.predicate>,
+                            "); })">]>,
+    summary> {
+
+  Attr elementAttr = element;
+
+  let returnType = [{ ::llvm::ArrayRef<Attribute> }];
+  let convertFromStorage = [{ $_self.getValue() }];
+}
+
+def DistinctAttr : Attr<CPred<"llvm::isa<::mlir::DistinctAttr>($_self)">,
                       "distinct attribute"> {
   let storageType = [{ ::mlir::DistinctAttr }];
   let returnType = [{ ::mlir::DistinctAttr }];
   let convertFromStorage = "$_self";
 }
 
-def FloatAttr : Attr<CPred<"$_self.isa<::mlir::FloatAttr>()">,
+def FloatAttr : Attr<CPred<"llvm::isa<::mlir::FloatAttr>($_self)">,
                       "float attribute"> {
   let storageType = [{ ::mlir::FloatAttr }];
   let returnType = [{ ::mlir::FloatAttr }];
   let convertFromStorage = "$_self";
 }
 
-def DoubleAttr : Attr<And<[CPred<"$_self.isa<::mlir::FloatAttr>()">,
+def DoubleAttr : Attr<And<[CPred<"llvm::isa<::mlir::FloatAttr>($_self)">,
                            CPred<"cast<::mlir::FloatAttr>($_self).getType().isF64()">]>,
                       "double-precision float"> {
   let storageType = [{ ::mlir::FloatAttr }];

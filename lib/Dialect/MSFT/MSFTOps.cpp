@@ -205,9 +205,8 @@ ParseResult SystolicArrayOp::parse(OpAsmParser &parser,
 }
 
 void SystolicArrayOp::print(OpAsmPrinter &p) {
-  hw::ArrayType rowInputType = getRowInputs().getType().cast<hw::ArrayType>();
-  hw::ArrayType columnInputType =
-      getColInputs().getType().cast<hw::ArrayType>();
+  hw::ArrayType rowInputType = cast<hw::ArrayType>(getRowInputs().getType());
+  hw::ArrayType columnInputType = cast<hw::ArrayType>(getColInputs().getType());
   p << " [";
   p.printOperand(getRowInputs());
   p << " : " << rowInputType.getNumElements() << " x ";
@@ -222,12 +221,10 @@ void SystolicArrayOp::print(OpAsmPrinter &p) {
   p << ", ";
   p.printOperand(getPe().getArgument(1));
   p << ") -> (";
-  p.printType(getPeOutputs()
-                  .getType()
-                  .cast<hw::ArrayType>()
-                  .getElementType()
-                  .cast<hw::ArrayType>()
-                  .getElementType());
+  p.printType(
+      cast<hw::ArrayType>(
+          cast<hw::ArrayType>(getPeOutputs().getType()).getElementType())
+          .getElementType());
   p << ") ";
   p.printRegion(getPe(), false);
 }

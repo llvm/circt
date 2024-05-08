@@ -181,7 +181,7 @@ class Verilator:
       self.verilator = "@VERILATOR_PATH@"
     elif "VERILATOR_PATH" in os.environ:
       self.verilator = os.environ["VERILATOR_PATH"]
-
+    self.valgrind = args.valgrind
     self.top = args.top
 
   def compile(self, sources, args):
@@ -203,7 +203,10 @@ class Verilator:
 
   def run(self, cycles, args):
     exe = os.path.join("obj_dir", "V" + self.top)
-    cmd = [exe]
+    if self.valgrind:
+      cmd = ["valgrind", exe]
+    else:
+      cmd = [exe]
     if cycles >= 0:
       cmd.append("--cycles")
       cmd.append(str(cycles))
@@ -272,6 +275,11 @@ def __main__(args):
                          default=-1,
                          help="Number of cycles to run the simulator. " +
                          " -1 means don't stop.")
+  argparser.add_argument(
+      "--valgrind",
+      dest="valgrind",
+      action='store_true',
+      help="Run the simulator under valgrind (Verilator only).")
 
   argparser.add_argument("sources",
                          nargs="+",

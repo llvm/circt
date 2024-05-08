@@ -6,8 +6,9 @@
 // RUN:    --ibis-lower-portrefs --ibis-clean-selfdrivers \
 // RUN:    --ibis-convert-containers-to-hw
 
+ibis.design @foo {
 ibis.container @D_up {
-  %this = ibis.this @D_up
+  %this = ibis.this <@foo::@D_up>
   %d = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,
     #ibis.step<parent : !ibis.scoperef>,
@@ -31,41 +32,42 @@ ibis.container @D_up {
   %clk_out_val = ibis.port.read %clk_out_ref : !ibis.portref<out i1>
 }
 ibis.container @C_up {
-  %this = ibis.this @C_up
+  %this = ibis.this <@foo::@C_up>
   %d = ibis.container.instance @d, @D_up
 }
 ibis.container @B_up {
-  %this = ibis.this @B_up
+  %this = ibis.this <@foo::@B_up>
   %c = ibis.container.instance @c, @C_up
   
 }
 
 ibis.container @A_up {
-  %this = ibis.this @A_up
+  %this = ibis.this <@foo::@A_up>
   %b = ibis.container.instance @b, @B_up
 }
 
 ibis.container @Top {
-  %this = ibis.this @Top
+  %this = ibis.this <@foo::@Top>
   %a_down = ibis.container.instance @a_down, @A_down
   %a_up = ibis.container.instance @a_up, @A_up
 }
 ibis.container @A_down {
-  %this = ibis.this @A_down
+  %this = ibis.this <@foo::@A_down>
   %b = ibis.container.instance @b, @B_down
 }
 ibis.container @B_down {
-  %this = ibis.this @B_down
+  %this = ibis.this <@foo::@B_down>
   %c = ibis.container.instance @c, @C_down
 }
 ibis.container @C_down {
-  %this = ibis.this @C_down
+  %this = ibis.this <@foo::@C_down>
   %d = ibis.container.instance @d, @D_down
 }
 ibis.container @D_down {
-  %this = ibis.this @D_down
-  %clk = ibis.port.input @clk_in : i1
-  %clk_out = ibis.port.output @clk_out : i1
+  %this = ibis.this <@foo::@D_down>
+  %clk = ibis.port.input "clk_in" sym @clk_in : i1
+  %clk_out = ibis.port.output "clk_out" sym @clk_out : i1
   %clk.val = ibis.port.read %clk : !ibis.portref<in i1>
   ibis.port.write %clk_out, %clk.val : !ibis.portref<out i1>
+}
 }

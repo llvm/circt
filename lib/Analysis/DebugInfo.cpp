@@ -88,13 +88,33 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
   // return. Otherwise collect ports, instances, and variables as a
   // fallback.
 
-  // Check what kind of DI is present in the module.
+  // Check what kind of DI is present in the module. Also create additional
+  // `DIModule` hierarchy levels for each explicit scope op in the module.
+  SmallDenseMap<debug::ScopeOp, DIModule *> scopes;
   bool hasVariables = false;
   bool hasInstances = false;
   moduleOp.walk([&](Operation *op) {
     if (isa<debug::VariableOp>(op))
       hasVariables = true;
+    if (auto scopeOp = dyn_cast<debug::ScopeOp>(op)) {
+      auto *node = createModule();
+      node->isInline = true;
+      node->name = scopeOp.getModuleNameAttr();
+      node->op = scopeOp;
+      scopes.insert({scopeOp, node});
+    }
   });
+
+  // Helper function to resolve a `scope` operand on a variable to the
+  // `DIModule` into which the variable should be collected. If the `scope` is
+  // not set, or it isn't a valid `dbg.scope` op, returns the `module` argument
+  // of this function.
+  auto getScope = [&](Value scopeValue) -> DIModule & {
+    if (scopeValue)
+      if (auto scopeOp = scopeValue.getDefiningOp<debug::ScopeOp>())
+        return *scopes.lookup(scopeOp);
+    return module;
+  };
 
   // If the module has no DI for variables, add variables for each of the ports
   // as a fallback.
@@ -119,8 +139,16 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
       var->name = varOp.getNameAttr();
       var->loc = varOp.getLoc();
       var->value = varOp.getValue();
-      module.variables.push_back(var);
+      getScope(varOp.getScope()).variables.push_back(var);
       return;
+    }
+
+    if (auto scopeOp = dyn_cast<debug::ScopeOp>(op)) {
+      auto *instance = createInstance();
+      instance->name = scopeOp.getInstanceNameAttr();
+      instance->op = scopeOp;
+      instance->module = scopes.lookup(scopeOp);
+      getScope(scopeOp.getScope()).instances.push_back(instance);
     }
 
     // Fallback if the module has no DI for its instances.

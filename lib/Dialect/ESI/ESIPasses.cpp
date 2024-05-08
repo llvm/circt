@@ -24,7 +24,7 @@ using namespace circt::hw;
 using namespace circt::sv;
 
 StringAttr circt::esi::detail::getTypeID(Type t) {
-  if (auto ch = t.dyn_cast<ChannelType>())
+  if (auto ch = dyn_cast<ChannelType>(t))
     t = ch.getInner();
   std::string typeID;
   llvm::raw_string_ostream(typeID) << t;
@@ -32,7 +32,7 @@ StringAttr circt::esi::detail::getTypeID(Type t) {
 }
 
 uint64_t circt::esi::detail::getWidth(Type t) {
-  if (auto ch = t.dyn_cast<ChannelType>())
+  if (auto ch = dyn_cast<ChannelType>(t))
     t = ch.getInner();
   return hw::getBitWidth(t);
 }

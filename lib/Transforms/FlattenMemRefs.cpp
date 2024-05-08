@@ -91,7 +91,7 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
 
 static bool hasMultiDimMemRef(ValueRange values) {
   return llvm::any_of(values, [](Value v) {
-    auto memref = v.getType().dyn_cast<MemRefType>();
+    auto memref = dyn_cast<MemRefType>(v.getType());
     if (!memref)
       return false;
     return !isUniDimensional(memref);
@@ -200,11 +200,13 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
     llvm::SmallVector<Type> convResTypes;
     if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
       return failure();
-    auto newCallOp = rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, adaptor.getCallee(), convResTypes, adaptor.getOperands());
+    auto newCallOp = rewriter.create<func::CallOp>(
+        op.getLoc(), adaptor.getCallee(), convResTypes, adaptor.getOperands());
 
-    if (!rewriteFunctions)
+    if (!rewriteFunctions) {
+      rewriter.replaceOp(op, newCallOp);
       return success();
+    }
 
     // Override any definition corresponding to the updated signature.
     // It is up to users of this pass to define how these rewritten functions
@@ -221,6 +223,7 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
       newFuncOp =
           rewriter.create<func::FuncOp>(op.getLoc(), op.getCallee(), funcType);
     newFuncOp.setVisibility(SymbolTable::Visibility::Private);
+    rewriter.replaceOp(op, newCallOp);
 
     return success();
   }
@@ -257,7 +260,7 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
     });
 
     auto resultsConverted = llvm::all_of(op.getResultTypes(), [](Type type) {
-      if (auto memref = type.dyn_cast<MemRefType>())
+      if (auto memref = dyn_cast<MemRefType>(type))
         return isUniDimensional(memref);
       return true;
     });
@@ -273,7 +276,7 @@ static Value materializeSubViewFlattening(OpBuilder &builder, MemRefType type,
                                           ValueRange inputs, Location loc) {
   assert(type.hasStaticShape() &&
          "Can only subview flatten memref's with static shape (for now...).");
-  MemRefType sourceType = inputs[0].getType().cast<MemRefType>();
+  MemRefType sourceType = cast<MemRefType>(inputs[0].getType());
   int64_t memSize = sourceType.getNumElements();
   unsigned dims = sourceType.getShape().size();
 

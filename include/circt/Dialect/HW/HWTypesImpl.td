@@ -243,6 +243,7 @@ def ModuleTypeImpl : HWType<"Module"> {
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
   let mnemonic = "modty";
+  let genStorageClass = 0;
 
   let extraClassDeclaration = [{
     // Many of these are transitional and will be removed when modules and instances
@@ -259,8 +260,7 @@ def ModuleTypeImpl : HWType<"Module"> {
     Type getPortType(size_t);
     Type getInputType(size_t);
     Type getOutputType(size_t);
-    SmallVector<StringAttr> getInputNamesStr();
-    SmallVector<StringAttr> getOutputNamesStr();
+    SmallVector<Attribute> getPortNames();
     SmallVector<Attribute> getInputNames();
     SmallVector<Attribute> getOutputNames();
     StringAttr getPortNameAttr(size_t);

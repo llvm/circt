@@ -105,7 +105,8 @@ static bool applyToPort(AnnotationSet annos, Operation *op, size_t portCount,
     portAnnotations.append(before.begin(), before.end());
   portAnnotations[portNo] = annos.getArrayAttr();
   auto after = ArrayAttr::get(context, portAnnotations);
-  op->setAttr(getPortAnnotationAttrName(), after);
+  if (before != after)
+    op->setAttr(getPortAnnotationAttrName(), after);
   return before != after;
 }
 
@@ -411,7 +412,7 @@ bool AnnotationSet::removeAnnotations(Operation *op, StringRef className) {
 bool AnnotationSet::removePortAnnotations(
     Operation *module,
     llvm::function_ref<bool(unsigned, Annotation)> predicate) {
-  auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
+  auto ports = dyn_cast_or_null<ArrayAttr>(module->getAttr("portAnnotations"));
   if (!ports || ports.empty())
     return false;
 
@@ -694,9 +695,8 @@ LogicalResult circt::firrtl::extractDUT(const FModuleOp mod, FModuleOp &dut) {
   if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
     return success();
 
-  // TODO: This check is duplicated multiple places, e.g., in
-  // WireDFT.  This should be factored out as part of the annotation
-  // lowering pass.
+  // TODO: This check is duplicated multiple places. This should be factored
+  // out as part of the annotation lowering pass.
   if (dut) {
     auto diag = emitError(mod->getLoc())
                 << "is marked with a '" << dutAnnoClass << "', but '"

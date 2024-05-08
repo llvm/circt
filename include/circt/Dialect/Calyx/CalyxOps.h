@@ -26,6 +26,13 @@
 namespace circt {
 namespace calyx {
 
+// the goPort, donePort, resetPort and clkPort identify the attributes of the
+// go, done, reset and clk port of the circuit.
+static constexpr std::string_view goPort = "go";
+static constexpr std::string_view donePort = "done";
+static constexpr std::string_view resetPort = "reset";
+static constexpr std::string_view clkPort = "clk";
+
 /// A helper function to verify each control-like operation
 /// has a valid parent and, if applicable, body.
 LogicalResult verifyControlLikeOp(Operation *op);
@@ -53,7 +60,7 @@ public:
       return success();
 
     // If the operation has the static attribute, verify it is zero.
-    APInt staticValue = staticAttribute.cast<IntegerAttr>().getValue();
+    APInt staticValue = cast<IntegerAttr>(staticAttribute).getValue();
     assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
 
     return success();

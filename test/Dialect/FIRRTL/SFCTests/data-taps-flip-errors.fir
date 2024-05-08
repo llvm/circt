@@ -27,6 +27,7 @@ circuit Top : %[[
 
     ; expected-error @below {{Wiring Problem sink type "'!firrtl.bundle<a: uint<2>, b flip: uint<2>>'" must be passive (no flips) when using references}}
     wire sink : {a : UInt<2>, flip b: UInt<2>}
+    sink is invalid
     tap <= sink
 
 

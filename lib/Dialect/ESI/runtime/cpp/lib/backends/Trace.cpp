@@ -13,13 +13,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Trace.h"
-#include "esi/Design.h"
-#include "esi/StdServices.h"
+
+#include "esi/Accelerator.h"
+#include "esi/Services.h"
 #include "esi/Utils.h"
 
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <sstream>
 
 using namespace std;
 
@@ -63,6 +66,12 @@ struct esi::backends::trace::TraceAccelerator::Impl {
                          const ServiceImplDetails &details,
                          const HWClientDetails &clients);
 
+  /// Request the host side channel ports for a particular instance (identified
+  /// by the AppID path). For convenience, provide the bundle type and direction
+  /// of the bundle port.
+  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
+                                                          const BundleType *);
+
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
   void write(const AppIDPath &id, const string &portName, const void *data,
@@ -83,10 +92,11 @@ void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
   *traceWrite << "write " << id << '.' << portName << ": " << b64data << endl;
 }
 
-unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
+unique_ptr<AcceleratorConnection>
+TraceAccelerator::connect(Context &ctxt, string connectionString) {
   string modeStr;
   string manifestPath;
-  string traceFile = "trace.json";
+  string traceFile = "trace.log";
 
   // Parse the connection string.
   // <mode>:<manifest path>[:<traceFile>]
@@ -109,12 +119,14 @@ unique_ptr<Accelerator> TraceAccelerator::connect(string connectionString) {
   else
     throw runtime_error("unknown mode '" + modeStr + "'");
 
-  return make_unique<TraceAccelerator>(mode, filesystem::path(manifestPath),
-                                       filesystem::path(traceFile));
+  return make_unique<TraceAccelerator>(
+      ctxt, mode, filesystem::path(manifestPath), filesystem::path(traceFile));
 }
 
-TraceAccelerator::TraceAccelerator(Mode mode, filesystem::path manifestJson,
-                                   filesystem::path traceFile) {
+TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
+                                   filesystem::path manifestJson,
+                                   filesystem::path traceFile)
+    : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(mode, manifestJson, traceFile);
 }
 
@@ -155,12 +167,12 @@ private:
 namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
-  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const AppIDPath &id,
-                        const string &portName)
-      : impl(impl), id(id), portName(portName) {}
+  WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
+                        const AppIDPath &id, const string &portName)
+      : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
-  virtual void write(const void *data, size_t size) override {
-    impl.write(id, portName, data, size);
+  virtual void write(const MessageData &data) override {
+    impl.write(id, portName, data.getBytes(), data.getSize());
   }
 
 protected:
@@ -173,17 +185,31 @@ protected:
 namespace {
 class ReadTraceChannelPort : public ReadChannelPort {
 public:
-  ReadTraceChannelPort(TraceAccelerator::Impl &impl) {}
+  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
+      : ReadChannelPort(type) {}
 
-  virtual ssize_t read(void *data, size_t maxSize) override;
+  virtual bool read(MessageData &data) override;
+
+private:
+  size_t numReads = 0;
 };
 } // namespace
 
-ssize_t ReadTraceChannelPort::read(void *data, size_t maxSize) {
-  uint8_t *dataPtr = reinterpret_cast<uint8_t *>(data);
-  for (size_t i = 0; i < maxSize; ++i)
-    dataPtr[i] = rand() % 256;
-  return maxSize;
+bool ReadTraceChannelPort::read(MessageData &data) {
+  if ((++numReads & 0x1) == 1)
+    return false;
+
+  std::ptrdiff_t numBits = getType()->getBitWidth();
+  if (numBits < 0)
+    // TODO: support other types.
+    throw runtime_error("unsupported type for read: " + getType()->getID());
+
+  std::ptrdiff_t size = (numBits + 7) / 8;
+  std::vector<uint8_t> bytes(size);
+  for (std::ptrdiff_t i = 0; i < size; ++i)
+    bytes[i] = rand() % 256;
+  data = MessageData(bytes);
+  return true;
 }
 
 namespace {
@@ -192,28 +218,31 @@ public:
   TraceCustomService(TraceAccelerator::Impl &impl, AppIDPath idPath,
                      const ServiceImplDetails &details,
                      const HWClientDetails &clients)
-      : CustomService(idPath, details, clients), impl(impl) {}
-
-  virtual map<string, ChannelPort &>
-  requestChannelsFor(AppIDPath idPath, const BundleType &bundleType,
-                     BundlePort::Direction svcDir) override {
-    map<string, ChannelPort &> channels;
-    for (auto [name, dir, type] : bundleType.getChannels()) {
-      ChannelPort *port;
-      if (BundlePort::isWrite(dir, svcDir))
-        port = new WriteTraceChannelPort(impl, idPath, name);
-      else
-        port = new ReadTraceChannelPort(impl);
-      channels.emplace(name, *port);
-      impl.adoptChannelPort(port);
-    }
-    return channels;
-  }
-
-private:
-  TraceAccelerator::Impl &impl;
+      : CustomService(idPath, details, clients) {}
 };
 } // namespace
+
+map<string, ChannelPort &>
+TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
+                                           const BundleType *bundleType) {
+  map<string, ChannelPort &> channels;
+  for (auto [name, dir, type] : bundleType->getChannels()) {
+    ChannelPort *port;
+    if (BundlePort::isWrite(dir))
+      port = new WriteTraceChannelPort(*this, type, idPath, name);
+    else
+      port = new ReadTraceChannelPort(*this, type);
+    channels.emplace(name, *port);
+    adoptChannelPort(port);
+  }
+  return channels;
+}
+
+map<string, ChannelPort &>
+TraceAccelerator::requestChannelsFor(AppIDPath idPath,
+                                     const BundleType *bundleType) {
+  return impl->requestChannelsFor(idPath, bundleType);
+}
 
 Service *
 TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,

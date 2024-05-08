@@ -21,11 +21,12 @@
 #ifndef ESI_ACCELERATOR_H
 #define ESI_ACCELERATOR_H
 
+#include "esi/Context.h"
 #include "esi/Design.h"
 #include "esi/Manifest.h"
+#include "esi/Ports.h"
+#include "esi/Services.h"
 
-#include <any>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -34,81 +35,54 @@
 
 namespace esi {
 
-constexpr uint32_t MagicNumOffset = 16;
+//===----------------------------------------------------------------------===//
+// Constants used by low-level APIs.
+//===----------------------------------------------------------------------===//
+
+constexpr uint32_t MetadataOffset = 8;
 constexpr uint32_t MagicNumberLo = 0xE5100E51;
 constexpr uint32_t MagicNumberHi = 0x207D98E5;
-constexpr uint32_t VersionNumberOffset = MagicNumOffset + 8;
 constexpr uint32_t ExpectedVersionNumber = 0;
 
-/// Unidirectional channels are the basic communication primitive between the
-/// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
-/// be either read or write but not both. At this level, channels are untyped --
-/// just streams of bytes. They are not intended to be used directly by users
-/// but used by higher level APIs which add types.
-class ChannelPort {
+//===----------------------------------------------------------------------===//
+// Accelerator design hierarchy root.
+//===----------------------------------------------------------------------===//
+
+/// Top level accelerator class. Maintains a shared pointer to the manifest,
+/// which owns objects used in the design hierarchy owned by this class. Since
+/// this class owns the entire design hierarchy, when it gets destroyed the
+/// entire design hierarchy gets destroyed so all of the instances, ports, etc.
+/// are no longer valid pointers.
+class Accelerator : public HWModule {
 public:
-  virtual ~ChannelPort() = default;
-  virtual void connect() {}
-  virtual void disconnect() {}
+  Accelerator() = delete;
+  Accelerator(const Accelerator &) = delete;
+  ~Accelerator() = default;
+  Accelerator(std::optional<ModuleInfo> info,
+              std::vector<std::unique_ptr<Instance>> children,
+              std::vector<services::Service *> services,
+              std::vector<std::unique_ptr<BundlePort>> &ports)
+      : HWModule(info, std::move(children), services, ports) {}
 };
 
-/// A ChannelPort which sends data to the accelerator.
-class WriteChannelPort : public ChannelPort {
+//===----------------------------------------------------------------------===//
+// Connection to the accelerator and its services.
+//===----------------------------------------------------------------------===//
+
+/// Abstract class representing a connection to an accelerator. Actual
+/// connections (e.g. to a co-simulation or actual device) are implemented by
+/// subclasses.
+class AcceleratorConnection {
 public:
-  /// A very basic write API. Will likely change for performance reasons.
-  virtual void write(const void *data, size_t size) = 0;
-};
+  AcceleratorConnection(Context &ctxt) : ctxt(ctxt) {}
 
-/// A ChannelPort which reads data from the accelerator.
-class ReadChannelPort : public ChannelPort {
-public:
-  /// Specify a buffer to read into and a maximum size to read. Returns the
-  /// number of bytes read, or -1 on error. Basic API, will likely change for
-  /// performance reasons.
-  virtual ssize_t read(void *data, size_t maxSize) = 0;
-};
-
-namespace services {
-/// Parent class of all APIs modeled as 'services'. May or may not map to a
-/// hardware side 'service'.
-class Service {
-public:
-  using Type = const std::type_info &;
-  virtual ~Service() = default;
-
-  virtual std::string getServiceSymbol() const = 0;
-};
-
-/// A service for which there are no standard services registered. Requires
-/// ports be added to the design hierarchy instead of high level interfaces like
-/// the ones in StdServices.h.
-class CustomService : public Service {
-public:
-  CustomService(AppIDPath idPath, const ServiceImplDetails &details,
-                const HWClientDetails &clients);
-  virtual ~CustomService() = default;
-
-  virtual std::string getServiceSymbol() const override {
-    return serviceSymbol;
-  }
+  virtual ~AcceleratorConnection() = default;
+  Context &getCtxt() const { return ctxt; }
 
   /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
+  /// by the AppID path). For convenience, provide the bundle type.
   virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType &,
-                     BundlePort::Direction portDir) = 0;
-
-protected:
-  std::string serviceSymbol;
-  AppIDPath id;
-};
-} // namespace services
-
-/// An ESI accelerator system.
-class Accelerator {
-public:
-  virtual ~Accelerator() = default;
+  requestChannelsFor(AppIDPath, const BundleType *) = 0;
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -142,19 +116,23 @@ private:
   /// Accelerator objects get deconstructed.
   using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
+
+  /// ESI accelerator context.
+  Context &ctxt;
 };
 
 namespace registry {
 
 // Connect to an ESI accelerator given a backend name and connection specifier.
 // Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<Accelerator> connect(std::string backend,
-                                     std::string connection);
+std::unique_ptr<AcceleratorConnection>
+connect(Context &ctxt, std::string backend, std::string connection);
 
 namespace internal {
 
 /// Backends can register themselves to be connected via a connection string.
-using BackendCreate = std::function<std::unique_ptr<Accelerator>(std::string)>;
+using BackendCreate = std::function<std::unique_ptr<AcceleratorConnection>(
+    Context &, std::string)>;
 void registerBackend(std::string name, BackendCreate create);
 
 // Helper struct to

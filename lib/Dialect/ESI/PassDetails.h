@@ -29,6 +29,7 @@
 
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
 namespace esi {
@@ -42,6 +43,20 @@ namespace esi {
 namespace circt {
 namespace esi {
 namespace detail {
+
+/// Generic pattern for removing an op during pattern conversion.
+template <typename OpTy>
+struct RemoveOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 StringAttr getTypeID(Type t);
 uint64_t getWidth(Type t);

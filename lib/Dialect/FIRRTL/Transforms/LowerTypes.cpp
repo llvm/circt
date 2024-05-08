@@ -28,6 +28,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -40,6 +41,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -99,31 +101,6 @@ static Type mapLoweredType(Type type, FIRRTLBaseType fieldType) {
     return type;
   return mapLoweredType(ftype, fieldType);
 }
-
-// NOLINTBEGIN(misc-no-recursion)
-/// Return true if the type has more than zero bitwidth.
-static bool hasZeroBitWidth(FIRRTLType type) {
-  return FIRRTLTypeSwitch<FIRRTLType, bool>(type)
-      .Case<BundleType>([&](auto bundle) {
-        for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-          auto elt = bundle.getElement(i);
-          if (hasZeroBitWidth(elt.type))
-            return true;
-        }
-        return bundle.getNumElements() == 0;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        if (vector.getNumElements() == 0)
-          return true;
-        return hasZeroBitWidth(vector.getElementType());
-      })
-      .Case<FIRRTLBaseType>([](auto groundType) {
-        return firrtl::getBitWidth(groundType).value_or(0) == 0;
-      })
-      .Case<RefType>([](auto ref) { return hasZeroBitWidth(ref.getType()); })
-      .Default([](auto) { return false; });
-}
-// NOLINTEND(misc-no-recursion)
 
 /// Return true if the type is a 1d vector type or ground type.
 static bool isOneDimVectorType(FIRRTLType type) {
@@ -232,7 +209,7 @@ static bool isNotSubAccess(Operation *op) {
     return true;
   ConstantOp arg =
       llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().get().getNumElements() != 0;
+  return arg && sao.getInput().getType().base().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -395,7 +372,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(MuxPrimOp op);
   bool visitExpr(Mux2CellIntrinsicOp op);
   bool visitExpr(Mux4CellIntrinsicOp op);
-  bool visitExpr(mlir::UnrealizedConversionCastOp op);
   bool visitExpr(BitCastOp op);
   bool visitExpr(RefSendOp op);
   bool visitExpr(RefResolveOp op);
@@ -405,8 +381,15 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
   bool visitStmt(LayerBlockOp op);
+  bool visitUnrealizedConversionCast(mlir::UnrealizedConversionCastOp op);
 
   bool isFailed() const { return encounteredError; }
+
+  bool visitInvalidOp(Operation *op) {
+    if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
+      return visitUnrealizedConversionCast(castOp);
+    return false;
+  }
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -662,7 +645,7 @@ bool TypeLoweringVisitor::lowerProducer(
   if (auto nameAttr = op->getAttrOfType<StringAttr>(cache.nameAttr))
     loweredName = nameAttr.getValue();
   auto baseNameLen = loweredName.size();
-  auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+  auto oldAnno = dyn_cast_or_null<ArrayAttr>(op->getAttr("annotations"));
 
   SmallVector<hw::InnerSymAttr> fieldSyms(fieldTypes.size());
   if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(op)) {
@@ -1327,7 +1310,8 @@ bool TypeLoweringVisitor::visitExpr(Mux4CellIntrinsicOp op) {
 }
 
 // Expand UnrealizedConversionCastOp of aggregates
-bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
+bool TypeLoweringVisitor::visitUnrealizedConversionCast(
+    mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getOperand(0), field.index);
@@ -1430,7 +1414,10 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);
-    return builder->create<RefCastOp>(RefType::get(field.type), input);
+    return builder->create<RefCastOp>(RefType::get(field.type,
+                                                   op.getType().getForceable(),
+                                                   op.getType().getLayer()),
+                                      input);
   };
   return lowerProducer(op, clone);
 }
@@ -1467,7 +1454,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
-            context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
+            context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
             field);
         newPortAnno.push_back(annos);
       }
@@ -1486,7 +1473,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
       op.getNameKindAttr(), direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.getAnnotations(),
-      builder->getArrayAttr(newPortAnno), op.getLowerToBindAttr(),
+      builder->getArrayAttr(newPortAnno), op.getLayersAttr(),
+      op.getLowerToBindAttr(),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   // Copy over any attributes which have not already been copied over by
@@ -1638,9 +1626,7 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  LLVM_DEBUG(
-      llvm::dbgs() << "===- Running LowerTypes Pass "
-                      "------------------------------------------------===\n");
+  LLVM_DEBUG(debugPassHeader(this) << "\n");
   std::vector<FModuleLike> ops;
   // Symbol Table
   auto &symTbl = getAnalysis<SymbolTable>();

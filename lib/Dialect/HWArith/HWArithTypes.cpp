@@ -17,7 +17,7 @@ using namespace circt;
 using namespace hwarith;
 
 bool circt::hwarith::isHWArithIntegerType(Type type) {
-  return type.isa<IntegerType>() && !type.isSignlessInteger() &&
+  return isa<IntegerType>(type) && !type.isSignlessInteger() &&
          type.getIntOrFloatBitWidth() > 0;
 }
 

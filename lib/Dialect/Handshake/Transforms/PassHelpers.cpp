@@ -143,7 +143,7 @@ static Type tupleToStruct(TupleType tuple) {
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
   for (auto [i, innerType] : llvm::enumerate(tuple)) {
     Type convertedInnerType = innerType;
-    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+    if (auto tupleInnerType = dyn_cast<TupleType>(innerType))
       convertedInnerType = tupleToStruct(tupleInnerType);
     hwfields.push_back({StringAttr::get(ctx, "field" + std::to_string(i)),
                         convertedInnerType});

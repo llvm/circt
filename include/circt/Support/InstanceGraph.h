@@ -210,7 +210,10 @@ public:
   InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
 
   /// Check if child is instantiated by a parent.
-  bool isAncestor(ModuleOpInterface child, ModuleOpInterface parent);
+  bool isAncestor(
+      ModuleOpInterface child, ModuleOpInterface parent,
+      llvm::function_ref<bool(InstanceRecord *)> skipInstance =
+          [](InstanceRecord *_) { return false; });
 
   /// Get the node corresponding to the top-level module of a circuit.
   virtual InstanceGraphNode *getTopLevelNode() { return nullptr; }
@@ -294,11 +297,15 @@ public:
 
   InstancePath dropFront() const { return InstancePath(path.drop_front()); }
 
+  InstancePath dropBack() const { return InstancePath(path.drop_back()); }
+
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
+
+  bool operator==(const InstancePath &that) const { return path == that.path; }
 
   /// Print the path to any stream-like object.
   void print(llvm::raw_ostream &into) const;
@@ -326,6 +333,8 @@ struct InstancePathCache {
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
+  ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op,
+                                          InstanceGraphNode *top);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(InstanceOpInterface oldOp, InstanceOpInterface newOp);

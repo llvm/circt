@@ -1,16 +1,8 @@
-//===-- circt-c/Dialect/OM.h - C API for OM dialect -----------------------===//
+//===- OM.h - C interface for the OM dialect ----------------------*- C -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This header declares the C interface for registering and accessing the
-// OM dialect. A dialect should be registered with a context to make it
-// available to users of the context. These users must load the dialect
-// before using any of its attributes, operations or types. Parser and pass
-// manager can load registered dialects automatically.
 //
 //===----------------------------------------------------------------------===//
 
@@ -215,6 +207,15 @@ omEvaluatorValueIsAPath(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED MlirAttribute
 omEvaluatorPathGetAsString(OMEvaluatorValue evaluatorValue);
 
+/// Query if the EvaluatorValue is a Reference.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue);
+
+/// Dereference a Reference EvaluatorValue. Emits an error and returns null if
+/// the Reference cannot be dereferenced.
+MLIR_CAPI_EXPORTED OMEvaluatorValue
+omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//
@@ -234,6 +235,9 @@ MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGetInt(MlirAttribute attr);
 
 /// Get an om::IntegerAttr from mlir::IntegerAttr.
 MLIR_CAPI_EXPORTED MlirAttribute omIntegerAttrGet(MlirAttribute attr);
+
+/// Get a string representation of an om::IntegerAttr.
+MLIR_CAPI_EXPORTED MlirStringRef omIntegerAttrToString(MlirAttribute attr);
 
 //===----------------------------------------------------------------------===//
 // ListAttr API

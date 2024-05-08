@@ -40,8 +40,6 @@ config.substitutions.append(
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
-config.substitutions.append(
-    ('%ESI_COLLATERAL_PATH%', config.esi_collateral_path))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -80,9 +78,8 @@ tool_dirs = [
     config.llvm_tools_dir
 ]
 tools = [
-    'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py', 'equiv-rtl.sh', 'handshake-runner', 'hlstool',
-    'ibistool'
+    'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
+    'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'ibistool', 'circt-lec'
 ]
 
 # Enable python if its path was configured
@@ -172,17 +169,16 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 # Enable ESI runtime tests.
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
+  tools.append('esiquery')
 
   llvm_config.with_environment('PYTHONPATH',
                                [f"{config.esi_runtime_path}/python/"],
                                append_path=True)
 
   # Enable ESI cosim tests if they have been built.
-  if config.esi_cosim_path != "":
+  if config.esi_cosim != "OFF":
     config.available_features.add('esi-cosim')
-    config.substitutions.append(
-        ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
-    config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
+    tools.append('esi-cosim.py')
 
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:
@@ -200,11 +196,33 @@ if config.clang_tidy_path != "":
 if config.have_systemc != "":
   config.available_features.add('systemc')
 
-# Enable circt-lec tests if it is built.
-if config.lec_enabled != "":
-  config.available_features.add('circt-lec')
-  tools.append('circt-lec')
+# Enable z3 if it has been detected.
+if config.z3_path != "":
+  tool_dirs.append(config.z3_path)
+  tools.append('z3')
+  config.available_features.add('z3')
 
+# Enable libz3 if it has been detected.
+if config.z3_library != "":
+  tools.append(ToolSubst(f"%libz3", config.z3_library))
+  config.available_features.add('libz3')
+
+# Add mlir-cpu-runner if the execution engine is built.
+if config.mlir_enable_execution_engine:
+  config.available_features.add('mlir-cpu-runner')
+  config.available_features.add('circt-lec-jit')
+  tools.append('mlir-cpu-runner')
+
+# Add circt-verilog if the Slang frontend is enabled.
+if config.slang_frontend_enabled:
+  config.available_features.add('slang')
+  tools.append('circt-verilog')
+
+# Add arcilator JIT if MLIR's execution engine is enabled.
+if config.arcilator_jit_enabled:
+  config.available_features.add('arcilator-jit')
+
+config.substitutions.append(('%driver', f'{config.driver}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 # cocotb availability

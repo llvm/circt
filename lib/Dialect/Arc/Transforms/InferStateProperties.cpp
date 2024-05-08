@@ -239,7 +239,7 @@ static ResetInfo getIfMuxBasedReset(OpOperand &output) {
     if (!mux.getResult().hasOneUse())
       return {};
 
-    if (auto condArg = mux.getCond().dyn_cast<BlockArgument>())
+    if (auto condArg = dyn_cast<BlockArgument>(mux.getCond()))
       return ResetInfo(mux.getFalseValue(), condArg, true);
   }
 
@@ -266,7 +266,7 @@ static ResetInfo getIfAndBasedReset(OpOperand &output) {
       if (auto xorOp = operand.get().getDefiningOp<comb::XorOp>();
           xorOp && xorOp->getNumOperands() == 2 &&
           xorOp.getResult().hasOneUse()) {
-        if (auto condArg = xorOp.getInputs()[0].dyn_cast<BlockArgument>()) {
+        if (auto condArg = dyn_cast<BlockArgument>(xorOp.getInputs()[0])) {
           if (xorOp.getInputs().size() != 2 ||
               !isConstTrue(xorOp.getInputs()[1]))
             continue;
@@ -299,12 +299,12 @@ static ResetInfo getIfAndBasedReset(OpOperand &output) {
 static EnableInfo checkOperandsForEnable(arc::StateOp stateOp, Value selfArg,
                                          Value cond, unsigned outputNr,
                                          bool isDisable) {
-  if (auto trueArg = selfArg.dyn_cast<BlockArgument>()) {
+  if (auto trueArg = dyn_cast<BlockArgument>(selfArg)) {
     if (stateOp.getInputs()[trueArg.getArgNumber()] !=
         stateOp.getResult(outputNr))
       return {};
 
-    if (auto condArg = cond.dyn_cast<BlockArgument>())
+    if (auto condArg = dyn_cast<BlockArgument>(cond))
       return EnableInfo(selfArg, condArg, trueArg, isDisable);
   }
 
@@ -380,25 +380,12 @@ EnableInfo computeEnableInfoFromPattern(OpOperand &output, StateOp stateOp) {
 
 namespace {
 struct InferStatePropertiesPass
-    : public arc::impl::InferStatePropertiesBase<InferStatePropertiesPass> {
-  InferStatePropertiesPass() = default;
-  InferStatePropertiesPass(const InferStatePropertiesPass &pass)
-      : InferStatePropertiesPass() {}
+    : public impl::InferStatePropertiesBase<InferStatePropertiesPass> {
+  using InferStatePropertiesBase::InferStatePropertiesBase;
 
   void runOnOperation() override;
   void runOnStateOp(arc::StateOp stateOp, arc::DefineOp arc,
                     DenseMap<arc::DefineOp, unsigned> &resetConditionMap);
-
-  Statistic addedEnables{this, "added-enables",
-                         "Enables added explicitly to a StateOp"};
-  Statistic addedResets{this, "added-resets",
-                        "Resets added explicitly to a StateOp"};
-  Statistic missedEnables{
-      this, "missed-enables",
-      "Detected enables that could not be added explicitly to a StateOp"};
-  Statistic missedResets{
-      this, "missed-resets",
-      "Detected resets that could not be added explicitly to a StateOp"};
 };
 } // namespace
 
@@ -418,60 +405,56 @@ void InferStatePropertiesPass::runOnStateOp(
     arc::StateOp stateOp, arc::DefineOp arc,
     DenseMap<arc::DefineOp, unsigned> &resetConditionMap) {
 
-  if (stateOp.getLatency() < 1)
-    return;
-
   auto outputOp = cast<arc::OutputOp>(arc.getBodyBlock().getTerminator());
-  const unsigned visitedNoChange = -1;
+  static constexpr unsigned visitedNoChange = -1;
 
-  // Check for reset patterns, we only have to do this once per arc::DefineOp
-  // and store the result for later arc::StateOps referring to the same arc.
-  if (!resetConditionMap.count(arc)) {
-    SmallVector<ResetInfo> resetInfos;
-    int numResets = 0;
-    ;
-    for (auto &output : outputOp->getOpOperands()) {
-      auto resetInfo = computeResetInfoFromPattern(output);
-      resetInfos.push_back(resetInfo);
-      if (resetInfo)
-        ++numResets;
+  if (detectResets) {
+    // Check for reset patterns, we only have to do this once per arc::DefineOp
+    // and store the result for later arc::StateOps referring to the same arc.
+    if (!resetConditionMap.count(arc)) {
+      SmallVector<ResetInfo> resetInfos;
+      int numResets = 0;
+      for (auto &output : outputOp->getOpOperands()) {
+        auto resetInfo = computeResetInfoFromPattern(output);
+        resetInfos.push_back(resetInfo);
+        if (resetInfo)
+          ++numResets;
+      }
+
+      // Rewrite the arc::DefineOp if valid
+      auto result = applyResetTransformation(arc, resetInfos);
+      if ((succeeded(result) && resetInfos[0]))
+        resetConditionMap[arc] = resetInfos[0].condition.getArgNumber();
+      else
+        resetConditionMap[arc] = visitedNoChange;
+
+      if (failed(result))
+        missedResets += numResets;
     }
 
-    // Rewrite the arc::DefineOp if valid
-    auto result = applyResetTransformation(arc, resetInfos);
-    if ((succeeded(result) && resetInfos[0]))
-      resetConditionMap[arc] = resetInfos[0].condition.getArgNumber();
+    // Apply resets to the state operation.
+    if (resetConditionMap.count(arc) &&
+        resetConditionMap[arc] != visitedNoChange) {
+      setResetOperandOfStateOp(stateOp, resetConditionMap[arc]);
+      ++addedResets;
+    }
+  }
+
+  if (detectEnables) {
+    // Check for enable patterns.
+    SmallVector<EnableInfo> enableInfos;
+    int numEnables = 0;
+    for (OpOperand &output : outputOp->getOpOperands()) {
+      auto enableInfo = computeEnableInfoFromPattern(output, stateOp);
+      enableInfos.push_back(enableInfo);
+      if (enableInfo)
+        ++numEnables;
+    }
+
+    // Apply enable patterns.
+    if (!failed(applyEnableTransformation(arc, stateOp, enableInfos)))
+      ++addedEnables;
     else
-      resetConditionMap[arc] = visitedNoChange;
-
-    if (failed(result))
-      missedResets += numResets;
+      missedEnables += numEnables;
   }
-
-  // Apply resets to the state operation.
-  if (resetConditionMap.count(arc) &&
-      resetConditionMap[arc] != visitedNoChange) {
-    setResetOperandOfStateOp(stateOp, resetConditionMap[arc]);
-    ++addedResets;
-  }
-
-  // Check for enable patterns.
-  SmallVector<EnableInfo> enableInfos;
-  int numEnables = 0;
-  for (OpOperand &output : outputOp->getOpOperands()) {
-    auto enableInfo = computeEnableInfoFromPattern(output, stateOp);
-    enableInfos.push_back(enableInfo);
-    if (enableInfo)
-      ++numEnables;
-  }
-
-  // Apply enable patterns.
-  if (!failed(applyEnableTransformation(arc, stateOp, enableInfos)))
-    ++addedEnables;
-  else
-    missedEnables += numEnables;
-}
-
-std::unique_ptr<Pass> arc::createInferStatePropertiesPass() {
-  return std::make_unique<InferStatePropertiesPass>();
 }

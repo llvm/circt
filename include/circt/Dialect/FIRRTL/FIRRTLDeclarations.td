@@ -59,9 +59,10 @@ def InstanceOp : HardwareDeclOp<"instance", [
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
                        UnitAttr:$lowerToBind,
                        OptionalAttr<InnerSymAttr>:$inner_sym);
 
@@ -78,6 +79,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"StringAttr", "StringAttr()">:$innerSym)>,
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
@@ -88,6 +90,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    "ArrayRef<Attribute>":$annotations,
                    "ArrayRef<Attribute>":$portAnnotations,
+                   "::mlir::ArrayRef<Attribute>":$layers,
                    "bool":$lowerToBind,
                    "hw::InnerSymAttr":$innerSym)>,
 
@@ -106,9 +109,9 @@ def InstanceOp : HardwareDeclOp<"instance", [
                    "mlir::StringRef":$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
                    CArg<"bool","false">:$lowerToBind,
                    CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
-
   ];
 
   let extraClassDeclaration = [{
@@ -159,7 +162,83 @@ def InstanceOp : HardwareDeclOp<"instance", [
     //===------------------------------------------------------------------===//
     SmallVector<::circt::hw::PortInfo> getPortList();
   }];
+
+  let hasVerifier = true;
 }
+
+def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "Creates an instance of a module based on a option";
+
+  let description = [{
+    The instance choice operation creates an instance choosing the target based
+    on the value of an option if one is specified, instantiating a default
+    target otherwise.
+
+    The port lists of all instance targets must match exactly.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.instance_choice foo @Foo alternatives @Opt { @FPGA -> @FPGAFoo }
+      (in io: !firrtl.uint)
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefArrayAttr:$moduleNames,
+                       SymbolRefArrayAttr:$caseNames,
+                       StrAttr:$name, NameKindAttr:$nameKind,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+
+    /// Return the default target attribute.
+    FlatSymbolRefAttr getDefaultTargetAttr() {
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
+    }
+
+    /// Return the name of the option group.
+    StringAttr getOptionNameAttr() {
+      return llvm::cast<SymbolRefAttr>(getCaseNames()[0]).getRootReference();
+    }
+
+    /// Return the target for an option or the default if none specified.
+    FlatSymbolRefAttr getTargetOrDefaultAttr(OptionCaseOp option);
+
+    /// Return the list of case-module mappings.
+    SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
+    getTargetChoices();
+  }];
+
+  let builders = [
+    OpBuilder<(ins "FModuleLike":$defaultModule,
+                   "ArrayRef<std::pair<OptionCaseOp, FModuleLike>>":$cases,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+  ];
+}
+
 
 def MemOp : HardwareDeclOp<"mem"> {
   let summary = "Define a new mem";
@@ -499,7 +578,10 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
   let hasVerifier = 1;
 }
 
-def WireOp : HardwareDeclOp<"wire", [Forceable]> {
+def WireOp : HardwareDeclOp<"wire", [
+    Forceable,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -588,34 +670,6 @@ def WireOp : HardwareDeclOp<"wire", [Forceable]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Clock Gate Intrinsic
-//===----------------------------------------------------------------------===//
-
-def ClockGateIntrinsicOp : FIRRTLOp<"int.clock_gate", [Pure]> {
-  let summary = "Safely gates a clock with an enable signal";
-  let description = [{
-    The `int.clock_gate` enables and disables a clock safely, without glitches,
-    based on a boolean enable value. If the enable input is 1, the output clock
-    produced by the clock gate is identical to the input clock. If the enable
-    input is 0, the output clock is a constant zero.
-
-    The enable input is sampled at the rising edge of the input clock; any
-    changes on the enable before or after that edge are ignored and do not
-    affect the output clock.
-  }];
-
-  let arguments = (ins NonConstClockType:$input,
-                       NonConstUInt1Type:$enable,
-                       Optional<NonConstUInt1Type>:$test_enable);
-  let results = (outs NonConstClockType:$output);
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
-  let assemblyFormat = [{
-    $input `,` $enable (`,` $test_enable^)? attr-dict
-  }];
-}
-
-//===----------------------------------------------------------------------===//
 // Property Ops
 //===----------------------------------------------------------------------===//
 
@@ -623,11 +677,11 @@ def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<FInstanceLike, [
-      "getReferencedOperation"
-    ]>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedOperation",
       "getReferencedModuleName",
       "getReferencedModuleNameAttr",
+    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, [

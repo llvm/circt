@@ -19,6 +19,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 include "circt/Dialect/Handshake/HandshakeInterfaces.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/Ibis/IbisInterfaces.td"
 include "circt/Dialect/Ibis/IbisTypes.td"
@@ -34,13 +35,11 @@ def HasCustomSSAName :
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>;
 
 def ClassOp : IbisOp<"class", [
-    Symbol,
     IsolatedFromAbove, RegionKindInterface,
-    InnerSymbolTable,
     SingleBlock,
     NoTerminator, ScopeOpInterface,
     InstanceGraphModuleOpInterface,
-    HasParent<"mlir::ModuleOp">]> {
+    HasParent<"DesignOp"> ] > {
 
   let summary = "Ibis class";
   let description = [{
@@ -51,36 +50,40 @@ def ClassOp : IbisOp<"class", [
     `ibis.port`s, `ibis.container`s, and contain logic for member variables.
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins InnerSymAttr:$inner_sym);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $body
+    $inner_sym attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-  
+
     Block* getBodyBlock() { return &getBody().front(); }
 
     StringAttr getModuleNameAttr() {
-      return getSymNameAttr();
+      return getInnerSymAttr().getSymName();
     }
 
     llvm::StringRef getModuleName() {
-      return getSymName();
+      return getModuleNameAttr();
+    }
+
+    // For hw:InnerSymbol - the symbol targets the operation and not any result.
+    static std::optional<size_t> getTargetResultIndex() {
+      return std::nullopt;
     }
   }];
 }
 
 class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
     DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
     InstanceGraphInstanceOpInterface,
     HasCustomSSAName
 ]> {
-
-  let arguments = (ins InnerSymAttr:$inner_sym, FlatSymbolRefAttr:$targetName);
+  let arguments = (ins InnerSymAttr:$inner_sym, InnerRefAttr:$targetName);
   let results = (outs ScopeRefType:$scopeRef);
   let assemblyFormat = [{
     $inner_sym `,` $targetName attr-dict
@@ -88,14 +91,13 @@ class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
   }];
 
   let builders = [
-    OpBuilder<(ins "hw::InnerSymAttr":$instanceName, "StringAttr":$targetName), [{
+    OpBuilder<(ins "hw::InnerSymAttr":$instanceName, "hw::InnerRefAttr":$targetName), [{
       build($_builder, $_state, $_builder.getType<ScopeRefType>(targetName),
         instanceName, targetName);
     }]>
   ];
 
   code extraInstanceClassDeclaration = ?;
-
   let extraClassDeclaration = extraInstanceClassDeclaration # [{
     llvm::StringRef getInstanceName() {
       return getInnerSym().getSymName().strref();
@@ -105,13 +107,12 @@ class InstanceOpBase<string mnemonic> : IbisOp<mnemonic, [
       return getInnerSymAttr().getSymName();
     }
 
-    llvm::StringRef getModuleName() {
-      return getTargetName();
+    StringAttr getReferencedModuleNameAttr() {
+      return getTargetNameAttr().getName();
     }
 
-    mlir::FlatSymbolRefAttr getModuleNameAttr() {
-      return getTargetNameAttr();
-    }
+    // Operation* getReferencedModuleSlow();
+    Operation* getReferencedModule(const hw::InnerRefNamespace &);
   }];
 
   code extraInstanceClassDefinition = ?;
@@ -131,19 +132,17 @@ def InstanceOp : InstanceOpBase<"instance"> {
 
   let extraInstanceClassDeclaration = [{
     // Return the class this instance is instantiating.
-    ClassOp getClass(const SymbolTable *symbolTable = nullptr);
-
-    Operation* getReferencedModuleSlow();
-    Operation* getReferencedModule(const SymbolTable&);
+    ClassOp getClass(const hw::InnerRefNamespace &);
   }];
 
   let extraInstanceClassDefinition = [{
-    Operation* InstanceOp::getReferencedModuleSlow() {
-      return getClass();
+    ClassOp InstanceOp::getClass(const hw::InnerRefNamespace &ns) {
+      return ns.lookupOp<ClassOp>(getTargetNameAttr());
+      // return dyn_cast_or_null<ClassOp>(getReferencedModule(&ns));
     }
-
-    Operation* InstanceOp::getReferencedModule(const SymbolTable& symbolTable) {
-      return getClass(&symbolTable);
+    Operation* InstanceOp::getReferencedModule(
+        const hw::InnerRefNamespace &ns) {
+      return getClass(ns);
     }
   }];
 }
@@ -327,7 +326,7 @@ def DCBlockOp : BlockLikeOp<"sblock.dc", [
     llvm::SmallVector<Type> getInternalResultTypes() {
       llvm::SmallVector<Type> innerRes;
       for(Type outerRes : getResultTypes())
-        innerRes.push_back(outerRes.cast<dc::ValueType>().getInnerType());
+        innerRes.push_back(llvm::cast<dc::ValueType>(outerRes).getInnerType());
       return innerRes;
     }
   }];
@@ -395,7 +394,7 @@ def VarOp : IbisOp<"var", [
 ]> {
   let summary = "Ibis variable definition";
   let description = [{
-    Defines an Ibis class member variable. The variable is typed with a 
+    Defines an Ibis class member variable. The variable is typed with a
     `memref.memref` type, and may define either a singleton or uni-dimensional
     array of values.
     `ibis.var` defines a symbol within the encompassing class scope which can
@@ -426,7 +425,7 @@ def GetVarOp : IbisOp<"get_var", [
 
   let extraClassDeclaration = [{
     // Return the `VarOp` that this operation is referencing.
-    FailureOr<VarOp> getTarget(SymbolTable* symbolTable = nullptr);
+    VarOp getVar(const hw::InnerRefNamespace &symbolTable);
   }];
 
   let extraClassDefinition = [{
@@ -436,13 +435,16 @@ def GetVarOp : IbisOp<"get_var", [
   }];
 }
 
-def CallOp : IbisOp<"call", [CallOpInterface]> {
+def CallOp : IbisOp<"call", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    CallOpInterface
+  ]> {
   let summary = "Ibis method call";
   let description = [{
     Dispatch a call to an Ibis method.
   }];
 
-  let arguments = (ins SymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let arguments = (ins InnerRefAttr:$callee, Variadic<AnyType>:$operands);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -467,6 +469,9 @@ def CallOp : IbisOp<"call", [CallOpInterface]> {
     void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
       (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
     }
+
+    /// Return the callee of this operation.
+    MethodOp getTarget(const hw::InnerRefNamespace &symbolTable);
   }];
 
   let assemblyFormat = [{
@@ -489,7 +494,7 @@ def PathStepAttr : AttrDef<IbisDialect, "PathStep", [TypedAttrInterface]> {
   );
   let mnemonic = "step";
   // Would like to either have no prefix before child, or `:`, but both are
-  // currently invalid due to 
+  // currently invalid due to
   // https://github.com/llvm/llvm-project/issues/64724
   let assemblyFormat = "`<` $direction (`,` $child^)? `:` $type  `>`";
   let genVerifyDecl = 1;
@@ -499,6 +504,7 @@ def PathStepArrayAttr :
   TypedArrayAttrBase<PathStepAttr, "Path step array attribute">;
 
 def PathOp : IbisOp<"path", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
     Pure, InferTypeOpInterface, HasCustomSSAName
   ]> {
   let summary = "Ibis path";
@@ -506,7 +512,7 @@ def PathOp : IbisOp<"path", [
     The `ibis.path` operation describes an instance hierarchy path relative to
     the current scope. The path is specified by a list of either parent or
     child identifiers (navigating up or down the hierarchy, respectively).
-    
+
     Scopes along the path are optionally typed, however, An `ibis.path` must
     lways terminate in a fully typed specifier, i.e. never an `!ibis.scoperef<>`.
 
@@ -532,12 +538,12 @@ def PathOp : IbisOp<"path", [
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
-    
+
     auto getPathAsRange() {
       return getPath().getAsRange<PathStepAttr>();
     }
   }];
-  let hasVerifier = 1;
+
   let hasCanonicalizeMethod = 1;
 }
 
@@ -546,7 +552,7 @@ def ThisOp : IbisOp<"this", [
   HasCustomSSAName
 ]> {
   let summary = "Return a handle to the current scope `!ibis.scoperef`";
-  let arguments = (ins FlatSymbolRefAttr:$scopeName);
+  let arguments = (ins InnerRefAttr:$scopeName);
   let results = (outs ScopeRefType:$thisRef);
 
   let assemblyFormat = [{
@@ -554,37 +560,63 @@ def ThisOp : IbisOp<"this", [
   }];
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name), [{
+    OpBuilder<(ins "StringAttr":$moduleName, "hw::InnerSymAttr":$sym), [{
+      auto name = $_builder.getAttr<hw::InnerRefAttr>(
+        FlatSymbolRefAttr::get(moduleName), sym.getSymName());
+      build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
+    }]>,
+    OpBuilder<(ins "hw::InnerRefAttr":$name), [{
       build($_builder, $_state, $_builder.getType<ScopeRefType>(name), name);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// Return the scope operation which this accelerator refers to
+    ScopeOpInterface getScope(const hw::InnerRefNamespace &symbolTable);
+  }];
 }
 
 // ===---------------------------------------------------------------------===//
 // Low-level Ibis operations
 // ===---------------------------------------------------------------------===//
 
-def ContainerOp : IbisOp<"container", [
+def DesignOp : IbisOp<"design", [
   Symbol,
-  // TODO: @mortbopet: ContainerOp should be an innersymbol table (or equivalent)
-  // whenever we figure out how to support nested symbol tables...
-  // InnerSymbolTable
   SingleBlock,
-  NoTerminator, NoRegionArguments,
-  ScopeOpInterface, IsolatedFromAbove,
-  InstanceGraphModuleOpInterface,
-  RegionKindInterface
+  InnerSymbolTable,
+  NoTerminator,
+  NoRegionArguments,
+  IsolatedFromAbove
 ]> {
-  let summary = "Ibis container";
-  let description = [{
-    An ibis container describes a collection of logic nested within an Ibis class.
-  }];
+  let summary = "All Ibis containers must be inside this op";
 
   let arguments = (ins SymbolNameAttr:$sym_name);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $body
+  }];
+}
+
+def ContainerOp : IbisOp<"container", [
+  SingleBlock,
+  NoTerminator, NoRegionArguments,
+  ScopeOpInterface, IsolatedFromAbove,
+  InstanceGraphModuleOpInterface,
+  RegionKindInterface,
+  DeclareOpInterfaceMethods<InnerSymbol>,
+  ParentOneOf<["DesignOp", "ClassOp"]>
+]> {
+  let summary = "Ibis container";
+  let description = [{
+    An ibis container describes a collection of logic nested within an Ibis class.
+  }];
+
+  let arguments = (ins InnerSymAttr:$inner_sym, UnitAttr:$isTopLevel);
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{
@@ -594,20 +626,33 @@ def ContainerOp : IbisOp<"container", [
     Block* getBodyBlock() { return &getBody().front(); }
 
     StringAttr getModuleNameAttr() {
-      return getSymNameAttr();
+      return getInnerSymAttr().getSymName();
     }
 
     llvm::StringRef getModuleName() {
-      return getSymName();
+      return getModuleNameAttr();
+    }
+  }];
+
+  let extraClassDefinition = [{
+    // For hw:InnerSymbol - the symbol targets the operation and not any result.
+    std::optional<size_t> $cppClass::getTargetResultIndex() {
+      return std::nullopt;
     }
   }];
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name), [{
+    OpBuilder<(ins "StringRef":$inner_sym, "bool":$isTopLevel), [{
+      build($_builder, $_state,
+        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), isTopLevel);
+    }]>,
+    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "bool":$isTopLevel), [{
       auto region = $_state.addRegion();
       region->push_back(new Block());
-      $_state.addAttribute(getSymNameAttrName($_state.name), name);
+      $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      if (isTopLevel)
+        $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
     }]>
   ];
 }
@@ -620,19 +665,18 @@ def ContainerInstanceOp : InstanceOpBase<"container.instance"> {
 
   let extraInstanceClassDeclaration = [{
     // Return the container this instance is instantiating.
-    ContainerOp getContainer(const SymbolTable* symbolTable = nullptr);
-
-    Operation* getReferencedModuleSlow();
-    Operation* getReferencedModule(const SymbolTable&);
+    ContainerOp getContainer(const hw::InnerRefNamespace &symbolTable);
   }];
 
   let extraInstanceClassDefinition = [{
-    Operation* ContainerInstanceOp::getReferencedModuleSlow() {
-      return getContainer();
+    ContainerOp ContainerInstanceOp::getContainer(
+        const hw::InnerRefNamespace &ns) {
+      // return dyn_cast_or_null<ContainerOp>(getReferencedModule(&ns));
+      return ns.lookupOp<ContainerOp>(getTargetNameAttr());
     }
-
-    Operation* ContainerInstanceOp::getReferencedModule(const SymbolTable &symbolTable) {
-      return getContainer(&symbolTable);
+    Operation* ContainerInstanceOp::getReferencedModule(
+        const hw::InnerRefNamespace &ns) {
+      return getContainer(ns);
     }
   }];
 }
@@ -646,7 +690,7 @@ def GetPortOp : IbisOp<"get_port", [
   let description = [{
     Given an Ibis class reference, returns a port of said class. The port
     is specified by the symbol name of the port in the referenced class.
-    
+
     Importantly, the user must specify how they intend to use the op, by
     specifying the direction of the portref type that this op is generated with.
     If the request port is to be read from, the type must be `!ibis.portref<out T>`
@@ -654,7 +698,7 @@ def GetPortOp : IbisOp<"get_port", [
     This is to ensure that the usage is reflected in the get_port type which in
     turn is used by the tunneling passes to create the proper ports through the
     hierarchy.
-    
+
     This implies that the portref direction of the get_port op is independent of
     the actual direction of the target port, and only the inner portref type
     must match.
@@ -682,8 +726,11 @@ def GetPortOp : IbisOp<"get_port", [
   let extraClassDeclaration = [{
     // Returns the direction requested by this get_port op.
     ibis::Direction getDirection() {
-      return getPort().getType().cast<PortRefType>().getDirection();
+      return llvm::cast<PortRefType>(getPort().getType()).getDirection();
     }
+
+    // Returns the port op that this operation is referencing.
+    PortOpInterface getPort(const hw::InnerRefNamespace &symbolTable);
   }];
 }
 
@@ -695,10 +742,17 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
       HasCustomSSAName,
       DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
   ])> {
-  let arguments = (ins InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
+
+  let description = [{
+    An ibis port has an attached 'name' attribute. This is a name-hint used
+    to generate the final port name. The port name and port symbol are not
+    related, and all references to a port is done through the port symbol.
+  }];
+
+  let arguments = (ins OptionalAttr<StrAttr>:$name, InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
-    $inner_sym `:` $type attr-dict
+    ($name^)? `sym` $inner_sym `:` $type attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -720,8 +774,9 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
                                           mlir::OpaqueProperties properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results) {
-      results.push_back(PortRefType::get(context, attrs.get("type")
-        .cast<TypeAttr>().getValue(), getPortDirection()));
+      results.push_back(PortRefType::get(context,
+        llvm::cast<TypeAttr>(attrs.get("type")).getValue(),
+        getPortDirection()));
       return success();
     }
   }];
@@ -731,9 +786,9 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
   code extraPortClassDefinition = ?;
   let extraClassDefinition =  extraPortClassDefinition # [{
     LogicalResult $cppClass::verify() {
-      if(getType().isa<ScopeRefType>())
+      if(llvm::isa<ScopeRefType>(getType()))
         return emitOpError("port type cannot be a scope reference");
-      
+
       return success();
     }
 
@@ -803,7 +858,7 @@ class InnerTypeToPortrefTypeConstraint<string lhs, string rhs, string dir>
 
 class PortRefToInnerTypeConstraint<string lhs, string rhs>
   : TypesMatchWith<"the inner type of the lhs portref type dictates the rhs type",
-    lhs, rhs, "$_self.cast<PortRefType>().getPortType()">;
+    lhs, rhs, "llvm::cast<PortRefType>($_self).getPortType()">;
 
 def InputWireOp : WireLikeOp<"wire.input", [
   InnerTypeToPortrefTypeConstraint<"output", "port", "Input">

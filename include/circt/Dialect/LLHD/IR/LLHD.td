@@ -64,7 +64,7 @@ include "LLHDTypesImpl.td"
 
 // LLHD Time Type
 def LLHD_TimeType : DialectType<LLHD_Dialect,
-    CPred<"$_self.isa<TimeType>()">, "LLHD time type", "TimeType">,
+    CPred<"llvm::isa<TimeType>($_self)">, "LLHD time type", "TimeType">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
 // Legal underlying types for signals and pointers.
@@ -73,15 +73,15 @@ def LLHD_AnyUnderlyingType :
 
 // LLHD sig type
 class LLHD_SigType<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<SigType>()">,
-    "$_self.cast<SigType>().getUnderlyingType()", "LLHD sig type">;
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<SigType>($_self)">,
+    "llvm::cast<SigType>($_self).getUnderlyingType()", "LLHD sig type">;
 
 def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 
 // LLHD ptr type
 class LLHD_PtrType<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"$_self.isa<PtrType>()">,
-    "$_self.cast<PtrType>().getUnderlyingType()", "LLHD pointer type">;
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<PtrType>($_self)">,
+    "llvm::cast<PtrType>($_self).getUnderlyingType()", "LLHD pointer type">;
 
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 

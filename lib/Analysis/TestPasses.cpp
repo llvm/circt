@@ -27,6 +27,7 @@ using namespace mlir;
 using namespace mlir::affine;
 using namespace circt;
 using namespace circt::analysis;
+using namespace circt::scheduling;
 
 //===----------------------------------------------------------------------===//
 // DebugAnalysis

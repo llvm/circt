@@ -17,6 +17,7 @@ include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
@@ -112,7 +113,8 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
-       SingleBlockImplicitTerminator<"OutputOp">]>{
+       SingleBlockImplicitTerminator<"OutputOp">,
+       Emittable]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -122,7 +124,7 @@ def HWModuleOp : HWModuleOpBase<"module",
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$module_type,
                        OptionalAttr<DictArrayAttr>:$per_port_attrs,
-                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       OptionalAttr<LocationArrayAttr>:$result_locs,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$comment);
   let results = (outs);
@@ -395,7 +397,9 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
     ]>
 {
-  let extraClassDeclaration = [{
+  code extraInstanceClassDeclaration = [{}];
+
+  let extraClassDeclaration = extraInstanceClassDeclaration # [{
     /// Return the name of the specified input port or null if it cannot be
     /// determined.
     StringAttr getArgumentName(size_t idx) {
@@ -434,7 +438,9 @@ class HWInstanceOpBase<string mnemonic, list<Trait> traits = []> :
     void getValues(SmallVectorImpl<Value> &values, const ModulePortInfo &mpi);
   }];
 
-  let extraClassDefinition = [{
+  code extraInstanceClassDefinition = [{}];
+
+  let extraClassDefinition = extraInstanceClassDefinition # [{
     ::llvm::SmallVector<::circt::hw::PortInfo> $cppClass::getPortList() {
       return instance_like_impl::getPortList(getOperation());
     }
@@ -516,9 +522,30 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+
+  let extraInstanceClassDeclaration = [{
+    /**
+     * Return the name of the default target.
+     */
+    ::llvm::StringRef getReferencedModuleName() {
+      return getReferencedModuleNameAttr().getValue();
+    }
+
+    /**
+     * Return the name of the default target.
+     */
+    ::mlir::StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+  }];
 }
 
-def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
+def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
+    HWInstanceLike,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getReferencedModuleNamesAttr"
+    ]>
+]> {
   let summary = "Represents an instance with a target-specific reference";
   let description = [{
     This represents an instance to a module which is determined based on the
@@ -541,7 +568,8 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefArrayAttr:$moduleNames,
-                       StrArrayAttr:$targetNames,
+                       StrAttr:$optionName,
+                       StrArrayAttr:$caseNames,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
@@ -550,6 +578,15 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", []> {
 
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+
+  let extraInstanceClassDeclaration = [{
+    /**
+     * Return the name of the default target.
+     */
+    StringAttr getDefaultModuleNameAttr() {
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]).getAttr();
+    }
+  }];
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,

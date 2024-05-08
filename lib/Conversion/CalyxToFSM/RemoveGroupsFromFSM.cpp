@@ -138,7 +138,7 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
   llvm::MapVector<Value, SmallVector<Operation *>> referencedValues;
   machineOp.walk([&](Operation *op) {
     for (auto &operand : op->getOpOperands()) {
-      if (auto barg = operand.get().dyn_cast<BlockArgument>()) {
+      if (auto barg = dyn_cast<BlockArgument>(operand.get())) {
         if (barg.getOwner()->getParentOp() == machineOp)
           continue;
 
@@ -203,8 +203,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
   // First we inspect the groupDoneInputsAttr map and create backedges.
   for (auto &namedAttr : groupDoneInputsAttr.getValue()) {
     auto name = namedAttr.getName();
-    auto idx = namedAttr.getValue().cast<IntegerAttr>();
-    auto inputIdx = idx.cast<IntegerAttr>().getInt();
+    auto idx = cast<IntegerAttr>(namedAttr.getValue());
+    auto inputIdx = cast<IntegerAttr>(idx).getInt();
     if (fsmInputMap.count(inputIdx))
       return emitError(machineOp.getLoc())
              << "MachineOp has duplicate input index " << idx;
@@ -266,7 +266,7 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
   // Record the FSM output group go signals.
   for (auto namedAttr : groupGoOutputsAttr.getValue()) {
     auto name = namedAttr.getName();
-    auto idx = namedAttr.getValue().cast<IntegerAttr>().getInt();
+    auto idx = cast<IntegerAttr>(namedAttr.getValue()).getInt();
     groupGoSignals[name] = fsmInstance.getResult(idx);
   }
 

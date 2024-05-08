@@ -158,8 +158,8 @@ hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out
   %c0_i3 = hw.constant 0 : i3
   %c-1_i3 = hw.constant -1 : i3
 
-  // CHECK: [[CLK_TRUE:%.+]] = seq.const_clock high
   // CHECK: [[CLK_FALSE:%.+]] = seq.const_clock low
+  // CHECK: [[CLK_TRUE:%.+]] = seq.const_clock high
   %clk_false = seq.to_clock %false
   %clk_true = seq.to_clock %true
 
@@ -197,6 +197,13 @@ hw.module @FirMem(in %addr : i4, in %clock : !seq.clock, in %data : i42, out out
   // CHECK-NEXT: seq.firmem.read_port [[MEM]][%addr], clock [[CLK_FALSE]] {rw6}
   %8 = seq.firmem.read_write_port %0[%addr] = %data if %true, clock %clk_false {rw6} : <12 x 42, mask 3>
 
+  // CHECK: seq.firmem
+  %has_symbol = seq.firmem sym @someMem 0, 1, undefined, undefined : <12 x 42, mask 3>
+
+  // CHECK-NOT: seq.firmem
+  %no_readers = seq.firmem 0, 1, undefined, undefined : <12 x 42, mask 3>
+  seq.firmem.write_port %no_readers[%addr] = %data, clock %clk_false {w5} : <12 x 42, mask 3>
+
   %9 = comb.xor %1, %2, %3, %4, %5, %6, %7, %8 : i42
   hw.output %9 : i42
 }
@@ -219,8 +226,8 @@ hw.module @through_wire(in %clock : i1, out out: i1) {
 
 // CHECK-LABEL: @const_clock
 hw.module @const_clock(out clock_true : !seq.clock, out clock_false : !seq.clock) {
-  // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
   // CHECK: [[CLOCK_TRUE:%.+]] = seq.const_clock high
+  // CHECK: [[CLOCK_FALSE:%.+]] = seq.const_clock low
 
   %true = hw.constant 1 : i1
   %clock_true = seq.to_clock %true
@@ -238,4 +245,23 @@ hw.module @const_clock_reg(in %clock : !seq.clock, out r_data : !seq.clock) {
   %0 = seq.const_clock  low
   %1 = seq.firreg %1 clock %0 : !seq.clock
   hw.output %1 : !seq.clock
+}
+
+// CHECK-LABEL: @clock_inv
+hw.module @clock_inv(in %clock : !seq.clock, out clock_true : !seq.clock, out clock_false : !seq.clock, out same_clock: !seq.clock) {
+  %clk_low = seq.const_clock low
+  %clk_high = seq.const_clock high
+
+  %clk_inv_low = seq.clock_inv %clk_low
+  %clk_inv_high = seq.clock_inv %clk_high
+
+  %clk_inv = seq.clock_inv %clock
+  %clk_orig = seq.clock_inv %clk_inv
+
+
+  // CHECK: [[CLK_HIGH:%.+]] = seq.const_clock high
+  // CHECK: [[CLK_LOW:%.+]] = seq.const_clock low
+  // CHECK: hw.output [[CLK_HIGH]], [[CLK_LOW]], %clock
+  hw.output %clk_inv_low, %clk_inv_high, %clk_orig : !seq.clock, !seq.clock, !seq.clock
+
 }

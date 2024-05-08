@@ -185,3 +185,40 @@ func.func @seqClocks(%clk1: !seq.clock, %clk2: !seq.clock) -> !seq.clock {
 //  CHECK-SAME: ([[CLK1:%.+]]: i1, [[CLK2:%.+]]: i1)
 //       CHECK: [[RES:%.+]] = llvm.xor [[CLK1]], [[CLK2]]
 //       CHECK: llvm.return [[RES]] : i1
+
+// CHECK-LABEL: llvm.func @ReadAggregates(
+// CHECK-SAME: %arg0: !llvm.ptr
+// CHECK-SAME: %arg1: !llvm.ptr
+func.func @ReadAggregates(%arg0: !arc.state<!hw.struct<a: i1, b: i1>>, %arg1: !arc.state<!hw.array<4xi1>>) {
+  // CHECK: llvm.load %arg0 : !llvm.ptr -> !llvm.struct<(i1, i1)>
+  // CHECK: llvm.load %arg1 : !llvm.ptr -> !llvm.array<4 x i1>
+  arc.state_read %arg0 : <!hw.struct<a: i1, b: i1>>
+  arc.state_read %arg1 : <!hw.array<4xi1>>
+  return
+}
+
+// CHECK-LABEL: llvm.func @WriteStruct(
+// CHECK-SAME: %arg0: !llvm.ptr
+// CHECK-SAME: %arg1: !llvm.struct<(i1, i1)>
+func.func @WriteStruct(%arg0: !arc.state<!hw.struct<a: i1, b: i1>>, %arg1: !hw.struct<a: i1, b: i1>) {
+  // CHECK: [[CONST:%.+]] = llvm.load {{%.+}} : !llvm.ptr -> !llvm.struct<(i1, i1)>
+  %0 = hw.aggregate_constant [false, false] : !hw.struct<a: i1, b: i1>
+  // CHECK: llvm.store [[CONST]], %arg0 : !llvm.struct<(i1, i1)>, !llvm.ptr
+  // CHECK: llvm.store %arg1, %arg0 : !llvm.struct<(i1, i1)>, !llvm.ptr
+  arc.state_write %arg0 = %0 : <!hw.struct<a: i1, b: i1>>
+  arc.state_write %arg0 = %arg1 : <!hw.struct<a: i1, b: i1>>
+  return
+}
+
+// CHECK-LABEL: llvm.func @WriteArray(
+// CHECK-SAME: %arg0: !llvm.ptr
+// CHECK-SAME: %arg1: !llvm.array<4 x i1>
+func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>) {
+  // CHECK: [[CONST:%.+]] = llvm.load {{%.+}} : !llvm.ptr -> !llvm.array<4 x i1>
+  %0 = hw.aggregate_constant [false, false, false, false] : !hw.array<4xi1>
+  // CHECK: llvm.store [[CONST]], %arg0 : !llvm.array<4 x i1>, !llvm.ptr
+  // CHECK: llvm.store %arg1, %arg0 : !llvm.array<4 x i1>, !llvm.ptr
+  arc.state_write %arg0 = %0 : <!hw.array<4xi1>>
+  arc.state_write %arg0 = %arg1 : <!hw.array<4xi1>>
+  return
+}

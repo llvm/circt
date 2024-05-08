@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -132,8 +133,8 @@ static std::string valueName(Operation *scopeOp, Value v) {
 /// port on a cell interface.
 static bool isPort(Value value) {
   Operation *definingOp = value.getDefiningOp();
-  return value.isa<BlockArgument>() ||
-         (definingOp && isa<CellInterface>(definingOp));
+  return isa<BlockArgument>(value) ||
+         isa_and_nonnull<CellInterface>(definingOp);
 }
 
 /// Gets the port for a given BlockArgument.
@@ -356,7 +357,7 @@ static void eraseControlWithGroupAndConditional(OpTy op,
       rewriter.eraseOp(group);
   }
   // Check the conditional after the Group, since it will be driven within.
-  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+  if (!isa<BlockArgument>(cond) && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
 }
 
@@ -373,7 +374,7 @@ static void eraseControlWithConditional(OpTy op, PatternRewriter &rewriter) {
   rewriter.eraseOp(op);
 
   // Check if conditional is still needed, and remove if it isn't
-  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+  if (!isa<BlockArgument>(cond) && cond.getDefiningOp()->use_empty())
     rewriter.eraseOp(cond.getDefiningOp());
 }
 
@@ -472,7 +473,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> portNames;
   auto getPortName = [context](const auto &port) -> StringAttr {
     StringRef name = port.ssaName.name;
-    if (name.startswith("%"))
+    if (name.starts_with("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
   };
@@ -627,7 +628,7 @@ static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
   ArrayAttr portNames = op.getPortNames();
 
   for (size_t i = 0, e = portNames.size(); i != e; ++i) {
-    auto portName = portNames[i].cast<StringAttr>();
+    auto portName = cast<StringAttr>(portNames[i]);
     if (portName.getValue() == name)
       return op.getBodyBlock()->getArgument(i);
   }
@@ -643,19 +644,19 @@ ControlOp calyx::ComponentOp::getControlOp() {
 }
 
 Value calyx::ComponentOp::getGoPort() {
-  return getBlockArgumentWithName("go", *this);
+  return getBlockArgumentWithName(goPort, *this);
 }
 
 Value calyx::ComponentOp::getDonePort() {
-  return getBlockArgumentWithName("done", *this);
+  return getBlockArgumentWithName(donePort, *this);
 }
 
 Value calyx::ComponentOp::getClkPort() {
-  return getBlockArgumentWithName("clk", *this);
+  return getBlockArgumentWithName(clkPort, *this);
 }
 
 Value calyx::ComponentOp::getResetPort() {
-  return getBlockArgumentWithName("reset", *this);
+  return getBlockArgumentWithName(resetPort, *this);
 }
 
 SmallVector<PortInfo> ComponentOp::getPortInfo() {
@@ -665,10 +666,9 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
 
   SmallVector<PortInfo> results;
   for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
-                               portTypes[i],
+    results.push_back(PortInfo{cast<StringAttr>(portNamesAttr[i]), portTypes[i],
                                direction::get(portDirectionsAttr[i]),
-                               portAttrs[i].cast<DictionaryAttr>()});
+                               cast<DictionaryAttr>(portAttrs[i])});
   }
   return results;
 }
@@ -711,7 +711,7 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
   std::sort(identifiers.begin(), identifiers.end());
 
   llvm::SmallVector<StringRef, 4> intersection,
-      interfacePorts{"clk", "done", "go", "reset"};
+      interfacePorts{clkPort, donePort, goPort, resetPort};
   // Find the intersection between all identifiers and required ports.
   std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
                         identifiers.begin(), identifiers.end(),
@@ -770,7 +770,7 @@ void ComponentOp::getAsmBlockArgumentNames(
   auto ports = getPortNames();
   auto *block = &getRegion()->front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+    setNameFn(block->getArgument(i), cast<StringAttr>(ports[i]).getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -784,10 +784,9 @@ SmallVector<PortInfo> CombComponentOp::getPortInfo() {
 
   SmallVector<PortInfo> results;
   for (size_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back(PortInfo{portNamesAttr[i].cast<StringAttr>(),
-                               portTypes[i],
+    results.push_back(PortInfo{cast<StringAttr>(portNamesAttr[i]), portTypes[i],
                                direction::get(portDirectionsAttr[i]),
-                               portAttrs[i].cast<DictionaryAttr>()});
+                               cast<DictionaryAttr>(portAttrs[i])});
   }
   return results;
 }
@@ -883,7 +882,7 @@ void CombComponentOp::getAsmBlockArgumentNames(
   auto ports = getPortNames();
   auto *block = &getRegion()->front();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
+    setNameFn(block->getArgument(i), cast<StringAttr>(ports[i]).getValue());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1429,12 +1428,12 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 static LogicalResult verifyPortDirection(Operation *op, Value value,
                                          bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
-  bool isComponentPort = value.isa<BlockArgument>(),
-       isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
+  bool isComponentPort = isa<BlockArgument>(value),
+       isCellInterfacePort = isa_and_nonnull<CellInterface>(definingOp);
   assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
   PortInfo port = isComponentPort
-                      ? getPortInfo(value.cast<BlockArgument>())
+                      ? getPortInfo(cast<BlockArgument>(value))
                       : cast<CellInterface>(definingOp).portInfo(value);
 
   bool isSource = !isDestination;
@@ -1623,7 +1622,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 SmallVector<StringRef> InstanceOp::portNames() {
   SmallVector<StringRef> portNames;
   for (Attribute name : getReferencedComponent().getPortNames())
-    portNames.push_back(name.cast<StringAttr>().getValue());
+    portNames.push_back(cast<StringAttr>(name).getValue());
   return portNames;
 }
 
@@ -1694,8 +1693,8 @@ verifyPrimitiveOpType(PrimitiveOp instance,
            << " but got " << numParams;
 
   for (size_t i = 0; i != numExpected; ++i) {
-    auto param = parameters[i].cast<circt::hw::ParamDeclAttr>();
-    auto modParam = modParameters[i].cast<circt::hw::ParamDeclAttr>();
+    auto param = cast<circt::hw::ParamDeclAttr>(parameters[i]);
+    auto modParam = cast<circt::hw::ParamDeclAttr>(modParameters[i]);
 
     auto paramName = param.getName();
     if (paramName != modParam.getName())
@@ -1883,7 +1882,7 @@ static void printParameterList(OpAsmPrinter &p, Operation *op,
 
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<hw::ParamDeclAttr>();
+    auto paramAttr = cast<hw::ParamDeclAttr>(param);
     p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
     if (auto value = paramAttr.getValue()) {
       p << " = ";
@@ -1955,7 +1954,7 @@ void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 SmallVector<StringRef> RegisterOp::portNames() {
-  return {"in", "write_en", "clk", "reset", "out", "done"};
+  return {"in", "write_en", clkPort, resetPort, "out", donePort};
 }
 
 SmallVector<Direction> RegisterOp::portDirections() {
@@ -1966,10 +1965,10 @@ SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
   MLIRContext *context = getContext();
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
   NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
-  clk.append("clk", isSet);
-  reset.append("reset", isSet);
-  done.append("done", isSet);
+  writeEn.append(goPort, isSet);
+  clk.append(clkPort, isSet);
+  reset.append(resetPort, isSet);
+  done.append(donePort, isSet);
   return {
       DictionaryAttr::get(context),   // In
       writeEn.getDictionary(context), // Write enable
@@ -1998,7 +1997,7 @@ SmallVector<StringRef> MemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "clk", "read_data", "done"});
+  portNames.append({"write_data", "write_en", clkPort, "read_data", donePort});
   return portNames;
 }
 
@@ -2019,9 +2018,9 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
   NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
-  clk.append("clk", isSet);
-  done.append("done", isSet);
+  writeEn.append(goPort, isSet);
+  clk.append(clkPort, isSet);
+  done.append(donePort, isSet);
   portAttributes.append({DictionaryAttr::get(context),   // In
                          writeEn.getDictionary(context), // Write enable
                          clk.getDictionary(context),     // Clk
@@ -2065,8 +2064,8 @@ LogicalResult MemoryOp::verify() {
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = cast<IntegerAttr>(opSizes[i]).getInt();
+    int64_t addrSize = cast<IntegerAttr>(opAddrSizes[i]).getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
       return emitOpError("address size (")
              << addrSize << ") for dimension " << i
@@ -2092,8 +2091,8 @@ SmallVector<StringRef> SeqMemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.append({"write_data", "write_en", "write_done", "clk", "read_data",
-                    "read_en", "read_done"});
+  portNames.append({clkPort, "reset", "content_en", "write_en", "write_data",
+                    "read_data", "done"});
   return portNames;
 }
 
@@ -2101,7 +2100,7 @@ SmallVector<Direction> SeqMemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (size_t i = 0, e = getAddrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
-  portDirections.append({Input, Input, Output, Input, Output, Input, Output});
+  portDirections.append({Input, Input, Input, Input, Input, Output, Output});
   return portDirections;
 }
 
@@ -2115,19 +2114,18 @@ SmallVector<DictionaryAttr> SeqMemoryOp::portAttributes() {
   // Use a boolean to indicate this attribute is used.
   IntegerAttr isSet = IntegerAttr::get(builder.getIndexType(), 1);
   IntegerAttr isTwo = IntegerAttr::get(builder.getIndexType(), 2);
-  NamedAttrList writeEn, writeDone, clk, reset, readEn, readDone;
-  writeEn.append("go", isSet);
-  writeDone.append("done", isSet);
-  clk.append("clk", isSet);
-  readEn.append("go", isTwo);
-  readDone.append("done", isTwo);
-  portAttributes.append({DictionaryAttr::get(context),     // Write Data
-                         writeEn.getDictionary(context),   // Write enable
-                         writeDone.getDictionary(context), // Write done
-                         clk.getDictionary(context),       // Clk
-                         DictionaryAttr::get(context),     // Out
-                         readEn.getDictionary(context),    // Read enable
-                         readDone.getDictionary(context)}  // Read done
+  NamedAttrList done, clk, reset, contentEn;
+  done.append(donePort, isSet);
+  clk.append(clkPort, isSet);
+  clk.append(resetPort, isSet);
+  contentEn.append(goPort, isTwo);
+  portAttributes.append({clk.getDictionary(context),       // Clk
+                         reset.getDictionary(context),     // Reset
+                         contentEn.getDictionary(context), // Content enable
+                         DictionaryAttr::get(context),     // Write enable
+                         DictionaryAttr::get(context),     // Write data
+                         DictionaryAttr::get(context),     // Read data
+                         done.getDictionary(context)}      // Done
   );
   return portAttributes;
 }
@@ -2143,13 +2141,13 @@ void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
   SmallVector<Type> types;
   for (int64_t size : addrSizes)
     types.push_back(builder.getIntegerType(size)); // Addresses
-  types.push_back(builder.getIntegerType(width));  // Write data
-  types.push_back(builder.getI1Type());            // Write enable
-  types.push_back(builder.getI1Type());            // Write done
   types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getI1Type());            // Reset
+  types.push_back(builder.getI1Type());            // Content enable
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getIntegerType(width));  // Write data
   types.push_back(builder.getIntegerType(width));  // Read data
-  types.push_back(builder.getI1Type());            // Read enable
-  types.push_back(builder.getI1Type());            // Read done
+  types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
 
@@ -2163,14 +2161,14 @@ LogicalResult SeqMemoryOp::verify() {
            << numDims << ") and address sizes (" << numAddrs << ")";
 
   size_t numExtraPorts =
-      7; // write data/enable/done, clk, and read data/enable/done.
+      7; // write data/enable, clk, reset, read data, content enable, and done.
   if (getNumResults() != numAddrs + numExtraPorts)
     return emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
 
   for (size_t i = 0; i < numDims; ++i) {
-    int64_t size = opSizes[i].cast<IntegerAttr>().getInt();
-    int64_t addrSize = opAddrSizes[i].cast<IntegerAttr>().getInt();
+    int64_t size = cast<IntegerAttr>(opSizes[i]).getInt();
+    int64_t addrSize = cast<IntegerAttr>(opAddrSizes[i]).getInt();
     if (llvm::Log2_64_Ceil(size) > addrSize)
       return emitOpError("address size (")
              << addrSize << ") for dimension " << i
@@ -2668,7 +2666,7 @@ Value InvokeOp::getInstGoValue() {
         auto portInfo = op.getReferencedComponent().getPortInfo();
         for (auto [portInfo, res] :
              llvm::zip(portInfo, operation->getResults())) {
-          if (portInfo.hasAttribute("go"))
+          if (portInfo.hasAttribute(goPort))
             ret = res;
         }
       })
@@ -2703,7 +2701,7 @@ Value InvokeOp::getInstDoneValue() {
         auto portInfo = instanceOp.getReferencedComponent().getPortInfo();
         for (auto [portInfo, res] :
              llvm::zip(portInfo, operation->getResults())) {
-          if (portInfo.hasAttribute("done"))
+          if (portInfo.hasAttribute(donePort))
             ret = res;
         }
       })
@@ -2763,9 +2761,9 @@ LogicalResult InvokeOp::verify() {
       .Case<InstanceOp>([&](auto op) {
         auto portInfo = op.getReferencedComponent().getPortInfo();
         for (PortInfo info : portInfo) {
-          if (info.hasAttribute("go"))
+          if (info.hasAttribute(goPort))
             ++goPortNum;
-          if (info.hasAttribute("done"))
+          if (info.hasAttribute(donePort))
             ++donePortNum;
         }
       })
@@ -2794,7 +2792,7 @@ LogicalResult InvokeOp::verify() {
     // inputs are required to be destination ports.
     if (failed(verifyInvokeOpValue(*this, port, true)))
       return emitOpError() << "'@" << callee << "' has input '"
-                           << portName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(portName).getValue()
                            << "', which is a source port. The inputs are "
                               "required to be destination ports.";
     // The go port should not appear in the parameter list.
@@ -2804,12 +2802,12 @@ LogicalResult InvokeOp::verify() {
     // Check the direction of these source ports.
     if (failed(verifyInvokeOpValue(*this, input, false)))
       return emitOpError() << "'@" << callee << "' has output '"
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(inputName).getValue()
                            << "', which is a destination port. The inputs are "
                               "required to be source ports.";
     if (failed(verifyComplexLogic(*this, input)))
       return emitOpError() << "'@" << callee << "' has '"
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(inputName).getValue()
                            << "', which is not a port or constant. Complex "
                               "logic should be conducted in the guard.";
     if (input == doneValue)
@@ -2818,8 +2816,8 @@ LogicalResult InvokeOp::verify() {
     // Check if the connection uses the callee's port.
     if (port.getDefiningOp() != operation && input.getDefiningOp() != operation)
       return emitOpError() << "the connection "
-                           << portName.cast<StringAttr>().getValue() << " = "
-                           << inputName.cast<StringAttr>().getValue()
+                           << cast<StringAttr>(portName).getValue() << " = "
+                           << cast<StringAttr>(inputName).getValue()
                            << " is not defined as an input port of '@" << callee
                            << "'.";
   }
@@ -2852,7 +2850,7 @@ LogicalResult SliceLibOp::verify() {
 
 #define ImplBinPipeOpCellInterface(OpType, outName)                            \
   SmallVector<StringRef> OpType::portNames() {                                 \
-    return {"clk", "reset", "go", "left", "right", outName, "done"};           \
+    return {clkPort, resetPort, goPort, "left", "right", outName, donePort};   \
   }                                                                            \
                                                                                \
   SmallVector<Direction> OpType::portDirections() {                            \
@@ -2867,10 +2865,10 @@ LogicalResult SliceLibOp::verify() {
     MLIRContext *context = getContext();                                       \
     IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);     \
     NamedAttrList go, clk, reset, done;                                        \
-    go.append("go", isSet);                                                    \
-    clk.append("clk", isSet);                                                  \
-    reset.append("reset", isSet);                                              \
-    done.append("done", isSet);                                                \
+    go.append(goPort, isSet);                                                  \
+    clk.append(clkPort, isSet);                                                \
+    reset.append(resetPort, isSet);                                            \
+    done.append(donePort, isSet);                                              \
     return {                                                                   \
         clk.getDictionary(context),   /* Clk    */                             \
         reset.getDictionary(context), /* Reset  */                             \

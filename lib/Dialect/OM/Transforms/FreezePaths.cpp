@@ -69,6 +69,30 @@ static LogicalResult getAccessPath(Location loc, Type type, size_t fieldId,
   return success();
 }
 
+// Check if the element type of a potentially nested list includes path types.
+static bool hasPathType(Type type) {
+  bool isPathType = false;
+  type.walk([&](Type innerType) {
+    if (isa<BasePathType, PathType>(innerType))
+      isPathType = true;
+  });
+
+  return isPathType;
+}
+
+// Convert potentially nested lists of PathType or BasePathType to frozen lists.
+static Type processType(Type type) {
+  mlir::AttrTypeReplacer replacer;
+  replacer.addReplacement([](BasePathType innerType) {
+    return FrozenBasePathType::get(innerType.getContext());
+  });
+  replacer.addReplacement([](PathType innerType) {
+    return FrozenPathType::get(innerType.getContext());
+  });
+
+  return replacer.replace(type);
+}
+
 LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
                                        PathAttr &targetPath,
                                        StringAttr &bottomModule,
@@ -124,7 +148,11 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       // If this is our inner ref pair: [Foo::bar]
       // if "bar" is an instance, modules = [Foo::bar], bottomModule = Bar.
       // if "bar" is a wire, modules = [], bottomModule = Foo, component = bar.
-      if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
+      if (isa<hw::HWInstanceLike>(op)) {
+        // TODO: add support for instance choices.
+        auto inst = dyn_cast<hw::InstanceOp>(op);
+        if (!inst)
+          return op->emitError("unsupported instance operation");
         // We are targeting an instance.
         modules.emplace_back(currentModule, verilogName);
         bottomModule = inst.getReferencedModuleNameAttr();
@@ -148,7 +176,6 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     component = StringAttr::get(context, "");
     field = StringAttr::get(context, "");
   }
-
 
   // Create the target path.
   targetPath = PathAttr::get(context, modules);
@@ -215,28 +242,15 @@ LogicalResult PathVisitor::process(EmptyPathOp path) {
 LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
   ListType listType = listCreateOp.getResult().getType();
 
-  // Check if the element type of a potentially nested list includes path types.
-  bool hasPathType = false;
-  listType.walk([&](Type innerType) {
-    if (isa<BasePathType, PathType>(innerType))
-      hasPathType = true;
-  });
-
-  if (!hasPathType)
+  // Check if there are any path types in the list(s).
+  if (!hasPathType(listType))
     return success();
 
-  // Set up a type replacer to replace potentially nested path types.
-  mlir::AttrTypeReplacer replacer;
-  replacer.addReplacement([](BasePathType innerType) {
-    return FrozenBasePathType::get(innerType.getContext());
-  });
-  replacer.addReplacement([](PathType innerType) {
-    return FrozenPathType::get(innerType.getContext());
-  });
+  // Create a new ListType with frozen path types.
+  auto newListType = processType(listType);
 
   // Create a new op with the result type updated to replace path types.
   OpBuilder builder(listCreateOp);
-  auto newListType = replacer.replace(listType);
   auto newListCreateOp = builder.create<ListCreateOp>(
       listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
   listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
@@ -245,13 +259,9 @@ LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
 }
 
 LogicalResult PathVisitor::run(ModuleOp module) {
-  auto frozenBasePathType = FrozenBasePathType::get(module.getContext());
-  auto frozenPathType = FrozenPathType::get(module.getContext());
   auto updatePathType = [&](Value value) {
-    if (isa<BasePathType>(value.getType()))
-      value.setType(frozenBasePathType);
-    if (isa<PathType>(value.getType()))
-      value.setType(frozenPathType);
+    if (hasPathType(value.getType()))
+      value.setType(processType(value.getType()));
   };
   for (auto classLike : module.getOps<ClassLike>()) {
     // Transform PathType block argument to FrozenPathType.

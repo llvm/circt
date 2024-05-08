@@ -35,10 +35,12 @@ struct ModuleSizeCache {
     module->walk([&](Operation *op) {
       size += 1;
       if (auto instOp = dyn_cast<HWInstanceLike>(op)) {
-        auto *node = instanceGraph.lookup(instOp.getReferencedModuleNameAttr());
-        if (auto instModule =
-                dyn_cast_or_null<hw::HWModuleLike>(*node->getModule()))
-          size += getModuleSize(instModule, instanceGraph);
+        for (auto moduleName : instOp.getReferencedModuleNamesAttr()) {
+          auto *node = instanceGraph.lookup(cast<StringAttr>(moduleName));
+          if (auto instModule =
+                  dyn_cast_or_null<hw::HWModuleLike>(*node->getModule()))
+            size += getModuleSize(instModule, instanceGraph);
+        }
       }
     });
     moduleSizes.insert({module, size});
@@ -88,8 +90,8 @@ struct HWOperandForwarder : public Reduction {
     if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
         OpNum >= op->getNumOperands())
       return 0;
-    auto resultTy = op->getResult(0).getType().dyn_cast<IntegerType>();
-    auto opTy = op->getOperand(OpNum).getType().dyn_cast<IntegerType>();
+    auto resultTy = dyn_cast<IntegerType>(op->getResult(0).getType());
+    auto opTy = dyn_cast<IntegerType>(op->getOperand(OpNum).getType());
     return resultTy && opTy && resultTy == opTy &&
            op->getResult(0) != op->getOperand(OpNum);
   }
@@ -116,14 +118,14 @@ struct HWConstantifier : public Reduction {
     if (op->getNumResults() == 0 || op->getNumOperands() == 0)
       return 0;
     return llvm::all_of(op->getResults(), [](Value result) {
-      return result.getType().isa<IntegerType>();
+      return isa<IntegerType>(result.getType());
     });
   }
   LogicalResult rewrite(Operation *op) override {
     assert(match(op));
     OpBuilder builder(op);
     for (auto result : op->getResults()) {
-      auto type = result.getType().cast<IntegerType>();
+      auto type = cast<IntegerType>(result.getType());
       auto newOp = builder.create<hw::ConstantOp>(op->getLoc(), type, 0);
       result.replaceAllUsesWith(newOp);
     }

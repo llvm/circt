@@ -127,7 +127,7 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
   let extraClassDeclaration = [{
     /// Get the systemc::ModuleType that represents the instantiated module.
     systemc::ModuleType getInstanceType() {
-      return getInstanceHandle().getType().cast<systemc::ModuleType>();
+      return llvm::cast<systemc::ModuleType>(getInstanceHandle().getType());
     }
 
     /// Lookup the module for the symbol. This returns null on invalid IR.
@@ -139,6 +139,14 @@ def InstanceDeclOp : SystemCOp<"instance.decl", [
 
     /// An InstanceDeclOp may not optionally define a symbol.
     bool isOptionalSymbol() { return false; }
+
+    //===------------------------------------------------------------------===//
+    // InstanceGraphInstanceOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
 
     //===------------------------------------------------------------------===//
     // PortList Methods
@@ -226,10 +234,10 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
       CallOpInterface,
       TypesMatchWith<"callee input types match argument types",
                      "callee", "callee_operands",
-                     "$_self.cast<FunctionType>().getInputs()">,
+                     "llvm::cast<FunctionType>($_self).getInputs()">,
       TypesMatchWith<"callee result types match result types",
                      "callee", "results",
-                     "$_self.cast<FunctionType>().getResults()">
+                     "llvm::cast<FunctionType>($_self).getResults()">
     ]> {
   let summary = "indirect call operation";
   let description = [{
@@ -253,7 +261,7 @@ def CallIndirectOp : SystemCOp<"cpp.call_indirect", [
     OpBuilder<(ins "Value":$callee, CArg<"ValueRange", "{}">:$operands), [{
       $_state.operands.push_back(callee);
       $_state.addOperands(operands);
-      $_state.addTypes(callee.getType().cast<FunctionType>().getResults());
+      $_state.addTypes(llvm::cast<FunctionType>(callee.getType()).getResults());
     }]>];
 
   let extraClassDeclaration = [{

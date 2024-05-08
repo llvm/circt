@@ -25,6 +25,10 @@ if(POLICY CMP0116)
   cmake_policy(SET CMP0116 OLD)
 endif()
 
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
@@ -140,6 +144,12 @@ else()
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
+
+  # If building as part of a unified build, whether or not MLIR's execution engine
+  # is enabled must be fetched from its subdirectory scope.
+  get_directory_property(MLIR_ENABLE_EXECUTION_ENGINE
+      DIRECTORY ${MLIR_MAIN_SRC_DIR}
+      DEFINITION MLIR_ENABLE_EXECUTION_ENGINE)
 
   set(BACKEND_PACKAGE_STRING "${PACKAGE_STRING}")
 
@@ -454,13 +464,13 @@ endif()
 llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
 
 #-------------------------------------------------------------------------------
-# circt-lec Configuration
+# Z3Lib Configuration (for circt-lec and SMT dialect integration tests)
 #-------------------------------------------------------------------------------
 
-# If circt-lec hasn't been explicitly disabled, find it.
-option(CIRCT_LEC_DISABLE "Disable the Logical Equivalence Checker" OFF)
-if(CIRCT_LEC_DISABLE)
-  message(STATUS "Disabling circt-lec")
+# If z3 hasn't been explicitly disabled, find it.
+option(Z3_DISABLE "Disable the z3 tests.")
+if (Z3_DISABLE)
+  message(STATUS "Disabling tests requiring z3.")
 else()
   if(Z3_DIR)
     # Search and load the package configuration file in the specified directory.
@@ -475,16 +485,35 @@ else()
     # Attempt initialising Z3 according to LLVM's `FindZ3` CMake module.
     find_package(Z3)
   endif()
-  
+
   if(Z3_FOUND)
     SET(CIRCT_LEC_Z3_VER 4.8.11)
     if(Z3_VERSION_STRING VERSION_LESS ${CIRCT_LEC_Z3_VER})
       message(WARNING "Cannot build circt-lec with outdated Z3 version ${Z3_VERSION_STRING}, requires ${CIRCT_LEC_Z3_VER}.")
     else()
       message(STATUS "Z3 identified as a logical backend.")
-      # Signal to proceed building circt-lec.
-      set(CIRCT_LEC_ENABLED ON)
     endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Z3 Configuration (for integration tests to check SMT-LIB export)
+#-------------------------------------------------------------------------------
+
+# If z3 hasn't been explicitly disabled, find it.
+option(Z3_DISABLE "Disable the z3 tests.")
+if (Z3_DISABLE)
+  message(STATUS "Disabling tests requiring z3.")
+else()
+  # Search for the `z3` command.
+  find_program(Z3_PATH "z3")
+  if(EXISTS ${Z3_PATH})
+    # Then strip the filename.
+    get_filename_component(Z3_PATH ${Z3_PATH} DIRECTORY)
+    message(STATUS "Found z3 at ${Z3_PATH}.")
+  else()
+    set(Z3_PATH "")
+    message(STATUS "Did NOT find z3.")
   endif()
 endif()
 
@@ -521,6 +550,76 @@ if(CIRCT_BINDINGS_TCL_ENABLED)
   message(STATUS "Found TCL include path: ${TCL_INCLUDE_PATH}")
   message(STATUS "Found TCL library: ${TCL_LIBRARY}")
   message(STATUS "Found TCL executable: ${TCL_TCLSH}")
+endif()
+
+#-------------------------------------------------------------------------------
+# slang Verilog Frontend
+#-------------------------------------------------------------------------------
+
+option(CIRCT_SLANG_FRONTEND_ENABLED "Enables the slang Verilog frontend." OFF)
+option(CIRCT_SLANG_BUILD_FROM_SOURCE
+  "Build slang from source instead of finding an installed package" ON)
+
+llvm_canonicalize_cmake_booleans(CIRCT_SLANG_FRONTEND_ENABLED)
+llvm_canonicalize_cmake_booleans(CIRCT_SLANG_BUILD_FROM_SOURCE)
+
+if(CIRCT_SLANG_FRONTEND_ENABLED)
+  message(STATUS "slang Verilog frontend is enabled")
+  if(CIRCT_SLANG_BUILD_FROM_SOURCE)
+    # Build slang as part of CIRCT (see https://sv-lang.com/building.html)
+    message(STATUS "Building slang from source")
+    include(FetchContent)
+    FetchContent_Declare(
+      slang
+      GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
+      GIT_TAG v3.0
+      GIT_SHALLOW ON)
+    set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
+
+    # Force Slang to be built as a static library to avoid messing around with
+    # RPATHs and installing a slang dylib alongside CIRCT. The static library
+    # will embed Slang into ImportVerilog.
+    set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+    if (MSVC)
+      set(CMAKE_CXX_FLAGS "/EHsc")
+    else ()
+      set(CMAKE_CXX_FLAGS "")
+    endif ()
+    set(BUILD_SHARED_LIBS OFF)
+    FetchContent_MakeAvailable(slang)
+
+    set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
+    set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+
+    if(BUILD_SHARED_LIBS)
+      set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
+      set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
+      set_target_properties(unordered_dense PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endif()
+
+    # The following feels *very* hacky, but CMake complains about the
+    # CIRCTImportVerilog target linking against slang_slang (even with PRIVATE
+    # linking) without the latter being in an export set. I think we'd want to
+    # statically link slang into the CIRCTImportVerilog library, but seems to be
+    # harder than it ought to be.
+    set_property(
+      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
+    install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
+  else()
+    find_package(slang 3.0 REQUIRED)
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Arcilator JIT
+#-------------------------------------------------------------------------------
+
+if(MLIR_ENABLE_EXECUTION_ENGINE)
+  set(ARCILATOR_JIT_ENABLED 1)
+else()
+  set(ARCILATOR_JIT_ENABLED 0)
 endif()
 
 #-------------------------------------------------------------------------------
@@ -573,6 +672,29 @@ if (NOT LLVM_ENABLE_IDE)
   add_llvm_install_targets(install-circt-headers
                            DEPENDS circt-headers
                            COMPONENT circt-headers)
+endif()
+
+
+# Custom target to install all CIRCT libraries
+add_custom_target(circt-libraries)
+set_target_properties(circt-libraries PROPERTIES FOLDER "Misc")
+
+if (NOT LLVM_ENABLE_IDE)
+  add_llvm_install_targets(install-circt-libraries
+                           DEPENDS circt-libraries
+                           COMPONENT circt-libraries)
+endif()
+
+get_property(CIRCT_LIBS GLOBAL PROPERTY CIRCT_ALL_LIBS)
+if(CIRCT_LIBS)
+  list(REMOVE_DUPLICATES CIRCT_LIBS)
+  foreach(lib ${CIRCT_LIBS})
+    add_dependencies(circt-libraries ${lib})
+    if(NOT LLVM_ENABLE_IDE)
+      add_dependencies(install-circt-libraries install-${lib})
+      add_dependencies(install-circt-libraries-stripped install-${lib}-stripped)
+    endif()
+  endforeach()
 endif()
 
 add_subdirectory(cmake/modules)

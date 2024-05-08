@@ -16,16 +16,17 @@ class ArcTypeDef<string name> : TypeDef<ArcDialect, name> { }
 
 def StateType : ArcTypeDef<"State"> {
   let mnemonic = "state";
-  let parameters = (ins "::mlir::IntegerType":$type);
+  let parameters = (ins "::mlir::Type":$type);
   let assemblyFormat = "`<` $type `>`";
+  let genVerifyDecl = 1;
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::IntegerType":$type), [{
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$type), [{
       return $_get(type.getContext(), type);
     }]>
   ];
 
   let extraClassDeclaration = [{
-    unsigned getBitWidth() { return getType().getWidth(); }
+    unsigned getBitWidth();
     unsigned getByteWidth() { return (getBitWidth() + 7) / 8; }
   }];
 }
@@ -46,6 +47,12 @@ def StorageType : ArcTypeDef<"Storage"> {
   let mnemonic = "storage";
   let parameters = (ins OptionalParameter<"unsigned">:$size);
   let assemblyFormat = "(`<` $size^ `>`)?";
+}
+
+def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
+  let mnemonic = "sim.instance";
+  let parameters = (ins "mlir::FlatSymbolRefAttr":$model);
+  let assemblyFormat = "`<` $model `>`";
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCTYPES_TD

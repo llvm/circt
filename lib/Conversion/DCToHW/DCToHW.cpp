@@ -45,7 +45,7 @@ static Type tupleToStruct(TupleType tuple) {
   mlir::SmallVector<hw::StructType::FieldInfo, 8> hwfields;
   for (auto [i, innerType] : llvm::enumerate(tuple)) {
     Type convertedInnerType = innerType;
-    if (auto tupleInnerType = innerType.dyn_cast<TupleType>())
+    if (auto tupleInnerType = dyn_cast<TupleType>(innerType))
       convertedInnerType = tupleToStruct(tupleInnerType);
     hwfields.push_back(
         {StringAttr::get(ctx, "field" + Twine(i)), convertedInnerType});
@@ -393,7 +393,7 @@ struct RTLBuilder {
     // Start the mux tree with zero value.
     auto dataType = inputs[0].getType();
     unsigned width =
-        dataType.isa<NoneType>() ? 0 : dataType.getIntOrFloatBitWidth();
+        isa<NoneType>(dataType) ? 0 : dataType.getIntOrFloatBitWidth();
     Value muxValue = constant(width, 0);
 
     // Iteratively chain together muxes from the high bit to the low bit.
@@ -413,9 +413,9 @@ struct RTLBuilder {
 };
 
 static bool isZeroWidthType(Type type) {
-  if (auto intType = type.dyn_cast<IntegerType>())
+  if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth() == 0;
-  return type.isa<NoneType>();
+  return isa<NoneType>(type);
 }
 
 static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
@@ -656,6 +656,46 @@ public:
   }
 };
 
+class MergeConversionPattern : public OpConversionPattern<MergeOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(MergeOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    BackedgeBuilder bb(rewriter, op.getLoc());
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto output = io.outputs[0];
+    RTLBuilder rtlb(op.getLoc(), rewriter);
+
+    // A winner is found if any of the two input valids are high.
+    Value hasWin = rtlb.bitOr(io.getInputValids());
+
+    // The winning index is either 0b0 (first) or 0b1 (second), hence we can
+    // just use either of the input valids as win index signal. The op is
+    // defined to select inputs with priority first >> second, so use the first
+    // input.
+    Value winWasFirst = io.inputs[0].valid;
+    Value winWasSecond = rtlb.bitNot(winWasFirst);
+    Value winIndex = winWasSecond;
+
+    output.valid->setValue(hasWin);
+    output.data->setValue(winIndex);
+
+    // Create the logic to set the done wires for the result. The done wire is
+    // asserted when the output is valid and ready.
+    Value outValidAndReady = rtlb.bitAnd({hasWin, output.ready});
+
+    // Create the logic to assign the arg ready outputs. An argument is ready
+    // when the output is valid and ready, and the given input is selected.
+    io.inputs[0].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasFirst}));
+    io.inputs[1].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasSecond}));
+
+    rewriter.replaceOp(op, output.channel);
+
+    return success();
+  }
+};
+
 class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
   // Essentially a no-op, seeing as the type converter does the heavy
   // lifting here.
@@ -785,7 +825,7 @@ public:
 
 } // namespace
 
-static bool isDCType(Type type) { return type.isa<TokenType, ValueType>(); }
+static bool isDCType(Type type) { return isa<TokenType, ValueType>(type); }
 
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
@@ -814,7 +854,7 @@ public:
     // Check whether this precondition is met, and if not, exit.
     auto walkRes = parent->walk([&](Operation *op) {
       for (auto res : op->getResults()) {
-        if (res.getType().isa<dc::TokenType, dc::ValueType>()) {
+        if (isa<dc::TokenType, dc::ValueType>(res.getType())) {
           if (res.use_empty()) {
             op->emitOpError() << "DCToHW: value " << res << " is unused.";
             return WalkResult::interrupt();
@@ -848,13 +888,12 @@ public:
 
     RewritePatternSet patterns(parent->getContext());
 
-    patterns.insert<ForkConversionPattern, JoinConversionPattern,
-                    SelectConversionPattern, BranchConversionPattern,
-                    PackConversionPattern, UnpackConversionPattern,
-                    BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern,
-                    ToESIConversionPattern, FromESIConversionPattern>(
-        typeConverter, parent->getContext());
+    patterns.insert<
+        ForkConversionPattern, JoinConversionPattern, SelectConversionPattern,
+        BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
+        BufferConversionPattern, SourceConversionPattern, SinkConversionPattern,
+        MergeConversionPattern, TypeConversionPattern, ToESIConversionPattern,
+        FromESIConversionPattern>(typeConverter, parent->getContext());
 
     if (failed(applyPartialConversion(parent, target, std::move(patterns))))
       signalPassFailure();

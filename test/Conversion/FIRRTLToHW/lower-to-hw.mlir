@@ -6,28 +6,34 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
   // Headers
-  // CHECK:      sv.ifdef  "PRINTF_COND_" {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef  "PRINTF_COND" {
-  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
+  // CHECK:      emit.fragment @PRINTF_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @PRINTF_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @PRINTF_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @PRINTF_COND {
+  // CHECK-NEXT:       sv.macro.def @PRINTF_COND_ "(`PRINTF_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @PRINTF_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK:      sv.ifdef  "ASSERT_VERBOSE_COND_" {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef  "ASSERT_VERBOSE_COND" {
-  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
+  // CHECK:      emit.fragment @ASSERT_VERBOSE_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @ASSERT_VERBOSE_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @ASSERT_VERBOSE_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @ASSERT_VERBOSE_COND {
+  // CHECK-NEXT:       sv.macro.def @ASSERT_VERBOSE_COND_ "(`ASSERT_VERBOSE_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @ASSERT_VERBOSE_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK:      sv.ifdef  "STOP_COND_" {
-  // CHECK-NEXT: } else {
-  // CHECK-NEXT:   sv.ifdef  "STOP_COND" {
-  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "(`STOP_COND)"
+  // CHECK:      emit.fragment @STOP_COND_FRAGMENT {
+  // CHECK:        sv.ifdef @STOP_COND_ {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.macro.def @STOP_COND_ "1"
+  // CHECK-NEXT:     sv.ifdef @STOP_COND {
+  // CHECK-NEXT:       sv.macro.def @STOP_COND_ "(`STOP_COND)"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.macro.def @STOP_COND_ "1"
+  // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
@@ -145,7 +151,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %11 = firrtl.shr %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
 
-    %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<0>
 
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
     %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
@@ -313,16 +319,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    input reset: UInt<1>
 //    input a: UInt<4>
 //    input b: UInt<4>
+//    input c: SInt<4>
+//    input d: SInt<4>
 //    printf(clock, reset, "No operands!\n")
 //    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
+//    printf(clock, reset, "Hi signed %d %d\n", add(c, c), d)
 
   // CHECK-LABEL: hw.module private @Print
+  // CHECK-SAME: attributes {emit.fragments = [@PRINTF_COND_FRAGMENT]}
   firrtl.module private @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
-                       in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
+                       in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
+                       in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
     // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK: [[ADD:%.+]] = comb.add
+    
+    // CHECK: [[ADDSIGNED:%.+]] = comb.add
+    // CHECK: [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
+    // CHECK: [[DSIGNED:%.+]] = sv.system "signed"(%d)
 
-    // CHECK:      sv.ifdef "SYNTHESIS" {
+    // CHECK:      sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else  {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
@@ -337,13 +352,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
     // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
     // CHECK-NEXT:     }
+    // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-   firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>
+
+    %1 = firrtl.add %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
+
+    firrtl.printf %clock, %reset, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<4>
 
     firrtl.skip
 
@@ -360,29 +385,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 //    stop(clock2, reset, 0)
 
   // CHECK-LABEL: hw.module private @Stop
+  // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT]}
   firrtl.module private @Stop(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    // CHECK: [[CLOCK2:%.+]] = seq.from_clock %clock2
-    // CHECK: [[CLOCK1:%.+]] = seq.from_clock %clock1
-
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
-    // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.always posedge [[CLOCK1]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.fatal
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
+    // CHECK-NEXT: [[STOP_COND_1:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_1]], %reset : i1
+    // CHECK-NEXT: sim.fatal %clock1, [[COND]]
     firrtl.stop %clock1, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
 
-    // CHECK-NEXT:   sv.always posedge [[CLOCK2]] {
-    // CHECK-NEXT:     %STOP_COND_ = sv.macro.ref @STOP_COND_
-    // CHECK-NEXT:     [[COND:%.+]] = comb.and bin %STOP_COND_, %reset : i1
-    // CHECK-NEXT:     sv.if [[COND]] {
-    // CHECK-NEXT:       sv.finish
-    // CHECK-NEXT:     }
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT: [[STOP_COND_2:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT: [[COND:%.+]] = comb.and bin [[STOP_COND_2:%.+]], %reset : i1
+    // CHECK-NEXT: sim.finish %clock2, [[COND]]
     firrtl.stop %clock2, %reset, 0 : !firrtl.clock, !firrtl.uint<1>
   }
 
@@ -410,6 +422,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assert_0"}
     firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {name = "assert_0", guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.assume %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {guards = ["USE_PROPERTY_AS_CONSTRAINT"], isConcurrent = true}
+    firrtl.int.unclocked_assume %bCond, %bEn, "assume0"(%value) : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42> {name = "assume_unr", guards = ["USE_PROPERTY_AS_CONSTRAINT", "USE_UNR_ONLY_CONSTRAINTS"]}
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
@@ -424,10 +440,28 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
     // CHECK-NEXT: [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]]) : i42
-    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP4]] label "assume__assert_0"
-    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP6]]
+    // CHECK-NEXT: [[SAMPLED:%.+]] = sv.system.sampled %value : i42
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP7:%.+]] = comb.xor bin %bEn, [[TRUE]] : i1
+    // CHECK-NEXT: [[TMP8:%.+]] = comb.or bin [[TMP7]], %bCond : i1
+    // CHECK:      sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP3:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP4:%.+]] = comb.or bin [[TMP3]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP4]] label "assume__assert_0" message "assert0"
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP5:%.+]] = comb.xor bin %aEn, [[TRUE]]
+    // CHECK-NEXT:   [[TMP6:%.+]] = comb.or bin [[TMP5]], %aCond
+    // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP6]] message "assert0"([[SAMPLED]])
+    // CHECK-NEXT:   sv.ifdef  @USE_UNR_ONLY_CONSTRAINTS {
+    // CHECK-NEXT:     sv.always edge [[TMP8]] {
+    // CHECK-NEXT:       sv.assume [[TMP8]], immediate label "assume__assume_unr" message "assume0"(%value) : i42
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, name = "assume_0"}
@@ -501,15 +535,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.cover %clock, %cond, %enable, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["HELLO", "WORLD"]}
 
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock
-    // CHECK-NEXT: sv.ifdef "HELLO" {
-    // CHECK-NEXT:   sv.ifdef "WORLD" {
+    // CHECK-NEXT: sv.ifdef @HELLO {
+    // CHECK-NEXT:   sv.ifdef @WORLD {
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:     sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
-    // CHECK-NEXT:     sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
-    // CHECK-NEXT:       sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
-    // CHECK-NEXT:     }
     // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT:     [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
@@ -522,34 +553,55 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @VerificationAssertFormat
+  // CHECK-SAME: attributes {emit.fragments = [@STOP_COND_FRAGMENT, @ASSERT_VERBOSE_COND_FRAGMENT]}
   firrtl.module private @VerificationAssertFormat(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>,
     in %value: !firrtl.uint<42>,
+    in %value2: !firrtl.sint<24>,
     in %i0: !firrtl.uint<0>
   ) {
     firrtl.assert %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "sva"}
+    firrtl.assume %clock, %cond, %enable, "assert0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, guards = ["USE_PROPERTY_AS_CONSTRAINT"]}
     // CHECK-NEXT: [[FALSE:%.+]] = hw.constant false
     // CHECK-NEXT: [[CLOCK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT: sv.assert.concurrent posedge [[CLOCK]], [[TMP2]] message "assert0"
-    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT: sv.ifdef @USE_PROPERTY_AS_CONSTRAINT {
+    // CHECK-NEXT:   [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:   [[TMP1:%.+]] = comb.xor bin %enable, [[TRUE]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = comb.or bin [[TMP1]], %cond
     // CHECK-NEXT:   sv.assume.concurrent posedge [[CLOCK]], [[TMP2]]
     // CHECK-NEXT: }
     firrtl.assert %clock, %cond, %enable, "assert1 %d, %d"(%value, %i0) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<0> {isConcurrent = true, format = "ifElseFatal"}
+    firrtl.assert %clock, %cond, %enable, "assert2 %d"(%value2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.sint<24> {isConcurrent = true, format = "ifElseFatal"}
     // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
     // CHECK-NEXT: [[TMP1:%.+]] = comb.xor bin %cond, [[TRUE]]
     // CHECK-NEXT: [[TMP2:%.+]] = comb.and bin %enable, [[TMP1]]
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS" {
+    // CHECK-NEXT: [[SIGNEDVAL:%.+]] = sv.system "signed"(%value2) : (i24) -> i24 
+    // CHECK-NEXT: [[TRUE2:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor bin %cond, [[TRUE2]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.and bin %enable, [[TMP3]]
+    // CHECK-NEXT: sv.ifdef @SYNTHESIS {
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     sv.if [[TMP2]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
     // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
+    // CHECK-NEXT:       sv.if [[STOP_COND]] {
+    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.if [[TMP4]] {
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref @ASSERT_VERBOSE_COND_
+    // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
+    // CHECK-NEXT:         sv.error "assert2 %d"([[SIGNEDVAL]]) : i24
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
@@ -633,7 +685,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
   // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
   // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
-  // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
+  // CHECK-NEXT:   sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:     sv.assign %a1, %1 : i1
   // CHECK-NEXT:     sv.assign %a1, %0 : i1
   // CHECK-NEXT:     sv.assign %b1, %2 : i1
@@ -641,7 +693,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:     sv.assign %c1, %2 : i1
   // CHECK-NEXT:     sv.assign %c1, %1 : i1
   // CHECK-NEXT:    } else {
-  // CHECK-NEXT:     sv.ifdef "verilator" {
+  // CHECK-NEXT:     sv.ifdef @VERILATOR {
   // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !hw.inout<i1>
@@ -740,11 +792,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
 
-    // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT: sv.ifdef @SYNTHESIS {
     // CHECK-NEXT:   sv.assign %a, %1 : i1
     // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef "verilator" {
+    // CHECK-NEXT:   sv.ifdef @VERILATOR {
     // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
     // CHECK-NEXT:   } else {
     // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !hw.inout<i1>, !hw.inout<i1>
@@ -1345,7 +1397,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
   // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
   // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  sv.ifdef  "SYNTHESIS" {
+  // CHECK-NEXT:  sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.always posedge [[CLOCK]] {
   // CHECK-NEXT:      sv.if %c {
@@ -1565,5 +1617,81 @@ firrtl.circuit "ZeroWidthForeignOperand" {
     dbg.variable "v0", %c0_ui0 : !firrtl.uint<0>
     dbg.variable "v1", %0 : !firrtl.uint<0>
     dbg.variable "v2", %a : !firrtl.uint<0>
+  }
+}
+
+// -----
+
+// Check correct symbol mapping from output port to wire happens.
+firrtl.circuit "PortSym" {
+  firrtl.extmodule private @Blackbox(out bar: !firrtl.uint<1>)
+  // CHECK-LABEL: module @PortSym(
+  // CHECK-SAME: out a : i1 {hw.exportPort = #hw<innerSym@out_a_m>}
+  // CHECK-SAME: out out : i5, in %c : i1)
+  firrtl.module @PortSym(out %a: !firrtl.uint<1> sym @out_a_m, in %b: !firrtl.uint<0>, out %out: !firrtl.uint<5> sym @out_sym, in %c: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: %[[OUT:.+]] = hw.wire %{{.+}} sym @out_sym
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
+    firrtl.strictconnect %out, %c1_ui5 : !firrtl.uint<5>
+    %e_a = firrtl.instance sub1 @Blackbox(out bar: !firrtl.uint<1>)
+    firrtl.strictconnect %a, %e_a : !firrtl.uint<1>
+    %0 = firrtl.eq %out, %c1_ui5 : (!firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test various aspects of output file behavior.
+
+firrtl.circuit "Directories" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+      dirname = "testbench"
+    }
+  ]
+} {
+  // CHECK-LABEL: hw.module private @Directories_A
+  // CHECK-SAME:    output_file = #hw.output_file<"hello{{/|\\\\}}"
+  firrtl.module private @Directories_A() attributes {
+    output_file = #hw.output_file<"hello/", excludeFromFileList>
+  } {}
+  // CHECK:       hw.module private @BoundUnderDUT
+  // CHECK-SAME:    output_file = #hw.output_file<"testbench{{/|\\\\}}"
+  firrtl.module private @BoundUnderDUT() {}
+  // CHECK:       hw.module private @DUT
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance boundUnderDUT {lowerToBind} @BoundUnderDUT()
+    // Memories in the DUT shouldn't be moved into the testbench.
+    // See: https://github.com/llvm/circt/issues/6775
+    // CHECK:     seq.firmem
+    // CHECK-NOT:   output_file
+    %mem_r = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "mem",
+      portNames = ["r"],
+      prefix = "",
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %0 = firrtl.subfield %mem_r[clk] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %0, %c0_clock : !firrtl.clock
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.subfield %mem_r[en] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %1, %c0_ui1 : !firrtl.uint<1>
+    %2 = firrtl.subfield %mem_r[addr] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
+    firrtl.strictconnect %2, %c0_ui1 : !firrtl.uint<1>
+  }
+  // CHECK:       hw.module @Directories
+  firrtl.module @Directories() {
+    firrtl.instance dut @DUT()
+    firrtl.instance dut_A @Directories_A()
   }
 }

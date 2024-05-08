@@ -21,7 +21,7 @@
 // CHECK: func.func @Top_clock
 
 // CHECK-NOT: hw.module @Top
-// CHECK-LABEL: arc.model "Top" {
+// CHECK-LABEL: arc.model @Top io !hw.modty<input clock : !seq.clock, input i0 : i4, input i1 : i4, output out : i4>
 // CHECK-NEXT: ^bb0(%arg0: !arc.storage<8>):
 hw.module @Top(in %clock : !seq.clock, in %i0 : i4, in %i1 : i4, out out : i4) {
   // CHECK: func.call @Top_passthrough(%arg0)

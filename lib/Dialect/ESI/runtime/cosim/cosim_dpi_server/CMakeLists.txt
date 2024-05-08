@@ -17,6 +17,10 @@ set_target_properties(EsiCosimDpiServer
 )
 add_dependencies(EsiCosimDpiServer EsiCosimCapnp MtiPli)
 target_link_libraries(EsiCosimDpiServer PRIVATE EsiCosimCapnp MtiPli)
+install(TARGETS EsiCosimDpiServer
+  DESTINATION lib
+  COMPONENT ESIRuntime
+)
 
 set(ESI_COSIM_PATH $<TARGET_FILE:EsiCosimDpiServer>
       CACHE PATH "Path to Cosim DPI shared library")

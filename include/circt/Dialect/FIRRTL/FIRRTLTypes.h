@@ -203,6 +203,9 @@ bool isConst(Type type);
 /// guaranteed to be unchanging at circuit execution time
 bool containsConst(Type type);
 
+/// Return true if the type has zero bit width.
+bool hasZeroBitWidth(FIRRTLType type);
+
 /// Returns whether the two types are equivalent.  This implements the exact
 /// definition of type equivalence in the FIRRTL spec.  If the types being
 /// compared have any outer flips that encode FIRRTL module directions (input or
@@ -297,8 +300,8 @@ public:
   static IntType get(MLIRContext *context, bool isSigned,
                      int32_t widthOrSentinel = -1, bool isConst = false);
 
-  bool isSigned() { return isa<SIntType>(); }
-  bool isUnsigned() { return isa<UIntType>(); }
+  bool isSigned() { return mlir::isa<SIntType>(*this); }
+  bool isUnsigned() { return mlir::isa<UIntType>(*this); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() const;
@@ -306,7 +309,7 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
 
-  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+  static bool classof(Type type) { return mlir::isa<SIntType, UIntType>(type); }
 };
 
 //===----------------------------------------------------------------------===//
@@ -612,7 +615,7 @@ public:
   // Support C++ implicit conversions to BaseTy.
   operator BaseTy() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 
-  BaseTy get() const { return circt::firrtl::type_cast<BaseTy>(*this); }
+  BaseTy base() const { return circt::firrtl::type_cast<BaseTy>(*this); }
 };
 
 } // namespace firrtl

@@ -44,7 +44,7 @@ def CompRegOp : SeqOp<"compreg",
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -53,6 +53,13 @@ def CompRegOp : SeqOp<"compreg",
   let hasVerifier = 1;
 
   let builders = [
+    /// Create a register with no name nor inner_sym.
+    OpBuilder<(ins "Value":$input, "Value":$clk), [{
+      return build($_builder, $_state, input.getType(), input, clk,
+                   /*name*/ StringAttr(),
+                   /*reset*/ Value(), /*resetValue*/ Value(),
+                   /*powerOnValue*/ Value(), hw::InnerSymAttr());
+    }]>,
     /// Create a register with an inner_sym matching the register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
       auto nameAttr = name.get($_builder.getContext());
@@ -94,7 +101,7 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -158,7 +165,7 @@ def ShiftRegOp : SeqOp<"shiftreg", [
 
   let assemblyFormat = [{
     `[` $numElements `]`
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -289,32 +296,33 @@ def FIFOOp : SeqOp<"fifo", [
 }
 
 def HLMemOp : SeqOp<"hlmem", [
-     Symbol,
      Clocked,
      DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
 
   let summary = "Instantiate a high-level memory.";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$sym_name);
+  let arguments = (ins ClockType:$clk, I1:$rst, SymbolNameAttr:$name);
   let results = (outs HLMemType:$handle);
 
   let extraClassDeclaration = [{
-    HLMemType getMemType() { return getHandle().getType().cast<HLMemType>(); }
+    HLMemType getMemType() {
+      return llvm::cast<HLMemType>(getHandle().getType());
+    }
   }];
 
   let builders = [
-    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$symName,
+    OpBuilder<(ins "Value":$clk, "Value":$rst, "StringRef":$name,
                    "llvm::ArrayRef<int64_t>":$shape, "Type":$elementType)>
   ];
 
-  let assemblyFormat = "$sym_name $clk `,` $rst attr-dict `:` type($handle)";
+  let assemblyFormat = "$name $clk `,` $rst attr-dict `:` type($handle)";
 }
 
 class HLMemTypeValueConstraint<string hlmemvalue, string value>
   : TypesMatchWith<"type of 'value' matches element type of 'hlmemvalue'",
                      hlmemvalue, value,
-                     "$_self.cast<HLMemType>().getElementType()">;
+                     "llvm::cast<HLMemType>($_self).getElementType()">;
 
 class HLMemTypeIndexingConstraint<string hlmemvalue, string addresses>
   : PredOpTrait<"address bit widths should be identical to the clog2 of the shape of the HLMemType",
@@ -432,7 +440,7 @@ def ClockMuxOp : SeqOp<"clock_mux", [Pure]> {
 // Clock Dividers
 //===----------------------------------------------------------------------===//
 
-def ClockDivider : SeqOp<"clock_div", [Pure]> {
+def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
   let summary = "Produces a clock divided by a power of two";
   let description = [{
     The output clock is phase-aligned to the input clock.
@@ -442,11 +450,36 @@ def ClockDivider : SeqOp<"clock_div", [Pure]> {
     ```
   }];
 
-  let arguments = (ins ClockType:$clockIn, I8Attr:$pow2);
-  let results = (outs ClockType:$clockOut);
+  let arguments = (ins ClockType:$input, I64Attr:$pow2);
+  let results = (outs ClockType:$output);
 
   let assemblyFormat = [{
-    $clockIn `by` $pow2 attr-dict
+    $input `by` $pow2 attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Clock Inverter and Buffer
+//===----------------------------------------------------------------------===//
+
+def ClockInverterOp : SeqOp<"clock_inv", [Pure]> {
+  let summary = "Inverts the clock signal";
+  let description = [{
+    Note that the compiler can optimize inverters away, preventing their
+    use as part of explicit clock buffers.
+
+    ```
+    %inv_clock = seq.clock_inv %clock
+    ```
+  }];
+
+  let arguments = (ins ClockType:$input);
+  let results = (outs ClockType:$output);
+
+  let hasFolder = 1;
+
+  let assemblyFormat = [{
+    $input attr-dict
   }];
 }
 
@@ -489,6 +522,8 @@ def FirMemOp : SeqOp<"firmem", [
     $readLatency `,` $writeLatency `,` $ruw `,` $wuw
     attr-dict `:` type($memory)
   }];
+
+  let hasCanonicalizeMethod = true;
 }
 
 class AddressMatchesFirMem<string memoryValue, string addressValue> :

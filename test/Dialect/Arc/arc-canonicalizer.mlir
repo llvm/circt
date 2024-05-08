@@ -5,17 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: hw.module @passthoughChecks
-hw.module @passthoughChecks(in %clock: !seq.clock, in %in0: i1, in %in1: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1, out out4: i1, out out5: i1, out out6: i1, out out7: i1, out out8: i1, out out9: i1) {
+hw.module @passthoughChecks(in %clock: !seq.clock, in %in0: i1, in %in1: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1, out out4: i1, out out5: i1) {
   %0:2 = arc.call @passthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
   %1:2 = arc.call @noPassthrough(%in0, %in1) : (i1, i1) -> (i1, i1)
-  %2:2 = arc.state @passthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
-  %3:2 = arc.state @noPassthrough(%in0, %in1) lat 0 : (i1, i1) -> (i1, i1)
-  %4:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 : (i1, i1) -> (i1, i1)
-  hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1, %3#0, %3#1, %4#0, %4#1 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  %2:2 = arc.state @passthrough(%in0, %in1) clock %clock latency 1 : (i1, i1) -> (i1, i1)
+  hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1 : i1, i1, i1, i1, i1, i1
   // CHECK-NEXT: [[V0:%.+]]:2 = arc.call @noPassthrough(%in0, %in1) :
-  // CHECK-NEXT: [[V1:%.+]]:2 = arc.state @noPassthrough(%in0, %in1) lat 0 :
-  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %clock lat 1 :
-  // CHECK-NEXT: hw.output %in0, %in1, [[V0]]#0, [[V0]]#1, %in0, %in1, [[V1]]#0, [[V1]]#1, [[V2]]#0, [[V2]]#1 :
+  // CHECK-NEXT: [[V2:%.+]]:2 = arc.state @passthrough(%in0, %in1) clock %clock latency 1 :
+  // CHECK-NEXT: hw.output %in0, %in1, [[V0]]#0, [[V0]]#1, [[V2]]#0, [[V2]]#1 :
 }
 arc.define @passthrough(%arg0: i1, %arg1: i1) -> (i1, i1) {
   arc.output %arg0, %arg1 : i1, i1
@@ -41,12 +38,13 @@ arc.define @memArcTrue(%arg0: i1, %arg1: i32) -> (i1, i32, i1) {
 hw.module @memoryWritePortCanonicalizations(in %clk: !seq.clock, in %addr: i1, in %data: i32) {
   // CHECK-NEXT: [[MEM:%.+]] = arc.memory <2 x i32, i1>
   %mem = arc.memory <2 x i32, i1>
-  arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
-  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
-  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk lat 1 :
-  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable lat 1 : <2 x i32, i1>, i1, i32
-  %0:3 = arc.state @memArcTrue(%addr, %data) lat 0 : (i1, i32) -> (i1, i32, i1)
+  arc.memory_write_port %mem, @memArcFalse(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk latency 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
+  // CHECK-NEXT: arc.memory_write_port [[MEM]], @memArcTrue_0(%addr, %data) clock %clk latency 1 :
+  arc.memory_write_port %mem, @memArcTrue(%addr, %data) clock %clk enable latency 1 : <2 x i32, i1>, i1, i32
+  // COM: trivially dead operation, requires listener callback to keep symbol cache up-to-date
+  %0:3 = arc.call @memArcTrue(%addr, %data) : (i1, i32) -> (i1, i32, i1)
   // CHECK-NEXT: hw.output
   hw.output
 }
@@ -129,6 +127,34 @@ hw.module @icmpNeCanonicalizer(in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg
 }
 
 //===----------------------------------------------------------------------===//
+// CompRegCanonicalizer
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: hw.module @HoistCompRegReset
+// CHECK-SAME: in %[[CLOCK:[^ ]*]] : !seq.clock, in %[[INPUT:[^ ]*]] : i32, in %[[RESET:[^ ]*]] : i1, in %[[RESET_VALUE:[^ ]*]] : i32
+hw.module @HoistCompRegReset(in %clock: !seq.clock, in %input: i32, in %reset: i1, in %resetValue: i32, out out: i32) {
+  // CHECK: %[[NEW_INPUT:.*]] = comb.mux %[[RESET]], %[[RESET_VALUE]], %[[INPUT]] : i32
+  // CHECK: %[[REG:.*]] = seq.compreg %[[NEW_INPUT]], %[[CLOCK]] : i32
+  %reg = seq.compreg %input, %clock reset %reset, %resetValue : i32
+
+  // CHECK: hw.output %[[REG]] : i32
+  hw.output %reg : i32
+}
+
+// CHECK-LABEL: hw.module @NoHoistCompRegZeroResetValue
+// CHECK-SAME: in %[[CLOCK:[^ ]*]] : !seq.clock, in %[[INPUT:[^ ]*]] : i32, in %[[RESET:[^ ]*]] : i1
+hw.module @NoHoistCompRegZeroResetValue(in %clock: !seq.clock, in %input: i32, in %reset: i1, out out: i32) {
+  // CHECK: %[[ZERO:.*]] = hw.constant 0 : i32
+  %zero = hw.constant 0 : i32
+
+  // CHECK: %[[REG:.*]] = seq.compreg %[[INPUT]], %[[CLOCK]] reset %[[RESET]], %[[ZERO]] : i32
+  %reg = seq.compreg %input, %clock reset %reset, %zero : i32
+
+  // CHECK: hw.output %[[REG]] : i32
+  hw.output %reg : i32
+}
+
+//===----------------------------------------------------------------------===//
 // RemoveUnusedArcArguments
 //===----------------------------------------------------------------------===//
 
@@ -151,10 +177,10 @@ arc.define @OneOfThreeUsed(%arg0: i1, %arg1: i1, %arg2: i1) -> i1 {
 
 // CHECK: @test1
 hw.module @test1 (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %clock: !seq.clock, out out0: i1, out out1: i1) {
-  // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock lat 1 : (i1) -> i1
-  %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  // CHECK-NEXT: arc.state @OneOfThreeUsed(%arg1) clock %clock latency 1 : (i1) -> i1
+  %0 = arc.state @OneOfThreeUsed(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
   // CHECK-NEXT: arc.state @NestedCall(%arg1)
-  %1 = arc.state @NestedCall(%arg0, %arg1, %arg2) clock %clock lat 1 : (i1, i1, i1) -> i1
+  %1 = arc.state @NestedCall(%arg0, %arg1, %arg2) clock %clock latency 1 : (i1, i1, i1) -> i1
   hw.output %0, %1 : i1, i1
 }
 
@@ -166,8 +192,8 @@ arc.define @NoArgsToRemove() -> i1 {
 
 // CHECK: @test2
 hw.module @test2 (out out: i1) {
-  // CHECK-NEXT: arc.state @NoArgsToRemove() lat 0 : () -> i1
-  %0 = arc.state @NoArgsToRemove() lat 0 : () -> i1
+  // CHECK-NEXT: arc.call @NoArgsToRemove() : () -> i1
+  %0 = arc.call @NoArgsToRemove() : () -> i1
   hw.output %0 : i1
 }
 
@@ -197,14 +223,14 @@ arc.define @Foo(%arg0: i4) -> i4 {
 // CHECK: hw.module @SinkSameConstants
 hw.module @SinkSameConstants(in %x: i4, out out0: i4, out out1: i4, out out2: i4) {
   // CHECK-NOT: hw.constant
-  // CHECK-NEXT: %0 = arc.state @SinkSameConstantsArc(%x)
-  // CHECK-NEXT: %1 = arc.state @SinkSameConstantsArc(%x)
+  // CHECK-NEXT: %0 = arc.call @SinkSameConstantsArc(%x)
+  // CHECK-NEXT: %1 = arc.call @SinkSameConstantsArc(%x)
   // CHECK-NEXT: arc.call
   // CHECK-NEXT: hw.output
   %k1 = hw.constant 2 : i4
   %k2 = hw.constant 2 : i4
-  %0 = arc.state @SinkSameConstantsArc(%x, %k1) lat 0 : (i4, i4) -> i4
-  %1 = arc.state @SinkSameConstantsArc(%x, %k2) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @SinkSameConstantsArc(%x, %k1) : (i4, i4) -> i4
+  %1 = arc.call @SinkSameConstantsArc(%x, %k2) : (i4, i4) -> i4
   %2 = arc.call @Foo(%x) : (i4) -> i4
   hw.output %0, %1, %2 : i4, i4, i4
 }
@@ -224,13 +250,13 @@ arc.define @DontSinkDifferentConstantsArc(%arg0: i4, %arg1: i4) -> i4 {
 hw.module @DontSinkDifferentConstants(in %x: i4, out out0: i4, out out1: i4) {
   // CHECK-NEXT: %c2_i4 = hw.constant 2 : i4
   // CHECK-NEXT: %c3_i4 = hw.constant 3 : i4
-  // CHECK-NEXT: %0 = arc.state @DontSinkDifferentConstantsArc(%x, %c2_i4)
-  // CHECK-NEXT: %1 = arc.state @DontSinkDifferentConstantsArc(%x, %c3_i4)
+  // CHECK-NEXT: %0 = arc.call @DontSinkDifferentConstantsArc(%x, %c2_i4)
+  // CHECK-NEXT: %1 = arc.call @DontSinkDifferentConstantsArc(%x, %c3_i4)
   // CHECK-NEXT: hw.output
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
-  %0 = arc.state @DontSinkDifferentConstantsArc(%x, %c2_i4) lat 0 : (i4, i4) -> i4
-  %1 = arc.state @DontSinkDifferentConstantsArc(%x, %c3_i4) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @DontSinkDifferentConstantsArc(%x, %c2_i4) : (i4, i4) -> i4
+  %1 = arc.call @DontSinkDifferentConstantsArc(%x, %c3_i4) : (i4, i4) -> i4
   hw.output %0, %1 : i4, i4
 }
 // CHECK-NEXT: }
@@ -257,14 +283,14 @@ arc.define @Bar(%arg0: i4) -> i4 {
 // CHECK: hw.module @DontSinkDifferentConstants1
 hw.module @DontSinkDifferentConstants1(in %x: i4, out out0: i4, out out1: i4, out out2: i4) {
   // CHECK-NEXT: %c2_i4 = hw.constant 2 : i4
-  // CHECK-NEXT: %0 = arc.state @DontSinkDifferentConstantsArc1(%x, %c2_i4)
-  // CHECK-NEXT: %1 = arc.state @DontSinkDifferentConstantsArc1(%x, %c2_i4)
+  // CHECK-NEXT: %0 = arc.call @DontSinkDifferentConstantsArc1(%x, %c2_i4)
+  // CHECK-NEXT: %1 = arc.call @DontSinkDifferentConstantsArc1(%x, %c2_i4)
   // CHECK-NEXT: arc.call
   // CHECK-NEXT: hw.output
   %k1 = hw.constant 2 : i4
   %k2 = hw.constant 2 : i4
-  %0 = arc.state @DontSinkDifferentConstantsArc1(%x, %k1) lat 0 : (i4, i4) -> i4
-  %1 = arc.state @DontSinkDifferentConstantsArc1(%x, %k2) lat 0 : (i4, i4) -> i4
+  %0 = arc.call @DontSinkDifferentConstantsArc1(%x, %k1) : (i4, i4) -> i4
+  %1 = arc.call @DontSinkDifferentConstantsArc1(%x, %k2) : (i4, i4) -> i4
   %2 = arc.call @Bar(%x) : (i4) -> i4
   hw.output %0, %1, %2 : i4, i4, i4
 }

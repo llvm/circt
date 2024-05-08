@@ -42,3 +42,17 @@ target_link_libraries(circt-capi-firrtl-test
   CIRCTCAPIFIRRTL
   CIRCTCAPIExportFIRRTL
 )
+
+add_llvm_executable(circt-capi-firtool-test
+  PARTIAL_SOURCES_INTENDED
+  firtool.c
+)
+llvm_update_compile_flags(circt-capi-firtool-test)
+
+target_link_libraries(circt-capi-firtool-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPIFIRRTL
+  CIRCTCAPIFirtool
+)

@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -22,6 +23,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
@@ -66,7 +68,7 @@ getBackwardSliceSimple(Operation *rootOp, SetVector<Operation *> &backwardSlice,
       if (!backwardSlice.contains(definingOp))
         for (auto newOperand : llvm::reverse(definingOp->getOperands()))
           worklist.push_back(newOperand);
-    } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
+    } else if (auto blockArg = dyn_cast<BlockArgument>(operand)) {
       Block *block = blockArg.getOwner();
       Operation *parentOp = block->getParentOp();
       // TODO: determine whether we want to recurse backward into the other
@@ -140,8 +142,8 @@ getBackwardSlice(hw::HWModuleOp module,
 
 static StringAttr getNameForPort(Value val,
                                  SmallVector<mlir::Attribute> modulePorts) {
-  if (auto bv = val.dyn_cast<BlockArgument>())
-    return modulePorts[bv.getArgNumber()].cast<StringAttr>();
+  if (auto bv = dyn_cast<BlockArgument>(val))
+    return cast<StringAttr>(modulePorts[bv.getArgNumber()]);
 
   if (auto *op = val.getDefiningOp()) {
     if (auto readinout = dyn_cast<ReadInOutOp>(op)) {
@@ -152,7 +154,7 @@ static StringAttr getNameForPort(Value val,
           return reg.getNameAttr();
       }
     } else if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-      auto index = val.cast<mlir::OpResult>().getResultNumber();
+      auto index = cast<mlir::OpResult>(val).getResultNumber();
       SmallString<64> portName = inst.getInstanceName();
       portName += ".";
       auto resultName = inst.getResultName(index);
@@ -222,7 +224,10 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
+  if (auto fragments = op->getAttr(emit::getFragmentsAttrName()))
+    newMod->setAttr(emit::getFragmentsAttrName(), fragments);
   newMod.setCommentAttr(b.getStringAttr("VCS coverage exclude_file"));
+  newMod.setPrivate();
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(realInputs)) {
@@ -540,15 +545,16 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   // verifications. See FIRParserAsserts for more details.
   if (auto error = dyn_cast<ErrorOp>(op)) {
     if (auto message = error.getMessage())
-      return message->startswith("assert:") ||
-             message->startswith("assert failed (verification library)") ||
-             message->startswith("Assertion failed") ||
-             message->startswith("assertNotX:") ||
+      return message->starts_with("assert:") ||
+             message->starts_with("assert failed (verification library)") ||
+             message->starts_with("Assertion failed") ||
+             message->starts_with("assertNotX:") ||
              message->contains("[verif-library-assert]");
     return false;
   }
 
-  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp>(op);
+  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
+             verif::AssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -558,7 +564,7 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
       if (mod->getAttr("firrtl.extract.cover.extra"))
         return true;
-  return isa<CoverOp, CoverConcurrentOp>(op);
+  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp>(op);
 }
 
 static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -569,7 +575,7 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
       if (mod->getAttr("firrtl.extract.assume.extra"))
         return true;
 
-  return isa<AssumeOp, AssumeConcurrentOp>(op);
+  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(op);
 }
 
 /// Return true if the operation belongs to the design.

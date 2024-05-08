@@ -45,30 +45,6 @@ def PEOutputOp: MSFTOp<"pe.output", [Terminator]> {
   let assemblyFormat = "$output attr-dict `:` type($output)";
 }
 
-def ChannelOp: MSFTOp<"constructs.channel",
-    [Pure, Symbol,
-     AllTypesMatch<["input", "output"]>]> {
-
-  let summary = "A pipeline-able connection";
-  let description = [{
-    A logical, feed-forward connection between a producer and consumer. Can be
-    pipelined with a number of stages (cycle delay) on a per-instance basis.
-    `defaultStages` is used when `stages` isn't specified by a
-    `DynamicInstance`. Non-resettable, for now.
-
-    Per-instance specification is not yet supported, so the default pipelining
-    is always used.
-  }];
-
-  let arguments = (ins AnyType:$input, ClockType:$clk, StrAttr:$sym_name,
-                       UI64Attr:$defaultStages);
-  let results = (outs AnyType:$output);
-
-  let assemblyFormat = [{
-    $input $clk $sym_name `(` $defaultStages `)` attr-dict `:` type($input)
-  }];
-}
-
 // Linear, pipelineable datapath.
 def LinearOp : MSFTOp<"hlc.linear", [
     SingleBlockImplicitTerminator<"OutputOp">

@@ -222,41 +222,24 @@ parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
 /// Depending on the nature the verification operation, the `stop` may be
 /// optional. The Scala implementation simply removes all `stop`s that have the
 /// same condition as the printf.
-ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
+FailureOr<bool> circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   auto *context = printOp.getContext();
   auto whenStmt = dyn_cast<WhenOp>(printOp->getParentOp());
 
   // If the parent of printOp is not when, printOp doesn't encode a
   // verification.
   if (!whenStmt)
-    return success();
+    return false;
 
   // The when blocks we're interested in don't have an else region.
   if (whenStmt.hasElseRegion())
-    return success();
+    return false;
 
   // The when blocks we're interested in contain a `PrintFOp` and an optional
   // `StopOp` with the same clock and condition as the print.
   Block &thenBlock = whenStmt.getThenBlock();
   auto opIt = std::next(printOp->getIterator());
   auto opEnd = thenBlock.end();
-
-  // optional `stop(clock, enable, ...)`
-  //
-  // FIXME: Currently, we can't detetct stopOp in the following IR:
-  //    when invCond:
-  //      printf(io.clock, UInt<1>(1), "assert: ..")
-  //      stop(io.clock, UInt<1>(1), 1)
-  // It is because `io.clock` will create another subfield op so StopOp is not
-  // the next operation. Also, we will have to modify `stopOp.clock() !=
-  // printOp.clock()` below since they are not CSEd.
-  if (opIt != opEnd) {
-    auto stopOp = dyn_cast<StopOp>(*opIt++);
-    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
-        stopOp.getCond() != printOp.getCond())
-      return success();
-    stopOp.erase();
-  }
 
   // Detect if we're dealing with a verification statement, and what flavor of
   // statement it is.
@@ -276,10 +259,27 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     flavor = VerifFlavor::Cover;
   else if (fmt.consume_front("assertNotX:"))
     flavor = VerifFlavor::AssertNotX;
-  else if (fmt.startswith("Assertion failed"))
+  else if (fmt.starts_with("Assertion failed"))
     flavor = VerifFlavor::ChiselAssert;
   else
-    return success();
+    return false;
+
+  // optional `stop(clock, enable, ...)`
+  //
+  // FIXME: Currently, we can't detetct stopOp in the following IR:
+  //    when invCond:
+  //      printf(io.clock, UInt<1>(1), "assert: ..")
+  //      stop(io.clock, UInt<1>(1), 1)
+  // It is because `io.clock` will create another subfield op so StopOp is not
+  // the next operation. Also, we will have to modify `stopOp.clock() !=
+  // printOp.clock()` below since they are not CSEd.
+  if (opIt != opEnd) {
+    auto stopOp = dyn_cast<StopOp>(*opIt++);
+    if (!stopOp || opIt != opEnd || stopOp.getClock() != printOp.getClock() ||
+        stopOp.getCond() != printOp.getCond())
+      return false;
+    stopOp.erase();
+  }
 
   // Check if the condition of the `WhenOp` is a trivial inversion operation,
   // and remove any immediately preceding verification ops that ensure this
@@ -403,10 +403,11 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
       if (printOp.getSubstitutions().size() != 1) {
-        printOp.emitError("printf-encoded assertNotX requires one operand");
+        return printOp.emitError(
+            "printf-encoded assertNotX requires one operand");
         return failure();
       }
-      // Construct a `!whenCond | (value !== 1'bx)` predicate.
+      // Construct a `!whenCond | (^value !== 1'bx)` predicate.
       Value notCond = predicate;
       predicate = builder.create<XorRPrimOp>(printOp.getSubstitutions()[0]);
       predicate = builder.create<IsXIntrinsicOp>(predicate);
@@ -523,10 +524,9 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
       break;
     case PredicateModifier::TrueOrIsX:
       // Construct a `predicate | (^predicate === 1'bx)`.
-      Value orX = builder.create<XorRPrimOp>(predicate);
-      orX = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
-                                           "{{0}} === 1'bx", orX);
-      predicate = builder.create<OrPrimOp>(predicate, orX);
+      Value isX =
+          builder.create<IsXIntrinsicOp>(builder.create<XorRPrimOp>(predicate));
+      predicate = builder.create<OrPrimOp>(predicate, isX);
       break;
     }
 
@@ -618,5 +618,5 @@ ParseResult circt::firrtl::foldWhenEncodedVerifOp(PrintFOp printOp) {
   // Clean up the `WhenOp` if it has become completely empty.
   if (thenBlock.empty())
     whenStmt.erase();
-  return success();
+  return true;
 }
