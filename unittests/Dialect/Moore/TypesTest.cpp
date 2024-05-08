@@ -211,97 +211,46 @@ TEST(TypesTest, UnpackedFormattingAroundStuff) {
             "bit [2:0] bar [42]");
 }
 
-TEST(TypesTest, Resolution) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-
-  auto loc = UnknownLoc::get(&context);
-  auto t0 = IntType::get(&context, IntType::Bit);
-  auto t1 = PackedRangeDim::get(t0, 3);
-  auto t2 = PackedNamedType::get(t1, "foo", loc);
-
-  ASSERT_EQ(t2.toString(), "foo");
-  ASSERT_EQ(t2.resolved().toString(), "bit [2:0]");
-  ASSERT_EQ(t2.fullyResolved().toString(), "bit [2:0]");
-
-  auto t3 = PackedRangeDim::get(t2, 2);
-  auto t4 = PackedNamedType::get(t3, "bar", loc);
-
-  ASSERT_EQ(t4.toString(), "bar");
-  ASSERT_EQ(t4.resolved().toString(), "foo [1:0]");
-  ASSERT_EQ(t4.fullyResolved().toString(), "bit [1:0][2:0]");
-
-  auto t5 = UnpackedArrayDim::get(t4, 4);
-  auto t6 = UnpackedNamedType::get(t5, "tony", loc);
-
-  ASSERT_EQ(t6.toString(), "tony");
-  ASSERT_EQ(t6.resolved().toString(), "bar $ [4]");
-  ASSERT_EQ(t6.fullyResolved().toString(), "bit [1:0][2:0] $ [4]");
-
-  auto t7 = UnpackedAssocDim::get(t6);
-  auto t8 = UnpackedNamedType::get(t7, "ada", loc);
-
-  ASSERT_EQ(t8.toString(), "ada");
-  ASSERT_EQ(t8.resolved().toString(), "tony $ [*]");
-  ASSERT_EQ(t8.fullyResolved().toString(), "bit [1:0][2:0] $ [*][4]");
-
-  // Type references
-  auto r0 = PackedRefType::get(t2, loc);
-
-  ASSERT_EQ(r0.toString(), "type(foo)");
-  ASSERT_EQ(r0.resolved().toString(), "foo");
-  ASSERT_EQ(r0.fullyResolved().toString(), "bit [2:0]");
-
-  auto r1 = UnpackedRefType::get(t8, loc);
-
-  ASSERT_EQ(r1.toString(), "type(ada)");
-  ASSERT_EQ(r1.resolved().toString(), "ada");
-  ASSERT_EQ(r1.fullyResolved().toString(), "bit [1:0][2:0] $ [*][4]");
-}
-
 TEST(TypesTest, NamedStructFormatting) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
-  auto foo = StringAttr::get(&context, "Foo");
 
-  auto s0 = UnpackedStructType::get(StructKind::Struct, {}, foo, loc);
-  auto s1 = UnpackedStructType::get(StructKind::Union, {}, foo, loc);
-  auto s2 = UnpackedStructType::get(StructKind::TaggedUnion, {}, foo, loc);
-  auto s3 = PackedStructType::get(StructKind::Struct, {}, foo, loc);
-  auto s4 = PackedStructType::get(StructKind::Union, {}, foo, loc);
-  auto s5 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc);
+  auto s0 = UnpackedStructType::get(&context, StructKind::Struct, {});
+  auto s1 = UnpackedStructType::get(&context, StructKind::Union, {});
+  auto s2 = UnpackedStructType::get(&context, StructKind::TaggedUnion, {});
+  auto s3 = PackedStructType::get(&context, StructKind::Struct, {});
+  auto s4 = PackedStructType::get(&context, StructKind::Union, {});
+  auto s5 = PackedStructType::get(&context, StructKind::TaggedUnion, {});
   auto s6 =
-      PackedStructType::get(StructKind::Struct, {}, foo, loc, Sign::Unsigned);
+      PackedStructType::get(&context, StructKind::Struct, {}, Sign::Unsigned);
   auto s7 =
-      PackedStructType::get(StructKind::Union, {}, foo, loc, Sign::Unsigned);
-  auto s8 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc,
+      PackedStructType::get(&context, StructKind::Union, {}, Sign::Unsigned);
+  auto s8 = PackedStructType::get(&context, StructKind::TaggedUnion, {},
                                   Sign::Unsigned);
   auto s9 =
-      PackedStructType::get(StructKind::Struct, {}, foo, loc, Sign::Signed);
+      PackedStructType::get(&context, StructKind::Struct, {}, Sign::Signed);
   auto s10 =
-      PackedStructType::get(StructKind::Union, {}, foo, loc, Sign::Signed);
-  auto s11 = PackedStructType::get(StructKind::TaggedUnion, {}, foo, loc,
+      PackedStructType::get(&context, StructKind::Union, {}, Sign::Signed);
+  auto s11 = PackedStructType::get(&context, StructKind::TaggedUnion, {},
                                    Sign::Signed);
 
-  ASSERT_EQ(s0.toString(), "struct Foo");
-  ASSERT_EQ(s1.toString(), "union Foo");
-  ASSERT_EQ(s2.toString(), "union tagged Foo");
-  ASSERT_EQ(s3.toString(), "struct packed Foo");
-  ASSERT_EQ(s4.toString(), "union packed Foo");
-  ASSERT_EQ(s5.toString(), "union tagged packed Foo");
-  ASSERT_EQ(s6.toString(), "struct packed unsigned Foo");
-  ASSERT_EQ(s7.toString(), "union packed unsigned Foo");
-  ASSERT_EQ(s8.toString(), "union tagged packed unsigned Foo");
-  ASSERT_EQ(s9.toString(), "struct packed signed Foo");
-  ASSERT_EQ(s10.toString(), "union packed signed Foo");
-  ASSERT_EQ(s11.toString(), "union tagged packed signed Foo");
+  ASSERT_EQ(s0.toString(), "struct {}");
+  ASSERT_EQ(s1.toString(), "union {}");
+  ASSERT_EQ(s2.toString(), "union tagged {}");
+  ASSERT_EQ(s3.toString(), "struct packed {}");
+  ASSERT_EQ(s4.toString(), "union packed {}");
+  ASSERT_EQ(s5.toString(), "union tagged packed {}");
+  ASSERT_EQ(s6.toString(), "struct packed unsigned {}");
+  ASSERT_EQ(s7.toString(), "union packed unsigned {}");
+  ASSERT_EQ(s8.toString(), "union tagged packed unsigned {}");
+  ASSERT_EQ(s9.toString(), "struct packed signed {}");
+  ASSERT_EQ(s10.toString(), "union packed signed {}");
+  ASSERT_EQ(s11.toString(), "union tagged packed signed {}");
 }
 
 TEST(TypesTest, Structs) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
   auto foo = StringAttr::get(&context, "foo");
   auto bar = StringAttr::get(&context, "bar");
 
@@ -310,20 +259,17 @@ TEST(TypesTest, Structs) {
   auto bit8Type = PackedRangeDim::get(bitType, 8);
   auto bitDynArrayType = PackedUnsizedDim::get(bitType);
 
-  auto s0 = UnpackedStructType::get(StructKind::Struct,
-                                    {StructMember{foo, loc, bitType}}, {}, loc);
+  auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
+                                    {StructMember{foo, bitType}});
   auto s1 = UnpackedStructType::get(
-      StructKind::Struct,
-      {StructMember{foo, loc, bitType}, StructMember{bar, loc, bit8Type}}, {},
-      loc);
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, bit8Type}});
   auto s2 = UnpackedStructType::get(
-      StructKind::Struct,
-      {StructMember{foo, loc, bitType}, StructMember{bar, loc, logicType}}, {},
-      loc);
-  auto s3 = UnpackedStructType::get(StructKind::Struct,
-                                    {StructMember{foo, loc, bitType},
-                                     StructMember{bar, loc, bitDynArrayType}},
-                                    {}, loc);
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, logicType}});
+  auto s3 = UnpackedStructType::get(
+      &context, StructKind::Struct,
+      {StructMember{foo, bitType}, StructMember{bar, bitDynArrayType}});
 
   // Member formatting
   ASSERT_EQ(s0.toString(), "struct { bit foo; }");
@@ -338,65 +284,6 @@ TEST(TypesTest, Structs) {
   ASSERT_EQ(s1.getBitSize(), 9u);
   ASSERT_EQ(s2.getBitSize(), 2u);
   ASSERT_EQ(s3.getBitSize(), std::nullopt);
-}
-
-TEST(TypesTest, Enums) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-  auto loc = UnknownLoc::get(&context);
-  auto foo = StringAttr::get(&context, "Foo");
-  auto intType = IntType::getInt(&context);
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto bit8Type = PackedRangeDim::get(bitType, 8);
-  auto slogicType = IntType::get(&context, IntType::Logic, Sign::Signed);
-  auto slogic8Type = PackedRangeDim::get(slogicType, 8);
-
-  auto e0 = EnumType::get({}, loc);
-  auto e1 = EnumType::get(foo, loc);
-  auto e2 = EnumType::get({}, loc, bit8Type);
-  auto e3 = EnumType::get(foo, loc, bit8Type);
-  auto e4 = EnumType::get({}, loc, slogic8Type);
-  auto e5 = EnumType::get(foo, loc, slogic8Type);
-
-  // Formatting
-  ASSERT_EQ(e0.toString(), "enum");
-  ASSERT_EQ(e1.toString(), "enum Foo");
-  ASSERT_EQ(e2.toString(), "enum bit [7:0]");
-  ASSERT_EQ(e3.toString(), "enum Foo");
-  ASSERT_EQ(e4.toString(), "enum logic signed [7:0]");
-  ASSERT_EQ(e5.toString(), "enum Foo");
-
-  // Base types
-  ASSERT_EQ(e0.getBase(), intType);
-  ASSERT_EQ(e1.getBase(), intType);
-  ASSERT_EQ(e2.getBase(), bit8Type);
-  ASSERT_EQ(e3.getBase(), bit8Type);
-  ASSERT_EQ(e4.getBase(), slogic8Type);
-  ASSERT_EQ(e5.getBase(), slogic8Type);
-
-  // Sign
-  ASSERT_EQ(e0.getSign(), Sign::Signed); // implicit int
-  ASSERT_EQ(e1.getSign(), Sign::Signed); // implicit int
-  ASSERT_EQ(e2.getSign(), Sign::Unsigned);
-  ASSERT_EQ(e3.getSign(), Sign::Unsigned);
-  ASSERT_EQ(e4.getSign(), Sign::Signed);
-  ASSERT_EQ(e5.getSign(), Sign::Signed);
-
-  // Value domain
-  ASSERT_EQ(e0.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e1.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e2.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e3.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(e4.getDomain(), Domain::FourValued);
-  ASSERT_EQ(e5.getDomain(), Domain::FourValued);
-
-  // Bit size
-  ASSERT_EQ(e0.getBitSize(), 32u);
-  ASSERT_EQ(e1.getBitSize(), 32u);
-  ASSERT_EQ(e2.getBitSize(), 8u);
-  ASSERT_EQ(e3.getBitSize(), 8u);
-  ASSERT_EQ(e4.getBitSize(), 8u);
-  ASSERT_EQ(e5.getBitSize(), 8u);
 }
 
 TEST(TypesTest, SimpleBitVectorTypes) {

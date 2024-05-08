@@ -336,6 +336,8 @@ class StructType(Type):
       cls, fields: typing.Union[typing.List[typing.Tuple[str, Type]],
                                 typing.Dict[str, Type]]
   ) -> StructType:
+    if len(fields) == 0:
+      raise ValueError("Structs must have at least one field.")
     if isinstance(fields, dict):
       fields = list(fields.items())
     if not isinstance(fields, list):

@@ -8,9 +8,9 @@
 module Enums;
   typedef enum shortint { MAGIC } myEnum;
 
-  // CHECK-NEXT: %e0 = moore.variable : !moore.enum<int, loc(
-  // CHECK-NEXT: %e1 = moore.variable : !moore.enum<byte, loc(
-  // CHECK-NEXT: %e2 = moore.variable : !moore.packed<named<"myEnum", enum<shortint, loc(
+  // CHECK-NEXT: %e0 = moore.variable : !moore.int
+  // CHECK-NEXT: %e1 = moore.variable : !moore.byte
+  // CHECK-NEXT: %e2 = moore.variable : !moore.shortint
   enum { FOO, BAR } e0;
   enum byte { HELLO = 0, WORLD = 1 } e1;
   myEnum e2;
@@ -121,10 +121,10 @@ module Structs;
   typedef struct packed { byte a; int b; } myStructA;
   typedef struct { byte x; int y; } myStructB;
 
-  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: bit loc({{.+}}), bar: logic loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<bit, int> loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<named<"myStructA", struct<{a: byte loc({{.+}}), b: int loc({{.+}})}, loc({{.+}})>, loc({{.+}})>>
-  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<named<"myStructB", struct<{x: byte loc({{.+}}), y: int loc({{.+}})}, loc({{.+}})>, loc({{.+}})>>
+  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: bit, bar: logic}>>
+  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<bit, int>}>>
+  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<struct<{a: byte, b: int}>>
+  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<struct<{x: byte, y: int}>>
   struct packed { bit foo; logic bar; } s0;
   struct { bit many[int]; } s1;
   myStructA s2;
@@ -136,8 +136,8 @@ module Typedefs;
   typedef logic [2:0] myType1;
   typedef logic myType2 [2:0];
 
-  // CHECK-NEXT: %v0 = moore.variable : !moore.packed<named<"myType1", range<logic, 2:0>, loc(
-  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<named<"myType2", range<logic, 2:0>, loc(
+  // CHECK-NEXT: %v0 = moore.variable : !moore.packed<range<logic, 2:0>>
+  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<range<logic, 2:0>>
   myType1 v0;
   myType2 v1;
 endmodule

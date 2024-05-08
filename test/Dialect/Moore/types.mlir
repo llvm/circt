@@ -80,34 +80,6 @@ func.func @RealTypes(
   %arg2: !moore.realtime
 ) { return }
 
-// CHECK-LABEL: func @EnumType(
-func.func @EnumType(
-  // CHECK-SAME: %arg0: !moore.enum<loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg1: !moore.enum<int, loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg2: !moore.enum<"Foo", loc("foo.sv":42:9001)>
-  // CHECK-SAME: %arg3: !moore.enum<"Foo", int, loc("foo.sv":42:9001)>
-  %arg0: !moore.enum<loc("foo.sv":42:9001)>,
-  %arg1: !moore.enum<int, loc("foo.sv":42:9001)>,
-  %arg2: !moore.enum<"Foo", loc("foo.sv":42:9001)>,
-  %arg3: !moore.enum<"Foo", int, loc("foo.sv":42:9001)>
-) { return }
-
-// CHECK-LABEL: func @IndirectTypes(
-func.func @IndirectTypes(
-  // CHECK-SAME: %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg1: !moore.packed<ref<bit, loc("foo.sv":42:9001)>>
-  %arg0: !moore.packed<named<"Foo", bit, loc("foo.sv":42:9001)>>,
-  %arg1: !moore.packed<ref<bit, loc("foo.sv":42:9001)>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<named<"Foo", bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg3: !moore.unpacked<named<"Foo", string, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg4: !moore.unpacked<ref<bit, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg5: !moore.unpacked<ref<string, loc("foo.sv":42:9001)>>
-  %arg2: !moore.unpacked<named<"Foo", bit, loc("foo.sv":42:9001)>>,
-  %arg3: !moore.unpacked<named<"Foo", string, loc("foo.sv":42:9001)>>,
-  %arg4: !moore.unpacked<ref<bit, loc("foo.sv":42:9001)>>,
-  %arg5: !moore.unpacked<ref<string, loc("foo.sv":42:9001)>>
-) { return }
-
 // CHECK-LABEL: func @DimTypes(
 func.func @DimTypes(
   // CHECK-SAME: %arg0: !moore.packed<unsized<bit>>,
@@ -134,20 +106,16 @@ func.func @DimTypes(
 
 // CHECK-LABEL: func @StructTypes(
 func.func @StructTypes(
-  // CHECK-SAME: %arg0: !moore.packed<struct<{}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg1: !moore.packed<struct<"Foo", {}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg2: !moore.packed<struct<unsigned, {}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg3: !moore.packed<struct<"Foo", signed, {}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg4: !moore.packed<struct<{foo: bit loc("foo.sv":1:2), bar: int loc("foo.sv":3:4)}, loc("foo.sv":42:9001)>>
-  %arg0: !moore.packed<struct<{}, loc("foo.sv":42:9001)>>,
-  %arg1: !moore.packed<struct<"Foo", {}, loc("foo.sv":42:9001)>>,
-  %arg2: !moore.packed<struct<unsigned, {}, loc("foo.sv":42:9001)>>,
-  %arg3: !moore.packed<struct<"Foo", signed, {}, loc("foo.sv":42:9001)>>,
-  %arg4: !moore.packed<struct<{foo: bit loc("foo.sv":1:2), bar: int loc("foo.sv":3:4)}, loc("foo.sv":42:9001)>>,
-  // CHECK-SAME: %arg5: !moore.unpacked<struct<{}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg6: !moore.unpacked<struct<"Foo", {}, loc("foo.sv":42:9001)>>
-  // CHECK-SAME: %arg7: !moore.unpacked<struct<{foo: string loc("foo.sv":1:2), bar: event loc("foo.sv":3:4)}, loc("foo.sv":42:9001)>>
-  %arg5: !moore.unpacked<struct<{}, loc("foo.sv":42:9001)>>,
-  %arg6: !moore.unpacked<struct<"Foo", {}, loc("foo.sv":42:9001)>>,
-  %arg7: !moore.unpacked<struct<{foo: string loc("foo.sv":1:2), bar: event loc("foo.sv":3:4)}, loc("foo.sv":42:9001)>>
+  // CHECK-SAME: %arg0: !moore.packed<struct<{}>>
+  // CHECK-SAME: %arg1: !moore.packed<struct<unsigned, {}>>
+  // CHECK-SAME: %arg2: !moore.packed<struct<signed, {}>>
+  // CHECK-SAME: %arg3: !moore.packed<struct<{foo: bit, bar: int}>>
+  %arg0: !moore.packed<struct<{}>>,
+  %arg1: !moore.packed<struct<unsigned, {}>>,
+  %arg2: !moore.packed<struct<signed, {}>>,
+  %arg3: !moore.packed<struct<{foo: bit, bar: int}>>,
+  // CHECK-SAME: %arg4: !moore.unpacked<struct<{}>>
+  // CHECK-SAME: %arg5: !moore.unpacked<struct<{foo: string, bar: event}>>
+  %arg4: !moore.unpacked<struct<{}>>,
+  %arg5: !moore.unpacked<struct<{foo: string, bar: event}>>
 ) { return }

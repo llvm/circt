@@ -235,13 +235,11 @@ Os &operator<<(Os &os, const SimpleBitVectorType &type) {
 namespace detail {
 struct RealTypeStorage;
 struct IntTypeStorage;
-struct IndirectTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
 struct SizedDimStorage;
 struct AssocDimStorage;
-struct EnumTypeStorage;
 struct StructTypeStorage;
 } // namespace detail
 
@@ -260,7 +258,6 @@ class StringType;
 class ChandleType;
 class EventType;
 class RealType;
-class UnpackedIndirectType;
 class UnpackedDim;
 class UnpackedStructType;
 
@@ -293,21 +290,9 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType>(type) || llvm::isa<StringType>(type) ||
            llvm::isa<ChandleType>(type) || llvm::isa<EventType>(type) ||
-           llvm::isa<RealType>(type) || llvm::isa<UnpackedIndirectType>(type) ||
-           llvm::isa<UnpackedDim>(type) || llvm::isa<UnpackedStructType>(type);
+           llvm::isa<RealType>(type) || llvm::isa<UnpackedDim>(type) ||
+           llvm::isa<UnpackedStructType>(type);
   }
-
-  /// Resolve one level of name or type reference indirection.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `foo`.
-  UnpackedType resolved() const;
-
-  /// Resolve all name or type reference indirections.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `int`.
-  UnpackedType fullyResolved() const;
 
   /// Get the value domain of this type.
   Domain getDomain() const;
@@ -394,9 +379,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, Ty type) {
 
 class VoidType;
 class IntType;
-class PackedIndirectType;
 class PackedDim;
-class EnumType;
 class PackedStructType;
 
 /// A packed SystemVerilog type.
@@ -424,21 +407,8 @@ class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
     return llvm::isa<VoidType>(type) || llvm::isa<IntType>(type) ||
-           llvm::isa<PackedIndirectType>(type) || llvm::isa<PackedDim>(type) ||
-           llvm::isa<EnumType>(type) || llvm::isa<PackedStructType>(type);
+           llvm::isa<PackedDim>(type) || llvm::isa<PackedStructType>(type);
   }
-
-  /// Resolve one level of name or type reference indirection.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `foo`.
-  PackedType resolved() const;
-
-  /// Resolve all name or type reference indirections.
-  ///
-  /// For example, given `typedef int foo; typedef foo bar;`, resolves `bar`
-  /// to `int`.
-  PackedType fullyResolved() const;
 
   /// Get the value domain of this type.
   Domain getDomain() const;
@@ -457,58 +427,6 @@ public:
 
 protected:
   using UnpackedType::UnpackedType;
-};
-
-//===----------------------------------------------------------------------===//
-// Unit Types
-//===----------------------------------------------------------------------===//
-
-/// The `void` type.
-class VoidType
-    : public Type::TypeBase<VoidType, PackedType, DefaultTypeStorage> {
-public:
-  static VoidType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.void";
-
-protected:
-  using Base::Base;
-};
-
-/// The `string` type.
-class StringType
-    : public Type::TypeBase<StringType, UnpackedType, DefaultTypeStorage> {
-public:
-  static StringType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.string";
-
-protected:
-  using Base::Base;
-};
-
-/// The `chandle` type.
-class ChandleType
-    : public Type::TypeBase<ChandleType, UnpackedType, DefaultTypeStorage> {
-public:
-  static ChandleType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.chandle";
-
-protected:
-  using Base::Base;
-};
-
-/// The `event` type.
-class EventType
-    : public Type::TypeBase<EventType, UnpackedType, DefaultTypeStorage> {
-public:
-  static EventType get(MLIRContext *context);
-
-  static constexpr StringLiteral name = "moore.event";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//
@@ -640,174 +558,6 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Packed and Unpacked Type Indirections
-//===----------------------------------------------------------------------===//
-
-class PackedNamedType;
-class PackedRefType;
-class UnpackedNamedType;
-class UnpackedRefType;
-
-namespace detail {
-UnpackedType getIndirectTypeInner(const TypeStorage *impl);
-Location getIndirectTypeLoc(const TypeStorage *impl);
-StringAttr getIndirectTypeName(const TypeStorage *impl);
-} // namespace detail
-
-/// Common base class for name and type reference indirections.
-///
-/// These handle the cases where the source text uses a `typedef` or
-/// `type(<decl>)` construct to build a type. We keep track of these
-/// indirections alongside the location in the source text where they were
-/// created, in order to be able to reproduce the exact source text type in
-/// diagnostics.
-///
-/// We use this templated base class to construct separate packed and unpacked
-/// indirect types, where holding a packed indirect type guarantees  that the
-/// inner type is a packed type as well. The resulting inheritance trees are:
-///
-/// - `PackedNamedType -> PackedIndirectType -> PackedType`
-/// - `PackedRefType -> PackedIndirectType -> PackedType`
-/// - `UnpackedNamedType -> UnpackedIndirectType -> UnpackedType`
-/// - `UnpackedRefType -> UnpackedIndirectType -> UnpackedType`
-template <class BaseTy>
-class IndirectTypeBase : public BaseTy {
-protected:
-  using InnerType = BaseTy;
-  using BaseTy::BaseTy;
-  using Base = IndirectTypeBase<BaseTy>;
-
-public:
-  /// Get the type this indirection wraps.
-  BaseTy getInner() const {
-    return cast<BaseTy>(detail::getIndirectTypeInner(this->impl));
-  }
-
-  /// Get the location in the source text where the indirection was generated.
-  Location getLoc() const { return detail::getIndirectTypeLoc(this->impl); }
-
-  /// Resolve one level of name or type reference indirection. This simply
-  /// returns the inner type, which removes the name indirection introduced by
-  /// this type. See `PackedType::resolved` and `UnpackedType::resolved`.
-  BaseTy resolved() const { return getInner(); }
-
-  /// Resolve all name or type reference indirections. This always returns the
-  /// fully resolved inner type. See `PackedType::fullyResolved` and
-  /// `UnpackedType::fullyResolved`.
-  BaseTy fullyResolved() const { return getInner().fullyResolved(); }
-};
-
-/// A named type.
-///
-/// Named types are user-defined types that are introduced with a `typedef
-/// <inner> <name>` construct in the source file. They are composed of the
-/// following information:
-///
-/// - `inner: The type that this name expands to.
-/// - `name`: How the user originally called the type.
-/// - `loc`: The location of the typedef in the source file.
-template <class ConcreteTy, class BaseTy>
-class NamedTypeBase
-    : public Type::TypeBase<ConcreteTy, BaseTy, detail::IndirectTypeStorage> {
-protected:
-  using InnerType = typename BaseTy::InnerType;
-  using Type::TypeBase<ConcreteTy, BaseTy,
-                       detail::IndirectTypeStorage>::TypeBase;
-  using NamedBase = NamedTypeBase<ConcreteTy, BaseTy>;
-
-public:
-  static ConcreteTy get(InnerType inner, StringAttr name, Location loc);
-  static ConcreteTy get(InnerType inner, StringRef name, Location loc) {
-    return get(inner, StringAttr::get(inner.getContext(), name), loc);
-  }
-
-  /// Get the name assigned to the wrapped type.
-  StringAttr getName() const { return detail::getIndirectTypeName(this->impl); }
-};
-
-/// A type reference.
-///
-/// Type references are introduced with a `type(<decl>)` construct in the source
-/// file. They are composed of the following information:
-///
-/// - `inner`: The type that this reference expands to.
-/// - `loc`: The location of the `type(...)` in the source file.
-template <class ConcreteTy, class BaseTy>
-class RefTypeBase
-    : public Type::TypeBase<ConcreteTy, BaseTy, detail::IndirectTypeStorage> {
-protected:
-  using InnerType = typename BaseTy::InnerType;
-  using Type::TypeBase<ConcreteTy, BaseTy,
-                       detail::IndirectTypeStorage>::TypeBase;
-  using RefBase = RefTypeBase<ConcreteTy, BaseTy>;
-
-public:
-  static ConcreteTy get(InnerType inner, Location loc);
-};
-
-/// A packed type indirection. See `IndirectTypeBase` for details.
-class PackedIndirectType : public IndirectTypeBase<PackedType> {
-public:
-  static bool classof(Type type) {
-    return llvm::isa<PackedNamedType>(type) || llvm::isa<PackedRefType>(type);
-  }
-
-protected:
-  using Base::Base;
-};
-
-/// An unpacked type indirection. See `IndirectTypeBase` for details.
-class UnpackedIndirectType : public IndirectTypeBase<UnpackedType> {
-public:
-  static bool classof(Type type) {
-    return llvm::isa<UnpackedNamedType>(type) ||
-           llvm::isa<UnpackedRefType>(type);
-  }
-
-protected:
-  using Base::Base;
-};
-
-/// A packed named type. See `NamedTypeBase` for details.
-class PackedNamedType
-    : public NamedTypeBase<PackedNamedType, PackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.packed_named";
-
-protected:
-  using NamedBase::NamedBase;
-};
-
-/// An unpacked named type. See `NamedTypeBase` for details.
-class UnpackedNamedType
-    : public NamedTypeBase<UnpackedNamedType, UnpackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.unpacked_named";
-
-protected:
-  using NamedBase::NamedBase;
-};
-
-/// A packed named type. See `NamedTypeBase` for details.
-class PackedRefType : public RefTypeBase<PackedRefType, PackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.packed_ref";
-
-protected:
-  using RefBase::RefBase;
-};
-
-/// An unpacked named type. See `NamedTypeBase` for details.
-class UnpackedRefType
-    : public RefTypeBase<UnpackedRefType, UnpackedIndirectType> {
-public:
-  static constexpr StringLiteral name = "moore.unpacked_ref";
-
-protected:
-  using RefBase::RefBase;
-};
-
-//===----------------------------------------------------------------------===//
 // Packed Dimensions
 //===----------------------------------------------------------------------===//
 
@@ -829,14 +579,6 @@ public:
   void format(llvm::raw_ostream &os) const;
   /// Format just the dimension part, `[...]`.
   void formatDim(llvm::raw_ostream &os) const;
-
-  /// Resolve one level of name or type reference indirection. See
-  /// `PackedType::resolved`.
-  PackedType resolved() const;
-
-  /// Resolve all name or type reference indirections. See
-  /// `PackedType::fullyResolved`.
-  PackedType fullyResolved() const;
 
   /// Get the dimension's range, or `None` if it is unsized.
   std::optional<Range> getRange() const;
@@ -924,14 +666,6 @@ public:
               llvm::function_ref<void(llvm::raw_ostream &)> around = {}) const;
   /// Format just the dimension part, `[...]`.
   void formatDim(llvm::raw_ostream &os) const;
-
-  /// Resolve one level of name or type reference indirection. See
-  /// `UnpackedType::resolved`.
-  UnpackedType resolved() const;
-
-  /// Resolve all name or type reference indirections. See
-  /// `UnpackedType::fullyResolved`.
-  UnpackedType fullyResolved() const;
 
 protected:
   using UnpackedType::UnpackedType;
@@ -1047,39 +781,6 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Enumerations
-//===----------------------------------------------------------------------===//
-
-/// An enum type.
-class EnumType
-    : public Type::TypeBase<EnumType, PackedType, detail::EnumTypeStorage> {
-public:
-  static EnumType get(StringAttr name, Location loc, PackedType base = {});
-
-  /// Get the base type of the enumeration.
-  PackedType getBase() const;
-  /// Returns whether the base type was explicitly specified by the user. This
-  /// allows us to distinguish `enum` from `enum int`.
-  bool isBaseExplicit() const;
-  /// Get the name of the surrounding typedef, if this enum is embedded in a
-  /// typedef. Otherwise this returns a null attribute.
-  StringAttr getName() const;
-  /// Get the location in the source text where the enum was declared. This
-  /// shall be the location of the `enum` keyword or, if the enum is embedded in
-  /// a typedef, the location of the typedef name.
-  Location getLoc() const;
-
-  /// Format this enum in SystemVerilog syntax. Useful to present the enum back
-  /// to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const;
-
-  static constexpr StringLiteral name = "moore.enum";
-
-protected:
-  using Base::Base;
-};
-
-//===----------------------------------------------------------------------===//
 // Packed and Unpacked Structs
 //===----------------------------------------------------------------------===//
 
@@ -1109,19 +810,17 @@ Os &operator<<(Os &os, const StructKind &kind) {
 struct StructMember {
   /// The name of this member.
   StringAttr name;
-  /// The location in the source text where this member was declared.
-  Location loc;
   /// The type of this member.
   UnpackedType type;
 
   bool operator==(const StructMember &other) const {
-    return name == other.name && loc == other.loc && type == other.type;
+    return name == other.name && type == other.type;
   }
 };
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const StructMember &x) {
-  return llvm::hash_combine(x.name, x.loc, x.type);
+  return llvm::hash_combine(x.name, x.type);
 }
 
 /// A struct.
@@ -1142,17 +841,9 @@ struct Struct {
   /// unknown size. This is commonly the case for unpacked member types, or
   /// dimensions with unknown size such as `[]` or `[$]`.
   std::optional<unsigned> bitSize;
-  /// The name of the surrounding typedef, if this struct is embedded in a
-  /// typedef. Otherwise this is a null attribute.
-  StringAttr name;
-  /// The location in the source text where the struct was declared. This shall
-  /// be the location of the `struct` or `union` keyword, or, if the struct is
-  /// embedded in a typedef, the location of the typedef name.
-  Location loc;
 
   /// Create a new struct.
-  Struct(StructKind kind, ArrayRef<StructMember> members, StringAttr name,
-         Location loc);
+  Struct(StructKind kind, ArrayRef<StructMember> members);
 
   /// Format this struct in SystemVerilog syntax. Useful to present the struct
   /// back to the user in diagnostics.
@@ -1171,12 +862,12 @@ class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
                                                detail::StructTypeStorage,
                                                ::mlir::TypeTrait::IsMutable> {
 public:
-  static PackedStructType get(StructKind kind, ArrayRef<StructMember> members,
-                              StringAttr name, Location loc,
+  static PackedStructType get(MLIRContext *context, StructKind kind,
+                              ArrayRef<StructMember> members,
                               std::optional<Sign> sign = {});
-  static PackedStructType get(const Struct &strukt,
+  static PackedStructType get(MLIRContext *context, const Struct &strukt,
                               std::optional<Sign> sign = {}) {
-    return get(strukt.kind, strukt.members, strukt.name, strukt.loc, sign);
+    return get(context, strukt.kind, strukt.members, sign);
   }
 
   /// Get the sign of this struct.
@@ -1210,10 +901,10 @@ class UnpackedStructType
                             detail::StructTypeStorage,
                             ::mlir::TypeTrait::IsMutable> {
 public:
-  static UnpackedStructType get(StructKind kind, ArrayRef<StructMember> members,
-                                StringAttr name, Location loc);
-  static UnpackedStructType get(const Struct &strukt) {
-    return get(strukt.kind, strukt.members, strukt.name, strukt.loc);
+  static UnpackedStructType get(MLIRContext *context, StructKind kind,
+                                ArrayRef<StructMember> members);
+  static UnpackedStructType get(MLIRContext *context, const Struct &strukt) {
+    return get(context, strukt.kind, strukt.members);
   }
 
   /// Get the struct definition.
