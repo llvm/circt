@@ -34,11 +34,6 @@ TEST(TypesTest, UnitTypes) {
   ASSERT_EQ(stringType.getDomain(), Domain::TwoValued);
   ASSERT_EQ(chandleType.getDomain(), Domain::TwoValued);
   ASSERT_EQ(eventType.getDomain(), Domain::TwoValued);
-
-  ASSERT_EQ(voidType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(stringType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(chandleType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(eventType.getSign(), Sign::Unsigned);
 }
 
 TEST(TypesTest, Ranges) {
@@ -88,21 +83,7 @@ TEST(TypesTest, PackedInt) {
   for (auto pair : pairs) {
     auto kind = std::get<0>(pair);
     auto type = IntType::get(&context, kind);
-    auto unsignedType = IntType::get(&context, kind, Sign::Unsigned);
-    auto signedType = IntType::get(&context, kind, Sign::Signed);
-
-    // Check the domain.
     ASSERT_EQ(type.getDomain(), std::get<2>(pair));
-    ASSERT_EQ(unsignedType.getDomain(), std::get<2>(pair));
-    ASSERT_EQ(signedType.getDomain(), std::get<2>(pair));
-
-    // Check the sign.
-    ASSERT_EQ(type.getSign(), std::get<3>(pair));
-    ASSERT_EQ(unsignedType.getSign(), Sign::Unsigned);
-    ASSERT_EQ(signedType.getSign(), Sign::Signed);
-    ASSERT_FALSE(type.isSignExplicit());
-    ASSERT_TRUE(unsignedType.isSignExplicit());
-    ASSERT_TRUE(signedType.isSignExplicit());
   }
 }
 
@@ -121,10 +102,6 @@ TEST(TypesTest, Reals) {
   ASSERT_EQ(t0.getBitSize(), 32u);
   ASSERT_EQ(t1.getBitSize(), 64u);
   ASSERT_EQ(t2.getBitSize(), 64u);
-
-  ASSERT_EQ(t0.getSign(), Sign::Unsigned);
-  ASSERT_EQ(t1.getSign(), Sign::Unsigned);
-  ASSERT_EQ(t2.getSign(), Sign::Unsigned);
 }
 
 TEST(TypesTest, PackedDim) {
@@ -212,25 +189,13 @@ TEST(TypesTest, SimpleBitVectorTypes) {
   ASSERT_FALSE(voidType.isSimpleBitVector());
   ASSERT_FALSE(voidType.isCastableToSimpleBitVector());
 
-  // SBVTs preserve whether the sign was explicitly mentioned.
-  auto bit1 = IntType::get(&context, IntType::Bit);
-  auto ubit1 = IntType::get(&context, IntType::Bit, Sign::Unsigned);
-  auto sbit1 = IntType::get(&context, IntType::Bit, Sign::Signed);
-  ASSERT_EQ(bit1.getSimpleBitVector().toString(), "bit");
-  ASSERT_EQ(ubit1.getSimpleBitVector().toString(), "bit unsigned");
-  ASSERT_EQ(sbit1.getSimpleBitVector().toString(), "bit signed");
-
-  // SBVTs preserve whether the original type was an integer atom.
-  auto intTy = IntType::get(&context, IntType::Int);
-  auto byteTy = IntType::get(&context, IntType::Byte);
-  ASSERT_EQ(intTy.getSimpleBitVector().getType(&context), intTy);
-  ASSERT_EQ(byteTy.getSimpleBitVector().getType(&context), byteTy);
-
   // Integer atoms with a dimension are no SBVT, but can be cast to one.
+  auto intTy = IntType::get(&context, IntType::Int);
   auto intArray = PackedRangeDim::get(intTy, 8);
   ASSERT_FALSE(intArray.isSimpleBitVector());
   ASSERT_TRUE(intArray.isCastableToSimpleBitVector());
-  ASSERT_EQ(intArray.castToSimpleBitVector().toString(), "bit signed [255:0]");
+  ASSERT_EQ(intArray.castToSimpleBitVector(),
+            SimpleBitVectorType(Domain::TwoValued, 256));
 }
 
 } // namespace

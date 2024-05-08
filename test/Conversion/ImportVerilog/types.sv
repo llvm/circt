@@ -40,11 +40,11 @@ module IntAtoms;
   // CHECK-NEXT: %u0 = moore.variable : !moore.logic
   // CHECK-NEXT: %u1 = moore.variable : !moore.bit
   // CHECK-NEXT: %u2 = moore.variable : !moore.reg
-  // CHECK-NEXT: %u3 = moore.variable : !moore.int<unsigned>
-  // CHECK-NEXT: %u4 = moore.variable : !moore.shortint<unsigned>
-  // CHECK-NEXT: %u5 = moore.variable : !moore.longint<unsigned>
-  // CHECK-NEXT: %u6 = moore.variable : !moore.integer<unsigned>
-  // CHECK-NEXT: %u7 = moore.variable : !moore.byte<unsigned>
+  // CHECK-NEXT: %u3 = moore.variable : !moore.int
+  // CHECK-NEXT: %u4 = moore.variable : !moore.shortint
+  // CHECK-NEXT: %u5 = moore.variable : !moore.longint
+  // CHECK-NEXT: %u6 = moore.variable : !moore.integer
+  // CHECK-NEXT: %u7 = moore.variable : !moore.byte
   // CHECK-NEXT: %u8 = moore.variable : !moore.time
   logic unsigned u0;
   bit unsigned u1;
@@ -56,15 +56,15 @@ module IntAtoms;
   byte unsigned u7;
   time unsigned u8;
 
-  // CHECK-NEXT: %s0 = moore.variable : !moore.logic<signed>
-  // CHECK-NEXT: %s1 = moore.variable : !moore.bit<signed>
-  // CHECK-NEXT: %s2 = moore.variable : !moore.reg<signed>
+  // CHECK-NEXT: %s0 = moore.variable : !moore.logic
+  // CHECK-NEXT: %s1 = moore.variable : !moore.bit
+  // CHECK-NEXT: %s2 = moore.variable : !moore.reg
   // CHECK-NEXT: %s3 = moore.variable : !moore.int
   // CHECK-NEXT: %s4 = moore.variable : !moore.shortint
   // CHECK-NEXT: %s5 = moore.variable : !moore.longint
   // CHECK-NEXT: %s6 = moore.variable : !moore.integer
   // CHECK-NEXT: %s7 = moore.variable : !moore.byte
-  // CHECK-NEXT: %s8 = moore.variable : !moore.time<signed>
+  // CHECK-NEXT: %s8 = moore.variable : !moore.time
   logic signed s0;
   bit signed s1;
   reg signed s2;

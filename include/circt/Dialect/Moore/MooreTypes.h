@@ -135,101 +135,39 @@ struct SimpleBitVectorType {
   /// Create a null SBVT.
   SimpleBitVectorType() {}
 
-  /// Create a new SBVT with the given domain, sign, and size. The resulting
-  /// type will expand exactly to `bit signed? [size-1:0]`.
-  SimpleBitVectorType(Domain domain, Sign sign, unsigned size,
-                      bool usedAtom = false, bool explicitSign = false,
-                      bool explicitSize = true)
-      : size(size), domain(domain), sign(sign), usedAtom(usedAtom),
-        explicitSign(explicitSign), explicitSize(explicitSize) {
+  /// Create a new SBVT with the given domain and size.
+  SimpleBitVectorType(Domain domain, unsigned size)
+      : size(size), domain(domain) {
     assert(size > 0 && "SBVT requires non-zero size");
   }
 
   /// Convert this SBVT to an actual type.
   PackedType getType(MLIRContext *context) const;
 
-  /// Check whether the type is unsigned.
-  bool isUnsigned() const { return sign == Sign::Unsigned; }
-
-  /// Check whether the type is signed.
-  bool isSigned() const { return sign == Sign::Signed; }
-
-  /// Get the range of the type.
-  Range getRange() const { return Range(size, RangeDir::Down, 0); }
-
   /// Get a single bit version of this type by setting its size to 1.
   SimpleBitVectorType toSingleBit() const {
     auto type = *this;
     type.size = 1;
-    type.explicitSize = false;
-    type.usedAtom = false;
     return type;
   }
 
   /// Check whether this type is equivalent to another.
-  bool isEquivalent(const SimpleBitVectorType &other) const {
-    return domain == other.domain && sign == other.sign && size == other.size;
-  }
-
   bool operator==(const SimpleBitVectorType &other) const {
-    if (size == 0 || other.size == 0)
-      return size == other.size; // if either is null, the other has to be null
-    return isEquivalent(other) && usedAtom == other.usedAtom &&
-           explicitSign == other.explicitSign &&
-           explicitSize == other.explicitSize;
+    return domain == other.domain && size == other.size;
   }
 
   /// Check whether this is a null type.
   operator bool() const { return size > 0; }
 
-  /// Format this simple bit vector type as a string.
-  std::string toString() const {
-    std::string buffer;
-    llvm::raw_string_ostream(buffer) << *this;
-    return buffer;
-  }
-
   /// The size of the vector.
   unsigned size = 0;
   /// The domain, which dictates whether this is a `bit` or `logic` vector.
   Domain domain : 8;
-  /// The sign.
-  Sign sign : 8;
-
-  // The following flags ensure that converting a `PackedType` to an SBVT and
-  // then back to a `PackedType` will yield exactly the original type. For
-  // example, the packed type `int` maps to an SBVT `{32, TwoValued, Signed}`,
-  // which should be converted back to `int` instead of `bit signed [31:0]`.
-
-  /// Whether the type used an integer atom like `int` in the source text.
-  bool usedAtom : 1;
-  /// Whether the sign was explicit in the source text.
-  bool explicitSign : 1;
-  /// Whether the single-bit vector had an explicit range in the source text.
-  /// Essentially whether it was `bit` or `bit[a:a]`.
-  bool explicitSize : 1;
 };
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 inline llvm::hash_code hash_value(const SimpleBitVectorType &x) {
-  if (x)
-    return llvm::hash_combine(x.size, x.domain, x.sign, x.usedAtom,
-                              x.explicitSign, x.explicitSize);
-  return {};
-}
-
-template <typename Os>
-Os &operator<<(Os &os, const SimpleBitVectorType &type) {
-  if (!type) {
-    os << "<<<NULL SBVT>>>";
-    return os;
-  }
-  os << (type.domain == Domain::TwoValued ? "bit" : "logic");
-  if (type.sign != Sign::Unsigned || type.explicitSign)
-    os << " " << type.sign;
-  if (type.size > 1 || type.explicitSize)
-    os << " [" << type.getRange() << "]";
-  return os;
+  return llvm::hash_combine(x.size, x.domain);
 }
 
 namespace detail {
@@ -296,9 +234,6 @@ public:
 
   /// Get the value domain of this type.
   Domain getDomain() const;
-
-  /// Get the sign for this type.
-  Sign getSign() const;
 
   /// Get the size of this type in bits.
   ///
@@ -384,9 +319,6 @@ public:
   /// Get the value domain of this type.
   Domain getDomain() const;
 
-  /// Get the sign for this type.
-  Sign getSign() const;
-
   /// Get the size of this type in bits.
   ///
   /// Returns `None` if any of the type's dimensions is unsized.
@@ -432,8 +364,6 @@ public:
   static std::optional<Kind> getKindFromKeyword(StringRef keyword);
   /// Get the keyword (like `bit`) for one of the integer types.
   static StringRef getKeyword(Kind kind);
-  /// Get the default sign for one of the integer types.
-  static Sign getDefaultSign(Kind kind);
   /// Get the value domain for one of the integer types.
   static Domain getDomain(Kind kind);
   /// Get the size of one of the integer types.
@@ -445,8 +375,7 @@ public:
   static std::optional<Kind> getKindFromDomainAndSize(Domain domain,
                                                       unsigned size);
 
-  static IntType get(MLIRContext *context, Kind kind,
-                     std::optional<Sign> sign = {});
+  static IntType get(MLIRContext *context, Kind kind);
 
   /// Create a `logic` type.
   static IntType getLogic(MLIRContext *context) { return get(context, Logic); }
@@ -459,16 +388,9 @@ public:
 
   /// Get the concrete integer vector or atom type.
   Kind getKind() const;
-  /// Get the sign of this type.
-  Sign getSign() const;
-  /// Whether the sign of the type was specified explicitly. This allows us to
-  /// distinguish `bit unsigned` from `bit`.
-  bool isSignExplicit() const;
 
   /// Get the keyword (like `bit`) for this type.
   StringRef getKeyword() const { return getKeyword(getKind()); }
-  /// Get the default sign for this type.
-  Sign getDefaultSign() const { return getDefaultSign(getKind()); }
   /// Get the value domain for this type.
   Domain getDomain() const { return getDomain(getKind()); }
   /// Get the size of this type.
@@ -797,17 +719,11 @@ class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
                                                ::mlir::TypeTrait::IsMutable> {
 public:
   static PackedStructType get(MLIRContext *context, StructKind kind,
-                              ArrayRef<StructMember> members,
-                              std::optional<Sign> sign = {});
-  static PackedStructType get(MLIRContext *context, const Struct &strukt,
-                              std::optional<Sign> sign = {}) {
-    return get(context, strukt.kind, strukt.members, sign);
+                              ArrayRef<StructMember> members);
+  static PackedStructType get(MLIRContext *context, const Struct &strukt) {
+    return get(context, strukt.kind, strukt.members);
   }
 
-  /// Get the sign of this struct.
-  Sign getSign() const;
-  /// Returns whether the sign was explicitly mentioned by the user.
-  bool isSignExplicit() const;
   /// Get the struct definition.
   const Struct &getStruct() const;
 

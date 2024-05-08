@@ -35,7 +35,7 @@ moore.module @Foo {
   // CHECK: %w11 = moore.net supply0 : !moore.logic
   %w11 = moore.net supply0 : !moore.logic
   // CHECK: %w12 = moore.net supply1 : !moore.logic
-  %w12 = moore.net supply1 : !moore.logic  
+  %w12 = moore.net supply1 : !moore.logic
 
   // CHECK: moore.procedure initial {
   // CHECK: moore.procedure final {
@@ -82,8 +82,8 @@ moore.module @Expressions {
   moore.constant 0 : !moore.int
   // CHECK: moore.constant -2 : !moore.packed<range<bit, 1:0>>
   moore.constant 2 : !moore.packed<range<bit, 1:0>>
-  // CHECK: moore.constant -2 : !moore.packed<range<bit<signed>, 1:0>>
-  moore.constant -2 : !moore.packed<range<bit<signed>, 1:0>>
+  // CHECK: moore.constant -2 : !moore.packed<range<bit, 1:0>>
+  moore.constant -2 : !moore.packed<range<bit, 1:0>>
 
   // CHECK: moore.conversion %b5 : !moore.packed<range<bit, 4:0>> -> !moore.packed<range<logic, 4:0>>
   moore.conversion %b5 : !moore.packed<range<bit, 4:0>> -> !moore.packed<range<logic, 4:0>>
@@ -113,17 +113,14 @@ moore.module @Expressions {
   moore.sub %int, %int2 : !moore.int
   // CHECK: moore.mul %int, %int2 : !moore.int
   moore.mul %int, %int2 : !moore.int
-  // CHECK: moore.div %int, %int2 : !moore.int
-  moore.div %int, %int2 : !moore.int
-  // CHECK: moore.mod %int, %int2 : !moore.int
-  moore.mod %int, %int2 : !moore.int
-
-  // CHECK: moore.and %int, %int2 : !moore.int
-  moore.and %int, %int2 : !moore.int
-  // CHECK: moore.or %int, %int2 : !moore.int
-  moore.or %int, %int2 : !moore.int
-  // CHECK: moore.xor %int, %int2 : !moore.int
-  moore.xor %int, %int2 : !moore.int
+  // CHECK: moore.divu %int, %int2 : !moore.int
+  moore.divu %int, %int2 : !moore.int
+  // CHECK: moore.divs %int, %int2 : !moore.int
+  moore.divs %int, %int2 : !moore.int
+  // CHECK: moore.modu %int, %int2 : !moore.int
+  moore.modu %int, %int2 : !moore.int
+  // CHECK: moore.mods %int, %int2 : !moore.int
+  moore.mods %int, %int2 : !moore.int
 
   // CHECK: moore.shl %l1, %b1 : !moore.logic, !moore.bit
   moore.shl %l1, %b1 : !moore.logic, !moore.bit
@@ -149,27 +146,33 @@ moore.module @Expressions {
   // CHECK: moore.wildcard_ne %integer, %integer2 : !moore.integer -> !moore.logic
   moore.wildcard_ne %integer, %integer2 : !moore.integer -> !moore.logic
 
-  // CHECK: moore.lt %int, %int2 : !moore.int -> !moore.bit
-  moore.lt %int, %int2 : !moore.int -> !moore.bit
-  // CHECK: moore.le %int, %int2 : !moore.int -> !moore.bit
-  moore.le %int, %int2 : !moore.int -> !moore.bit
-  // CHECK: moore.gt %int, %int2 : !moore.int -> !moore.bit
-  moore.gt %int, %int2 : !moore.int -> !moore.bit
-  // CHECK: moore.ge %int, %int2 : !moore.int -> !moore.bit
-  moore.ge %int, %int2 : !moore.int -> !moore.bit
-  // CHECK: moore.ge %integer, %integer2 : !moore.integer -> !moore.logic
-  moore.ge %integer, %integer2 : !moore.integer -> !moore.logic
+  // CHECK: moore.ult %int, %int2 : !moore.int -> !moore.bit
+  moore.ult %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ule %int, %int2 : !moore.int -> !moore.bit
+  moore.ule %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.ugt %int, %int2 : !moore.int -> !moore.bit
+  moore.ugt %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.uge %int, %int2 : !moore.int -> !moore.bit
+  moore.uge %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.slt %int, %int2 : !moore.int -> !moore.bit
+  moore.slt %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.sle %int, %int2 : !moore.int -> !moore.bit
+  moore.sle %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.sgt %int, %int2 : !moore.int -> !moore.bit
+  moore.sgt %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.sge %int, %int2 : !moore.int -> !moore.bit
+  moore.sge %int, %int2 : !moore.int -> !moore.bit
+  // CHECK: moore.uge %integer, %integer2 : !moore.integer -> !moore.logic
+  moore.uge %integer, %integer2 : !moore.integer -> !moore.logic
 
-  // CHECK: moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
-  moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
+  // CHECK: moore.concat %b1 : (!moore.bit) -> !moore.bit
+  moore.concat %b1 : (!moore.bit) -> !moore.bit
   // CHECK: moore.concat %b5, %b1 : (!moore.packed<range<bit, 4:0>>, !moore.bit) -> !moore.packed<range<bit, 5:0>>
   moore.concat %b5, %b1 : (!moore.packed<range<bit, 4:0>>, !moore.bit) -> !moore.packed<range<bit, 5:0>>
   // CHECK: moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
   moore.concat %l1, %l1, %l1 : (!moore.logic, !moore.logic, !moore.logic) -> !moore.packed<range<logic, 2:0>>
-  // CHECK: [[VAL:%.*]] = moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
-  // CHECK: moore.replicate [[VAL]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 3:0>>
-  %0 = moore.concat %b1 : (!moore.bit) -> !moore.packed<range<bit, 0:0>>
-  moore.replicate %0 : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 3:0>>
+  // CHECK: moore.replicate %b1 : (!moore.bit) -> !moore.packed<range<bit, 3:0>>
+  moore.replicate %b1 : (!moore.bit) -> !moore.packed<range<bit, 3:0>>
 
   // CHECK: moore.extract %b5 from %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit -> !moore.bit
   moore.extract %b5 from %b1 : !moore.packed<range<bit, 4:0>>, !moore.bit -> !moore.bit
