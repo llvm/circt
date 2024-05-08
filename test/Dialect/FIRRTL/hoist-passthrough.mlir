@@ -95,40 +95,27 @@ firrtl.circuit "Public" {
 
 // -----
 
-// TODO: Test requiring materializing a wire (HW).
+// Check insertion of temporary.
+// CHECK-LABEL: "NeedsWire"
+firrtl.circuit "NeedsWire" {
+  firrtl.module @NeedsWire(in %in_cond : !firrtl.vector<uint<1>, 2>) {
+    %c_cond, %c_out = firrtl.instance c @Child(in cond : !firrtl.vector<uint<1>, 2>,
+                                               out out : !firrtl.uint<1>)
+    firrtl.strictconnect %c_cond, %in_cond : !firrtl.vector<uint<1>, 2>
+  }
+  firrtl.extmodule @ExtSink(in sink : !firrtl.uint<1>)
+  // CHECK: module private @Child(
+  // CHECK-NOT: out
+  firrtl.module private @Child(in %cond : !firrtl.vector<uint<1>, 2>,
+                               out %out : !firrtl.uint<1>) {
+    // CHECK-NEXT: firrtl.wire : !firrtl.uint<1>
+    %sub = firrtl.subindex %cond[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %out, %sub : !firrtl.uint<1>
 
-// Check insertion of temporary, and hoisting out of when regions.
-// COM: // CHECK-LABEL: "NeedsWire"
-// COM: firrtl.circuit "NeedsWire" {
-// COM:   firrtl.module @NeedsWire(in %in_cond : !firrtl.uint<1>) {
-// COM:     %cond, %in_pass, %out_pass, %out_ref = firrtl.instance c @Child(in cond : !firrtl.uint<1>,
-// COM:                                                                     in in : !firrtl.probe<vector<uint<1>,2>>,
-// COM:                                                                     out out : !firrtl.probe<uint<1>>,
-// COM:                                                                     out out_vec : !firrtl.probe<vector<uint<1>, 2>>)
-// COM:     firrtl.ref.define %in_pass, %out_ref: !firrtl.probe<vector<uint<1>, 2>>
-// COM:     firrtl.strictconnect %cond, %in_cond : !firrtl.uint<1>
-// COM:   }
-// COM:   firrtl.extmodule @ExtVec(out vec : !firrtl.vector<uint<1>, 2>)
-// COM:   // CHECK: module private @Child(
-// COM:   // CHECK-NOT: out %out:
-// COM:   // CHECK-SAME: out %out_vec
-// COM:   firrtl.module private @Child(in %cond : !firrtl.uint<1>,
-// COM:                                in %in : !firrtl.probe<vector<uint<1>,2>>,
-// COM:                                out %out : !firrtl.probe<uint<1>>,
-// COM:                                out %out_vec : !firrtl.probe<vector<uint<1>, 2>>) {
-// COM:     // CHECK-NEXT: firrtl.wire : !firrtl.probe<uint<1>>
-// COM:     firrtl.when %cond : !firrtl.uint<1> {
-// COM:       %index = firrtl.ref.sub %in[1] : !firrtl.probe<vector<uint<1>,2>>
-// COM:       firrtl.ref.define %out, %index : !firrtl.probe<uint<1>>
-// COM:     } else {
-// COM:       %data = firrtl.ref.resolve %out : !firrtl.probe<uint<1>>
-// COM:     }
-// COM: 
-// COM:     %vec = firrtl.instance ev @ExtVec(out vec : !firrtl.vector<uint<1>, 2>)
-// COM:     %vec_ref = firrtl.ref.send %vec : !firrtl.vector<uint<1>, 2>
-// COM:     firrtl.ref.define %out_vec, %vec_ref : !firrtl.probe<vector<uint<1>, 2>>
-// COM:   }
-// COM: }
+    %sink = firrtl.instance ev @ExtSink(in sink : !firrtl.uint<1>)
+    firrtl.strictconnect %sink, %out : !firrtl.uint<1>
+  }
+}
 
 // -----
 
