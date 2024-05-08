@@ -507,23 +507,18 @@ namespace llvm {
 template <typename To, typename From>
 struct CastInfo<
     To, From,
-    std::enable_if_t<
-        std::is_same_v<circt::firrtl::AnnoTarget, std::remove_const_t<From>> ||
-        std::is_base_of_v<circt::firrtl::AnnoTarget, From>>>
+    std::enable_if_t<std::is_base_of_v<::circt::firrtl::AnnoTarget, From>>>
     : NullableValueCastFailed<To>,
       DefaultDoCastIfPossible<To, From, CastInfo<To, From>> {
   static inline bool isPossible(From target) {
-    /// Return a constant true instead of a dynamic true when casting to self or
-    /// up the hierarchy.
-    if constexpr (std::is_base_of_v<To, From>) {
+    // Allow constant upcasting.  This also gets around the fact that AnnoTarget
+    // does not implement classof.
+    if constexpr (std::is_base_of_v<To, From>)
       return true;
-    } else {
+    else
       return To::classof(target);
-    }
   }
-  static inline To doCast(circt::firrtl::AnnoTarget target) {
-    return To(target.getImpl());
-  }
+  static inline To doCast(From target) { return To(target.getImpl()); }
 };
 
 /// Make `Annotation` behave like a `Attribute` in terms of pointer-likeness.
