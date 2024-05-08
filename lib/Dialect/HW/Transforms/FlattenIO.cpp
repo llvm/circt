@@ -32,6 +32,35 @@ static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
   return inner;
 }
 
+template <typename T>
+static llvm::SmallVector<Value>
+flattenOperands(T op, typename T::Adaptor adaptor,
+                ConversionPatternRewriter &rewriter) {
+  llvm::SmallVector<Value> convOperands;
+  for (auto operand : adaptor.getOperands()) {
+    llvm::TypeSwitch<Type>(operand.getType())
+        .template Case<hw::StructType>([&](auto str) {
+          auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
+              op.getLoc(), getInnerTypes(str), operand);
+          llvm::copy(explodedStruct.getResults(),
+                     std::back_inserter(convOperands));
+        })
+        .template Case<hw::ArrayType>([&](auto arr) {
+          for (auto idx : llvm::seq(arr.getNumElements())) {
+            IntegerType idxType = rewriter.getIntegerType(
+                llvm::Log2_64_Ceil(arr.getNumElements()));
+            Value idxVal =
+                rewriter.create<hw::ConstantOp>(op.getLoc(), idxType, idx);
+            auto element =
+                rewriter.create<hw::ArrayGetOp>(op.getLoc(), operand, idxVal);
+            convOperands.push_back(element);
+          }
+        })
+        .Default([&](auto type) { convOperands.push_back(operand); });
+  }
+  return convOperands;
+}
+
 namespace {
 
 // Replaces an output op with a new output with flattened (exploded) structs.
@@ -43,31 +72,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
   LogicalResult
   matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Value> convOperands;
-
-    // Flatten the operands.
-    for (auto operand : adaptor.getOperands()) {
-      if (auto structType =
-              hw::type_dyn_cast<hw::StructType>(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            op.getLoc(), getInnerTypes(structType), operand);
-        llvm::copy(explodedStruct.getResults(),
-                   std::back_inserter(convOperands));
-      } else if (auto arrayType =
-                     hw::type_dyn_cast<hw::ArrayType>(operand.getType())) {
-        for (auto idx : llvm::seq(arrayType.getNumElements())) {
-          IntegerType idxType = rewriter.getIntegerType(
-              llvm::Log2_64_Ceil(arrayType.getNumElements()));
-          Value idxVal =
-              rewriter.create<hw::ConstantOp>(op.getLoc(), idxType, idx);
-          auto element =
-              rewriter.create<hw::ArrayGetOp>(op.getLoc(), operand, idxVal);
-          convOperands.push_back(element);
-        }
-      } else {
-        convOperands.push_back(operand);
-      }
-    }
+    llvm::SmallVector<Value> convOperands =
+        flattenOperands(op, adaptor, rewriter);
 
     // And replace.
     opVisited->insert(op->getParentOp());
@@ -93,29 +99,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     if (externModules->contains(referencedMod.getValue()))
       return success();
 
-    auto loc = op.getLoc();
-    // Flatten the operands.
-    llvm::SmallVector<Value> convOperands;
-    for (auto operand : adaptor.getOperands()) {
-      if (auto structType =
-              hw::type_dyn_cast<hw::StructType>(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            loc, getInnerTypes(structType), operand);
-        llvm::copy(explodedStruct.getResults(),
-                   std::back_inserter(convOperands));
-      } else if (auto arrayType =
-                     hw::type_dyn_cast<hw::ArrayType>(operand.getType())) {
-        for (auto idx : llvm::seq(arrayType.getNumElements())) {
-          IntegerType idxType = rewriter.getIntegerType(
-              llvm::Log2_64_Ceil(arrayType.getNumElements()));
-          Value idxVal = rewriter.create<hw::ConstantOp>(loc, idxType, idx);
-          auto element = rewriter.create<hw::ArrayGetOp>(loc, operand, idxVal);
-          convOperands.push_back(element);
-        }
-      } else {
-        convOperands.push_back(operand);
-      }
-    }
+    llvm::SmallVector<Value> convOperands =
+        flattenOperands(op, adaptor, rewriter);
 
     // Get the new module return type.
     llvm::SmallVector<Type> newResultTypes;
@@ -134,7 +119,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     // Create the new instance with the flattened module, attributes will be
     // adjusted later.
     auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, newResultTypes, op.getInstanceNameAttr(),
+        op.getLoc(), newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
         op.getInnerSymAttr());
@@ -146,7 +131,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
       if (auto structType = hw::type_dyn_cast<hw::StructType>(oldResultType)) {
         size_t nElements = structType.getElements().size();
         auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            loc, structType,
+            op.getLoc(), structType,
             newInstance.getResults().slice(resIndex, nElements));
         convResults.push_back(implodedStruct.getResult());
         resIndex += nElements;
@@ -154,7 +139,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
                      hw::type_dyn_cast<hw::ArrayType>(oldResultType)) {
         size_t nElements = arrayType.getNumElements();
         auto implodedArray = rewriter.create<hw::ArrayCreateOp>(
-            loc, arrayType,
+            op.getLoc(), arrayType,
             newInstance.getResults().slice(resIndex, nElements));
         convResults.push_back(implodedArray.getResult());
         resIndex += nElements;
