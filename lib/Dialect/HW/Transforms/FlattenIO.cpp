@@ -319,9 +319,7 @@ static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
   // Module arg and result port names may not be ordered. So we cannot reuse
   // updateNameAttribute. The arg and result order must be preserved.
   SmallVector<Attribute> newNames;
-  SmallVector<hw::ModulePort> oldPorts(oldModType.getPorts().begin(),
-                                       oldModType.getPorts().end());
-  for (auto oldPort : oldPorts) {
+  for (auto oldPort : oldModType.getPorts()) {
     auto oldName = oldPort.name;
     TypeSwitch<Type>(hw::getCanonicalType(oldPort.type))
         .template Case<hw::StructType>([&](auto st) {
