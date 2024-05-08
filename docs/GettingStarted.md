@@ -320,7 +320,7 @@ and will cause some errors due to unimplemented functions. Your goal is to now i
   }
   ``` 
   Here `getOperation.walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
-  use it to generically walk over all operations and then visit them individually using a visitor pattern, e.g.
+  use it to generically walk over all operations and then visit them individually using a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern), e.g.
   ```cpp
   void visit(WireOp op) { /*...*/ }
   void visit(/*...*/) { /*...*/ }
