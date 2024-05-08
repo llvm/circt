@@ -177,14 +177,15 @@ class FlattenIOTypeConverter : public TypeConverter {
 public:
   FlattenIOTypeConverter() {
     addConversion([](Type type, SmallVectorImpl<Type> &results) {
-      if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
-        for (auto field : structType.getElements())
-          results.push_back(field.type);
-      } else if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
-        results.append(arrayType.getNumElements(), arrayType.getElementType());
-      } else {
-        results.push_back(type);
-      }
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(type))
+          .Case<hw::StructType>([&](auto str) {
+            llvm::transform(str.getElements(), std::back_inserter(results),
+                            [](auto s) { return s.type; });
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            results.append(arr.getNumElements(), arr.getElementType());
+          })
+          .Default([&](auto type) { results.push_back(type); });
 
       return success();
     });
@@ -322,20 +323,21 @@ static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
                                        oldModType.getPorts().end());
   for (auto oldPort : oldPorts) {
     auto oldName = oldPort.name;
-    if (auto structType = hw::type_dyn_cast<hw::StructType>(oldPort.type)) {
-      for (auto field : structType.getElements()) {
-        newNames.push_back(StringAttr::get(
-            op->getContext(),
-            oldName.getValue() + Twine(joinChar) + field.name.str()));
-      }
-    } else if (auto arrayType =
-                   hw::type_dyn_cast<hw::ArrayType>(oldPort.type)) {
-      for (auto idx : llvm::seq(arrayType.getNumElements()))
-        newNames.push_back(StringAttr::get(
-            op->getContext(),
-            oldName.getValue() + Twine(joinChar) + std::to_string(idx)));
-    } else
-      newNames.push_back(oldName);
+    TypeSwitch<Type>(hw::getCanonicalType(oldPort.type))
+        .template Case<hw::StructType>([&](auto st) {
+          for (auto field : st.getElements()) {
+            newNames.push_back(StringAttr::get(
+                op->getContext(),
+                oldName.getValue() + Twine(joinChar) + field.name.str()));
+          }
+        })
+        .template Case<hw::ArrayType>([&](auto arr) {
+          for (auto idx : llvm::seq(arr.getNumElements()))
+            newNames.push_back(StringAttr::get(
+                op->getContext(),
+                oldName.getValue() + Twine(joinChar) + std::to_string(idx)));
+        })
+        .Default([&](auto type) { newNames.push_back(oldName); });
   }
   op.setAllPortNames(newNames);
 }
