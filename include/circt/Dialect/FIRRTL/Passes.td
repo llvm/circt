@@ -711,6 +711,9 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
     This pass lowers generic intrinsic ops to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let statistics = [
+    Statistic<"numConverted", "num-converted", "Number of intrinsic operations lowered">,
+  ];
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
