@@ -710,6 +710,7 @@ int main(int argc, char **argv) {
     firrtl::registerPasses();
     om::registerPasses();
     sv::registerPasses();
+    hw::registerFlattenModulesPass();
 
     // Export passes:
     registerExportChiselInterfacePass();
