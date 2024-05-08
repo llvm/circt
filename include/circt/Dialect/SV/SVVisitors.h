@@ -44,8 +44,7 @@ public:
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp,
-            FuncOp,
+            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp, FuncOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
