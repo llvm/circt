@@ -83,13 +83,13 @@ static void addAnnotation(AnnoTarget ref, unsigned fieldIdx,
     annotation = DictionaryAttr::get(context, anno);
   }
 
-  if (ref.isa<OpAnnoTarget>()) {
+  if (isa<OpAnnoTarget>(ref)) {
     auto newAnno = appendArrayAttr(getAnnotationsFrom(ref.getOp()), annotation);
     ref.getOp()->setAttr(getAnnotationAttrName(), newAnno);
     return;
   }
 
-  auto portRef = ref.cast<PortAnnoTarget>();
+  auto portRef = cast<PortAnnoTarget>(ref);
   auto portAnnoRaw = ref.getOp()->getAttr(getPortAnnotationAttrName());
   ArrayAttr portAnno = dyn_cast_or_null<ArrayAttr>(portAnnoRaw);
   if (!portAnno || portAnno.size() != getNumPorts(ref.getOp())) {
@@ -244,7 +244,7 @@ static LogicalResult applyDUTAnno(const AnnoPathValue &target,
   if (!target.isLocal())
     return mlir::emitError(loc) << "must be local";
 
-  if (!target.ref.isa<OpAnnoTarget>() || !isa<FModuleOp>(op))
+  if (!isa<OpAnnoTarget>(target.ref) || !isa<FModuleOp>(op))
     return mlir::emitError(loc) << "can only target to a module";
 
   auto moduleOp = cast<FModuleOp>(op);
@@ -277,7 +277,7 @@ static LogicalResult applyConventionAnno(const AnnoPathValue &target,
     return diag;
   };
 
-  auto opTarget = target.ref.dyn_cast<OpAnnoTarget>();
+  auto opTarget = dyn_cast<OpAnnoTarget>(target.ref);
   if (!opTarget)
     return error() << "must target a module object";
 
@@ -320,7 +320,7 @@ static LogicalResult applyAttributeAnnotation(const AnnoPathValue &target,
     return diag;
   };
 
-  if (!target.ref.isa<OpAnnoTarget>())
+  if (!isa<OpAnnoTarget>(target.ref))
     return error()
            << "must target an operation. Currently ports are not supported";
 

@@ -415,25 +415,6 @@ protected:
 struct AnnoTarget {
   AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl){};
 
-  template <typename U>
-  bool isa() const { // NOLINT(readability-identifier-naming)
-    assert(*this && "isa<> used on a null type.");
-    return U::classof(*this);
-  }
-  template <typename U>
-  U dyn_cast() const { // NOLINT(readability-identifier-naming)
-    return isa<U>() ? U(impl) : U(nullptr);
-  }
-  template <typename U>
-  U dyn_cast_or_null() const { // NOLINT(readability-identifier-naming)
-    return (*this && isa<U>()) ? U(impl) : U(nullptr);
-  }
-  template <typename U>
-  U cast() const {
-    assert(isa<U>());
-    return U(impl);
-  }
-
   operator bool() const { return impl; }
   bool operator==(const AnnoTarget &other) const { return impl == other.impl; }
   bool operator!=(const AnnoTarget &other) const { return !(*this == other); }
@@ -521,6 +502,24 @@ LogicalResult extractDUT(FModuleOp mod, FModuleOp &dut);
 //===----------------------------------------------------------------------===//
 
 namespace llvm {
+
+/// Add support for llvm style casts to AnnoTarget.
+template <typename To, typename From>
+struct CastInfo<
+    To, From,
+    std::enable_if_t<std::is_base_of_v<::circt::firrtl::AnnoTarget, From>>>
+    : NullableValueCastFailed<To>,
+      DefaultDoCastIfPossible<To, From, CastInfo<To, From>> {
+  static inline bool isPossible(From target) {
+    // Allow constant upcasting.  This also gets around the fact that AnnoTarget
+    // does not implement classof.
+    if constexpr (std::is_base_of_v<To, From>)
+      return true;
+    else
+      return To::classof(target);
+  }
+  static inline To doCast(From target) { return To(target.getImpl()); }
+};
 
 /// Make `Annotation` behave like a `Attribute` in terms of pointer-likeness.
 template <>
