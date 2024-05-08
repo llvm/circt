@@ -9,6 +9,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -38,7 +39,7 @@ flattenOperands(T op, typename T::Adaptor adaptor,
                 ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<Value> convOperands;
   for (auto operand : adaptor.getOperands()) {
-    llvm::TypeSwitch<Type>(operand.getType())
+    llvm::TypeSwitch<Type>(hw::getCanonicalType(operand.getType()))
         .template Case<hw::StructType>([&](auto str) {
           auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
               op.getLoc(), getInnerTypes(str), operand);
@@ -105,15 +106,16 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     // Get the new module return type.
     llvm::SmallVector<Type> newResultTypes;
     for (auto oldResultType : op.getResultTypes()) {
-      if (auto structType = hw::type_dyn_cast<hw::StructType>(oldResultType))
-        llvm::transform(structType.getElements(),
-                        std::back_inserter(newResultTypes),
-                        [](auto s) { return s.type; });
-      else if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(oldResultType))
-        newResultTypes.append(arrayType.getNumElements(),
-                              arrayType.getElementType());
-      else
-        newResultTypes.push_back(oldResultType);
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
+          .Case<hw::StructType>([&](auto str) {
+            llvm::transform(str.getElements(),
+                            std::back_inserter(newResultTypes),
+                            [](auto s) { return s.type; });
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            newResultTypes.append(arr.getNumElements(), arr.getElementType());
+          })
+          .Default([&](auto type) { newResultTypes.push_back(oldResultType); });
     }
 
     // Create the new instance with the flattened module, attributes will be
@@ -128,25 +130,27 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     llvm::SmallVector<Value> convResults;
     size_t resIndex = 0;
     for (auto oldResultType : op.getResultTypes()) {
-      if (auto structType = hw::type_dyn_cast<hw::StructType>(oldResultType)) {
-        size_t nElements = structType.getElements().size();
-        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            op.getLoc(), structType,
-            newInstance.getResults().slice(resIndex, nElements));
-        convResults.push_back(implodedStruct.getResult());
-        resIndex += nElements;
-      } else if (auto arrayType =
-                     hw::type_dyn_cast<hw::ArrayType>(oldResultType)) {
-        size_t nElements = arrayType.getNumElements();
-        auto implodedArray = rewriter.create<hw::ArrayCreateOp>(
-            op.getLoc(), arrayType,
-            newInstance.getResults().slice(resIndex, nElements));
-        convResults.push_back(implodedArray.getResult());
-        resIndex += nElements;
-      } else {
-        convResults.push_back(newInstance.getResult(resIndex));
-        resIndex += 1;
-      }
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
+          .Case<hw::StructType>([&](auto str) {
+            size_t nElements = str.getElements().size();
+            auto implodedStruct = rewriter.create<hw::StructCreateOp>(
+                op.getLoc(), str,
+                newInstance.getResults().slice(resIndex, nElements));
+            convResults.push_back(implodedStruct.getResult());
+            resIndex += nElements;
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            size_t nElements = arr.getNumElements();
+            auto implodedArray = rewriter.create<hw::ArrayCreateOp>(
+                op.getLoc(), arr,
+                newInstance.getResults().slice(resIndex, nElements));
+            convResults.push_back(implodedArray.getResult());
+            resIndex += nElements;
+          })
+          .Default([&](auto type) {
+            convResults.push_back(newInstance.getResult(resIndex));
+            resIndex += 1;
+          });
     }
     rewriter.replaceOp(op, convResults);
     convertedOps->insert(newInstance);
