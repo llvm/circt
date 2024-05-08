@@ -263,7 +263,7 @@ public:
         data.push_back(up.data);
     }
 
-    bool isIndexType = op.getIndex().getType().isa<IndexType>();
+    bool isIndexType = isa<IndexType>(op.getIndex().getType());
 
     // control-side
     Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);

@@ -386,15 +386,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
       auto entr = refSendPathList[*remoteOpPath];
-      TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
-          .Case<Attribute>([&](auto attr) {
-            // If the path is a singular verbatim expression, the attribute of
-            // the send path list entry will be null.
-            if (attr)
-              refSendPath.push_back(attr);
-          })
-          .Case<Operation *>(
-              [&](auto *op) { indexing.push_back(cast<RefSubOp>(op)); });
+      if (entr.info)
+        TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
+            .Case<Attribute>([&](auto attr) {
+              // If the path is a singular verbatim expression, the attribute of
+              // the send path list entry will be null.
+              if (attr)
+                refSendPath.push_back(attr);
+            })
+            .Case<Operation *>(
+                [&](auto *op) { indexing.push_back(cast<RefSubOp>(op)); });
       remoteOpPath = entr.next;
     }
     auto iter = xmrPathSuffix.find(lastIndex);

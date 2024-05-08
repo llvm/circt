@@ -961,7 +961,7 @@ replaceDeclRefInExpr(Location loc,
       auto res = replaceDeclRefInExpr(loc, parameters, operand, emitErrors);
       if (failed(res))
         return {failure()};
-      replacedOperands.push_back(res->cast<TypedAttr>());
+      replacedOperands.push_back(cast<TypedAttr>(*res));
     }
     return {
         hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
@@ -1038,12 +1038,12 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
           return {failure()};
 
         // If the width was evaluated to a constant, return an `IntegerType`
-        if (auto intAttr = evaluatedWidth->dyn_cast<IntegerAttr>())
+        if (auto intAttr = dyn_cast<IntegerAttr>(*evaluatedWidth))
           return {IntegerType::get(type.getContext(),
                                    intAttr.getValue().getSExtValue())};
 
         // Otherwise parameter references are still involved
-        return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
+        return hw::IntType::get(cast<TypedAttr>(*evaluatedWidth));
       })
       .Case<hw::ArrayType, hw::UnpackedArrayType>(
           [&](auto arrayType) -> FailureOr<Type> {

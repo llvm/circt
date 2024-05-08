@@ -521,7 +521,7 @@ PackedType PackedDim::getInner() const {
 }
 
 std::optional<Range> PackedDim::getRange() const {
-  if (auto dim = dyn_cast<PackedRangeDim>())
+  if (auto dim = llvm::dyn_cast<PackedRangeDim>(*this))
     return dim.getRange();
   return {};
 }
