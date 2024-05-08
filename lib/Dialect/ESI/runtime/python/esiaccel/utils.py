@@ -5,8 +5,10 @@
 from pathlib import Path
 import subprocess
 import sys
+from typing import List
 
 _thisdir = Path(__file__).absolute().resolve().parent
+_pkgdir = _thisdir
 
 
 def run_esiquery():
@@ -24,3 +26,8 @@ def run_esi_cosim():
   cosim_import = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(cosim_import)
   return cosim_import.__main__(sys.argv)
+
+
+def get_cpp_cmake() -> str:
+  """Return the path to the cmake file."""
+  return str(_thisdir / "cmake" / "esiaccel.cmake")

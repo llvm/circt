@@ -54,16 +54,30 @@ set(ESIRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
+set(ESIRuntimeHeaders
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Design.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Manifest.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
+)
+set(ESIRuntimeBackendHeaders
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
+)
 set(ESIRuntimeLinkLibraries
   ZLIB::ZLIB
   nlohmann_json::nlohmann_json
 )
 set(ESIPythonRuntimeSources
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/__init__.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/accelerator.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/types.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/utils.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.pyi
+  python/esiaccel/__init__.py
+  python/esiaccel/accelerator.py
+  python/esiaccel/types.py
+  python/esiaccel/utils.py
+  python/esiaccel/esiCppAccel.pyi
 )
 set(ESIRuntimeIncludeDirs)
 set(ESIRuntimeCxxFlags)
@@ -104,6 +118,10 @@ if(ESI_COSIM)
       ${ESIRuntimeSources}
       ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
     )
+    set(ESIRuntimeBackendHeaders
+      ${ESIRuntimeBackendHeaders}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
+    )
     set(ESIRuntimeLinkLibraries
       ${ESIRuntimeLinkLibraries}
       EsiCosimCapnp
@@ -123,6 +141,10 @@ if (XRT_PATH)
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
+  )
+  set(ESIRuntimeBackendHeaders
+    ${ESIRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
   )
   set(ESIRuntimeIncludeDirs
     ${ESIRuntimeIncludeDirs}
@@ -173,6 +195,18 @@ install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
   DESTINATION lib
   PRE_EXCLUDE_REGEXES .*
   PRE_INCLUDE_REGEXES capnp kj
+  COMPONENT ESIRuntime
+)
+install(FILES ${ESIRuntimeHeaders}
+  DESTINATION include/esi
+  COMPONENT ESIRuntime
+)
+install(FILES ${ESIRuntimeBackendHeaders}
+  DESTINATION include/esi/backends
+  COMPONENT ESIRuntime
+)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
+  DESTINATION cmake
   COMPONENT ESIRuntime
 )
 
