@@ -163,3 +163,17 @@ module Foo;
     b = a[1-:-1];
   end
 endmodule
+
+// -----
+
+module Foo;
+  int x;
+  initial begin
+    // expected-remark @below {{declared here}}
+    automatic int a;
+    // expected-error @below {{nonblocking assignment to automatic variable 'a' is not allowed}}
+    a <= x;
+    // expected-error @below {{declaration must come before all statements in the block}}
+    automatic int b;
+  end
+endmodule

@@ -58,6 +58,8 @@ moore.module @Foo {
     moore.blocking_assign %v1, %v2 : !moore.bit
     // CHECK: moore.nonblocking_assign %v1, %v2 : !moore.bit
     moore.nonblocking_assign %v1, %v2 : !moore.bit
+    // CHECK: %a = moore.variable  : !moore.int
+    %a = moore.variable  : !moore.int
   }
 }
 
