@@ -189,29 +189,6 @@ SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
                              /*explicitSize=*/false);
 }
 
-void UnpackedType::format(
-    llvm::raw_ostream &os,
-    llvm::function_ref<void(llvm::raw_ostream &os)> around) const {
-  TypeSwitch<UnpackedType>(*this)
-      .Case<StringType>([&](auto) { os << "string"; })
-      .Case<ChandleType>([&](auto) { os << "chandle"; })
-      .Case<EventType>([&](auto) { os << "event"; })
-      .Case<RealType>([&](auto type) { os << type.getKeyword(); })
-      .Case<PackedType, UnpackedStructType>([&](auto type) { type.format(os); })
-      .Case<UnpackedDim>([&](auto type) { type.format(os, around); })
-      .Default([](auto) { llvm_unreachable("all types should be handled"); });
-
-  // In case there were no unpacked dimensions, the `around` function was never
-  // called. However, callers expect us to be able to format things like `bit
-  // [7:0] fieldName`, where `fieldName` would be printed by `around`. So in
-  // case `around` is non-null, but no unpacked dimension had a chance to print
-  // it, simply print it now.
-  if (!isa<UnpackedDim>() && around) {
-    os << " ";
-    around(os);
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // Packed Type
 //===----------------------------------------------------------------------===//
@@ -245,14 +222,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
       })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
-}
-
-void PackedType::format(llvm::raw_ostream &os) const {
-  TypeSwitch<PackedType>(*this)
-      .Case<VoidType>([&](auto) { os << "void"; })
-      .Case<IntType, PackedRangeDim, PackedUnsizedDim, PackedStructType>(
-          [&](auto type) { type.format(os); })
-      .Default([](auto) { llvm_unreachable("all types should be handled"); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -435,13 +404,6 @@ Sign IntType::getSign() const { return getImpl()->sign; }
 
 bool IntType::isSignExplicit() const { return getImpl()->explicitSign; }
 
-void IntType::format(llvm::raw_ostream &os) const {
-  os << getKeyword();
-  auto sign = getSign();
-  if (isSignExplicit() || sign != getDefaultSign())
-    os << " " << sign;
-}
-
 //===----------------------------------------------------------------------===//
 // Unpacked Reals
 //===----------------------------------------------------------------------===//
@@ -558,32 +520,6 @@ PackedType PackedDim::getInner() const {
   return llvm::cast<PackedType>(getImpl()->inner);
 }
 
-void PackedDim::format(llvm::raw_ostream &os) const {
-  SmallVector<PackedDim> dims;
-  dims.push_back(*this);
-  for (;;) {
-    PackedType inner = dims.back().getInner();
-    if (auto dim = llvm::dyn_cast<PackedDim>(inner)) {
-      dims.push_back(dim);
-    } else {
-      inner.format(os);
-      break;
-    }
-  }
-  os << " ";
-  for (auto dim : dims) {
-    dim.formatDim(os);
-  }
-}
-
-void PackedDim::formatDim(llvm::raw_ostream &os) const {
-  TypeSwitch<PackedDim>(*this)
-      .Case<PackedRangeDim>(
-          [&](auto dim) { os << "[" << dim.getRange() << "]"; })
-      .Case<PackedUnsizedDim>([&](auto dim) { os << "[]"; })
-      .Default([&](auto) { llvm_unreachable("unhandled dim type"); });
-}
-
 std::optional<Range> PackedDim::getRange() const {
   if (auto dim = dyn_cast<PackedRangeDim>())
     return dim.getRange();
@@ -651,55 +587,6 @@ struct AssocDimStorage : DimStorage {
 } // namespace circt
 
 UnpackedType UnpackedDim::getInner() const { return getImpl()->inner; }
-
-void UnpackedDim::format(
-    llvm::raw_ostream &os,
-    llvm::function_ref<void(llvm::raw_ostream &)> around) const {
-  SmallVector<UnpackedDim> dims;
-  dims.push_back(*this);
-  for (;;) {
-    UnpackedType inner = dims.back().getInner();
-    if (auto dim = llvm::dyn_cast<UnpackedDim>(inner)) {
-      dims.push_back(dim);
-    } else {
-      inner.format(os);
-      break;
-    }
-  }
-  os << " ";
-  if (around)
-    around(os);
-  else
-    os << "$";
-  os << " ";
-  for (auto dim : dims) {
-    dim.formatDim(os);
-  }
-}
-
-void UnpackedDim::formatDim(llvm::raw_ostream &os) const {
-  TypeSwitch<UnpackedDim>(*this)
-      .Case<UnpackedUnsizedDim>([&](auto dim) { os << "[]"; })
-      .Case<UnpackedArrayDim>(
-          [&](auto dim) { os << "[" << dim.getSize() << "]"; })
-      .Case<UnpackedRangeDim>(
-          [&](auto dim) { os << "[" << dim.getRange() << "]"; })
-      .Case<UnpackedAssocDim>([&](auto dim) {
-        os << "[";
-        if (auto indexType = dim.getIndexType())
-          indexType.format(os);
-        else
-          os << "*";
-        os << "]";
-      })
-      .Case<UnpackedQueueDim>([&](auto dim) {
-        os << "[$";
-        if (auto bound = dim.getBound())
-          os << ":" << *bound;
-        os << "]";
-      })
-      .Default([&](auto) { llvm_unreachable("unhandled dim type"); });
-}
 
 const detail::DimStorage *UnpackedDim::getImpl() const {
   return static_cast<detail::DimStorage *>(this->impl);
@@ -788,23 +675,6 @@ Struct::Struct(StructKind kind, ArrayRef<StructMember> members)
       break;
     }
   }
-}
-
-void Struct::format(llvm::raw_ostream &os, bool packed,
-                    std::optional<Sign> signing) const {
-  os << kind;
-  if (packed)
-    os << " packed";
-  if (signing)
-    os << " " << *signing;
-
-  // Otherwise actually print the struct definition inline.
-  os << " {";
-  for (auto &member : members)
-    os << " " << member.type << " " << member.name.getValue() << ";";
-  if (!members.empty())
-    os << " ";
-  os << "}";
 }
 
 namespace circt {

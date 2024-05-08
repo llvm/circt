@@ -340,38 +340,9 @@ public:
     return sbv;
   }
 
-  /// Format this type in SystemVerilog syntax into an output stream. Useful to
-  /// present the type back to the user in diagnostics.
-  void
-  format(llvm::raw_ostream &os,
-         llvm::function_ref<void(llvm::raw_ostream &os)> around = {}) const;
-
-  void format(llvm::raw_ostream &os, StringRef around) const {
-    format(os, [&](llvm::raw_ostream &os) { os << around; });
-  }
-
-  /// Format this type in SystemVerilog syntax into a string. Useful to present
-  /// the type back to the user in diagnostics. Prefer the `format` function if
-  /// possible, as that does not need to allocate a string.
-  template <typename... Args>
-  std::string toString(Args... args) const {
-    std::string buffer;
-    llvm::raw_string_ostream os(buffer);
-    format(os, args...);
-    return buffer;
-  }
-
 protected:
   using SVType::SVType;
 };
-
-template <
-    typename Ty,
-    std::enable_if_t<std::is_base_of<UnpackedType, Ty>::value, bool> = true>
-llvm::raw_ostream &operator<<(llvm::raw_ostream &os, Ty type) {
-  type.format(os);
-  return os;
-}
 
 //===----------------------------------------------------------------------===//
 // Packed Type
@@ -420,10 +391,6 @@ public:
   ///
   /// Returns `None` if any of the type's dimensions is unsized.
   std::optional<unsigned> getBitSize() const;
-
-  /// Format this type in SystemVerilog syntax into an output stream. Useful to
-  /// present the type back to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const;
 
 protected:
   using UnpackedType::UnpackedType;
@@ -507,10 +474,6 @@ public:
   /// Get the size of this type.
   unsigned getBitSize() const { return getBitSize(getKind()); }
 
-  /// Format this type in SystemVerilog syntax. Useful to present the type back
-  /// to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const;
-
   static constexpr StringLiteral name = "moore.int";
 
 protected:
@@ -573,12 +536,6 @@ public:
 
   /// Get the element type of the dimension. This is the `x` in `x[a:b]`.
   PackedType getInner() const;
-
-  /// Format this type in SystemVerilog syntax. Useful to present the type back
-  /// to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const;
-  /// Format just the dimension part, `[...]`.
-  void formatDim(llvm::raw_ostream &os) const;
 
   /// Get the dimension's range, or `None` if it is unsized.
   std::optional<Range> getRange() const;
@@ -654,18 +611,6 @@ public:
 
   /// Get the element type of the dimension. This is the `x` in `x[a:b]`.
   UnpackedType getInner() const;
-
-  /// Format this type in SystemVerilog syntax. Useful to present the type back
-  /// to the user in diagnostics. The unpacked dimensions are separated from any
-  /// packed dimensions by calling the provided `around` callback, or a `$` if
-  /// no callback has been provided. This can be useful when printing
-  /// declarations like `bit [7:0] foo [16]` to have the type properly surround
-  /// the declaration name `foo`, and to easily tell packed from unpacked
-  /// dimensions in types like `bit [7:0] $ [15]`.
-  void format(llvm::raw_ostream &os,
-              llvm::function_ref<void(llvm::raw_ostream &)> around = {}) const;
-  /// Format just the dimension part, `[...]`.
-  void formatDim(llvm::raw_ostream &os) const;
 
 protected:
   using UnpackedType::UnpackedType;
@@ -844,18 +789,7 @@ struct Struct {
 
   /// Create a new struct.
   Struct(StructKind kind, ArrayRef<StructMember> members);
-
-  /// Format this struct in SystemVerilog syntax. Useful to present the struct
-  /// back to the user in diagnostics.
-  void format(llvm::raw_ostream &os, bool packed = false,
-              std::optional<Sign> signing = {}) const;
 };
-
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const Struct &strukt) {
-  strukt.format(os);
-  return os;
-}
 
 /// A packed struct.
 class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
@@ -876,14 +810,6 @@ public:
   bool isSignExplicit() const;
   /// Get the struct definition.
   const Struct &getStruct() const;
-
-  /// Format this struct in SystemVerilog syntax. Useful to present the struct
-  /// back to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const {
-    getStruct().format(os, true,
-                       isSignExplicit() ? std::optional<Sign>(getSign())
-                                        : std::optional<Sign>());
-  }
 
   /// Allow implicit casts from `PackedStructType` to the actual struct
   /// definition.
@@ -909,10 +835,6 @@ public:
 
   /// Get the struct definition.
   const Struct &getStruct() const;
-
-  /// Format this struct in SystemVerilog syntax. Useful to present the struct
-  /// back to the user in diagnostics.
-  void format(llvm::raw_ostream &os) const { getStruct().format(os); }
 
   /// Allow implicit casts from `UnpackedStructType` to the actual struct
   /// definition.
