@@ -274,8 +274,7 @@ static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
 
 template <typename ModTy, typename T>
 static llvm::SmallVector<Attribute>
-updateNameAttribute(ModTy op, StringRef attrName,
-                    llvm::SmallVectorImpl<Type> &oldTypes, T oldNames,
+updateNameAttribute(ModTy op, llvm::SmallVectorImpl<Type> &oldTypes, T oldNames,
                     char joinChar) {
   llvm::SmallVector<Attribute> newNames;
 
@@ -305,25 +304,14 @@ static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
                                   char joinChar) {
   // Module arg and result port names may not be ordered. So we cannot reuse
   // updateNameAttribute. The arg and result order must be preserved.
-  SmallVector<Attribute> newNames;
-  for (auto oldPort : oldModType.getPorts()) {
-    auto oldName = oldPort.name;
-    TypeSwitch<Type>(hw::getCanonicalType(oldPort.type))
-        .template Case<hw::StructType>([&](auto st) {
-          for (auto field : st.getElements()) {
-            newNames.push_back(StringAttr::get(
-                op->getContext(),
-                oldName.getValue() + Twine(joinChar) + field.name.str()));
-          }
-        })
-        .template Case<hw::ArrayType>([&](auto arr) {
-          for (auto idx : llvm::seq(arr.getNumElements()))
-            newNames.push_back(StringAttr::get(
-                op->getContext(),
-                oldName.getValue() + Twine(joinChar) + std::to_string(idx)));
-        })
-        .Default([&](auto type) { newNames.push_back(oldName); });
+  SmallVector<StringRef> oldNames;
+  SmallVector<Type> oldTypes;
+  for (auto port : oldModType.getPorts()) {
+    oldNames.push_back(port.name);
+    oldTypes.push_back(port.type);
   }
+  SmallVector<Attribute> newNames =
+      updateNameAttribute(op, oldTypes, oldNames, joinChar);
   op.setAllPortNames(newNames);
 }
 
@@ -465,13 +453,13 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
       instanceOp.setInputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, "argNames", ioInfo.argTypes,
+              instanceOp, ioInfo.argTypes,
               oldArgNames[targetModule].template getAsValueRange<StringAttr>(),
               joinChar)));
       instanceOp.setOutputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, "resultNames", ioInfo.resTypes,
+              instanceOp, ioInfo.resTypes,
               oldResNames[targetModule].template getAsValueRange<StringAttr>(),
               joinChar)));
     }
