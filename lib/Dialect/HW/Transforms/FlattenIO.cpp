@@ -40,9 +40,9 @@ flattenOperands(T op, typename T::Adaptor adaptor,
   llvm::SmallVector<Value> convOperands;
   for (auto operand : adaptor.getOperands()) {
     llvm::TypeSwitch<Type>(hw::getCanonicalType(operand.getType()))
-        .template Case<hw::StructType>([&](auto str) {
+        .template Case<hw::StructType>([&](auto st) {
           auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-              op.getLoc(), getInnerTypes(str), operand);
+              op.getLoc(), getInnerTypes(st), operand);
           llvm::copy(explodedStruct.getResults(),
                      std::back_inserter(convOperands));
         })
@@ -107,8 +107,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     llvm::SmallVector<Type> newResultTypes;
     for (auto oldResultType : op.getResultTypes()) {
       llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
-          .Case<hw::StructType>([&](auto str) {
-            llvm::transform(str.getElements(),
+          .Case<hw::StructType>([&](auto st) {
+            llvm::transform(st.getElements(),
                             std::back_inserter(newResultTypes),
                             [](auto s) { return s.type; });
           })
@@ -131,10 +131,10 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     size_t resIndex = 0;
     for (auto oldResultType : op.getResultTypes()) {
       llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
-          .Case<hw::StructType>([&](auto str) {
-            size_t nElements = str.getElements().size();
+          .Case<hw::StructType>([&](auto st) {
+            size_t nElements = st.getElements().size();
             auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-                op.getLoc(), str,
+                op.getLoc(), st,
                 newInstance.getResults().slice(resIndex, nElements));
             convResults.push_back(implodedStruct.getResult());
             resIndex += nElements;
@@ -178,8 +178,8 @@ public:
   FlattenIOTypeConverter() {
     addConversion([](Type type, SmallVectorImpl<Type> &results) {
       llvm::TypeSwitch<Type>(hw::getCanonicalType(type))
-          .Case<hw::StructType>([&](auto str) {
-            llvm::transform(str.getElements(), std::back_inserter(results),
+          .Case<hw::StructType>([&](auto st) {
+            llvm::transform(st.getElements(), std::back_inserter(results),
                             [](auto s) { return s.type; });
           })
           .Case<hw::ArrayType>([&](auto arr) {
