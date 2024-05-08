@@ -5199,6 +5199,8 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
+    if (removedFeature({4, 0, 0}, "intrinsic modules"))
+      return failure();
     return parseIntModule(circuit, indent);
   case FIRToken::kw_layer:
     if (requireFeature({4, 0, 0}, "layers"))
