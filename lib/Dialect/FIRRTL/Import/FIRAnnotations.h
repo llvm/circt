@@ -39,10 +39,6 @@ bool fromOMIRJSON(llvm::json::Value &value,
                   SmallVectorImpl<Attribute> &annotations,
                   llvm::json::Path path, MLIRContext *context);
 
-/// Classifier for legacy verif intent captured in printf + when's.  Returns
-/// true if the printf encodes verif intent, false otherwise.
-bool isRecognizedPrintfEncodedVerif(PrintFOp printOp);
-
 } // namespace firrtl
 } // namespace circt
 
