@@ -279,25 +279,31 @@ When your review converges and your patch is approved, it can be merged directly
 If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.  
   
 ## Writing a basic CIRCT Pass  
-Passes can be added at several levels in CIRCT. Here we illustrate this with a simple pass, added 
-to the `firrtl` dialect, that replaces all of the wire names with `foo`: 
+
+Passes can be added at several levels in CIRCT. Here we illustrate this with a simple pass, targetting 
+the `hw` dialect, that replaces all of the wire names with `foo. This example is very basic and is 
+meant for people who want to get a quick and dirty start at writing passes for CIRCT. For more detailed
+tutorials, we recommend looking at the [MLIR docs](https://mlir.llvm.org/docs/PassManagement/), and their
+[Toy tutorials](https://mlir.llvm.org/docs/Tutorials/Toy/).  
+To add a simple dialect pass, that doesn't perform any dialect conversion, you can do the following:  
 1) Update your dialect’s Passes.td file to define what your pass will do in a high-level, well documented way, 
-e.g. in `include/circt/Dialect/FIRRTL/Passes.td`:  
+e.g. in `include/circt/Dialect/HW/Passes.td`:  
 ```
-def FooWires : Pass<"firrtl-foo-wires", "firrtl::CircuitOp"> {
+def FooWires : Pass<"hw-foo-wires", "hw::HwModuleOp"> {
   let summary = "Change all wires' name to foo_<n>.";
   let description = [{
     Very basic pass that numbers all of the wires in a given module.
     The wires' names are then all converte to foo_<that number>.
   }];
-  let constructor = "circt::firrtl::createFooWiresPass()";
+  let constructor = "circt::hw::createFooWiresPass()";
   let statistics = [
     Statistic<"numChangedWires", "num-changed-wires", "Number of wires changed">
   ];
 }
 ```    
 Once this is added, compile CIRCT. This will generate a base class for your pass following the naming
-defined in the tablegen description. This base class will contain some methods that need to be implemented.
+defined in the [tablegen description](https://mlir.llvm.org/docs/PassManagement/#tablegen-specification). 
+This base class will contain some methods that need to be implemented. 
 Your goal is to now implement those.  
 
 2) Create a new file that contains your pass. Don't forget to also add it in the folder's CMakeLists.txt. 
@@ -306,41 +312,56 @@ This file should implement:
   - This struct should define an override of the `void runOnOperation()` method, e.g.  
   ```cpp
   namespace {
-      // A test pass that simply replaces all wire names with foo_<n>
-      struct FooWires : FooWiresBase<FooWires> {
-        void runOnOperation() override;
-      };
+    // A test pass that simply replaces all wire names with foo_<n>
+    struct FooWiresPass : FooWiresBase<FooWiresPass> {
+      void runOnOperation() override;
+    };
   }
   ```  
   - The `runOnOperation` method will contain the actual logic of your pass, which you can now implement, e.g.
   ```cpp
-  void FooWires::runOnOperation() {
+  void FooWiresPass::runOnOperation() {
     size_t nWires = 0; // Counts the number of wires modified
     module.walk([&](hw::WireOp wire) { // Walk over every wire in the module
       wire.setName("foo_" + std::to_string(nWires++)); // Rename said wire
     });
   }
   ``` 
-  Here `module.walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
-  use it to generically walk over all operations and then visit them individually using a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern) by overloading type visitors defined by each dialect, e.g.
+  > *Note*: Here `module.walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
+  > use it to generically walk over all operations and then visit them individually 
+  > using a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern) by overloading type visitors 
+  > defined by each dialect. More details can be found in the 
+  > [MLIR docs](https://mlir.llvm.org/docs/Tutorials/UnderstandingTheIRStructure/), e.g.
   ```cpp
   #include "circt/Dialect/HW/HWVisitors.h" // defines dispatchTypeOpVisitor which calls visit(op)
 
-  void visit(hw::WireOp op) { /*...*/ }
-  void visit(/*other hw operations*/) { /*...*/ }
+  namespace {
+    // A test pass that simply replaces all wire names with foo_<n>
+    struct VisitorExamplePass 
+      : public VisitorExampleBase<VisitorExamplePass>,
+        public hw::TypeOpVisitor<VisitorExamplePass> // Allows for the visitor overloads to be added
+    {
+    public:  
+      void runOnOperation() override;
 
-  void FooWires::runOnOperation() {
+      // Vistor overloads
+      void visitTypeOp(hw::ConstantOp op) { /*...*/ }
+      void visitTypeOp(/*other hw operations*/) { /*...*/ }
+    };
+  }
+
+  void VisitorExamplePass::runOnOperation() {
     module.walk([&](Operation* op) { dispatchTypeOpVisitor(op); });
   }
   ```
   - Finally implement the constructor for the pass, as defined in the tablegen description, e.g.  
   ```cpp
-  std::unique_ptr<mlir::Pass> circt::firrtl::createFooWiresPass() {
-    return std::make_unique<FooWires>();
+  std::unique_ptr<mlir::Pass> circt::hw::createFooWiresPass() {
+    return std::make_unique<FooWiresPass>();
   }
   ```  
     
-3) Define the pass constructor in the dialect's `Passes.h` file, e.g. in `include/circt/Dialect/FIRRTL/Passes.h` add:  
+3) Define the pass constructor in the dialect's `Passes.h` file, e.g. in `include/circt/Dialect/hw/HWPasses.h` add:  
 ```cpp
 std::unique_ptr<mlir::Pass> createFooWiresPass();
 ```
