@@ -56,7 +56,7 @@ module Basic;
   tri w3 = w0;
   // CHECK: %w4 = moore.net triand %w0 : !moore.logic
   triand w4 = w0;
-  // CHECK: %w5 = moore.net trior %w0 : !moore.logic  
+  // CHECK: %w5 = moore.net trior %w0 : !moore.logic
   trior w5 = w0;
   // CHECK: %w6 = moore.net wand %w0 : !moore.logic
   wand w6 = w0;
@@ -66,11 +66,11 @@ module Basic;
   trireg w8 = w0;
   // CHECK: %w9 = moore.net tri0 %w0 : !moore.logic
   tri0 w9 = w0;
-  // CHECK: %w10 = moore.net tri1 %w0 : !moore.logic 
+  // CHECK: %w10 = moore.net tri1 %w0 : !moore.logic
   tri1 w10 = w0;
-  // CHECK: %w11 = moore.net supply0 : !moore.logic  
+  // CHECK: %w11 = moore.net supply0 : !moore.logic
   supply0 w11;
-  // CHECK: %w12 = moore.net supply1 : !moore.logic  
+  // CHECK: %w12 = moore.net supply1 : !moore.logic
   supply1 w12;
 
   // CHECK: %b1 = moore.variable : !moore.packed<range<bit, 0:0>>
@@ -119,11 +119,10 @@ module Statements;
   bit x, y, z;
   int i;
   initial begin
-    //===------------------------------------------------------------------===//
-    // local variables
-
     // CHECK: %a = moore.variable  : !moore.int
     automatic int a;
+    // CHECK moore.blocking_assign %i, %a : !moore.int
+    i = a;
     
     //===------------------------------------------------------------------===//
     // Conditional statements
@@ -294,9 +293,10 @@ module Expressions;
   // CHECK: %b = moore.variable : !moore.int
   // CHECK: %c = moore.variable : !moore.int
   int a, b, c;
-  int unsigned u;
+  int unsigned u, w;
   bit [1:0][3:0] v;
   integer d, e, f;
+  integer unsigned g, h, k;
   bit x;
   logic y;
   logic [31:0] vec_1;
@@ -313,15 +313,15 @@ module Expressions;
     c = 42;
     // CHECK: moore.constant 42 : !moore.packed<range<bit, 18:0>>
     c = 19'd42;
-    // CHECK: moore.constant 42 : !moore.packed<range<bit<signed>, 18:0>>
+    // CHECK: moore.constant 42 : !moore.packed<range<bit, 18:0>>
     c = 19'sd42;
     // CHECK: moore.concat %a, %b, %c : (!moore.int, !moore.int, !moore.int) -> !moore.packed<range<bit, 95:0>>
     a = {a, b, c};
     // CHECK: moore.concat %d, %e : (!moore.integer, !moore.integer) -> !moore.packed<range<logic, 63:0>>
     d = {d, e};
     // CHECK: %[[VAL_1:.*]] = moore.constant false : !moore.packed<range<bit, 0:0>>
-    // CHECK: %[[VAL_2:.*]] = moore.concat %[[VAL_1]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 0:0>>
-    // CHECK: %[[VAL_3:.*]] = moore.replicate %[[VAL_2]] : (!moore.packed<range<bit, 0:0>>) -> !moore.packed<range<bit, 31:0>>
+    // CHECK: %[[VAL_2:.*]] = moore.concat %[[VAL_1]] : (!moore.packed<range<bit, 0:0>>) -> !moore.bit
+    // CHECK: %[[VAL_3:.*]] = moore.replicate %[[VAL_2]] : (!moore.bit) -> !moore.packed<range<bit, 31:0>>
     a = {32{1'b0}};
     // CHECK: %[[VAL:.*]] = moore.constant 1 : !moore.int
     // CHECK: moore.extract %vec_1 from %[[VAL]] : !moore.packed<range<logic, 31:0>>, !moore.int -> !moore.packed<range<logic, 3:1>>
@@ -432,9 +432,13 @@ module Expressions;
     c = a - b;
     // CHECK: moore.mul %a, %b : !moore.int
     c = a * b;
-    // CHECK: moore.div %d, %e : !moore.integer
+    // CHECK: moore.divu %h, %k : !moore.integer
+    g = h / k;
+    // CHECK: moore.divs %d, %e : !moore.integer
     f = d / e;
-    // CHECK: moore.mod %d, %e : !moore.integer
+    // CHECK: moore.modu %h, %k : !moore.integer
+    g = h % k;
+    // CHECK: moore.mods %d, %e : !moore.integer
     f = d % e;
 
     // CHECK: moore.and %a, %b : !moore.int
@@ -473,13 +477,21 @@ module Expressions;
     // CHECK: moore.wildcard_ne %a, %b : !moore.int -> !moore.bit
     x = a !=? b;
 
-    // CHECK: moore.ge %a, %b : !moore.int -> !moore.bit
+    // CHECK: moore.uge %u, %w : !moore.int -> !moore.bit
+    c = u >= w;
+    // CHECK: moore.ugt %u, %w : !moore.int -> !moore.bit
+    c = u > w;
+    // CHECK: moore.ule %u, %w : !moore.int -> !moore.bit
+    c = u <= w;
+    // CHECK: moore.ult %u, %w : !moore.int -> !moore.bit
+    c = u < w;
+    // CHECK: moore.sge %a, %b : !moore.int -> !moore.bit
     c = a >= b;
-    // CHECK: moore.gt %a, %b : !moore.int -> !moore.bit
+    // CHECK: moore.sgt %a, %b : !moore.int -> !moore.bit
     c = a > b;
-    // CHECK: moore.le %a, %b : !moore.int -> !moore.bit
+    // CHECK: moore.sle %a, %b : !moore.int -> !moore.bit
     c = a <= b;
-    // CHECK: moore.lt %a, %b : !moore.int -> !moore.bit
+    // CHECK: moore.slt %a, %b : !moore.int -> !moore.bit
     c = a < b;
 
     // CHECK: [[A:%.+]] = moore.bool_cast %a : !moore.int -> !moore.bit
@@ -512,7 +524,7 @@ module Expressions;
     c = a <<< b;
     // CHECK: moore.ashr %a, %b : !moore.int, !moore.int
     c = a >>> b;
-    // CHECK: moore.shr %u, %b : !moore.int<unsigned>, !moore.int
+    // CHECK: moore.shr %u, %b : !moore.int, !moore.int
     c = u >>> b;
 
     //===------------------------------------------------------------------===//
@@ -531,13 +543,21 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a *= b;
     // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
-    // CHECK: [[TMP2:%.+]] = moore.div [[TMP1]], %d
+    // CHECK: [[TMP2:%.+]] = moore.divs [[TMP1]], %d
     // CHECK: moore.blocking_assign %f, [[TMP2]]
     f /= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %g
+    // CHECK: [[TMP2:%.+]] = moore.divu [[TMP1]], %h
+    // CHECK: moore.blocking_assign %g, [[TMP2]]
+    g /= h;
     // CHECK: [[TMP1:%.+]] = moore.read_lvalue %f
-    // CHECK: [[TMP2:%.+]] = moore.mod [[TMP1]], %d
+    // CHECK: [[TMP2:%.+]] = moore.mods [[TMP1]], %d
     // CHECK: moore.blocking_assign %f, [[TMP2]]
     f %= d;
+    // CHECK: [[TMP1:%.+]] = moore.read_lvalue %g
+    // CHECK: [[TMP2:%.+]] = moore.modu [[TMP1]], %h
+    // CHECK: moore.blocking_assign %g, [[TMP2]]
+    g %= h;
     // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
     // CHECK: [[TMP2:%.+]] = moore.and [[TMP1]], %b
     // CHECK: moore.blocking_assign %a, [[TMP2]]
@@ -597,7 +617,7 @@ module Conversion;
   int c = byte'(a);
 
   // Sign conversion.
-  // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.int -> !moore.packed<range<bit<signed>, 31:0>>
+  // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.int -> !moore.packed<range<bit, 31:0>>
   // CHECK: %d1 = moore.variable [[TMP]]
   // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.int -> !moore.packed<range<bit, 31:0>>
   // CHECK: %d2 = moore.variable [[TMP]]
@@ -605,7 +625,7 @@ module Conversion;
   bit [31:0] d2 = unsigned'(b);
 
   // Width conversion.
-  // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.int -> !moore.packed<range<bit<signed>, 18:0>>
+  // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.int -> !moore.packed<range<bit, 18:0>>
   // CHECK: %e = moore.variable [[TMP]]
   bit signed [18:0] e = 19'(b);
 endmodule

@@ -33,12 +33,7 @@ struct TypeVisitor {
       break;
     }
 
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return moore::IntType::get(context.getContext(), kind);
   }
 
   Type visit(const slang::ast::FloatingType &type) {
@@ -81,12 +76,7 @@ struct TypeVisitor {
       break;
     }
 
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return moore::IntType::get(context.getContext(), kind);
   }
 
   Type visit(const slang::ast::PackedArrayType &type) {

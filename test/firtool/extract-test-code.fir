@@ -42,11 +42,6 @@ circuit Top:
     input cond : UInt<1>
     assert(clock, cond, cond, "Some assertion")
 
-  intmodule VerifAssertIntrinsic_foo :
-    input property : UInt<1>
-    intrinsic = circt_verif_assert
-    parameter label = "foo"
-
   ; CHECK: module Top_assert(
   ; CHECK-NOT: endmodule
   ; CHECK:   foo: assert property (cond);
@@ -66,5 +61,4 @@ circuit Top:
     connect input_only.clock, clock
     connect input_only.cond, cond
 
-    inst verif of VerifAssertIntrinsic_foo
-    connect verif.property, cond
+    intrinsic(circt_verif_assert<label="foo">, cond)

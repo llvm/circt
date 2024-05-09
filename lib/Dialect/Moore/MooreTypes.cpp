@@ -59,13 +59,6 @@ StringRef moore::getKeywordFromSign(const Sign &sign) {
   llvm_unreachable("all signs should be handled");
 }
 
-std::optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
-  return StringSwitch<std::optional<Sign>>(keyword)
-      .Case("unsigned", Sign::Unsigned)
-      .Case("signed", Sign::Signed)
-      .Default({});
-}
-
 //===----------------------------------------------------------------------===//
 // Simple Bit Vector Type
 //===----------------------------------------------------------------------===//
@@ -73,22 +66,14 @@ std::optional<Sign> moore::getSignFromKeyword(StringRef keyword) {
 PackedType SimpleBitVectorType::getType(MLIRContext *context) const {
   if (!*this)
     return {};
-  std::optional<Sign> maybeSign;
-  if (explicitSign)
-    maybeSign = sign;
-
-  // If the type originally used an integer atom, try to reconstruct that.
-  if (usedAtom)
-    if (auto kind = IntType::getKindFromDomainAndSize(domain, size))
-      return IntType::get(context, *kind, maybeSign);
 
   // Build the core integer bit type.
   auto kind = domain == Domain::TwoValued ? IntType::Bit : IntType::Logic;
-  auto intType = IntType::get(context, kind, maybeSign);
+  auto intType = IntType::get(context, kind);
 
   // If the vector is wider than a single bit, or the dimension was explicit in
   // the original type, add a dimension around the bit type.
-  if (size > 1 || explicitSize)
+  if (size > 1)
     return PackedRangeDim::get(intType, size);
   return intType;
 }
@@ -104,13 +89,6 @@ Domain UnpackedType::getDomain() const {
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().domain; })
       .Default([](auto) { return Domain::TwoValued; });
-}
-
-Sign UnpackedType::getSign() const {
-  return TypeSwitch<UnpackedType, Sign>(*this)
-      .Case<PackedType>([](auto type) { return type.getSign(); })
-      .Case<UnpackedDim>([&](auto type) { return type.getInner().getSign(); })
-      .Default([](auto) { return Sign::Unsigned; });
 }
 
 std::optional<unsigned> UnpackedType::getBitSize() const {
@@ -134,10 +112,7 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
 
 /// Map an `IntType` to the corresponding SBVT. Never returns a null type.
 static SimpleBitVectorType getSimpleBitVectorFromIntType(IntType type) {
-  auto bitSize = type.getBitSize();
-  bool usedAtom = bitSize > 1;
-  return SimpleBitVectorType(type.getDomain(), type.getSign(), bitSize,
-                             usedAtom, type.isSignExplicit(), false);
+  return SimpleBitVectorType(type.getDomain(), type.getBitSize());
 }
 
 SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
@@ -154,15 +129,14 @@ SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
 
         // Inner type must be a single-bit integer. Cannot have integer atom
         // vectors like `int [31:0]`.
-        auto sbv = getSimpleBitVectorFromIntType(innerType);
-        if (sbv.usedAtom)
+        if (innerType.getBitSize() > 1)
           return SimpleBitVectorType{};
 
         // Range must be have non-zero size, and go downwards to zero.
         auto range = rangeType.getRange();
         if (range.size == 0 || range.offset != 0 || range.dir != RangeDir::Down)
           return SimpleBitVectorType{};
-        sbv.explicitSize = true;
+        auto sbv = getSimpleBitVectorFromIntType(innerType);
         sbv.size = range.size;
         return sbv;
       })
@@ -184,9 +158,7 @@ SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
   if (!bitSize || *bitSize == 0)
     return {};
 
-  return SimpleBitVectorType(packed.getDomain(), packed.getSign(), *bitSize,
-                             /*usedAtom=*/false, /*explicitSign=*/false,
-                             /*explicitSize=*/false);
+  return SimpleBitVectorType(packed.getDomain(), *bitSize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -200,14 +172,6 @@ Domain PackedType::getDomain() const {
       .Case<PackedDim>([&](auto type) { return type.getInner().getDomain(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().domain; });
-}
-
-Sign PackedType::getSign() const {
-  return TypeSwitch<PackedType, Sign>(*this)
-      .Case<VoidType>([](auto) { return Sign::Unsigned; })
-      .Case<IntType, PackedStructType>(
-          [&](auto type) { return type.getSign(); })
-      .Case<PackedDim>([&](auto type) { return type.getInner().getSign(); });
 }
 
 std::optional<unsigned> PackedType::getBitSize() const {
@@ -235,24 +199,15 @@ struct IntTypeStorage : TypeStorage {
   using KeyTy = unsigned;
   using Kind = IntType::Kind;
 
-  IntTypeStorage(KeyTy key)
-      : kind(static_cast<Kind>((key >> 16) & 0xFF)),
-        sign(static_cast<Sign>((key >> 8) & 0xFF)), explicitSign(key & 1) {}
-  static KeyTy pack(Kind kind, Sign sign, bool explicitSign) {
-    return static_cast<unsigned>(kind) << 16 |
-           static_cast<unsigned>(sign) << 8 | explicitSign;
-  }
-  bool operator==(const KeyTy &key) const {
-    return pack(kind, sign, explicitSign) == key;
-  }
+  IntTypeStorage(KeyTy key) : kind(static_cast<Kind>(key)) {}
+  static KeyTy pack(Kind kind) { return static_cast<unsigned>(kind); }
+  bool operator==(const KeyTy &key) const { return pack(kind) == key; }
   static IntTypeStorage *construct(TypeStorageAllocator &allocator,
                                    const KeyTy &key) {
     return new (allocator.allocate<IntTypeStorage>()) IntTypeStorage(key);
   }
 
   Kind kind;
-  Sign sign;
-  bool explicitSign;
 };
 } // namespace detail
 } // namespace moore
@@ -292,23 +247,6 @@ StringRef IntType::getKeyword(Kind kind) {
     return "integer";
   case IntType::Time:
     return "time";
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-Sign IntType::getDefaultSign(Kind kind) {
-  switch (kind) {
-  case IntType::Bit:
-  case IntType::Logic:
-  case IntType::Reg:
-  case IntType::Time:
-    return Sign::Unsigned;
-  case IntType::Byte:
-  case IntType::ShortInt:
-  case IntType::Int:
-  case IntType::LongInt:
-  case IntType::Integer:
-    return Sign::Signed;
   }
   llvm_unreachable("all kinds should be handled");
 }
@@ -391,18 +329,11 @@ std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
   llvm_unreachable("all domains should be handled");
 }
 
-IntType IntType::get(MLIRContext *context, Kind kind,
-                     std::optional<Sign> sign) {
-  return Base::get(context, detail::IntTypeStorage::pack(
-                                kind, sign.value_or(getDefaultSign(kind)),
-                                sign.has_value()));
+IntType IntType::get(MLIRContext *context, Kind kind) {
+  return Base::get(context, detail::IntTypeStorage::pack(kind));
 }
 
 IntType::Kind IntType::getKind() const { return getImpl()->kind; }
-
-Sign IntType::getSign() const { return getImpl()->sign; }
-
-bool IntType::isSignExplicit() const { return getImpl()->explicitSign; }
 
 //===----------------------------------------------------------------------===//
 // Unpacked Reals
@@ -685,16 +616,9 @@ struct StructTypeStorage : TypeStorage {
   using KeyTy = std::tuple<unsigned, ArrayRef<StructMember>>;
 
   StructTypeStorage(KeyTy key)
-      : strukt(static_cast<StructKind>((std::get<0>(key) >> 16) & 0xFF),
-               std::get<1>(key)),
-        sign(static_cast<Sign>((std::get<0>(key) >> 8) & 0xFF)),
-        explicitSign((std::get<0>(key) >> 0) & 1) {}
-  static unsigned pack(StructKind kind, Sign sign, bool explicitSign) {
-    return static_cast<unsigned>(kind) << 16 |
-           static_cast<unsigned>(sign) << 8 | explicitSign;
-  }
+      : strukt(static_cast<StructKind>(std::get<0>(key)), std::get<1>(key)) {}
   bool operator==(const KeyTy &key) const {
-    return std::get<0>(key) == pack(strukt.kind, sign, explicitSign) &&
+    return std::get<0>(key) == static_cast<unsigned>(strukt.kind) &&
            std::get<1>(key) == ArrayRef<StructMember>(strukt.members);
   }
   static StructTypeStorage *construct(TypeStorageAllocator &allocator,
@@ -703,8 +627,6 @@ struct StructTypeStorage : TypeStorage {
   }
 
   Struct strukt;
-  Sign sign;
-  bool explicitSign;
 };
 
 } // namespace detail
@@ -712,23 +634,13 @@ struct StructTypeStorage : TypeStorage {
 } // namespace circt
 
 PackedStructType PackedStructType::get(MLIRContext *context, StructKind kind,
-                                       ArrayRef<StructMember> members,
-                                       std::optional<Sign> sign) {
+                                       ArrayRef<StructMember> members) {
   assert(llvm::all_of(members,
                       [](const StructMember &member) {
                         return llvm::isa<PackedType>(member.type);
                       }) &&
          "packed struct members must be packed");
-  return Base::get(context,
-                   detail::StructTypeStorage::pack(
-                       kind, sign.value_or(Sign::Unsigned), sign.has_value()),
-                   members);
-}
-
-Sign PackedStructType::getSign() const { return getImpl()->sign; }
-
-bool PackedStructType::isSignExplicit() const {
-  return getImpl()->explicitSign;
+  return Base::get(context, static_cast<unsigned>(kind), members);
 }
 
 const Struct &PackedStructType::getStruct() const { return getImpl()->strukt; }
@@ -736,9 +648,7 @@ const Struct &PackedStructType::getStruct() const { return getImpl()->strukt; }
 UnpackedStructType UnpackedStructType::get(MLIRContext *context,
                                            StructKind kind,
                                            ArrayRef<StructMember> members) {
-  return Base::get(context,
-                   detail::StructTypeStorage::pack(kind, Sign::Unsigned, false),
-                   members);
+  return Base::get(context, static_cast<unsigned>(kind), members);
 }
 
 const Struct &UnpackedStructType::getStruct() const {
@@ -811,19 +721,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 
   // Packed primary types.
   if (auto kind = IntType::getKindFromKeyword(mnemonic)) {
-    std::optional<Sign> sign;
-    if (succeeded(parser.parseOptionalLess())) {
-      StringRef signKeyword;
-      if (parser.parseKeyword(&signKeyword) || parser.parseGreater())
-        return failure();
-      sign = getSignFromKeyword(signKeyword);
-      if (!sign) {
-        parser.emitError(parser.getCurrentLocation())
-            << "expected keyword `unsigned` or `signed`";
-        return failure();
-      }
-    }
-    return yieldPacked(IntType::get(context, *kind, sign));
+    return yieldPacked(IntType::get(context, *kind));
   }
 
   // Unpacked primary types.
@@ -904,22 +802,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
     if (parser.parseLess())
       return failure();
 
-    std::optional<Sign> sign;
     StringRef keyword;
-    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-      sign = getSignFromKeyword(keyword);
-      if (!sign) {
-        parser.emitError(loc) << "expected keyword `unsigned` or `signed`";
-        return failure();
-      }
-      if (subset.implied == Subset::Unpacked) {
-        parser.emitError(loc) << "unpacked struct cannot have a sign";
-        return failure();
-      }
-      if (parser.parseComma())
-        return failure();
-    }
-
     SmallVector<StructMember> members;
     auto result2 =
         parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Braces, [&]() {
@@ -937,8 +820,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 
     return yieldImplied(
         [&]() {
-          return PackedStructType::get(parser.getContext(), *kind, members,
-                                       sign);
+          return PackedStructType::get(parser.getContext(), *kind, members);
         },
         [&]() {
           return UnpackedStructType::get(parser.getContext(), *kind, members);
@@ -971,9 +853,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       // Integers and reals
       .Case<IntType>([&](auto type) {
         printer << type.getKeyword();
-        auto sign = type.getSign();
-        if (type.isSignExplicit())
-          printer << "<" << getKeywordFromSign(sign) << ">";
         return success();
       })
       .Case<RealType>(
@@ -1020,11 +899,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       // Structs
       .Case<PackedStructType, UnpackedStructType>([&](auto type) {
         const auto &strukt = type.getStruct();
-        printer << getMnemonicFromStructKind(strukt.kind) << "<";
-        auto packed = llvm::dyn_cast<PackedStructType>(type);
-        if (packed && packed.isSignExplicit())
-          printer << packed.getSign() << ", ";
-        printer << "{";
+        printer << getMnemonicFromStructKind(strukt.kind) << "<{";
         llvm::interleaveComma(strukt.members, printer, [&](const auto &member) {
           printer << member.name.getValue() << ": ";
           printMooreType(member.type, printer, subset);

@@ -46,7 +46,7 @@ func.func @UnrealizedConversionCast(%arg0: !moore.byte) -> !moore.shortint {
 }
 
 // CHECK-LABEL: func @Expressions
-func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.packed<range<bit, 5:0>>, %arg3: !moore.packed<range<bit<signed>, 4:0>>, %arg4: !moore.bit<signed>) {
+func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.packed<range<bit, 5:0>>, %arg3: !moore.packed<range<bit, 4:0>>, %arg4: !moore.bit) {
   // CHECK-NEXT: %0 = comb.concat %arg0, %arg0 : i1, i1
   // CHECK-NEXT: %1 = comb.concat %arg1, %arg1 : i1, i1
   moore.concat %arg0, %arg0 : (!moore.bit, !moore.bit) -> !moore.packed<range<bit, 1:0>>
@@ -77,7 +77,7 @@ func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.pac
   // CHECK-NEXT: [[V6:%.+]] = hw.constant -1 : i5
   // CHECK-NEXT: [[V7:%.+]] = comb.mux [[V4]], [[V5]], [[V6]] : i5
   // CHECK-NEXT: comb.shl %arg3, [[V7]] : i5
-  moore.shl %arg3, %arg2 : !moore.packed<range<bit<signed>, 4:0>>, !moore.packed<range<bit, 5:0>>
+  moore.shl %arg3, %arg2 : !moore.packed<range<bit, 4:0>>, !moore.packed<range<bit, 5:0>>
 
   // CHECK-NEXT: [[V8:%.+]] = hw.constant 0 : i5
   // CHECK-NEXT: [[V9:%.+]] = comb.concat [[V8]], %arg0 : i5, i1
@@ -94,7 +94,7 @@ func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.pac
   // CHECK-NEXT: [[V14:%.+]] = hw.constant -1 : i5
   // CHECK-NEXT: [[V15:%.+]] = comb.mux [[V12]], [[V13]], [[V14]] : i5
   // CHECK-NEXT: comb.shrs %arg3, [[V15]] : i5
-  moore.ashr %arg3, %arg2 : !moore.packed<range<bit<signed>, 4:0>>, !moore.packed<range<bit, 5:0>>
+  moore.ashr %arg3, %arg2 : !moore.packed<range<bit, 4:0>>, !moore.packed<range<bit, 5:0>>
 
   // CHECK-NEXT: %c2_i32 = hw.constant 2 : i32
   %2 = moore.constant 2 : !moore.int
@@ -151,10 +151,10 @@ func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.pac
   moore.add %arg1, %arg1 : !moore.logic
   moore.sub %arg1, %arg1 : !moore.logic
   moore.mul %arg1, %arg1 : !moore.logic
-  moore.div %arg0, %arg0 : !moore.bit
-  moore.div %arg4, %arg4 : !moore.bit<signed>
-  moore.mod %arg0, %arg0 : !moore.bit
-  moore.mod %arg4, %arg4 : !moore.bit<signed>
+  moore.divu %arg0, %arg0 : !moore.bit
+  moore.divs %arg4, %arg4 : !moore.bit
+  moore.modu %arg0, %arg0 : !moore.bit
+  moore.mods %arg4, %arg4 : !moore.bit
   moore.and %arg0, %arg0 : !moore.bit
   moore.or %arg0, %arg0 : !moore.bit
   moore.xor %arg0, %arg0 : !moore.bit
@@ -163,19 +163,19 @@ func.func @Expressions(%arg0: !moore.bit, %arg1: !moore.logic, %arg2: !moore.pac
   // CHECK-NEXT: comb.icmp ule %arg0, %arg0 : i1
   // CHECK-NEXT: comb.icmp ugt %arg0, %arg0 : i1
   // CHECK-NEXT: comb.icmp uge %arg0, %arg0 : i1
-  moore.lt %arg1, %arg1 : !moore.logic -> !moore.logic
-  moore.le %arg0, %arg0 : !moore.bit -> !moore.bit
-  moore.gt %arg0, %arg0 : !moore.bit -> !moore.bit
-  moore.ge %arg0, %arg0 : !moore.bit -> !moore.bit
+  moore.ult %arg1, %arg1 : !moore.logic -> !moore.logic
+  moore.ule %arg0, %arg0 : !moore.bit -> !moore.bit
+  moore.ugt %arg0, %arg0 : !moore.bit -> !moore.bit
+  moore.uge %arg0, %arg0 : !moore.bit -> !moore.bit
 
   // CHECK-NEXT: comb.icmp slt %arg4, %arg4 : i1
   // CHECK-NEXT: comb.icmp sle %arg4, %arg4 : i1
   // CHECK-NEXT: comb.icmp sgt %arg4, %arg4 : i1
   // CHECK-NEXT: comb.icmp sge %arg4, %arg4 : i1
-  moore.lt %arg4, %arg4 : !moore.bit<signed> -> !moore.bit
-  moore.le %arg4, %arg4 : !moore.bit<signed> -> !moore.bit
-  moore.gt %arg4, %arg4 : !moore.bit<signed> -> !moore.bit
-  moore.ge %arg4, %arg4 : !moore.bit<signed> -> !moore.bit
+  moore.slt %arg4, %arg4 : !moore.bit -> !moore.bit
+  moore.sle %arg4, %arg4 : !moore.bit -> !moore.bit
+  moore.sgt %arg4, %arg4 : !moore.bit -> !moore.bit
+  moore.sge %arg4, %arg4 : !moore.bit -> !moore.bit
 
   // CHECK-NEXT: comb.icmp eq %arg1, %arg1 : i1
   // CHECK-NEXT: comb.icmp ne %arg0, %arg0 : i1
