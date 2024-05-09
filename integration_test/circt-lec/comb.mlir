@@ -68,7 +68,21 @@ hw.module @decomposedAnd(in %in1: i1, in %in2: i1, out out: i1) {
 // TODO
 
 // comb.icmp
-// TODO
+//  RUN: circt-lec %s -c1=eqInv -c2=constFalse --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMPEQ
+//  COMB_ICMPEQ: c1 == c2
+hw.module @eqInv(in %a: i8, out eq: i1) {
+  %ones = hw.constant -1 : i8
+  %inv_a = comb.xor bin %a, %ones : i8
+  %eq = comb.icmp bin eq %a, %inv_a : i8
+  hw.output %eq : i1
+}
+
+hw.module @constFalse(in %a: i8, out eq: i1) {
+  %eq = hw.constant false
+  hw.output %eq : i1
+}
+
+// TODO: Other icmp predicates
 
 // comb.mods
 // TODO
