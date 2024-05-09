@@ -228,6 +228,7 @@ Cheat sheet for powershell:
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$(PWD)" `
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON `
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DLLVM_USE_SPLIT_DWARF=ON 
     -DLLVM_ENABLE_LLD=ON
 > ninja -C<build_dir> check-circt
 ```
