@@ -157,12 +157,12 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         if (!intType || intType.getWidth() != 1)
           return std::nullopt;
 
-        auto castOp = dyn_cast_or_null<mlir::UnrealizedConversionCastOp>(
-            inputs[0].getDefiningOp());
-        if (!castOp)
+        auto castOp =
+            inputs[0].getDefiningOp<mlir::UnrealizedConversionCastOp>();
+        if (!castOp || castOp.getInputs().size() != 1)
           return std::nullopt;
 
-        if (!dyn_cast<smt::BoolType>(castOp.getInputs()[0].getType()))
+        if (!isa<smt::BoolType>(castOp.getInputs()[0].getType()))
           return std::nullopt;
 
         Value constZero = builder.create<smt::BVConstantOp>(loc, 0, 1);
