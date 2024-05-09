@@ -3256,11 +3256,13 @@ firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.
 }
 
 // CHECK-LABEL: @RefCastSame
-firrtl.module private @RefCastSame(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
+firrtl.module private @RefCastSame(in %in: !firrtl.uint<1>, out %out: !firrtl.probe<uint<1>>) {
   // Drop no-op ref.cast's.
-  // CHECK-NEXT:  firrtl.ref.define %out, %in
+  // CHECK-NEXT:  %[[P:.+]] = firrtl.ref.send
+  // CHECK-NEXT:  firrtl.ref.define %out, %[[P]]
   // CHECK-NEXT:  }
-  %same_as_in = firrtl.ref.cast %in : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
+  %probe = firrtl.ref.send %in : !firrtl.uint<1>
+  %same_as_in = firrtl.ref.cast %probe : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
   firrtl.ref.define %out, %same_as_in : !firrtl.probe<uint<1>>
 }
 

@@ -58,15 +58,6 @@ enum MooreRealKind {
   MooreRealTime,
 };
 
-enum MooreSign {
-  /// No sign is explicitly given.
-  MooreNone,
-  /// Explicitly marked to be unsigned.
-  MooreUnsigned,
-  /// Explicitly marked to be signed.
-  MooreSigned,
-};
-
 /// Create a void type.
 MLIR_CAPI_EXPORTED MlirType mooreVoidTypeGet(MlirContext ctx);
 /// Create a string type.
@@ -77,8 +68,7 @@ MLIR_CAPI_EXPORTED MlirType mooreChandleTypeGet(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirType mooreEventTypeGet(MlirContext ctx);
 /// Create an int type.
 MLIR_CAPI_EXPORTED MlirType mooreIntTypeGet(MlirContext ctx,
-                                            enum MooreIntKind kind,
-                                            enum MooreSign sign);
+                                            enum MooreIntKind kind);
 /// Create a `logic` type.
 MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx);
 /// Create an `int` type.
@@ -119,7 +109,6 @@ mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound);
 /// Create a simple bit-vector type.
 MLIR_CAPI_EXPORTED MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx,
                                                         bool isFourValued,
-                                                        bool isSigned,
                                                         unsigned size);
 /// Checks whether the passed UnpackedType is a four-valued type.
 MLIR_CAPI_EXPORTED bool mooreIsFourValuedType(MlirType type);

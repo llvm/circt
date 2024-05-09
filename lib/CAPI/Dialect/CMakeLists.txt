@@ -20,7 +20,7 @@ set(LLVM_OPTIONAL_SOURCES
   Verif.cpp
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIComb
+add_circt_public_c_api_library(CIRCTCAPIComb
   Comb.cpp
 
   LINK_LIBS PUBLIC
@@ -29,7 +29,7 @@ add_mlir_public_c_api_library(CIRCTCAPIComb
   CIRCTCombTransforms
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIDebug
+add_circt_public_c_api_library(CIRCTCAPIDebug
   Debug.cpp
 
   LINK_LIBS PUBLIC
@@ -37,7 +37,7 @@ add_mlir_public_c_api_library(CIRCTCAPIDebug
   CIRCTDebug
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIESI
+add_circt_public_c_api_library(CIRCTCAPIESI
   ESI.cpp
 
   LINK_LIBS PUBLIC
@@ -45,7 +45,7 @@ add_mlir_public_c_api_library(CIRCTCAPIESI
   CIRCTESI
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIFIRRTL
+add_circt_public_c_api_library(CIRCTCAPIFIRRTL
   FIRRTL.cpp
 
   LINK_LIBS PUBLIC
@@ -54,7 +54,7 @@ add_mlir_public_c_api_library(CIRCTCAPIFIRRTL
   CIRCTImportFIRFile
 )
 
-add_mlir_public_c_api_library(CIRCTCAPICHIRRTL
+add_circt_public_c_api_library(CIRCTCAPICHIRRTL
   CHIRRTL.cpp
 
   LINK_LIBS PUBLIC
@@ -62,7 +62,7 @@ add_mlir_public_c_api_library(CIRCTCAPICHIRRTL
   CIRCTFIRRTL
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIMSFT
+add_circt_public_c_api_library(CIRCTCAPIMSFT
   MSFT.cpp
 
   DEPENDS
@@ -75,7 +75,7 @@ add_mlir_public_c_api_library(CIRCTCAPIMSFT
   CIRCTMSFTTransforms
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIHW
+add_circt_public_c_api_library(CIRCTCAPIHW
   HW.cpp
 
   LINK_LIBS PUBLIC
@@ -83,7 +83,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHW
   CIRCTHW
 )
 
-add_mlir_public_c_api_library(CIRCTCAPILLHD
+add_circt_public_c_api_library(CIRCTCAPILLHD
   LLHD.cpp
 
   LINK_LIBS PUBLIC
@@ -91,7 +91,7 @@ add_mlir_public_c_api_library(CIRCTCAPILLHD
   CIRCTLLHD
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIMoore
+add_circt_public_c_api_library(CIRCTCAPIMoore
   Moore.cpp
 
   LINK_LIBS PUBLIC
@@ -99,7 +99,7 @@ add_mlir_public_c_api_library(CIRCTCAPIMoore
   CIRCTMoore
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIOM
+add_circt_public_c_api_library(CIRCTCAPIOM
   OM.cpp
 
   LINK_LIBS PUBLIC
@@ -108,7 +108,7 @@ add_mlir_public_c_api_library(CIRCTCAPIOM
   CIRCTOMEvaluator
 )
 
-add_mlir_public_c_api_library(CIRCTCAPISeq
+add_circt_public_c_api_library(CIRCTCAPISeq
   Seq.cpp
 
   LINK_LIBS PUBLIC
@@ -117,7 +117,7 @@ add_mlir_public_c_api_library(CIRCTCAPISeq
   CIRCTSeqTransforms
 )
 
-add_mlir_public_c_api_library(CIRCTCAPISV
+add_circt_public_c_api_library(CIRCTCAPISV
   SV.cpp
 
   LINK_LIBS PUBLIC
@@ -126,7 +126,7 @@ add_mlir_public_c_api_library(CIRCTCAPISV
   CIRCTSVTransforms
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIFSM
+add_circt_public_c_api_library(CIRCTCAPIFSM
   FSM.cpp
 
   DEPENDS
@@ -139,7 +139,7 @@ add_mlir_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSMToSV
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIHandshake
+add_circt_public_c_api_library(CIRCTCAPIHandshake
   Handshake.cpp
 
   LINK_LIBS PUBLIC
@@ -150,7 +150,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHandshake
   CIRCTCFToHandshake
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIHWArith
+add_circt_public_c_api_library(CIRCTCAPIHWArith
   HWArith.cpp
 
   LINK_LIBS PUBLIC
@@ -159,7 +159,7 @@ add_mlir_public_c_api_library(CIRCTCAPIHWArith
   CIRCTHWArithToHW
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIVerif
+add_circt_public_c_api_library(CIRCTCAPIVerif
   Verif.cpp
 
   LINK_LIBS PUBLIC
@@ -168,7 +168,7 @@ add_mlir_public_c_api_library(CIRCTCAPIVerif
   CIRCTVerifToSV
 )
 
-add_mlir_public_c_api_library(CIRCTCAPILTL
+add_circt_public_c_api_library(CIRCTCAPILTL
   LTL.cpp
 
   LINK_LIBS PUBLIC
@@ -176,7 +176,7 @@ add_mlir_public_c_api_library(CIRCTCAPILTL
   CIRCTLTL
 )
 
-add_mlir_public_c_api_library(CIRCTCAPIEmit
+add_circt_public_c_api_library(CIRCTCAPIEmit
   Emit.cpp
 
   LINK_LIBS PUBLIC

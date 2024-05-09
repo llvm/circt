@@ -115,7 +115,7 @@ struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
       return failure();
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
         op, op.getType(),
-        evaluated->cast<IntegerAttr>().getValue().getSExtValue());
+        cast<IntegerAttr>(*evaluated).getValue().getSExtValue());
     return success();
   }
 

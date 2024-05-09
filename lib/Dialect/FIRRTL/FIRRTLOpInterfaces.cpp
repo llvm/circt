@@ -42,12 +42,9 @@ static LogicalResult verifyNoInputProbes(FModuleLike module) {
         });
   };
 
-  if (module.isPublic()) {
-    for (auto &pi : module.getPorts()) {
-      if (hasInputRef(pi.type, pi.isOutput()))
-        return emitError(pi.loc, "input probe not allowed on public module");
-    }
-  }
+  for (auto &pi : module.getPorts())
+    if (hasInputRef(pi.type, pi.isOutput()))
+      return emitError(pi.loc, "input probe not allowed");
   return success();
 }
 

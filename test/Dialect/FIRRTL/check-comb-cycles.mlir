@@ -906,19 +906,6 @@ firrtl.circuit "Bug5442" {
 
 // -----
 
-firrtl.circuit "References"   {
-  firrtl.module private @Child(in %in: !firrtl.probe<uint<1>>, out %out: !firrtl.probe<uint<1>>) {
-    firrtl.ref.define %out, %in : !firrtl.probe<uint<1>>
-  }
-  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: References.{child0.in <- child0.out <- child0.in}}}
-  firrtl.module @References() {
-    %in, %out = firrtl.instance child0 @Child(in in: !firrtl.probe<uint<1>>, out out: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %in, %out : !firrtl.probe<uint<1>>
-  }
-}
-
-// -----
-
 firrtl.circuit "RefSubLoop" {
   firrtl.module private @Child(in %bundle: !firrtl.bundle<a: uint<1>, b: uint<1>>, out %p: !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>) {
     %n, %n_ref = firrtl.node interesting_name %bundle forceable : !firrtl.bundle<a: uint<1>, b: uint<1>>
