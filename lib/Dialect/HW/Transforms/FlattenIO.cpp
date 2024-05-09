@@ -316,17 +316,6 @@ updateLocAttribute(SmallVectorImpl<Type> &oldTypes,
   return newLocs;
 }
 
-/// The conversion framework seems to throw away block argument locations.  We
-/// use this function to copy the location from the original argument to the
-/// set of flattened arguments.
-static void updateBlockLocations(hw::HWModuleLike op) {
-  auto locs = op.getInputLocs();
-  if (locs.empty() || op.getModuleBody().empty())
-    return;
-  for (auto [arg, loc] : llvm::zip(op.getBodyBlock()->getArguments(), locs))
-    arg.setLoc(loc);
-}
-
 template <typename T>
 static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
                                       StringSet<> &externModules,
@@ -395,7 +384,6 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
           updateLocAttribute(ioMap[op].resTypes, ioMap[op].resLocs);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
       op.setAllPortLocs(newArgLocs);
-      updateBlockLocations(op);
     }
 
     // And likewise with the converted instance ops.
