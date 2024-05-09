@@ -67,7 +67,7 @@ $ mkdir llvm/build
 $ cd llvm/build
 $ cmake -G Ninja ../llvm \
     -DLLVM_ENABLE_PROJECTS="mlir" \
-    -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
+    -DLLVM_TARGETS_TO_BUILD="s/X86;RISCV/host/" \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DCMAKE_BUILD_TYPE=DEBUG \
     -DLLVM_USE_SPLIT_DWARF=ON \
