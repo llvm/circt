@@ -1374,12 +1374,12 @@ firrtl.circuit "InnerSym" {
 // COMMON-LABEL: "WireProbe"
 firrtl.circuit "WireProbe" {
   // (Read-only probes are unconditionally split as workaround for 4479)
-  // COMMON-LABEL: module private @SPassthrough
-  // LT-SAME: in %in_a: !firrtl.probe<uint<5>>
-  // LT-SAME: in %in_b: !firrtl.probe<uint<5>>
-  firrtl.module private @SPassthrough(in %in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>,
-                                      out %y: !firrtl.probe<uint<5>>,
-                                      out %z: !firrtl.probe<uint<5>>) {
+  // COMMON-LABEL: module public @WireProbe
+  // LT-SAME: out %out_a: !firrtl.probe<uint<5>>
+  // LT-SAME: out %out_b: !firrtl.probe<uint<5>>
+  firrtl.module public @WireProbe(out %out: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>,
+                                  out %y: !firrtl.probe<uint<5>>,
+                                  out %z: !firrtl.probe<uint<5>>) {
     // LT-NEXT: %w_a = firrtl.wire
     // LT-NEXT: %w_b = firrtl.wire
     // LT-NOT: firrtl.ref.sub
@@ -1389,17 +1389,11 @@ firrtl.circuit "WireProbe" {
     %1 = firrtl.ref.sub %w[0] : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
     firrtl.ref.define %y, %1 : !firrtl.probe<uint<5>>
     firrtl.ref.define %z, %0 : !firrtl.probe<uint<5>>
+    firrtl.ref.define %out, %w : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
   }
-  // COMMON-LABEL: @WireProbe
-  firrtl.module @WireProbe(in %x: !firrtl.bundle<a: uint<5>, b: uint<5>>,
-                           out %y: !firrtl.probe<uint<5>>,
-                           out %z: !firrtl.probe<uint<5>>) {
-    %sp_in, %sp_y, %sp_z = firrtl.instance sp @SPassthrough(in in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>, out y: !firrtl.probe<uint<5>>, out z: !firrtl.probe<uint<5>>)
-    %0 = firrtl.ref.send %x : !firrtl.bundle<a: uint<5>, b: uint<5>>
-    firrtl.ref.define %sp_in, %0 : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
-    firrtl.ref.define %y, %sp_y : !firrtl.probe<uint<5>>
-    firrtl.ref.define %z, %sp_z : !firrtl.probe<uint<5>>
-  }
+}
+
+firrtl.circuit "UnrealizedConversion" {
   // COMMON-LABEL: @UnrealizedConversion
   firrtl.module @UnrealizedConversion( ){
     // CHECK: %[[a:.+]] = "d.w"() : () -> !hw.struct<data: i64, tag: i1>
