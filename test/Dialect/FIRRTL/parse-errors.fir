@@ -439,7 +439,7 @@ circuit DefineIntoProbe:
 
 circuit InProbeTop:
   module InProbeTop:
-    input p : Probe<UInt<1>> ; expected-error {{input probe not allowed on public module}}
+    input p : Probe<UInt<1>> ; expected-error {{input probe not allowed}}
 
 ;// -----
 

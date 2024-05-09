@@ -99,7 +99,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
       /*hoistHWDrivers=*/!opt.shouldDisableOptimization() &&
       !opt.shouldDisableHoistingHWPassthrough()));
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());

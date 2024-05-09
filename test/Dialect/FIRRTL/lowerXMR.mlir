@@ -55,26 +55,28 @@ firrtl.circuit "Top" {
 // CHECK-LABEL: firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.module @Top() {
-    %t_bar_a, %t_bar_b = firrtl.instance t @TopPriv(in bar_a : !firrtl.probe<uint<0>>, in bar_b : !firrtl.probe<vector<uint<0>,10>>)
-    %zw = firrtl.wire : !firrtl.uint<0>
-    %zw_ref = firrtl.ref.send %zw : !firrtl.uint<0>
-    %zw_vec = firrtl.wire : !firrtl.vector<uint<0>,10>
-    %zw_vec_ref = firrtl.ref.send %zw_vec : !firrtl.vector<uint<0>,10>
-    firrtl.ref.define %t_bar_a, %zw_ref : !firrtl.probe<uint<0>>
-    firrtl.ref.define %t_bar_b, %zw_vec_ref : !firrtl.probe<vector<uint<0>,10>>
-  }
-  firrtl.module private @TopPriv(in %bar_a : !firrtl.probe<uint<0>>, in %bar_b : !firrtl.probe<vector<uint<0>,10>>) {
+    %t_bar_a, %t_bar_b = firrtl.instance t @TopPriv(out bar_a : !firrtl.probe<uint<0>>, out bar_b : !firrtl.probe<vector<uint<0>,10>>)
+
     %a = firrtl.wire : !firrtl.uint<0>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<0>>
+    %0 = firrtl.ref.resolve %t_bar_a : !firrtl.probe<uint<0>>
     // CHECK:  %[[c0_ui0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
     firrtl.strictconnect %a, %0 : !firrtl.uint<0>
     // CHECK:  firrtl.strictconnect %a, %[[c0_ui0]] : !firrtl.uint<0>
     %b = firrtl.wire : !firrtl.vector<uint<0>,10>
-    %1 = firrtl.ref.resolve %bar_b : !firrtl.probe<vector<uint<0>,10>>
+    %1 = firrtl.ref.resolve %t_bar_b : !firrtl.probe<vector<uint<0>,10>>
     firrtl.strictconnect %b, %1 : !firrtl.vector<uint<0>,10>
     // CHECK:	%[[c0_ui0_0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
     // CHECK:  %[[v2:.+]] = firrtl.bitcast %[[c0_ui0_0]] : (!firrtl.uint<0>) -> !firrtl.vector<uint<0>, 10>
     // CHECK:  firrtl.strictconnect %b, %[[v2]] : !firrtl.vector<uint<0>, 10>
+  }
+  // CHECK: TopPriv()
+  firrtl.module private @TopPriv(out %bar_a : !firrtl.probe<uint<0>>, out %bar_b : !firrtl.probe<vector<uint<0>,10>>) {
+    %zw = firrtl.wire : !firrtl.uint<0>
+    %zw_ref = firrtl.ref.send %zw : !firrtl.uint<0>
+    %zw_vec = firrtl.wire : !firrtl.vector<uint<0>,10>
+    %zw_vec_ref = firrtl.ref.send %zw_vec : !firrtl.vector<uint<0>,10>
+    firrtl.ref.define %bar_a, %zw_ref : !firrtl.probe<uint<0>>
+    firrtl.ref.define %bar_b, %zw_vec_ref : !firrtl.probe<vector<uint<0>,10>>
   }
 }
 
@@ -166,238 +168,6 @@ firrtl.circuit "Top" {
     // CHECK-NEXT: firrtl.strictconnect %b, %[[#xmr_3]]
     firrtl.strictconnect %c, %2 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %c, %[[#xmr_4]]
-  }
-}
-
-// -----
-
-// Check for downward reference
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod() {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK:  %c0_ui1 = firrtl.constant 0
-    // CHECK:  %0 = firrtl.node sym @[[xmrSym]] %c0_ui1  : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
-    %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  firrtl.instance bar sym @barXMR  @XmrSrcMod()
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Top() {
-    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  firrtl.instance bar sym @bar  @Bar()
-    %a = firrtl.wire : !firrtl.uint<1>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %a, %[[#xmr]]
-    %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %bar_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-
-}
-
-// -----
-
-// Check for downward reference to port
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>) {
-    // CHECK: firrtl.node sym @[[xmrSym]]
-    %1 = firrtl.ref.send %pa : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
-    %pa, %xmr   = firrtl.instance bar sym @barXMR @XmrSrcMod(in pa: !firrtl.uint<1>, out _a: !firrtl.probe<uint<1>>)
-    // CHECK: %bar_pa = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<1>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Top() {
-    %bar_a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<1>>)
-    // CHECK:  firrtl.instance bar sym @bar  @Bar()
-    %a = firrtl.wire : !firrtl.uint<1>
-    %0 = firrtl.ref.resolve %bar_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    firrtl.strictconnect %a, %0 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %a, %[[#xmr]]
-    %c_a = firrtl.instance child @Child(in  _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %bar_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-}
-
-// -----
-
-// Test for multiple paths and downward reference.
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path_0:[a-zA-Z0-9_]+]] [@Top::@foo, @Foo::@fooXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  // CHECK: hw.hierpath private @[[path_1:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym]]]
-  firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-    // CHECK: firrtl.node sym @[[xmrSym]]
-  }
-  firrtl.module @Foo(out %_a: !firrtl.probe<uint<1>>) {
-    %xmr   = firrtl.instance bar sym @fooXMR @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %_a, %xmr   : !firrtl.probe<uint<1>>
-  }
-  firrtl.module @Top() {
-    %foo_a = firrtl.instance foo sym @foo @Foo(out _a: !firrtl.probe<uint<1>>)
-    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    %c_a, %c_b = firrtl.instance child @Child2p(in _a: !firrtl.probe<uint<1>>, in _b: !firrtl.probe<uint<1>> )
-    // CHECK:  firrtl.instance child  @Child2p()
-    firrtl.ref.define %c_a, %foo_a : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_b, %xmr_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child2p(in  %_a: !firrtl.probe<uint<1>>, in  %_b: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path_0]]
-    %1 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path_1]]
-  }
-}
-
-// -----
-
-// Test for multiple children paths
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-    // CHECK: firrtl.node sym @[[xmrSym]]
-  }
-  firrtl.module @Top() {
-    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    %c_a = firrtl.instance child @Child1(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %xmr_a : !firrtl.probe<uint<1>>
-  }
-  // CHECK-LABEL: firrtl.module private @Child1() {
-  firrtl.module private @Child1(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.probe<uint<1>>, in _b: !firrtl.probe<uint<1>> )
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_b, %_a : !firrtl.probe<uint<1>>
-    %c3 = firrtl.instance child @Child3(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c3 , %_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>, in  %_b: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-  firrtl.module private @Child3(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-}
-
-// -----
-
-// Test for multiple children paths
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-    // CHECK: firrtl.node sym @[[xmrSym]]
-  }
-  firrtl.module @Top() {
-    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    %c_a = firrtl.instance child @Child1(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %xmr_a : !firrtl.probe<uint<1>>
-  }
-  // CHECK-LABEL: firrtl.module private @Child1() {
-  firrtl.module private @Child1(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.probe<uint<1>>, in _b: !firrtl.probe<uint<1>> )
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_b, %_a : !firrtl.probe<uint<1>>
-    %c3 = firrtl.instance child @Child3(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c3 , %_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>, in  %_b: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-  firrtl.module private @Child3(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-}
-
-// -----
-
-// Multiply instantiated Top works, because the reference port does not flow through it.
-firrtl.circuit "Top" {
-  // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Dut::@xmr, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
-  firrtl.module @XmrSrcMod(out %_a: !firrtl.probe<uint<1>>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    %1 = firrtl.ref.send %zero : !firrtl.uint<1>
-    firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
-    // CHECK: firrtl.node sym @[[xmrSym]]
-  }
-  firrtl.module @Top() {
-    firrtl.instance d1 @Dut()
-  }
-  firrtl.module @Top2() {
-    firrtl.instance d2 @Dut()
-  }
-  firrtl.module @Dut() {
-    %xmr_a = firrtl.instance xmr sym @xmr @XmrSrcMod(out _a: !firrtl.probe<uint<1>>)
-    %c_a = firrtl.instance child @Child1(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c_a, %xmr_a : !firrtl.probe<uint<1>>
-  }
-  // CHECK-LABEL: firrtl.module private @Child1() {
-  firrtl.module private @Child1(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %c_a, %c_b = firrtl.instance child @Child2(in _a: !firrtl.probe<uint<1>>, in _b: !firrtl.probe<uint<1>> )
-    firrtl.ref.define %c_a, %_a : !firrtl.probe<uint<1>>
-    firrtl.ref.define %c_b, %_a : !firrtl.probe<uint<1>>
-    %c3 = firrtl.instance child @Child3(in _a: !firrtl.probe<uint<1>>)
-    firrtl.ref.define %c3 , %_a : !firrtl.probe<uint<1>>
-  }
-  firrtl.module private @Child2(in  %_a: !firrtl.probe<uint<1>>, in  %_b: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_b : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-  }
-  firrtl.module private @Child3(in  %_a: !firrtl.probe<uint<1>>) {
-    %0 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
-    %1 = firrtl.ref.resolve %_a : !firrtl.probe<uint<1>>
-    // CHECK:      %[[#xmr:]] = firrtl.xmr.deref @[[path]]
   }
 }
 
