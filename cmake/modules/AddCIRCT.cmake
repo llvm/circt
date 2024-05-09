@@ -10,6 +10,11 @@ function(add_circt_interface interface)
   add_dependencies(circt-headers MLIR${interface}IncGen)
 endfunction()
 
+function(add_circt_public_c_api_library name)
+  add_mlir_public_c_api_library(${ARGV})
+  add_dependencies(circt-capi ${name})
+endfunction()
+
 # Additional parameters are forwarded to tablegen.
 function(add_circt_doc tablegen_file output_path command)
   set(LLVM_TARGET_DEFINITIONS ${tablegen_file}.td)
