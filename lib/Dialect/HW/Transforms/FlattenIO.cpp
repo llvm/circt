@@ -264,14 +264,6 @@ static bool hasUnconvertedOps(mlir::ModuleOp module) {
                       [](T op) { return !isLegalModLikeOp(op); });
 }
 
-template <typename T>
-static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
-  DenseMap<Operation *, IOTypes> ioMap;
-  for (auto op : module.getOps<T>())
-    ioMap[op] = {op.getArgumentTypes(), op.getResultTypes()};
-  return ioMap;
-}
-
 template <typename ModTy, typename T>
 static llvm::SmallVector<Attribute>
 updateNameAttribute(ModTy op, llvm::SmallVectorImpl<Type> &oldTypes, T oldNames,
