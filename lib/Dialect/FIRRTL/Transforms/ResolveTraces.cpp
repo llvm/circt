@@ -137,7 +137,7 @@ private:
 
     // If this targets a module or an instance, then we're done.  There is no
     // "reference" part of the FIRRTL target.
-    if (path.ref.isa<OpAnnoTarget>() &&
+    if (isa<OpAnnoTarget>(path.ref) &&
         path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>())
       return;
 

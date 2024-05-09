@@ -33,12 +33,7 @@ struct TypeVisitor {
       break;
     }
 
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return moore::IntType::get(context.getContext(), kind);
   }
 
   Type visit(const slang::ast::FloatingType &type) {
@@ -81,12 +76,7 @@ struct TypeVisitor {
       break;
     }
 
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return moore::IntType::get(context.getContext(), kind);
   }
 
   Type visit(const slang::ast::PackedArrayType &type) {
@@ -136,23 +126,14 @@ struct TypeVisitor {
 
   // Handle type defs.
   Type visit(const slang::ast::TypeAliasType &type) {
-    auto innerType = type.targetType.getType().visit(*this);
-    if (!innerType)
-      return {};
-    auto loc = context.convertLocation(type.location);
-    if (auto packedInnerType = dyn_cast<moore::PackedType>(innerType))
-      return moore::PackedNamedType::get(packedInnerType, type.name, loc);
-    return moore::UnpackedNamedType::get(cast<moore::UnpackedType>(innerType),
-                                         type.name, loc);
+    // Simply return the underlying type.
+    return type.targetType.getType().visit(*this);
   }
 
   // Handle enums.
   Type visit(const slang::ast::EnumType &type) {
-    auto baseType = type.baseType.visit(*this);
-    if (!baseType)
-      return {};
-    return moore::EnumType::get(StringAttr{}, loc,
-                                cast<moore::PackedType>(baseType));
+    // Simply return the underlying type.
+    return type.baseType.visit(*this);
   }
 
   // Collect the members in a struct or union.
@@ -160,7 +141,6 @@ struct TypeVisitor {
                                SmallVectorImpl<moore::StructMember> &members,
                                bool enforcePacked) {
     for (auto &field : structType.membersOfType<slang::ast::FieldSymbol>()) {
-      auto loc = context.convertLocation(field.location);
       auto name = StringAttr::get(context.getContext(), field.name);
       auto innerType = context.convertType(*field.getDeclaredType());
       if (!innerType)
@@ -168,28 +148,26 @@ struct TypeVisitor {
       // The Slang frontend guarantees the inner type to be packed if the struct
       // is packed.
       assert(!enforcePacked || isa<moore::PackedType>(innerType));
-      members.push_back({name, loc, cast<moore::UnpackedType>(innerType)});
+      members.push_back({name, cast<moore::UnpackedType>(innerType)});
     }
     return success();
   }
 
   // Handle packed and unpacked structs.
   Type visit(const slang::ast::PackedStructType &type) {
-    auto loc = context.convertLocation(type.location);
     SmallVector<moore::StructMember> members;
     if (failed(collectMembers(type, members, true)))
       return {};
-    return moore::PackedStructType::get(moore::StructKind::Struct, members,
-                                        StringAttr{}, loc);
+    return moore::PackedStructType::get(context.getContext(),
+                                        moore::StructKind::Struct, members);
   }
 
   Type visit(const slang::ast::UnpackedStructType &type) {
-    auto loc = context.convertLocation(type.location);
     SmallVector<moore::StructMember> members;
     if (failed(collectMembers(type, members, false)))
       return {};
-    return moore::UnpackedStructType::get(moore::StructKind::Struct, members,
-                                          StringAttr{}, loc);
+    return moore::UnpackedStructType::get(context.getContext(),
+                                          moore::StructKind::Struct, members);
   }
 
   /// Emit an error for all other types.

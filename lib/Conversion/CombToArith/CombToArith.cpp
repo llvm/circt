@@ -185,6 +185,30 @@ struct BinaryOpConversion : OpConversionPattern<SourceOp> {
   }
 };
 
+/// Lowering for division operations that need to special-case zero-value
+/// divisors to not run coarser UB than CIRCT defines.
+template <typename SourceOp, typename TargetOp>
+struct DivOpConversion : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value zero = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 0));
+    Value one = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 1));
+    Value isZero = rewriter.create<arith::CmpIOp>(loc, CmpIPredicate::eq,
+                                                  adaptor.getRhs(), zero);
+    Value divisor =
+        rewriter.create<arith::SelectOp>(loc, isZero, one, adaptor.getRhs());
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(), divisor);
+    return success();
+  }
+};
+
 /// Lower a comb::ReplicateOp operation to the LLVM dialect.
 template <typename SourceOp, typename TargetOp>
 struct VariadicOpConversion : OpConversionPattern<SourceOp> {
@@ -282,9 +306,9 @@ void circt::populateCombToArithConversionPatterns(
       ExtractOpConversion, ConcatOpConversion, ShrSOpConversion,
       LogicalShiftConversion<ShlOp, ShLIOp>,
       LogicalShiftConversion<ShrUOp, ShRUIOp>,
-      BinaryOpConversion<SubOp, SubIOp>, BinaryOpConversion<DivSOp, DivSIOp>,
-      BinaryOpConversion<DivUOp, DivUIOp>, BinaryOpConversion<ModSOp, RemSIOp>,
-      BinaryOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
+      BinaryOpConversion<SubOp, SubIOp>, DivOpConversion<DivSOp, DivSIOp>,
+      DivOpConversion<DivUOp, DivUIOp>, DivOpConversion<ModSOp, RemSIOp>,
+      DivOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
       VariadicOpConversion<AddOp, AddIOp>, VariadicOpConversion<MulOp, MulIOp>,
       VariadicOpConversion<AndOp, AndIOp>, VariadicOpConversion<OrOp, OrIOp>,
       VariadicOpConversion<XorOp, XOrIOp>>(converter, patterns.getContext());

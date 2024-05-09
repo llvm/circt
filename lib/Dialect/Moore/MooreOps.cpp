@@ -157,8 +157,7 @@ LogicalResult ConcatOp::inferReturnTypes(
       domain = Domain::FourValued;
     size += type.size;
   }
-  results.push_back(
-      SimpleBitVectorType(domain, Sign::Unsigned, size).getType(context));
+  results.push_back(SimpleBitVectorType(domain, size).getType(context));
   return success();
 }
 

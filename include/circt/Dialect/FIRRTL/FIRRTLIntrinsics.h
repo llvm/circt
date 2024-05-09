@@ -236,8 +236,8 @@ public:
     (addConverter<T>(args), ...);
   }
 
-  /// Lowers all intrinsics in a module.
-  LogicalResult lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
+  /// Lowers all intrinsics in a module.  Returns number converted or failure.
+  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
 
 private:
   template <typename T>

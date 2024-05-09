@@ -114,13 +114,6 @@ MLIR_CAPI_EXPORTED MlirType mooreUnpackedQueueDimTypeGet(MlirType inner);
 /// Create a unpacked queue dimension type with bound.
 MLIR_CAPI_EXPORTED MlirType
 mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound);
-/// Create a enum type without base.
-MLIR_CAPI_EXPORTED MlirType mooreEnumTypeGet(MlirAttribute name,
-                                             MlirLocation loc);
-/// Create a enum type with base.
-MLIR_CAPI_EXPORTED MlirType mooreEnumTypeGetWithBase(MlirAttribute name,
-                                                     MlirLocation loc,
-                                                     MlirType base);
 // TODO: PackedStructType
 // TODO: UnpackedStructType
 /// Create a simple bit-vector type.

@@ -444,7 +444,7 @@ def MulOp : BinaryOpBase<"mul", [Commutative]> {
   }];
 }
 
-def DivOp : BinaryOpBase<"div"> {
+class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Division";
   let description = [{
     Divide the left-hand side by the right-hand side operand. Any fractional
@@ -456,7 +456,10 @@ def DivOp : BinaryOpBase<"div"> {
   }];
 }
 
-def ModOp : BinaryOpBase<"mod"> {
+def DivUOp : DivOpBase<"divu">;
+def DivSOp : DivOpBase<"divs">;
+
+class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Remainder";
   let description = [{
     Compute the remainder of the left-hand side divided by the right-hand side
@@ -476,6 +479,9 @@ def ModOp : BinaryOpBase<"mod"> {
     | -11 |  -3 |     -2 |
   }];
 }
+
+def ModUOp : ModOpBase<"modu">;
+def ModSOp : ModOpBase<"mods">;
 
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
@@ -667,10 +673,11 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   let description = [{
     Compares the left- and right-hand side operand and returns a single bit 0,
     1, or X result. If any bit in the two operands is Z or X, returns X.
-    Otherwise, if all bits are 0 or 1, `lt`, `le`, `gt`, and `ge` return whether
-    the left-hand side is less than, less than or equal to, greater than, or
-    greater than or equal to the right-hand side, respectively. `lt` corresponds
-    to the `<` operator, `le` to `<=`, `gt` to `>`, and `ge` to `>=`.
+    Otherwise, if all bits are 0 or 1, `ult/slt`, `ule/sle`, `ugt/sgt`, and
+    `uge/sge` return whether the left-hand side is less than, less than or equal
+    to, greater than, or greater than or equal to the right-hand side,
+    respectively. `ult/slt` corresponds to the `<` operator, `ule/sle` to `<=`,
+    `ugt/sgt` to `>`, and `uge/sge` to `>=`.
 
     See IEEE 1800-2017 § 11.4.4 "Relational operators".
   }];
@@ -681,10 +688,31 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   }];
 }
 
-def LtOp : RelationalOpBase<"lt"> { let summary = "Less than"; }
-def LeOp : RelationalOpBase<"le"> { let summary = "Less than or equal"; }
-def GtOp : RelationalOpBase<"gt"> { let summary = "Greater than"; }
-def GeOp : RelationalOpBase<"ge"> { let summary = "Greater than or equal"; }
+def UltOp : RelationalOpBase<"ult"> {
+  let summary = "Unsigned less than comparison";
+}
+def UleOp : RelationalOpBase<"ule"> {
+  let summary = "Unsigned less than or equal comparison";
+}
+def UgtOp : RelationalOpBase<"ugt"> {
+  let summary = "Unsigned greater than comparison";
+}
+def UgeOp : RelationalOpBase<"uge"> {
+  let summary = "Unsigned greater than or equal comparison";
+}
+
+def SltOp : RelationalOpBase<"slt"> {
+  let summary = "Signed less than comparison";
+}
+def SleOp : RelationalOpBase<"sle"> {
+  let summary = "Signed less than or equal comparison";
+}
+def SgtOp : RelationalOpBase<"sgt"> {
+  let summary = "Signed greater than comparison";
+}
+def SgeOp : RelationalOpBase<"sge"> {
+  let summary = "Signed greater than or equal comparison";
+}
 
 def ConcatOp : MooreOp<"concat", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>

@@ -300,8 +300,8 @@ public:
   static IntType get(MLIRContext *context, bool isSigned,
                      int32_t widthOrSentinel = -1, bool isConst = false);
 
-  bool isSigned() { return isa<SIntType>(); }
-  bool isUnsigned() { return isa<UIntType>(); }
+  bool isSigned() { return mlir::isa<SIntType>(*this); }
+  bool isUnsigned() { return mlir::isa<UIntType>(*this); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() const;
@@ -309,7 +309,7 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
 
-  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+  static bool classof(Type type) { return mlir::isa<SIntType, UIntType>(type); }
 };
 
 //===----------------------------------------------------------------------===//
