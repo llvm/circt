@@ -161,10 +161,11 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   const StringSet<> *externModules;
 };
 
-using IOTypes = std::pair<TypeRange, TypeRange>;
-
 struct IOInfo {
   SmallVector<Type> argTypes, resTypes;
+  ArrayAttr argNames, resNames;
+  SmallVector<Location> argLocs, resLocs;
+  hw::ModuleType modType;
 };
 
 class FlattenIOTypeConverter : public TypeConverter {
@@ -326,22 +327,6 @@ static void updateBlockLocations(hw::HWModuleLike op) {
     arg.setLoc(loc);
 }
 
-static void setIOInfo(hw::HWModuleLike op, IOInfo &ioInfo) {
-  ioInfo.argTypes = op.getInputTypes();
-  ioInfo.resTypes = op.getOutputTypes();
-}
-
-template <typename T>
-static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
-  DenseMap<Operation *, IOInfo> ioInfoMap;
-  for (auto op : module.getOps<T>()) {
-    IOInfo ioInfo;
-    setIOInfo(op, ioInfo);
-    ioInfoMap[op] = ioInfo;
-  }
-  return ioInfoMap;
-}
-
 template <typename T>
 static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
                                       StringSet<> &externModules,
@@ -357,23 +342,19 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     RewritePatternSet patterns(ctx);
     target.addLegalDialect<hw::HWDialect>();
 
-    // Record any struct types at the module signature. This will be used
-    // post-conversion to update the argument and result names.
-    auto ioInfoMap = populateIOInfoMap<T>(module);
-
-    // Record the instances that were converted. We keep these around since we
-    // need to update their arg/res attribute names after the modules themselves
-    // have been updated.
-    llvm::DenseSet<hw::InstanceOp> convertedInstances;
-
     // Argument conversion for output ops. Similarly to the signature
-    // conversion, legality is based on the op having been visited once, due to
-    // the possibility of nested structs.
+    // conversion, legality is based on the op having been visited once, due
+    // to the possibility of nested structs.
     DenseSet<Operation *> opVisited;
     patterns.add<OutputOpConversion>(typeConverter, ctx, &opVisited);
 
+    // Record the instances that were converted. We keep these around since we
+    // need to update their arg/res attribute names after the modules
+    // themselves have been updated.
+    llvm::DenseSet<hw::InstanceOp> convertedInstances;
     patterns.add<InstanceOpConversion>(typeConverter, ctx, &convertedInstances,
                                        &externModules);
+
     target.addDynamicallyLegalOp<hw::OutputOp>(
         [&](auto op) { return opVisited.contains(op->getParentOp()); });
     target.addDynamicallyLegalOp<hw::InstanceOp>([&](hw::InstanceOp op) {
@@ -385,31 +366,33 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
              });
     });
 
-    DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames;
-    DenseMap<Operation *, SmallVector<Location>> oldArgLocs, oldResLocs;
-    DenseMap<Operation *, hw::ModuleType> oldModTypes;
-
-    for (auto op : module.getOps<T>()) {
-      oldModTypes[op] = op.getHWModuleType();
-      oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
-      oldResNames[op] =
-          ArrayAttr::get(module.getContext(), op.getOutputNames());
-      oldArgLocs[op] = op.getInputLocs();
-      oldResLocs[op] = op.getOutputLocs();
-    }
-
+    DenseMap<Operation *, IOInfo> ioMap;
     // Signature conversion and legalization patterns.
-    addSignatureConversion<T>(ioInfoMap, target, patterns, typeConverter);
+    addSignatureConversion<T>(ioMap, target, patterns, typeConverter);
+
+    // Record any struct types at the module signature. This will be used
+    // post-conversion to update the argument and result names.
+    for (auto op : module.getOps<T>())
+      ioMap[op] = IOInfo{
+          op.getInputTypes(),
+          op.getOutputTypes(),
+          ArrayAttr::get(module.getContext(), op.getInputNames()),
+          ArrayAttr::get(module.getContext(), op.getOutputNames()),
+          op.getInputLocs(),
+          op.getOutputLocs(),
+          op.getHWModuleType(),
+      };
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return failure();
 
     // Update the arg/res names of the module.
     for (auto op : module.getOps<T>()) {
-      auto ioInfo = ioInfoMap[op];
-      updateModulePortNames(op, oldModTypes[op], joinChar);
-      auto newArgLocs = updateLocAttribute(ioInfo.argTypes, oldArgLocs[op]);
-      auto newResLocs = updateLocAttribute(ioInfo.resTypes, oldResLocs[op]);
+      updateModulePortNames(op, ioMap[op].modType, joinChar);
+      auto newArgLocs =
+          updateLocAttribute(ioMap[op].argTypes, ioMap[op].argLocs);
+      auto newResLocs =
+          updateLocAttribute(ioMap[op].resTypes, ioMap[op].resLocs);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
       op.setAllPortLocs(newArgLocs);
       updateBlockLocations(op);
@@ -421,31 +404,30 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
           cast<hw::HWModuleLike>(SymbolTable::lookupNearestSymbolFrom(
               instanceOp, instanceOp.getReferencedModuleNameAttr()));
 
-      IOInfo ioInfo;
-      if (!ioInfoMap.contains(targetModule)) {
+      if (!ioMap.contains(targetModule)) {
         // If an extern module, then not yet processed, populate the maps.
-        setIOInfo(targetModule, ioInfo);
-        ioInfoMap[targetModule] = ioInfo;
-        oldArgNames[targetModule] =
-            ArrayAttr::get(module.getContext(), targetModule.getInputNames());
-        oldResNames[targetModule] =
-            ArrayAttr::get(module.getContext(), targetModule.getOutputNames());
-        oldArgLocs[targetModule] = targetModule.getInputLocs();
-        oldResLocs[targetModule] = targetModule.getOutputLocs();
-      } else
-        ioInfo = ioInfoMap[targetModule];
+        ioMap[targetModule] = IOInfo{
+            targetModule.getInputTypes(),
+            targetModule.getOutputTypes(),
+            ArrayAttr::get(module.getContext(), targetModule.getInputNames()),
+            ArrayAttr::get(module.getContext(), targetModule.getOutputNames()),
+            targetModule.getInputLocs(),
+            targetModule.getOutputLocs(),
+            targetModule.getHWModuleType(),
+        };
+      }
 
       instanceOp.setInputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, ioInfo.argTypes,
-              oldArgNames[targetModule].template getAsValueRange<StringAttr>(),
+              instanceOp, ioMap[targetModule].argTypes,
+              ioMap[targetModule].argNames.getAsValueRange<StringAttr>(),
               joinChar)));
       instanceOp.setOutputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, ioInfo.resTypes,
-              oldResNames[targetModule].template getAsValueRange<StringAttr>(),
+              instanceOp, ioMap[targetModule].resTypes,
+              ioMap[targetModule].resNames.getAsValueRange<StringAttr>(),
               joinChar)));
     }
 
