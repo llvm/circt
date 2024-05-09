@@ -2287,6 +2287,14 @@ firrtl.circuit "InputProbePublic" {
 
 // -----
 
+firrtl.circuit "InputProbePrivate" {
+  firrtl.module @InputProbePrivate() { }
+  // expected-error @below {{input probe not allowed}}
+  firrtl.module private @Private(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
 firrtl.circuit "InputProbeExt" {
   // expected-error @below {{input probe}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
