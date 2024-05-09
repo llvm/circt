@@ -14,24 +14,10 @@ func.func @UnitTypes(
 
 // CHECK-LABEL: func @IntTypes(
 func.func @IntTypes(
-  // CHECK-SAME: %arg0: !moore.bit
-  // CHECK-SAME: %arg1: !moore.logic
-  // CHECK-SAME: %arg2: !moore.reg
-  // CHECK-SAME: %arg3: !moore.byte
-  // CHECK-SAME: %arg4: !moore.shortint
-  // CHECK-SAME: %arg5: !moore.int
-  // CHECK-SAME: %arg6: !moore.longint
-  // CHECK-SAME: %arg7: !moore.integer
-  // CHECK-SAME: %arg8: !moore.time
-  %arg0: !moore.bit,
-  %arg1: !moore.logic,
-  %arg2: !moore.reg,
-  %arg3: !moore.byte,
-  %arg4: !moore.shortint,
-  %arg5: !moore.int,
-  %arg6: !moore.longint,
-  %arg7: !moore.integer,
-  %arg8: !moore.time
+  // CHECK-SAME: %arg0: !moore.i42
+  // CHECK-SAME: %arg1: !moore.l42
+  %arg0: !moore.i42,
+  %arg1: !moore.l42
 ) { return }
 
 // CHECK-LABEL: func @RealTypes(
@@ -46,24 +32,24 @@ func.func @RealTypes(
 
 // CHECK-LABEL: func @DimTypes(
 func.func @DimTypes(
-  // CHECK-SAME: %arg0: !moore.packed<unsized<bit>>,
-  // CHECK-SAME: %arg1: !moore.packed<range<bit, 4:-5>>,
-  %arg0: !moore.packed<unsized<bit>>,
-  %arg1: !moore.packed<range<bit, 4:-5>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<unsized<bit>>,
-  // CHECK-SAME: %arg3: !moore.unpacked<array<bit, 42>>,
-  // CHECK-SAME: %arg4: !moore.unpacked<range<bit, 4:-5>>,
-  // CHECK-SAME: %arg5: !moore.unpacked<assoc<bit>>,
-  // CHECK-SAME: %arg6: !moore.unpacked<assoc<bit, string>>,
-  // CHECK-SAME: %arg7: !moore.unpacked<queue<bit>>,
-  // CHECK-SAME: %arg8: !moore.unpacked<queue<bit, 9001>>
-  %arg2: !moore.unpacked<unsized<bit>>,
-  %arg3: !moore.unpacked<array<bit, 42>>,
-  %arg4: !moore.unpacked<range<bit, 4:-5>>,
-  %arg5: !moore.unpacked<assoc<bit>>,
-  %arg6: !moore.unpacked<assoc<bit, string>>,
-  %arg7: !moore.unpacked<queue<bit>>,
-  %arg8: !moore.unpacked<queue<bit, 9001>>
+  // CHECK-SAME: %arg0: !moore.packed<unsized<i1>>,
+  // CHECK-SAME: %arg1: !moore.packed<range<i1, 4:-5>>,
+  %arg0: !moore.packed<unsized<i1>>,
+  %arg1: !moore.packed<range<i1, 4:-5>>,
+  // CHECK-SAME: %arg2: !moore.unpacked<unsized<i1>>,
+  // CHECK-SAME: %arg3: !moore.unpacked<array<i1, 42>>,
+  // CHECK-SAME: %arg4: !moore.unpacked<range<i1, 4:-5>>,
+  // CHECK-SAME: %arg5: !moore.unpacked<assoc<i1>>,
+  // CHECK-SAME: %arg6: !moore.unpacked<assoc<i1, string>>,
+  // CHECK-SAME: %arg7: !moore.unpacked<queue<i1>>,
+  // CHECK-SAME: %arg8: !moore.unpacked<queue<i1, 9001>>
+  %arg2: !moore.unpacked<unsized<i1>>,
+  %arg3: !moore.unpacked<array<i1, 42>>,
+  %arg4: !moore.unpacked<range<i1, 4:-5>>,
+  %arg5: !moore.unpacked<assoc<i1>>,
+  %arg6: !moore.unpacked<assoc<i1, string>>,
+  %arg7: !moore.unpacked<queue<i1>>,
+  %arg8: !moore.unpacked<queue<i1, 9001>>
 ) {
   return
 }
@@ -71,9 +57,9 @@ func.func @DimTypes(
 // CHECK-LABEL: func @StructTypes(
 func.func @StructTypes(
   // CHECK-SAME: %arg0: !moore.packed<struct<{}>>
-  // CHECK-SAME: %arg1: !moore.packed<struct<{foo: bit, bar: int}>>
+  // CHECK-SAME: %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>
   %arg0: !moore.packed<struct<{}>>,
-  %arg1: !moore.packed<struct<{foo: bit, bar: int}>>,
+  %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>,
   // CHECK-SAME: %arg2: !moore.unpacked<struct<{}>>
   // CHECK-SAME: %arg3: !moore.unpacked<struct<{foo: string, bar: event}>>
   %arg2: !moore.unpacked<struct<{}>>,

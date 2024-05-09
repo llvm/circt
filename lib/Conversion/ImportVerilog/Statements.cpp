@@ -209,7 +209,7 @@ struct StmtVisitor {
     auto count = context.convertExpression(stmt.count);
     if (!count)
       return failure();
-    auto type = count.getType();
+    auto type = cast<moore::IntType>(count.getType());
     auto whileOp = builder.create<scf::WhileOp>(loc, type, count);
     OpBuilder::InsertionGuard guard(builder);
 

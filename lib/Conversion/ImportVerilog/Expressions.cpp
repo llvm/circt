@@ -27,13 +27,8 @@ struct ExprVisitor {
   Value convertToSimpleBitVector(Value value) {
     if (!value)
       return {};
-    if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType())) {
-      if (type.isSimpleBitVector())
-        return value;
-      if (auto sbvt = type.castToSimpleBitVectorOrNull())
-        return builder.create<moore::ConversionOp>(
-            loc, sbvt.getType(builder.getContext()), value);
-    }
+    if (isa<moore::IntType>(value.getType()))
+      return value;
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be cast to a simple bit vector";
     return {};
@@ -125,7 +120,8 @@ struct ExprVisitor {
     if (!preValue)
       return {};
     preValue = builder.create<moore::ReadLValueOp>(loc, preValue);
-    auto one = builder.create<moore::ConstantOp>(loc, preValue.getType(), 1);
+    auto one = builder.create<moore::ConstantOp>(
+        loc, cast<moore::IntType>(preValue.getType()), 1);
     auto postValue =
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
@@ -352,7 +348,8 @@ struct ExprVisitor {
       return {};
     }
     auto truncValue = value.as<uint64_t>().value();
-    return builder.create<moore::ConstantOp>(loc, type, truncValue);
+    return builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type),
+                                             truncValue);
   }
 
   // Handle `'0`, `'1`, `'x`, and `'z` literals.
