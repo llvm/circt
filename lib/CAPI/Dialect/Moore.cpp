@@ -26,18 +26,6 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Moore, moore, MooreDialect)
 // Types
 //===----------------------------------------------------------------------===//
 
-static std::optional<Sign> convertMooreSign(enum MooreSign sign) {
-  switch (sign) {
-  case MooreSign::MooreSigned:
-    return Sign::Signed;
-  case MooreSign::MooreUnsigned:
-    return Sign::Unsigned;
-  case MooreSign::MooreNone:
-    return {};
-  }
-  llvm_unreachable("All cases should be covered.");
-}
-
 static IntType::Kind convertMooreIntKind(enum MooreIntKind kind) {
   switch (kind) {
   case MooreIntKind::MooreBit:
@@ -96,10 +84,8 @@ MlirType mooreEventTypeGet(MlirContext ctx) {
 }
 
 /// Create an int type.
-MlirType mooreIntTypeGet(MlirContext ctx, enum MooreIntKind kind,
-                         enum MooreSign sign) {
-  return wrap(IntType::get(unwrap(ctx), convertMooreIntKind(kind),
-                           convertMooreSign(sign)));
+MlirType mooreIntTypeGet(MlirContext ctx, enum MooreIntKind kind) {
+  return wrap(IntType::get(unwrap(ctx), convertMooreIntKind(kind)));
 }
 
 /// Create a `logic` type.
@@ -177,10 +163,9 @@ MlirType mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound) {
 
 /// Create a simple bit-vector type.
 MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx, bool isFourValued,
-                                     bool isSigned, unsigned size) {
+                                     unsigned size) {
   Domain domain = isFourValued ? Domain::FourValued : Domain::TwoValued;
-  Sign sign = isSigned ? Sign::Signed : Sign::Unsigned;
-  return wrap(SimpleBitVectorType(domain, sign, size).getType(unwrap(ctx)));
+  return wrap(SimpleBitVectorType(domain, size).getType(unwrap(ctx)));
 }
 
 /// Checks whether the passed UnpackedType is a four-valued type.
