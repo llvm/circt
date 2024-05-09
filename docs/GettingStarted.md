@@ -96,7 +96,7 @@ $ ninja check-circt-integration # Run the integration tests.
 In order to use the recommended `lld` linker, use the `-DLLVM_ENABLE_LLD=ON`. 
 Removing that flag will use your compiler's default linker. More details about
 these problems and their solutions can be found 
-[in the llvm docs](https://llvm.org/docs/GettingStarted.html#common-problems).  
+[in the LLVM docs](https://llvm.org/docs/GettingStarted.html#common-problems).  
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
@@ -282,4 +282,4 @@ Patches are submitted to LLVM/MLIR via GitHub pull-requests, the basic flow is a
 6) Publish the branch on your fork of the repository and create a GitHub pull-request.
 
 When your review converges and your patch is approved, it can be merged directly on GitHub.
-If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.  
+If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.
