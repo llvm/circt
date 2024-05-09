@@ -240,16 +240,9 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
     }
     auto ioInfo = ioInfoIt->second;
 
-    auto compareTypes = [&](TypeRange oldTypes, TypeRange newTypes) {
-      return llvm::any_of(llvm::zip(oldTypes, newTypes), [&](auto typePair) {
-        auto oldType = std::get<0>(typePair);
-        auto newType = std::get<1>(typePair);
-        return oldType != newType;
-      });
-    };
     auto mtype = moduleLikeOp.getHWModuleType();
-    if (compareTypes(mtype.getOutputTypes(), ioInfo.resTypes) ||
-        compareTypes(mtype.getInputTypes(), ioInfo.argTypes))
+    if (mtype.getOutputTypes() != ioInfo.resTypes ||
+        mtype.getInputTypes() != ioInfo.argTypes)
       return true;
 
     // We're pre-conversion for an op that was primed in the map - it will
