@@ -78,7 +78,7 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
 /**
  * Tutorial Pass, doesn't do anything interesting
  */
-def FooWires : Pass<"hw-foo-wires", "hw::HwModuleOp"> {
+def FooWires : Pass<"hw-foo-wires", "hw::HWModuleOp"> {
   let summary = "Change all wires' name to foo_<n>.";
   let description = [{
     Very basic pass that numbers all of the wires in a given module.
