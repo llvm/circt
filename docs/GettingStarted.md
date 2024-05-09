@@ -70,7 +70,8 @@ $ cmake -G Ninja ../llvm \
     -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DCMAKE_BUILD_TYPE=DEBUG \
-    -DLLVM_ENABLE_LLD=true  
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-mlir
 ```
@@ -86,13 +87,16 @@ $ cmake -G Ninja .. \
     -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DCMAKE_BUILD_TYPE=DEBUG \
-    -DLLVM_ENABLE_LLD=true  
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-circt
 $ ninja check-circt-integration # Run the integration tests.
 ```  
-In order to use the recommended `lld` linker, use the `-DLLVM_ENABLE_LLD=true`. 
-Removing that flag will use your compiler's default linker.  
+In order to use the recommended `lld` linker, use the `-DLLVM_ENABLE_LLD=ON`. 
+Removing that flag will use your compiler's default linker. More details about
+these problems and their solutions can be found 
+[in the LLVM docs](https://llvm.org/docs/GettingStarted.html#common-problems).  
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
@@ -224,6 +228,8 @@ Cheat sheet for powershell:
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$(PWD)" `
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON `
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DLLVM_USE_SPLIT_DWARF=ON 
+    -DLLVM_ENABLE_LLD=ON
 > ninja -C<build_dir> check-circt
 ```
 

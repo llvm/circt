@@ -1,5 +1,6 @@
 # TODO: Make the check source feature optional as an argument on *_add_library.
 set(LLVM_OPTIONAL_SOURCES
+  Arc.cpp
   CHIRRTL.cpp
   Comb.cpp
   Debug.cpp
@@ -18,6 +19,15 @@ set(LLVM_OPTIONAL_SOURCES
   SV.cpp
   Seq.cpp
   Verif.cpp
+)
+
+add_circt_public_c_api_library(CIRCTCAPIArc
+  Arc.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTArc
+  CIRCTArcTransforms
 )
 
 add_circt_public_c_api_library(CIRCTCAPIComb
