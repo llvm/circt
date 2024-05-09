@@ -26,31 +26,6 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Moore, moore, MooreDialect)
 // Types
 //===----------------------------------------------------------------------===//
 
-static IntType::Kind convertMooreIntKind(enum MooreIntKind kind) {
-  switch (kind) {
-  case MooreIntKind::MooreBit:
-    return IntType::Kind::Bit;
-  case MooreIntKind::MooreLogic:
-    return IntType::Kind::Logic;
-  case MooreIntKind::MooreReg:
-    return IntType::Kind::Reg;
-
-  case MooreIntKind::MooreByte:
-    return IntType::Kind::Byte;
-  case MooreIntKind::MooreShortInt:
-    return IntType::Kind::ShortInt;
-  case MooreIntKind::MooreInt:
-    return IntType::Kind::Int;
-  case MooreIntKind::MooreLongInt:
-    return IntType::Kind::LongInt;
-  case MooreIntKind::MooreInteger:
-    return IntType::Kind::Integer;
-  case MooreIntKind::MooreTime:
-    return IntType::Kind::Time;
-  }
-  llvm_unreachable("All cases should be covered.");
-}
-
 static RealType::Kind convertMooreRealKind(enum MooreRealKind kind) {
   switch (kind) {
   case MooreRealKind::MooreShortReal:
@@ -83,24 +58,14 @@ MlirType mooreEventTypeGet(MlirContext ctx) {
   return wrap(EventType::get(unwrap(ctx)));
 }
 
-/// Create an int type.
-MlirType mooreIntTypeGet(MlirContext ctx, enum MooreIntKind kind) {
-  return wrap(IntType::get(unwrap(ctx), convertMooreIntKind(kind)));
+/// Create a two-valued simple bit vector type.
+MlirType mooreIntTypeGetInt(MlirContext ctx, unsigned width) {
+  return wrap(IntType::getInt(unwrap(ctx), width));
 }
 
-/// Create a `logic` type.
-MlirType mooreIntTypeGetLogic(MlirContext ctx) {
-  return wrap(IntType::getLogic(unwrap(ctx)));
-}
-
-/// Create an `int` type.
-MlirType mooreIntTypeGetInt(MlirContext ctx) {
-  return wrap(IntType::getInt(unwrap(ctx)));
-}
-
-/// Create a `time` type.
-MlirType mooreIntTypeGetTime(MlirContext ctx) {
-  return wrap(IntType::getTime(unwrap(ctx)));
+/// Create a four-valued simple bit vector type.
+MlirType mooreIntTypeGetLogic(MlirContext ctx, unsigned width) {
+  return wrap(IntType::getLogic(unwrap(ctx), width));
 }
 
 /// Create a real type.
@@ -161,24 +126,12 @@ MlirType mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound) {
   return wrap(UnpackedQueueDim::get(cast<UnpackedType>(unwrap(inner)), bound));
 }
 
-/// Create a simple bit-vector type.
-MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx, bool isFourValued,
-                                     unsigned size) {
-  Domain domain = isFourValued ? Domain::FourValued : Domain::TwoValued;
-  return wrap(SimpleBitVectorType(domain, size).getType(unwrap(ctx)));
+/// Checks whether the passed UnpackedType is a two-valued type.
+bool mooreIsTwoValuedType(MlirType type) {
+  return cast<UnpackedType>(unwrap(type)).getDomain() == Domain::TwoValued;
 }
 
 /// Checks whether the passed UnpackedType is a four-valued type.
 bool mooreIsFourValuedType(MlirType type) {
   return cast<UnpackedType>(unwrap(type)).getDomain() == Domain::FourValued;
-}
-
-/// Checks whether the passed type is a simple bit-vector.
-bool mooreIsSimpleBitVectorType(MlirType type) {
-  return cast<UnpackedType>(unwrap(type)).isSimpleBitVector();
-}
-
-/// Returns the size of a simple bit-vector type in bits.
-unsigned mooreGetSimpleBitVectorSize(MlirType type) {
-  return cast<UnpackedType>(unwrap(type)).getSimpleBitVector().size;
 }

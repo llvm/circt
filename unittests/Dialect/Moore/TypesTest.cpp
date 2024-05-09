@@ -68,23 +68,14 @@ TEST(TypesTest, PackedInt) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  std::tuple<IntType::Kind, StringRef, Domain, Sign> pairs[] = {
-      {IntType::Bit, "bit", Domain::TwoValued, Sign::Unsigned},
-      {IntType::Logic, "logic", Domain::FourValued, Sign::Unsigned},
-      {IntType::Reg, "reg", Domain::FourValued, Sign::Unsigned},
-      {IntType::Byte, "byte", Domain::TwoValued, Sign::Signed},
-      {IntType::ShortInt, "shortint", Domain::TwoValued, Sign::Signed},
-      {IntType::Int, "int", Domain::TwoValued, Sign::Signed},
-      {IntType::LongInt, "longint", Domain::TwoValued, Sign::Signed},
-      {IntType::Integer, "integer", Domain::FourValued, Sign::Signed},
-      {IntType::Time, "time", Domain::TwoValued, Sign::Unsigned},
-  };
+  auto i42 = IntType::getInt(&context, 42);
+  auto l42 = IntType::getLogic(&context, 42);
 
-  for (auto pair : pairs) {
-    auto kind = std::get<0>(pair);
-    auto type = IntType::get(&context, kind);
-    ASSERT_EQ(type.getDomain(), std::get<2>(pair));
-  }
+  ASSERT_EQ(i42.getBitSize(), 42u);
+  ASSERT_EQ(l42.getBitSize(), 42u);
+
+  ASSERT_EQ(i42.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(l42.getDomain(), Domain::FourValued);
 }
 
 TEST(TypesTest, Reals) {
@@ -108,15 +99,13 @@ TEST(TypesTest, PackedDim) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto arrayType1 = PackedRangeDim::get(bitType, 3);
+  auto arrayType1 = IntType::getInt(&context, 3);
   auto arrayType2 = PackedRangeDim::get(arrayType1, 2);
   auto arrayType3 = PackedUnsizedDim::get(arrayType2);
 
-  ASSERT_EQ(arrayType1.getRange(), Range(3));
   ASSERT_EQ(arrayType2.getRange(), Range(2));
   ASSERT_EQ(arrayType3.getRange(), std::nullopt);
-  ASSERT_EQ(arrayType1.getSize(), 3u);
+  ASSERT_EQ(arrayType2.getSize(), 2u);
   ASSERT_EQ(arrayType3.getSize(), std::nullopt);
 }
 
@@ -147,9 +136,9 @@ TEST(TypesTest, Structs) {
   auto foo = StringAttr::get(&context, "foo");
   auto bar = StringAttr::get(&context, "bar");
 
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto logicType = IntType::get(&context, IntType::Logic);
-  auto bit8Type = PackedRangeDim::get(bitType, 8);
+  auto bitType = IntType::getInt(&context, 1);
+  auto logicType = IntType::getLogic(&context, 1);
+  auto bit8Type = IntType::getInt(&context, 8);
   auto bitDynArrayType = PackedUnsizedDim::get(bitType);
 
   auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
@@ -165,37 +154,16 @@ TEST(TypesTest, Structs) {
       {StructMember{foo, bitType}, StructMember{bar, bitDynArrayType}});
 
   // Value domain
+  ASSERT_EQ(s0.getDomain(), Domain::TwoValued);
   ASSERT_EQ(s1.getDomain(), Domain::TwoValued);
   ASSERT_EQ(s2.getDomain(), Domain::FourValued);
+  ASSERT_EQ(s3.getDomain(), Domain::TwoValued);
 
   // Bit size
   ASSERT_EQ(s0.getBitSize(), 1u);
   ASSERT_EQ(s1.getBitSize(), 9u);
   ASSERT_EQ(s2.getBitSize(), 2u);
   ASSERT_EQ(s3.getBitSize(), std::nullopt);
-}
-
-TEST(TypesTest, SimpleBitVectorTypes) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-
-  // Unpacked types have no SBV equivalent.
-  auto stringType = StringType::get(&context);
-  ASSERT_FALSE(stringType.isSimpleBitVector());
-  ASSERT_FALSE(stringType.isCastableToSimpleBitVector());
-
-  // Void is packed but cannot be cast to an SBV.
-  auto voidType = VoidType::get(&context);
-  ASSERT_FALSE(voidType.isSimpleBitVector());
-  ASSERT_FALSE(voidType.isCastableToSimpleBitVector());
-
-  // Integer atoms with a dimension are no SBVT, but can be cast to one.
-  auto intTy = IntType::get(&context, IntType::Int);
-  auto intArray = PackedRangeDim::get(intTy, 8);
-  ASSERT_FALSE(intArray.isSimpleBitVector());
-  ASSERT_TRUE(intArray.isCastableToSimpleBitVector());
-  ASSERT_EQ(intArray.castToSimpleBitVector(),
-            SimpleBitVectorType(Domain::TwoValued, 256));
 }
 
 } // namespace
