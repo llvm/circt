@@ -363,13 +363,40 @@ This file should implement:
 ```cpp
 std::unique_ptr<mlir::Pass> createFooWiresPass();
 ```
+4) Make sure to add a test to check your pass, e.g. in `test/Dialect/HW`:  
+```mlir
+// RUN: circt-opt --hw-foo-wires %s | FileCheck %s
 
+hw.module @foo(in %a: i32, in %b: i32, out out: i32) {
+  // CHECK:   %c1_i32 = hw.constant 1 : i32
+  // CHECK:   %foo_0 = hw.wire %c1_i32  : i32
+  // CHECK:   %foo_1 = hw.wire %a  : i32
+  // CHECK:   %foo_2 = hw.wire %b  : i32
+  // CHECK:   %0 = comb.add bin %foo_1, %foo_0 : i32
+  // CHECK:   %foo_3 = hw.wire %0  : i32
+  // CHECK:   %1 = comb.add bin %foo_3, %foo_2 : i32
+  // CHECK:   %foo_4 = hw.wire %1  : i32
+  // CHECK:   hw.output %foo_4 : i32
+  %c1 = hw.constant 1 : i32
+  %wire_1 = hw.wire %c1 : i32
+  %wire_a = hw.wire %a : i32
+  %wire_b = hw.wire %b : i32
+  %ap1 = comb.add bin %wire_a, %wire_1 : i32
+  %wire_ap1 = hw.wire %ap1 : i32
+  %ap1pb = comb.add bin %wire_ap1, %wire_b : i32
+  %wire_ap1pb = hw.wire %ap1pb : i32
+  hw.output %wire_ap1pb : i32
+}
+```
 Now re-run cmake and compile CIRCT and you should be able to run your new pass! 
-By default, this will be accessible using `circt-opt` through the name that was defined in the tablegen description, 
-e.g. in our case the pass can be called by running `circt-opt --firrtl-foo-wires <file_name>.mlir`. 
-These passes can also be included in certain compilation pipelines that well packaged in tools like firtool.  
-We recommend looking at recently closed Pull-Requests that add passes to see more examples of how this can be done beyond our basic pass.  
-
-
-
-
+By default, every pass is accessible using `circt-opt` through the name that was defined in the tablegen description, 
+e.g. `circt-opt --hw-foo-wires <file_name>.mlir`. 
+These passes can also be included in certain compilation pipelines that are well packaged in tools like firtool.  
+We recommend looking at recently merged Pull-Requests or other [MLIR tutorials](https://mlir.llvm.org/docs/Tutorials/) 
+to learn how to go beyond what we've shown in this quick start guide.  
+The full source code of this pass is available at the following links:  
+- Pass Source: [FooWires.cpp](https://github.com/llvm/circt/blob/main/lib/Dialect/HW/Transforms/FooWires.cpp)   
+- Pass Test: [foo.mlir](https://github.com/llvm/circt/blob/main/test/Dialect/HW/foo.mlir)  
+- HW Dialect Pass Header: [HWPasses.h](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/HWPasses.h#L32)  
+- Tablegen Description: [Passes.td](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/Passes.td#L81-L88)  
+- [CMakeLists.txt](https://github.com/llvm/circt/blob/main/lib/Dialect/HW/Transforms/CMakeLists.txt#L8)
