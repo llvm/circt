@@ -544,10 +544,10 @@ private:
   // the corner case where value is an implication.
   Value impliesLTLCondition(Operation *op, Value value) {
     OpBuilder builder = OpBuilder(op);
-    Value not_cond = builder.createOrFold<LTLNotIntrinsicOp>(
+    Value notCond = builder.createOrFold<LTLNotIntrinsicOp>(
         condition.getLoc(), condition.getType(), condition);
     return builder.createOrFold<LTLOrIntrinsicOp>(
-        condition.getLoc(), condition.getType(), not_cond, value);
+        condition.getLoc(), condition.getType(), notCond, value);
   }
 
 private:
