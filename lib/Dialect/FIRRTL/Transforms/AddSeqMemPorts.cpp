@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -290,6 +291,9 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
 
+  SymbolTable &symTable = getAnalysis<SymbolTable>();
+  HierPathCache cache(circuit, symTable);
+
   // The current parameter to the verbatim op.
   unsigned paramIndex = 0;
   // Parameters to the verbatim op.
@@ -317,9 +321,6 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
 
   auto loc = builder.getUnknownLoc();
-  // Builder to create the hierpath to represent the path to the sram.
-  auto nlaBuilder =
-      mlir::ImplicitLocOpBuilder::atBlockBegin(loc, circuit.getBodyBlock());
   // Put the information in a verbatim operation.
   builder.create<emit::FileOp>(loc, outputFile, [&] {
     for (auto instancePath : instancePaths) {
@@ -329,10 +330,7 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
       addSymbol(dutSymbol);
       os << ".";
 
-      auto nla = nlaBuilder.create<hw::HierPathOp>(
-          loc, builder.getStringAttr(circtNamespace.newName("memNLA")),
-          builder.getArrayAttr(path));
-      auto nlaSymbol = FlatSymbolRefAttr::get(nla);
+      auto nlaSymbol = cache.getRefFor(builder.getArrayAttr(path));
       addSymbol(nlaSymbol);
       NamedAttrList fields;
       // There is no current client for the distinct attr, but it will be used
@@ -343,7 +341,7 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
       fields.append("circt.nonlocal", nlaSymbol);
       // Now add the nonlocal annotation to the leaf instance.
       auto *leafInstance = innerRefToInstanceMap[instancePath.front()];
-      // TODO: Check if we can reuse HierPathOp, if it already exists!
+
       AnnotationSet annos(leafInstance);
       annos.addAnnotations(builder.getDictionaryAttr(fields));
       annos.applyToOperation(leafInstance);
