@@ -200,7 +200,7 @@ def UnconnectedOp : MooreOp<"unconnected"> {
   let description = [{
     The `moore.unconnected` operation represents no connect in circuit design.
 
-    See IEEE 1800 - 2017 § 23.3.2.1 through 23.3.2.4
+    See IEEE 1800 - 2017 § 23.3.3 Port connection rules
   }];
 
   let arguments = (ins DirectionAttr:$direction);
