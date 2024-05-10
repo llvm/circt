@@ -225,18 +225,6 @@ struct MemberVisitor {
     return success();
   }
 
-  // Handle ports.
-  LogicalResult visit(const slang::ast::PortSymbol &portNode) {
-    auto loweredType = context.convertType(portNode.getType());
-    if (!loweredType)
-      return failure();
-    // TODO: Fix the `static_cast` here.
-    builder.create<moore::PortOp>(
-        loc, builder.getStringAttr(portNode.name),
-        static_cast<moore::Direction>(portNode.direction));
-    return success();
-  }
-
   // Handle continuous assignments.
   LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
     if (const auto *delay = assignNode.getDelay()) {

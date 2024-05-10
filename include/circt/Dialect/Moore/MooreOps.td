@@ -27,6 +27,15 @@ class MooreOp<string mnemonic, list<Trait> traits = []> :
 // Structure
 //===----------------------------------------------------------------------===//
 
+def In: I32EnumAttrCase<"In", 0>;
+def Out: I32EnumAttrCase<"Out", 1>;
+def InOut: I32EnumAttrCase<"InOut", 2>;
+def Ref: I32EnumAttrCase<"Ref", 3>;
+def DirectionAttr: I32EnumAttr<"Direction", "Port direction",
+                                  [In, Out, InOut, Ref]>{
+  let cppNamespace = "circt::moore";
+}
+
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
   Symbol,
@@ -49,38 +58,6 @@ def SVModuleOp : MooreOp<"module", [
   let regions = (region SizedRegion<1>:$bodyRegion);
   let assemblyFormat = [{
     $sym_name attr-dict-with-keyword $bodyRegion
-  }];
-}
-
-def In: I32EnumAttrCase<"In", 0>;
-def Out: I32EnumAttrCase<"Out", 1>;
-def InOut: I32EnumAttrCase<"InOut", 2>;
-def Ref: I32EnumAttrCase<"Ref", 3>;
-def DirectionAttr: I32EnumAttr<"Direction", "Port direction",
-                                  [In, Out, InOut, Ref]>{
-  let cppNamespace = "circt::moore";
-}
-
-def PortOp : MooreOp<"port", [
-  RecursiveMemoryEffects
-]> {
-  let summary = "Declare a port";
-  let description = [{
-    The `moore.port` operation defines declaration of ports from original module
-    / interface / instance ... It contains port direction (four types: 
-    **In**, **Out**, **InOut**, **Ref**); port type and port name.
-    Example:
-    ```mlir
-      moore.port In "a"
-      %a = moore.net "wire" : !moore.logic
-      moore.port Out "b"
-      %b = moore.net "wire" : !moore.logic
-    ```
-  }];
-  let arguments = (ins StrAttr:$name, DirectionAttr:$direction);
-  let results = (outs);
-  let assemblyFormat = [{
-    $direction $name attr-dict
   }];
 }
 
@@ -258,7 +235,7 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different
+    The `moore.net` operation is a net declaration. Net types defines different
     types of net connection in SV. There are twelve built-in net types defined
     in the official standard construct of the operation:
     `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
