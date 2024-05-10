@@ -36,9 +36,8 @@ with Context() as ctx, Location.unknown():
       om.class.field @node1_OMIROut, %0 : !om.class.type<@node>
     }
 
-    %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
-
     om.class @Test(%param: !om.integer) {
+      %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
       om.class.field @field, %param : !om.integer
 
       %c_14 = om.constant #om.integer<14> : !om.integer
