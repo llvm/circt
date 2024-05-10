@@ -326,12 +326,12 @@ This file should implement:
   ```cpp
   void FooWiresPass::runOnOperation() {
     size_t nWires = 0; // Counts the number of wires modified
-    module.walk([&](hw::WireOp wire) { // Walk over every wire in the module
+    getOperation().walk([&](hw::WireOp wire) { // Walk over every wire in the module
       wire.setName("foo_" + std::to_string(nWires++)); // Rename said wire
     });
   }
   ``` 
-  > *Note*: Here `module.walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
+  > *Note*: Here `getOperation().walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
   > use it to generically walk over all operations and then visit them individually 
   > using a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern) by overloading type visitors 
   > defined by each dialect. More details can be found in the 
