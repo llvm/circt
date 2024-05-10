@@ -10,10 +10,15 @@
 #define CIRCT_DIALECT_VERIF_VERIFOPS_TD
 
 include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
+include "circt/Dialect/LTL/LTLOps.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/PatternBase.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -41,6 +46,28 @@ def AssumeOp : AssertLikeOp<"assume"> {
 
 def CoverOp : AssertLikeOp<"cover"> {
   let summary = "Ensure that a property can hold.";
+}
+
+class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
+  VerifOp<mnemonic, traits> {
+  let arguments = (ins LTLAnyPropertyType:$property,
+                       ClockEdgeAttr:$edge, I1:$clock,
+                       OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = [{
+    $property, $edge $clock (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
+  let summary = "Assert that a property holds, checked on a given clock's ticks.";
+}
+
+def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
+  let summary = "Assume that a property holds, checked on a given clock's ticks.";
+}
+
+def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
+  let summary = "Ensure that a property can hold, checked on a given clock's ticks.";
 }
 
 //===----------------------------------------------------------------------===//
