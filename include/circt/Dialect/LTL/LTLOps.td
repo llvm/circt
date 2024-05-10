@@ -162,11 +162,11 @@ def RepeatOp : LTLOp<"repeat", [Pure]> {
   }];
   let hasFolder = 1;
 
-  let summary = "Repeat a sequence by a number.";
+  let summary = "Repeats a sequence by a number of times.";
   let description = [{
     Repeat the `$input` sequence at least `$base` times, at most `$base` +
     `$more` times. The number must be greater than or equal to zero. Omitting
-    `$more` indicates an unbounded but finite repeat. For example:
+    `$more` indicates an unbounded but finite repetition. For example:
 
     - `ltl.repeat %seq, 2, 0` repeats `%seq` exactly 2 times.
     - `ltl.repeat %seq, 2, 2` repeats `%seq` 2, 3, or 4 times.

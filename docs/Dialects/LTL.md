@@ -9,8 +9,6 @@ This dialect provides operations and types to model [Linear Temporal Logic](http
 
 The main goal of the `ltl` dialect is to capture the core formalism underpinning SystemVerilog Assertions (SVAs), the de facto standard for describing temporal logic sequences and properties in hardware verification. (See IEEE 1800-2017 section 16 "Assertions".) We expressly try *not* to model this dialect like an AST for SVAs, but instead try to strip away all the syntactic sugar and Verilog quirks, and distill out the core foundation as an IR. Within the CIRCT project, this dialect intends to enable emission of rich temporal assertions as part of the Verilog output, but also provide a foundation for formal tools built ontop of CIRCT.
 
-As a primary reference, the `ltl` dialect attempts to model SVAs after the [Linear Temporal Logic](https://en.wikipedia.org/wiki/Linear_temporal_logic) formalism as a way to distill SystemVerilog's syntactic sugar and quirks down to a core representation. However, most definitions of LTL tend to be rather academic in nature and may be lacking certain building blocks to make them useful in practice. (See section on [concatenation and repetition](#concatenation-and-repetition) below.) To inform some practical design decisions, the `ltl` dialect tries to think of temporal sequences as "regular expressions over time", borrowing from their wide applicability and usefulness.
-
 
 ### Sequences and Properties
 
@@ -30,7 +28,7 @@ The core building blocks for modeling temporal logic in the `ltl` dialect are *s
 
 - `always s` checks that the sequence `s` holds in every cycle. This is often referred to as the **G** (or "globally") operator in LTL.
 - `eventually s` checks that the sequence `s` will hold at some cycle now or in the future. This is often referred to as the **F** (or "finally") operator in LTL.
-- `p until q` checks that the property `p` holds in every cycle before `q` holds. This is often referred to as the **U** (or "until") operator in LTL.
+- `p until q` checks that the property `p` holds in every cycle before the first cycle `q` holds. This is often referred to as the **U** (or "until") operator in LTL.
 - `s implies t` checks that whenever the sequence `s` is observed, it is immediately followed by sequence `t`.
 
 Traditional definitions of the LTL formalism do not make a distinction between sequences and properties. Most of their operators fall into the property category, for example, quantifiers like *globally*, *finally*, *release*, and *until*. The set of sequence operators is usually very small, since it is not necessary for academic treatment, consisting only of the *next* operator. The `ltl` dialect provides a richer set of operations to model sequences.
@@ -136,26 +134,15 @@ An important benefit of only modeling the overlapping `|->` implication operator
 
 ### Repetition
 
-Consecutive repetition is an important operator in SVA sequences. For example, `s[*3]` repeats the sequence `s` three times, which is equivalent to `s ##1 s ##1 s`. This also applies when the sequence `s` could match traces with different lengths. For example `(##[0:3] a)[*2]` is equivalent to the disjunction of all the combinations such as `a ##1 a`, `a ##1 (##3 a)`, `(##3 a) ##1 (##2 a)`.
+Consecutive repetition repeats the sequence by a number of times. For example, `s[*3]` repeats the sequence `s` three times, which is equivalent to `s ##1 s ##1 s`. This also applies when the sequence `s` matches different traces with different lengths. For example `(##[0:3] a)[*2]` is equivalent to the disjunction of all the combinations such as `a ##1 a`, `a ##1 (##3 a)`, `(##3 a) ##1 (##2 a)`. However, the repetition with unbounded range cannot be expanded to the concatenations as it produces an infinite formula.
 
-The definition of `ltl.repeat` is similar to that of `ltl.delay`. The mapping from SVA consecutive repetition to the LTL dialect is as follows:
+The definition of `ltl.repeat` is similar to that of `ltl.delay`. The mapping from SVA's consecutive repetition to the LTL dialect is as follows:
 
-- `seqA[*]`. Repeats zero to unbounded times.
-  ```
-  ltl.repeat %seqA, 0
-  ```
-- `seqA[+]`. Repeats one to unbounded times.
-  ```
-  ltl.repeat %seqA, 1
-  ```
-- `seqA[*n]`. Repeats `n` times.
-  ```
-  ltl.repeat %seqA, n, 0
-  ```
-- `seqA[*m:n]`. Repeats `m` to `n` times.
-  ```
-  ltl.repeat %seqA, m, n-m
-  ```
+- `seq[*N]`. **Fixed repeat.** Repeats `N` times. Equivalent to `ltl.repeat %seq, N, 0`.
+- `seq[*N:M]`. **Bounded range repeat.** Repeats `N` to `M` times. Equivalent to `ltl.repeat %seq, N, (M-N)`.
+- `seq[*N:$]`. **Unbounded range repeat.** Repeats `N` to an indefinite finite number of times. Equivalent to `ltl.repeat %seq, N`.
+- `seq[*]`. Shorthand for `seq[*0:$]`. Equivalent to `ltl.repeat %seq, 0`.
+- `seq[+]`. Shorthand for `seq[*1:$]`. Equivalent to `ltl.repeat %seq, 1`.
 
 
 ### Clocking
@@ -205,7 +192,7 @@ The `ltl.delay` sequence operation represents various shorthands for the *next*/
 
 `ltl.until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.eventually` is *strong*, where `ltl.eventually %p` means `p` must hold at some point in the trace.
 
-`always` is not implemented for now, but `always p` could be expressed by `not s_eventually not p`. Notice that assertions work globally. Properties will be checked from every cycle.
+The operator of week `always` is not implemented for now, but week `always p` could be expressed by `not s_eventually not p`. Notice that assertions work globally. Properties will be checked from every cycle.
 
 ### Concatenation and Repetition
 
