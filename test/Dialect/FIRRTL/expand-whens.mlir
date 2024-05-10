@@ -643,9 +643,9 @@ firrtl.module @verif(
   in %enable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>
 ) {
   firrtl.when %cond : !firrtl.uint<1> {
-    // CHECK:   %0 = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   %1 = firrtl.int.ltl.or %0, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.assert %1 : !firrtl.uint<1>
+    // CHECK:   [[TMP0:%.+]] = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   [[TMP1:%.+]] = firrtl.int.ltl.or [[TMP0]], %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert [[TMP1]] : !firrtl.uint<1>
     firrtl.int.verif.assert %prop : !firrtl.uint<1>
     // CHECK:   %2 = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK:   %3 = firrtl.int.ltl.or %2, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
