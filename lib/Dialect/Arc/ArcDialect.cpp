@@ -64,8 +64,8 @@ void ArcDialect::initialize() {
 Operation *ArcDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
   // Integer constants.
-  if (auto intType = type.dyn_cast<IntegerType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>())
+  if (auto intType = dyn_cast<IntegerType>(type))
+    if (auto attrValue = dyn_cast<IntegerAttr>(value))
       return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
   // Parameter expressions materialize into hw.param.value.

@@ -33,7 +33,8 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
       opt.shouldDisableUnknownAnnotations(),
       opt.shouldDisableClasslessAnnotations(),
-      opt.shouldLowerNoRefTypePortAnnotations()));
+      opt.shouldLowerNoRefTypePortAnnotations(),
+      opt.shouldAllowAddingPortsOnPublic()));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
@@ -98,7 +99,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
       /*hoistHWDrivers=*/!opt.shouldDisableOptimization() &&
       !opt.shouldDisableHoistingHWPassthrough()));
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
@@ -324,7 +324,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   if (opt.shouldStripFirDebugInfo())
     pm.addPass(circt::createStripDebugInfoWithPredPass([](mlir::Location loc) {
-      if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+      if (auto fileLoc = dyn_cast<FileLineColLoc>(loc))
         return fileLoc.getFilename().getValue().ends_with(".fir");
       return false;
     }));
@@ -382,6 +382,15 @@ LogicalResult firtool::populateFinalizeIR(mlir::PassManager &pm,
   return success();
 }
 
+LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
+                                         const FirtoolOptions &opt,
+                                         llvm::raw_ostream &os) {
+  pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
+  pm.addPass(circt::hw::createFlattenModulesPass());
+  pm.addNestedPass<hw::HWModuleOp>(circt::createConvertHWToBTOR2Pass(os));
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FIRTOOL CommandLine Options
 //===----------------------------------------------------------------------===//
@@ -413,6 +422,11 @@ struct FirtoolCmdOptions {
       llvm::cl::desc(
           "Create real ports instead of ref type ports when resolving "
           "wiring problems inside the LowerAnnotations pass"),
+      llvm::cl::init(false), llvm::cl::Hidden};
+
+  llvm::cl::opt<bool> allowAddingPortsOnPublic{
+      "allow-adding-ports-on-public-modules",
+      llvm::cl::desc("Allow adding ports to public modules"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
   llvm::cl::opt<circt::firrtl::PreserveAggregate::PreserveMode>
@@ -696,6 +710,7 @@ void circt::firtool::registerFirtoolCLOptions() {
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
+      allowAddingPortsOnPublic(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableOptimization(false),
@@ -722,6 +737,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
   disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
+  allowAddingPortsOnPublic = clOptions->allowAddingPortsOnPublic;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
   enableDebugInfo = clOptions->enableDebugInfo;

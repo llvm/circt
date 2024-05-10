@@ -299,11 +299,10 @@ OperationOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
   if (ArrayAttr properties = getSspPropertiesAttr()) {
-    const auto *it = llvm::find_if(properties, [](Attribute a) {
-      return a.isa<LinkedOperatorTypeAttr>();
-    });
+    const auto *it = llvm::find_if(
+        properties, [](Attribute a) { return isa<LinkedOperatorTypeAttr>(a); });
     if (it != properties.end())
-      return (*it).cast<LinkedOperatorTypeAttr>();
+      return cast<LinkedOperatorTypeAttr>(*it);
   }
   return {};
 }

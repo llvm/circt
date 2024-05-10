@@ -30,7 +30,8 @@ std::unique_ptr<mlir::Pass> createResolvePathsPass();
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
-                                 bool noRefTypePorts = false);
+                                 bool noRefTypePorts = false,
+                                 bool allowAddingPortsOnPublic = false);
 
 std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
 
@@ -105,8 +106,6 @@ std::unique_ptr<mlir::Pass> createLowerMemoryPass();
 
 std::unique_ptr<mlir::Pass>
 createHoistPassthroughPass(bool hoistHWDrivers = true);
-
-std::unique_ptr<mlir::Pass> createProbeDCEPass();
 
 std::unique_ptr<mlir::Pass>
 createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);

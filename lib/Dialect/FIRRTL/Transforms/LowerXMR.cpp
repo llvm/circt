@@ -386,15 +386,16 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
     while (remoteOpPath) {
       lastIndex = *remoteOpPath;
       auto entr = refSendPathList[*remoteOpPath];
-      TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
-          .Case<Attribute>([&](auto attr) {
-            // If the path is a singular verbatim expression, the attribute of
-            // the send path list entry will be null.
-            if (attr)
-              refSendPath.push_back(attr);
-          })
-          .Case<Operation *>(
-              [&](auto *op) { indexing.push_back(cast<RefSubOp>(op)); });
+      if (entr.info)
+        TypeSwitch<XMRNode::SymOrIndexOp>(entr.info)
+            .Case<Attribute>([&](auto attr) {
+              // If the path is a singular verbatim expression, the attribute of
+              // the send path list entry will be null.
+              if (attr)
+                refSendPath.push_back(attr);
+            })
+            .Case<Operation *>(
+                [&](auto *op) { indexing.push_back(cast<RefSubOp>(op)); });
       remoteOpPath = entr.next;
     }
     auto iter = xmrPathSuffix.find(lastIndex);
@@ -617,7 +618,7 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
           module.getPortDirection(portIndex) != Direction::Out)
         continue;
       auto portValue =
-          module.getArgument(portIndex).cast<mlir::TypedValue<RefType>>();
+          cast<mlir::TypedValue<RefType>>(module.getArgument(portIndex));
       mlir::FlatSymbolRefAttr ref;
       SmallString<128> stringLeaf;
       if (failed(resolveReferencePath(portValue, declBuilder, ref, stringLeaf)))

@@ -14,6 +14,22 @@ In contrast, the `sv` dialect is geared towards emission of SystemVerilog text, 
 
 ## Types
 
+### Simple Bit Vector Type
+
+The `moore.iN` and `moore.lN` types represent a two-valued or four-valued simple bit vector of width `N`.
+
+| Verilog    | Moore Dialect |
+|------------|---------------|
+| `bit`      | `!moore.i1`   |
+| `logic`    | `!moore.l1`   |
+| `reg`      | `!moore.l1`   |
+| `byte`     | `!moore.i8`   |
+| `shortint` | `!moore.i16`  |
+| `int`      | `!moore.i32`  |
+| `integer`  | `!moore.l32`  |
+| `longint`  | `!moore.i64`  |
+| `time`     | `!moore.l64`  |
+
 [include "Dialects/MooreTypes.md"]
 
 

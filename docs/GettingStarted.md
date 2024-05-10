@@ -24,7 +24,10 @@ ninja.
 
 *Note:* CIRCT is known to build with at least GCC 9.4 and Clang 13.0.1, but
 older versions may not be supported. It is recommended to use the same C++
-toolchain to compile both LLVM and CIRCT to avoid potential issues.
+toolchain to compile both LLVM and CIRCT to avoid potential issues.   
+  
+*Recommendation:* In order to greatly reduce memory usage during linking, we
+recommend using the LLVM linker [`lld`](https://lld.llvm.org/).
 
 If you plan to use the Python bindings, you should start by reading [the
  instructions](https://mlir.llvm.org/docs/Bindings/Python/#building) for building
@@ -66,7 +69,9 @@ $ cmake -G Ninja ../llvm \
     -DLLVM_ENABLE_PROJECTS="mlir" \
     -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-mlir
 ```
@@ -81,11 +86,17 @@ $ cmake -G Ninja .. \
     -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
     -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-circt
 $ ninja check-circt-integration # Run the integration tests.
-```
+```  
+In order to use the recommended `lld` linker, use the `-DLLVM_ENABLE_LLD=ON`. 
+Removing that flag will use your compiler's default linker. More details about
+these problems and their solutions can be found 
+[in the LLVM docs](https://llvm.org/docs/GettingStarted.html#common-problems).  
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
@@ -217,6 +228,8 @@ Cheat sheet for powershell:
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$(PWD)" `
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON `
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DLLVM_USE_SPLIT_DWARF=ON 
+    -DLLVM_ENABLE_LLD=ON
 > ninja -C<build_dir> check-circt
 ```
 

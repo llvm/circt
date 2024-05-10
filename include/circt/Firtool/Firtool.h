@@ -92,6 +92,9 @@ public:
   bool shouldLowerNoRefTypePortAnnotations() const {
     return lowerAnnotationsNoRefTypePorts;
   }
+  bool shouldAllowAddingPortsOnPublic() const {
+    return allowAddingPortsOnPublic;
+  }
   bool shouldReplicateSequentialMemories() const { return replSeqMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
@@ -150,6 +153,11 @@ public:
 
   FirtoolOptions &setLowerAnnotationsNoRefTypePorts(bool value) {
     lowerAnnotationsNoRefTypePorts = value;
+    return *this;
+  }
+
+  FirtoolOptions &setAllowAddingPortsOnPublic(bool value) {
+    allowAddingPortsOnPublic = value;
     return *this;
   }
 
@@ -361,6 +369,7 @@ private:
   bool disableAnnotationsUnknown;
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
+  bool allowAddingPortsOnPublic;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;
   bool enableDebugInfo;
@@ -432,6 +441,10 @@ LogicalResult populateExportSplitVerilog(mlir::PassManager &pm,
 
 LogicalResult populateFinalizeIR(mlir::PassManager &pm,
                                  const FirtoolOptions &opt);
+
+LogicalResult populateHWToBTOR2(mlir::PassManager &pm,
+                                const FirtoolOptions &opt,
+                                llvm::raw_ostream &os);
 
 } // namespace firtool
 } // namespace circt

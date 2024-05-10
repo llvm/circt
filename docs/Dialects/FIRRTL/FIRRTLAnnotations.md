@@ -481,17 +481,20 @@ Example:
 | class      | string | `sifive.enterprise.firrtl.FullAsyncResetAnnotation` |
 | target     | string | Reference target                                    |
 
-Indicates that all reset-less registers which are children of the target will
-have an asynchronous reset attached, with a reset value of 0.
 
-A module targeted by this annotation is not allowed to reside in multiple
+The target must be a signal that is or is inferred to be an asynchronous reset.
+
+Indicates that all reset-less registers which are children of the module containing
+the target will have the asynchronous reset targeted attached, with a reset value of 0.
+
+The module containing the target of this annotation is not allowed to reside in multiple
 hierarchies.
 
 Example:
 ```json
 {
   "class": "sifive.enterprise.firrtl.FullAsyncResetAnnotation",
-  "target": "~Foo|Bar/d:Baz"
+  "target": "~Foo|Bar/d:Baz>reset"
 }
 ```
 
@@ -835,26 +838,6 @@ Example:
       "eccIndices":[ ]
     },
     "target":"~CoreIPSubsystemVerifTestHarness|TLRAM>mem"
-}
-```
-
-### ScalaClassAnnotation
-
-| Property   | Type   | Description                                     |
-| ---------- | ------ | -------------                                   |
-| class      | string | `sifive.enterprise.firrtl.ScalaClassAnnotation` |
-| target     | string | Reference target                                |
-| className  | string | The corresponding class name                    |
-
-This annotation records the name of the Java or Scala class which corresponds
-to the module.
-
-Example:
-```json
-{
-  "class":"sifive.enterprise.firrtl.ScalaClassAnnotation",
-  "target":"Top.ClockGroupAggregator",
-  "className":"freechips.rocketchip.prci.ClockGroupAggregator"
 }
 ```
 

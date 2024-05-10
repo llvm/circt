@@ -584,7 +584,7 @@ def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
      * Return the name of the default target.
      */
     StringAttr getDefaultModuleNameAttr() {
-      return getModuleNamesAttr()[0].cast<FlatSymbolRefAttr>().getAttr();
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]).getAttr();
     }
   }];
 }

@@ -1,4 +1,4 @@
-add_mlir_public_c_api_library(CIRCTCAPIConversion
+add_circt_public_c_api_library(CIRCTCAPIConversion
   Passes.cpp
 
   LINK_LIBS PUBLIC
@@ -27,6 +27,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTHWToSystemC
   CIRCTLLHDToLLVM
   CIRCTLoopScheduleToCalyx
+  CIRCTLTLToCore
   CIRCTMooreToCore
   CIRCTPipelineToHW
   CIRCTSCFToCalyx

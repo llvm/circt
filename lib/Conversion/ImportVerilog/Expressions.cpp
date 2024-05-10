@@ -27,13 +27,8 @@ struct ExprVisitor {
   Value convertToSimpleBitVector(Value value) {
     if (!value)
       return {};
-    if (auto type = dyn_cast_or_null<moore::UnpackedType>(value.getType())) {
-      if (type.isSimpleBitVector())
-        return value;
-      if (auto sbvt = type.castToSimpleBitVectorOrNull())
-        return builder.create<moore::ConversionOp>(
-            loc, sbvt.getType(builder.getContext()), value);
-    }
+    if (isa<moore::IntType>(value.getType()))
+      return value;
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be cast to a simple bit vector";
     return {};
@@ -125,7 +120,8 @@ struct ExprVisitor {
     if (!preValue)
       return {};
     preValue = builder.create<moore::ReadLValueOp>(loc, preValue);
-    auto one = builder.create<moore::ConstantOp>(loc, preValue.getType(), 1);
+    auto one = builder.create<moore::ConstantOp>(
+        loc, cast<moore::IntType>(preValue.getType()), 1);
     auto postValue =
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
@@ -218,9 +214,15 @@ struct ExprVisitor {
     case BinaryOperator::Multiply:
       return createBinary<moore::MulOp>(lhs, rhs);
     case BinaryOperator::Divide:
-      return createBinary<moore::DivOp>(lhs, rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::DivSOp>(lhs, rhs);
+      else
+        return createBinary<moore::DivUOp>(lhs, rhs);
     case BinaryOperator::Mod:
-      return createBinary<moore::ModOp>(lhs, rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::ModSOp>(lhs, rhs);
+      else
+        return createBinary<moore::ModUOp>(lhs, rhs);
 
     case BinaryOperator::BinaryAnd:
       return createBinary<moore::AndOp>(lhs, rhs);
@@ -249,13 +251,25 @@ struct ExprVisitor {
       return createBinary<moore::WildcardNeOp>(lhs, rhs);
 
     case BinaryOperator::GreaterThanEqual:
-      return createBinary<moore::GeOp>(lhs, rhs);
+      if (expr.left().type->isSigned())
+        return createBinary<moore::SgeOp>(lhs, rhs);
+      else
+        return createBinary<moore::UgeOp>(lhs, rhs);
     case BinaryOperator::GreaterThan:
-      return createBinary<moore::GtOp>(lhs, rhs);
+      if (expr.left().type->isSigned())
+        return createBinary<moore::SgtOp>(lhs, rhs);
+      else
+        return createBinary<moore::UgtOp>(lhs, rhs);
     case BinaryOperator::LessThanEqual:
-      return createBinary<moore::LeOp>(lhs, rhs);
+      if (expr.left().type->isSigned())
+        return createBinary<moore::SleOp>(lhs, rhs);
+      else
+        return createBinary<moore::UleOp>(lhs, rhs);
     case BinaryOperator::LessThan:
-      return createBinary<moore::LtOp>(lhs, rhs);
+      if (expr.left().type->isSigned())
+        return createBinary<moore::SltOp>(lhs, rhs);
+      else
+        return createBinary<moore::UltOp>(lhs, rhs);
 
     // See IEEE 1800-2017 § 11.4.7 "Logical operators".
     case BinaryOperator::LogicalAnd: {
@@ -309,9 +323,7 @@ struct ExprVisitor {
       rhs = convertToSimpleBitVector(rhs);
       if (!lhs || !rhs)
         return {};
-      if (cast<moore::PackedType>(lhs.getType())
-              .getSimpleBitVector()
-              .isSigned())
+      if (expr.type->isSigned())
         return builder.create<moore::AShrOp>(loc, lhs, rhs);
       return builder.create<moore::ShrOp>(loc, lhs, rhs);
     }
@@ -336,7 +348,8 @@ struct ExprVisitor {
       return {};
     }
     auto truncValue = value.as<uint64_t>().value();
-    return builder.create<moore::ConstantOp>(loc, type, truncValue);
+    return builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type),
+                                             truncValue);
   }
 
   // Handle `'0`, `'1`, `'x`, and `'z` literals.

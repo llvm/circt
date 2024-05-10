@@ -212,7 +212,7 @@ void SplitLoopsPass::runOnOperation() {
   SetVector<CallOpInterface> allArcUses;
 
   auto result = module.walk([&](CallOpInterface callOp) -> WalkResult {
-    auto refSym = callOp.getCallableForCallee().dyn_cast<SymbolRefAttr>();
+    auto refSym = dyn_cast<SymbolRefAttr>(callOp.getCallableForCallee());
 
     // If this call is not to an arc, skip it.
     if (!refSym)

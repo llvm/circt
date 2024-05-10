@@ -146,6 +146,10 @@ namespace verif {
 class VerifDialect;
 } // namespace verif
 
+namespace ltl {
+class LTLDialect;
+} // namespace ltl
+
 // Generate the classes which represent the passes
 #define GEN_PASS_CLASSES
 #include "circt/Conversion/Passes.h.inc"

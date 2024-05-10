@@ -618,6 +618,23 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "hw::HWModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// LTLToCore
+//===----------------------------------------------------------------------===//
+
+def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
+  let summary = "Convert LTL and Verif to Core";
+  let description = [{
+    This pass converts ltl and verif operations to core ones. This can be done directly
+    without going through FSM if we're only working with overlapping properties (no delays).
+  }];
+  let constructor = "circt::createLowerLTLToCorePass()";
+  let dependentDialects = [
+    "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
+    "seq::SeqDialect"
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // VerifToSV
 //===----------------------------------------------------------------------===//
 
@@ -737,7 +754,7 @@ def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
   let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
   let dependentDialects = [
     "smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
-    "mlir::cf::ControlFlowDialect"
+    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"
   ];
   let options = [
     Option<"debug", "debug", "bool", "false",

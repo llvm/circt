@@ -47,9 +47,9 @@ struct DCTuple {
 
 // Unpack a !dc.value<...> into a DCTuple.
 static DCTuple unpack(OpBuilder &b, Value v) {
-  if (v.getType().isa<dc::ValueType>())
+  if (isa<dc::ValueType>(v.getType()))
     return DCTuple(b.create<dc::UnpackOp>(v.getLoc(), v));
-  assert(v.getType().isa<dc::TokenType>() && "Expected a dc::TokenType");
+  assert(isa<dc::TokenType>(v.getType()) && "Expected a dc::TokenType");
   return DCTuple(v, {});
 }
 
@@ -63,7 +63,7 @@ class DCTypeConverter : public TypeConverter {
 public:
   DCTypeConverter() {
     addConversion([](Type type) -> Type {
-      if (type.isa<NoneType>())
+      if (isa<NoneType>(type))
         return dc::TokenType::get(type.getContext());
       return dc::ValueType::get(type.getContext(), type);
     });
@@ -78,12 +78,12 @@ public:
             return std::nullopt;
 
           // Materialize !dc.value<> -> !dc.token
-          if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().isa<dc::ValueType>())
+          if (isa<dc::TokenType>(resultType) &&
+              isa<dc::ValueType>(inputs.front().getType()))
             return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
-          auto vt = resultType.dyn_cast<dc::ValueType>();
+          auto vt = dyn_cast<dc::ValueType>(resultType);
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
@@ -98,12 +98,12 @@ public:
             return std::nullopt;
 
           // Materialize !dc.value<> -> !dc.token
-          if (resultType.isa<dc::TokenType>() &&
-              inputs.front().getType().isa<dc::ValueType>())
+          if (isa<dc::TokenType>(resultType) &&
+              isa<dc::ValueType>(inputs.front().getType()))
             return unpack(builder, inputs.front()).token;
 
           // Materialize !dc.token -> !dc.value<>
-          auto vt = resultType.dyn_cast<dc::ValueType>();
+          auto vt = dyn_cast<dc::ValueType>(resultType);
           if (vt && !vt.getInnerType())
             return pack(builder, inputs.front());
 
@@ -198,6 +198,50 @@ public:
   }
 };
 
+class MergeOpConversion : public DCOpConversionPattern<handshake::MergeOp> {
+public:
+  using DCOpConversionPattern<handshake::MergeOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::MergeOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::MergeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() > 2)
+      return rewriter.notifyMatchFailure(op, "only two inputs supported");
+
+    SmallVector<Value, 4> tokens, data;
+
+    for (auto input : adaptor.getDataOperands()) {
+      auto up = unpack(rewriter, input);
+      tokens.push_back(up.token);
+      if (up.data)
+        data.push_back(up.data);
+    }
+
+    // Control side
+    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    auto selectedIndexUnpacked = unpack(rewriter, selectedIndex);
+    Value mergeOutput;
+
+    if (!data.empty()) {
+      // Data-merge; mux the selected input.
+      auto dataMux = rewriter.create<arith::SelectOp>(
+          op.getLoc(), selectedIndexUnpacked.data, data[0], data[1]);
+      convertedOps->insert(dataMux);
+
+      // Pack the data mux with the control token.
+      mergeOutput = pack(rewriter, selectedIndexUnpacked.token, dataMux);
+    } else {
+      // Control-only merge; throw away the index value of the dc.merge
+      // operation and only forward the dc.token.
+      mergeOutput = selectedIndexUnpacked.token;
+    }
+
+    rewriter.replaceOp(op, mergeOutput);
+    return success();
+  }
+};
+
 class ControlMergeOpConversion
     : public DCOpConversionPattern<handshake::ControlMergeOp> {
 public:
@@ -219,6 +263,8 @@ public:
         data.push_back(up.data);
     }
 
+    bool isIndexType = isa<IndexType>(op.getIndex().getType());
+
     // control-side
     Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
     auto mergeOpUnpacked = unpack(rewriter, selectedIndex);
@@ -238,9 +284,16 @@ public:
 
     // if the original op used `index` as the select operand type, we need to
     // index-cast the unpacked select operand
-    if (op.getIndex().getType().isa<IndexType>()) {
+    if (isIndexType) {
       selValue = rewriter.create<arith::IndexCastOp>(
           op.getLoc(), rewriter.getIndexType(), selValue);
+      convertedOps->insert(selValue.getDefiningOp());
+      selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
+    } else {
+      // The cmerge had a specific type defined for the index type. dc.merge
+      // provides an i1 operand for the selected index, so we need to cast it.
+      selValue = rewriter.create<arith::ExtUIOp>(
+          op.getLoc(), op.getIndex().getType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
       selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
     }
@@ -433,9 +486,9 @@ public:
     auto select = unpack(rewriter, adaptor.getSelectOperand());
     auto selectData = select.data;
     auto selectToken = select.token;
-    bool isIndexType = selectData.getType().isa<IndexType>();
+    bool isIndexType = isa<IndexType>(selectData.getType());
 
-    bool withData = !op.getResult().getType().isa<NoneType>();
+    bool withData = !isa<NoneType>(op.getResult().getType());
 
     llvm::SmallVector<DCTuple> inputs;
     for (auto input : adaptor.getDataOperands())
@@ -461,7 +514,7 @@ public:
       if (isIndexType) {
         cmpIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), i);
       } else {
-        size_t width = selectData.getType().cast<IntegerType>().getWidth();
+        size_t width = cast<IntegerType>(selectData.getType()).getWidth();
         cmpIndex = rewriter.create<arith::ConstantIntOp>(op.getLoc(), i, width);
       }
       auto inputSelected = rewriter.create<arith::CmpIOp>(
@@ -624,12 +677,12 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // Add handshake conversion patterns.
   // Note: merge/control merge are not supported - these are non-deterministic
   // operators and we do not care for them.
-  patterns
-      .add<BufferOpConversion, CondBranchConversionPattern,
-           SinkOpConversionPattern, SourceOpConversionPattern,
-           MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
-           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
-          ctx, typeConverter, &convertedOps);
+  patterns.add<BufferOpConversion, CondBranchConversionPattern,
+               SinkOpConversionPattern, SourceOpConversionPattern,
+               MuxOpConversionPattern, ForkOpConversionPattern,
+               JoinOpConversion, MergeOpConversion, ControlMergeOpConversion,
+               ConstantOpConversion, SyncOpConversion>(ctx, typeConverter,
+                                                       &convertedOps);
 
   // ALL other single-result operations are converted via the
   // UnitRateConversionPattern.

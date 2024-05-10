@@ -43,8 +43,14 @@ LogicalResult LowerIntrinsicsPass::initialize(MLIRContext *context) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  if (failed(lowering->lower(getOperation())))
+  auto result = lowering->lower(getOperation());
+  if (failed(result))
     return signalPassFailure();
+
+  numConverted += *result;
+
+  if (*result == 0)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.

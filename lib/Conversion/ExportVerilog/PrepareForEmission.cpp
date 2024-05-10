@@ -41,12 +41,12 @@ using namespace ExportVerilog;
 
 // Check if the value is from read of a wire or reg or is a port.
 bool ExportVerilog::isSimpleReadOrPort(Value v) {
-  if (v.isa<BlockArgument>())
+  if (isa<BlockArgument>(v))
     return true;
   auto vOp = v.getDefiningOp();
   if (!vOp)
     return false;
-  if (v.getType().isa<sv::InOutType>() && isa<sv::WireOp>(vOp))
+  if (isa<sv::InOutType>(v.getType()) && isa<sv::WireOp>(vOp))
     return true;
   auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
@@ -380,7 +380,7 @@ static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
 static Operation *lowerStructExplodeOp(hw::StructExplodeOp op) {
   Operation *firstOp = nullptr;
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  StructType structType = op.getInput().getType().cast<StructType>();
+  StructType structType = cast<StructType>(op.getInput().getType());
   for (auto [res, field] :
        llvm::zip(op.getResults(), structType.getElements())) {
     auto extract =
@@ -453,7 +453,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
   // never generate a temporary and in fact must always be emitted inline.
   if (isExpressionAlwaysInline(op) &&
       !(isa<sv::ReadInOutOp>(op) ||
-        op->getResult(0).getType().isa<hw::InOutType>()))
+        isa<hw::InOutType>(op->getResult(0).getType())))
     return false;
 
   // Scan to the top of the region tree to find out where to move the op.
@@ -469,7 +469,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
         // the top level of the module.  We can tell this quite efficiently by
         // looking for ops in a procedural region - because procedural regions
         // live in graph regions but not visa-versa.
-        if (BlockArgument block = operand.dyn_cast<BlockArgument>()) {
+        if (BlockArgument block = dyn_cast<BlockArgument>(operand)) {
           // References to ports are always ok.
           if (isa<hw::HWModuleOp>(block.getParentBlock()->getParentOp()))
             return false;
@@ -503,7 +503,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// Check whether an op is a declaration that can be moved.
 static bool isMovableDeclaration(Operation *op) {
   if (op->getNumResults() != 1 ||
-      !op->getResult(0).getType().isa<InOutType, sv::InterfaceType>())
+      !isa<InOutType, sv::InterfaceType>(op->getResult(0).getType()))
     return false;
 
   // If all operands (e.g. init value) are constant, it is safe to move
@@ -593,7 +593,7 @@ EmittedExpressionStateManager::getExpressionState(Value v) {
     return it->second;
 
   // Ports.
-  if (auto blockArg = v.dyn_cast<BlockArgument>())
+  if (auto blockArg = dyn_cast<BlockArgument>(v))
     return EmittedExpressionState::getBaseState();
 
   EmittedExpressionState state =
@@ -686,7 +686,7 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // Don't spill wires for inout operations and simple expressions such as read
   // or constant.
   if (op.getNumResults() == 0 ||
-      op.getResult(0).getType().isa<hw::InOutType>() ||
+      isa<hw::InOutType>(op.getResult(0).getType()) ||
       isa<ReadInOutOp, ConstantOp>(op))
     return false;
 
@@ -995,7 +995,7 @@ static LogicalResult legalizeHWModule(Block &block,
       Value wireOp;
       ImplicitLocOpBuilder builder(op.getLoc(), &op);
       hw::StructType structType =
-          structCreateOp.getResult().getType().cast<hw::StructType>();
+          cast<hw::StructType>(structCreateOp.getResult().getType());
       bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
       if (procedural)
         wireOp = builder.create<LogicOp>(structType);

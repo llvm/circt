@@ -353,7 +353,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     newPortLocations.push_back(p.loc);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
     if (internalPaths) {
-      auto internalPath = internalPaths[p.portID].cast<InternalPathAttr>();
+      auto internalPath = cast<InternalPathAttr>(internalPaths[p.portID]);
       newInternalPaths.push_back(internalPath);
       if (internalPath.getPath())
         hasInternalPaths = true;
@@ -431,7 +431,7 @@ static void lowerModuleBody(FModuleOp mod,
             inst.getResult(p.portID).getType(),
             theBuilder.getStringAttr(
                 inst.getName() + "." +
-                oldNames[p.portID].cast<StringAttr>().getValue()));
+                cast<StringAttr>(oldNames[p.portID]).getValue()));
         inst.getResult(p.portID).replaceAllUsesWith(
             bounce[p.portID].getResult());
       }

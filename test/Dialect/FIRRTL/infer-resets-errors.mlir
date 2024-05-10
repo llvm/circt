@@ -167,7 +167,7 @@ firrtl.circuit "top" {
 // Reset annotation cannot target synchronous reset signals
 firrtl.circuit "top" {
   firrtl.module @top() {
-    // expected-error @below {{'IgnoreFullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
+    // expected-error @below {{'FullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
     %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.uint<1>
   }
 }
@@ -176,7 +176,7 @@ firrtl.circuit "top" {
 // Reset annotation cannot target reset signals which are inferred to be synchronous
 firrtl.circuit "top" {
   firrtl.module @top() {
-   // expected-error @below {{'IgnoreFullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
+   // expected-error @below {{'FullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
     %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.reset
     %invalid = firrtl.invalidvalue : !firrtl.reset
     firrtl.strictconnect %innerReset, %invalid : !firrtl.reset
@@ -264,5 +264,5 @@ firrtl.circuit "UninferredRefReset" {
   firrtl.module @UninferredRefReset() {}
   // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
   // expected-note @+1 {{the module with this uninferred reset port was defined here}}
-  firrtl.module private @UninferredRefResetPriv(in %reset: !firrtl.probe<reset>) {}
+  firrtl.module private @UninferredRefResetPriv(out %reset: !firrtl.probe<reset>) {}
 }

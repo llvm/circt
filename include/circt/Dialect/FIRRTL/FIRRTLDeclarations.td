@@ -212,12 +212,12 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
-      return getModuleNamesAttr()[0].cast<FlatSymbolRefAttr>();
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
     }
 
     /// Return the name of the option group.
     StringAttr getOptionNameAttr() {
-      return getCaseNames()[0].cast<SymbolRefAttr>().getRootReference();
+      return llvm::cast<SymbolRefAttr>(getCaseNames()[0]).getRootReference();
     }
 
     /// Return the target for an option or the default if none specified.

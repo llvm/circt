@@ -73,7 +73,7 @@ def MachineOp : FSMOp<"machine", [
     /// an error if the attribute is invalid.
     LogicalResult verifyType() {
       auto type = getFunctionTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
+      if (!llvm::isa<FunctionType>(type))
         return emitOpError("requires '" + getFunctionTypeAttrName().getValue() +
                            "' attribute of function type");
       return success();

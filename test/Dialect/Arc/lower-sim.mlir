@@ -15,6 +15,8 @@ module attributes { dlti.dl_spec = #dlti.dl_spec<
   func.func @full() {
     %c = arith.constant 24 : i8
 
+    // CHECK: %[[format_str2_ptr:.*]] = llvm.mlir.addressof @[[format_str2]] : !llvm.ptr
+    // CHECK: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
     // CHECK-DAG: %[[c:.*]] = llvm.mlir.constant(24 : i8)
     // CHECK-DAG: %[[zero:.*]] = llvm.mlir.constant(0 : i8)
     // CHECK-DAG: %[[size:.*]] = llvm.mlir.constant(3 : i64)
@@ -36,11 +38,9 @@ module attributes { dlti.dl_spec = #dlti.dl_spec<
       %result = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@id>
 
       // CHECK-DAG: %[[to_print:.*]] = llvm.zext %[[result]] : i8 to i16
-      // CHECK-DAG: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
       // CHECK: llvm.call @printf(%[[format_str_ptr]], %[[to_print]])
       arc.sim.emit "result", %result : i8
 
-      // CHECK-DAG: %[[format_str2_ptr:.*]] = llvm.mlir.addressof @[[format_str2]] : !llvm.ptr
       // CHECK: llvm.call @printf(%[[format_str2_ptr]], %[[to_print]])
       arc.sim.emit "result2", %result : i8
 

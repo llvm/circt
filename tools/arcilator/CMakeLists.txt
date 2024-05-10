@@ -10,6 +10,7 @@ add_circt_tool(arcilator arcilator.cpp)
 target_link_libraries(arcilator
   PRIVATE
   CIRCTArc
+  CIRCTHWTransforms
   CIRCTArcToLLVM
   CIRCTArcTransforms
   CIRCTCombToArith

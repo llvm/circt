@@ -321,7 +321,7 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type) {
   o["circt_name"] = circtName;
 
   int64_t width = hw::getBitWidth(type);
-  if (auto chanType = type.dyn_cast<ChannelType>())
+  if (auto chanType = dyn_cast<ChannelType>(type))
     width = hw::getBitWidth(chanType.getInner());
   if (width >= 0)
     o["hw_bitwidth"] = width;

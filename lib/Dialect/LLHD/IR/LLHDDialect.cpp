@@ -68,10 +68,10 @@ void LLHDDialect::initialize() {
 
 Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
-  if (auto timeAttr = value.dyn_cast<TimeAttr>())
+  if (auto timeAttr = dyn_cast<TimeAttr>(value))
     return builder.create<llhd::ConstantTimeOp>(loc, type, timeAttr);
 
-  if (auto intAttr = value.dyn_cast<IntegerAttr>())
+  if (auto intAttr = dyn_cast<IntegerAttr>(value))
     return builder.create<hw::ConstantOp>(loc, type, intAttr);
 
   return nullptr;

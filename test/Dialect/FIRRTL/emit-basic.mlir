@@ -453,24 +453,6 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
   // CHECK-NEXT:    parameter WIDTH = 32
 
-  firrtl.intmodule private @MyIntModule<
-    FORMAT: none = "xyz_timeout=%d\0A",
-    DEFAULT: ui32 = 0,
-    WIDTH: ui32 = 32,
-    DEPTH: f64 = 3.242000e+01
-  >(
-    in in: !firrtl.uint,
-    out out: !firrtl.uint<8>
-  ) attributes {intrinsic = "testIntrinsic1"}
-  // CHECK-LABEL: intmodule MyIntModule :
-  // CHECK-NEXT:    input in : UInt
-  // CHECK-NEXT:    output out : UInt<8>
-  // CHECK-NEXT:    intrinsic = testIntrinsic1
-  // CHECK-NEXT:    parameter FORMAT = "xyz_timeout=%d\n"
-  // CHECK-NEXT:    parameter DEFAULT = 0
-  // CHECK-NEXT:    parameter WIDTH = 32
-  // CHECK-NEXT:    parameter DEPTH = 32.42
-
   // CHECK-LABEL: module ConstTypes :
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
@@ -692,14 +674,14 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:    layer GroupB, bind :
   // CHECK-NEXT:      layer GroupC, bind :
   // CHECK-NEXT:      layer GroupD, bind :
-  // CHECK-NEXT:        layer GroupE, bind :
+  // CHECK-NEXT:        layer GroupE, inline :
   // CHECK-NEXT:    layer GroupF, bind :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
       }
       firrtl.layer @GroupD bind {
-        firrtl.layer @GroupE bind {
+        firrtl.layer @GroupE inline {
         }
       }
     }
@@ -776,17 +758,6 @@ firrtl.circuit "Foo" {
       @GroupA,
       @GroupA::@GroupB
     ]
-  }
-
-  // CHECK:      intmodule IntModuleWithEnabledLayers
-  // CHECK-NEXT:     enablelayer GroupA
-  // CHECK-NEXT:     enablelayer GroupA.GroupB :
-  firrtl.intmodule @IntModuleWithEnabledLayers() attributes {
-    layers = [
-      @GroupA,
-      @GroupA::@GroupB
-    ],
-    intrinsic = "test"
   }
 
   // CHECK:      module ModuleWithLargeEnabledLayers

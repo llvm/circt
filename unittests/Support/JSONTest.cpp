@@ -72,8 +72,8 @@ TEST(JSONTest, RoundTripTypes) {
   ASSERT_TRUE(bool(jsonValue));
 
   json::Path::Root root;
-  auto dict = convertJSONToAttribute(&context, jsonValue.get(), root)
-                  .cast<DictionaryAttr>();
+  auto dict = cast<DictionaryAttr>(
+      convertJSONToAttribute(&context, jsonValue.get(), root));
 
   ASSERT_EQ(floatAttr, dict.getAs<FloatAttr>("float"));
   ASSERT_EQ(intAttr, dict.getAs<IntegerAttr>("int"));

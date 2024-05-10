@@ -239,7 +239,7 @@ static ResetInfo getIfMuxBasedReset(OpOperand &output) {
     if (!mux.getResult().hasOneUse())
       return {};
 
-    if (auto condArg = mux.getCond().dyn_cast<BlockArgument>())
+    if (auto condArg = dyn_cast<BlockArgument>(mux.getCond()))
       return ResetInfo(mux.getFalseValue(), condArg, true);
   }
 
@@ -266,7 +266,7 @@ static ResetInfo getIfAndBasedReset(OpOperand &output) {
       if (auto xorOp = operand.get().getDefiningOp<comb::XorOp>();
           xorOp && xorOp->getNumOperands() == 2 &&
           xorOp.getResult().hasOneUse()) {
-        if (auto condArg = xorOp.getInputs()[0].dyn_cast<BlockArgument>()) {
+        if (auto condArg = dyn_cast<BlockArgument>(xorOp.getInputs()[0])) {
           if (xorOp.getInputs().size() != 2 ||
               !isConstTrue(xorOp.getInputs()[1]))
             continue;
@@ -299,12 +299,12 @@ static ResetInfo getIfAndBasedReset(OpOperand &output) {
 static EnableInfo checkOperandsForEnable(arc::StateOp stateOp, Value selfArg,
                                          Value cond, unsigned outputNr,
                                          bool isDisable) {
-  if (auto trueArg = selfArg.dyn_cast<BlockArgument>()) {
+  if (auto trueArg = dyn_cast<BlockArgument>(selfArg)) {
     if (stateOp.getInputs()[trueArg.getArgNumber()] !=
         stateOp.getResult(outputNr))
       return {};
 
-    if (auto condArg = cond.dyn_cast<BlockArgument>())
+    if (auto condArg = dyn_cast<BlockArgument>(cond))
       return EnableInfo(selfArg, condArg, trueArg, isDisable);
   }
 

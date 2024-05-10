@@ -57,7 +57,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
     PipelineStageOp stage, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto loc = stage.getLoc();
-  auto chPort = stage.getInput().getType().dyn_cast<ChannelType>();
+  auto chPort = dyn_cast<ChannelType>(stage.getInput().getType());
   if (!chPort)
     return rewriter.notifyMatchFailure(stage, "stage had wrong type");
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
@@ -122,7 +122,7 @@ public:
 LogicalResult NullSourceOpLowering::matchAndRewrite(
     NullSourceOp nullop, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
-  auto innerType = nullop.getOut().getType().cast<ChannelType>().getInner();
+  auto innerType = cast<ChannelType>(nullop.getOut().getType()).getInner();
   Location loc = nullop.getLoc();
   int64_t width = hw::getBitWidth(innerType);
   if (width == -1)

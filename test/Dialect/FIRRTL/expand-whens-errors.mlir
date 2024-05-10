@@ -147,17 +147,6 @@ firrtl.module @RefInitOut(out %out : !firrtl.probe<uint<1>>) {
 
 // -----
 
-// Check initialization error is produced for in-references
-firrtl.circuit "RefInitIn" {
-firrtl.module private @Child(in %in: !firrtl.probe<uint<1>>) { }
-firrtl.module @RefInitIn() {
-  %child_in = firrtl.instance child @Child(in in : !firrtl.probe<uint<1>>)
-  // expected-error @above {{sink "child.in" not fully initialized in "RefInitIn"}}
-}
-}
-
-// -----
-
 // Check initialization error is produced for output property ports on modules.
 firrtl.circuit "PropInitOut" {
 firrtl.module @PropInitOut(out %out : !firrtl.string) {

@@ -14,6 +14,7 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/Matchers.h"
@@ -146,7 +147,7 @@ private:
   FailureOr<Operation *> maybeGetDefinition(Operation *op) {
     if (auto callOp = dyn_cast<mlir::CallOpInterface>(op)) {
       auto symAttr =
-          callOp.getCallableForCallee().dyn_cast<mlir::SymbolRefAttr>();
+          dyn_cast<mlir::SymbolRefAttr>(callOp.getCallableForCallee());
       if (!symAttr)
         return failure();
       if (auto *def = handler->getDefinition(symAttr.getLeafReference()))
@@ -237,6 +238,12 @@ struct RemoveUnusedArcs : public SymOpRewritePattern<DefineOp> {
 struct ICMPCanonicalizer : public OpRewritePattern<comb::ICmpOp> {
   using OpRewritePattern::OpRewritePattern;
   LogicalResult matchAndRewrite(comb::ICmpOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct CompRegCanonicalizer : public OpRewritePattern<seq::CompRegOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(seq::CompRegOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -368,7 +375,7 @@ RemoveUnusedArcs::matchAndRewrite(DefineOp op,
                                   PatternRewriter &rewriter) const {
   if (symbolCache.useEmpty(op)) {
     op.getBody().walk([&](mlir::CallOpInterface user) {
-      if (auto symbol = user.getCallableForCallee().dyn_cast<SymbolRefAttr>())
+      if (auto symbol = dyn_cast<SymbolRefAttr>(user.getCallableForCallee()))
         if (auto *defOp = symbolCache.getDefinition(symbol.getLeafReference()))
           symbolCache.removeUser(defOp, user);
     });
@@ -547,6 +554,29 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
   return success(toDelete.any());
 }
 
+LogicalResult
+CompRegCanonicalizer::matchAndRewrite(seq::CompRegOp op,
+                                      PatternRewriter &rewriter) const {
+  if (!op.getReset())
+    return failure();
+
+  // Because Arcilator supports constant zero reset values, skip them.
+  APInt constant;
+  if (mlir::matchPattern(op.getResetValue(), mlir::m_ConstantInt(&constant)))
+    if (constant.isZero())
+      return failure();
+
+  Value newInput = rewriter.create<comb::MuxOp>(
+      op->getLoc(), op.getReset(), op.getResetValue(), op.getInput());
+  rewriter.modifyOpInPlace(op, [&]() {
+    op.getInputMutable().set(newInput);
+    op.getResetMutable().clear();
+    op.getResetValueMutable().clear();
+  });
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -594,7 +624,7 @@ void ArcCanonicalizerPass::runOnOperation() {
     dialect->getCanonicalizationPatterns(patterns);
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
-  patterns.add<ICMPCanonicalizer>(&getContext());
+  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer>(&getContext());
 
   // Don't test for convergence since it is often not reached.
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),

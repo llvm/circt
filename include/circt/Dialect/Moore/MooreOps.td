@@ -24,6 +24,17 @@ class MooreOp<string mnemonic, list<Trait> traits = []> :
   Op<MooreDialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
+// Constraints
+//===----------------------------------------------------------------------===//
+
+class ResultIsSingleBitMatchingInputDomain<string result, string input> :
+  TypesMatchWith<"result is single bit matching input domain",
+    input, result, [{
+    IntType::get($_self.getContext(), 1,
+      llvm::cast<UnpackedType>($_self).getDomain())
+  }]>;
+
+//===----------------------------------------------------------------------===//
 // Structure
 //===----------------------------------------------------------------------===//
 
@@ -335,8 +346,8 @@ def ConstantOp : MooreOp<"constant", [Pure]> {
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let builders = [
-    OpBuilder<(ins "Type":$type, "const APInt &":$value)>,
-    OpBuilder<(ins "Type":$type, "int64_t":$value)>,
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
+    OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
 }
 
@@ -411,12 +422,7 @@ def NotOp : MooreOp<"not", [Pure, SameOperandsAndResultType]> {
 
 class ReduceOpBase<string mnemonic, string operatorName> : MooreOp<mnemonic, [
   Pure,
-  TypesMatchWith<"result is single bit of input", "input", "result", [{
-    $_self.cast<UnpackedType>()
-      .getSimpleBitVector()
-      .toSingleBit()
-      .getType($_self.getContext())
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "input">
 ]> {
   let arguments = (ins SimpleBitVectorType:$input);
   let results = (outs AnySingleBitType:$result);
@@ -440,11 +446,7 @@ def ReduceXorOp : ReduceOpBase<"reduce_xor", "XOR">;
 
 def BoolCastOp : MooreOp<"bool_cast", [
   Pure,
-  TypesMatchWith<"result is single bit matching input domain",
-    "input", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "input">
 ]> {
   let summary = "Cast a value to a single bit boolean";
   let description = [{
@@ -502,7 +504,7 @@ def MulOp : BinaryOpBase<"mul", [Commutative]> {
   }];
 }
 
-def DivOp : BinaryOpBase<"div"> {
+class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Division";
   let description = [{
     Divide the left-hand side by the right-hand side operand. Any fractional
@@ -514,7 +516,10 @@ def DivOp : BinaryOpBase<"div"> {
   }];
 }
 
-def ModOp : BinaryOpBase<"mod"> {
+def DivUOp : DivOpBase<"divu">;
+def DivSOp : DivOpBase<"divs">;
+
+class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Remainder";
   let description = [{
     Compute the remainder of the left-hand side divided by the right-hand side
@@ -534,6 +539,9 @@ def ModOp : BinaryOpBase<"mod"> {
     | -11 |  -3 |     -2 |
   }];
 }
+
+def ModUOp : ModOpBase<"modu">;
+def ModSOp : ModOpBase<"mods">;
 
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
@@ -626,11 +634,7 @@ class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   Commutative,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the bits in the left- and right-hand side operand and returns a
@@ -683,11 +687,7 @@ def CaseNeOp : CaseEqOpBase<"case_ne"> { let summary = "Case inequality"; }
 class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the bits in the left- and right-hand side operand and returns a
@@ -716,19 +716,16 @@ def WildcardNeOp : WildcardEqOpBase<"wildcard_ne"> {
 class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain($_self.cast<UnpackedType>().getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the left- and right-hand side operand and returns a single bit 0,
     1, or X result. If any bit in the two operands is Z or X, returns X.
-    Otherwise, if all bits are 0 or 1, `lt`, `le`, `gt`, and `ge` return whether
-    the left-hand side is less than, less than or equal to, greater than, or
-    greater than or equal to the right-hand side, respectively. `lt` corresponds
-    to the `<` operator, `le` to `<=`, `gt` to `>`, and `ge` to `>=`.
+    Otherwise, if all bits are 0 or 1, `ult/slt`, `ule/sle`, `ugt/sgt`, and
+    `uge/sge` return whether the left-hand side is less than, less than or equal
+    to, greater than, or greater than or equal to the right-hand side,
+    respectively. `ult/slt` corresponds to the `<` operator, `ule/sle` to `<=`,
+    `ugt/sgt` to `>`, and `uge/sge` to `>=`.
 
     See IEEE 1800-2017 § 11.4.4 "Relational operators".
   }];
@@ -739,10 +736,31 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   }];
 }
 
-def LtOp : RelationalOpBase<"lt"> { let summary = "Less than"; }
-def LeOp : RelationalOpBase<"le"> { let summary = "Less than or equal"; }
-def GtOp : RelationalOpBase<"gt"> { let summary = "Greater than"; }
-def GeOp : RelationalOpBase<"ge"> { let summary = "Greater than or equal"; }
+def UltOp : RelationalOpBase<"ult"> {
+  let summary = "Unsigned less than comparison";
+}
+def UleOp : RelationalOpBase<"ule"> {
+  let summary = "Unsigned less than or equal comparison";
+}
+def UgtOp : RelationalOpBase<"ugt"> {
+  let summary = "Unsigned greater than comparison";
+}
+def UgeOp : RelationalOpBase<"uge"> {
+  let summary = "Unsigned greater than or equal comparison";
+}
+
+def SltOp : RelationalOpBase<"slt"> {
+  let summary = "Signed less than comparison";
+}
+def SleOp : RelationalOpBase<"sle"> {
+  let summary = "Signed less than or equal comparison";
+}
+def SgtOp : RelationalOpBase<"sgt"> {
+  let summary = "Signed greater than comparison";
+}
+def SgeOp : RelationalOpBase<"sge"> {
+  let summary = "Signed greater than or equal comparison";
+}
 
 def ConcatOp : MooreOp<"concat", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>

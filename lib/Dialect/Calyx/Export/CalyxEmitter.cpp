@@ -184,7 +184,7 @@ struct Emitter {
     for (auto sourceLoc : llvm::enumerate(metadata)) {
       // <index>: <source-location>\n
       os << std::to_string(sourceLoc.index()) << colon();
-      os << sourceLoc.value().cast<StringAttr>().getValue() << endl();
+      os << cast<StringAttr>(sourceLoc.value()).getValue() << endl();
     }
 
     os << metadataRBrace();
@@ -324,7 +324,7 @@ private:
     bool isBooleanAttribute =
         llvm::find(booleanAttributes, identifier) != booleanAttributes.end();
 
-    if (attr.getValue().isa<UnitAttr>()) {
+    if (isa<UnitAttr>(attr.getValue())) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
       if (!atFormat) {
@@ -332,7 +332,7 @@ private:
       } else {
         buffer << addressSymbol() << identifier;
       }
-    } else if (auto intAttr = attr.getValue().dyn_cast<IntegerAttr>()) {
+    } else if (auto intAttr = dyn_cast<IntegerAttr>(attr.getValue())) {
       APInt value = intAttr.getValue();
       if (!atFormat) {
         buffer << quote() << identifier << quote() << equals() << value;
@@ -438,7 +438,7 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
-    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+    if (auto blockArg = dyn_cast<BlockArgument>(value)) {
       // Emit component block argument.
       StringAttr portName = getPortInfo(blockArg).name;
       (isIndented ? indent() : os) << portName.getValue();
@@ -701,7 +701,7 @@ void Emitter::emitPrimitiveExtern(hw::HWModuleExternOp op) {
   if (!op.getParameters().empty()) {
     os << LSquare();
     llvm::interleaveComma(op.getParameters(), os, [&](Attribute param) {
-      auto paramAttr = param.cast<hw::ParamDeclAttr>();
+      auto paramAttr = cast<hw::ParamDeclAttr>(param);
       os << paramAttr.getName().str();
     });
     os << RSquare();
@@ -730,10 +730,8 @@ void Emitter::emitPrimitivePorts(hw::HWModuleExternOp op) {
       // We only care about the bit width in the emitted .futil file.
       // Emit parameterized or non-parameterized bit width.
       if (hw::isParametricType(port.type)) {
-        hw::ParamDeclRefAttr bitWidth =
-            port.type.template cast<hw::IntType>()
-                .getWidth()
-                .template dyn_cast<hw::ParamDeclRefAttr>();
+        hw::ParamDeclRefAttr bitWidth = dyn_cast<hw::ParamDeclRefAttr>(
+            cast<hw::IntType>(port.type).getWidth());
         os << bitWidth.getName().str();
       } else {
         unsigned int bitWidth = port.type.getIntOrFloatBitWidth();
@@ -764,11 +762,11 @@ void Emitter::emitPrimitive(PrimitiveOp op) {
 
   if (op.getParameters().has_value()) {
     llvm::interleaveComma(*op.getParameters(), os, [&](Attribute param) {
-      auto paramAttr = param.cast<hw::ParamDeclAttr>();
+      auto paramAttr = cast<hw::ParamDeclAttr>(param);
       auto value = paramAttr.getValue();
-      if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+      if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
         os << intAttr.getInt();
-      } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+      } else if (auto fpAttr = dyn_cast<FloatAttr>(value)) {
         os << fpAttr.getValue().convertToFloat();
       } else {
         llvm_unreachable("Primitive parameter type not supported");
@@ -805,14 +803,14 @@ void Emitter::emitMemory(MemoryOp memory) {
            << std::to_string(dimension) << LParen() << memory.getWidth()
            << comma();
   for (Attribute size : memory.getSizes()) {
-    APInt memSize = size.cast<IntegerAttr>().getValue();
+    APInt memSize = cast<IntegerAttr>(size).getValue();
     memSize.print(os, /*isSigned=*/false);
     os << comma();
   }
 
   ArrayAttr addrSizes = memory.getAddrSizes();
   for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
-    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    APInt addrSize = cast<IntegerAttr>(addrSizes[i]).getValue();
     addrSize.print(os, /*isSigned=*/false);
     if (i + 1 == e)
       continue;
@@ -833,14 +831,14 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
            << std::to_string(dimension) << LParen() << memory.getWidth()
            << comma();
   for (Attribute size : memory.getSizes()) {
-    APInt memSize = size.cast<IntegerAttr>().getValue();
+    APInt memSize = cast<IntegerAttr>(size).getValue();
     memSize.print(os, /*isSigned=*/false);
     os << comma();
   }
 
   ArrayAttr addrSizes = memory.getAddrSizes();
   for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
-    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    APInt addrSize = cast<IntegerAttr>(addrSizes[i]).getValue();
     addrSize.print(os, /*isSigned=*/false);
     if (i + 1 == e)
       continue;

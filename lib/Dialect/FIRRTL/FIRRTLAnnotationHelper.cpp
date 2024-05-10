@@ -225,7 +225,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     // AnnoTarget::getType() is not safe (CHIRRTL ops crash, null if instance),
     // avoid. For now, only references in ports can be targets, check that.
     // TODO: containsReference().
-    if (ref.isa<PortAnnoTarget>() && isa<RefType>(ref.getType())) {
+    if (isa<PortAnnoTarget>(ref) && isa<RefType>(ref.getType())) {
       mlir::emitError(circuit.getLoc())
           << "cannot target reference-type '" << path.name << "' in "
           << mod.getModuleName();
@@ -733,7 +733,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   if (!tapsAttr || tapsAttr.empty())
     return mlir::emitError(loc, "sink must have at least one entry");
 
-  auto tap = tapsAttr[0].dyn_cast_or_null<StringAttr>();
+  auto tap = dyn_cast_or_null<StringAttr>(tapsAttr[0]);
   if (!tap) {
     return mlir::emitError(
                loc, "Annotation '" + Twine(memTapClass) +

@@ -44,6 +44,19 @@ def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
   ];
 }
 
+def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
+  let summary = "Eagerly inline private modules";
+  let description = [{
+    This pass eagerly inlines private HW modules into their instantiation sites.
+    This is necessary for verification purposes, as model checking backends do not 
+    require or support the use of module hierarchy. For simulation, module hierarchies 
+    degenerate into a purely cosmetic construct, at which point it is beneficial
+    to fully flatten the module hierarchy to simplify further analysis and 
+    optimization of state transfer arcs.
+  }];
+  let constructor = "circt::hw::createFlattenModulesPass()";
+}
+
 def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
   let summary = "Specializes instances of parametric hw.modules";
   let constructor = "circt::hw::createHWSpecializePass()";

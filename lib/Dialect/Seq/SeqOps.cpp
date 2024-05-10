@@ -27,13 +27,13 @@ using namespace circt;
 using namespace seq;
 
 bool circt::seq::isValidIndexValues(Value hlmemHandle, ValueRange addresses) {
-  auto memType = hlmemHandle.getType().cast<seq::HLMemType>();
+  auto memType = cast<seq::HLMemType>(hlmemHandle.getType());
   auto shape = memType.getShape();
   if (shape.size() != addresses.size())
     return false;
 
   for (auto [dim, addr] : llvm::zip(shape, addresses)) {
-    auto addrType = addr.getType().dyn_cast<IntegerType>();
+    auto addrType = dyn_cast<IntegerType>(addr.getType());
     if (!addrType)
       return false;
     if (addrType.getIntOrFloatBitWidth() != llvm::Log2_64_Ceil(dim))
@@ -149,7 +149,7 @@ void ReadPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void ReadPortOp::build(OpBuilder &builder, OperationState &result, Value memory,
                        ValueRange addresses, Value rdEn, unsigned latency) {
-  auto memType = memory.getType().cast<seq::HLMemType>();
+  auto memType = cast<seq::HLMemType>(memory.getType());
   ReadPortOp::build(builder, result, memType.getElementType(), memory,
                     addresses, rdEn, latency);
 }
@@ -581,7 +581,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       // If the register has a reset value, we can replace it with that.
       rewriter.replaceOp(op, resetValue);
     } else {
-      if (op.getType().isa<seq::ClockType>()) {
+      if (isa<seq::ClockType>(op.getType())) {
         rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
             op,
             seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
@@ -604,9 +604,9 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
       // For now only support 1d arrays.
       // TODO: Support nested arrays and bundles.
-      if (hw::type_cast<hw::ArrayType>(op.getResult().getType())
-              .getElementType()
-              .isa<IntegerType>()) {
+      if (isa<IntegerType>(
+              hw::type_cast<hw::ArrayType>(op.getResult().getType())
+                  .getElementType())) {
         SmallVector<Value> nextOperands;
         bool changed = false;
         for (const auto &[i, value] :
@@ -683,7 +683,7 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
 
   // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
-  auto intType = getType().dyn_cast<IntegerType>();
+  auto intType = dyn_cast<IntegerType>(getType());
   if (!intType)
     return {};
   return IntegerAttr::get(intType, 0);
@@ -979,7 +979,7 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
   if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
     for (auto clockID : clockIDsAttr)
       writeClockIDs.push_back(
-          clockID.cast<IntegerAttr>().getValue().getZExtValue());
+          cast<IntegerAttr>(clockID).getValue().getZExtValue());
   initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
   initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
   initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();

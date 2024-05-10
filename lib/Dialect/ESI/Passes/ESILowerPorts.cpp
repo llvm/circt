@@ -186,7 +186,7 @@ void ValidReady::buildOutputSignals() {
   StringRef validSuffix = getStringAttributeOr(converter.getModule(),
                                                extModPortValidSuffix, "_valid");
   converter.createNewOutput(origPort, outSuffix,
-                            origPort.type.cast<esi::ChannelType>().getInner(),
+                            cast<esi::ChannelType>(origPort.type).getInner(),
                             data, dataPort);
   converter.createNewOutput(origPort, validSuffix + outSuffix, i1, valid,
                             validPort);
@@ -205,7 +205,7 @@ void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
 
 void FIFO::buildInputSignals() {
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
-  auto chanTy = origPort.type.cast<ChannelType>();
+  auto chanTy = cast<ChannelType>(origPort.type);
 
   StringRef rdenSuffix(getStringAttributeOr(converter.getModule(),
                                             extModPortRdenSuffix, "_rden"));
@@ -218,7 +218,7 @@ void FIFO::buildInputSignals() {
 
   // When we find one, add a data and valid signal to the new args.
   Value data = converter.createNewInput(
-      origPort, inSuffix, origPort.type.cast<esi::ChannelType>().getInner(),
+      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
       dataPort);
   Value empty =
       converter.createNewInput(origPort, emptySuffix + inSuffix, i1, emptyPort);
@@ -276,7 +276,7 @@ void FIFO::buildOutputSignals() {
 
   // New outputs.
   converter.createNewOutput(origPort, outSuffix,
-                            origPort.type.cast<esi::ChannelType>().getInner(),
+                            cast<esi::ChannelType>(origPort.type).getInner(),
                             data, dataPort);
   converter.createNewOutput(origPort, emptySuffix + outSuffix, i1, empty,
                             emptyPort);
@@ -359,7 +359,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   SmallVector<Type, 16> newArgTypes;
   size_t nextArgNo = 0;
   for (auto argTy : mod.getInputTypes()) {
-    auto chanTy = argTy.dyn_cast<ChannelType>();
+    auto chanTy = dyn_cast<ChannelType>(argTy);
     newArgNames.push_back(mod.getInputNameAttr(nextArgNo));
     newArgLocs.push_back(mod.getInputLoc(nextArgNo));
     nextArgNo++;
@@ -384,7 +384,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   for (size_t resNum = 0, numRes = mod.getNumOutputPorts(); resNum < numRes;
        ++resNum) {
     Type resTy = mod.getOutputTypes()[resNum];
-    auto chanTy = resTy.dyn_cast<ChannelType>();
+    auto chanTy = dyn_cast<ChannelType>(resTy);
     auto resNameAttr = mod.getOutputNameAttr(resNum);
     auto resLocAttr = mod.getOutputLoc(resNum);
     if (!chanTy) {
@@ -419,7 +419,7 @@ bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
 }
 
 static StringRef getOperandName(Value operand) {
-  if (BlockArgument arg = operand.dyn_cast<BlockArgument>()) {
+  if (BlockArgument arg = dyn_cast<BlockArgument>(operand)) {
     auto *op = arg.getParentBlock()->getParentOp();
     if (HWModuleLike mod = dyn_cast_or_null<HWModuleLike>(op))
       return mod.getInputName(arg.getArgNumber());
@@ -473,7 +473,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   // Fill the new operand list with old plain operands and mutated ones.
   std::string nameStringBuffer; // raw_string_ostream uses std::string.
   for (auto op : inst.getOperands()) {
-    auto instChanTy = op.getType().dyn_cast<ChannelType>();
+    auto instChanTy = dyn_cast<ChannelType>(op.getType());
     if (!instChanTy) {
       newOperands.push_back(op);
       ++opNum;
@@ -518,7 +518,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   for (size_t resNum = 0, numRes = inst.getNumResults(); resNum < numRes;
        ++resNum) {
     Value res = inst.getResult(resNum);
-    auto instChanTy = res.getType().dyn_cast<ChannelType>();
+    auto instChanTy = dyn_cast<ChannelType>(res.getType());
     if (!instChanTy) {
       newResults.push_back(res);
       newResultTypes.push_back(res.getType());

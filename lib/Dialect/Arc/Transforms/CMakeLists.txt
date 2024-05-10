@@ -7,7 +7,6 @@ add_circt_dialect_library(CIRCTArcTransforms
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
-  InlineModules.cpp
   IsolateClocks.cpp
   LatencyRetiming.cpp
   LegalizeStateUpdate.cpp
