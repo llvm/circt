@@ -23,14 +23,6 @@ using namespace circt::moore;
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult InstanceOp::verify() {
-  auto module = (*this)->getParentOfType<SVModuleOp>();
-  if (!module)
-    return emitError("can not find module definition '")
-           << module->getName() << "'";
-  return success();
-}
-
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module =
       symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());

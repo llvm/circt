@@ -11,13 +11,13 @@
 
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
+include "circt/Support/InstanceGraphInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "circt/Support/InstanceGraphInterface.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -73,6 +73,7 @@ def SVModuleOp : MooreOp<"module", [
 }
 
 def InstanceOp : MooreOp<"instance", [
+  HasParent<"SVModuleOp">,
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   // DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>
@@ -91,7 +92,6 @@ def InstanceOp : MooreOp<"instance", [
                        StrArrayAttr:$inputNames, StrArrayAttr:$outputNames);
   let results = (outs);
   
-  let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     StringRef getReferencedModuleName() {
