@@ -54,7 +54,7 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
                        ClockEdgeAttr:$edge, I1:$clock,
                        OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property, $edge $clock (`label` $label^)? attr-dict `:` type($property)
+    $property `,` $edge $clock (`label` $label^)? attr-dict `:` type($property)
   }];
 }
 
