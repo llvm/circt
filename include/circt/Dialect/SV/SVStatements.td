@@ -879,3 +879,17 @@ def MacroDefOp : SVOp<"macro.def",
     MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
   }];
 }
+
+
+//===----------------------------------------------------------------------===//
+// SV output control.
+//===----------------------------------------------------------------------===//
+
+def ReserveNamesOp : SVOp<"reserve_names", []> {
+  let summary = "Disallow a set of names to be used during emission";
+
+  let arguments = (ins StrArrayAttr:$reservedNames);
+  let assemblyFormat = [{
+    $reservedNames attr-dict
+  }];
+}
