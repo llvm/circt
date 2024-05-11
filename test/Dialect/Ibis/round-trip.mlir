@@ -69,7 +69,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %out_wire = ibis.wire.output @out_wire, %true : i1
 // CHECK-NEXT:    %a = ibis.instance @a, <@foo::@A> 
-// CHECK-NEXT:    ibis.container @D {
+// CHECK-NEXT:    ibis.container @D "D" {
 // CHECK-NEXT:      %this_0 = ibis.this <@foo::@D> 
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@foo::@LowLevel>> : !ibis.scoperef<@foo::@LowLevel>]
 // CHECK-NEXT:      %parent.LowLevel_in.ref = ibis.get_port %parent, @LowLevel_in : !ibis.scoperef<@foo::@LowLevel> -> !ibis.portref<in i1>
@@ -105,7 +105,7 @@ ibis.class @LowLevel {
   // Instantiation
   %a = ibis.instance @a, <@foo::@A>
 
-  ibis.container @D {
+  ibis.container @D "D" {
     %this_d = ibis.this <@foo::@D>
     %parent_C = ibis.path [
       #ibis.step<parent : !ibis.scoperef<@foo::@LowLevel>>

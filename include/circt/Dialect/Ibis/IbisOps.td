@@ -612,11 +612,11 @@ def ContainerOp : IbisOp<"container", [
     An ibis container describes a collection of logic nested within an Ibis class.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym, UnitAttr:$isTopLevel);
+  let arguments = (ins InnerSymAttr:$inner_sym, StrAttr:$name, UnitAttr:$isTopLevel);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
+    $inner_sym $name (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{
@@ -643,14 +643,15 @@ def ContainerOp : IbisOp<"container", [
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringRef":$inner_sym, "bool":$isTopLevel), [{
+    OpBuilder<(ins "StringRef":$inner_sym, "StringAttr":$name, "bool":$isTopLevel), [{
       build($_builder, $_state,
-        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), isTopLevel);
+        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), name, isTopLevel);
     }]>,
-    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "bool":$isTopLevel), [{
+    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "StringAttr":$name, "bool":$isTopLevel), [{
       auto region = $_state.addRegion();
       region->push_back(new Block());
       $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
+      $_state.addAttribute(getNameAttrName($_state.name), name);
       if (isTopLevel)
         $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
     }]>

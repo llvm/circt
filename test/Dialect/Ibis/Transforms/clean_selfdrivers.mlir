@@ -1,14 +1,14 @@
 // RUN: circt-opt --allow-unregistered-dialect --split-input-file --ibis-clean-selfdrivers %s | FileCheck %s
 
 ibis.design @D {
-// CHECK-LABEL:   ibis.container @C {
+// CHECK-LABEL:   ibis.container @C "C" {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@C>
 // CHECK:           %[[VAL_1:.*]] = hw.wire %[[VAL_2:.*]]  : i1
 // CHECK:           %[[VAL_3:.*]] = ibis.port.output "out" sym @out : i1
 // CHECK:           %[[VAL_2]] = hw.constant true
 // CHECK:           ibis.port.write %[[VAL_3]], %[[VAL_1]] : !ibis.portref<out i1>
 // CHECK:         }
-ibis.container @C {
+ibis.container @C "C" {
     %this = ibis.this <@D::@C>
     %in = ibis.port.input "in" sym @in : i1
     %out = ibis.port.output "out" sym @out : i1
@@ -23,7 +23,7 @@ ibis.container @C {
 // -----
 
 ibis.design @D {
-// CHECK-LABEL:   ibis.container @Selfdriver {
+// CHECK-LABEL:   ibis.container @Selfdriver "Selfdriver" {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@Selfdriver>
 // CHECK:           %[[VAL_1:.*]] = hw.wire %[[VAL_2:.*]]  : i1
 // CHECK:           %[[VAL_3:.*]] = ibis.port.output "in" sym @in : i1
@@ -31,21 +31,21 @@ ibis.design @D {
 // CHECK:           %[[VAL_2]] = hw.constant true
 // CHECK:         }
 
-// CHECK-LABEL:   ibis.container @ParentReader {
+// CHECK-LABEL:   ibis.container @ParentReader "ParentReader" {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@ParentReader>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @selfdriver, <@D::@Selfdriver>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @in : !ibis.scoperef<@D::@Selfdriver> -> !ibis.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<out i1>
 // CHECK:         }
 
-ibis.container @Selfdriver {
+ibis.container @Selfdriver "Selfdriver" {
   %this = ibis.this <@D::@Selfdriver>
   %in = ibis.port.input "in" sym @in : i1
   %true = hw.constant 1 : i1
   ibis.port.write %in, %true : !ibis.portref<in i1>
 }
 
-ibis.container @ParentReader {
+ibis.container @ParentReader "ParentReader" {
   %this = ibis.this <@D::@ParentReader>
   %selfdriver = ibis.container.instance @selfdriver, <@D::@Selfdriver>
   %in_ref = ibis.get_port %selfdriver, @in : !ibis.scoperef<@D::@Selfdriver> -> !ibis.portref<out i1>
@@ -58,12 +58,12 @@ ibis.container @ParentReader {
 
 ibis.design @D {
 
-ibis.container @Foo {
+ibis.container @Foo "Foo" {
   %this = ibis.this <@D::@Foo>
   %in = ibis.port.input "in" sym @in : i1
 }
 
-// CHECK-LABEL:   ibis.container @ParentReaderWriter {
+// CHECK-LABEL:   ibis.container @ParentReaderWriter "ParentReaderWriter" {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@ParentReaderWriter>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @f, <@D::@Foo>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @in : !ibis.scoperef<@D::@Foo> -> !ibis.portref<in i1>
@@ -71,7 +71,7 @@ ibis.container @Foo {
 // CHECK:           %[[VAL_3]] = hw.constant true
 // CHECK:           ibis.port.write %[[VAL_2]], %[[VAL_3]] : !ibis.portref<in i1>
 // CHECK:         }
-ibis.container @ParentReaderWriter {
+ibis.container @ParentReaderWriter "ParentReaderWriter" {
   %this = ibis.this <@D::@ParentReaderWriter>
   %f = ibis.container.instance @f, <@D::@Foo>
   %in_wr_ref = ibis.get_port %f, @in : !ibis.scoperef<@D::@Foo> -> !ibis.portref<in i1>

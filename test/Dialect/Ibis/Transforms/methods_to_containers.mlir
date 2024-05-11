@@ -2,7 +2,7 @@
 
 // CHECK-LABEL:   ibis.class @ToContainers {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToContainers>
-// CHECK:           ibis.container @foo {
+// CHECK:           ibis.container @foo "foo" {
 // CHECK:             %[[VAL_1:.*]] = ibis.this <@foo::@foo>
 // CHECK:             %[[VAL_2:.*]] = ibis.port.input "arg0" sym @arg0 : !dc.value<i32>
 // CHECK:             %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<in !dc.value<i32>>

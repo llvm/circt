@@ -2,11 +2,11 @@
 
 ibis.design @foo {
 
-// CHECK-LABEL:   ibis.container @A_B
-// CHECK-LABEL:   ibis.container @MyClass
-// CHECK-LABEL:   ibis.container @A_B_0
-// CHECK-LABEL:   ibis.container @A_C
-// CHECK-LABEL:   ibis.container @A {
+// CHECK-LABEL:   ibis.container @A_B "A_B"
+// CHECK-LABEL:   ibis.container @MyClass "MyClass"
+// CHECK-LABEL:   ibis.container @A_B_0 "A_B_0"
+// CHECK-LABEL:   ibis.container @A_C "A_C"
+// CHECK-LABEL:   ibis.container @A "A" {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@A>
 // CHECK:           ibis.port.input "A_in" sym @A_in : i1
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @myClass, <@foo::@MyClass>
@@ -15,7 +15,7 @@ ibis.design @foo {
 
 // This container will alias with the @B inside @A, and thus checks the
 // name uniquing logic.
-ibis.container @A_B {
+ibis.container @A_B "A_B" {
   %this = ibis.this <@foo::@A_B>
 }
 
@@ -27,10 +27,10 @@ ibis.class @A {
   %this = ibis.this <@foo::@A>
   ibis.port.input "A_in" sym @A_in : i1
   %myClass = ibis.instance @myClass, <@foo::@MyClass>
-  ibis.container @B {
+  ibis.container @B "B" {
     %B_this = ibis.this <@foo::@B>
   }
-  ibis.container @C {
+  ibis.container @C "C" {
     %C_this = ibis.this <@foo::@C>
   }
 }

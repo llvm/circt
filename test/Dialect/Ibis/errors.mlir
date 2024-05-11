@@ -36,7 +36,7 @@ ibis.class @MultipleThis {
 
 ibis.design @foo {
 // expected-error @+1 {{'ibis.container' op must contain a 'ibis.this' operation}}
-ibis.container @NoThis {
+ibis.container @NoThis "No This" {
 }
 }
 

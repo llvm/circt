@@ -14,7 +14,7 @@ ibis.design @D {
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container @B {
+ibis.container @B "B" {
   %this = ibis.this <@D::@B>
   // Test different port names vs. symbol names
   %in = ibis.port.input "in_foo" sym @in : i1 {"inputAttr"}
@@ -25,14 +25,14 @@ ibis.container @B {
   ibis.port.write %out, %v : !ibis.portref<out i1>
 }
 
-ibis.container @AccessSibling {
+ibis.container @AccessSibling "AccessSibling" {
   %this = ibis.this <@D::@AccessSibling>
   %p_b_out = ibis.port.input "p_b_out_foo" sym @p_b_out : i1
   %p_b_in = ibis.port.output "p_b_in_foo" sym @p_b_in : i1
   ibis.port.write %p_b_in, %p_b_out.val : !ibis.portref<out i1>
   %p_b_out.val = ibis.port.read %p_b_out : !ibis.portref<in i1>
 }
-ibis.container @Parent top_level {
+ibis.container @Parent "Parent" top_level {
   %this = ibis.this <@D::@Parent>
   %a = ibis.container.instance @a, <@D::@AccessSibling>
   %a.p_b_out.ref = ibis.get_port %a, @p_b_out : !ibis.scoperef<@D::@AccessSibling> -> !ibis.portref<in i1>
@@ -62,7 +62,7 @@ ibis.design @D {
 // CHECK:    hw.output
 // CHECK:  }
 
-ibis.container @C {
+ibis.container @C "C" {
   %this = ibis.this <@D::@C>
   %in = ibis.port.input "in_foo" sym @in : i1
   %out = ibis.port.output "out_foo" sym @out : i1
@@ -98,13 +98,13 @@ ibis.design @D {
 // CHECK:           hw.output
 // CHECK:         }
 
-ibis.container @Inst {
+ibis.container @Inst "Inst" {
   %this = ibis.this <@D::@Inst>
   %out = ibis.port.output "out" sym @out : i1
   %true = hw.constant 1 : i1
   ibis.port.write %out, %true : !ibis.portref<out i1>
 }
-ibis.container @Top {
+ibis.container @Top "Top" {
   %this = ibis.this <@D::@Top>
   %myInst = ibis.container.instance @myInst, <@D::@Inst>
   %true = hw.constant 1 : i1
@@ -123,7 +123,7 @@ ibis.design @D {
 
 // CHECK:   hw.module @D_Top(in %clk : i1, in %clk_0 : i1, out out : i1, out out_0 : i1) {
 // CHECK:     hw.output %clk, %clk_0 : i1, i1
-ibis.container @Top {
+ibis.container @Top "Top" {
   %this = ibis.this <@D::@Top>
   %clk1 = ibis.port.input "clk" sym @clk1 : i1
   %clk2 = ibis.port.input "clk" sym @clk2 : i1

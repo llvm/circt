@@ -115,6 +115,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
     auto design = op->getParentOfType<DesignOp>();
     rewriter.setInsertionPoint(design);
 
+    // TODO: once #7023 is addressed, use the 'name' attribute instead.
     // If the container is a top level container, ignore the design name.
     StringAttr hwmodName;
     if (op.getIsTopLevel())
