@@ -294,6 +294,97 @@ struct YosysCircuitImporter {
   Yosys::RTLIL::Design *design;
   InstanceGraph *instanceGraph;
 };
+
+struct RTLILImporter {
+  RTLIL::Design *design;
+  const bool mutateInplace;
+  LogicalResult run(mlir::ModuleOp module);
+};
+
+struct RTLILModuleImporter {
+  RTLIL::Module *rtlilModule;
+  hw::HWModuleOp module;
+  MLIRContext *context;
+  RTLILModuleImporter(MLIRContext *context, const RTLILImporter &importer,
+                      RTLIL::Module *rtlilModule)
+      : importer(importer), rtlilModule(rtlilModule), context(context) {
+    builder = std::make_unique<OpBuilder>(context);
+    backEdgeBuilder = std::make_unique<BackedgeBuilder>(
+        *builder, mlir::UnknownLoc::get(context));
+  }
+  const RTLILImporter &importer;
+  StringAttr getStr(const Yosys::RTLIL::IdString &str) {
+    return builder->getStringAttr(str.c_str());
+  }
+  LogicalResult initModule(OpBuilder &moduleBuilder) {
+    size_t size = rtlilModule->ports.size();
+    SmallVector<hw::PortInfo> ports(size);
+    SmallVector<Value> values(size);
+    if (importer.mutateInplace) {
+    } else {
+      SmallVector<Value> outputs;
+      size_t numInput = 0, numOutput = 0;
+      for (auto port : rtlilModule->ports) {
+        auto *wire = rtlilModule->wires_[port];
+        assert(wire->port_input || wire->port_output);
+
+        size_t portId = wire->port_id - 1;
+        size_t argNum = (wire->port_input ? numInput : numOutput)++;
+        ports[portId].name = getStr(wire->name);
+        ports[portId].argNum = argNum;
+        ports[portId].type = builder->getIntegerType(wire->width);
+        ports[portId].dir =
+            wire->port_input ? hw::ModulePort::Input : hw::ModulePort::Output;
+      }
+      module = moduleBuilder.create<hw::HWModuleOp>(
+          UnknownLoc::get(context), getStr(rtlilModule->name), ports);
+    }
+
+    return success();
+  }
+  LogicalResult importBody() {
+    SmallVector<std::pair<size_t, Value>> outputs;
+    builder->setInsertionPointToStart(module.getBodyBlock());
+    // Init wires.
+    ModulePortInfo portInfo(module.getPortList());
+    for (auto wire : rtlilModule->wires()) {
+      if (wire->port_input) {
+        auto arg = module.getBodyBlock()->getArgument(
+            portInfo.at(wire->port_id - 1).argNum);
+        mapping.insert({getStr(wire->name), arg});
+      } else {
+        auto val = backEdgeBuilder->get(builder->getIntegerType(wire->width));
+        mapping.insert({getStr(wire->name), val});
+        if (wire->port_output) {
+          outputs.emplace_back(wire->port_id - 1, val);
+        }
+      }
+    }
+
+    llvm::sort(
+        outputs.begin(), outputs.end(),
+        [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+    SmallVector<Value> results;
+    for (auto p : llvm::map_range(outputs, [](auto &p) { return p.second; })) {
+      results.push_back(p);
+    }
+    // Ensure terminator.
+    builder->create<hw::OutputOp>(module.getLoc(), results);
+
+    // Import cells.
+
+    for (auto cell : rtlilModule->cells()) {
+      if (failed(importCell(cell)))
+        return failure();
+    }
+    return success();
+  }
+
+  LogicalResult importCell(RTLIL::Cell *cell) { return failure(); }
+  DenseMap<StringAttr, Value> mapping;
+  std::unique_ptr<circt::BackedgeBuilder> backEdgeBuilder;
+  std::unique_ptr<OpBuilder> builder;
+};
 } // namespace
 
 RTLIL::Const ModuleConverter::getConstant(const APInt &value) {
@@ -782,10 +873,7 @@ LogicalResult ModuleConverter::visitSeq(seq::FirMemReadOp op) {
       {"ABITS", widthConst},
       {"CLK_ENABLE", op.getEnable() ? trueConst : falseConst},
       {"CLK_POLARITY", falseConst},
-      // {"TRANSPARENCY_MASK", falseConst},
       {"TRANSPARENT", falseConst},
-      // {"COLLISION_X_MASK", falseConst},
-      // {"CE_OVER_SRST", falseConst},
       {"MEMID", memName},
       {"WIDTH", width}};
 
@@ -844,6 +932,9 @@ void ExportYosysPass::runOnOperation() {
   Yosys::run_pass("synth", design);
   Yosys::run_pass("write_verilog synth.v", design);
   // RTLIL_BACKEND::dump_design(std::cout, design, false);
+  RTLILImporter importer{design, false};
+  if (failed(importer.run(getOperation())))
+    return signalPassFailure();
 }
 
 LogicalResult runYosys(Location loc, StringRef inputFilePath,
@@ -969,84 +1060,19 @@ void ExportYosysParallelPass::runOnOperation() {
     return signalPassFailure();
 }
 
-struct RTLILImporter {
-  RTLIL::Design *design;
-  const bool mutateInplace;
-};
-struct RTLILModuleImporter {
-  RTLIL::Module *rtlilModule;
-  hw::HWModuleOp module;
-  const RTLILImporter &importer;
-  StringAttr getStr(const Yosys::RTLIL::IdString &str) {
-    return builder->getStringAttr(str.c_str());
+LogicalResult RTLILImporter::run(mlir::ModuleOp module) {
+  SmallVector<RTLILModuleImporter> modules;
+  OpBuilder builder(module);
+  for (auto mod : design->modules()) {
+    modules.emplace_back(module.getContext(), *this, mod);
+    modules.back().initModule(builder);
   }
-  LogicalResult initModule() {
-    size_t size = rtlilModule->ports.size();
-    SmallVector<hw::PortInfo> ports(size);
-    SmallVector<Value> values(size);
-    builder->setInsertionPoint(module);
-    if (importer.mutateInplace) {
-    } else {
-      SmallVector<Value> outputs;
-      size_t numInput = 0, numOutput = 0;
-      for (auto port : rtlilModule->ports) {
-        auto *wire = rtlilModule->wires_[port];
-        assert(wire->port_input || wire->port_output);
-
-        size_t portId = wire->port_id - 1;
-        size_t argNum = (wire->port_input ? numInput : numOutput)++;
-        ports[portId].argNum = argNum;
-        ports[portId].type = builder->getIntegerType(wire->width);
-        ports[portId].dir =
-            wire->port_input ? hw::ModulePort::Input : hw::ModulePort::Output;
-      }
-      module = builder->create<hw::HWModuleOp>(module.getLoc(),
-                                               module.getSymNameAttr(), ports);
-    }
-
-    return success();
+  for (auto &mod : modules) {
+    if (failed(mod.importBody()))
+      return failure();
   }
-  LogicalResult importBody() {
-    SmallVector<std::pair<size_t, Value>> outputs;
-    builder->setInsertionPointToStart(module.getBodyBlock());
-    // Init wires.
-    for (auto wire : rtlilModule->wires()) {
-      if (wire->port_input) {
-      }
-      auto val = backEdgeBuilder->get(builder->getIntegerType(wire->width));
-      mapping.insert({getStr(wire->name), val});
-      if (wire->port_output) {
-        outputs.emplace_back(wire->port_id - 1, val);
-      }
-    }
-
-    llvm::sort(
-        outputs.begin(), outputs.end(),
-        [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
-    SmallVector<Value> results;
-    for (auto p : llvm::map_range(outputs, [](auto &p) { return p.second; })) {
-      results.push_back(p);
-    }
-    // Ensure terminator.
-    builder->create<hw::OutputOp>(module.getLoc(), results);
-
-    // Import cells.
-
-    for (auto cell : rtlilModule->cells()) {
-      if (failed(importCell(cell)))
-        return failure();
-    }
-    return success();
-  }
-
-  LogicalResult importCell(RTLIL::Cell *cell) {
-    return failure();
-  }
-  DenseMap<StringAttr, Value> mapping;
-  std::unique_ptr<circt::BackedgeBuilder> backEdgeBuilder;
-  std::unique_ptr<OpBuilder> builder;
-};
-
+  return success();
+}
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
