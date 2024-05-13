@@ -36,7 +36,7 @@ struct VerifyObjectFieldsPass
 } // namespace
 
 void VerifyObjectFieldsPass::runOnOperation() {
-  auto module = getOperation();
+  auto *module = getOperation();
   assert(module->getNumRegions() == 1 &&
          module->hasTrait<OpTrait::SymbolTable>() &&
          "op must have a single region and symbol table trait");
