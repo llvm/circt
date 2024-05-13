@@ -33,7 +33,9 @@ struct VerifyObjectFieldsPass
 
 void VerifyObjectFieldsPass::runOnOperation() {
   auto module = getOperation();
-  assert(module->getNumRegions() == 1 && module->hasTrait<OpTrait::SymbolTable>());
+  assert(module->getNumRegions() == 1 &&
+         module->hasTrait<OpTrait::SymbolTable>() &&
+         "op must have a single region and symbol table trait");
   auto &symbolTable = getAnalysis<SymbolTable>();
 
   /// A map from a class and field name to a field.
