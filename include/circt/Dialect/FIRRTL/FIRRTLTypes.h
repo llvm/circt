@@ -32,6 +32,7 @@ struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct LHSTypeStorage;
 struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
@@ -60,6 +61,7 @@ class PathType;
 class BoolType;
 class DoubleType;
 class BaseTypeAliasType;
+class LHSType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -182,7 +184,7 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
+           !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType, OpenVectorType>(
                type);
   }
 
@@ -505,6 +507,14 @@ type_dyn_cast_or_null(Type type) { // NOLINT(readability-identifier-naming)
     return type_cast<BaseTy>(type);
   return {};
 }
+
+
+template<typename Ty>
+bool lhsOrType(Type type) {
+  return type_isa<Ty>(type) ||
+  (isa<LHSType>(type) && type_isa<Ty>(cast<LHSType>(type).getType()));
+}
+
 
 //===--------------------------------------------------------------------===//
 // Type alias aware TypeSwitch.

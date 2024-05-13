@@ -366,4 +366,9 @@ firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
   firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
 }
 
+firrtl.module @StrictWires(in %in: !firrtl.uint<2>, out %out: !firrtl.uint<2>) {
+  //blockargs: %in : uint<2>, %out : lhs<uint<2>
+  %name,%name_write = firrtl.strictwire : !firrtl.uint<2>, !firrtl.lhs<uint<2>>
+}
+
 }

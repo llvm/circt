@@ -130,7 +130,7 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
              fieldIndex != fend; ++fieldIndex) {
           auto name = rType.getElement(fieldIndex).name.getValue();
           auto oldField = builder.create<SubfieldOp>(result, fieldIndex);
-          FIRRTLBaseValue newField =
+          auto newField =
               builder.create<SubfieldOp>(newResult, fieldIndex);
           // data and mask depend on the memory type which was split.  They can
           // also go both directions, depending on the port direction.
@@ -149,8 +149,8 @@ struct FlattenMemoryPass : public FlattenMemoryBase<FlattenMemoryPass> {
           } else {
             // Cast the input aggregate write data to flat type.
             // Cast the input aggregate write data to flat type.
-            auto newFieldType = newField.getType();
-            auto oldFieldBitWidth = getBitWidth(oldField.getType());
+            auto newFieldType = newField.getOutputType();
+            auto oldFieldBitWidth = getBitWidth(oldField.getOutputType());
             // Following condition is true, if a data field is 0 bits. Then
             // newFieldType is of smaller bits than old.
             if (getBitWidth(newFieldType) != *oldFieldBitWidth)

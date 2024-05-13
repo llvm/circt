@@ -18,6 +18,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <mlir/Support/LogicalResult.h>
 
 using namespace circt;
 using namespace firrtl;
@@ -114,6 +115,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
           os << ", " << layer;
         os << '>';
       })
+      .Case<LHSType>([&](LHSType lhstype) {
+        os << "lhs<";
+        printNestedType(lhstype.getType(),os);
+        os << ">";
+      })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<BoolType>([&](auto boolType) { os << "bool"; })
@@ -175,6 +181,7 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= enum '<' (enum-elt (',' enum-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///   ::= const '.' type
+///   ::= ref '<' type '>'
 ///   ::= 'property.' firrtl-phased-type
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
@@ -349,6 +356,12 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type, false, layer), success();
+  }
+  if (name.equals("lhs")) {
+    FIRRTLType type;
+    if(parser.parseLess() || parseNestedType(type, parser) || parser.parseGreater())
+      return failure();
+    return result = LHSType::get(context, type), success();
   }
   if (name.equals("rwprobe")) {
     FIRRTLBaseType type;
@@ -2460,6 +2473,15 @@ RecursiveTypeProperties RefType::getRecursiveTypeProperties() const {
   // References are not "passive", per FIRRTL spec.
   rtp.isPassive = false;
   return rtp;
+
+}//===----------------------------------------------------------------------===//
+// LHSType
+//===----------------------------------------------------------------------===//
+
+LogicalResult LHSType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                     FIRRTLType base) {
+  // constraints checked by ODS constraints.
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

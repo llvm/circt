@@ -417,6 +417,21 @@ def RefImpl : FIRRTLImplType<"Ref",
   }];
 }
 
+def LHSTypeImpl : FIRRTLImplType<"LHS", [], "::circt::firrtl::FIRRTLType"> {
+  let summary = "A wrapper for LHS types.";
+  let description = [{
+    A LHS type is a type usable for the destination of a strict connect
+    and for field indexing.  No other operations are valid.
+  }];
+  let parameters = (ins "FIRRTLType":$type);
+  let genAccessors = true;
+  let genStorageClass = true;
+  let genVerifyDecl = true;
+
+  let typeName = "firrtl.lhs";
+}
+
+
 def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
                                         "::circt::firrtl::FIRRTLBaseType"> {
   let summary = "type alias for firrtl base types";

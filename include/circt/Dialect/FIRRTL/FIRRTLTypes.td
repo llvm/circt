@@ -34,6 +34,10 @@ class FIRRTLDialectAliasTypeHelper<string typeName, string summary, string desc 
   : FIRRTLDialectType<CPred<"type_isa<" # typeName # ">($_self)">, summary,
                       "::circt::firrtl::BaseTypeAliasOr<::circt::firrtl::" # typeName #">", desc>;
 
+class LHS_OR<Type typeName, string summary="LHS or alternate", string desc = "">
+  : FIRRTLDialectType<CPred<"::circt::firrtl::lhsOrType<" # typeName # ">($_self)">,
+                      summary, "::mlir::Type", desc>;
+
 def FIRRTLType : FIRRTLDialectTypeHelper<"FIRRTLType", "FIRRTLType", [{
     Any FIRRTL dialect type, represented by FIRRTLType.
   }]>;
@@ -52,6 +56,9 @@ def FIRRTLBaseType : FIRRTLDialectType<
 
 def ForeignType : FIRRTLDialectType<CPred<"!isa<FIRRTLType>($_self)">,
                                     "foreign type", "::mlir::Type">;
+
+def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
+                                      "writable type", "::circt::firrtl::LHSType">;
 
 def ClockType : FIRRTLDialectAliasTypeHelper<"ClockType", "clock">;
 

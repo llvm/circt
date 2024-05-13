@@ -669,6 +669,47 @@ def WireOp : HardwareDeclOp<"wire", [
   }];
 }
 
+class LHSTypeConstraint<string result, string input>
+  : TypesMatchWith<"Result must be lhw of element type",
+                   input, result,
+                   "type_cast<LHSType>($_self).getType()">;
+class OptRefTypeConstraint<string result, string input>
+  : OptionalTypesMatchWith<"Result must be lhw of element type",
+                   input, result,
+                   "type_cast<RefType>($_self).getType()">;
+
+def StrictWireOp : HardwareDeclOp<"strictwire", [
+    Forceable,
+    LHSTypeConstraint<"result", "writeport">,
+    OptRefTypeConstraint<"result", "ref">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name,%name.wp,%name.ref = firrtl.strictwire forceable : t1
+    ```
+    }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable); // ReferenceKinds
+  let results = (outs PassiveType:$result, 
+                      LHSType:$writeport,
+                      Optional<RefType>:$ref);
+
+//  let hasCanonicalizer = true;
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    qualified(type($result)) `,` qualified(type($writeport)) (`,` qualified(type($ref))^)?
+  }];
+}
+
+
 //===----------------------------------------------------------------------===//
 // Property Ops
 //===----------------------------------------------------------------------===//

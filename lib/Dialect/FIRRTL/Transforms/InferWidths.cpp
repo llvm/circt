@@ -1451,10 +1451,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        BundleType bundleType = op.getInput().getType();
+        BundleType bundleType = op.getInputType();
         auto fieldID = bundleType.getFieldID(op.getFieldIndex());
         unifyTypes(FieldRef(op.getResult(), 0),
-                   FieldRef(op.getInput(), fieldID), op.getType());
+                   FieldRef(op.getInput(), fieldID), op.getOutputType());
       })
       .Case<SubindexOp, SubaccessOp>([&](auto op) {
         // All vec fields unify to the same thing. Always use the first element

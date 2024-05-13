@@ -127,7 +127,7 @@ public:
           .Case<SubfieldOp>([&](SubfieldOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
-                sub.getInput().getType().base().getFieldID(sub.getFieldIndex()),
+                sub.getInputType().getFieldID(sub.getFieldIndex()),
                 sub.getResult());
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {

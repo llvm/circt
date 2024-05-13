@@ -280,8 +280,8 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
     ```
     }];
 
-  let arguments = (ins btype:$input, I32Attr:$fieldIndex);
-  let results = (outs rtype:$result);
+  let arguments = (ins LHS_OR<btype>:$input, I32Attr:$fieldIndex);
+  let results = (outs LHS_OR<rtype>:$result);
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 
@@ -310,6 +310,9 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
     StringRef getFieldName() {
       return firrtl::type_cast<InputType>(getInput().getType()).getElementName(getFieldIndex());
     }
+
+    InputType getInputType();
+    FIRRTLBaseType getOutputType();
   }];
 }
 

@@ -3285,9 +3285,26 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWriteport(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+std::optional<size_t> StrictWireOp::getTargetResultIndex() { return 0; }
+
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
   if (!refType)
     return success();
@@ -4348,6 +4365,35 @@ FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
                        isConst(operands[0].getType()));
 }
 
+BundleType SubfieldOp::getInputType() {
+  Type type = getInput().getType();
+  if (auto lhs = dyn_cast<LHSType>(type))
+    type = lhs.getType();
+  return type_cast<BundleType>(type);
+}
+
+OpenBundleType OpenSubfieldOp::getInputType() {
+  Type type = getInput().getType();
+  if (auto lhs = dyn_cast<LHSType>(type))
+    type = lhs.getType();
+  return type_cast<OpenBundleType>(type);
+}
+
+FIRRTLBaseType SubfieldOp::getOutputType() {
+  Type type = getType();
+  if (auto lhs = dyn_cast<LHSType>(type))
+    type = lhs.getType();
+  return type_cast<FIRRTLBaseType>(type);
+}
+
+FIRRTLBaseType OpenSubfieldOp::getOutputType() {
+  Type type = getType();
+  if (auto lhs = dyn_cast<LHSType>(type))
+    type = lhs.getType();
+  return type_cast<FIRRTLBaseType>(type);
+}
+
+
 template <typename OpTy>
 ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
@@ -4541,7 +4587,10 @@ LogicalResult ConstCastOp::verify() {
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        std::optional<Location> loc) {
-  auto inType = type_cast<BundleType>(operands[0].getType());
+  auto type = operands[0].getType();
+  if (auto t = dyn_cast<LHSType>(type))
+    type = t.getType();
+  auto inType = type_cast<BundleType>(type);
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
@@ -4552,7 +4601,10 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.getElementTypePreservingConst(fieldIndex);
+  FIRRTLType proposed = inType.getElementTypePreservingConst(fieldIndex);
+  if (isa<LHSType>(operands[0].getType()))
+    proposed = LHSType::get(proposed.getContext(), proposed);
+  return proposed;
 }
 
 FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
@@ -4573,11 +4625,11 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  BundleType bundle = getInput().getType();
+  BundleType bundle = getInputType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 bool OpenSubfieldOp::isFieldFlipped() {
-  auto bundle = getInput().getType();
+  auto bundle = getInputType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 
