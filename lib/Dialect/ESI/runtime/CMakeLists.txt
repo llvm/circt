@@ -42,19 +42,31 @@ FetchContent_Declare(json
 )
 FetchContent_MakeAvailable(json)
 
-include_directories(cpp/include)
 
 set(ESIRuntimeSources
-  cpp/lib/Accelerator.cpp
-  cpp/lib/Context.cpp
-  cpp/lib/Common.cpp
-  cpp/lib/Design.cpp
-  cpp/lib/Manifest.cpp
-  cpp/lib/Services.cpp
-  cpp/lib/Ports.cpp
-  cpp/lib/Utils.cpp
-
-  cpp/lib/backends/Trace.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
+)
+set(ESIRuntimeHeaders
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Design.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Manifest.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
+)
+set(ESIRuntimeBackendHeaders
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
 )
 set(ESIRuntimeLinkLibraries
   ZLIB::ZLIB
@@ -104,7 +116,11 @@ if(ESI_COSIM)
 
     set(ESIRuntimeSources
       ${ESIRuntimeSources}
-      cpp/lib/backends/Cosim.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+    )
+    set(ESIRuntimeBackendHeaders
+      ${ESIRuntimeBackendHeaders}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
     )
     set(ESIRuntimeLinkLibraries
       ${ESIRuntimeLinkLibraries}
@@ -124,7 +140,11 @@ if (XRT_PATH)
 
   set(ESIRuntimeSources
     ${ESIRuntimeSources}
-    cpp/lib/backends/Xrt.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
+  )
+  set(ESIRuntimeBackendHeaders
+    ${ESIRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
   )
   set(ESIRuntimeIncludeDirs
     ${ESIRuntimeIncludeDirs}
@@ -155,6 +175,8 @@ endif()
 add_library(ESIRuntime SHARED
   ${ESIRuntimeSources}
 )
+target_include_directories(ESIRuntime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
@@ -175,6 +197,18 @@ install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
   PRE_INCLUDE_REGEXES capnp kj
   COMPONENT ESIRuntime
 )
+install(FILES ${ESIRuntimeHeaders}
+  DESTINATION include/esi
+  COMPONENT ESIRuntime
+)
+install(FILES ${ESIRuntimeBackendHeaders}
+  DESTINATION include/esi/backends
+  COMPONENT ESIRuntime
+)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
+  DESTINATION cmake
+  COMPONENT ESIRuntime
+)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(ESIRuntime PRIVATE -Wno-covered-switch-default)
@@ -182,7 +216,7 @@ endif()
 
 # The esiquery tool is a simple wrapper around the SysInfo API.
 add_executable(esiquery
-  cpp/tools/esiquery.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESIRuntime)
 install(TARGETS esiquery
@@ -235,7 +269,8 @@ if(Python3_FOUND)
     endif()
   else()
     # Compile Pybind11 module and copy to the correct python directory.
-    pybind11_add_module(esiCppAccel python/esiaccel/esiCppAccel.cpp)
+    pybind11_add_module(esiCppAccel
+      ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
 
     if (WHEEL_BUILD)

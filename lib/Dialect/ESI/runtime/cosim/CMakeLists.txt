@@ -66,6 +66,13 @@ install(FILES
   COMPONENT ESIRuntime
 )
 
+# Cap'nProto MUST be built with exceptions enabled.
+if (MSVC)
+  target_compile_options(EsiCosimCapnp PRIVATE /EHsc)
+else()
+  target_compile_options(EsiCosimCapnp PRIVATE -fexceptions)
+endif()
+
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_subdirectory(cosim_dpi_server)
 add_subdirectory(MtiPliStub)
