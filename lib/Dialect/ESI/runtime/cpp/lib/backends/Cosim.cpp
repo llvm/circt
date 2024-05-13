@@ -38,11 +38,13 @@ CosimAccelerator::connect(Context &ctxt, string connectionString) {
   string portStr;
   string host = "localhost";
 
+  size_t strLen = connectionString.size();
   size_t colon;
   if ((colon = connectionString.find(':')) != string::npos) {
     portStr = connectionString.substr(colon + 1);
     host = connectionString.substr(0, colon);
-  } else if (connectionString.ends_with("cosim.cfg")) {
+  } else if (strLen >= 9 &&
+             connectionString.substr(strLen - 9) == "cosim.cfg") {
     ifstream cfg(connectionString);
     string line, key, value;
 
