@@ -5,10 +5,8 @@
 from pathlib import Path
 import subprocess
 import sys
-from typing import List
 
 _thisdir = Path(__file__).absolute().resolve().parent
-_pkgdir = _thisdir
 
 
 def run_esiquery():

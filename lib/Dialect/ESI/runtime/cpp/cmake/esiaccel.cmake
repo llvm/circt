@@ -1,4 +1,5 @@
 function(add_esiaccel_flags TARGET)
+  message("-- Adding ESI runtime flags to target ${TARGET}")
   target_include_directories(${TARGET}
     PUBLIC
       "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../include"
