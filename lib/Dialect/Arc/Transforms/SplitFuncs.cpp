@@ -72,8 +72,7 @@ void SplitFuncsPass::runOnOperation() {
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
   assert(splitBound != 0 && "Cannot split functions into functions of size 0");
-  int numOps =
-      funcOp->getRegion(0).front().getOperations().size(); // TODO neaten this!
+  int numOps = funcOp.front().getOperations().size();
   if (numOps < splitBound)
     return success();
   int numBlocks = ceil((float)numOps / splitBound);
@@ -117,24 +116,21 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
   }
   Liveness liveness(funcOp);
-  // TODO: funcs is only here for debugging
-  std::vector<Operation *> funcs;
   auto argTypes = blocks.back()->getArgumentTypes();
   auto args = blocks.back()->getArguments();
-  for (int i = blocks.size() - 2; i >= 0; i--) {
+
+  // Create return ops
+  for (int i = blocks.size() - 2; i >= 0; --i) {
     liveness = Liveness(funcOp);
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
-    std::vector<Type> outTypes;
     std::vector<Value> outValues;
-    llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
-      outValues.push_back(el);
-      outTypes.push_back(el.getType());
-    });
+    llvm::for_each(liveOut, [&outValues](auto el) { outValues.push_back(el); });
     opBuilder.setInsertionPointToEnd(currentBlock);
-    opBuilder.create<ReturnOp>(funcOp->getLoc(), ValueRange(outValues));
+    opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
   }
 
+  // Create and populate new FuncOps
   for (int i = 0; i < blocks.size() - 1; i++) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
@@ -159,7 +155,6 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
       op.remove();
       funcBlock->push_back(&op);
     }
-    funcs.push_back(newFunc);
     currentBlock->erase();
 
     opBuilder.setInsertionPointToEnd(funcBlock);
