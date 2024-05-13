@@ -325,7 +325,6 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
-  pm.addPass(arc::createSplitFuncsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 }
