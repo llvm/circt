@@ -28,6 +28,10 @@ namespace {
 struct VerifyObjectFieldsPass
     : public VerifyObjectFieldsBase<VerifyObjectFieldsPass> {
   void runOnOperation() override;
+  bool canScheduleOn(RegisteredOperationName opName) const override {
+    return opName.getStringRef() == "firrtl.circuit" ||
+           opName.getStringRef() == "builtin.module";
+  }
 };
 } // namespace
 
@@ -44,13 +48,25 @@ void VerifyObjectFieldsPass::runOnOperation() {
     tables.insert({op, llvm::DenseMap<StringAttr, ClassFieldLike>()});
 
   // Peel tables parallelly.
-  mlir::parallelForEach(&getContext(), tables, [](auto &entry) {
-    ClassLike classLike = entry.first;
-    auto &table = entry.second;
-    classLike.walk([&](ClassFieldLike fieldLike) {
-      table.insert({fieldLike.getNameAttr(), fieldLike});
-    });
-  });
+  if (failed(
+          mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
+            ClassLike classLike = entry.first;
+            auto &table = entry.second;
+            auto result = classLike.walk([&](ClassFieldLike fieldLike)
+                                             -> WalkResult {
+              if (table.insert({fieldLike.getNameAttr(), fieldLike}).second)
+                return WalkResult::advance();
+
+              auto emit = fieldLike.emitOpError()
+                          << "field " << fieldLike.getNameAttr()
+                          << " is defined twice";
+              emit.attachNote(table.lookup(fieldLike.getNameAttr()).getLoc())
+                  << "previous definition is here";
+              return WalkResult::interrupt();
+            });
+            return LogicalResult::failure(result.wasInterrupted());
+          })))
+    return signalPassFailure();
 
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
@@ -58,11 +74,17 @@ void VerifyObjectFieldsPass::runOnOperation() {
         ClassLike classLike = entry.first;
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
-              ObjectOp objectInst =
-                  objectField.getObject().getDefiningOp<ObjectOp>();
+              auto objectInstType =
+                  cast<ClassType>(objectField.getObject().getType());
               ClassLike classDef =
-                  cast<ClassLike>(symbolTable.lookupNearestSymbolFrom(
-                      objectField, objectInst.getClassNameAttr()));
+                  symbolTable.lookupNearestSymbolFrom<ClassLike>(
+                      objectField, objectInstType.getClassName());
+              if (!classDef) {
+                objectField.emitError()
+                    << "class " << objectInstType.getClassName()
+                    << " was not found";
+                return WalkResult::interrupt();
+              }
 
               // Traverse the field path, verifying each field exists.
               ClassFieldLike finalField;
@@ -72,13 +94,13 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
                 ClassFieldLike fieldDef;
-                auto it = tables.find(classDef);
-                assert(it != tables.end() && "must be vistied");
+                auto *it = tables.find(classDef);
+                assert(it != tables.end() && "must be visited");
                 fieldDef = it->second.lookup(field.getAttr());
 
                 if (!fieldDef) {
                   auto error =
-                      objectField.emitOpError("referenced non-existant field ")
+                      objectField.emitOpError("referenced non-existent field ")
                       << field;
                   error.attachNote(classDef.getLoc()) << "class defined here";
                   return WalkResult::interrupt();
@@ -95,12 +117,18 @@ void VerifyObjectFieldsPass::runOnOperation() {
                     return WalkResult::interrupt();
                   }
 
-                  // The nested ClassOp must exist, since a field with ClassType
-                  // must be an ObjectInstOp, which already verifies the class
-                  // exists.
-                  classDef =
-                      cast<ClassLike>(symbolTable.lookupNearestSymbolFrom(
-                          objectField, classType.getClassName()));
+                  // Check if the nested ClassOp exists. ObjectInstOp verifier
+                  // already checked the class exits but it's not verified yet
+                  // if the object is an input argument.
+                  classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+                      objectField, classType.getClassName());
+
+                  if (!classDef) {
+                    objectField.emitError()
+                        << "class " << classType.getClassName()
+                        << " was not found";
+                    return WalkResult::interrupt();
+                  }
 
                   // Proceed to the next field in the path.
                   continue;
