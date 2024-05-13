@@ -338,7 +338,7 @@ struct ExpressionVisitor
     worklist.push_back(yieldedValue);
     unsigned indentExt = operatorString.size() + 2;
     VisitorInfo newInfo(info.stream, info.valueMap,
-                        info.indentLevel + indentExt, info.openParens);
+                        info.indentLevel + indentExt, 0);
     if (weight != 0 || !patterns.empty())
       newInfo.stream.indent(0);
     else
@@ -370,7 +370,7 @@ struct ExpressionVisitor
         unsigned indentExt = operatorString.size() + 2;
 
         VisitorInfo newInfo2(info.stream, info.valueMap,
-                             info.indentLevel + indentExt, info.openParens);
+                             info.indentLevel + indentExt, 0);
 
         info.stream.indent(0);
 
