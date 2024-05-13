@@ -10,17 +10,11 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
-#include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SparseBitVector.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Debug.h"
 #include <string>
 
 #define DEBUG_TYPE "arc-split-funcs"
@@ -34,10 +28,7 @@ namespace arc {
 
 using namespace mlir;
 using namespace circt;
-using namespace arc;
-using namespace hw;
 using namespace func;
-using mlir::OpTrait::ConstantLike;
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
