@@ -895,8 +895,8 @@ def FuncOp : SVOp<"func",
       FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
   let summary = "A System Verilog function";
   let description = [{
-    `sv.func` reresents System Verilog function in SV spec 13.4.
-    Similar to HW module, it's allowed to mix the order of input
+    `sv.func` represents SystemVerilog function in IEEE 1800-2017 section 13.4
+     "Functions". Similar to HW module, it's allowed to mix the order of input
     and output arguments. `sv.func` can be used for both function
     declaration and definition, i.e. a function without a body
     region is a declaration.
