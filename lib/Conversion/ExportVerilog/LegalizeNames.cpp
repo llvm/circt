@@ -30,7 +30,7 @@ using namespace ExportVerilog;
 
 void GlobalNameTable::addReservedNames(NameCollisionResolver &resolver) const {
   for (auto &name : reservedNames)
-    resolver.insertUsedName(name.getKey());
+    resolver.insertUsedName(name);
 }
 
 //===----------------------------------------------------------------------===//

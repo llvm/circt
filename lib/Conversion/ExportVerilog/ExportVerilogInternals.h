@@ -82,7 +82,7 @@ private:
   DenseMap<Type, StringAttr> enumPrefixes;
 
   /// List of names which are marked as reserved for any name.
-  StringSet<> reservedNames;
+  DenseSet<StringAttr> reservedNames;
 };
 
 //===----------------------------------------------------------------------===//

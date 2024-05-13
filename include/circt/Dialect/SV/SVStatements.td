@@ -885,7 +885,9 @@ def MacroDefOp : SVOp<"macro.def",
 // SV output control.
 //===----------------------------------------------------------------------===//
 
-def ReserveNamesOp : SVOp<"reserve_names", []> {
+def ReserveNamesOp : SVOp<"reserve_names", [
+  HasParent<"mlir::ModuleOp">
+]> {
   let summary = "Disallow a set of names to be used during emission";
 
   let arguments = (ins StrArrayAttr:$reservedNames);
