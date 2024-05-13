@@ -611,18 +611,18 @@ void parse_fsm(string input_file, int time_bound, string to_check){
   vector<expr> *solverVarsAfter = new vector<expr>;
 
   // input args
-  copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
-  solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
+  // copy(solverVars->begin(), solverVars->end(), back_inserter(*solverVarsAfter));
+  // solverVarsAfter->at(solverVarsAfter->size()-1) = solverVars->at(solverVars->size()-1)+1;
 
-  for(int i=0; i<argInputs->size(); i++){
-    solverVarsAfter->at(i) = array[solverVars->at(solverVars->size()-1)+1];
-  }
+  // for(int i=0; i<argInputs->size(); i++){
+  //   solverVarsAfter->at(i) = array[solverVars->at(solverVars->size()-1)+1];
+  // }
 
   // err signal triggers error state sat
 
-  body = (!(solverVars->at(0)==1) || ((findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
+  // body = (!(solverVars->at(0)==1) || ((findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
 
-  s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars, body, 0))));
+  // s.add(forall(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars, body, 0))));
 
   // body = ((solverVars->at(0)==1) && (!(findMyFun(to_check, stateInvMap_fun)(solverVarsAfter->size(), solverVarsAfter->data()))));
 
@@ -644,6 +644,13 @@ void parse_fsm(string input_file, int time_bound, string to_check){
   // body = (findMyFun(to_check, stateInvMap_fun)(solverVars->size(), solverVars->data()));
 
   // s.add(exists(solverVars->at(solverVars->size()-1),  implies((solverVars->at(solverVars->size()-1)>=0 && solverVars->at(solverVars->size()-1)<time_bound), nestedForall(*solverVars,body,0))));
+
+
+  // counter is always 0 at initial state 
+
+  body = ( (findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) && (solverVars->at(0)!=0));
+  
+  s.add(exists(solverVars->at(solverVars->size()-1),  nestedForall(*solverVars, body, 0)));
 
   printSolverAssertions(s);
 

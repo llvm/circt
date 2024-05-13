@@ -4,12 +4,11 @@ import os
 
 reps = 10
 
-time = 10000
+time = 500
 
-for file in os.listdir("massive_test_campaign/testbench/"):
+for file in os.listdir("linear/"):
     print(file)
-    loop = int(file.split("_")[3].split("l")[0])+5
-    command = "../build/bin/fsm-verification ../fsm_examples/massive_test_campaign/testbench/"+file+" "+str(time)+" _"+str(loop)
+    command = "../build/bin/fsm-verification ../fsm_examples/linear/"+file+" "+str(time)+" _0"
     print(command)
     for i in range(reps):
         print("rep "+ str(i)+" file "+file)
