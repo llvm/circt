@@ -180,6 +180,7 @@ target_include_directories(ESIRuntime PUBLIC
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
+target_compile_definitions(ESIRuntime PUBLIC "GLIBCXX_USE_CXX11_ABI=1")
 target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
 target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
 install(TARGETS ESIRuntime
