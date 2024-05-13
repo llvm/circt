@@ -13,6 +13,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/TypeRange.h"
+#include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -125,7 +126,10 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
     std::vector<Value> outValues;
-    llvm::for_each(liveOut, [&outValues](auto el) { outValues.push_back(el); });
+    llvm::for_each(liveOut, [&outValues](auto el) {
+      if (!dyn_cast<BlockArgument>(el))
+        outValues.push_back(el);
+    });
     opBuilder.setInsertionPointToEnd(currentBlock);
     opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
   }
@@ -137,8 +141,10 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     std::vector<Type> outTypes;
     std::vector<Value> outValues;
     llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
-      outValues.push_back(el);
-      outTypes.push_back(el.getType());
+      if (!dyn_cast<BlockArgument>(el)) {
+        outValues.push_back(el);
+        outTypes.push_back(el.getType());
+      }
     });
     opBuilder.setInsertionPoint(funcOp);
     SmallString<64> funcName;
