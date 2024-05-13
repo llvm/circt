@@ -296,11 +296,11 @@ struct ExpressionVisitor
     auto weight = op.getWeight();
     auto patterns = op.getPatterns();
     // TODO: add support
-    if (patterns.size()>1)
+    if (patterns.size() > 1)
       return op.emitError() << "multiple patterns not supported yet";
     if (op.getNoPattern())
       return op.emitError() << "no-pattern attribute not supported yet";
-  
+
     llvm::ScopedHashTableScope<Value, std::string> scope(info.valueMap);
     info.stream << "(" << operatorString << " (";
     StringLiteral delimiter = "";
@@ -360,7 +360,7 @@ struct ExpressionVisitor
         // retrieve argument name from the body region
         for (auto [i, arg] : llvm::enumerate(p.getArguments()))
           info.valueMap.insert(arg, argNames[i].str());
-        
+
         SmallVector<Value> worklist;
 
         Value yieldedValue = p.front().getTerminator()->getOperand(0);
