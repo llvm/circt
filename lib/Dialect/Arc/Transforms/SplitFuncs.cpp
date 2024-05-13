@@ -52,7 +52,7 @@ struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
   SplitFuncsPass(const SplitFuncsPass &pass) : SplitFuncsPass() {}
 
   void runOnOperation() override;
-  LogicalResult lowerFunc(FuncOp funcOp, OpBuilder funcBuilder);
+  LogicalResult lowerFunc(FuncOp funcOp);
 
   SymbolTable *symbolTable;
 
@@ -65,13 +65,12 @@ struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
 
 void SplitFuncsPass::runOnOperation() {
   symbolTable = &getAnalysis<SymbolTable>();
-  OpBuilder funcBuilder(getOperation().getBodyRegion());
-  for (auto op : getOperation().getOps<FuncOp>())
-    if (failed(lowerFunc(op, funcBuilder)))
+  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FuncOp>()))
+    if (failed(lowerFunc(op)))
       return signalPassFailure();
 }
 
-LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
+LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   assert(splitBound != 0 && "Cannot split functions into functions of size 0");
   int numOps = funcOp.front().getOperations().size();
   if (numOps < splitBound)
@@ -133,7 +132,6 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     opBuilder.setInsertionPointToEnd(currentBlock);
     opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
   }
-
   // Create and populate new FuncOps
   for (int i = 0; i < blocks.size() - 1; i++) {
     Block *currentBlock = blocks[i];
@@ -151,9 +149,9 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp, OpBuilder funcBuilder) {
     funcName.append(funcOp.getName());
     funcName.append("_split_func");
     funcName.append(std::to_string(i));
-    auto newFunc = funcBuilder.create<FuncOp>(
-        funcOp->getLoc(), funcName,
-        opBuilder.getFunctionType(argTypes, outTypes));
+    auto newFunc =
+        opBuilder.create<FuncOp>(funcOp->getLoc(), funcName,
+                                 opBuilder.getFunctionType(argTypes, outTypes));
     numFuncsCreated++;
     symbolTable->insert(newFunc);
     auto *funcBlock = newFunc.addEntryBlock();
