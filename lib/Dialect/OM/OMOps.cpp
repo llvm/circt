@@ -331,16 +331,6 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// ObjectFieldOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // This is verified by VerifyObjectFields pass.
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 

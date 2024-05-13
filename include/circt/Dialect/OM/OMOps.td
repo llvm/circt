@@ -149,8 +149,7 @@ def ObjectOp : OMOp<"object",
   }];
 }
 
-def ObjectFieldOp : OMOp<"object.field",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+def ObjectFieldOp : OMOp<"object.field", [Pure]> {
   let arguments = (ins
     ClassType:$object,
     FlatSymbolRefArrayAttr:$fieldPath
