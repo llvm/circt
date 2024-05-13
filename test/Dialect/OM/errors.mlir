@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics -split-input-file
+// RUN: circt-opt -om-verify-object-fields %s -verify-diagnostics -split-input-file
 
 om.class @Class() {
   // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}

@@ -244,6 +244,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
+  pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -260,6 +261,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   return success();
 }
@@ -308,6 +312,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
+
   return success();
 }
 
@@ -340,6 +347,9 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   return success();
 }

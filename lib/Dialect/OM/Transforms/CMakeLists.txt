@@ -1,6 +1,7 @@
 add_circt_dialect_library(CIRCTOMTransforms
   FreezePaths.cpp
   LinkModules.cpp
+  VerifyObjectFields.cpp
 
   DEPENDS
   CIRCTOMTransformsIncGen
