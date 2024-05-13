@@ -12,7 +12,6 @@
 include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
-include "circt/Dialect/LTL/LTLOps.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -46,6 +45,20 @@ def AssumeOp : AssertLikeOp<"assume"> {
 
 def CoverOp : AssertLikeOp<"cover"> {
   let summary = "Ensure that a property can hold.";
+}
+
+// Edge behavior enum for always block.  See SV Spec 9.4.2.
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"Pos", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"Neg", 1, "negedge">;
+/// AtEdge is syntactic sugar for AtPosEdge or AtNegEdge.
+def AtEdge   : I32EnumAttrCase<"Both", 2, "edge">;
+
+def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
+                                [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::verif";
 }
 
 class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :

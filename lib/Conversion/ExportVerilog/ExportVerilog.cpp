@@ -70,6 +70,18 @@ using namespace pretty;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
+static ltl::ClockEdge verifToltlClockEdge(verif::ClockEdge ce) {
+  switch (ce) {
+  case verif::ClockEdge::Pos:
+    return ltl::ClockEdge::Pos;
+  case verif::ClockEdge::Neg:
+    return ltl::ClockEdge::Neg;
+  case verif::ClockEdge::Both:
+    return ltl::ClockEdge::Both;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
 /// where a lower number binds tighter.
@@ -3396,6 +3408,15 @@ public:
       Value property,
       PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
+  // Handle the emission of a disable signal, surrounded by a clock, this
+  // is needed for the verif.clocked_assertlike operations
+  EmittedProperty visitDisableBody(Value property, Value disable, Value clock,
+                                   ltl::ClockEdge edge);
+
+  // Handle the emission of a clock operation, this is part of both
+  // verif.clocked_assertlike and ltl.clock
+  EmittedProperty visitClockBody(Value input, Value clock, ltl::ClockEdge edge);
+
 private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
@@ -3599,15 +3620,7 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
-  ps << "@(";
-  ps.scopedBox(PP::ibox2, [&] {
-    ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
-    emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
+  return visitClockBody(op.getInput(), op.getClock(), op.getEdge());
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
@@ -3618,6 +3631,41 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
   });
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
+}
+
+EmittedProperty PropertyEmitter::visitDisableBody(Value property, Value disable,
+                                                  Value clock,
+                                                  ltl::ClockEdge edge) {
+  // Emit clocking statement first
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
+    emitNestedProperty(clock, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
+  ps << "disable iff" << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox2, [&] {
+    emitNestedProperty(disable, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
+  emitNestedProperty(property, PropertyPrecedence::Clocking);
+}
+
+EmittedProperty PropertyEmitter::visitClockBody(Value input, Value clock,
+                                                ltl::ClockEdge edge) {
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
+    emitNestedProperty(clock, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(input, PropertyPrecedence::Clocking);
   return {PropertyPrecedence::Clocking};
 }
 
@@ -3838,6 +3886,14 @@ private:
   LogicalResult visitVerif(verif::AssertOp op);
   LogicalResult visitVerif(verif::AssumeOp op);
   LogicalResult visitVerif(verif::CoverOp op);
+
+  LogicalResult emitVerifClockedAssertLike(Operation *op, Value property,
+                                           Value disable, Value clock,
+                                           verif::ClockEdge edge,
+                                           PPExtString opName);
+  LogicalResult visitVerif(verif::ClockedAssertOp op);
+  LogicalResult visitVerif(verif::ClockedAssumeOp op);
+  LogicalResult visitVerif(verif::ClockedCoverOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4579,17 +4635,15 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
 LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
                                                PPExtString opName) {
-  if (hasSVAttributes(op))
-    emitError(op, "SV attributes emission is unimplemented for the op");
 
   // If we are inside a procedural region we have the option of emitting either
   // an `assert` or `assert property`. If we are in a non-procedural region,
   // e.g., the body of a module, we have to use the concurrent form `assert
   // property` (which also supports plain booleans).
   //
-  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
-  // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
-  // procedural code".
+  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion
+  // statements outside procedural code" and 16.14.6 "Embedding concurrent
+  // assertions in procedural code".
   bool isTemporal = !property.getType().isSignlessInteger(1);
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
@@ -4626,6 +4680,80 @@ LogicalResult StmtEmitter::visitVerif(verif::AssumeOp op) {
 
 LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
   return emitVerifAssertLike(op, op.getProperty(), PPExtString("cover"));
+}
+
+/// Emit an assert-like operation from the `verif` dialect. This covers
+/// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
+LogicalResult StmtEmitter::emitVerifClockedAssertLike(
+    Operation *op, Value property, Value disable, Value clock,
+    verif::ClockEdge edge, PPExtString opName) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // If we are inside a procedural region we have the option of emitting either
+  // an `assert` or `assert property`. If we are in a non-procedural region,
+  // e.g., the body of a module, we have to use the concurrent form `assert
+  // property` (which also supports plain booleans).
+  //
+  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
+  // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
+  // procedural code".
+  bool isTemporal = !property.getType().isSignlessInteger(1);
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  bool emitAsImmediate = !isTemporal && isProcedural;
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.addCallback({op, true});
+  ps.scopedBox(PP::ibox2, [&]() {
+    emitAssertionLabel(op);
+    ps.scopedBox(PP::cbox0, [&]() {
+      if (emitAsImmediate)
+        ps << opName << "(";
+      else
+        ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
+      ps.scopedBox(PP::ibox2, [&]() {
+        PropertyEmitter pemitter = PropertyEmitter(emitter, ops);
+        pemitter.emitProperty(property);
+
+        ltl::ClockEdge ltledge = verifToltlClockEdge(edge);
+
+        // Check if there is a disable condition for this assertion
+        // if so, emit it nested in the clock body
+        if (disable) {
+          pemitter.visitDisableBody(property, disable, clock, ltledge);
+        } else {
+          // Visit the clock and delay if they exist
+          pemitter.visitClockBody(property, clock, ltledge);
+        }
+
+        ps << ");";
+      });
+    });
+  });
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// FIXME: emit property assertion wrapped in a clock and disabled
+LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("assert"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("assume"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
