@@ -374,13 +374,13 @@ struct ExpressionVisitor
 
         info.stream.indent(0);
 
-        if (failed(printExpression(worklist, info)))
+        if (failed(printExpression(worklist, newInfo2)))
           return failure();
 
         info.stream << info.valueMap.lookup(yieldedValue);
         for (unsigned j = 0; j < newInfo2.openParens; ++j)
           info.stream << ")";
-        info.stream << ")";
+        // info.stream << ")";
       }
       info.stream << ")";
     }
