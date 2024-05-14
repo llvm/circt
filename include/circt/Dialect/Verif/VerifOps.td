@@ -68,20 +68,30 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
                       ClockEdgeAttr:$edge, I1:$clock,
                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property `disable` $disable `clock` $edge $clock (`label` $label^)? attr-dict `:` type($property)
+    $property `disable` $disable `clock` $edge $clock 
+    (`label` $label^)? attr-dict `:` type($property)
   }];
 }
 
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
-  let summary = "Assert that a property holds, checked on a given clock's ticks and disabled if a given condition holds.";
+  let summary = [{ 
+    Assert that a property holds, checked on a given clock's 
+    ticks and disabled if a given condition holds.
+  }];
 }
 
 def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
-  let summary = "Assume that a property holds, checked on a given clock's ticks and disabled if a given condition holds.";
+  let summary = [{ 
+    Assume that a property holds, checked on a given clock's 
+    ticks and disabled if a given condition holds.
+  }];
 }
 
 def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
-  let summary = "Ensure that a property can hold, checked on a given clock's ticks and disabled if a given condition holds.";
+  let summary = [{ 
+    Cover on the holding of a property, checked on a given clock's 
+    ticks and disabled if a given condition holds.
+  }];
 }
 
 //===----------------------------------------------------------------------===//
