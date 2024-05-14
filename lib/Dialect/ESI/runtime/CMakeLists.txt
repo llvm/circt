@@ -199,15 +199,15 @@ install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
 )
 install(FILES ${ESIRuntimeHeaders}
   DESTINATION include/esi
-  COMPONENT ESIRuntime
+  COMPONENT ESIRuntime-dev
 )
 install(FILES ${ESIRuntimeBackendHeaders}
   DESTINATION include/esi/backends
-  COMPONENT ESIRuntime
+  COMPONENT ESIRuntime-dev
 )
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
   DESTINATION cmake
-  COMPONENT ESIRuntime
+  COMPONENT ESIRuntime-dev
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
