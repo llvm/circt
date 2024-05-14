@@ -3408,14 +3408,12 @@ public:
       Value property,
       PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
-  // Handle the emission of a disable signal, surrounded by a clock, this
-  // is needed for the verif.clocked_assertlike operations
-  EmittedProperty visitDisableBody(Value property, Value disable, Value clock,
-                                   ltl::ClockEdge edge);
-
-  // Handle the emission of a clock operation, this is part of both
-  // verif.clocked_assertlike and ltl.clock
-  EmittedProperty visitClockBody(Value input, Value clock, ltl::ClockEdge edge);
+  // Emits a property that is directly associated to a single clock and a single
+  // disable. Note that it is illegal to nest disable or clock operations in the
+  // property itself here.
+  void emitClockedProperty(
+      Value property, Value clock, ltl::ClockEdge edge, Value disable,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
 private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
@@ -3462,6 +3460,35 @@ void PropertyEmitter::emitProperty(
     Value property, PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
   // Wrap to this column.
+  ps.scopedBox(PP::ibox0,
+               [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
+  // If we are not using an external token buffer provided through the
+  // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
+  // flush it.
+  if (&buffer.tokens == &localTokens)
+    buffer.flush(state.pp);
+}
+
+void PropertyEmitter::emitClockedProperty(
+    Value property, Value clock, ltl::ClockEdge edge, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(localTokens.empty());
+  // Wrap to this column.
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
+    emitNestedProperty(clock, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
+  ps << "disable iff" << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox2, [&] {
+    emitNestedProperty(disable, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
   ps.scopedBox(PP::ibox0,
                [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
   // If we are not using an external token buffer provided through the
@@ -3620,7 +3647,15 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
-  return visitClockBody(op.getInput(), op.getClock(), op.getEdge());
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
+    emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
@@ -3631,42 +3666,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
   });
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
-}
-
-EmittedProperty PropertyEmitter::visitDisableBody(Value property, Value disable,
-                                                  Value clock,
-                                                  ltl::ClockEdge edge) {
-  // Emit clocking statement first
-  ps << "@(";
-  ps.scopedBox(PP::ibox2, [&] {
-    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
-    emitNestedProperty(clock, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-
-  ps << PP::space;
-  ps << "disable iff" << PP::nbsp << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(disable, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-
-  ps << PP::space;
-  emitNestedProperty(property, PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
-}
-
-EmittedProperty PropertyEmitter::visitClockBody(Value input, Value clock,
-                                                ltl::ClockEdge edge) {
-  ps << "@(";
-  ps.scopedBox(PP::ibox2, [&] {
-    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
-    emitNestedProperty(clock, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-  ps << PP::space;
-  emitNestedProperty(input, PropertyPrecedence::Clocking);
   return {PropertyPrecedence::Clocking};
 }
 
@@ -4715,20 +4714,9 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
       else
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
-        PropertyEmitter pemitter = PropertyEmitter(emitter, ops);
-        pemitter.emitProperty(property);
-
-        ltl::ClockEdge ltledge = verifToltlClockEdge(edge);
-
-        // Check if there is a disable condition for this assertion
-        // if so, emit it nested in the clock body
-        if (disable) {
-          pemitter.visitDisableBody(property, disable, clock, ltledge);
-        } else {
-          // Visit the clock and delay if they exist
-          pemitter.visitClockBody(property, clock, ltledge);
-        }
-
+        PropertyEmitter(emitter, ops)
+            .emitClockedProperty(property, clock, verifToltlClockEdge(edge),
+                                 disable);
         ps << ");";
       });
     });
