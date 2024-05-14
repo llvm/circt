@@ -36,11 +36,14 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 find_package(ZLIB REQUIRED)
 
 # JSON parser for the manifest.
-FetchContent_Declare(json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG        v3.11.3
-)
-FetchContent_MakeAvailable(json)
+if (NOT TARGET nlohmann_json)
+  message("  -- ESI runtime pulling down json")
+  FetchContent_Declare(json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+  )
+  FetchContent_MakeAvailable(json)
+endif()
 
 
 set(ESIRuntimeSources
