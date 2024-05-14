@@ -1435,7 +1435,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
       .Case<StrictWireOp>(
           [&](auto op) { 
-            declareVars(op.getResult(), op.getLoc()); 
+            declareVars(op.getResult(), op.getLoc());
+            declareVars(op.getWriteport(), op.getLoc());
             constrainTypes(op.getResult(), op.getWriteport(), true);
             })
       .Case<RegResetOp>([&](auto op) {
@@ -1465,7 +1466,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // All vec fields unify to the same thing. Always use the first element
         // of the vector, which has a field ID of 1.
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 1),
-                   op.getInputType());
+                   op.getOutputType());
       })
       .Case<SubtagOp>([&](auto op) {
         FEnumType enumType = op.getInput().getType();
@@ -1612,21 +1613,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
 
-      .Case<ConnectOp>(
+      .Case<ConnectOp, StrictConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
-      })
-      // StrictConnect is an identify constraint
-      .Case<StrictConnectOp>([&](auto op) {
-        // This back-propagates width from destination to source,
-        // causing source to sometimes be inferred wider than
-        // it should be (https://github.com/llvm/circt/issues/5391).
-        // This is needed to push the width into feeding widthCast?
-        constrainTypes(op.getDest(), op.getSrc());
-        constrainTypes(op.getSrc(), op.getDest());
       })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
