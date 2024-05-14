@@ -121,7 +121,7 @@ public:
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
-                sub.getInput().getType().base().getFieldID(sub.getIndex()),
+                sub.getInputType().getFieldID(sub.getIndex()),
                 sub.getResult());
           })
           .Case<SubfieldOp>([&](SubfieldOp sub) {
@@ -131,7 +131,7 @@ public:
                 sub.getResult());
           })
           .Case<SubaccessOp>([&](SubaccessOp sub) {
-            auto vecType = sub.getInput().getType().base();
+            auto vecType = sub.getInputType();
             auto input = sub.getInput();
             auto result = sub.getResult();
             // Flatten the subaccess. The result can refer to any of the

@@ -824,7 +824,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             // were connected. However for the sake of type inference, this
             // is indistinguishable from them having to share the same type
             // (namely the vector element type).
-            FVectorType vectorType = op.getInput().getType();
+            FVectorType vectorType = op.getInputType();
             traceResets(op.getType(), op.getResult(), 0,
                         vectorType.getElementType(), op.getInput(),
                         getFieldID(vectorType), op.getLoc());

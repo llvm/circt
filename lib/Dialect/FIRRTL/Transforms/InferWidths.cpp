@@ -1168,7 +1168,7 @@ void ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
     diag << " port";
   } else if (auto op = value.getDefiningOp()) {
     TypeSwitch<Operation *>(op)
-        .Case<WireOp>([&](auto) { diag << " wire"; })
+        .Case<WireOp, StrictWireOp>([&](auto) { diag << " wire"; })
         .Case<RegOp, RegResetOp>([&](auto) { diag << " reg"; })
         .Case<NodeOp>([&](auto) { diag << " node"; })
         .Default([&](auto) { diag << " value"; });
@@ -1433,6 +1433,11 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<WireOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
+      .Case<StrictWireOp>(
+          [&](auto op) { 
+            declareVars(op.getResult(), op.getLoc()); 
+            constrainTypes(op.getResult(), op.getWriteport(), true);
+            })
       .Case<RegResetOp>([&](auto op) {
         // The original Scala code also constrains the reset signal to be at
         // least 1 bit wide. We don't do this here since the MLIR FIRRTL
@@ -1460,7 +1465,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // All vec fields unify to the same thing. Always use the first element
         // of the vector, which has a field ID of 1.
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.getInput(), 1),
-                   op.getType());
+                   op.getInputType());
       })
       .Case<SubtagOp>([&](auto op) {
         FEnumType enumType = op.getInput().getType();
@@ -1607,7 +1612,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
 
-      .Case<ConnectOp, StrictConnectOp>(
+      .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness

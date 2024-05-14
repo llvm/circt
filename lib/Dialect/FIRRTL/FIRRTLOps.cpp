@@ -3476,9 +3476,7 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
       TypeSwitch<Operation *>(definingOp)
           .Case<SubfieldOp, SubindexOp>([&](auto op) { value = op.getInput(); })
           .Case<SubaccessOp>([&](SubaccessOp op) {
-            if (op.getInput()
-                    .getType()
-                    .base()
+            if (op.getInputType()
                     .getElementTypePreservingConst()
                     .isConst())
               originalFieldType = originalFieldType.getConstType(true);
@@ -4365,34 +4363,61 @@ FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
                        isConst(operands[0].getType()));
 }
 
-BundleType SubfieldOp::getInputType() {
-  Type type = getInput().getType();
+template<typename Ty>
+static auto getInputTypeImpl(Ty op) -> typename Ty::InputType {
+  Type type = op.getInput().getType();
   if (auto lhs = dyn_cast<LHSType>(type))
     type = lhs.getType();
-  return type_cast<BundleType>(type);
+  return type_cast<typename Ty::InputType>(type);
+}
+
+BundleType SubfieldOp::getInputType() {
+  return getInputTypeImpl(*this);
 }
 
 OpenBundleType OpenSubfieldOp::getInputType() {
-  Type type = getInput().getType();
+  return getInputTypeImpl(*this);
+}
+
+FVectorType SubindexOp::getInputType() {
+  return getInputTypeImpl(*this); 
+}
+
+OpenVectorType OpenSubindexOp::getInputType() {
+  return getInputTypeImpl(*this);
+}
+
+FVectorType SubaccessOp::getInputType() {
+  return getInputTypeImpl(*this);
+}
+
+template<typename Ty>
+static FIRRTLBaseType getOutputTypeImpl(Ty op) {
+  Type type = op.getType();
   if (auto lhs = dyn_cast<LHSType>(type))
     type = lhs.getType();
-  return type_cast<OpenBundleType>(type);
+  return type_cast<FIRRTLBaseType>(type);
 }
 
 FIRRTLBaseType SubfieldOp::getOutputType() {
-  Type type = getType();
-  if (auto lhs = dyn_cast<LHSType>(type))
-    type = lhs.getType();
-  return type_cast<FIRRTLBaseType>(type);
+  return getOutputTypeImpl(*this);
 }
 
 FIRRTLBaseType OpenSubfieldOp::getOutputType() {
-  Type type = getType();
-  if (auto lhs = dyn_cast<LHSType>(type))
-    type = lhs.getType();
-  return type_cast<FIRRTLBaseType>(type);
+  return getOutputTypeImpl(*this);
 }
 
+FIRRTLBaseType SubindexOp::getOutputType() {
+  return getOutputTypeImpl(*this);
+}
+
+FIRRTLBaseType OpenSubindexOp::getOutputType() {
+  return getOutputTypeImpl(*this);
+}
+
+FIRRTLBaseType SubaccessOp::getOutputType() {
+  return getOutputTypeImpl(*this);
+}
 
 template <typename OpTy>
 ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
@@ -4514,7 +4539,7 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 template <typename OpTy>
 static LogicalResult verifySubfieldLike(OpTy op) {
   if (op.getFieldIndex() >=
-      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+      firrtl::type_cast<typename OpTy::InputType>(op.getInputType())
           .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");

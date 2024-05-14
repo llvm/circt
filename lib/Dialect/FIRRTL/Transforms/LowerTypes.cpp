@@ -209,7 +209,7 @@ static bool isNotSubAccess(Operation *op) {
     return true;
   ConstantOp arg =
       llvm::dyn_cast_or_null<ConstantOp>(sao.getIndex().getDefiningOp());
-  return arg && sao.getInput().getType().base().getNumElements() != 0;
+  return arg && sao.getInputType().getNumElements() != 0;
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -844,7 +844,7 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
   SubaccessOp sao = cast<SubaccessOp>(writePath.back());
-  FVectorType saoType = sao.getInput().getType();
+  FVectorType saoType = sao.getInputType();
   auto selectWidth = llvm::Log2_64_Ceil(saoType.getNumElements());
 
   for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
@@ -1507,7 +1507,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.getInput();
-  FVectorType vType = input.getType();
+  FVectorType vType = op.getInputType();
 
   // Check for empty vectors
   if (vType.getNumElements() == 0) {

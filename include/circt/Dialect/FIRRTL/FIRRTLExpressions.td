@@ -322,7 +322,9 @@ def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType> {
 }
 def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
 
-def SubindexOp : FIRRTLExprOp<"subindex"> {
+
+
+class BaseSubindexOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   let summary = "Extract an element of a vector value";
   let description = [{
     The subindex expression statically refers, by index, to a subelement
@@ -334,49 +336,33 @@ def SubindexOp : FIRRTLExprOp<"subindex"> {
     ```
     }];
 
-  let arguments = (ins FVectorType:$input, I32Attr:$index);
-  let results = (outs FIRRTLBaseType:$result);
-  let hasFolder = 1;
-  let hasCanonicalizer = 1;
+  let arguments = (ins LHS_OR<btype>:$input, I32Attr:$index);
+  let results = (outs LHS_OR<rtype>:$result);
+  let hasCustomAssemblyFormat = 1;
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input))";
 
   let firrtlExtraClassDeclaration = [{
+    using InputType = }] # btype # [{;
+
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().base().getFieldID(getIndex()));
+      return FieldRef(getInput(), getInputType().getFieldID(getIndex()));
     }
-    using InputType = FVectorType;
+
+    InputType getInputType();
+    FIRRTLBaseType getOutputType();
   }];
 }
 
-def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
-  let summary = "Extract an element of a vector value";
-  let description = [{
-    The subindex expression statically refers, by index, to a subelement
-    of an expression with a vector type. The index must be a non-negative
-    integer and cannot be equal to or exceed the length of the vector it
-    indexes.
-    ```
-      %result = firrtl.opensubindex %input[index] : t1
-    ```
-    }];
 
-  let arguments = (ins OpenVectorType:$input, I32Attr:$index);
-  let results = (outs FIRRTLType:$result);
+def SubindexOp : BaseSubindexOp<"subindex", FVectorType, FIRRTLBaseType> {
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
 
-  let assemblyFormat =
-     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
-
-  let firrtlExtraClassDeclaration = [{
-    /// Return a `FieldRef` to the accessed field.
-    FieldRef getAccessedField() {
-      return FieldRef(getInput(), getInput().getType().getFieldID(getIndex()));
-    }
-
-    using InputType = OpenVectorType;
-  }];
+def OpenSubindexOp : BaseSubindexOp<"opensubindex", OpenVectorType, FIRRTLType> {
 }
 
 def SubaccessOp : FIRRTLExprOp<"subaccess"> {
@@ -390,13 +376,21 @@ def SubaccessOp : FIRRTLExprOp<"subaccess"> {
     ```
     }];
 
-  let arguments = (ins FVectorType:$input, UIntType:$index);
-  let results = (outs FIRRTLBaseType:$result);
+  let arguments = (ins LHS_OR<FVectorType>:$input, UIntType:$index);
+  let results = (outs LHS_OR<FIRRTLBaseType>:$result);
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` qualified(type($input)) `,` qualified(type($index))";
 
   let hasCanonicalizer = true;
+
+  let firrtlExtraClassDeclaration = [{
+    using InputType = FVectorType;
+
+    InputType getInputType();
+    FIRRTLBaseType getOutputType();
+  }];
+
 }
 
 def IsTagOp : FIRRTLExprOp<"istag"> {
