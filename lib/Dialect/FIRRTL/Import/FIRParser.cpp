@@ -5413,6 +5413,7 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
           << "example printf here, this is now just a printf and nothing more";
       diag.attachNote() << "For more information, see "
                            "https://github.com/llvm/circt/issues/6970";
+      return diag;
     }
   }
 
