@@ -225,7 +225,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     // AnnoTarget::getType() is not safe (CHIRRTL ops crash, null if instance),
     // avoid. For now, only references in ports can be targets, check that.
     // TODO: containsReference().
-    if (ref.isa<PortAnnoTarget>() && isa<RefType>(ref.getType())) {
+    if (isa<PortAnnoTarget>(ref) && isa<RefType>(ref.getType())) {
       mlir::emitError(circuit.getLoc())
           << "cannot target reference-type '" << path.name << "' in "
           << mod.getModuleName();

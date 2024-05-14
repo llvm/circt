@@ -636,4 +636,40 @@ firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in:
   firrtl.propassign %0, %in : !firrtl.class<@ClassWithInput(in in: !firrtl.string)>
 }
 
+// Test all verif assert/assume/cover constructs
+// CHECK:   firrtl.module @verif(in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>, in %prop: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
+firrtl.module @verif(
+  in %clock : !firrtl.clock, in %cond : !firrtl.uint<1>, in %prop : !firrtl.uint<1>,
+  in %enable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>
+) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    // CHECK:   [[TMP0:%.+]] = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   [[TMP1:%.+]] = firrtl.int.ltl.or [[TMP0]], %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert [[TMP1]] : !firrtl.uint<1>
+    firrtl.int.verif.assert %prop : !firrtl.uint<1>
+    // CHECK:   %2 = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %3 = firrtl.int.ltl.or %2, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assume %3 : !firrtl.uint<1>
+    firrtl.int.verif.assume %prop : !firrtl.uint<1>
+    // CHECK:   %4 = firrtl.int.ltl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %5 = firrtl.int.ltl.or %4, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.cover %5 : !firrtl.uint<1>
+    firrtl.int.verif.cover %prop : !firrtl.uint<1>
+  } else {
+    // CHECK:   %6 = firrtl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %7 = firrtl.int.ltl.not %6 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %8 = firrtl.int.ltl.or %7, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert %8 : !firrtl.uint<1>
+    firrtl.int.verif.assert %prop : !firrtl.uint<1>
+    // CHECK:   %9 = firrtl.int.ltl.not %6 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %10 = firrtl.int.ltl.or %9, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assume %10 : !firrtl.uint<1>
+    firrtl.int.verif.assume %prop : !firrtl.uint<1>
+    // CHECK:   %11 = firrtl.int.ltl.not %6 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   %12 = firrtl.int.ltl.or %11, %prop : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.cover %12 : !firrtl.uint<1>
+    firrtl.int.verif.cover %prop : !firrtl.uint<1>
+  }
+}
+
 }

@@ -34,11 +34,6 @@ TEST(TypesTest, UnitTypes) {
   ASSERT_EQ(stringType.getDomain(), Domain::TwoValued);
   ASSERT_EQ(chandleType.getDomain(), Domain::TwoValued);
   ASSERT_EQ(eventType.getDomain(), Domain::TwoValued);
-
-  ASSERT_EQ(voidType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(stringType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(chandleType.getSign(), Sign::Unsigned);
-  ASSERT_EQ(eventType.getSign(), Sign::Unsigned);
 }
 
 TEST(TypesTest, Ranges) {
@@ -73,37 +68,14 @@ TEST(TypesTest, PackedInt) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  std::tuple<IntType::Kind, StringRef, Domain, Sign> pairs[] = {
-      {IntType::Bit, "bit", Domain::TwoValued, Sign::Unsigned},
-      {IntType::Logic, "logic", Domain::FourValued, Sign::Unsigned},
-      {IntType::Reg, "reg", Domain::FourValued, Sign::Unsigned},
-      {IntType::Byte, "byte", Domain::TwoValued, Sign::Signed},
-      {IntType::ShortInt, "shortint", Domain::TwoValued, Sign::Signed},
-      {IntType::Int, "int", Domain::TwoValued, Sign::Signed},
-      {IntType::LongInt, "longint", Domain::TwoValued, Sign::Signed},
-      {IntType::Integer, "integer", Domain::FourValued, Sign::Signed},
-      {IntType::Time, "time", Domain::TwoValued, Sign::Unsigned},
-  };
+  auto i42 = IntType::getInt(&context, 42);
+  auto l42 = IntType::getLogic(&context, 42);
 
-  for (auto pair : pairs) {
-    auto kind = std::get<0>(pair);
-    auto type = IntType::get(&context, kind);
-    auto unsignedType = IntType::get(&context, kind, Sign::Unsigned);
-    auto signedType = IntType::get(&context, kind, Sign::Signed);
+  ASSERT_EQ(i42.getBitSize(), 42u);
+  ASSERT_EQ(l42.getBitSize(), 42u);
 
-    // Check the domain.
-    ASSERT_EQ(type.getDomain(), std::get<2>(pair));
-    ASSERT_EQ(unsignedType.getDomain(), std::get<2>(pair));
-    ASSERT_EQ(signedType.getDomain(), std::get<2>(pair));
-
-    // Check the sign.
-    ASSERT_EQ(type.getSign(), std::get<3>(pair));
-    ASSERT_EQ(unsignedType.getSign(), Sign::Unsigned);
-    ASSERT_EQ(signedType.getSign(), Sign::Signed);
-    ASSERT_FALSE(type.isSignExplicit());
-    ASSERT_TRUE(unsignedType.isSignExplicit());
-    ASSERT_TRUE(signedType.isSignExplicit());
-  }
+  ASSERT_EQ(i42.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(l42.getDomain(), Domain::FourValued);
 }
 
 TEST(TypesTest, Reals) {
@@ -121,25 +93,19 @@ TEST(TypesTest, Reals) {
   ASSERT_EQ(t0.getBitSize(), 32u);
   ASSERT_EQ(t1.getBitSize(), 64u);
   ASSERT_EQ(t2.getBitSize(), 64u);
-
-  ASSERT_EQ(t0.getSign(), Sign::Unsigned);
-  ASSERT_EQ(t1.getSign(), Sign::Unsigned);
-  ASSERT_EQ(t2.getSign(), Sign::Unsigned);
 }
 
 TEST(TypesTest, PackedDim) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto arrayType1 = PackedRangeDim::get(bitType, 3);
+  auto arrayType1 = IntType::getInt(&context, 3);
   auto arrayType2 = PackedRangeDim::get(arrayType1, 2);
   auto arrayType3 = PackedUnsizedDim::get(arrayType2);
 
-  ASSERT_EQ(arrayType1.getRange(), Range(3));
   ASSERT_EQ(arrayType2.getRange(), Range(2));
   ASSERT_EQ(arrayType3.getRange(), std::nullopt);
-  ASSERT_EQ(arrayType1.getSize(), 3u);
+  ASSERT_EQ(arrayType2.getSize(), 2u);
   ASSERT_EQ(arrayType3.getSize(), std::nullopt);
 }
 
@@ -170,9 +136,9 @@ TEST(TypesTest, Structs) {
   auto foo = StringAttr::get(&context, "foo");
   auto bar = StringAttr::get(&context, "bar");
 
-  auto bitType = IntType::get(&context, IntType::Bit);
-  auto logicType = IntType::get(&context, IntType::Logic);
-  auto bit8Type = PackedRangeDim::get(bitType, 8);
+  auto bitType = IntType::getInt(&context, 1);
+  auto logicType = IntType::getLogic(&context, 1);
+  auto bit8Type = IntType::getInt(&context, 8);
   auto bitDynArrayType = PackedUnsizedDim::get(bitType);
 
   auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
@@ -188,49 +154,16 @@ TEST(TypesTest, Structs) {
       {StructMember{foo, bitType}, StructMember{bar, bitDynArrayType}});
 
   // Value domain
+  ASSERT_EQ(s0.getDomain(), Domain::TwoValued);
   ASSERT_EQ(s1.getDomain(), Domain::TwoValued);
   ASSERT_EQ(s2.getDomain(), Domain::FourValued);
+  ASSERT_EQ(s3.getDomain(), Domain::TwoValued);
 
   // Bit size
   ASSERT_EQ(s0.getBitSize(), 1u);
   ASSERT_EQ(s1.getBitSize(), 9u);
   ASSERT_EQ(s2.getBitSize(), 2u);
   ASSERT_EQ(s3.getBitSize(), std::nullopt);
-}
-
-TEST(TypesTest, SimpleBitVectorTypes) {
-  MLIRContext context;
-  context.loadDialect<MooreDialect>();
-
-  // Unpacked types have no SBV equivalent.
-  auto stringType = StringType::get(&context);
-  ASSERT_FALSE(stringType.isSimpleBitVector());
-  ASSERT_FALSE(stringType.isCastableToSimpleBitVector());
-
-  // Void is packed but cannot be cast to an SBV.
-  auto voidType = VoidType::get(&context);
-  ASSERT_FALSE(voidType.isSimpleBitVector());
-  ASSERT_FALSE(voidType.isCastableToSimpleBitVector());
-
-  // SBVTs preserve whether the sign was explicitly mentioned.
-  auto bit1 = IntType::get(&context, IntType::Bit);
-  auto ubit1 = IntType::get(&context, IntType::Bit, Sign::Unsigned);
-  auto sbit1 = IntType::get(&context, IntType::Bit, Sign::Signed);
-  ASSERT_EQ(bit1.getSimpleBitVector().toString(), "bit");
-  ASSERT_EQ(ubit1.getSimpleBitVector().toString(), "bit unsigned");
-  ASSERT_EQ(sbit1.getSimpleBitVector().toString(), "bit signed");
-
-  // SBVTs preserve whether the original type was an integer atom.
-  auto intTy = IntType::get(&context, IntType::Int);
-  auto byteTy = IntType::get(&context, IntType::Byte);
-  ASSERT_EQ(intTy.getSimpleBitVector().getType(&context), intTy);
-  ASSERT_EQ(byteTy.getSimpleBitVector().getType(&context), byteTy);
-
-  // Integer atoms with a dimension are no SBVT, but can be cast to one.
-  auto intArray = PackedRangeDim::get(intTy, 8);
-  ASSERT_FALSE(intArray.isSimpleBitVector());
-  ASSERT_TRUE(intArray.isCastableToSimpleBitVector());
-  ASSERT_EQ(intArray.castToSimpleBitVector().toString(), "bit signed [255:0]");
 }
 
 } // namespace

@@ -13,9 +13,11 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -66,8 +68,11 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
     /// which is for some reason the format of the metadata file.
     std::vector<SmallVector<Attribute>> instancePaths;
   };
+
+  CircuitNamespace circtNamespace;
   /// This maps a module to information about the memories.
   DenseMap<Operation *, MemoryInfo> memInfoMap;
+  DenseMap<Attribute, Operation *> innerRefToInstanceMap;
 
   InstanceGraph *instanceGraph;
 
@@ -248,12 +253,13 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
         // current module.
         auto &instancePaths = memInfo.instancePaths;
         auto ref = getInnerRefTo(inst);
+        innerRefToInstanceMap[ref] = inst;
         // If its a mem module, this is the start of a path to the module.
         if (isa<FMemModuleOp>(submodule))
           instancePaths.push_back({ref});
         // Copy any paths through the submodule to memories, adding the ref to
         // the current instance.
-        for (auto subPath : subMemInfo.instancePaths) {
+        for (const auto &subPath : subMemInfo.instancePaths) {
           instancePaths.push_back(subPath);
           instancePaths.back().push_back(ref);
         }
@@ -285,6 +291,9 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
 
+  SymbolTable &symTable = getAnalysis<SymbolTable>();
+  HierPathCache cache(circuit, symTable);
+
   // The current parameter to the verbatim op.
   unsigned paramIndex = 0;
   // Parameters to the verbatim op.
@@ -308,22 +317,37 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
   auto &instancePaths = memInfoMap[module].instancePaths;
-  for (auto instancePath : instancePaths) {
-    os << sramIndex++ << " -> ";
-    addSymbol(dutSymbol);
-    // The instance path is reverse from the order we print it.
-    for (auto ref : llvm::reverse(instancePath)) {
-      os << ".";
-      addSymbol(ref);
-    }
-    os << "\n";
-  }
+  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
 
-  // Put the information in a verbatim operation.
   auto loc = builder.getUnknownLoc();
+  // Put the information in a verbatim operation.
   builder.create<emit::FileOp>(loc, outputFile, [&] {
+    for (auto instancePath : instancePaths) {
+      // Note: Reverse instancepath to construct the NLA.
+      SmallVector<Attribute> path(llvm::reverse(instancePath));
+      os << sramIndex++ << " -> ";
+      addSymbol(dutSymbol);
+      os << ".";
+
+      auto nlaSymbol = cache.getRefFor(builder.getArrayAttr(path));
+      addSymbol(nlaSymbol);
+      NamedAttrList fields;
+      // There is no current client for the distinct attr, but it will be used
+      // by OM::path once the metadata is moved to OM, instead of the verbatim.
+      auto id = DistinctAttr::create(UnitAttr::get(builder.getContext()));
+      fields.append("id", id);
+      fields.append("class", builder.getStringAttr("circt.tracker"));
+      fields.append("circt.nonlocal", nlaSymbol);
+      // Now add the nonlocal annotation to the leaf instance.
+      auto *leafInstance = innerRefToInstanceMap[instancePath.front()];
+
+      AnnotationSet annos(leafInstance);
+      annos.addAnnotations(builder.getDictionaryAttr(fields));
+      annos.applyToOperation(leafInstance);
+
+      os << "\n";
+    }
     builder.create<sv::VerbatimOp>(loc, buffer, ValueRange{},
                                    builder.getArrayAttr(params));
   });
@@ -334,6 +358,7 @@ void AddSeqMemPortsPass::runOnOperation() {
   auto *context = &getContext();
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
+  circtNamespace = CircuitNamespace(circuit);
   // Clear the state.
   userPorts.clear();
   memInfoMap.clear();

@@ -639,18 +639,6 @@ firrtl.circuit "NoDedup" {
   }
 }
 
-// Don't deduplicate modules with input RefType ports.
-// CHECK-LABEL:   firrtl.circuit "InputRefTypePorts"
-// CHECK-COUNT-3: firrtl.module
-firrtl.circuit "InputRefTypePorts" {
-  firrtl.module private @Foo(in %a: !firrtl.probe<uint<1>>) {}
-  firrtl.module private @Bar(in %a: !firrtl.probe<uint<1>>) {}
-  firrtl.module @InputRefTypePorts() {
-    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.probe<uint<1>>)
-    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.probe<uint<1>>)
-  }
-}
-
 // Check that modules marked MustDedup have been deduped.
 // CHECK-LABEL: firrtl.circuit "MustDedup"
 firrtl.circuit "MustDedup" attributes {annotations = [{

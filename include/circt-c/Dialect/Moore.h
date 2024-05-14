@@ -25,30 +25,6 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Moore, moore);
 // Types
 //===----------------------------------------------------------------------===//
 
-enum MooreIntKind {
-  // The integer vector types. These are the builtin single-bit integer types.
-  /// A `bit`.
-  MooreBit,
-  /// A `logic`.
-  MooreLogic,
-  /// A `reg`.
-  MooreReg,
-
-  // The integer atom types. These are the builtin multi-bit integer types.
-  /// A `byte`.
-  MooreByte,
-  /// A `shortint`.
-  MooreShortInt,
-  /// An `int`.
-  MooreInt,
-  /// A `longint`.
-  MooreLongInt,
-  /// An `integer`.
-  MooreInteger,
-  /// A `time`.
-  MooreTime,
-};
-
 enum MooreRealKind {
   /// A `shortreal`.
   MooreShortReal,
@@ -56,15 +32,6 @@ enum MooreRealKind {
   MooreReal,
   /// A `realtime`.
   MooreRealTime,
-};
-
-enum MooreSign {
-  /// No sign is explicitly given.
-  MooreNone,
-  /// Explicitly marked to be unsigned.
-  MooreUnsigned,
-  /// Explicitly marked to be signed.
-  MooreSigned,
 };
 
 /// Create a void type.
@@ -75,16 +42,11 @@ MLIR_CAPI_EXPORTED MlirType mooreStringTypeGet(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirType mooreChandleTypeGet(MlirContext ctx);
 /// Create an event type.
 MLIR_CAPI_EXPORTED MlirType mooreEventTypeGet(MlirContext ctx);
-/// Create an int type.
-MLIR_CAPI_EXPORTED MlirType mooreIntTypeGet(MlirContext ctx,
-                                            enum MooreIntKind kind,
-                                            enum MooreSign sign);
-/// Create a `logic` type.
-MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx);
-/// Create an `int` type.
-MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetInt(MlirContext ctx);
-/// Create a `time` type.
-MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetTime(MlirContext ctx);
+/// Create a two-valued simple bit vector type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetInt(MlirContext ctx, unsigned width);
+/// Create a four-valued simple bit vector type.
+MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx,
+                                                 unsigned width);
 /// Create a real type.
 MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx,
                                              enum MooreRealKind kind);
@@ -114,19 +76,10 @@ MLIR_CAPI_EXPORTED MlirType mooreUnpackedQueueDimTypeGet(MlirType inner);
 /// Create a unpacked queue dimension type with bound.
 MLIR_CAPI_EXPORTED MlirType
 mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound);
-// TODO: PackedStructType
-// TODO: UnpackedStructType
-/// Create a simple bit-vector type.
-MLIR_CAPI_EXPORTED MlirType mooreSimpleBitVectorTypeGet(MlirContext ctx,
-                                                        bool isFourValued,
-                                                        bool isSigned,
-                                                        unsigned size);
+/// Checks whether the passed UnpackedType is a two-valued type.
+MLIR_CAPI_EXPORTED bool mooreIsTwoValuedType(MlirType type);
 /// Checks whether the passed UnpackedType is a four-valued type.
 MLIR_CAPI_EXPORTED bool mooreIsFourValuedType(MlirType type);
-/// Checks whether the passed type is a simple bit-vector.
-MLIR_CAPI_EXPORTED bool mooreIsSimpleBitVectorType(MlirType type);
-/// Returns the size of a simple bit-vector type in bits.
-MLIR_CAPI_EXPORTED unsigned mooreGetSimpleBitVectorSize(MlirType type);
 
 #ifdef __cplusplus
 }
