@@ -34,10 +34,9 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<IntType, RealType, PackedUnsizedDim, PackedRangeDim,
-           UnpackedUnsizedDim, UnpackedArrayDim, UnpackedRangeDim,
-           UnpackedAssocDim, UnpackedQueueDim, PackedStructType,
-           UnpackedStructType>();
+  addTypes<RealType, PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
+           UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
+           UnpackedQueueDim, PackedStructType, UnpackedStructType>();
 
   addTypes<
 #define GET_TYPEDEF_LIST
@@ -117,42 +116,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
 }
-
-//===----------------------------------------------------------------------===//
-// Packed Integers
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-struct IntTypeStorage : TypeStorage {
-  using KeyTy = unsigned;
-
-  IntTypeStorage(KeyTy key)
-      : width(key >> 1), domain(static_cast<Domain>((key >> 0) & 1)) {}
-  static KeyTy pack(unsigned width, Domain domain) {
-    assert((width >> 31) == 0 && "width must fit in 31 bits");
-    return width << 1 | unsigned(domain) << 0;
-  }
-  bool operator==(const KeyTy &key) const { return pack(width, domain) == key; }
-  static IntTypeStorage *construct(TypeStorageAllocator &allocator,
-                                   const KeyTy &key) {
-    return new (allocator.allocate<IntTypeStorage>()) IntTypeStorage(key);
-  }
-
-  unsigned width;
-  Domain domain;
-};
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-IntType IntType::get(MLIRContext *context, unsigned width, Domain domain) {
-  return Base::get(context, detail::IntTypeStorage::pack(width, domain));
-}
-
-unsigned IntType::getWidth() const { return getImpl()->width; }
-Domain IntType::getDomain() const { return getImpl()->domain; }
 
 //===----------------------------------------------------------------------===//
 // Unpacked Reals
