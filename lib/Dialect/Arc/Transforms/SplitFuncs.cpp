@@ -63,7 +63,7 @@ void SplitFuncsPass::runOnOperation() {
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   assert(splitBound != 0 && "Cannot split functions into functions of size 0");
-  int numOps = funcOp.front().getOperations().size();
+  unsigned numOps = funcOp.front().getOperations().size();
   if (numOps < splitBound)
     return success();
   int numBlocks = ceil((float)numOps / splitBound);
@@ -74,7 +74,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   blocks.push_back(frontBlock);
   for (int i = 0; i < numBlocks - 1; i++) {
     std::vector<Location> locs;
-    for (auto t : frontBlock->getArgumentTypes()) {
+    for (unsigned long j = 0; j < frontBlock->getArgumentTypes().size(); j++) {
       locs.push_back(funcOp.getLoc());
     }
     auto *block = opBuilder.createBlock(&(funcOp.getBody()), {},
@@ -98,10 +98,10 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     op.remove();
     (*blockIter)->push_back(&op);
   }
-
-  std::vector<std::pair<Value, Value>> argMap;
+  DenseMap<Value, Value> argMap;
   // Move function arguments to the block that will stay in the function
-  for (int argIndex = 0; argIndex < frontBlock->getNumArguments(); argIndex++) {
+  for (unsigned argIndex = 0; argIndex < frontBlock->getNumArguments();
+       argIndex++) {
     auto oldArg = frontBlock->getArgument(argIndex);
     auto newArg = blocks.back()->getArgument(argIndex);
     replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
@@ -124,7 +124,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
   }
   // Create and populate new FuncOps
-  for (int i = 0; i < blocks.size() - 1; i++) {
+  for (long unsigned i = 0; i < blocks.size() - 1; i++) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
     std::vector<Type> outTypes;
@@ -166,8 +166,8 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
         funcOp->getLoc(), outTypes, funcName, args);
     auto callResults = callOp->getResults();
     argMap.clear();
-    for (int k = 0; k < outValues.size(); k++) {
-      argMap.push_back(std::pair(outValues[k], callResults[k]));
+    for (unsigned long k = 0; k < outValues.size(); k++) {
+      argMap.insert(std::pair(outValues[k], callResults[k]));
     }
   }
   for (auto pair : argMap) {
