@@ -380,7 +380,6 @@ struct ExpressionVisitor
         info.stream << info.valueMap.lookup(yieldedValue);
         for (unsigned j = 0; j < newInfo2.openParens; ++j)
           info.stream << ")";
-        // info.stream << ")";
       }
       info.stream << ")";
     }
