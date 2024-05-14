@@ -3654,6 +3654,7 @@ EmittedProperty PropertyEmitter::visitDisableBody(Value property, Value disable,
 
   ps << PP::space;
   emitNestedProperty(property, PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
 }
 
 EmittedProperty PropertyEmitter::visitClockBody(Value input, Value clock,
