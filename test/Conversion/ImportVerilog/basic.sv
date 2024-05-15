@@ -302,6 +302,7 @@ module Expressions;
   // CHECK: %vec_2 = moore.variable : !moore.l32
   // CHECK: %myStruct = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   // CHECK: %myStruct2 = moore.variable  : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+  // CHECK: %myStruct3 = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   int a, b, c;
   int unsigned u, w;
   bit [1:0][3:0] v;
@@ -317,6 +318,8 @@ module Expressions;
   structTemp myStruct;
   typedef struct packed signed {structTemp c,d;} structTemp2;
   structTemp2 myStruct2;
+  typedef struct packed unsigned {int a, b;} structTemp3;
+  structTemp3 myStruct3;
 
   initial begin
     // CHECK: moore.constant 0 : !moore.i32
@@ -628,6 +631,14 @@ module Expressions;
     // CHECK: %myStruct2.d.b = moore.variable  : !moore.i32
     // CHECK: moore.blocking_assign %b, %myStruct2.d.b : !moore.i32
     b = myStruct2.d.b;
+
+    // CHECK: %myStruct3.a = moore.variable  : !moore.i32
+    // CHECK: moore.blocking_assign %myStruct3.a, %a : !moore.i32
+    myStruct3.a = a;
+
+    // CHECK: %myStruct3.b = moore.variable  : !moore.i32
+    // CHECK: moore.blocking_assign %b, %myStruct3.b : !moore.i32
+    b = myStruct3.b;
   end
 endmodule
 
