@@ -314,5 +314,5 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     wire w: UInt<1>
     inst ext of Val
     w <= ext.v
-    out[0] <= intrinsic(circt_mux2cell : UInt<1>, xor(cond, UInt<1>(1)), w, low)
-    out[1] <= intrinsic(circt_mux2cell : UInt<1>, xor(cond, UInt<1>(1)), ext.v, low)
+    out[0] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), w, low)
+    out[1] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), ext.v, low)
