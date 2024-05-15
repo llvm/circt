@@ -53,11 +53,11 @@ smt.solver () : () -> () {
 
   // CHECK: (assert (let (([[V21:.+]] (exists (([[V22:.+]] Int) ([[V23:.+]] Int))
   // CHECK:                           ( ! (let (([[V24:.+]] (= [[V22]] [[V23]])))
-  // CHECK:                           (let (([[V25:.+]] (=> [[V24:.+]] true)))
-  // CHECK:                           [[V25:.+]])) 
-  // CHECK                            :pattern ( ( let (([[V26:.+]] (= [[V22:.+]] [[V23:.+]])))
-  // CHECK:                   [[V26:.+]]))))))
-  // CHECK:         [[V21]]))
+  // CHECK:                           (let (([[V25:.+]] (=> [[V24]] true)))
+  // CHECK:                           [[V25]])) 
+  // CHECK:                           :pattern ((let (([[V26:.+]] (= [[V22]] [[V23]])))
+  // CHECK:                           [[V26]]))))))
+  // CHECK:               [[V21]]))
 
   %6 = smt.exists {
     ^bb0(%arg2: !smt.int, %arg3: !smt.int):
@@ -71,13 +71,12 @@ smt.solver () : () -> () {
   }
   smt.assert %6
 
-
   // CHECK: (assert (let (([[V27:.+]] (exists (([[V28:.+]] Int) ([[V29:.+]] Int))
   // CHECK:                           ( ! (let (([[V30:.+]] (= [[V28]] [[V29]])))
-  // CHECK:                           (let (([[V31:.+]] (=> [[V30:.+]] true)))
-  // CHECK:                           [[V31:.+]])) :weight 2
-  // CHECK                            :pattern ( ( let (([[V32:.+]] (= [[V28:.+]] [[V29:.+]])))
-  // CHECK:                   [[V32:.+]]))))))
+  // CHECK:                           (let (([[V31:.+]] (=> [[V30]] true)))
+  // CHECK:                           [[V31]])) :weight 2
+  // CHECK:                           :pattern ((let (([[V32:.+]] (= [[V28]] [[V29]])))
+  // CHECK:                   [[V32]]))))))
   // CHECK:         [[V27]]))
 
   %7 = smt.exists weight 2 {
@@ -95,4 +94,6 @@ smt.solver () : () -> () {
   
   // CHECK: (reset)
   // CHECK-INLINED: (reset)
+
+
 }
