@@ -300,6 +300,7 @@ module Expressions;
   // CHECK: %y = moore.variable : !moore.l1
   // CHECK: %vec_1 = moore.variable : !moore.l32
   // CHECK: %vec_2 = moore.variable : !moore.l32
+  // CHECK: %myStruct = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   int a, b, c;
   int unsigned u, w;
   bit [1:0][3:0] v;
@@ -311,6 +312,8 @@ module Expressions;
   logic [0:31] vec_2;
   bit [4:1] arr [1:3][2:7];
   bit [3:2] s;
+  typedef struct packed signed {int a, b;} structTemp;
+  structTemp myStruct;
 
   initial begin
     // CHECK: moore.constant 0 : !moore.i32
@@ -606,6 +609,14 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
+
+    // CHECK: %myStruct.a = moore.variable  : !moore.i32
+    // CHECK: moore.blocking_assign %myStruct.a, %a : !moore.i32
+    myStruct.a = a;
+
+    // CHECK: %myStruct.b = moore.variable  : !moore.i32
+    // CHECK: moore.blocking_assign %b, %myStruct.b : !moore.i32
+    b = myStruct.b;
   end
 endmodule
 

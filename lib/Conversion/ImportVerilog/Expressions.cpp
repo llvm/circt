@@ -428,6 +428,37 @@ struct ExprVisitor {
     return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
   }
 
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    llvm::SmallVector<const slang::ast::ValueSymbol *> symbolVec;
+    const slang::ast::Expression *exprIt = &(expr.value());
+    std::string concatName = {};
+    std::string memberName(expr.member.name);
+    concatName = memberName + concatName;
+    symbolVec.push_back(
+        static_cast<const slang::ast::ValueSymbol *>(&expr.member));
+    while (true) {
+      std::string structName((*exprIt).getSymbolReference()->name);
+      concatName = structName + "." + concatName;
+      symbolVec.push_back(static_cast<const slang::ast::ValueSymbol *>(
+          exprIt->getSymbolReference()));
+      if (exprIt->kind == slang::ast::ExpressionKind::MemberAccess) {
+        exprIt = &(exprIt->as<slang::ast::MemberAccessExpression>().value());
+      } else {
+        break;
+      }
+    }
+    auto type = context.convertType(*expr.type);
+    Value initial;
+
+    if (context.valueMultiSymbols.count(symbolVec)) {
+      return context.valueMultiSymbols.at(symbolVec);
+    }
+    auto varOp = builder.create<moore::VariableOp>(
+        loc, type, builder.getStringAttr(concatName), initial);
+    context.valueMultiSymbols.insert({symbolVec, varOp});
+    return varOp;
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {

@@ -16,6 +16,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include <map>
 #include <queue>
@@ -89,7 +90,11 @@ struct Context {
   using ValueSymbols =
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
+  using ValueMultiSymbols =
+      std::map<llvm::SmallVector<const slang::ast::ValueSymbol *>,
+                            Value>;
   ValueSymbols valueSymbols;
+  ValueMultiSymbols valueMultiSymbols;
 
   /// A stack of assignment left-hand side values. Each assignment will push its
   /// lowered left-hand side onto this stack before lowering its right-hand
