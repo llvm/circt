@@ -229,7 +229,7 @@ def ClockOp : LTLOp<"clock", [
   Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
   let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock);
-  let results = (outs LTLSequenceOrPropertyType:$result);
+  let results = (outs LTLAnyClockedType:$result);
   let assemblyFormat = [{
     $input `,` $edge $clock attr-dict `:` type($input)
   }];
@@ -249,8 +249,8 @@ def ClockOp : LTLOp<"clock", [
 }
 
 def DisableOp : LTLOp<"disable", [Pure]> {
-  let arguments = (ins LTLAnyPropertyType:$input, I1:$condition);
-  let results = (outs LTLPropertyType:$result);
+  let arguments = (ins LTLAnyPurePropertyType:$input, I1:$condition);
+  let results = (outs LTLDisabledPropertyType:$result);
   let assemblyFormat = [{
     $input `if` $condition attr-dict `:` type($input)
   }];
@@ -264,7 +264,10 @@ def DisableOp : LTLOp<"disable", [Pure]> {
     `$input`, the resulting property is disabled.
 
     The disabling is "infectious". If a property is disabled, it also implicitly
-    disables all properties that use it. Consider the following example:
+    disables all properties that use it. Note that only one disbale can be associated 
+    to a given property.
+    
+    Consider the following example:
     ```
     %0 = ltl.disable %prop if %cond
     %1 = ltl.or %0, %otherProp
