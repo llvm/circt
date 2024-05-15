@@ -264,7 +264,7 @@ LogicalResult LowerClassesPass::processPaths(
 
       // Attach an inner sym to the operation.
       Attribute targetSym;
-      if (auto portTarget = target.dyn_cast<PortAnnoTarget>()) {
+      if (auto portTarget = dyn_cast<PortAnnoTarget>(target)) {
         targetSym = getInnerRefTo(
             {portTarget.getPortNo(), portTarget.getOp(), fieldID},
             [&](FModuleLike module) -> hw::InnerSymbolNamespace & {

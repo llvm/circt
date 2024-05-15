@@ -8,9 +8,9 @@
 module Enums;
   typedef enum shortint { MAGIC } myEnum;
 
-  // CHECK-NEXT: %e0 = moore.variable : !moore.int
-  // CHECK-NEXT: %e1 = moore.variable : !moore.byte
-  // CHECK-NEXT: %e2 = moore.variable : !moore.shortint
+  // CHECK-NEXT: %e0 = moore.variable : !moore.i32
+  // CHECK-NEXT: %e1 = moore.variable : !moore.i8
+  // CHECK-NEXT: %e2 = moore.variable : !moore.i16
   enum { FOO, BAR } e0;
   enum byte { HELLO = 0, WORLD = 1 } e1;
   myEnum e2;
@@ -18,15 +18,15 @@ endmodule
 
 // CHECK-LABEL: moore.module @IntAtoms
 module IntAtoms;
-  // CHECK-NEXT: %d0 = moore.variable : !moore.logic
-  // CHECK-NEXT: %d1 = moore.variable : !moore.bit
-  // CHECK-NEXT: %d2 = moore.variable : !moore.reg
-  // CHECK-NEXT: %d3 = moore.variable : !moore.int
-  // CHECK-NEXT: %d4 = moore.variable : !moore.shortint
-  // CHECK-NEXT: %d5 = moore.variable : !moore.longint
-  // CHECK-NEXT: %d6 = moore.variable : !moore.integer
-  // CHECK-NEXT: %d7 = moore.variable : !moore.byte
-  // CHECK-NEXT: %d8 = moore.variable : !moore.time
+  // CHECK-NEXT: %d0 = moore.variable : !moore.l1
+  // CHECK-NEXT: %d1 = moore.variable : !moore.i1
+  // CHECK-NEXT: %d2 = moore.variable : !moore.l1
+  // CHECK-NEXT: %d3 = moore.variable : !moore.i32
+  // CHECK-NEXT: %d4 = moore.variable : !moore.i16
+  // CHECK-NEXT: %d5 = moore.variable : !moore.i64
+  // CHECK-NEXT: %d6 = moore.variable : !moore.l32
+  // CHECK-NEXT: %d7 = moore.variable : !moore.i8
+  // CHECK-NEXT: %d8 = moore.variable : !moore.l64
   logic d0;
   bit d1;
   reg d2;
@@ -37,15 +37,15 @@ module IntAtoms;
   byte d7;
   time d8;
 
-  // CHECK-NEXT: %u0 = moore.variable : !moore.logic
-  // CHECK-NEXT: %u1 = moore.variable : !moore.bit
-  // CHECK-NEXT: %u2 = moore.variable : !moore.reg
-  // CHECK-NEXT: %u3 = moore.variable : !moore.int<unsigned>
-  // CHECK-NEXT: %u4 = moore.variable : !moore.shortint<unsigned>
-  // CHECK-NEXT: %u5 = moore.variable : !moore.longint<unsigned>
-  // CHECK-NEXT: %u6 = moore.variable : !moore.integer<unsigned>
-  // CHECK-NEXT: %u7 = moore.variable : !moore.byte<unsigned>
-  // CHECK-NEXT: %u8 = moore.variable : !moore.time
+  // CHECK-NEXT: %u0 = moore.variable : !moore.l1
+  // CHECK-NEXT: %u1 = moore.variable : !moore.i1
+  // CHECK-NEXT: %u2 = moore.variable : !moore.l1
+  // CHECK-NEXT: %u3 = moore.variable : !moore.i32
+  // CHECK-NEXT: %u4 = moore.variable : !moore.i16
+  // CHECK-NEXT: %u5 = moore.variable : !moore.i64
+  // CHECK-NEXT: %u6 = moore.variable : !moore.l32
+  // CHECK-NEXT: %u7 = moore.variable : !moore.i8
+  // CHECK-NEXT: %u8 = moore.variable : !moore.l64
   logic unsigned u0;
   bit unsigned u1;
   reg unsigned u2;
@@ -56,15 +56,15 @@ module IntAtoms;
   byte unsigned u7;
   time unsigned u8;
 
-  // CHECK-NEXT: %s0 = moore.variable : !moore.logic<signed>
-  // CHECK-NEXT: %s1 = moore.variable : !moore.bit<signed>
-  // CHECK-NEXT: %s2 = moore.variable : !moore.reg<signed>
-  // CHECK-NEXT: %s3 = moore.variable : !moore.int
-  // CHECK-NEXT: %s4 = moore.variable : !moore.shortint
-  // CHECK-NEXT: %s5 = moore.variable : !moore.longint
-  // CHECK-NEXT: %s6 = moore.variable : !moore.integer
-  // CHECK-NEXT: %s7 = moore.variable : !moore.byte
-  // CHECK-NEXT: %s8 = moore.variable : !moore.time<signed>
+  // CHECK-NEXT: %s0 = moore.variable : !moore.l1
+  // CHECK-NEXT: %s1 = moore.variable : !moore.i1
+  // CHECK-NEXT: %s2 = moore.variable : !moore.l1
+  // CHECK-NEXT: %s3 = moore.variable : !moore.i32
+  // CHECK-NEXT: %s4 = moore.variable : !moore.i16
+  // CHECK-NEXT: %s5 = moore.variable : !moore.i64
+  // CHECK-NEXT: %s6 = moore.variable : !moore.l32
+  // CHECK-NEXT: %s7 = moore.variable : !moore.i8
+  // CHECK-NEXT: %s8 = moore.variable : !moore.l64
   logic signed s0;
   bit signed s1;
   reg signed s2;
@@ -78,30 +78,30 @@ endmodule
 
 // CHECK-LABEL: moore.module @MultiPackedRangeDim
 module MultiPackedRangeDim;
-  // CHECK-NEXT: %v0 = moore.variable : !moore.packed<range<range<logic, 2:0>, 5:0>>
-  // CHECK-NEXT: %v1 = moore.variable : !moore.packed<range<range<logic, 2:0>, 0:5>>
+  // CHECK-NEXT: %v0 = moore.variable : !moore.packed<range<l3, 5:0>>
+  // CHECK-NEXT: %v1 = moore.variable : !moore.packed<range<l3, 0:5>>
   logic [5:0][2:0] v0;
   logic [0:5][2:0] v1;
 endmodule
 
 // CHECK-LABEL: moore.module @MultiUnpackedRangeDim
 module MultiUnpackedRangeDim;
-  // CHECK-NEXT: %v0 = moore.variable : !moore.unpacked<range<range<logic, 2:0>, 5:0>>
-  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<range<range<logic, 2:0>, 0:5>>
+  // CHECK-NEXT: %v0 = moore.variable : !moore.unpacked<range<range<l1, 2:0>, 5:0>>
+  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<range<range<l1, 2:0>, 0:5>>
   logic v0 [5:0][2:0];
   logic v1 [0:5][2:0];
 endmodule
 
 // CHECK-LABEL: moore.module @MultiUnpackedUnsizedDim
 module MultiUnpackedUnsizedDim;
-  // CHECK-NEXT: %v0 = moore.variable : !moore.unpacked<unsized<unsized<logic>>>
+  // CHECK-NEXT: %v0 = moore.variable : !moore.unpacked<unsized<unsized<l1>>>
   logic v0 [][];
 endmodule
 
 // CHECK-LABEL: moore.module @PackedRangeDim
 module PackedRangeDim;
-  // CHECK-NEXT: %d0 = moore.variable : !moore.packed<range<logic, 2:0>>
-  // CHECK-NEXT: %d1 = moore.variable : !moore.packed<range<logic, 0:2>>
+  // CHECK-NEXT: %d0 = moore.variable : !moore.l3
+  // CHECK-NEXT: %d1 = moore.variable : !moore.l3
   logic [2:0] d0;
   logic [0:2] d1;
 endmodule
@@ -121,10 +121,10 @@ module Structs;
   typedef struct packed { byte a; int b; } myStructA;
   typedef struct { byte x; int y; } myStructB;
 
-  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: bit loc({{.+}}), bar: logic loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<bit, int> loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<struct<{a: byte loc({{.+}}), b: int loc({{.+}})}, loc({{.+}})>>
-  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<struct<{x: byte loc({{.+}}), y: int loc({{.+}})}, loc({{.+}})>>
+  // CHECK-NEXT: %s0 = moore.variable : !moore.packed<struct<{foo: i1, bar: l1}>>
+  // CHECK-NEXT: %s1 = moore.variable : !moore.unpacked<struct<{many: assoc<i1, i32>}>>
+  // CHECK-NEXT: %s2 = moore.variable : !moore.packed<struct<{a: i8, b: i32}>>
+  // CHECK-NEXT: %s3 = moore.variable : !moore.unpacked<struct<{x: i8, y: i32}>>
   struct packed { bit foo; logic bar; } s0;
   struct { bit many[int]; } s1;
   myStructA s2;
@@ -136,38 +136,38 @@ module Typedefs;
   typedef logic [2:0] myType1;
   typedef logic myType2 [2:0];
 
-  // CHECK-NEXT: %v0 = moore.variable : !moore.packed<range<logic, 2:0>>
-  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<range<logic, 2:0>>
+  // CHECK-NEXT: %v0 = moore.variable : !moore.l3
+  // CHECK-NEXT: %v1 = moore.variable : !moore.unpacked<range<l1, 2:0>>
   myType1 v0;
   myType2 v1;
 endmodule
 
 // CHECK-LABEL: moore.module @UnpackedAssocDim
 module UnpackedAssocDim;
-  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<assoc<logic, int>>
-  // CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<assoc<logic, logic>>
+  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<assoc<l1, i32>>
+  // CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<assoc<l1, l1>>
   logic d0 [int];
   logic d1 [logic];
 endmodule
 
 // CHECK-LABEL: moore.module @UnpackedQueueDim
 module UnpackedQueueDim;
-  //CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<queue<logic, 0>>
-  //CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<queue<logic, 2>>
+  //CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<queue<l1, 0>>
+  //CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<queue<l1, 2>>
   logic d0[$];
   logic d1[$:2];
 endmodule
 
 // CHECK-LABEL: moore.module @UnpackedRangeDim
 module UnpackedRangeDim;
-  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<range<logic, 2:0>>
-  // CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<range<logic, 0:2>>
+  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<range<l1, 2:0>>
+  // CHECK-NEXT: %d1 = moore.variable : !moore.unpacked<range<l1, 0:2>>
   logic d0 [2:0];
   logic d1 [0:2];
 endmodule
 
 // CHECK-LABEL: moore.module @UnpackedUnsizedDim
 module UnpackedUnsizedDim;
-  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<unsized<logic>>
+  // CHECK-NEXT: %d0 = moore.variable : !moore.unpacked<unsized<l1>>
   logic d0 [];
 endmodule

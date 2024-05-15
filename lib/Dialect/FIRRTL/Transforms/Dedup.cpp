@@ -1642,12 +1642,6 @@ class DedupPass : public DedupBase<DedupPass> {
           if (annotations.hasAnnotation(noDedupClass))
             return success();
 
-          // If the module has input RefType ports, also skip it.
-          if (llvm::any_of(module.getPorts(), [&](PortInfo port) {
-                return type_isa<RefType>(port.type) && port.isInput();
-              }))
-            return success();
-
           // Only dedup extmodule's with defname.
           if (auto ext = dyn_cast<FExtModuleOp>(*module);
               ext && !ext.getDefname().has_value())

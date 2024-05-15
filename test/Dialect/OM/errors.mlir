@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics -split-input-file
+// RUN: circt-opt -om-verify-object-fields %s -verify-diagnostics -split-input-file
 
 om.class @Class() {
   // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}
@@ -39,7 +39,7 @@ om.class @Class1() {}
 
 om.class @Class2() {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
-  // expected-error @+1 {{'om.object.field' op referenced non-existant field @foo}}
+  // expected-error @+1 {{'om.object.field' op referenced non-existent field @foo}}
   om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i1
 }
 
@@ -123,4 +123,21 @@ om.class @Thing() { }
 om.class @BadPath(%basepath: !om.basepath) {
   // expected-error @below {{invalid symbol reference}}
   %0 = om.path_create reference %basepath @Thing
+}
+
+
+// -----
+
+om.class @DupField(%0: i1) {
+  // expected-note @+1 {{previous definition is here}}
+  om.class.field @foo, %0 : i1
+  // expected-error @+1 {{'om.class.field' op field "foo" is defined twice}}
+  om.class.field @foo, %0 : i1
+}
+
+// -----
+
+om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
+  // expected-error @+1 {{class @Unknwon was not found}}
+  om.object.field %arg, [@unknown]: (!om.class.type<@Unknwon>) -> i1
 }

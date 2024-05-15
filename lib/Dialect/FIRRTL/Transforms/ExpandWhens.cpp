@@ -514,6 +514,9 @@ public:
   void process(Block &block);
 
   /// Simulation Constructs.
+  void visitStmt(VerifAssertIntrinsicOp op);
+  void visitStmt(VerifAssumeIntrinsicOp op);
+  void visitStmt(VerifCoverIntrinsicOp op);
   void visitStmt(AssertOp op);
   void visitStmt(AssumeOp op);
   void visitStmt(UnclockedAssumeIntrinsicOp op);
@@ -536,6 +539,17 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
+  // Create an implication from the condition to the given value
+  // This is implemented as (or (not condition) value) to avoid
+  // the corner case where value is an implication.
+  Value impliesLTLCondition(Operation *op, Value value) {
+    OpBuilder builder = OpBuilder(op);
+    Value notCond = builder.createOrFold<LTLNotIntrinsicOp>(
+        condition.getLoc(), condition.getType(), condition);
+    return builder.createOrFold<LTLOrIntrinsicOp>(
+        condition.getLoc(), condition.getType(), notCond, value);
+  }
+
 private:
   /// The current wrapping condition. If null, we are in the outer scope.
   Value condition;
@@ -554,6 +568,18 @@ void WhenOpVisitor::visitStmt(PrintFOp op) {
 
 void WhenOpVisitor::visitStmt(StopOp op) {
   op.getCondMutable().assign(andWithCondition(op, op.getCond()));
+}
+
+void WhenOpVisitor::visitStmt(VerifAssertIntrinsicOp op) {
+  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+}
+
+void WhenOpVisitor::visitStmt(VerifAssumeIntrinsicOp op) {
+  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+}
+
+void WhenOpVisitor::visitStmt(VerifCoverIntrinsicOp op) {
+  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {

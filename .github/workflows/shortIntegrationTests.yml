@@ -93,7 +93,7 @@ jobs:
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
       - name: Test CIRCT
         run: |
-          ninja -C build check-circt -j$(nproc)
+          ninja -C build check-circt circt-capi -j$(nproc)
       - name: Unit Test CIRCT
         run: |
           ninja -C build check-circt-unit -j$(nproc)

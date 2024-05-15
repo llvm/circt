@@ -3,49 +3,6 @@
 FIRRTL version 4.0.0
 
 circuit ChiselVerif:
-  intmodule Assert:
-    input clock: Clock
-    input predicate: UInt<1>
-    input enable: UInt<1>
-    intrinsic = circt_chisel_assert
-
-  intmodule AssertFormat:
-    input clock: Clock
-    input predicate: UInt<1>
-    input enable: UInt<1>
-    input val: UInt<1>
-    intrinsic = circt_chisel_assert
-    parameter format = "message: %d"
-    parameter label = "label for assert with format string"
-    parameter guards = "MACRO_GUARD;ASDF"
-
-  intmodule IfElseFatalFormat:
-    input clock: Clock
-    input predicate: UInt<1>
-    input enable: UInt<1>
-    input val: UInt<1>
-    intrinsic = circt_chisel_ifelsefatal
-    parameter format = "ief: %d"
-    ; In normal emission these are unused, but allow them to be set for now.
-    parameter label = "label for ifelsefatal assert"
-    parameter guards = "MACRO_GUARD;ASDF"
-
-  intmodule Assume:
-    input clock: Clock
-    input predicate: UInt<1>
-    input enable: UInt<1>
-    input val: UInt<1>
-    intrinsic = circt_chisel_assume
-    parameter format = "text: %d"
-    parameter label = "label for assume"
-
-  intmodule CoverLabel:
-    input clock: Clock
-    input predicate: UInt<1>
-    input enable: UInt<1>
-    intrinsic = circt_chisel_cover
-    parameter label = "label for cover"
-
   ; CHECK: module ChiselVerif
   public module ChiselVerif:
     input clock: Clock
@@ -54,10 +11,7 @@ circuit ChiselVerif:
     ; CHECK:  wire [[GEN:.+]] = ~enable | cond;
     ; CHECK: assert property
     ; CHECK-NOT: $error
-    inst assert of Assert
-    connect assert.clock, clock
-    connect assert.predicate, cond
-    connect assert.enable, enable
+    intrinsic(circt_chisel_assert, clock, cond, enable)
 
     ; CHECK: `ifdef MACRO_GUARD
     ; CHECK-NEXT: `ifdef ASDF
@@ -65,21 +19,19 @@ circuit ChiselVerif:
     ; CHECK: assert property
     ; CHECK: "message: %d"
     ; CHECK: $sampled(cond)
-    inst assertFormat of AssertFormat
-    connect assertFormat.clock, clock
-    connect assertFormat.predicate, cond
-    connect assertFormat.enable, enable
-    connect assertFormat.val, cond
+    intrinsic(circt_chisel_assert<format = "message: %d",
+                                  label = "label for assert with format string",
+                                  guards = "MACRO_GUARD;ASDF">,
+              clock, cond, enable, cond)
 
     ; Special if-else-fatal pattern, assert-like.
     ; No guards or labels for normal emission flow.
     ; CHECK: $error("ief: %d"
     ; CHECK: $fatal
-    inst ief of IfElseFatalFormat
-    connect ief.clock, clock
-    connect ief.predicate, cond
-    connect ief.enable, enable
-    connect ief.val, enable
+    intrinsic(circt_chisel_ifelsefatal<format = "ief: %d",
+                                       label = "label for ifelsefatal assert",
+                                       guards = "MACRO_GUARD;ASDF">,
+              clock, cond, enable, enable)
     ; CHECK: `ifdef USE_PROPERTY_AS_CONSTRAINT
     ; CHECK-NEXT:  assume property (@(posedge clock) [[GEN]]);
     ; CHECK-NEXT:  `ifdef MACRO_GUARD
@@ -96,15 +48,11 @@ circuit ChiselVerif:
     ; CHECK: assume property
     ; CHECK: "text: %d"
     ; CHECK: $sampled(enable)
-    inst assume of Assume
-    connect assume.clock, clock
-    connect assume.predicate, cond
-    connect assume.enable, enable
-    connect assume.val, enable
+    intrinsic(circt_chisel_assume<format = "text: %d",
+                                  label = "label for assume">,
+              clock, cond, enable, enable)
 
     ; CHECK: label_for_cover
     ; CHECK: cover property
-    inst cover of CoverLabel
-    connect cover.clock, clock
-    connect cover.predicate, cond
-    connect cover.enable, enable
+    intrinsic(circt_chisel_cover<label = "label for cover">,
+              clock, cond, enable)

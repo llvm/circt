@@ -1130,9 +1130,12 @@ firrtl.circuit "InvalidRef" {
 // Mux ref
 
 firrtl.circuit "MuxRef" {
-  firrtl.module @MuxRef() {}
-  firrtl.module private @MuxRefPrivate(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
-                          in %cond: !firrtl.uint<1>) {
+  firrtl.extmodule private @MuxRefPrivate(out a: !firrtl.probe<uint<1>>, out b: !firrtl.probe<uint<1>>,
+                                          out cond: !firrtl.uint<1>)
+  firrtl.module @MuxRef() {
+    %a, %b, %cond = firrtl.instance vals @MuxRefPrivate(out a: !firrtl.probe<uint<1>>,
+                                                        out b: !firrtl.probe<uint<1>>,
+                                                        out cond: !firrtl.uint<1>)
     // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
   }
@@ -1142,8 +1145,9 @@ firrtl.circuit "MuxRef" {
 // Bitcast ref
 
 firrtl.circuit "BitcastRef" {
-  firrtl.module @BitcastRef() {}
-  firrtl.module private @BitcastRefPrivate(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule @BitcastRef(out a: !firrtl.probe<uint<1>>)
+  firrtl.module private @BitcastRefPrivate() {
+    %a = firrtl.instance vals @BitcastRef(out a: !firrtl.probe<uint<1>>)
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.probe<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.probe<uint<1>>) -> (!firrtl.probe<uint<1>>)
   }
@@ -1165,12 +1169,13 @@ firrtl.circuit "Top" {
 // Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {}
-  // expected-note @+1 {{destination was defined here}}
-  firrtl.module private @InProbe(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule private @Probe(out _a: !firrtl.probe<uint<1>>)
+  firrtl.module @Foo() {
+    // expected-note @below {{destination was defined here}}
+    %_a = firrtl.instance val @Probe(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
-    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    // expected-error @+1 {{connect has invalid flow: the destination expression "val._a" has source flow, expected sink or duplex flow}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -2276,21 +2281,29 @@ firrtl.circuit "InstanceOfClass" {
 // -----
 
 firrtl.circuit "InputProbePublic" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.module @InputProbePublic(in %in : !firrtl.probe<uint<1>>) { }
 }
 
 // -----
 
+firrtl.circuit "InputProbePrivate" {
+  firrtl.module @InputProbePrivate() { }
+  // expected-error @below {{input probe not allowed}}
+  firrtl.module private @Private(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
 }
 
 // -----
 
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
 }
 

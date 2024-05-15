@@ -21,6 +21,7 @@ namespace om {
 
 std::unique_ptr<mlir::Pass> createOMLinkModulesPass();
 std::unique_ptr<mlir::Pass> createFreezePathsPass();
+std::unique_ptr<mlir::Pass> createVerifyObjectFieldsPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/OM/OMPasses.h.inc"

@@ -23,85 +23,25 @@ firrtl.circuit "SimpleHW" {
 
 // -----
 
-// Combined example.  Hoist passthrough. Ref and HW.
-// CHECK-LABEL: "UTurnTH"
-firrtl.circuit "UTurnTH" {
-  // CHECK:      module private @UTurn(in %in: !firrtl.probe<uint<5>>, in %hw_in: !firrtl.uint<5>) {
-  // CHECK-NEXT: }
-  firrtl.module private @UTurn(in %in : !firrtl.probe<uint<5>>,
-                               out %out : !firrtl.probe<uint<5>>,
-                               in %hw_in : !firrtl.uint<5>,
-                               out %hw_out : !firrtl.uint<5>) {
-    firrtl.ref.define %out, %in : !firrtl.probe<uint<5>>
-    firrtl.strictconnect %hw_out, %hw_in : !firrtl.uint<5>
-  }
-  firrtl.module @UTurnTH(in %in : !firrtl.uint<5>, out %out : !firrtl.uint<5>) {
-    // CHECK: %[[U_IN:.+]], %[[U_HW_IN:.+]] = firrtl.instance
-    %u_in, %u_out, %u_hw_in, %u_hw_out = firrtl.instance u @UTurn(in in : !firrtl.probe<uint<5>>,
-                                                                  out out : !firrtl.probe<uint<5>>,
-                                                                  in hw_in : !firrtl.uint<5>,
-                                                                  out hw_out : !firrtl.uint<5>)
-    %ref = firrtl.ref.send %in : !firrtl.uint<5>
-    firrtl.ref.define %u_in, %ref : !firrtl.probe<uint<5>>
-    // CHECK: firrtl.ref.resolve %[[U_IN]]
-    %data = firrtl.ref.resolve %u_out : !firrtl.probe<uint<5>>
-    firrtl.strictconnect %u_hw_in, %in : !firrtl.uint<5>
-    // CHECK: firrtl.strictconnect %out, %[[U_HW_IN]]
-    firrtl.strictconnect %out, %u_hw_out : !firrtl.uint<5>
-  }
-}
-
-// -----
-
 // Multiple outputs derived from same input.
 
 // CHECK-LABEL: "Split"
 firrtl.circuit "Split" {
-  // CHECK: @SPassthrough(in %in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>) {
-  firrtl.module private @SPassthrough(in %in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>, out %y: !firrtl.probe<uint<5>>, out %z: !firrtl.probe<uint<5>>) {
-    %w = firrtl.wire : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
-    firrtl.ref.define %w, %in : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
+  // CHECK: @SPassthrough(in %in: !firrtl.bundle<a: uint<5>, b: uint<5>>) {
+  firrtl.module private @SPassthrough(in %in: !firrtl.bundle<a: uint<5>, b: uint<5>>, out %y: !firrtl.uint<5>, out %z: !firrtl.uint<5>) {
+    // %w = firrtl.wire : !firrtl.bundle<a: uint<5>, b: uint<5>>
+    // firrtl.strictconnect %w, %in : !firrtl.bundle<a: uint<5>, b: uint<5>>
 
-    %0 = firrtl.ref.sub %w[1] : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
-    %1 = firrtl.ref.sub %w[0] : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
-    firrtl.ref.define %y, %1 : !firrtl.probe<uint<5>>
-    firrtl.ref.define %z, %0 : !firrtl.probe<uint<5>>
+    %0 = firrtl.subfield %in[b] : !firrtl.bundle<a: uint<5>, b: uint<5>>
+    %1 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<5>, b: uint<5>>
+    firrtl.strictconnect %y, %1 : !firrtl.uint<5>
+    firrtl.strictconnect %z, %0 : !firrtl.uint<5>
   }
-  firrtl.module @Split(in %x: !firrtl.bundle<a: uint<5>, b: uint<5>>, out %y: !firrtl.probe<uint<5>>, out %z: !firrtl.probe<uint<5>>) attributes {convention = #firrtl<convention scalarized>} {
-    %sp_in, %sp_y, %sp_z = firrtl.instance sp interesting_name @SPassthrough(in in: !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>, out y: !firrtl.probe<uint<5>>, out z: !firrtl.probe<uint<5>>)
-    %0 = firrtl.ref.send %x : !firrtl.bundle<a: uint<5>, b: uint<5>>
-    firrtl.ref.define %sp_in, %0 : !firrtl.probe<bundle<a: uint<5>, b: uint<5>>>
-    firrtl.ref.define %y, %sp_y : !firrtl.probe<uint<5>>
-    firrtl.ref.define %z, %sp_z : !firrtl.probe<uint<5>>
-  }
-}
-
-// -----
-
-// Multiple-instantiation hoisting
-
-// CHECK-LABEL: "MultUTurnTH"
-firrtl.circuit "MultUTurnTH" {
-  // CHECK:      module private @UTurn(in %in: !firrtl.probe<uint<5>>) {
-  // CHECK-NEXT: }
-  firrtl.module private @UTurn(in %in : !firrtl.probe<uint<5>>, out %out : !firrtl.probe<uint<5>>) {
-    firrtl.ref.define %out, %in : !firrtl.probe<uint<5>>
-  }
-  // CHECK: @MultUTurnTH
-  firrtl.module @MultUTurnTH(in %in : !firrtl.uint<5>, in %in2 : !firrtl.uint<5>) {
-    // CHECK: %[[U_IN:.+]] = firrtl.instance
-    %u_in, %u_out = firrtl.instance u @UTurn(in in : !firrtl.probe<uint<5>>, out out : !firrtl.probe<uint<5>>)
-    %ref = firrtl.ref.send %in : !firrtl.uint<5>
-    firrtl.ref.define %u_in, %ref : !firrtl.probe<uint<5>>
-    // CHECK: firrtl.ref.resolve %[[U_IN]]
-    %data = firrtl.ref.resolve %u_out : !firrtl.probe<uint<5>>
-
-    // CHECK: %[[U2_IN:.+]] = firrtl.instance
-    %u2_in, %u2_out = firrtl.instance u2 @UTurn(in in : !firrtl.probe<uint<5>>, out out : !firrtl.probe<uint<5>>)
-    %ref2 = firrtl.ref.send %in2 : !firrtl.uint<5>
-    firrtl.ref.define %u2_in, %ref2 : !firrtl.probe<uint<5>>
-    // CHECK: firrtl.ref.resolve %[[U2_IN]]
-    %data2 = firrtl.ref.resolve %u2_out : !firrtl.probe<uint<5>>
+  firrtl.module @Split(in %x: !firrtl.bundle<a: uint<5>, b: uint<5>>, out %y: !firrtl.uint<5>, out %z: !firrtl.uint<5>) {
+    %sp_in, %sp_y, %sp_z = firrtl.instance sp interesting_name @SPassthrough(in in: !firrtl.bundle<a: uint<5>, b: uint<5>>, out y: !firrtl.uint<5>, out z: !firrtl.uint<5>)
+    firrtl.strictconnect %sp_in, %x : !firrtl.bundle<a: uint<5>, b: uint<5>>
+    firrtl.strictconnect %y, %sp_y : !firrtl.uint<5>
+    firrtl.strictconnect %z, %sp_z : !firrtl.uint<5>
   }
 }
 
@@ -155,60 +95,25 @@ firrtl.circuit "Public" {
 
 // -----
 
-// Check insertion of temporary, and hoisting out of when regions.
+// Check insertion of temporary.
 // CHECK-LABEL: "NeedsWire"
 firrtl.circuit "NeedsWire" {
-  firrtl.module @NeedsWire(in %in_cond : !firrtl.uint<1>) {
-    %cond, %in_pass, %out_pass, %out_ref = firrtl.instance c @Child(in cond : !firrtl.uint<1>,
-                                                                    in in : !firrtl.probe<vector<uint<1>,2>>,
-                                                                    out out : !firrtl.probe<uint<1>>,
-                                                                    out out_vec : !firrtl.probe<vector<uint<1>, 2>>)
-    firrtl.ref.define %in_pass, %out_ref: !firrtl.probe<vector<uint<1>, 2>>
-    firrtl.strictconnect %cond, %in_cond : !firrtl.uint<1>
+  firrtl.module @NeedsWire(in %in_cond : !firrtl.vector<uint<1>, 2>) {
+    %c_cond, %c_out = firrtl.instance c @Child(in cond : !firrtl.vector<uint<1>, 2>,
+                                               out out : !firrtl.uint<1>)
+    firrtl.strictconnect %c_cond, %in_cond : !firrtl.vector<uint<1>, 2>
   }
-  firrtl.extmodule @ExtVec(out vec : !firrtl.vector<uint<1>, 2>)
+  firrtl.extmodule @ExtSink(in sink : !firrtl.uint<1>)
   // CHECK: module private @Child(
-  // CHECK-NOT: out %out:
-  // CHECK-SAME: out %out_vec
-  firrtl.module private @Child(in %cond : !firrtl.uint<1>,
-                               in %in : !firrtl.probe<vector<uint<1>,2>>,
-                               out %out : !firrtl.probe<uint<1>>,
-                               out %out_vec : !firrtl.probe<vector<uint<1>, 2>>) {
-    // CHECK-NEXT: firrtl.wire : !firrtl.probe<uint<1>>
-    firrtl.when %cond : !firrtl.uint<1> {
-      %index = firrtl.ref.sub %in[1] : !firrtl.probe<vector<uint<1>,2>>
-      firrtl.ref.define %out, %index : !firrtl.probe<uint<1>>
-    } else {
-      %data = firrtl.ref.resolve %out : !firrtl.probe<uint<1>>
-    }
+  // CHECK-NOT: out
+  firrtl.module private @Child(in %cond : !firrtl.vector<uint<1>, 2>,
+                               out %out : !firrtl.uint<1>) {
+    // CHECK-NEXT: firrtl.wire : !firrtl.uint<1>
+    %sub = firrtl.subindex %cond[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.strictconnect %out, %sub : !firrtl.uint<1>
 
-    %vec = firrtl.instance ev @ExtVec(out vec : !firrtl.vector<uint<1>, 2>)
-    %vec_ref = firrtl.ref.send %vec : !firrtl.vector<uint<1>, 2>
-    firrtl.ref.define %out_vec, %vec_ref : !firrtl.probe<vector<uint<1>, 2>>
-  }
-}
-
-// -----
-
-// Hoisting through cast: refs
-
-// CHECK-LABEL: "RefCast"
-firrtl.circuit "RefCast" {
-  // CHECK:      module private @UTurnCast(in %in: !firrtl.rwprobe<uint<5>>) {
-  // CHECK-NEXT:   firrtl.ref.cast %in : (!firrtl.rwprobe<uint<5>>) -> !firrtl.probe<uint<5>>
-  // CHECK-NEXT: }
-  firrtl.module private @UTurnCast(in %in : !firrtl.rwprobe<uint<5>>, out %out : !firrtl.probe<uint<5>>) {
-    %cast = firrtl.ref.cast %in : (!firrtl.rwprobe<uint<5>>) -> !firrtl.probe<uint<5>>
-    firrtl.ref.define %out, %cast : !firrtl.probe<uint<5>>
-  }
-  firrtl.module @RefCast(in %in : !firrtl.uint<5>) {
-    // CHECK: %[[U_IN:.+]] = firrtl.instance
-    %u_in, %u_out = firrtl.instance u @UTurnCast(in in : !firrtl.rwprobe<uint<5>>, out out : !firrtl.probe<uint<5>>)
-    %n, %ref = firrtl.node %in forceable : !firrtl.uint<5>
-    firrtl.ref.define %u_in, %ref : !firrtl.rwprobe<uint<5>>
-    // CHECK: %[[CAST:.+]] = firrtl.ref.cast %[[U_IN]]
-    // CHECK: firrtl.ref.resolve %[[CAST]]
-    %data = firrtl.ref.resolve %u_out : !firrtl.probe<uint<5>>
+    %sink = firrtl.instance ev @ExtSink(in sink : !firrtl.uint<1>)
+    firrtl.strictconnect %sink, %out : !firrtl.uint<1>
   }
 }
 
@@ -231,34 +136,6 @@ firrtl.circuit "HWCast" {
     firrtl.strictconnect %u_in, %in : !firrtl.const.uint<5>
     // CHECK: firrtl.strictconnect %out, %[[U_OUT]] : !firrtl.uint<5>
     firrtl.strictconnect %out, %u_out : !firrtl.uint<5>
-  }
-}
-
-// -----
-
-// Hoisting through wires (+cast): refs
-
-// CHECK-LABEL: "RefWire"
-firrtl.circuit "RefWire" {
-  // CHECK:      module private @UWire(in %in: !firrtl.rwprobe<uint<5>>) {
-  // CHECK-NEXT:   %[[W:.+]] = firrtl.wire : !firrtl.rwprobe
-  // CHECK-NEXT:   firrtl.ref.define %[[W]], %in
-  // CHECK-NEXT:   firrtl.ref.cast %[[W]] : (!firrtl.rwprobe<uint<5>>) -> !firrtl.probe<uint<5>>
-  // CHECK-NEXT: }
-  firrtl.module private @UWire(in %in : !firrtl.rwprobe<uint<5>>, out %out : !firrtl.probe<uint<5>>) {
-    %w = firrtl.wire : !firrtl.rwprobe<uint<5>>
-    firrtl.ref.define %w, %in : !firrtl.rwprobe<uint<5>>
-    %cast = firrtl.ref.cast %w : (!firrtl.rwprobe<uint<5>>) -> !firrtl.probe<uint<5>>
-    firrtl.ref.define %out, %cast : !firrtl.probe<uint<5>>
-  }
-  firrtl.module @RefWire(in %in : !firrtl.uint<5>) {
-    // CHECK: %[[U_IN:.+]] = firrtl.instance
-    %u_in, %u_out = firrtl.instance u @UWire(in in : !firrtl.rwprobe<uint<5>>, out out : !firrtl.probe<uint<5>>)
-    %n, %ref = firrtl.node %in forceable : !firrtl.uint<5>
-    firrtl.ref.define %u_in, %ref : !firrtl.rwprobe<uint<5>>
-    // CHECK: %[[CAST:.+]] = firrtl.ref.cast %[[U_IN]]
-    // CHECK: firrtl.ref.resolve %[[CAST]]
-    %data = firrtl.ref.resolve %u_out : !firrtl.probe<uint<5>>
   }
 }
 
@@ -605,29 +482,25 @@ firrtl.circuit "HWForceable" {
 
 // -----
 
-// Multiple layers of probe aggregate.
+// Multiple layers of HW aggregate.
 
 // CHECK-LABEL: "AggAgg"
 firrtl.circuit "AggAgg" {
   // CHECK-NOT: out %out
-  firrtl.module private @IndexIndex(in %in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out %out : !firrtl.probe<uint<1>>) {
-    %vec_sel = firrtl.ref.sub %in[1] : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
-    %vec_wire = firrtl.wire : !firrtl.probe<vector<uint<1>, 5>>
-    firrtl.ref.define %vec_wire, %vec_sel: !firrtl.probe<vector<uint<1>, 5>>
-    %sel = firrtl.ref.sub %vec_wire[3] : !firrtl.probe<vector<uint<1>, 5>>
-    firrtl.ref.define %out, %sel : !firrtl.probe<uint<1>>
+  firrtl.module private @IndexIndex(in %in : !firrtl.vector<vector<uint<1>, 5>, 5>, out %out : !firrtl.uint<1>) {
+    %vec_sel = firrtl.subindex %in[1] : !firrtl.vector<vector<uint<1>, 5>, 5>
+    %sel = firrtl.subindex %vec_sel[3] : !firrtl.vector<uint<1>, 5>
+    firrtl.strictconnect %out, %sel : !firrtl.uint<1>
   }
   // CHECK: @AggAgg
   firrtl.module @AggAgg(in %in : !firrtl.vector<vector<uint<1>, 5>, 5>, out %out : !firrtl.uint<1>) {
-    %ref = firrtl.ref.send %in : !firrtl.vector<vector<uint<1>, 5>, 5>
     // CHECK: %[[IN:.+]] = firrtl.instance
-    %ii_in, %ii_out = firrtl.instance ii @IndexIndex(in in : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>, out out : !firrtl.probe<uint<1>>)
-    firrtl.ref.define %ii_in, %ref : !firrtl.probe<vector<vector<uint<1>, 5>, 5>>
-    // CHECK: %[[IN_1:.+]] = firrtl.ref.sub %[[IN]][1]
-    // CHECK: %[[IN_1_3:.+]] = firrtl.ref.sub %[[IN_1]][3]
-    // CHECK: ref.resolve %[[IN_1_3]]
-    %read = firrtl.ref.resolve %ii_out : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %out, %read : !firrtl.uint<1>
+    %ii_in, %ii_out = firrtl.instance ii @IndexIndex(in in : !firrtl.vector<vector<uint<1>, 5>, 5>, out out : !firrtl.uint<1>)
+    firrtl.strictconnect %ii_in, %in : !firrtl.vector<vector<uint<1>, 5>, 5>
+    // CHECK: %[[IN_1:.+]] = firrtl.subindex %[[IN]][1]
+    // CHECK: %[[IN_1_3:.+]] = firrtl.subindex %[[IN_1]][3]
+    // CHECK: strictconnect %out, %[[IN_1_3]]
+    firrtl.strictconnect %out, %ii_out : !firrtl.uint<1>
   }
 }
 

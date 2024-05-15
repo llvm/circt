@@ -26,6 +26,8 @@ using namespace mlir;
 using namespace circt;
 using namespace moore;
 
+using comb::ICmpPredicate;
+
 namespace {
 
 /// Returns the passed value if the integer width is already correct.
@@ -54,51 +56,6 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   Value max = builder.create<hw::ConstantOp>(
       loc, builder.getIntegerType(targetWidth), -1);
   return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
-}
-
-/// Due to the result type of the `lt`, or `le`, or `gt`, or `ge` ops are
-/// always unsigned, estimating their operands type.
-static bool isSignedType(Operation *op) {
-  return TypeSwitch<Operation *, bool>(op)
-      .template Case<LtOp, LeOp, GtOp, GeOp>([&](auto op) -> bool {
-        return cast<UnpackedType>(op->getOperand(0).getType())
-                   .castToSimpleBitVector()
-                   .isSigned() &&
-               cast<UnpackedType>(op->getOperand(1).getType())
-                   .castToSimpleBitVector()
-                   .isSigned();
-      })
-      .Default([&](auto op) -> bool {
-        return cast<UnpackedType>(op->getResult(0).getType())
-            .castToSimpleBitVector()
-            .isSigned();
-      });
-}
-
-/// Not define the predicate for `relation` and `equality` operations in the
-/// MooreDialect, but comb needs it. Return a correct `comb::ICmpPredicate`
-/// corresponding to different moore `relation` and `equality` operations.
-static comb::ICmpPredicate getCombPredicate(Operation *op) {
-  using comb::ICmpPredicate;
-  return TypeSwitch<Operation *, ICmpPredicate>(op)
-      .Case<LtOp>([&](auto op) {
-        return isSignedType(op) ? ICmpPredicate::slt : ICmpPredicate::ult;
-      })
-      .Case<LeOp>([&](auto op) {
-        return isSignedType(op) ? ICmpPredicate::sle : ICmpPredicate::ule;
-      })
-      .Case<GtOp>([&](auto op) {
-        return isSignedType(op) ? ICmpPredicate::sgt : ICmpPredicate::ugt;
-      })
-      .Case<GeOp>([&](auto op) {
-        return isSignedType(op) ? ICmpPredicate::sge : ICmpPredicate::uge;
-      })
-      .Case<EqOp>([&](auto op) { return ICmpPredicate::eq; })
-      .Case<NeOp>([&](auto op) { return ICmpPredicate::ne; })
-      .Case<CaseEqOp>([&](auto op) { return ICmpPredicate::ceq; })
-      .Case<CaseNeOp>([&](auto op) { return ICmpPredicate::cne; })
-      .Case<WildcardEqOp>([&](auto op) { return ICmpPredicate::weq; })
-      .Case<WildcardNeOp>([&](auto op) { return ICmpPredicate::wne; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,16 +160,13 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
   LogicalResult
   matchAndRewrite(BoolCastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (cast<UnpackedType>(op.getInput().getType())
-            .castToSimpleBitVectorOrNull()) {
-      Type resultType = typeConverter->convertType(op.getInput().getType());
+    Type resultType = typeConverter->convertType(op.getInput().getType());
+    if (isa_and_nonnull<IntegerType>(resultType)) {
       Value zero = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
-
       rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
                                                 adaptor.getInput(), zero);
       return success();
     }
-
     return failure();
   }
 };
@@ -231,8 +185,7 @@ struct NotOpConversion : public OpConversionPattern<NotOp> {
   }
 };
 
-template <typename SourceOp, typename UnsignedOp,
-          typename SignedOp = UnsignedOp>
+template <typename SourceOp, typename TargetOp>
 struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
   using OpAdaptor = typename SourceOp::Adaptor;
@@ -240,17 +193,13 @@ struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   LogicalResult
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
-    isSignedType(op)
-        ? rewriter.replaceOpWithNewOp<SignedOp>(op, adaptor.getLhs(),
-                                                adaptor.getRhs(), false)
-        : rewriter.replaceOpWithNewOp<UnsignedOp>(op, adaptor.getLhs(),
-                                                  adaptor.getRhs(), false);
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
+                                          adaptor.getRhs(), false);
     return success();
   }
 };
 
-template <typename SourceOp>
+template <typename SourceOp, ICmpPredicate pred>
 struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
   using OpAdaptor = typename SourceOp::Adaptor;
@@ -260,7 +209,6 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType =
         ConversionPattern::typeConverter->convertType(op.getResult().getType());
-    comb::ICmpPredicate pred = getCombPredicate(op);
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
         op, resultType, pred, adapter.getLhs(), adapter.getRhs());
@@ -464,15 +412,13 @@ static void populateLegality(ConversionTarget &target) {
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
-    return mlir::IntegerType::get(type.getContext(), type.getBitSize());
+    return mlir::IntegerType::get(type.getContext(), type.getWidth());
   });
 
   // Directly map simple bit vector types to a compact integer type. This needs
   // to be added after all of the other conversions above, such that SBVs
   // conversion gets tried first before any of the others.
   typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
-    if (auto sbv = type.getSimpleBitVectorOrNull())
-      return mlir::IntegerType::get(type.getContext(), sbv.size);
     if (isa<UnpackedRangeDim, PackedRangeDim>(type))
       return mlir::IntegerType::get(type.getContext(),
                                     type.getBitSize().value());
@@ -494,23 +440,35 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion, 
-    
+    BoolCastOpConversion, NotOpConversion,
+
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
     BinaryOpConversion<SubOp, comb::SubOp>,
     BinaryOpConversion<MulOp, comb::MulOp>,
-    BinaryOpConversion<DivOp, comb::DivUOp, comb::DivSOp>,
-    BinaryOpConversion<ModOp, comb::ModUOp, comb::ModSOp>,
+    BinaryOpConversion<DivUOp, comb::DivUOp>,
+    BinaryOpConversion<DivSOp, comb::DivSOp>,
+    BinaryOpConversion<ModUOp, comb::ModUOp>,
+    BinaryOpConversion<ModSOp, comb::ModSOp>,
     BinaryOpConversion<AndOp, comb::AndOp>,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
 
     // Patterns of relational operations.
-    ICmpOpConversion<LtOp>, ICmpOpConversion<LeOp>, ICmpOpConversion<GtOp>,
-    ICmpOpConversion<GeOp>, ICmpOpConversion<EqOp>, ICmpOpConversion<NeOp>,
-    ICmpOpConversion<CaseEqOp>, ICmpOpConversion<CaseNeOp>,
-    ICmpOpConversion<WildcardEqOp>, ICmpOpConversion<WildcardNeOp>,
+    ICmpOpConversion<UltOp, ICmpPredicate::ult>,
+    ICmpOpConversion<SltOp, ICmpPredicate::slt>,
+    ICmpOpConversion<UleOp, ICmpPredicate::ule>,
+    ICmpOpConversion<SleOp, ICmpPredicate::sle>,
+    ICmpOpConversion<UgtOp, ICmpPredicate::ugt>,
+    ICmpOpConversion<SgtOp, ICmpPredicate::sgt>,
+    ICmpOpConversion<UgeOp, ICmpPredicate::uge>,
+    ICmpOpConversion<SgeOp, ICmpPredicate::sge>,
+    ICmpOpConversion<EqOp, ICmpPredicate::eq>,
+    ICmpOpConversion<NeOp, ICmpPredicate::ne>,
+    ICmpOpConversion<CaseEqOp, ICmpPredicate::ceq>,
+    ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
+    ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
+    ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,

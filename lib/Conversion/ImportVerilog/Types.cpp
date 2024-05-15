@@ -11,6 +11,7 @@
 
 using namespace circt;
 using namespace ImportVerilog;
+using moore::Domain;
 
 namespace {
 struct TypeVisitor {
@@ -18,27 +19,16 @@ struct TypeVisitor {
   Location loc;
   TypeVisitor(Context &context, Location loc) : context(context), loc(loc) {}
 
+  // Handle simple bit vector types such as `bit`, `int`, or `bit [41:0]`.
+  Type getSimpleBitVectorType(const slang::ast::IntegralType &type) {
+    return moore::IntType::get(context.getContext(), type.bitWidth,
+                               type.isFourState ? Domain::FourValued
+                                                : Domain::TwoValued);
+  }
+
   // NOLINTBEGIN(misc-no-recursion)
   Type visit(const slang::ast::ScalarType &type) {
-    moore::IntType::Kind kind;
-    switch (type.scalarKind) {
-    case slang::ast::ScalarType::Bit:
-      kind = moore::IntType::Bit;
-      break;
-    case slang::ast::ScalarType::Logic:
-      kind = moore::IntType::Logic;
-      break;
-    case slang::ast::ScalarType::Reg:
-      kind = moore::IntType::Reg;
-      break;
-    }
-
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return getSimpleBitVectorType(type);
   }
 
   Type visit(const slang::ast::FloatingType &type) {
@@ -59,37 +49,15 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {
-    moore::IntType::Kind kind;
-    switch (type.integerKind) {
-    case slang::ast::PredefinedIntegerType::Int:
-      kind = moore::IntType::Int;
-      break;
-    case slang::ast::PredefinedIntegerType::ShortInt:
-      kind = moore::IntType::ShortInt;
-      break;
-    case slang::ast::PredefinedIntegerType::LongInt:
-      kind = moore::IntType::LongInt;
-      break;
-    case slang::ast::PredefinedIntegerType::Integer:
-      kind = moore::IntType::Integer;
-      break;
-    case slang::ast::PredefinedIntegerType::Byte:
-      kind = moore::IntType::Byte;
-      break;
-    case slang::ast::PredefinedIntegerType::Time:
-      kind = moore::IntType::Time;
-      break;
-    }
-
-    std::optional<moore::Sign> sign =
-        type.isSigned ? moore::Sign::Signed : moore::Sign::Unsigned;
-    if (sign == moore::IntType::getDefaultSign(kind))
-      sign = {};
-
-    return moore::IntType::get(context.getContext(), kind, sign);
+    return getSimpleBitVectorType(type);
   }
 
   Type visit(const slang::ast::PackedArrayType &type) {
+    // Handle simple bit vector types of the form `bit [41:0]`.
+    if (type.elementType.as_if<slang::ast::ScalarType>())
+      return getSimpleBitVectorType(type);
+
+    // Handle all other packed arrays.
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
@@ -151,7 +119,6 @@ struct TypeVisitor {
                                SmallVectorImpl<moore::StructMember> &members,
                                bool enforcePacked) {
     for (auto &field : structType.membersOfType<slang::ast::FieldSymbol>()) {
-      auto loc = context.convertLocation(field.location);
       auto name = StringAttr::get(context.getContext(), field.name);
       auto innerType = context.convertType(*field.getDeclaredType());
       if (!innerType)
@@ -159,28 +126,26 @@ struct TypeVisitor {
       // The Slang frontend guarantees the inner type to be packed if the struct
       // is packed.
       assert(!enforcePacked || isa<moore::PackedType>(innerType));
-      members.push_back({name, loc, cast<moore::UnpackedType>(innerType)});
+      members.push_back({name, cast<moore::UnpackedType>(innerType)});
     }
     return success();
   }
 
   // Handle packed and unpacked structs.
   Type visit(const slang::ast::PackedStructType &type) {
-    auto loc = context.convertLocation(type.location);
     SmallVector<moore::StructMember> members;
     if (failed(collectMembers(type, members, true)))
       return {};
-    return moore::PackedStructType::get(moore::StructKind::Struct, members,
-                                        StringAttr{}, loc);
+    return moore::PackedStructType::get(context.getContext(),
+                                        moore::StructKind::Struct, members);
   }
 
   Type visit(const slang::ast::UnpackedStructType &type) {
-    auto loc = context.convertLocation(type.location);
     SmallVector<moore::StructMember> members;
     if (failed(collectMembers(type, members, false)))
       return {};
-    return moore::UnpackedStructType::get(moore::StructKind::Struct, members,
-                                          StringAttr{}, loc);
+    return moore::UnpackedStructType::get(context.getContext(),
+                                          moore::StructKind::Struct, members);
   }
 
   /// Emit an error for all other types.
