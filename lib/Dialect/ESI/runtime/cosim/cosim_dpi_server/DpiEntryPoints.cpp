@@ -16,8 +16,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cosim/Server.h"
-#include "cosim/dpi.h"
+#include "cosim/CapnpThreads.h"
+#include "dpi.h"
 
 #include <algorithm>
 #include <cassert>

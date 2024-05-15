@@ -17,8 +17,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cosim/Server.h"
 #include "CosimDpi.capnp.h"
+#include "cosim/CapnpThreads.h"
 #include <capnp/ez-rpc.h>
 #include <thread>
 #ifdef _WIN32
@@ -242,9 +242,6 @@ kj::Promise<void> CosimServer::openLowLevel(OpenLowLevelContext ctxt) {
 
 /// ----- RpcServer definitions.
 
-RpcServer::RpcServer() : mainThread(nullptr), stopSig(false) {}
-RpcServer::~RpcServer() { stop(); }
-
 /// Write the port number to a file. Necessary when we allow 'EzRpcServer' to
 /// select its own port. We can't use stdout/stderr because the flushing
 /// semantics are undefined (as in `flush()` doesn't work on all simulators).
@@ -268,40 +265,15 @@ void RpcServer::mainLoop(uint16_t port) {
   }
   writePort(port);
   printf("[COSIM] Listening on port: %u\n", (unsigned int)port);
-
-  // OK, this is uber hacky, but it unblocks me and isn't _too_ inefficient. The
-  // problem is that I can't figure out how read the stop signal from libkj
-  // asyncrony land.
-  //
-  // IIRC the main libkj wait loop uses `select()` (or something similar on
-  // Windows) on its FDs. As a result, any code which checks the stop variable
-  // doesn't run until there is some I/O. Probably the right way is to set up a
-  // pipe to deliver a shutdown signal.
-  //
-  // TODO: Figure out how to do this properly, if possible.
-  while (!stopSig) {
-    waitScope.poll();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  }
+  loop(waitScope);
 }
 
 /// Start the server if not already started.
 void RpcServer::run(uint16_t port) {
   Lock g(m);
-  if (mainThread == nullptr) {
-    mainThread = new std::thread(&RpcServer::mainLoop, this, port);
+  if (myThread == nullptr) {
+    myThread = new std::thread(&RpcServer::mainLoop, this, port);
   } else {
     fprintf(stderr, "Warning: cannot Run() RPC server more than once!");
-  }
-}
-
-/// Signal the RPC server thread to stop. Wait for it to exit.
-void RpcServer::stop() {
-  Lock g(m);
-  if (mainThread == nullptr) {
-    fprintf(stderr, "RpcServer not Run()\n");
-  } else if (!stopSig) {
-    stopSig = true;
-    mainThread->join();
   }
 }
