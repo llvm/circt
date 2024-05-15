@@ -91,9 +91,65 @@ smt.solver () : () -> () {
   }
   smt.assert %7
 
+  // CHECK: (assert (let (([[V33:.+]] (exists (([[V34:.+]] Int) ([[V35:.+]] Int))
+  // CHECK:                           ( ! (let (([[V36:.+]] (= [[V35]] 4)))
+  // CHECK:                               (let (([[V37:.+]] (= [[V34]] 3)))
+  // CHECK:                               (let (([[V38:.+]] (= [[V37]] [[V36]])))
+  // CHECK:                               [[V38]])))
+  // CHECK:                               :pattern ((let (([[V39:.+]] (= [[V34]] 3)))
+  // CHECK:                               [[V39]]) (let (([[V40:.+]] (= [[V35]] 4)))
+  // CHECK:                               [[V40]]))))))
+  // CHECK:         [[V33]]))
+
+  %three = smt.int.constant 3
+  %four = smt.int.constant 4
+
+  %8 = smt.exists {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %4 = smt.eq %arg2, %three: !smt.int
+    %5 = smt.eq %arg3, %four: !smt.int
+    %9 = smt.eq %4, %5: !smt.bool
+    smt.yield %9 : !smt.bool
+  } patterns {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %4 = smt.eq %arg2, %three: !smt.int
+    smt.yield %4: !smt.bool
+    }, {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %5 = smt.eq %arg3, %four: !smt.int
+    smt.yield %5: !smt.bool
+  }
+  smt.assert %8
+
+  smt.check sat {} unknown {} unsat {}
+
+  // CHECK: (assert (let (([[V41:.+]] (exists (([[V42:.+]] Int) ([[V43:.+]] Int))
+  // CHECK:                           ( ! (let (([[V44:.+]] (= [[V43]] 4)))
+  // CHECK:                               (let (([[V45:.+]] (= [[V42]] 3)))
+  // CHECK:                               (let (([[V46:.+]] (= [[V45]] [[V44]])))
+  // CHECK:                               [[V46]])))
+  // CHECK:                               :pattern ((let (([[V47:.+]] (= [[V42]] 3)))
+  // CHECK:                               [[V47]])(let (([[V48:.+]] (= [[V43]] 4)))
+  // CHECK:                               [[V48]]))))))
+  // CHECK:         [[V41]]))
+
+  %10 = smt.exists {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %4 = smt.eq %arg2, %three: !smt.int
+    %5 = smt.eq %arg3, %four: !smt.int
+    %9 = smt.eq %4, %5: !smt.bool
+    smt.yield %9 : !smt.bool
+  } patterns {
+    ^bb0(%arg2: !smt.int, %arg3: !smt.int):
+    %4 = smt.eq %arg2, %three: !smt.int
+    %5 = smt.eq %arg3, %four: !smt.int
+    smt.yield %4, %5: !smt.bool, !smt.bool
+  }
+  smt.assert %10
+
+  smt.check sat {} unknown {} unsat {}
   
   // CHECK: (reset)
   // CHECK-INLINED: (reset)
-
 
 }
