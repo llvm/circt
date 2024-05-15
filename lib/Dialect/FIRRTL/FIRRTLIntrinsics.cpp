@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
@@ -90,15 +92,13 @@ namespace {
 class IntrinsicOpConversion final
     : public OpConversionPattern<GenericIntrinsicOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
-
   using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
 
-  IntrinsicOpConversion(MLIRContext *context,
+  IntrinsicOpConversion(TypeConverter &typeConverter, MLIRContext *context,
                         const ConversionMapTy &conversions,
                         size_t &numConversions,
                         bool allowUnknownIntrinsics = false)
-      : OpConversionPattern(context), conversions(conversions),
+      : OpConversionPattern(typeConverter, context), conversions(conversions),
         numConversions(numConversions),
         allowUnknownIntrinsics(allowUnknownIntrinsics) {}
 
@@ -146,10 +146,36 @@ FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
   else
     target.addIllegalOp<GenericIntrinsicOp>();
 
+  // Automatically insert wires + connect for compatible FIRRTL base types.
+  // For now, this is not customizable/extendable.
+  TypeConverter typeConverter;
+  typeConverter.addConversion([](Type type) { return type; });
+  auto firrtlBaseTypeMaterialization =
+      [](OpBuilder &builder, FIRRTLBaseType resultType, ValueRange inputs,
+         Location loc) -> Value {
+    if (inputs.size() != 1)
+      return {};
+    auto inputType = type_dyn_cast<FIRRTLBaseType>(inputs.front().getType());
+    if (!inputType)
+      return {};
+
+    if (!areTypesEquivalent(resultType, inputType) ||
+        !isTypeLarger(resultType, inputType))
+      return {};
+
+    auto w = builder.create<WireOp>(loc, resultType).getResult();
+    emitConnect(builder, loc, w, inputs.front());
+    return w;
+  };
+  // New result doesn't match? Add wire + connect.
+  typeConverter.addSourceMaterialization(firrtlBaseTypeMaterialization);
+  // New operand doesn't match? Add wire + connect.
+  typeConverter.addTargetMaterialization(firrtlBaseTypeMaterialization);
+
   RewritePatternSet patterns(context);
   size_t count = 0;
-  patterns.add<IntrinsicOpConversion>(context, conversions, count,
-                                      allowUnknownIntrinsics);
+  patterns.add<IntrinsicOpConversion>(typeConverter, context, conversions,
+                                      count, allowUnknownIntrinsics);
 
   if (failed(mlir::applyPartialConversion(mod, target, std::move(patterns))))
     return failure();
@@ -362,23 +388,35 @@ public:
   }
 };
 
-class CirctMux2CellConverter
-    : public IntrinsicOpConverter<Mux2CellIntrinsicOp> {
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+class CirctMux2CellConverter : public IntrinsicConverter {
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(3) || gi.typedInput<UIntType>(0) || gi.hasNParam(0) ||
            gi.hasOutput();
   }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<Mux2CellIntrinsicOp>(gi.op, operands[0],
+                                                     operands[1], operands[2]);
+  }
 };
 
-class CirctMux4CellConverter
-    : public IntrinsicOpConverter<Mux4CellIntrinsicOp> {
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+class CirctMux4CellConverter : public IntrinsicConverter {
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(5) || gi.typedInput<UIntType>(0) || gi.hasNParam(0) ||
            gi.hasOutput();
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<Mux4CellIntrinsicOp>(
+        gi.op, operands[0], operands[1], operands[2], operands[3], operands[4]);
   }
 };
 
