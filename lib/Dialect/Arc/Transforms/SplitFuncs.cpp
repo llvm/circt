@@ -15,6 +15,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 #include <string>
 
 #define DEBUG_TYPE "arc-split-funcs"
@@ -36,21 +37,11 @@ using namespace func;
 
 namespace {
 struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
-  SplitFuncsPass() = default;
-  explicit SplitFuncsPass(unsigned splitBound) : SplitFuncsPass() {
-    this->splitBound.setValue(splitBound);
-  }
-  SplitFuncsPass(const SplitFuncsPass &pass) : SplitFuncsPass() {}
-
+  using arc::impl::SplitFuncsBase<SplitFuncsPass>::SplitFuncsBase;
   void runOnOperation() override;
   LogicalResult lowerFunc(FuncOp funcOp);
 
   SymbolTable *symbolTable;
-
-  Statistic numFuncsCreated{this, "funcs-created",
-                            "Number of new functions created"};
-
-  using SplitFuncsBase::splitBound;
 };
 } // namespace
 
@@ -62,28 +53,29 @@ void SplitFuncsPass::runOnOperation() {
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
+  if (splitBound == 0)
+    return funcOp.emitError("Cannot split functions into functions of size 0.");
+  if (funcOp.getBody().getBlocks().size() > 1)
+    return funcOp.emitError("Regions with multiple blocks are not supported.");
   assert(splitBound != 0 && "Cannot split functions into functions of size 0");
+  assert(funcOp->getNumRegions() == 1);
   unsigned numOps = funcOp.front().getOperations().size();
   if (numOps < splitBound)
     return success();
-  int numBlocks = ceil((float)numOps / splitBound);
+  int numBlocks = llvm::divideCeil(numOps, splitBound);
   OpBuilder opBuilder(funcOp->getContext());
-  std::vector<Block *> blocks;
-  assert(funcOp->getNumRegions() == 1);
+  SmallVector<Block *> blocks;
   Block *frontBlock = &(funcOp.getBody().front());
   blocks.push_back(frontBlock);
   for (int i = 0; i < numBlocks - 1; i++) {
-    std::vector<Location> locs;
-    for (unsigned long j = 0; j < frontBlock->getArgumentTypes().size(); j++) {
-      locs.push_back(funcOp.getLoc());
-    }
+    SmallVector<Location> locs(frontBlock->getNumArguments(), funcOp.getLoc());
     auto *block = opBuilder.createBlock(&(funcOp.getBody()), {},
                                         frontBlock->getArgumentTypes(), locs);
     blocks.push_back(block);
   }
 
   unsigned numOpsInBlock = 0;
-  std::vector<Block *>::iterator blockIter = blocks.begin();
+  SmallVector<Block *>::iterator blockIter = blocks.begin();
   for (auto &op : llvm::make_early_inc_range(*frontBlock)) {
     if (numOpsInBlock >= splitBound) {
       blockIter++;
@@ -115,9 +107,9 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     liveness = Liveness(funcOp);
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
-    std::vector<Value> outValues;
+    SmallVector<Value> outValues;
     llvm::for_each(liveOut, [&outValues](auto el) {
-      if (!dyn_cast<BlockArgument>(el))
+      if (!isa<BlockArgument>(el))
         outValues.push_back(el);
     });
     opBuilder.setInsertionPointToEnd(currentBlock);
@@ -127,10 +119,10 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   for (long unsigned i = 0; i < blocks.size() - 1; i++) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
-    std::vector<Type> outTypes;
-    std::vector<Value> outValues;
+    SmallVector<Type> outTypes;
+    SmallVector<Value> outValues;
     llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
-      if (!dyn_cast<BlockArgument>(el)) {
+      if (!isa<BlockArgument>(el)) {
         outValues.push_back(el);
         outTypes.push_back(el.getType());
       }
@@ -153,30 +145,25 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     currentBlock->erase();
 
     opBuilder.setInsertionPointToEnd(funcBlock);
-    int j = 0;
-    for (auto el : args) {
+    for (auto [j, el] : llvm::enumerate(args))
       replaceAllUsesInRegionWith(el, newFunc.getArgument(j++),
                                  newFunc.getRegion());
-    }
-    for (auto pair : argMap) {
+    for (auto pair : argMap)
       replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
-    }
     opBuilder.setInsertionPointToStart(blocks[i + 1]);
     Operation *callOp = opBuilder.create<func::CallOp>(
         funcOp->getLoc(), outTypes, funcName, args);
     auto callResults = callOp->getResults();
     argMap.clear();
-    for (unsigned long k = 0; k < outValues.size(); k++) {
+    for (unsigned long k = 0; k < outValues.size(); k++)
       argMap.insert(std::pair(outValues[k], callResults[k]));
-    }
   }
-  for (auto pair : argMap) {
+  for (auto pair : argMap)
     replaceAllUsesInRegionWith(pair.first, pair.second, funcOp.getRegion());
-  }
   return success();
 }
 
 std::unique_ptr<Pass>
 arc::createSplitFuncsPass(const SplitFuncsOptions &options) {
-  return std::make_unique<SplitFuncsPass>(options.splitBound);
+  return std::make_unique<SplitFuncsPass>();
 }

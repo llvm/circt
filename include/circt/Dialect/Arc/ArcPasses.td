@@ -271,11 +271,14 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
 
 def SplitFuncs : Pass<"arc-split-funcs", "mlir::ModuleOp"> {
   let summary = "Split large funcs into multiple smaller funcs";
-  let constructor = "circt::arc::createSplitFuncsPass()";
   let dependentDialects = ["mlir::func::FuncDialect"];
   let options = [
     Option<"splitBound", "split-bound", "unsigned", "20000",
       "Size threshold (in ops) above which to split funcs">
+  ];
+  let statistics = [
+    Statistic<"numFuncsCreated", "funcs-created",
+      "Number of new functions created">,
   ];
 }
 
