@@ -46,8 +46,6 @@ std::unique_ptr<mlir::Pass> createLowerVectorizationsPass(
 std::unique_ptr<mlir::Pass> createMakeTablesPass();
 std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
-std::unique_ptr<mlir::Pass>
-createSplitFuncsPass(const SplitFuncsOptions &options = {});
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
 std::unique_ptr<mlir::Pass> createStripSVPass();
 

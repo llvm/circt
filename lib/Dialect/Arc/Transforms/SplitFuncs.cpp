@@ -162,8 +162,3 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     replaceAllUsesInRegionWith(pair.first, pair.second, funcOp.getRegion());
   return success();
 }
-
-std::unique_ptr<Pass>
-arc::createSplitFuncsPass(const SplitFuncsOptions &options) {
-  return std::make_unique<SplitFuncsPass>();
-}

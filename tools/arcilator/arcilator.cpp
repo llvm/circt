@@ -332,7 +332,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   if (splitFuncsThreshold.getNumOccurrences()) {
-    pm.addPass(arc::createSplitFuncsPass({splitFuncsThreshold}));
+    pm.addPass(arc::createSplitFuncs({splitFuncsThreshold}));
   }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
