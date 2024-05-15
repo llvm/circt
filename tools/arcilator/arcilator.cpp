@@ -165,6 +165,12 @@ static llvm::cl::opt<bool> splitInputFile(
                    "chunk independently"),
     llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<unsigned> splitFuncsThreshold(
+    "split-funcs-threshold",
+    llvm::cl::desc(
+        "Split large MLIR functions that occur above the given size threshold"),
+    llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -325,6 +331,9 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
+  if (splitFuncsThreshold.getNumOccurrences()) {
+    pm.addPass(arc::createSplitFuncs({splitFuncsThreshold}));
+  }
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 }
