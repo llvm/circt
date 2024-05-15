@@ -6,7 +6,7 @@
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
 ; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
-
+FIRRTL version 4.0.0
 
 circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
@@ -56,7 +56,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
   type V3 = UInt<1>[3]
   type V2 = UInt<1>[2]
 
-  module test_mod :
+  public module test_mod :
     input clock : Clock
     input a: UInt<1>
     input b: UInt<2>
@@ -295,13 +295,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output out : UInt<1>
     out is invalid
 
-  intmodule Mux2:
-     input sel: UInt<1>
-     input high: UInt
-     input low: UInt
-     output out: UInt
-     intrinsic = circt_mux2cell
-
   extmodule Val:
      output v: UInt<1>
   ; VERILOG-LABEL: Mux2Cell
@@ -319,15 +312,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input low: UInt<1>
     output out: UInt<1>[2]
     wire w: UInt<1>
-    inst mux2 of Mux2
     inst ext of Val
     w <= ext.v
-    mux2.sel <= xor(cond, UInt<1>(1))
-    mux2.high <= w
-    mux2.low <= low
-    out[0] <= mux2.out
-    inst mux2_1 of Mux2
-    mux2_1.sel <= xor(cond, UInt<1>(1))
-    mux2_1.high <= ext.v
-    mux2_1.low <= low
-    out[1] <= mux2_1.out
+    out[0] <= intrinsic(circt_mux2cell : UInt<1>, xor(cond, UInt<1>(1)), w, low)
+    out[1] <= intrinsic(circt_mux2cell : UInt<1>, xor(cond, UInt<1>(1)), ext.v, low)

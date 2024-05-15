@@ -1,32 +1,18 @@
 ; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
+FIRRTL version 4.0.0
 
 circuit PlusArgTest:
-  intmodule PlusArgFooTest :
-    output found : UInt<1>
-    intrinsic = circt_plusargs_test
-    parameter FORMAT = "foo"
-
-  intmodule PlusArgBarValue :
-    output found : UInt<1>
-    output result : UInt<32>
-    intrinsic = circt_plusargs_value
-    parameter FORMAT = "foo=%d"
-
-
   ; CHECK-LABEL: @PlusArgTest
-  module PlusArgTest :
+  public module PlusArgTest :
     output foo_found : UInt<1>
     output bar_found : UInt<1>
     output bar_result : UInt<32>
 
+    connect foo_found, intrinsic(circt_plusargs_test<FORMAT="foo"> : UInt<1>)
 
-    inst foo of PlusArgFooTest
-    foo_found <= foo.found
-
-    inst bar of PlusArgBarValue
-    bar_found <= bar.found
-    bar_result <= bar.result
-
+    node bar = intrinsic(circt_plusargs_value<FORMAT="foo=%d"> : { found : UInt<1>, result : UInt<32> })
+    connect bar_found, bar.found
+    connect bar_result, bar.result
 
     ; CHECK:      [[FORMAT_FOO:%.+]] = sv.constantStr "foo"
     ; CHECK-NEXT: [[FOUND_FOO_REG:%.+]] = sv.reg : !hw.inout<i1>
