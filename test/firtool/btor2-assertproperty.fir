@@ -1,55 +1,26 @@
 ; RUN: firtool --btor2 %s | FileCheck %s
+FIRRTL version 4.0.0
 
-FIRRTL version 3.2.0
 circuit Counter :
-  intmodule HasBeenResetIntrinsic :
-    input clock : Clock
-    input reset : Reset
-    output out : UInt<1>
-    intrinsic = circt_has_been_reset
-
-  intmodule LTLDisableIntrinsic :
-    input in : UInt<1>
-    input condition : UInt<1>
-    output out : UInt<1>
-    intrinsic = circt_ltl_disable
-
-  intmodule LTLClockIntrinsic :
-    input in : UInt<1>
-    input clock : Clock
-    output out : UInt<1>
-    intrinsic = circt_ltl_clock
-
-  intmodule VerifAssertIntrinsic :
-    input property : UInt<1>
-    intrinsic = circt_verif_assert
-
-  module Counter :
+  public module Counter :
     input clock : Clock
     input reset : UInt<1>
 
-    regreset count : UInt<32>, clock, reset, UInt<32>(0h0) 
-    node _T = eq(count, UInt<5>(0h16)) 
+    regreset count : UInt<32>, clock, reset, UInt<32>(0h0)
+    node _T = eq(count, UInt<5>(0h16))
     when _T :
-      connect count, UInt<1>(0h0) 
-    node _T_1 = neq(count, UInt<5>(0h16)) 
+      connect count, UInt<1>(0h0)
+    node _T_1 = neq(count, UInt<5>(0h16))
     when _T_1 :
       node _count_T = add(count, UInt<1>(0h1))
-      node _count_T_1 = tail(_count_T, 1) 
-      connect count, _count_T_1 
-    node _T_2 = neq(count, UInt<4>(0ha)) 
-    inst HasBeenResetIntrinsic of HasBeenResetIntrinsic 
-    connect HasBeenResetIntrinsic.clock, clock 
-    connect HasBeenResetIntrinsic.reset, reset 
-    node disable = eq(HasBeenResetIntrinsic.out, UInt<1>(0h0)) 
-    inst ltl_disable of LTLDisableIntrinsic
-    connect ltl_disable.in, _T_2 
-    connect ltl_disable.condition, disable 
-    inst ltl_clock of LTLClockIntrinsic
-    connect ltl_clock.in, ltl_disable.out 
-    connect ltl_clock.clock, clock
-    inst verif of VerifAssertIntrinsic
-    connect verif.property, ltl_clock.out 
+      node _count_T_1 = tail(_count_T, 1)
+      connect count, _count_T_1
+    node _T_2 = neq(count, UInt<4>(0ha))
+    node hbr = intrinsic(circt_has_been_reset : UInt<1>, clock, reset)
+    node disable = eq(hbr, UInt<1>(0h0))
+    node ltl_disable = intrinsic(circt_ltl_disable : UInt<1>, _T_2, disable)
+    node ltl_clock = intrinsic(circt_ltl_clock : UInt<1>, ltl_disable, clock)
+    intrinsic(circt_verif_assert, ltl_clock)
 
 ; CHECK:  1 sort bitvec 1
 ; CHECK:  2 input 1 reset
