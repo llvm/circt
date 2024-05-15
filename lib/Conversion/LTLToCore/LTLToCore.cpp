@@ -33,18 +33,6 @@ using namespace mlir;
 using namespace circt;
 using namespace hw;
 
-static sv::EventControl ltlToSVEventControl(ltl::ClockEdge ce) {
-  switch (ce) {
-  case ltl::ClockEdge::Pos:
-    return sv::EventControl::AtPosEdge;
-  case ltl::ClockEdge::Neg:
-    return sv::EventControl::AtNegEdge;
-  case ltl::ClockEdge::Both:
-    return sv::EventControl::AtEdge;
-  }
-  llvm_unreachable("Unknown event control kind");
-}
-
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
@@ -186,8 +174,7 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
     rewriter.create<sv::AlwaysOp>(
-        clockOp.getLoc(), ltlToSVEventControl(clockOp.getEdge()), ltlClock,
-        [&] {
+        clockOp.getLoc(), clockOp.getEdge(), ltlClock, [&] {
           // Generate the sv assertion using the input to the
           // parenting clock
           rewriter.replaceOpWithNewOp<sv::AssertOp>(

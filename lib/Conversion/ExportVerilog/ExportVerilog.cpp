@@ -3601,7 +3601,7 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
   ps << "@(";
   ps.scopedBox(PP::ibox2, [&] {
-    ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
+    ps << PPExtString(stringifyEventControl(op.getEdge())) << PP::space;
     emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
     ps << ")";
   });
@@ -4791,7 +4791,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
     llvm::interleave(
         op.getEvents(),
         [&](Attribute eventAttr) {
-          auto event = sv::EventControl(cast<IntegerAttr>(eventAttr).getInt());
+          auto event = hw::EventControl(cast<IntegerAttr>(eventAttr).getInt());
           comment += stringifyEventControl(event);
         },
         [&]() { comment += ", "; });
@@ -4863,7 +4863,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
       // Negative edge async resets need to invert the reset condition. This
       // is noted in the op description.
       if (op.getResetStyle() == ResetType::AsyncReset &&
-          *op.getResetEdge() == sv::EventControl::AtNegEdge)
+          *op.getResetEdge() == hw::EventControl::AtNegEdge)
         ps << "!";
       emitExpression(op.getReset(), ops);
       ps << ")";

@@ -29,7 +29,6 @@ void LTLDialect::initialize() {
 }
 
 #include "circt/Dialect/LTL/LTLDialect.cpp.inc"
-#include "circt/Dialect/LTL/LTLEnums.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/LTL/LTLTypes.cpp.inc"

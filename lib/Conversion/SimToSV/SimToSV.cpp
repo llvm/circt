@@ -145,7 +145,7 @@ public:
         loc, "SYNTHESIS", [&] {},
         [&] {
           rewriter.create<sv::AlwaysOp>(
-              loc, sv::EventControl::AtPosEdge, clockCast, [&] {
+              loc, hw::EventControl::AtPosEdge, clockCast, [&] {
                 rewriter.create<sv::IfOp>(loc, adaptor.getCond(),
                                           [&] { rewriter.create<ToOp>(loc); });
               });

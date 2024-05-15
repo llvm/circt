@@ -1,13 +1,13 @@
 add_circt_dialect(SV sv)
 add_circt_dialect_doc(SV sv)
 
-set(LLVM_TARGET_DEFINITIONS SV.td)
-
+set(LLVM_TARGET_DEFINITIONS SVEnums.td)
 mlir_tablegen(SVEnums.h.inc -gen-enum-decls)
 mlir_tablegen(SVEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRSVEnumsIncGen)
 add_dependencies(circt-headers MLIRSVEnumsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS SV.td)
 mlir_tablegen(SVAttributes.h.inc -gen-attrdef-decls --attrdefs-dialect=sv)
 mlir_tablegen(SVAttributes.cpp.inc -gen-attrdef-defs --attrdefs-dialect=sv)
 add_public_tablegen_target(MLIRSVAttributesIncGen)

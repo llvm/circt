@@ -22,14 +22,14 @@ using namespace circt;
 using namespace hw;
 using namespace sv;
 
-static sv::EventControl hwToSvEventControl(hw::EventControl ec) {
+static hw::EventControl hwToSvEventControl(hw::EventControl ec) {
   switch (ec) {
   case hw::EventControl::AtPosEdge:
-    return sv::EventControl::AtPosEdge;
+    return hw::EventControl::AtPosEdge;
   case hw::EventControl::AtNegEdge:
-    return sv::EventControl::AtNegEdge;
+    return hw::EventControl::AtNegEdge;
   case hw::EventControl::AtEdge:
-    return sv::EventControl::AtEdge;
+    return hw::EventControl::AtEdge;
   }
   llvm_unreachable("Unknown event control kind");
 }
@@ -47,7 +47,7 @@ struct TriggeredOpConversionPattern : public OpConversionPattern<TriggeredOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto alwaysOp = rewriter.create<AlwaysOp>(
         op.getLoc(),
-        llvm::SmallVector<sv::EventControl>{hwToSvEventControl(op.getEvent())},
+        llvm::SmallVector<hw::EventControl>{hwToSvEventControl(op.getEvent())},
         llvm::SmallVector<Value>{op.getTrigger()});
     rewriter.mergeBlocks(op.getBodyBlock(), alwaysOp.getBodyBlock(),
                          operands.getInputs());

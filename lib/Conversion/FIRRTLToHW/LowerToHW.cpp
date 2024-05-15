@@ -1461,13 +1461,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   /// Return an `i1` value for the specified value, auto-uniqueing them.
   Value getNonClockValue(Value v);
 
-  void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                        ::ResetType resetStyle, sv::EventControl resetEdge,
+  void addToAlwaysBlock(hw::EventControl clockEdge, Value clock,
+                        sv::ResetType resetStyle, hw::EventControl resetEdge,
                         Value reset, std::function<void(void)> body = {},
                         std::function<void(void)> resetBody = {});
   void addToAlwaysBlock(Value clock, std::function<void(void)> body = {}) {
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, ::ResetType(),
-                     sv::EventControl(), Value(), body,
+    addToAlwaysBlock(hw::EventControl::AtPosEdge, clock, sv::ResetType(),
+                     hw::EventControl(), Value(), body,
                      std::function<void(void)>());
   }
 
@@ -1723,8 +1723,8 @@ private:
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
-  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
-                                   ::ResetType, sv::EventControl, Value>;
+  using AlwaysKeyType = std::tuple<Block *, hw::EventControl, Value,
+                                   sv::ResetType, hw::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
@@ -2498,9 +2498,9 @@ Value FIRRTLLowering::getNonClockValue(Value v) {
   return it.first->second;
 }
 
-void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                                      ::ResetType resetStyle,
-                                      sv::EventControl resetEdge, Value reset,
+void FIRRTLLowering::addToAlwaysBlock(hw::EventControl clockEdge, Value clock,
+                                      sv::ResetType resetStyle,
+                                      hw::EventControl resetEdge, Value reset,
                                       std::function<void(void)> body,
                                       std::function<void(void)> resetBody) {
   AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
@@ -2511,7 +2511,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
 
   if (!alwaysOp) {
     if (reset) {
-      assert(resetStyle != ::ResetType::NoReset);
+      assert(resetStyle != sv::ResetType::NoReset);
       // Here, we want to create the folloing structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
@@ -2530,12 +2530,12 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
-      if (resetStyle == ::ResetType::AsyncReset) {
-        sv::EventControl events[] = {clockEdge, resetEdge};
+      if (resetStyle == sv::ResetType::AsyncReset) {
+        hw::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
 
         alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&]() {
-          if (resetEdge == sv::EventControl::AtNegEdge)
+          if (resetEdge == hw::EventControl::AtNegEdge)
             llvm_unreachable("negative edge for reset is not expected");
           createIfOp();
         });
@@ -3750,7 +3750,7 @@ LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
-                                        ltl::ClockEdge::Pos,
+                                        hw::EventControl::AtPosEdge,
                                         getLoweredNonClockValue(op.getClock()));
 }
 
@@ -4532,22 +4532,22 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       }
 
       // Handle the regular SVA case.
-      sv::EventControl event;
+      hw::EventControl event;
       switch (opEventControl) {
       case EventControl::AtPosEdge:
-        event = circt::sv::EventControl::AtPosEdge;
+        event = circt::hw::EventControl::AtPosEdge;
         break;
       case EventControl::AtEdge:
-        event = circt::sv::EventControl::AtEdge;
+        event = circt::hw::EventControl::AtEdge;
         break;
       case EventControl::AtNegEdge:
-        event = circt::sv::EventControl::AtNegEdge;
+        event = circt::hw::EventControl::AtNegEdge;
         break;
       }
 
       buildConcurrentVerifOp(
           builder, opName,
-          circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
+          circt::hw::EventControlAttr::get(builder.getContext(), event), clock,
           predicate, prefixedLabel, message, messageOps);
       return;
     }
@@ -4620,7 +4620,7 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
   }
   return emitGuards(op.getLoc(), guards, [&]() {
     builder.create<sv::AlwaysOp>(
-        ArrayRef(sv::EventControl::AtEdge), ArrayRef(predicate), [&]() {
+        ArrayRef(hw::EventControl::AtEdge), ArrayRef(predicate), [&]() {
           if (op.getMessageAttr().getValue().empty())
             buildImmediateVerifOp(
                 builder, "assume", predicate,
