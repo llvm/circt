@@ -86,10 +86,16 @@ struct Context {
   /// A table of defined values, such as variables, that may be referred to by
   /// name in expressions. The expressions use this table to lookup the MLIR
   /// value that was created for a given declaration in the Slang AST node.
+  /// A map of values, such as variables, that may be referred to by multi names
+  /// in expressions. The expressions use this table to lookup the MLIR value
+  /// that was created for a given declaration in the Slang AST node.
   using ValueSymbols =
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
+  using ValueMultiSymbols =
+      std::map<llvm::SmallVector<const slang::ast::ValueSymbol *>, Value>;
   ValueSymbols valueSymbols;
+  ValueMultiSymbols valueMultiSymbols;
 
   /// A stack of assignment left-hand side values. Each assignment will push its
   /// lowered left-hand side onto this stack before lowering its right-hand
