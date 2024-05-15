@@ -57,7 +57,6 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     return funcOp.emitError("Cannot split functions into functions of size 0.");
   if (funcOp.getBody().getBlocks().size() > 1)
     return funcOp.emitError("Regions with multiple blocks are not supported.");
-  assert(splitBound != 0 && "Cannot split functions into functions of size 0");
   assert(funcOp->getNumRegions() == 1);
   unsigned numOps = funcOp.front().getOperations().size();
   if (numOps < splitBound)
@@ -67,7 +66,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   SmallVector<Block *> blocks;
   Block *frontBlock = &(funcOp.getBody().front());
   blocks.push_back(frontBlock);
-  for (int i = 0; i < numBlocks - 1; i++) {
+  for (int i = 0; i < numBlocks - 1; ++i) {
     SmallVector<Location> locs(frontBlock->getNumArguments(), funcOp.getLoc());
     auto *block = opBuilder.createBlock(&(funcOp.getBody()), {},
                                         frontBlock->getArgumentTypes(), locs);
@@ -78,11 +77,11 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   SmallVector<Block *>::iterator blockIter = blocks.begin();
   for (auto &op : llvm::make_early_inc_range(*frontBlock)) {
     if (numOpsInBlock >= splitBound) {
-      blockIter++;
+      ++blockIter;
       numOpsInBlock = 0;
       opBuilder.setInsertionPointToEnd(*blockIter);
     }
-    numOpsInBlock++;
+    ++numOpsInBlock;
     // Don't bother moving ops to the original block
     if (*blockIter == (frontBlock))
       continue;
@@ -93,7 +92,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   DenseMap<Value, Value> argMap;
   // Move function arguments to the block that will stay in the function
   for (unsigned argIndex = 0; argIndex < frontBlock->getNumArguments();
-       argIndex++) {
+       ++argIndex) {
     auto oldArg = frontBlock->getArgument(argIndex);
     auto newArg = blocks.back()->getArgument(argIndex);
     replaceAllUsesInRegionWith(oldArg, newArg, funcOp.getBody());
@@ -116,7 +115,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     opBuilder.create<ReturnOp>(funcOp->getLoc(), outValues);
   }
   // Create and populate new FuncOps
-  for (long unsigned i = 0; i < blocks.size() - 1; i++) {
+  for (long unsigned i = 0; i < blocks.size() - 1; ++i) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
     SmallVector<Type> outTypes;
@@ -135,7 +134,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     auto newFunc =
         opBuilder.create<FuncOp>(funcOp->getLoc(), funcName,
                                  opBuilder.getFunctionType(argTypes, outTypes));
-    numFuncsCreated++;
+    ++numFuncsCreated;
     symbolTable->insert(newFunc);
     auto *funcBlock = newFunc.addEntryBlock();
     for (auto &op : make_early_inc_range(currentBlock->getOperations())) {
@@ -146,7 +145,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
 
     opBuilder.setInsertionPointToEnd(funcBlock);
     for (auto [j, el] : llvm::enumerate(args))
-      replaceAllUsesInRegionWith(el, newFunc.getArgument(j++),
+      replaceAllUsesInRegionWith(el, newFunc.getArgument(j),
                                  newFunc.getRegion());
     for (auto pair : argMap)
       replaceAllUsesInRegionWith(pair.first, pair.second, newFunc.getRegion());
@@ -155,7 +154,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
         funcOp->getLoc(), outTypes, funcName, args);
     auto callResults = callOp->getResults();
     argMap.clear();
-    for (unsigned long k = 0; k < outValues.size(); k++)
+    for (unsigned long k = 0; k < outValues.size(); ++k)
       argMap.insert(std::pair(outValues[k], callResults[k]));
   }
   for (auto pair : argMap)
