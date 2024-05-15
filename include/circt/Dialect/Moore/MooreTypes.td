@@ -53,6 +53,46 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
 
 
 //===----------------------------------------------------------------------===//
+// Packed Types
+//===----------------------------------------------------------------------===//
+
+def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
+  let typeName = "moore.int";
+  let summary = "a simple bit vector type";
+  let description = [{
+    The `!moore.iN` and `!moore.lN` types represent a two-valued or four-valued
+    simple bit vector of width `N`. The predefined SystemVerilog integer types
+    map to this as follows:
+
+    | Verilog    | Moore Dialect |
+    |------------|---------------|
+    | `bit`      | `!moore.i1`   |
+    | `logic`    | `!moore.l1`   |
+    | `reg`      | `!moore.l1`   |
+    | `byte`     | `!moore.i8`   |
+    | `shortint` | `!moore.i16`  |
+    | `int`      | `!moore.i32`  |
+    | `integer`  | `!moore.l32`  |
+    | `longint`  | `!moore.i64`  |
+    | `time`     | `!moore.l64`  |
+  }];
+  let parameters = (ins "unsigned":$width, "Domain":$domain);
+
+  let extraClassDeclaration = [{
+    /// Create a signless `bit [width-1:0]` type.
+    static IntType getInt(MLIRContext *context, unsigned width) {
+      return get(context, width, Domain::TwoValued);
+    }
+
+    /// Create a signless `logic [width-1:0]` type.
+    static IntType getLogic(MLIRContext *context, unsigned width) {
+      return get(context, width, Domain::FourValued);
+    }
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
 

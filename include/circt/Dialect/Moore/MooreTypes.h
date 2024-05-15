@@ -127,7 +127,6 @@ class PackedType;
 
 namespace detail {
 struct RealTypeStorage;
-struct IntTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
@@ -247,38 +246,6 @@ public:
 
 protected:
   using UnpackedType::UnpackedType;
-};
-
-//===----------------------------------------------------------------------===//
-// Packed Integers
-//===----------------------------------------------------------------------===//
-
-/// A signed or unsigned, two- or four-valued bit vector. SystemVerilog calls
-/// these "simple bit vectors".
-class IntType
-    : public Type::TypeBase<IntType, PackedType, detail::IntTypeStorage> {
-public:
-  /// Return the width of the integer.
-  unsigned getWidth() const;
-  /// Return whether this is a two- or four-valued integer.
-  Domain getDomain() const;
-
-  static IntType get(MLIRContext *context, unsigned width, Domain domain);
-
-  /// Create a signless `bit [width-1:0]` type.
-  static IntType getInt(MLIRContext *context, unsigned width) {
-    return get(context, width, Domain::TwoValued);
-  }
-
-  /// Create a signless `logic [width-1:0]` type.
-  static IntType getLogic(MLIRContext *context, unsigned width) {
-    return get(context, width, Domain::FourValued);
-  }
-
-  static constexpr StringLiteral name = "moore.int";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//
