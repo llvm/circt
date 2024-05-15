@@ -77,21 +77,24 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
   let summary = [{ 
     Assert that a property holds, checked on a given clock's 
-    ticks and disabled if a given condition holds.
+    ticks and disabled if a given condition holds. Only supports
+    a single clock and a single disable.
   }];
 }
 
 def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
   let summary = [{ 
     Assume that a property holds, checked on a given clock's 
-    ticks and disabled if a given condition holds.
+    ticks and disabled if a given condition holds. Only supports
+    a single clock and a single disable.
   }];
 }
 
 def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
   let summary = [{ 
     Cover on the holding of a property, checked on a given clock's 
-    ticks and disabled if a given condition holds.
+    ticks and disabled if a given condition holds. Only supports
+    a single clock and a single disable.
   }];
 }
 
