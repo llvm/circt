@@ -98,7 +98,7 @@ private:
 
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
-  static constexpr int64_t noWidth = -1L;
+  [[maybe_unused]] static constexpr int64_t noWidth = -1L;
 
   /// Field helper functions
 public:
