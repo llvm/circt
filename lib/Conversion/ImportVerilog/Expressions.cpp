@@ -430,10 +430,9 @@ struct ExprVisitor {
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     llvm::SmallVector<const slang::ast::ValueSymbol *> symbolVec;
-    const slang::ast::Expression *exprIt = &(expr.value());
+    const auto *exprIt = &(expr.value());
     std::string concatName = {};
-    std::string memberName(expr.member.name);
-    concatName = memberName + concatName;
+    concatName = std::string(expr.member.name) + concatName;
     symbolVec.push_back(
         static_cast<const slang::ast::ValueSymbol *>(&expr.member));
     while (true) {
