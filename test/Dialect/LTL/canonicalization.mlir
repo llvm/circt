@@ -2,7 +2,7 @@
 
 func.func private @Bool(%arg0: i1)
 func.func private @Seq(%arg0: !ltl.sequence)
-func.func private @Prop(%arg0: !ltl.property)
+func.func private @Prop(%arg0: !ltl.disabled_property)
 
 // CHECK-LABEL: @DelayFolds
 func.func @DelayFolds(%arg0: !ltl.sequence) {
@@ -100,7 +100,7 @@ func.func @ClockingFolds(%arg0: !ltl.property) {
   // disable(p, false) -> p
   // CHECK-NEXT: call @Prop(%arg0)
   %false = hw.constant false
-  %0 = ltl.disable %arg0 if %false : !ltl.disabled_property
+  %0 = ltl.disable %arg0 if %false : !ltl.property
   call @Prop(%0) : (!ltl.disabled_property) -> ()
   return
 }

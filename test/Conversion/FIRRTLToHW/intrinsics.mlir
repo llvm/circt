@@ -68,17 +68,17 @@ firrtl.circuit "Intrinsics" {
     %d1 = firrtl.int.ltl.delay %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[L0:%.+]] = ltl.and [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
-    // CHECK-NEXT: [[L1:%.+]] = ltl.or %a, [[L0]] : i1, !ltl.sequence
+    // CHECK-NEXT: [[L1:%.+]] = ltl.or %a, [[L0]] : i1, !ltl.property
     %l0 = firrtl.int.ltl.and %d0, %d1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %l1 = firrtl.int.ltl.or %a, %l0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[C0:%.+]] = ltl.concat [[D0]], [[L1]] : !ltl.sequence, !ltl.sequence
+    // CHECK-NEXT: [[C0:%.+]] = ltl.concat [[D0]], [[L1]] : !ltl.property, !ltl.sequence
     %c0 = firrtl.int.ltl.concat %d0, %l1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[N0:%.+]] = ltl.not [[C0]] : !ltl.sequence
+    // CHECK-NEXT: [[N0:%.+]] = ltl.not [[C0]] : !ltl.property
     %n0 = firrtl.int.ltl.not %c0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[I0:%.+]] = ltl.implication [[C0]], [[N0]] : !ltl.sequence, !ltl.property
+    // CHECK-NEXT: [[I0:%.+]] = ltl.implication [[C0]], [[N0]] : !ltl.property, !ltl.property
     %i0 = firrtl.int.ltl.implication %c0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
@@ -87,15 +87,15 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[K0:%.+]] = ltl.clock [[I0]], posedge [[CLK]] : !ltl.property
     %k0 = firrtl.int.ltl.clock %i0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[D2:%.+]] = ltl.disable [[K0]] if %b : !ltl.property
+    // CHECK-NEXT: [[D2:%.+]] = ltl.disable [[K0]] if %b : !ltl.clocked_property
     %d2 = firrtl.int.ltl.disable %k0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: verif.assert %a : i1
     // CHECK-NEXT: verif.assert %a label "hello" : i1
-    // CHECK-NEXT: verif.assume [[C0]] : !ltl.sequence
-    // CHECK-NEXT: verif.assume [[C0]] label "hello" : !ltl.sequence
-    // CHECK-NEXT: verif.cover [[K0]] : !ltl.property
-    // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.property
+    // CHECK-NEXT: verif.assume [[C0]] : !ltl.property
+    // CHECK-NEXT: verif.assume [[C0]] label "hello" : !ltl.property
+    // CHECK-NEXT: verif.cover [[K0]] : !ltl.clocked_property
+    // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.clocked_property
     firrtl.int.verif.assert %a : !firrtl.uint<1>
     firrtl.int.verif.assert %a {label = "hello"} : !firrtl.uint<1>
     firrtl.int.verif.assume %c0 : !firrtl.uint<1>

@@ -102,10 +102,10 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %g1 = ltl.and %c0, %c1 : !ltl.sequence, !ltl.sequence
   %g2 = ltl.or %a, %b : i1, i1
   %g3 = ltl.or %c0, %c1 : !ltl.sequence, !ltl.sequence
-  verif.assert %g0 : !ltl.sequence
-  verif.assert %g1 : !ltl.sequence
-  verif.assert %g2 : !ltl.sequence
-  verif.assert %g3 : !ltl.sequence
+  verif.assert %g0 : !ltl.property
+  verif.assert %g1 : !ltl.property
+  verif.assert %g2 : !ltl.property
+  verif.assert %g3 : !ltl.property
 
   // CHECK: assert property (@(posedge clk) a);
   // CHECK: assert property (@(negedge clk) a);

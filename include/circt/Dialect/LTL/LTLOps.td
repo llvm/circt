@@ -97,8 +97,8 @@ def DelayOp : LTLOp<"delay", [
 def ConcatOp : LTLOp<"concat", [
   Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
 ]> {
-  let arguments = (ins Variadic<LTLAnySequenceType>:$inputs);
-  let results = (outs LTLSequenceType:$result);
+  let arguments = (ins Variadic<LTLAnyPropertyType>:$inputs);
+  let results = (outs LTLAnyPropertyType:$result);
   let assemblyFormat = [{
     $inputs attr-dict `:` type($inputs)
   }];
