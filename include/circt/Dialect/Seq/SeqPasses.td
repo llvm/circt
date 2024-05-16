@@ -107,4 +107,9 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def PrintClockDomains : Pass<"print-clock-domains", "mlir::ModuleOp"> {
+  let summary = "Print a summary of the clock trees in the design.";
+  let constructor =  "circt::seq::createPrintClockDomainsPass()";
+}
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

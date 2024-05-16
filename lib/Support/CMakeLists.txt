@@ -8,6 +8,7 @@ set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
+  ClockDomainAnalysis.cpp
   CustomDirectiveImpl.cpp
   Debug.cpp
   FieldRef.cpp
