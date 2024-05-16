@@ -2226,7 +2226,7 @@ LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
   if (mergeConcatSlices(op, rewriter))
     return success();
 
-  return success();
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
