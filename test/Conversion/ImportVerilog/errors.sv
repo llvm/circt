@@ -189,7 +189,6 @@ module Foo;
   structTemp1 myStruct1;
 endmodule
 
-
 // -----
 
 module Foo;
@@ -199,4 +198,15 @@ module Foo;
   typedef struct unpacked unsigned {int a,  b;} structTemp2;
   // expected-error @below {{use of undeclared identifier 'structTemp2'}}
   structTemp2 myStruct2;
+endmodule
+
+// -----
+
+module Foo;
+  // expected-error @below {{expected '{'}}
+  // expected-error @below {{expected ';'}}
+  // expected-error @below {{expected a declaration name}}
+  typedef union unpacked { bit a; logic b; } unionTemp;
+  // expected-error @below {{use of undeclared identifier 'unionTemp'}}
+  unionTemp myUnion;
 endmodule
