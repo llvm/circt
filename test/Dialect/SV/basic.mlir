@@ -393,6 +393,8 @@ hw.module @XMRRefOp() {
 // Functions.
 // CHECK-LABEL: sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
 sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+// CHECK-NEXT: sv.func.dpi.import linkage "c_func_name" @function_declare
+sv.func.dpi.import linkage "c_func_name" @function_declare
 
 // CHECK-LABEL: sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
 sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>) attributes {test = "foo"} {

@@ -2416,6 +2416,24 @@ LogicalResult FuncCallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// FuncDPIImportOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FuncDPIImportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp = dyn_cast_or_null<sv::FuncOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (!referencedOp.isDeclaration())
+    return emitError("imported function must be a declaration but '")
+           << getCallee() << "' is defined";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

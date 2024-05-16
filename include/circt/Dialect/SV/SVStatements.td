@@ -888,6 +888,21 @@ def MacroDefOp : SVOp<"macro.def",
 // Function/Call
 //===----------------------------------------------------------------------===//
 
+def FuncDPIImportOp: SVOp<"func.dpi.import",
+  [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "DPI import statement";
+  let description = [{
+     `sv.func.dpi.import` represents DPI function import statement defined in
+     IEEE 1800-2017 section 35.4.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       OptionalAttr<StrAttr>: $linkage_name);
+  let results = (outs);
+
+  let assemblyFormat = "(`linkage` $linkage_name^)? $callee attr-dict";
+}
+
 def FuncOp : SVOp<"func",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface, ProceduralRegion,
       DeclareOpInterfaceMethods<HWModuleLike>,

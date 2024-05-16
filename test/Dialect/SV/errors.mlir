@@ -272,3 +272,11 @@ hw.module private @call(){
   %0 = sv.func.call @func() : () -> (i1)
 }
 
+// -----
+
+sv.func private @func() {
+  sv.return
+}
+
+// expected-error @below {{imported function must be a declaration but 'func' is defined}}
+sv.func.dpi.import @func
