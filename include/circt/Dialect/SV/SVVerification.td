@@ -11,21 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Immediate assertions, like `assert`.
-def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
-/// Observed deferred assertions, like `assert #0`.
-def ObservedAssert: I32EnumAttrCase<"Observed", 1, "observed">;
-/// Final deferred assertions, like `assert final`.
-def FinalAssert: I32EnumAttrCase<"Final", 2, "final">;
-
-/// A mode specifying how immediate/deferred assertions operate.
-def DeferAssertAttr : I32EnumAttr<
-  "DeferAssert", "assertion deferring mode",
-  [ImmediateAssert, ObservedAssert, FinalAssert]>
-{
-  let cppNamespace = "circt::sv";
-}
-
 /// A constraint checking no substitutions if no message.
 def NoSubstitutionsIfNoMessage : PredOpTrait<"has message if has substitutions",
   CPred<"($message && !$message->empty()) || $substitutions.empty()">>;

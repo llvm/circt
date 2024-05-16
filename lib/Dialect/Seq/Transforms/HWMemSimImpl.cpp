@@ -145,7 +145,7 @@ Value HWMemSimImpl::addPipelineStages(ImplicitLocOpBuilder &b,
       alwaysOp = {};
   }
   if (!alwaysOp)
-    alwaysOp = b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock);
+    alwaysOp = b.create<sv::AlwaysOp>(hw::EventControl::AtPosEdge, clock);
 
   // Add the necessary registers.
   auto savedIP = b.saveInsertionPoint();
@@ -374,7 +374,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Write logic gaurded by the corresponding mask bit.
     for (auto wmask : llvm::enumerate(maskValues)) {
-      b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+      b.create<sv::AlwaysOp>(hw::EventControl::AtPosEdge, clock, [&]() {
         auto wcond = b.createOrFold<comb::AndOp>(
             writeEn,
             b.createOrFold<comb::AndOp>(wmask.value(), writeWMode, false),
@@ -451,7 +451,7 @@ void HWMemSimImpl::generateMemory(HWModuleOp op, FirMemory mem) {
 
     // Build a new always block with write port logic.
     auto alwaysBlock = [&] {
-      return b.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock,
+      return b.create<sv::AlwaysOp>(hw::EventControl::AtPosEdge, clock,
                                     [&]() { writeLogic(); });
     };
 

@@ -9,11 +9,11 @@
 #ifndef CIRCT_DIALECT_LTL_LTLDIALECT_H
 #define CIRCT_DIALECT_LTL_LTLDIALECT_H
 
+#include "circt/Dialect/HW/HWEnums.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
 #include "circt/Dialect/LTL/LTLDialect.h.inc"
-#include "circt/Dialect/LTL/LTLEnums.h.inc"
 
 #endif // CIRCT_DIALECT_LTL_LTLDIALECT_H

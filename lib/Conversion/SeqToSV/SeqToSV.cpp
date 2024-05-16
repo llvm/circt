@@ -97,22 +97,22 @@ public:
     if (adaptor.getReset() && adaptor.getResetValue()) {
       if (lowerToAlwaysFF) {
         rewriter.create<sv::AlwaysFFOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
-            ResetType::SyncReset, sv::EventControl::AtPosEdge,
+            loc, hw::EventControl::AtPosEdge, adaptor.getClk(),
+            sv::ResetType::SyncReset, hw::EventControl::AtPosEdge,
             adaptor.getReset(), assignValue, assignReset);
       } else {
         rewriter.create<sv::AlwaysOp>(
-            loc, sv::EventControl::AtPosEdge, adaptor.getClk(), [&] {
+            loc, hw::EventControl::AtPosEdge, adaptor.getClk(), [&] {
               rewriter.create<sv::IfOp>(loc, adaptor.getReset(), assignReset,
                                         assignValue);
             });
       }
     } else {
       if (lowerToAlwaysFF) {
-        rewriter.create<sv::AlwaysFFOp>(loc, sv::EventControl::AtPosEdge,
+        rewriter.create<sv::AlwaysFFOp>(loc, hw::EventControl::AtPosEdge,
                                         adaptor.getClk(), assignValue);
       } else {
-        rewriter.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge,
+        rewriter.create<sv::AlwaysOp>(loc, hw::EventControl::AtPosEdge,
                                       adaptor.getClk(), assignValue);
       }
     }
@@ -169,7 +169,7 @@ public:
 
     // Latch the enable signal using an always @* block.
     rewriter.create<sv::AlwaysOp>(
-        loc, llvm::SmallVector<sv::EventControl>{}, llvm::SmallVector<Value>{},
+        loc, llvm::SmallVector<hw::EventControl>{}, llvm::SmallVector<Value>{},
         [&]() {
           rewriter.create<sv::IfOp>(
               loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
@@ -339,7 +339,7 @@ public:
       regs.push_back(reg);
 
       rewriter.create<sv::AlwaysOp>(
-          loc, sv::EventControl::AtPosEdge, output, [&] {
+          loc, hw::EventControl::AtPosEdge, output, [&] {
             Value outputVal = rewriter.create<sv::ReadInOutOp>(loc, reg);
             Value inverted = rewriter.create<comb::XorOp>(loc, outputVal, one);
             rewriter.create<sv::BPAssignOp>(loc, reg, inverted);

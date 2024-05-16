@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "circt/Dialect/HW/HWEnums.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -186,21 +186,6 @@ def IfOp : SVOp<"if", [SingleBlock, NoTerminator, NoRegionArguments,
   }];
 }
 
-// Edge behavior enum for always block.  See SV Spec 9.4.2.
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
-/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
-def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
-
-def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
-                                   [AtPosEdge, AtNegEdge, AtEdge]> {
-  let cppNamespace = "circt::sv";
-}
-
-
 def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
                                RecursiveMemoryEffects, RecursivelySpeculatable,
                                ProceduralRegion, NonProceduralOp]> {
@@ -216,7 +201,7 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
+    OpBuilder<(ins "ArrayRef<hw::EventControl>":$event, "ArrayRef<Value>":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
@@ -224,7 +209,7 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
     Block *getBodyBlock() { return &getBody().front(); }
 
     struct Condition {
-      EventControl event;
+      hw::EventControl event;
       Value value;
     };
 
@@ -260,13 +245,6 @@ def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
   }];
 }
 
-def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
-def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
-def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
-
-def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
-                                   [NoReset, SyncReset, AsyncReset]>;
-
 
 def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
                                    RecursiveMemoryEffects, RecursivelySpeculatable,
@@ -297,11 +275,11 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock,
+    OpBuilder<(ins "hw::EventControl":$clockEdge, "Value":$clock,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>,
-    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock,
+    OpBuilder<(ins "hw::EventControl":$clockEdge, "Value":$clock,
                       "ResetType":$resetStyle,
-                      "EventControl":$resetEdge, "Value":$reset,
+                      "hw::EventControl":$resetEdge, "Value":$reset,
                       CArg<"std::function<void()>", "{}">:$bodyCtor,
                       CArg<"std::function<void()>", "{}">:$resetCtor)>
   ];
@@ -336,25 +314,6 @@ def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &getBody().front(); }
   }];
-}
-
-def CaseStmt: I32EnumAttrCase<"CaseStmt", 0, "case">;
-def CaseXStmt: I32EnumAttrCase<"CaseXStmt", 1, "casex">;
-def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
-
-def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
-                                   [CaseStmt, CaseXStmt, CaseZStmt]>;
-
-def ValidationQualifierPlain: I32EnumAttrCase<"ValidationQualifierPlain", 0, "plain">;
-def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 1, "unique">;
-def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 2, "unique0">;
-def ValidationQualifierPriority: I32EnumAttrCase<"ValidationQualifierPriority", 3, "priority">;
-
-def ValidationQualifierTypeEnum: I32EnumAttr<"ValidationQualifierTypeEnum", "validation qualifier type",
-              [ValidationQualifierPlain, ValidationQualifierUnique,
-               ValidationQualifierUnique0, ValidationQualifierPriority]> {
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::sv";
 }
 
 def ValidationQualifierTypeAttr: EnumAttr<SVDialect, ValidationQualifierTypeEnum, "validation_qualifier">;
@@ -736,12 +695,6 @@ def DepositOp : SVOp<"nonstandard.deposit",
 //===----------------------------------------------------------------------===//
 // Memory loading system tasks
 //===----------------------------------------------------------------------===//
-
-def MemBaseBin: I32EnumAttrCase<"MemBaseBin", 0>;
-def MemBaseHex: I32EnumAttrCase<"MemBaseHex", 1>;
-def MemBaseTypeAttr :
-    I32EnumAttr<"MemBaseTypeAttr", "the numeric base of a memory file",
-                [MemBaseBin, MemBaseHex]>;
 
 def ReadMemOp : SVOp<"readmem", [ProceduralOp]> {
   let summary = "load a memory from a file in either binary or hex format";

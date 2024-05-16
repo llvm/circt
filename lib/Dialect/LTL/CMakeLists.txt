@@ -7,7 +7,6 @@ add_circt_dialect_library(CIRCTLTL
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/LTL
 
   DEPENDS
-  CIRCTLTLEnumsIncGen
   MLIRLTLIncGen
 
   LINK_COMPONENTS

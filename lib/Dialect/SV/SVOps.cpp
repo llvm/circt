@@ -558,12 +558,13 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
-  return Condition{EventControl(cast<IntegerAttr>(getEvents()[idx]).getInt()),
-                   getOperand(idx)};
+  return Condition{
+      hw::EventControl(cast<IntegerAttr>(getEvents()[idx]).getInt()),
+      getOperand(idx)};
 }
 
 void AlwaysOp::build(OpBuilder &builder, OperationState &result,
-                     ArrayRef<sv::EventControl> events, ArrayRef<Value> clocks,
+                     ArrayRef<hw::EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
@@ -602,7 +603,7 @@ static ParseResult parseEventList(
   StringRef keyword;
   if (!p.parseOptionalKeyword(&keyword)) {
     while (1) {
-      auto kind = sv::symbolizeEventControl(keyword);
+      auto kind = hw::symbolizeEventControl(keyword);
       if (!kind.has_value())
         return p.emitError(loc, "expected 'posedge', 'negedge', or 'edge'");
       auto eventEnum = static_cast<int32_t>(*kind);
@@ -639,7 +640,7 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 //===----------------------------------------------------------------------===//
 
 void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
-                       EventControl clockEdge, Value clock,
+                       hw::EventControl clockEdge, Value clock,
                        std::function<void()> bodyCtor) {
   OpBuilder::InsertionGuard guard(builder);
 
@@ -661,8 +662,8 @@ void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
-                       EventControl clockEdge, Value clock,
-                       ResetType resetStyle, EventControl resetEdge,
+                       hw::EventControl clockEdge, Value clock,
+                       ResetType resetStyle, hw::EventControl resetEdge,
                        Value reset, std::function<void()> bodyCtor,
                        std::function<void()> resetCtor) {
   OpBuilder::InsertionGuard guard(builder);

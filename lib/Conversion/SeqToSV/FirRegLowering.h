@@ -105,10 +105,10 @@ private:
   tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
                         hw::ArrayCreateOp nextRegValue);
 
-  void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
+  void addToAlwaysBlock(Block *block, hw::EventControl clockEdge, Value clock,
                         const std::function<void(OpBuilder &)> &body,
-                        ResetType resetStyle = {},
-                        sv::EventControl resetEdge = {}, Value reset = {},
+                        sv::ResetType resetStyle = {},
+                        hw::EventControl resetEdge = {}, Value reset = {},
                         const std::function<void(OpBuilder &)> &resetBody = {});
 
   void addToIfBlock(OpBuilder &builder, Value cond,
@@ -127,8 +127,8 @@ private:
     return constant;
   }
 
-  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
-                                   sv::EventControl, Value>;
+  using AlwaysKeyType = std::tuple<Block *, hw::EventControl, Value,
+                                   sv::ResetType, hw::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
 

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 
 //===----------------------------------------------------------------------===//
 // Interface operations
@@ -108,17 +107,6 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   let builders = [
     OpBuilder<(ins "::llvm::StringRef":$name, "::mlir::Type":$type)>
   ];
-}
-
-def ModportDirectionInput : I32EnumAttrCase<"input", 0>;
-def ModportDirectionOutput : I32EnumAttrCase<"output", 1>;
-def ModportDirectionInOut : I32EnumAttrCase<"inout", 2>;
-
-def ModportDirection : I32EnumAttr<"ModportDirection",
-  "Defines direction in a modport",
-  [ModportDirectionInput, ModportDirectionOutput, ModportDirectionInOut]> {
-  let genSpecializedAttr = 0;
-  let cppNamespace = "::circt::sv";
 }
 
 def ModportDirectionAttr : EnumAttr<SVDialect, ModportDirection,

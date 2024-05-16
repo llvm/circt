@@ -96,7 +96,7 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     // for sync resets this happens on the clock's posedge if the reset is set.
     Value triggerOn = op.getAsync() ? reset : clock;
     rewriter.create<sv::AlwaysOp>(
-        op.getLoc(), sv::EventControl::AtPosEdge, triggerOn, [&] {
+        op.getLoc(), hw::EventControl::AtPosEdge, triggerOn, [&] {
           auto assignOne = [&] {
             rewriter.create<sv::PAssignOp>(op.getLoc(), reg, constOne);
           };
