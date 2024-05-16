@@ -2644,7 +2644,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
           rewriter.replaceOpWithNewOp<WireOp>(wmodeField, wmodeField.getType());
         }
       } else {
-        result.replaceAllUsesWith(newResult);
+        rewriter.replaceAllUsesWith(result, newResult);
       }
     }
     rewriter.eraseOp(op);
