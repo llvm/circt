@@ -34,7 +34,7 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<RealType, PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
+  addTypes<PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
            UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
            UnpackedQueueDim, PackedStructType, UnpackedStructType>();
 
@@ -73,7 +73,8 @@ Domain UnpackedType::getDomain() const {
 
 std::optional<unsigned> UnpackedType::getBitSize() const {
   return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
-      .Case<PackedType, RealType>([](auto type) { return type.getBitSize(); })
+      .Case<PackedType>([](auto type) { return type.getBitSize(); })
+      .Case<RealType>([](auto type) { return 64; })
       .Case<UnpackedUnsizedDim>([](auto) { return std::nullopt; })
       .Case<UnpackedArrayDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
@@ -116,70 +117,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
 }
-
-//===----------------------------------------------------------------------===//
-// Unpacked Reals
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-struct RealTypeStorage : TypeStorage {
-  using KeyTy = unsigned;
-  using Kind = RealType::Kind;
-
-  RealTypeStorage(KeyTy key) : kind(static_cast<Kind>(key)) {}
-  bool operator==(const KeyTy &key) const {
-    return kind == static_cast<Kind>(key);
-  }
-  static RealTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<RealTypeStorage>()) RealTypeStorage(key);
-  }
-
-  Kind kind;
-};
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-std::optional<RealType::Kind> RealType::getKindFromKeyword(StringRef keyword) {
-  return StringSwitch<std::optional<Kind>>(keyword)
-      .Case("shortreal", ShortReal)
-      .Case("real", Real)
-      .Case("realtime", RealTime)
-      .Default({});
-}
-
-StringRef RealType::getKeyword(Kind kind) {
-  switch (kind) {
-  case ShortReal:
-    return "shortreal";
-  case Real:
-    return "real";
-  case RealTime:
-    return "realtime";
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-unsigned RealType::getBitSize(Kind kind) {
-  switch (kind) {
-  case ShortReal:
-    return 32;
-  case Real:
-    return 64;
-  case RealTime:
-    return 64;
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-RealType RealType::get(MLIRContext *context, Kind kind) {
-  return Base::get(context, static_cast<unsigned>(kind));
-}
-
-RealType::Kind RealType::getKind() const { return getImpl()->kind; }
 
 //===----------------------------------------------------------------------===//
 // Packed Dimensions
@@ -512,10 +449,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
     return yieldPacked(IntType::get(context, width, domain));
   }
 
-  // Unpacked primary types.
-  if (auto kind = RealType::getKindFromKeyword(mnemonic))
-    return yieldUnpacked(RealType::get(context, *kind));
-
   // Everything that follows can be packed or unpacked. The packing is inferred
   // from the last `packed<...>` or `unpacked<...>` that we've seen. The
   // `yieldImplied` function will call the first lambda to construct a packed
@@ -644,8 +577,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
         printer << type.getWidth();
         return success();
       })
-      .Case<RealType>(
-          [&](auto type) { return printer << type.getKeyword(), success(); })
 
       // Packed and unpacked dimensions
       .Case<PackedUnsizedDim, UnpackedUnsizedDim>([&](auto type) {

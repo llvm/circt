@@ -82,17 +82,9 @@ TEST(TypesTest, Reals) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  auto t0 = RealType::get(&context, RealType::ShortReal);
-  auto t1 = RealType::get(&context, RealType::Real);
-  auto t2 = RealType::get(&context, RealType::RealTime);
-
+  auto t0 = RealType::get(&context);
   ASSERT_EQ(t0.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(t1.getDomain(), Domain::TwoValued);
-  ASSERT_EQ(t2.getDomain(), Domain::TwoValued);
-
-  ASSERT_EQ(t0.getBitSize(), 32u);
-  ASSERT_EQ(t1.getBitSize(), 64u);
-  ASSERT_EQ(t2.getBitSize(), 64u);
+  ASSERT_EQ(t0.getBitSize(), 64u);
 }
 
 TEST(TypesTest, PackedDim) {

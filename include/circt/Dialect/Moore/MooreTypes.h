@@ -126,7 +126,6 @@ Os &operator<<(Os &os, const Range &range) {
 class PackedType;
 
 namespace detail {
-struct RealTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
@@ -246,46 +245,6 @@ public:
 
 protected:
   using UnpackedType::UnpackedType;
-};
-
-//===----------------------------------------------------------------------===//
-// Unpacked Reals
-//===----------------------------------------------------------------------===//
-
-/// A real type.
-class RealType
-    : public Type::TypeBase<RealType, UnpackedType, detail::RealTypeStorage> {
-public:
-  enum Kind {
-    /// A `shortreal`.
-    ShortReal,
-    /// A `real`.
-    Real,
-    /// A `realtime`.
-    RealTime,
-  };
-
-  /// Get the integer type that corresponds to a keyword (like `bit`).
-  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
-  /// Get the keyword (like `bit`) for one of the integer types.
-  static StringRef getKeyword(Kind kind);
-  /// Get the size of one of the integer types.
-  static unsigned getBitSize(Kind kind);
-
-  static RealType get(MLIRContext *context, Kind kind);
-
-  /// Get the concrete integer vector or atom type.
-  Kind getKind() const;
-
-  /// Get the keyword (like `bit`) for this type.
-  StringRef getKeyword() const { return getKeyword(getKind()); }
-  /// Get the size of this type.
-  unsigned getBitSize() const { return getBitSize(getKind()); }
-
-  static constexpr StringLiteral name = "moore.real";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//

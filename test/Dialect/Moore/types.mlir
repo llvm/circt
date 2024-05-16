@@ -22,12 +22,8 @@ func.func @IntTypes(
 
 // CHECK-LABEL: func @RealTypes(
 func.func @RealTypes(
-  // CHECK-SAME: %arg0: !moore.shortreal
-  // CHECK-SAME: %arg1: !moore.real
-  // CHECK-SAME: %arg2: !moore.realtime
-  %arg0: !moore.shortreal,
-  %arg1: !moore.real,
-  %arg2: !moore.realtime
+  // CHECK-SAME: %arg0: !moore.real
+  %arg0: !moore.real
 ) { return }
 
 // CHECK-LABEL: func @DimTypes(

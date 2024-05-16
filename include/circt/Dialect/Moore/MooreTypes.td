@@ -53,7 +53,7 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
 
 
 //===----------------------------------------------------------------------===//
-// Packed Types
+// IntType
 //===----------------------------------------------------------------------===//
 
 def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
@@ -88,6 +88,30 @@ def IntType : MooreTypeDef<"Int", [], "moore::PackedType"> {
     static IntType getLogic(MLIRContext *context, unsigned width) {
       return get(context, width, Domain::FourValued);
     }
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
+// RealType
+//===----------------------------------------------------------------------===//
+
+def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
+  let mnemonic = "real";
+  let summary = "a SystemVerilog real type";
+  let description = [{
+    This type represents the SystemVerilog real type. Since the Moore dialect
+    does not fully handle real-valued expressions properly yet, we coalesce the
+    `shortreal`, `real`, and `realtime` types in the SystemVerilgo standard to
+    this common `!moore.real` type. The standard specifies these types to be of
+    at least 32, 64, and 64 bits, respectively. The `!moore.real` type is 64
+    bits wide.
+
+    | Verilog     | Moore Dialect |
+    |-------------|---------------|
+    | `shortreal` | `!moore.real` |
+    | `real`      | `!moore.real` |
+    | `realtime`  | `!moore.real` |
   }];
 }
 

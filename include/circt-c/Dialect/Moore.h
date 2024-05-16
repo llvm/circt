@@ -25,15 +25,6 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Moore, moore);
 // Types
 //===----------------------------------------------------------------------===//
 
-enum MooreRealKind {
-  /// A `shortreal`.
-  MooreShortReal,
-  /// A `real`.
-  MooreReal,
-  /// A `realtime`.
-  MooreRealTime,
-};
-
 /// Create a void type.
 MLIR_CAPI_EXPORTED MlirType mooreVoidTypeGet(MlirContext ctx);
 /// Create a string type.
@@ -48,8 +39,7 @@ MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetInt(MlirContext ctx, unsigned width);
 MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx,
                                                  unsigned width);
 /// Create a real type.
-MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx,
-                                             enum MooreRealKind kind);
+MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx);
 /// Create a packed unsized dimension type.
 MLIR_CAPI_EXPORTED MlirType moorePackedUnsizedDimTypeGet(MlirType inner);
 /// Create a packed range dimension type.
