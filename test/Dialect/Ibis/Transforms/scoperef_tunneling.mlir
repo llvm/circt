@@ -221,12 +221,12 @@ ibis.container @C {
 // cannot live within an ibis.design, but we need to run this pass on the
 // ibis.design op. I don't think it's critical that we support this case currently.
 
-// CHECKx-LABEL:   hw.module @AccessChildFromHW() {
-// CHECKx:           %[[VAL_0:.*]] = ibis.container.instance @c, <@D::@C>
-// CHECKx:           %[[VAL_1:.*]] = ibis.get_port %[[VAL_0]], @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
-// CHECKx:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_0]], @in : !ibis.scoperef<@D::@C> -> !ibis.portref<in i1>
-// CHECKx:           hw.output
-// CHECKx:         }
+// COM: CHECK-LABEL:   hw.module @AccessChildFromHW() {
+// COM: CHECK:           %[[VAL_0:.*]] = ibis.container.instance @c, <@D::@C>
+// COM: CHECK:           %[[VAL_1:.*]] = ibis.get_port %[[VAL_0]], @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
+// COM: CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_0]], @in : !ibis.scoperef<@D::@C> -> !ibis.portref<in i1>
+// COM: CHECK:           hw.output
+// COM: CHECK:         }
 
 }
 
