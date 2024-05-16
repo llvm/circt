@@ -890,7 +890,11 @@ def MacroDefOp : SVOp<"macro.def",
 
 def FuncDPIImportOp: SVOp<"func.dpi.import",
   [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "Emit a dpi import statement. See SV spec 35.4";
+  let summary = "DPI import statement";
+  let description = [{
+     `sv.func.dpi.import` represents DPI function import statement defined in
+     IEEE 1800-2017 section 35.4.
+  }];
 
   let arguments = (ins FlatSymbolRefAttr:$callee,
                        OptionalAttr<StrAttr>: $linkage_name);
