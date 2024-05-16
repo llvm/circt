@@ -18,6 +18,10 @@ add_library(EsiCosimCapnp SHARED
   ${COSIM_CAPNP_HDRS}
   ${COSIM_CAPNP_SRCS}
   ${COSIM_SCHEMA_HDR}
+
+  lib/CapnpThreads.cpp
+  lib/Endpoint.cpp
+  lib/Server.cpp
 )
 target_include_directories(EsiCosimCapnp PUBLIC ${CAPNPC_OUTPUT_DIR})
 target_include_directories(EsiCosimCapnp PUBLIC ${CAPNP_INCLUDE_DIRS})

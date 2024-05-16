@@ -1,4 +1,4 @@
-//===- Server.h - ESI cosim RPC servers -------------------------*- C++ -*-===//
+//===- CapnpThreads.h - ESI cosim RPC ---------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -20,24 +20,46 @@
 #include "cosim/LowLevel.h"
 #include <thread>
 
+namespace kj {
+class WaitScope;
+} // namespace kj
+
 namespace esi {
 namespace cosim {
+
+/// Since Capnp is not thread-safe, client and server must be run in their own
+/// threads and communicate with the outside world through thread safe channels.
+class CapnpCosimThread {
+public:
+  EndpointRegistry endpoints;
+  LowLevel lowLevelBridge;
+
+  CapnpCosimThread();
+  ~CapnpCosimThread();
+
+  /// Stop the thread. This is a blocking call -- it will not return until the
+  /// capnp thread has stopped.
+  void stop();
+
+protected:
+  /// Start capnp polling loop. Does not return until stop() is called. Must be
+  /// called in the same thread the RPC server/client was created.
+  void loop(kj::WaitScope &waitScope);
+
+  using Lock = std::lock_guard<std::mutex>;
+  std::thread *myThread;
+  volatile bool stopSig;
+  std::mutex m;
+};
 
 /// The main RpcServer. Does not implement any capnp RPC interfaces but contains
 /// the capnp main RPC server. We run the capnp server in its own thread to be
 /// more responsive to network traffic and so as to not slow down the
 /// simulation.
-class RpcServer {
+class RpcServer : public CapnpCosimThread {
 public:
-  EndpointRegistry endpoints;
-  LowLevel lowLevelBridge;
-
-  RpcServer();
-  ~RpcServer();
-
   /// Start and stop the server thread.
   void run(uint16_t port);
-  void stop();
 
   void setManifest(unsigned int esiVersion,
                    const std::vector<uint8_t> &manifest) {
@@ -46,14 +68,8 @@ public:
   }
 
 private:
-  using Lock = std::lock_guard<std::mutex>;
-
   /// The thread's main loop function. Exits on shutdown.
   void mainLoop(uint16_t port);
-
-  std::thread *mainThread;
-  volatile bool stopSig;
-  std::mutex m;
 
   unsigned int esiVersion = -1;
   std::vector<uint8_t> compressedManifest;
