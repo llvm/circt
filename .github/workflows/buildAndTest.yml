@@ -118,6 +118,10 @@ jobs:
             echo "================"
           fi
 
+      - name: filecheck lint
+        if: ${{ always() }}
+        run: utils/run-filecheck-lint.sh
+
   # --- end of sanity-check job.
 
   # --- end of configure-circt-unified job.
