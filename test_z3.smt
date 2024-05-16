@@ -1,22 +1,58 @@
-(define-fun _0 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  true)
-(define-fun _2 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  false)
-(define-fun ERR ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  true)
-(define-fun _1 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  (and (<= 1 x!0)
-       (<= 4 x!0)
-       (<= 1 x!1)
-       (<= (- 1) x!2)
-       (<= 0 x!2)
-       (<= 1 x!2)
-       (not (<= 2 x!2))))
-(define-fun arg0 ((x!0 Int)) Int
-  (ite (and (<= 0 x!0) (<= 1 x!0) (not (<= 2 x!0))) 4 5))
-(define-fun _3 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  false)
-(define-fun _4 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  false)
-(define-fun _5 ((x!0 Int) (x!1 Int) (x!2 Int)) Bool
-  false)
+(set-info :status unknown)
+(set-option :proof true)
+(declare-fun _0 (Int Int) Bool)
+(declare-fun _1 (Int Int) Bool)
+(declare-fun _2 (Int Int) Bool)
+(declare-fun _3 (Int Int) Bool)
+(declare-fun _4 (Int Int) Bool)
+(declare-fun _5 (Int Int) Bool)
+(assert
+ (forall ((arg0 Int) )(_0 0 0))
+ )
+(assert
+ (forall ((time Int) )(let (($x52 (forall ((arg0 Int) )(let (($x50 (_0 arg0 time)))
+ (=> $x50 (_1 (+ arg0 1) (+ time 1)))))
+ ))
+ (let (($x54 (>= time 0)))
+ (let (($x55 (and $x54 (< time 100))))
+ (=> $x55 $x52)))))
+ )
+(assert
+ (forall ((time Int) )(let (($x73 (forall ((arg0 Int) )(let (($x59 (_1 arg0 time)))
+ (=> $x59 (_2 (+ arg0 1) (+ time 1)))))
+ ))
+ (let (($x54 (>= time 0)))
+ (let (($x55 (and $x54 (< time 100))))
+ (=> $x55 $x73)))))
+ )
+(assert
+ (forall ((time Int) )(let (($x85 (forall ((arg0 Int) )(let (($x77 (_2 arg0 time)))
+ (=> $x77 (_3 (+ arg0 1) (+ time 1)))))
+ ))
+ (let (($x54 (>= time 0)))
+ (let (($x55 (and $x54 (< time 100))))
+ (=> $x55 $x85)))))
+ )
+(assert
+ (forall ((time Int) )(let (($x97 (forall ((arg0 Int) )(let (($x89 (_3 arg0 time)))
+ (=> $x89 (_4 (+ arg0 1) (+ time 1)))))
+ ))
+ (let (($x54 (>= time 0)))
+ (let (($x55 (and $x54 (< time 100))))
+ (=> $x55 $x97)))))
+ )
+(assert
+ (forall ((time Int) )(let (($x109 (forall ((arg0 Int) )(let (($x101 (_4 arg0 time)))
+ (=> $x101 (_5 (+ arg0 1) (+ time 1)))))
+ ))
+ (let (($x54 (>= time 0)))
+ (let (($x55 (and $x54 (< time 100))))
+ (=> $x55 $x109)))))
+ )
+(assert
+ (exists ((time Int) )(forall ((arg0 Int) )(let (($x59 (_1 arg0 time)))
+ (and $x59 (= arg0 1))))
+ )
+ )
+(check-sat)
+(get-proof)

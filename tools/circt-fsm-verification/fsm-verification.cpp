@@ -27,10 +27,10 @@ using namespace z3;
  
 */
 void printSolverAssertions(z3::solver& solver) {
-  // llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  // llvm::outs()<<solver.to_smt2()<<"\n";
-  // llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
-  // llvm::outs()<<solver.check()<<"\n";
+  llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
+  llvm::outs()<<solver.to_smt2()<<"\n";
+  llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  llvm::outs()<<solver.check()<<"\n";
   const auto start{std::chrono::steady_clock::now()};
   int sat = solver.check();
   const auto end{std::chrono::steady_clock::now()};
@@ -38,11 +38,11 @@ void printSolverAssertions(z3::solver& solver) {
   const std::chrono::duration<double> elapsed_seconds{end - start};
 
 
-  // llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
+  llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
-  // llvm::outs()<<solver.get_model().to_string()<<"\n";
-  // llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
-  // llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
+  llvm::outs()<<solver.get_model().to_string()<<"\n";
+  llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
 	ofstream outfile;
 	outfile.open("output.txt", ios::app);
 	outfile << elapsed_seconds.count()<<","<<sat << endl;
@@ -419,7 +419,7 @@ expr nestedForall(vector<expr> solver_vars, expr body, int i){
   if(i==solver_vars.size()-1){ // last element (time) is nested separately as a special case
     return body;
   } else {
-    return forall(solver_vars[i], implies(solver_vars[i]>=0, nestedForall(solver_vars, body, i+1)));
+    return forall(solver_vars[i], nestedForall(solver_vars, body, i+1));
   }
 }
 
@@ -578,7 +578,7 @@ void parse_fsm(string input_file, int time_bound, string to_check){
   // initialize time to 0
   expr body = findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVarsInit->size(), solverVarsInit->data());
   // initial condition
-  s.add(nestedForall(*solverVars, body, 0));
+  s.add(body);
 
 
   for(auto t: *transitions){
@@ -648,9 +648,9 @@ void parse_fsm(string input_file, int time_bound, string to_check){
 
   // counter is always 0 at initial state 
 
-  body = ( (findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) && (solverVars->at(0)!=0));
+  body = ((findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) != (solverVars->at(0)==0));
   
-  s.add(exists(solverVars->at(solverVars->size()-1),  nestedForall(*solverVars, body, 0)));
+  s.add(forall(solverVars->at(solverVars->size()-1), nestedForall(*solverVars, body, 0)));
 
   printSolverAssertions(s);
 
