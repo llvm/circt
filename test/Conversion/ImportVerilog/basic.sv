@@ -303,6 +303,9 @@ module Expressions;
   // CHECK: %myStruct = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   // CHECK: %myStruct2 = moore.variable  : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
   // CHECK: %myStruct3 = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
+  // CHECK: %myUnion = moore.variable  : !moore.packed<union<{a: i1, b: l1}>>
+  // CHECK: %myUnion2 = moore.variable  : !moore.unpacked<union<{a: i1, b: l1}>>
+  // CHECK: %myUnion3 = moore.variable  : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>>
   int a, b, c;
   int unsigned u, w;
   bit [1:0][3:0] v;
@@ -320,6 +323,13 @@ module Expressions;
   structTemp2 myStruct2;
   typedef struct packed unsigned {int a, b;} structTemp3;
   structTemp3 myStruct3;
+  typedef union packed { bit a; logic b; } unionTemp;
+  unionTemp myUnion;
+  typedef union {bit a; logic b; } unionTemp2;
+  unionTemp2 myUnion2;
+  typedef union{unionTemp a; bit b;} unionTemp3;
+  unionTemp3 myUnion3;
+
 
   initial begin
     // CHECK: moore.constant 0 : !moore.i32
@@ -639,6 +649,51 @@ module Expressions;
     // CHECK: %myStruct3.b = moore.variable  : !moore.i32
     // CHECK: moore.blocking_assign %b, %myStruct3.b : !moore.i32
     b = myStruct3.b;
+
+    // CHECK: %myUnion.a = moore.variable  : !moore.i1
+    // CHECK: moore.blocking_assign %myUnion.a, %x : !moore.i1
+    myUnion.a = x;
+
+    // CHECK: %myUnion.b = moore.variable  : !moore.l1
+    // CHECK:  moore.blocking_assign %myUnion.b, %y : !moore.l1
+    myUnion.b = y;
+
+    // CHECK: moore.blocking_assign %x, %myUnion.a : !moore.i1
+    x = myUnion.a;
+
+    // CHECK: moore.blocking_assign %y, %myUnion.b : !moore.l1
+    y = myUnion.b;
+
+    // CHECK: %myUnion2.a = moore.variable  : !moore.i1
+    // CHECK: moore.blocking_assign %myUnion2.a, %x : !moore.i1
+    myUnion2.a = x;
+
+    // CHECK: %myUnion2.b = moore.variable  : !moore.l1
+    // CHECK:  moore.blocking_assign %myUnion2.b, %y : !moore.l1
+    myUnion2.b = y;
+
+    // CHECK: moore.blocking_assign %x, %myUnion2.a : !moore.i1
+    x = myUnion2.a;
+
+    // CHECK: moore.blocking_assign %y, %myUnion2.b : !moore.l1
+    y = myUnion2.b;
+
+    // CHECK: %myUnion3.a = moore.variable  : !moore.packed<union<{a: i1, b: l1}>>
+    // CHECK: moore.blocking_assign %myUnion3.a, %myUnion : !moore.packed<union<{a: i1, b: l1}>>
+    myUnion3.a = myUnion;
+
+
+    // CHECK: %myUnion3.b = moore.variable  : !moore.i1
+    // CHECK: %195 = moore.conversion %y : !moore.l1 -> !moore.i1
+    // CHECK: moore.blocking_assign %myUnion3.b, %195 : !moore.i1
+    myUnion3.b = y;
+
+    // CHECK: moore.blocking_assign %myUnion, %myUnion3.a : !moore.packed<union<{a: i1, b: l1}>>
+    myUnion = myUnion3.a;
+
+    // CHECK: %196 = moore.conversion %myUnion3.b : !moore.i1 -> !moore.l1
+    // CHECK: moore.blocking_assign %y, %196 : !moore.l1
+    y = myUnion3.b;
   end
 endmodule
 
