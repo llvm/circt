@@ -27,22 +27,23 @@ using namespace z3;
  
 */
 void printSolverAssertions(z3::solver& solver) {
-  llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
-  llvm::outs()<<solver.to_smt2()<<"\n";
-  llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
-  llvm::outs()<<solver.check()<<"\n";
+  // llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
+  // llvm::outs()<<solver.to_smt2()<<"\n";
+  // llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
+  // llvm::outs()<<solver.check()<<"\n";
   const auto start{std::chrono::steady_clock::now()};
   int sat = solver.check();
+  llvm::outs()<<sat<<"\n";
   const auto end{std::chrono::steady_clock::now()};
 
   const std::chrono::duration<double> elapsed_seconds{end - start};
 
 
-  llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
+  // llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
 
-  llvm::outs()<<solver.get_model().to_string()<<"\n";
-  llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
-  llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
+  // llvm::outs()<<solver.get_model().to_string()<<"\n";
+  // llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  // llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
 	ofstream outfile;
 	outfile.open("output.txt", ios::app);
 	outfile << elapsed_seconds.count()<<","<<sat << endl;
@@ -648,7 +649,7 @@ void parse_fsm(string input_file, int time_bound, string to_check){
 
   // counter is always 0 at initial state 
 
-  body = ((findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) != (solverVars->at(0)==0));
+  body = ((findMyFun(transitions->at(1).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) != (solverVars->at(0)==5));
   
   s.add(forall(solverVars->at(solverVars->size()-1), nestedForall(*solverVars, body, 0)));
 
