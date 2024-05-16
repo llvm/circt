@@ -1184,7 +1184,7 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
       matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
       lb + step == ub) {
     // Unroll the loop if it's executed only once.
-    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+    rewriter.replaceAllUsesWith(op.getInductionVar(), op.getLowerBound());
     replaceOpWithRegion(rewriter, op, op.getBodyRegion());
     rewriter.eraseOp(op);
     return success();
