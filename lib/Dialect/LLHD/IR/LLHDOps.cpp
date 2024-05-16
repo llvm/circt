@@ -237,10 +237,12 @@ static LogicalResult canonicalizeSigPtrArraySliceOp(Op op,
   if (matchPattern(op.getInput(),
                    m_Op<Op>(matchers::m_Any(), m_Constant(&a)))) {
     auto sliceOp = op.getInput().template getDefiningOp<Op>();
-    op.getInputMutable().assign(sliceOp.getInput());
-    Value newIndex = rewriter.create<hw::ConstantOp>(
-        op->getLoc(), a.getValue() + indexAttr.getValue());
-    op.getLowIndexMutable().assign(newIndex);
+    rewriter.modifyOpInPlace(op, [&]() {
+      op.getInputMutable().assign(sliceOp.getInput());
+      Value newIndex = rewriter.create<hw::ConstantOp>(
+          op->getLoc(), a.getValue() + indexAttr.getValue());
+      op.getLowIndexMutable().assign(newIndex);
+    });
 
     return success();
   }
