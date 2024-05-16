@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTLTL
   LTLDialect.cpp
   LTLFolds.cpp
   LTLOps.cpp
+  LTLTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/LTL

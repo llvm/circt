@@ -117,11 +117,11 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %k2 = ltl.clock %a, edge %clk : i1
   %k3 = ltl.clock %d1, posedge %clk : !ltl.sequence
   %k4 = ltl.concat %b, %k0 : i1, !ltl.sequence
-  verif.assert %k0 : !ltl.sequence
-  verif.assert %k1 : !ltl.sequence
-  verif.assert %k2 : !ltl.sequence
-  verif.assert %k3 : !ltl.sequence
-  verif.assert %k4 : !ltl.sequence
+  verif.assert %k0 : !ltl.clocked_sequence
+  verif.assert %k1 : !ltl.clocked_sequence
+  verif.assert %k2 : !ltl.clocked_sequence
+  verif.assert %k3 : !ltl.clocked_sequence
+  verif.assert %k4 : !ltl.clocked_sequence
 }
 
 // CHECK-LABEL: module Properties
@@ -157,11 +157,11 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (@(posedge clk) disable iff (b) not a);
   %k0 = ltl.clock %i0, posedge %clk : !ltl.property
   %k1 = ltl.clock %n0, negedge %b : !ltl.property
-  %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
-  %k3 = ltl.clock %k2, posedge %clk : !ltl.property
-  %k4 = ltl.disable %n0 if %b : !ltl.property
-  %k5 = ltl.disable %k0 if %b : !ltl.property
-  %k6 = ltl.clock %k4, posedge %clk : !ltl.property
+  %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.clocked_property
+  %k3 = ltl.clock %k2, posedge %clk : !ltl.clocked_property
+  %k4 = ltl.disable %n0 if %b : !ltl.disabled_property
+  %k5 = ltl.disable %k0 if %b : !ltl.clocked_disabled_property
+  %k6 = ltl.clock %k4, posedge %clk : !ltl.clocked_disabled_property
   verif.assert %k0 : !ltl.property
   verif.assert %k3 : !ltl.property
   verif.assert %k4 : !ltl.property
@@ -216,14 +216,14 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   %b0 = ltl.delay %c, 1, 0 : i1
   %b1 = ltl.concat %b, %b0, %a1 : i1, !ltl.sequence, !ltl.sequence
   %b2 = ltl.implication %a, %b1 : i1, !ltl.sequence
-  %b3 = ltl.clock %b2, posedge %clk : !ltl.property
+  %b3 = ltl.clock %b2, posedge %clk : !ltl.clocked_property
   verif.assert %b3 : !ltl.property
 
   // CHECK: assert property (@(posedge clk) disable iff (e) a |-> not b ##1 c ##1 d);
   %c0 = ltl.not %b1 : !ltl.sequence
   %c1 = ltl.implication %a, %c0 : i1, !ltl.property
-  %c2 = ltl.disable %c1 if %e : !ltl.property
-  %c3 = ltl.clock %c2, posedge %clk : !ltl.property
+  %c2 = ltl.disable %c1 if %e : !ltl.disabled_property
+  %c3 = ltl.clock %c2, posedge %clk : !ltl.clocked_disabled_property
   verif.assert %c3 : !ltl.property
 
   // CHECK: assert property (##1 a |-> b);
@@ -244,8 +244,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   %0 = comb.and %fell_reset, %not_isLive : i1
   %1 = ltl.eventually %isLive : i1
   %2 = ltl.implication %0, %1 : i1, !ltl.property
-  %3 = ltl.disable %2 if %reset : !ltl.property
-  %liveness_after_reset = ltl.clock %3, posedge %clock : !ltl.property
+  %3 = ltl.disable %2 if %reset : !ltl.disabled_property
+  %liveness_after_reset = ltl.clock %3, posedge %clock : !ltl.clocked_disabled_property
   verif.assert %liveness_after_reset : !ltl.property
   verif.assume %liveness_after_reset : !ltl.property
 
@@ -254,8 +254,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   %4 = ltl.delay %not_isLive, 1, 0 : i1
   %5 = ltl.concat %isLive, %4 : i1, !ltl.sequence
   %6 = ltl.implication %5, %1 : !ltl.sequence, !ltl.property
-  %7 = ltl.disable %6 if %reset : !ltl.property
-  %liveness_after_fall = ltl.clock %7, posedge %clock : !ltl.property
+  %7 = ltl.disable %6 if %reset : !ltl.disabled_property
+  %liveness_after_fall = ltl.clock %7, posedge %clock : !ltl.clocked_disabled_property
   verif.assert %liveness_after_fall : !ltl.property
   verif.assume %liveness_after_fall : !ltl.property
 }

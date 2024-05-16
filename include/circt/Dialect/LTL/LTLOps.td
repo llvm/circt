@@ -53,7 +53,9 @@ def OrOp : AssocLTLOp<"or"> {
 // Sequences
 //===----------------------------------------------------------------------===//
 
-def DelayOp : LTLOp<"delay", [Pure]> {
+def DelayOp : LTLOp<"delay", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
     I64Attr:$delay,
@@ -92,7 +94,9 @@ def DelayOp : LTLOp<"delay", [Pure]> {
   }];
 }
 
-def ConcatOp : LTLOp<"concat", [Pure]> {
+def ConcatOp : LTLOp<"concat", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins Variadic<LTLAnySequenceType>:$inputs);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
@@ -155,7 +159,9 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
 // Properties
 //===----------------------------------------------------------------------===//
 
-def NotOp : LTLOp<"not", [Pure]> {
+def NotOp : LTLOp<"not", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins LTLAnyPropertyType:$input);
   let results = (outs LTLPropertyType:$result);
   let assemblyFormat = [{
@@ -170,7 +176,9 @@ def NotOp : LTLOp<"not", [Pure]> {
   }];
 }
 
-def ImplicationOp : LTLOp<"implication", [Pure]> {
+def ImplicationOp : LTLOp<"implication", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins LTLAnySequenceType:$antecedent,
                        LTLAnyPropertyType:$consequent);
   let results = (outs LTLPropertyType:$result);
@@ -191,7 +199,9 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
   }];
 }
 
-def EventuallyOp : LTLOp<"eventually", [Pure]> {
+def EventuallyOp : LTLOp<"eventually", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins LTLAnyPropertyType:$input);
   let results = (outs LTLPropertyType:$result);
   let assemblyFormat = [{
@@ -248,7 +258,9 @@ def ClockOp : LTLOp<"clock", [
   }];
 }
 
-def DisableOp : LTLOp<"disable", [Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def DisableOp : LTLOp<"disable", [
+  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
   let arguments = (ins LTLAnyNonDisabledPropertyType:$input, I1:$condition);
   let results = (outs LTLDisabledPropertyType:$result);
   let assemblyFormat = [{
