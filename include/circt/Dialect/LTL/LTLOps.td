@@ -248,8 +248,8 @@ def ClockOp : LTLOp<"clock", [
   }];
 }
 
-def DisableOp : LTLOp<"disable", [Pure]> {
-  let arguments = (ins LTLAnyPurePropertyType:$input, I1:$condition);
+def DisableOp : LTLOp<"disable", [Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+  let arguments = (ins LTLAnyNonDisabledPropertyType:$input, I1:$condition);
   let results = (outs LTLDisabledPropertyType:$result);
   let assemblyFormat = [{
     $input `if` $condition attr-dict `:` type($input)

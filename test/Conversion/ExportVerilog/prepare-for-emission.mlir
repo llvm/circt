@@ -159,10 +159,10 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
     // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
     // CHECK: ltl.disable %{{.+}} if %[[READ]]
     %i0 = ltl.implication %a, %b : i1, i1
-    %k0 = ltl.clock %i0, posedge %clk : !ltl.property
-    %k5 = ltl.disable %k0 if %b_xor_b : !ltl.property
+    %k0 = ltl.clock %i0, posedge %clk : !ltl.clocked_property
+    %k5 = ltl.disable %k0 if %b_xor_b : !ltl.clcoked_disabled_property
 
-    verif.assert %k5: !ltl.property
+    verif.assert %k5: !ltl.clcoked_disabled_property
   }
 }
 

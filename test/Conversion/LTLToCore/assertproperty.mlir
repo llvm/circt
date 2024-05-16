@@ -24,13 +24,13 @@ module {
     %12 = hw.wire %10 : i1
 
     //CHECK:  %7 = comb.or %6, %0 : i1
-    %13 = ltl.disable %8 if %12 : i1
+    %13 = ltl.disable %8 if %12 : !ltl.disabled_property
 
     //CHECK:  sv.always posedge %1 {
     //CHECK:    sv.assert %7, immediate
     //CHECK:  }
-    %14 = ltl.clock %13, posedge %0 : !ltl.property
-    verif.assert %14 : !ltl.property
+    %14 = ltl.clock %13, posedge %0 : !ltl.clocked_disabled_property
+    verif.assert %14 : !ltl.clocked_disabled_property
 
     //CHECK:  hw.output
     hw.output 

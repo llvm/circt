@@ -57,7 +57,7 @@ OrOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 }
 
 //===----------------------------------------------------------------------===//
-// ClockOp
+// ClockOp / DisableOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult
@@ -65,10 +65,31 @@ ClockOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                           ValueRange operands, DictionaryAttr attributes,
                           OpaqueProperties properties, RegionRange regions,
                           SmallVectorImpl<Type> &inferredReturnTypes) {
-  if (isa<PropertyType>(operands[0].getType())) {
-    inferredReturnTypes.push_back(PropertyType::get(context));
+  auto type = operands[0].getType();
+  if (isa<PropertyType>(type)) {
+    inferredReturnTypes.push_back(ClockedPropertyType::get(context));
+  } else if (isa<DisabledPropertyType>(type)) {
+    inferredReturnTypes.push_back(ClockedDisabledPropertyType::get(context));
   } else {
-    inferredReturnTypes.push_back(SequenceType::get(context));
+    inferredReturnTypes.push_back(ClockedSequenceType::get(context));
+  }
+  return success();
+}
+
+LogicalResult
+DisableOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                            ValueRange operands, DictionaryAttr attributes,
+                            OpaqueProperties properties, RegionRange regions,
+                            SmallVectorImpl<Type> &inferredReturnTypes) {
+  auto type = operands[0].getType();
+  if (isa<PropertyType>(type)) {
+    inferredReturnTypes.push_back(DisabledPropertyType::get(context));
+  } else if (isa<ClockedPropertyType>(type)) {
+    inferredReturnTypes.push_back(ClockedDisabledPropertyType::get(context));
+  } else if (isa<ClockedSequenceType>(type)) {
+    inferredReturnTypes.push_back(ClockedDisabledPropertyType::get(context));
+  } else {
+    inferredReturnTypes.push_back(DisabledPropertyType::get(context));
   }
   return success();
 }

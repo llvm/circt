@@ -87,11 +87,11 @@ ltl.eventually %p : !ltl.property
 // Clocking
 //===----------------------------------------------------------------------===//
 
-// CHECK: ltl.clock {{%.+}}, posedge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, negedge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : i1
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.property
+// CHECK: ltl.clock {{%.+}}, posedge {{%.+}} : !ltl.clocked_sequence
+// CHECK: ltl.clock {{%.+}}, negedge {{%.+}} : !ltl.clocked_sequence
+// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.clocked_property
+// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.clocked_sequence
+// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.clocked_property
 ltl.clock %s, posedge %true : !ltl.sequence
 ltl.clock %s, negedge %true : !ltl.sequence
 %clk0 = ltl.clock %true, edge %true : i1
@@ -100,9 +100,9 @@ ltl.clock %s, negedge %true : !ltl.sequence
 
 // Type inference. `unrealized_conversion_cast` used to detect unexpected return
 // types on `ltl.and`.
-unrealized_conversion_cast %clk0 : !ltl.sequence to index
-unrealized_conversion_cast %clk1 : !ltl.sequence to index
-unrealized_conversion_cast %clk2 : !ltl.property to index
+unrealized_conversion_cast %clk0 : !ltl.clocked_sequence to index
+unrealized_conversion_cast %clk1 : !ltl.clocked_sequence to index
+unrealized_conversion_cast %clk2 : !ltl.clocked_property to index
 
-// CHECK: ltl.disable {{%.+}} if {{%.+}} : !ltl.property
-ltl.disable %p if %true : !ltl.property
+// CHECK: ltl.disable {{%.+}} if {{%.+}} : !ltl.disabled_property
+ltl.disable %p if %true : !ltl.disabled_property

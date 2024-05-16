@@ -100,7 +100,7 @@ func.func @ClockingFolds(%arg0: !ltl.property) {
   // disable(p, false) -> p
   // CHECK-NEXT: call @Prop(%arg0)
   %false = hw.constant false
-  %0 = ltl.disable %arg0 if %false : !ltl.property
-  call @Prop(%0) : (!ltl.property) -> ()
+  %0 = ltl.disable %arg0 if %false : !ltl.disabled_property
+  call @Prop(%0) : (!ltl.disabled_property) -> ()
   return
 }

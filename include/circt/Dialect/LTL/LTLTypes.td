@@ -28,7 +28,7 @@ def LTLSequenceType : LTLTypeDef<"Sequence", "sequence"> {
   }];
 }
 
-def LTLClockedSequenceType : LTLTypeDef<"ClokedSequence", "clocked_sequence"> {
+def LTLClockedSequenceType : LTLTypeDef<"ClockedSequence", "clocked_sequence"> {
   let summary = "LTL clocked sequence type";
   let description = [{
     The `ltl.clocked_sequence` type represents a sequence of linear temporal logic, 
