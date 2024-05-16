@@ -216,7 +216,7 @@ public:
     if (!dead)
       last = writeBack(nla.root(), nla.getNameAttr());
     for (auto root : newTops)
-      last = writeBack(root.getModule(), root.getName());
+      last = writeBack(root.getRoot(), root.getTarget());
 
     nla.erase();
     return last;
@@ -307,7 +307,7 @@ public:
     if (multiary)
       os << "[";
     llvm::interleaveComma(tops, os, [&](InnerRefAttr a) {
-      writeOne(a.getModule(), a.getName());
+      writeOne(a.getRoot(), a.getTarget());
     });
     if (multiary)
       os << "]";
@@ -598,8 +598,10 @@ private:
   /// parent, and on the current instance. Also HierPaths that are rooted at
   /// this module are also added to the active set.
   void setActiveHierPaths(StringAttr moduleName, StringAttr instInnerSym) {
-    auto &instPaths =
-        instOpHierPaths[InnerRefAttr::get(moduleName, instInnerSym)];
+    llvm::SmallVector<StringAttr> path{moduleName};
+    if (instInnerSym)
+      path.push_back(instInnerSym);
+    auto &instPaths = instOpHierPaths[InnerRefAttr::get(path)];
     if (currentPath.empty()) {
       activeHierpaths.insert(instPaths.begin(), instPaths.end());
       return;
@@ -760,7 +762,7 @@ bool Inliner::renameInstance(
         // The HierPathOp could have been renamed, check for the other retoped
         // names, if they are active at the inlining context.
         for (auto additionalSym : nlaMap[old].getAdditionalSymbols())
-          if (activeHierpaths.find(additionalSym.getName()) !=
+          if (activeHierpaths.find(additionalSym.getTarget()) !=
               activeHierpaths.end()) {
             validHierPaths.push_back(old);
             break;
@@ -787,7 +789,7 @@ bool Inliner::renameInstance(
       if (!nlaMap.count(nla))
         continue;
       auto &mnla = nlaMap[nla];
-      mnla.setInnerSym(newInnerRef.getModule(), newSymAttr);
+      mnla.setInnerSym(newInnerRef.getRoot(), newSymAttr);
     }
   }
 
@@ -1433,7 +1435,8 @@ void Inliner::run() {
               continue;
             }
             newAnnotation.push_back(
-                {pair.getName(), FlatSymbolRefAttr::get(rootAndSym.getName())});
+                {pair.getName(),
+                 FlatSymbolRefAttr::get(rootAndSym.getTarget())});
           }
           newAnnotations.push_back(DictionaryAttr::get(context, newAnnotation));
         }

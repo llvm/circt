@@ -201,7 +201,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   // needed for the actual memory writes for later.
   SmallVector<std::tuple<Value, Value, Value>> writeGoAddressData;
   for (auto req : implReq.getOps<ServiceImplementConnReqOp>()) {
-    auto port = req.getServicePort().getName();
+    auto port = req.getServicePort().getTarget();
     Value toClientResp;
 
     if (port == write) {
@@ -393,7 +393,7 @@ void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
   // Emit a record of the original request.
   b.create<ServiceRequestRecordOp>(
       req.getLoc(), req.getAppID(), req.getServicePortAttr(),
-      getStdService(req.getServicePortAttr().getModuleRef()),
+      getStdService(FlatSymbolRefAttr::get(req.getServicePortAttr().getRoot())),
       req.getToClient().getType());
   req.erase();
 }
@@ -419,7 +419,7 @@ LogicalResult ESIConnectServicesPass::process(hw::HWModuleLike mod) {
 
   // Sort the various requests by destination.
   mod.walk([&](ServiceImplementConnReqOp req) {
-    auto service = req.getServicePort().getModuleRef();
+    auto service = FlatSymbolRefAttr::get(req.getServicePort().getRoot());
     auto implOpF = localImplReqs.find(service);
     if (implOpF != localImplReqs.end())
       req->moveBefore(implOpF->second, implOpF->second->end());

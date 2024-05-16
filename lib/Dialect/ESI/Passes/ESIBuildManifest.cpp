@@ -198,7 +198,7 @@ std::string ESIBuildManifestPass::json() {
         j.attributeArray("ports", [&]() {
           for (auto port : ports) {
             j.object([&] {
-              j.attribute("name", port.port.getName().getValue());
+              j.attribute("name", port.port.getTarget().getValue());
               j.attribute("type", json(svcDecl, TypeAttr::get(port.type)));
             });
           }
@@ -240,7 +240,9 @@ void ESIBuildManifestPass::gatherFilters(Attribute attr) {
   TypeSwitch<Attribute>(attr)
       .Case([&](TypeAttr a) { addType(a.getValue()); })
       .Case([&](FlatSymbolRefAttr a) { symbols.insert(a); })
-      .Case([&](hw::InnerRefAttr a) { symbols.insert(a.getModuleRef()); })
+      .Case([&](hw::InnerRefAttr a) {
+        symbols.insert(FlatSymbolRefAttr::get(a.getRoot()));
+      })
       .Case([&](ArrayAttr a) {
         for (auto attr : a)
           gatherFilters(attr);
@@ -370,8 +372,8 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp,
       })
       .Case([&](hw::InnerRefAttr ref) {
         llvm::json::Object dict;
-        dict["outer_sym"] = ref.getModule().getValue();
-        dict["inner"] = ref.getName().getValue();
+        dict["outer_sym"] = ref.getRoot().getValue();
+        dict["inner"] = ref.getTarget().getValue();
         return dict;
       })
       .Case([&](AppIDAttr appid) {

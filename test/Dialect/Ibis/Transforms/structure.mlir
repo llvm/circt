@@ -18,7 +18,7 @@
 
 ibis.design @foo {
 ibis.class @C {
-  %this = ibis.this <@foo::@C>
+  %this = ibis.this <@C>
   ibis.method @getAndSet(%x: ui32) -> ui32 {
     ibis.return %x : ui32
   }
@@ -28,36 +28,36 @@ ibis.class @C {
 }
 
 // CHECK-LABEL: ibis.class @User {
-// CHECK:         [[c:%.+]] = ibis.instance @c, <@foo::@C>
+// CHECK:         [[c:%.+]] = ibis.instance @c, <@C>
 // CHECK:         ibis.method @getAndSetWrapper(%new_value: ui32) -> ui32 {
-// CHECK:           [[x:%.+]] = ibis.call <@foo::@getAndSet>(%new_value) : (ui32) -> ui32
+// CHECK:           [[x:%.+]] = ibis.call <@C::@getAndSet>(%new_value) : (ui32) -> ui32
 // CHECK:           ibis.return [[x]] : ui32
 // CHECK:         ibis.method @getAndSetDup(%new_value: ui32) -> ui32 {
-// CHECK:           [[x:%.+]] = ibis.call <@foo::@getAndSet>(%new_value) : (ui32) -> ui32
+// CHECK:           [[x:%.+]] = ibis.call <@C::@getAndSet>(%new_value) : (ui32) -> ui32
 // CHECK:           ibis.return [[x]] : ui32
 
 
 // PREP-LABEL: ibis.class @User {
-// PREP:         [[c:%.+]] = ibis.instance @c, <@foo::@C>
+// PREP:         [[c:%.+]] = ibis.instance @c, <@C>
 // PREP:         ibis.method @getAndSetWrapper(%arg: !hw.struct<new_value: ui32>) -> ui32 {
 // PREP:           %new_value = hw.struct_explode %arg : !hw.struct<new_value: ui32>
 // PREP:           [[STRUCT1:%.+]] = hw.struct_create (%new_value) {sv.namehint = "getAndSet_args_called_from_getAndSetWrapper"} : !hw.struct<x: ui32>
-// PREP:           [[CALLRES1:%.+]] = ibis.call <@foo::@getAndSet>([[STRUCT1]]) : (!hw.struct<x: ui32>) -> ui32
+// PREP:           [[CALLRES1:%.+]] = ibis.call <@C::@getAndSet>([[STRUCT1]]) : (!hw.struct<x: ui32>) -> ui32
 // PREP:         ibis.method @getAndSetDup(%arg: !hw.struct<new_value: ui32>) -> ui32 {
 // PREP:           %new_value = hw.struct_explode %arg : !hw.struct<new_value: ui32>
 // PREP:           [[STRUCT2:%.+]] = hw.struct_create (%new_value) {sv.namehint = "getAndSet_args_called_from_getAndSetDup"} : !hw.struct<x: ui32>
-// PREP:           [[CALLRES2:%.+]] = ibis.call <@foo::@getAndSet>([[STRUCT2]]) : (!hw.struct<x: ui32>) -> ui32
+// PREP:           [[CALLRES2:%.+]] = ibis.call <@C::@getAndSet>([[STRUCT2]]) : (!hw.struct<x: ui32>) -> ui32
 // PREP:           ibis.return [[CALLRES2]] : ui32
 ibis.class @User {
-  %this = ibis.this <@foo::@User>
-  ibis.instance @c, <@foo::@C>
+  %this = ibis.this <@User>
+  ibis.instance @c, <@C>
   ibis.method @getAndSetWrapper(%new_value: ui32) -> ui32 {
-    %x = ibis.call <@foo::@getAndSet>(%new_value): (ui32) -> ui32
+    %x = ibis.call <@C::@getAndSet>(%new_value): (ui32) -> ui32
     ibis.return %x : ui32
   }
 
   ibis.method @getAndSetDup(%new_value: ui32) -> ui32 {
-    %x = ibis.call <@foo::@getAndSet>(%new_value): (ui32) -> ui32
+    %x = ibis.call <@C::@getAndSet>(%new_value): (ui32) -> ui32
     ibis.return %x : ui32
   }
 }

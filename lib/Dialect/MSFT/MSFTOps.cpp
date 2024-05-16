@@ -102,10 +102,10 @@ void printImplicitInnerRef(OpAsmPrinter &p, Operation *,
                            hw::InnerRefAttr innerRef) {
   MLIRContext *ctxt = innerRef.getContext();
   StringRef innerRefNameStr, moduleStr;
-  if (innerRef.getName())
-    innerRefNameStr = innerRef.getName().getValue();
-  if (innerRef.getModule())
-    moduleStr = innerRef.getModule().getValue();
+  if (innerRef.getTarget())
+    innerRefNameStr = innerRef.getTarget().getValue();
+  if (innerRef.getRoot())
+    moduleStr = innerRef.getRoot().getValue();
   p << SymbolRefAttr::get(ctxt, moduleStr,
                           {FlatSymbolRefAttr::get(ctxt, innerRefNameStr)});
 }

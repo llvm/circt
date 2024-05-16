@@ -127,7 +127,7 @@ def ServiceDeclOpInterface : OpInterface<"ServiceDeclOpInterface"> {
         SmallVector<ServicePortInfo> ports;
         $_op.getPortList(ports);
         auto f = llvm::find_if(ports, [&](ServicePortInfo port) {
-          return port.port.getName() == portName;
+          return port.port.getTarget() == portName;
         });
         if (f != ports.end()) return *f;
         return failure();

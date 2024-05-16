@@ -27,10 +27,11 @@ struct InnerSymbolNamespace : Namespace {
   /// Populate the namespace from a module-like operation. This namespace will
   /// be composed of the `inner_sym`s of the module's ports and declarations.
   void add(Operation *module) {
-    hw::InnerSymbolTable::walkSymbols(
-        module, [&](StringAttr name, const InnerSymTarget &target) {
-          nextIndex.insert({name.getValue(), 0});
-        });
+    hw::InnerSymbolTable::walkSymbols(module, [&](StringAttr name,
+                                                  const InnerSymTarget &target,
+                                                  Operation * /*currentIST*/) {
+      nextIndex.insert({name.getValue(), 0});
+    });
   }
 };
 

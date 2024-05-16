@@ -316,10 +316,7 @@ void IMDeadCodeElimPass::runOnOperation() {
 
   instanceGraph = &getChildAnalysis<InstanceGraph>(circuit);
   symbolTable = &getChildAnalysis<SymbolTable>(circuit);
-  auto &istc = getChildAnalysis<hw::InnerSymbolTableCollection>(circuit);
-
-  circt::hw::InnerRefNamespace theInnerRefNamespace{*symbolTable, istc};
-  innerRefNamespace = &theInnerRefNamespace;
+  innerRefNamespace = &getChildAnalysis<hw::InnerRefNamespace>(circuit);
 
   // Walk attributes and find unknown uses of inner symbols or hierpaths.
   getOperation().walk([&](Operation *op) {

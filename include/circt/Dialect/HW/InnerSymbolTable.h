@@ -23,6 +23,10 @@
 namespace circt {
 namespace hw {
 
+namespace detail {
+struct InnerSymbolTableCollection;
+} // namespace detail
+
 /// The target of an inner symbol, the entity the symbol is a handle for.
 class InnerSymTarget {
 public:
@@ -102,10 +106,11 @@ public:
 
 /// A table of inner symbols and their resolutions.
 class InnerSymbolTable {
+
 public:
-  /// Build an inner symbol table for the given operation.  The operation must
-  /// have the InnerSymbolTable trait.
-  explicit InnerSymbolTable(Operation *op);
+  /// Construct an InnerSymbolTable, checking for verification failure.
+  /// Emits diagnostics describing encountered issues.
+  static FailureOr<InnerSymbolTable> get(Operation *op);
 
   /// Non-copyable
   InnerSymbolTable(const InnerSymbolTable &) = delete;
@@ -119,6 +124,11 @@ public:
   /// if no such name exists. Names never include the @ on them.
   InnerSymTarget lookup(StringRef name) const;
   InnerSymTarget lookup(StringAttr name) const;
+
+  /// Lookup an InnerRefAttr path, returning empty InnerSymTarget if no such
+  /// name exists.
+  InnerSymTarget lookup(hw::InnerRefAttr path) const;
+  InnerSymTarget lookup(llvm::ArrayRef<StringAttr> path) const;
 
   /// Look up a symbol with the specified name, returning null if no such
   /// name exists or doesn't target just an operation.
@@ -136,56 +146,115 @@ public:
     return dyn_cast_or_null<T>(lookupOp(name));
   }
 
+  /// Returns the name of an InnerSymbol operation.
+  static StringAttr getName(Operation *innerSymbolOp);
+
+  /// Return a pointer to the symbol table which this table is nested within.
+  /// If this is a top-level symbol table (nested in the InnerRefNamespace),
+  /// returns nullptr.
+  InnerSymbolTable *getParentSymbolTable() const;
+
+  /// Dumps this symbol table to the provided output stream.
+  void dump(llvm::raw_ostream &os, int indent = 0) const;
+
+  /// Return the operation this symbol table is associated with.
+  Operation *getInnerSymTblOp() const { return innerSymTblOp; }
+
   /// Get InnerSymbol for an operation.
   static StringAttr getInnerSymbol(Operation *op);
 
   /// Get InnerSymbol for a target.
   static StringAttr getInnerSymbol(const InnerSymTarget &target);
 
+  /// Get the symbol name for an InnerSymbolTable operation. These operations
+  /// may define symbols as either builtin MLIR symbols or inner_sym's.
+  static StringAttr getISTSymbol(Operation *op);
+
   /// Return the name of the attribute used for inner symbol names.
   static StringRef getInnerSymbolAttrName() { return "inner_sym"; }
 
-  /// Construct an InnerSymbolTable, checking for verification failure.
-  /// Emits diagnostics describing encountered issues.
-  static FailureOr<InnerSymbolTable> get(Operation *op);
-
   using InnerSymCallbackFn =
-      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &)>;
+      llvm::function_ref<LogicalResult(StringAttr, const InnerSymTarget &,
+                                       /*currentSymbolTableOp*/ Operation *)>;
+
+  /// Callback type for walking nested symbol tables. The `currentSymbolTable`
+  /// operation is provided as an Operation* value. A `InnerSymbolTable*` is
+  /// not provided, since this callback is also used in
+  /// `static InnerSymbolTable::walkSymbols`, which doesn't guarantee
+  /// construction of the symbol table.
+  using InnerSymTableCallbackFn = llvm::function_ref<LogicalResult(
+      StringAttr, /*currentSymbolTableOp*/ Operation *,
+      /*thisSymbolTable*/ Operation *)>;
 
   /// Walk the given IST operation and invoke the callback for all encountered
-  /// inner symbols.
+  /// inner symbols and symbol tables.
   /// This variant allows callbacks that return LogicalResult OR void,
   /// and wraps the underlying implementation.
-  template <typename FuncTy, typename RetTy = typename std::invoke_result_t<
-                                 FuncTy, StringAttr, const InnerSymTarget &>>
-  static RetTy walkSymbols(Operation *op, FuncTy &&callback) {
+  template <typename FuncTy,
+            typename RetTy = typename std::invoke_result_t<
+                FuncTy, StringAttr, const InnerSymTarget &, Operation *>>
+  static RetTy walkSymbols(
+      Operation *op, FuncTy &&symCallback,
+      std::optional<InnerSymTableCallbackFn> symTblCallback = std::nullopt) {
     if constexpr (std::is_void_v<RetTy>)
       return (void)walkSymbols(
-          op, InnerSymCallbackFn(
-                  [&](StringAttr name, const InnerSymTarget &target) {
-                    std::invoke(std::forward<FuncTy>(callback), name, target);
-                    return success();
-                  }));
+          op,
+          InnerSymCallbackFn([&](StringAttr name, const InnerSymTarget &target,
+                                 Operation *currentIST) {
+            std::invoke(std::forward<FuncTy>(symCallback), name, target,
+                        currentIST);
+            return success();
+          }),
+          symTblCallback);
     else
       return walkSymbols(
-          op, InnerSymCallbackFn([&](StringAttr name,
-                                     const InnerSymTarget &target) {
-            return std::invoke(std::forward<FuncTy>(callback), name, target);
-          }));
+          op,
+          InnerSymCallbackFn([&](StringAttr name, const InnerSymTarget &target,
+                                 Operation *currentIST) {
+            return std::invoke(std::forward<FuncTy>(symCallback), name, target,
+                               currentIST);
+          }),
+          symTblCallback);
   }
 
-  /// Walk the given IST operation and invoke the callback for all encountered
-  /// inner symbols.
-  /// This variant is the underlying implementation.
-  /// If callback returns failure, the walk is aborted and failure is returned.
-  /// A successful walk with no failures returns success.
-  static LogicalResult walkSymbols(Operation *op, InnerSymCallbackFn callback);
+  /// Walk the given IST operation and invoke the symCallback for all
+  /// encountered inner symbols and inner symbol tables. This variant is the
+  /// underlying implementation. If callback returns failure, the walk is
+  /// aborted and failure is returned. A successful walk with no failures
+  /// returns success.
+  /// This function guarantees that symTblCallback is called before any
+  /// symCallback call on operations that reside within a given symbol table.
+  static LogicalResult walkSymbols(
+      Operation *op, InnerSymCallbackFn symCallback,
+      std::optional<InnerSymTableCallbackFn> symTblCallback = std::nullopt);
 
 private:
-  using TableTy = DenseMap<StringAttr, InnerSymTarget>;
+  /// Construct an empty inner symbol table; used by InnerSymbolTable::get to
+  /// avoid calling the InnerSymbolTable(Operation*) constructor.
+  explicit InnerSymbolTable() = default;
+
+  /// Like walkSymbols, but also carries the currently active InnerSymbolTable
+  /// operation as an argument.
+  static LogicalResult
+  walkSymbolsInner(Operation *op, InnerSymCallbackFn symCallback,
+                   std::optional<InnerSymTableCallbackFn> symTblCallback,
+                   Operation *currentIST);
+
+  using SymbolTableTy = DenseMap<StringAttr, InnerSymTarget>;
+  using NestedSymbolTableTy =
+      DenseMap<StringAttr, std::unique_ptr<InnerSymbolTable>>;
+
+  /// Walk the symbols of the symbol table op and populate the symbol table.
+  static LogicalResult buildSymbolTable(InnerSymbolTable &ist,
+                                        Operation *istOp);
+
+  /// Build an inner symbol table for the given operation.  The operation must
+  /// have the InnerSymbolTable trait.
+  explicit InnerSymbolTable(Operation *op);
+
   /// Construct an inner symbol table for the given operation,
   /// with pre-populated table contents.
-  explicit InnerSymbolTable(Operation *op, TableTy &&table)
+  explicit InnerSymbolTable(Operation *op, SymbolTableTy &&table)
       : innerSymTblOp(op), symbolTable(table){};
 
   /// This is the operation this table is constructed for, which must have the
@@ -193,44 +262,36 @@ private:
   Operation *innerSymTblOp;
 
   /// This maps inner symbol names to their targets.
-  TableTy symbolTable;
-};
+  SymbolTableTy symbolTable;
 
-/// This class represents a collection of InnerSymbolTable's.
-class InnerSymbolTableCollection {
-public:
-  /// Get or create the InnerSymbolTable for the specified operation.
-  InnerSymbolTable &getInnerSymbolTable(Operation *op);
-
-  /// Populate tables in parallel for all InnerSymbolTable operations in the
-  /// given InnerRefNamespace operation, verifying each and returning
-  /// the verification result.
-  LogicalResult populateAndVerifyTables(Operation *innerRefNSOp);
-
-  explicit InnerSymbolTableCollection() = default;
-  explicit InnerSymbolTableCollection(Operation *innerRefNSOp) {
-    // Caller is not interested in verification, no way to report it upwards.
-    auto result = populateAndVerifyTables(innerRefNSOp);
-    (void)result;
-    assert(succeeded(result));
-  }
-  InnerSymbolTableCollection(const InnerSymbolTableCollection &) = delete;
-  InnerSymbolTableCollection &
-  operator=(const InnerSymbolTableCollection &) = delete;
-
-private:
-  /// This maps Operations to their InnnerSymbolTable's.
-  DenseMap<Operation *, std::unique_ptr<InnerSymbolTable>> symbolTables;
+  /// This maps inner symbol names to nested symbol tables.
+  NestedSymbolTableTy nestedSymbolTables;
 };
 
 /// This class represents the namespace in which InnerRef's can be resolved.
 struct InnerRefNamespace {
-  SymbolTable &symTable;
-  InnerSymbolTableCollection &innerSymTables;
+  /// Construct an InnerRefNamespace from the given operation.
+  explicit InnerRefNamespace(Operation *op);
+  ~InnerRefNamespace();
 
-  /// Resolve the InnerRef to its target within this namespace, returning empty
-  /// target if no such name exists.
+  /// Non-copyable
+  InnerRefNamespace(const InnerRefNamespace &) = delete;
+  InnerRefNamespace &operator=(const InnerRefNamespace &) = delete;
+
+  // Moveable
+  InnerRefNamespace(InnerRefNamespace &&) = default;
+  InnerRefNamespace &operator=(InnerRefNamespace &&) = default;
+
+  /// Construct an InnerRefNamespace, checking for verification failure.
+  /// Emits diagnostics describing encountered issues.
+  static FailureOr<InnerRefNamespace> get(Operation *op);
+
+  /// Resolve the InnerRef to its target within this namespace, returning
+  /// empty target if no such name exists.
   InnerSymTarget lookup(hw::InnerRefAttr inner) const;
+
+  /// Dump this namespace to the provided output stream.
+  void dump(llvm::raw_ostream &os) const;
 
   /// Resolve the InnerRef to its target within this namespace, returning
   /// empty target if no such name exists or it's not an operation.
@@ -240,6 +301,14 @@ struct InnerRefNamespace {
   T lookupOp(hw::InnerRefAttr inner) const {
     return dyn_cast_or_null<T>(lookupOp(inner));
   }
+
+private:
+  /// Private constructor to be used for verification purposes.
+  InnerRefNamespace();
+
+  /// Collection of InnerSymbolTable's for all top-level InnerSymbolTable
+  /// operations in the namespace.
+  std::unique_ptr<detail::InnerSymbolTableCollection> innerSymTables;
 };
 
 /// Printing InnerSymTarget's.
@@ -252,10 +321,14 @@ OS &operator<<(OS &os, const InnerSymTarget &target) {
     os << "field " << target.getField() << " of ";
 
   if (target.isPort())
-    os << "port " << target.getPort() << " on @"
-       << SymbolTable::getSymbolName(target.getOp()).getValue() << "";
+    os << "port " << target.getPort() << " on ";
   else
-    os << "op " << *target.getOp() << "";
+    os << "op ";
+
+  if (auto symName = InnerSymbolTable::getName(target.getOp()))
+    os << "@" << symName.getValue() << "";
+  else
+    os << *target.getOp();
 
   return os;
 }

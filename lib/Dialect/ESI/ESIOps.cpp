@@ -342,11 +342,11 @@ getServiceDecl(Operation *op, SymbolTableCollection &symbolTable,
   ModuleOp top = op->getParentOfType<mlir::ModuleOp>();
   SymbolTable &topSyms = symbolTable.getSymbolTable(top);
 
-  StringAttr modName = servicePort.getModule();
+  StringAttr modName = servicePort.getRoot();
   auto serviceDecl = topSyms.lookup<ServiceDeclOpInterface>(modName);
   if (!serviceDecl)
     return op->emitOpError("Could not find service declaration ")
-           << servicePort.getModuleRef();
+           << FlatSymbolRefAttr::get(servicePort.getRoot());
   return serviceDecl;
 }
 
@@ -357,9 +357,9 @@ getServicePortInfo(Operation *op, SymbolTableCollection &symbolTable,
   auto serviceDecl = getServiceDecl(op, symbolTable, servicePort);
   if (failed(serviceDecl))
     return failure();
-  auto portInfo = serviceDecl->getPortInfo(servicePort.getName());
+  auto portInfo = serviceDecl->getPortInfo(servicePort.getTarget());
   if (failed(portInfo))
-    return op->emitOpError("Could not locate port ") << servicePort.getName();
+    return op->emitOpError("Could not locate port ") << servicePort.getTarget();
   return portInfo;
 }
 

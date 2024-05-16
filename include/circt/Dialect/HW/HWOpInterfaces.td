@@ -478,14 +478,22 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
           this->getOperation()->removeAttr(InnerSymbolTable::getInnerSymbolAttrName());
       }]
     >,
-    InterfaceMethod<"Returns an InnerRef to this operation's top-level inner symbol, which must be present.",
+    InterfaceMethod<"Returns an InnerRef to this operation through the inner symbol table hierarchy of which it resides.",
       "::circt::hw::InnerRefAttr", "getInnerRef", (ins), [{}],
       /*defaultImplementation=*/[{
         auto *op = this->getOperation();
-        return hw::InnerRefAttr::get(
-            SymbolTable::getSymbolName(
-                op->template getParentWithTrait<OpTrait::InnerSymbolTable>()),
-            InnerSymbolTable::getInnerSymbol(op));
+        llvm::SmallVector<mlir::StringAttr> path;
+        Operation* parentOp = op->template getParentWithTrait<OpTrait::InnerSymbolTable>();
+        while (parentOp) {
+          auto parentSymbol = InnerSymbolTable::getISTSymbol(parentOp);
+          assert(parentSymbol && "Parent symbol table has no inner symbol");
+          path.push_back(parentSymbol);
+          parentOp = parentOp->template getParentWithTrait<OpTrait::InnerSymbolTable>();
+        }
+        // Reverse the path so that the innermost symbol is first.
+        std::reverse(path.begin(), path.end());
+        path.push_back(getInnerNameAttr());
+        return hw::InnerRefAttr::get(path);
       }]
     >,
     InterfaceMethod<"Returns the InnerSymAttr representing all inner symbols defined by this operation.",

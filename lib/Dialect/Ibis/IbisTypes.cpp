@@ -26,19 +26,18 @@ bool circt::ibis::isOpaqueScopeRefType(mlir::Type type) {
 }
 
 Type ScopeRefType::parse(AsmParser &p) {
+  // Is this an opaque scoperef? (!ibis.scoperef => no innerref)
   if (p.parseOptionalLess())
     return ScopeRefType::get(p.getBuilder().getContext());
 
-  SymbolRefAttr attr;
-  if (p.parseAttribute(attr) || p.parseGreater())
+  // Else, parse the inner reference
+  hw::InnerRefAttr innerRefAttr = hw::parseInnerRefAttr(p, /*parseLess=*/false)
+                                      .dyn_cast_or_null<hw::InnerRefAttr>();
+
+  if (p.parseGreater() || !innerRefAttr)
     return Type();
-  if (attr.getNestedReferences().size() != 1) {
-    p.emitError(p.getNameLoc(), "expected @outer::@inner format");
-    return Type();
-  }
-  return ScopeRefType::get(
-      p.getBuilder().getContext(),
-      hw::InnerRefAttr::get(attr.getRootReference(), attr.getLeafReference()));
+
+  return ScopeRefType::get(p.getBuilder().getContext(), innerRefAttr);
 }
 
 void ScopeRefType::print(AsmPrinter &p) const {

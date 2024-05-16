@@ -65,11 +65,11 @@ ibis.class @A {
   ibis.container@B {
     %B_this = ibis.this @B
     %parent = ibis.path [
-      #ibis.step<parent : !ibis.scoperef<@foo::@A>>
+      #ibis.step<parent : !ibis.scoperef<@A>>
     ]
-    %a_in = ibis.get_port %parent, @in : !ibis.scoperef<@foo::@A> -> !ibis.portref<out i1>
-    %a_clk = ibis.get_port %parent, @clk : !ibis.scoperef<@foo::@A> -> !ibis.portref<out !seq.clock>
-    %a_out = ibis.get_port %parent, @out : !ibis.scoperef<@foo::@A> -> !ibis.portref<in i1>
+    %a_in = ibis.get_port %parent, @in : !ibis.scoperef<@A> -> !ibis.portref<out i1>
+    %a_clk = ibis.get_port %parent, @clk : !ibis.scoperef<@A> -> !ibis.portref<out !seq.clock>
+    %a_out = ibis.get_port %parent, @out : !ibis.scoperef<@A> -> !ibis.portref<in i1>
     %in = ibis.port.read %a_in : !ibis.portref<out i1>
     %clk = ibis.port.read %a_clk : !ibis.portref<out !seq.clock>
     %r = seq.compreg %in, %clk: i1

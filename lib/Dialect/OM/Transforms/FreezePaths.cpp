@@ -23,8 +23,9 @@ using namespace om;
 
 namespace {
 struct PathVisitor {
-  PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn)
-      : instanceGraph(instanceGraph), irn(irn) {}
+  PathVisitor(hw::InstanceGraph &instanceGraph, SymbolTable &symTable,
+              hw::InnerRefNamespace &irn)
+      : instanceGraph(instanceGraph), symTable(symTable), irn(irn) {}
 
   StringAttr field;
   LogicalResult processPath(Location loc, hw::HierPathOp hierPathOp,
@@ -36,6 +37,7 @@ struct PathVisitor {
   LogicalResult process(ListCreateOp listCreateOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
+  SymbolTable &symTable;
   hw::InnerRefNamespace &irn;
 };
 } // namespace
@@ -116,13 +118,14 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       diag.attachNote(op->getLoc()) << "component here";
       return diag;
     }
-    modules.emplace_back(innerRef.getModule(), verilogName);
+    modules.emplace_back(innerRef.getRoot(), verilogName);
   }
 
   // Process the final target.
   auto &end = namepath.back();
   if (auto innerRef = dyn_cast<hw::InnerRefAttr>(end)) {
     auto target = irn.lookup(innerRef);
+    assert(target && "innerRef should be targeting something");
     if (target.isPort()) {
       // We are targeting the port of a module.
       auto module = cast<hw::HWModuleLike>(target.getOp());
@@ -137,7 +140,7 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       auto *op = target.getOp();
       assert(op && "innerRef should be targeting something");
       // Get the current module.
-      auto currentModule = innerRef.getModule();
+      auto currentModule = innerRef.getRoot();
       // Get the verilog name of the target.
       auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
       if (!verilogName) {
@@ -184,7 +187,7 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
 
 LogicalResult PathVisitor::process(PathCreateOp path) {
   auto hierPathOp =
-      irn.symTable.lookup<hw::HierPathOp>(path.getTargetAttr().getAttr());
+      symTable.lookup<hw::HierPathOp>(path.getTargetAttr().getAttr());
   PathAttr targetPath;
   StringAttr bottomModule;
   StringAttr ref;
@@ -206,7 +209,7 @@ LogicalResult PathVisitor::process(PathCreateOp path) {
 
 LogicalResult PathVisitor::process(BasePathCreateOp path) {
   auto hierPathOp =
-      irn.symTable.lookup<hw::HierPathOp>(path.getTargetAttr().getAttr());
+      symTable.lookup<hw::HierPathOp>(path.getTargetAttr().getAttr());
   PathAttr targetPath;
   StringAttr bottomModule;
   StringAttr ref;
@@ -298,11 +301,9 @@ struct FreezePathsPass : public FreezePathsBase<FreezePathsPass> {
 void FreezePathsPass::runOnOperation() {
   auto module = getOperation();
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
-  mlir::SymbolTableCollection symbolTableCollection;
   auto &symbolTable = getAnalysis<SymbolTable>();
-  hw::InnerSymbolTableCollection collection(module);
-  hw::InnerRefNamespace irn{symbolTable, collection};
-  if (failed(PathVisitor(instanceGraph, irn).run(module)))
+  hw::InnerRefNamespace &irn = getAnalysis<hw::InnerRefNamespace>();
+  if (failed(PathVisitor(instanceGraph, symbolTable, irn).run(module)))
     signalPassFailure();
 }
 
