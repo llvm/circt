@@ -17,7 +17,7 @@ jobs:
       # this is one point in the overall matrix.
       matrix:
         python-env:
-          - cp38-win_amd64
+          - cp38-manylinux_x86_64
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -25,6 +25,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: true
+
+      - name: Unshallow CIRCT
+        run: |
+          echo "Fetching history and tags from CIRCT repo"
+          git fetch --depth=1000000 --tags --no-recurse-submodules
 
       # --------
       # Build and test CIRCT
@@ -36,19 +41,14 @@ jobs:
           python3 -m pip install cibuildwheel twine
       - name: Build wheel
         env:
-          CC: clang
-          CXX: clang++
           CIBW_BUILD: ${{ matrix.python-env }}
-          CIBW_ENVIRONMENT: CMAKE_GENERATOR=Ninja
+          CIBW_ENVIRONMENT: CMAKE_GENERATOR=Ninja CC=clang CXX=clang++
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: RelWithAsserts
           RUN_TESTS: True
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
-
-          echo "Fetching history and tags from CIRCT repo"
-          git fetch --depth=1000000 --tags --no-recurse-submodules
 
           echo "Building wheel"
           cibuildwheel --output-dir wheelhouse frontends/PyCDE
