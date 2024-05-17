@@ -544,6 +544,32 @@ module Expressions;
     // CHECK: moore.shr %u, %b : !moore.i32, !moore.i32
     c = u >>> b;
 
+    // CHECK: moore.wildcard_eq %a, %a : !moore.i32 -> !moore.i1
+    c = a inside { a };
+
+    // CHECK: [[TMP1:%.+]] = moore.wildcard_eq %a, %a : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP2:%.+]] = moore.wildcard_eq %a, %b : !moore.i32 -> !moore.i1
+    // CHECK: moore.or [[TMP1]], [[TMP2]] : !moore.i1
+    c = a inside { a, b };
+
+    // CHECK: [[TMP1:%.+]] = moore.wildcard_eq %a, %a : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP2:%.+]] = moore.wildcard_eq %a, %b : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP3:%.+]] = moore.wildcard_eq %a, %a : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP4:%.+]] = moore.wildcard_eq %a, %b : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP5:%.+]] = moore.or [[TMP3]], [[TMP4]] : !moore.i1
+    // CHECK: [[TMP6:%.+]] = moore.or [[TMP2]], [[TMP5]] : !moore.i1
+    // CHECK: moore.or [[TMP1]], [[TMP6]] : !moore.i1
+    c = a inside { a, b, a, b };
+
+    // CHECK: [[TMP1:%.+]] = moore.wildcard_eq %a, %a : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP2:%.+]] = moore.wildcard_eq %a, %b : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP3:%.+]] = moore.sge %a, %a : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP4:%.+]] = moore.sle %a, %b : !moore.i32 -> !moore.i1
+    // CHECK: [[TMP5:%.+]] = moore.and [[TMP3]], [[TMP4]] : !moore.i1
+    // CHECK: [[TMP6:%.+]] = moore.or [[TMP2]], [[TMP5]] : !moore.i1
+    // CHECK: moore.or [[TMP1]], [[TMP6]] : !moore.i1
+    c = a inside { a, b, [a:b] };
+
     //===------------------------------------------------------------------===//
     // Assign operators
 
