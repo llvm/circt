@@ -28,6 +28,7 @@ smt.solver () : () -> () {
 
   // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
   // CHECK-INLINED:                 ( ! (= [[A]] [[B]]) :weight 2)))
+
   %2 = smt.exists weight 2 {
   ^bb0(%arg2: !smt.int, %arg3: !smt.int):
     %3 = smt.eq %arg2, %arg3 : !smt.int
@@ -36,11 +37,15 @@ smt.solver () : () -> () {
   smt.assert %2
 
 
+
   // CHECK: (assert (let (([[V16:.+]] (exists (([[V17:.+]] Int) ([[V18:.+]] Int))
   // CHECK:                           ( ! (let (([[V19:.+]] (= [[V17]] [[V18]])))
   // CHECK:                           (let (([[V20:.+]] (=> [[V19:.+]] true)))
   // CHECK:                           [[V20:.+]])) :weight 2))))
-  // CHECK:         [[V16]]))
+  // CHECK:         [[V16]])){{$}}
+
+  // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
+  // CHECK-INLINED:                 ( ! (=> (= [[A]] [[B]]) true) :weight 2)))
 
   %3 = smt.exists weight 2 {
   ^bb0(%arg2: !smt.int, %arg3: !smt.int):
@@ -57,7 +62,11 @@ smt.solver () : () -> () {
   // CHECK:                           [[V25]])) 
   // CHECK:                           :pattern ((let (([[V26:.+]] (= [[V22]] [[V23]])))
   // CHECK:                           [[V26]]))))))
-  // CHECK:               [[V21]]))
+  // CHECK:               [[V21]])){{$}}
+
+  // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
+  // CHECK-INLINED:                 ( ! (=> (= [[A]] [[B]]) true)
+  // CHECK-INLINED:                 :pattern ((= [[A]] [[B]])))))
 
   %6 = smt.exists {
     ^bb0(%arg2: !smt.int, %arg3: !smt.int):
@@ -77,7 +86,11 @@ smt.solver () : () -> () {
   // CHECK:                           [[V31]])) :weight 2
   // CHECK:                           :pattern ((let (([[V32:.+]] (= [[V28]] [[V29]])))
   // CHECK:                   [[V32]]))))))
-  // CHECK:         [[V27]]))
+  // CHECK:         [[V27]])){{$}}
+
+  // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
+  // CHECK-INLINED:                 ( ! (=> (= [[A]] [[B]]) true) :weight 2
+  // CHECK-INLINED:                 :pattern ((= [[A]] [[B]])))))
 
   %7 = smt.exists weight 2 {
     ^bb0(%arg2: !smt.int, %arg3: !smt.int):
@@ -99,7 +112,12 @@ smt.solver () : () -> () {
   // CHECK:                               :pattern ((let (([[V39:.+]] (= [[V34]] 3)))
   // CHECK:                               [[V39]]) (let (([[V40:.+]] (= [[V35]] 4)))
   // CHECK:                               [[V40]]))))))
-  // CHECK:         [[V33]]))
+  // CHECK:         [[V33]])){{$}}
+
+  // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
+  // CHECK-INLINED:                 ( ! (= (= [[A]] 3) (= [[B]] 4))
+  // CHECK-INLINED:                 :pattern ((= [[A]] 3) (= [[B]] 4)))))
+
 
   %three = smt.int.constant 3
   %four = smt.int.constant 4
@@ -131,7 +149,11 @@ smt.solver () : () -> () {
   // CHECK:                               :pattern ((let (([[V47:.+]] (= [[V42]] 3)))
   // CHECK:                               [[V47]])(let (([[V48:.+]] (= [[V43]] 4)))
   // CHECK:                               [[V48]]))))))
-  // CHECK:         [[V41]]))
+  // CHECK:         [[V41]])){{$}}
+
+  // CHECK-INLINED: (assert (exists (([[A:.+]] Int) ([[B:.+]] Int))
+  // CHECK-INLINED:                 ( ! (= (= [[A]] 3) (= [[B]] 4))
+  // CHECK-INLINED:                 :pattern ((= [[A]] 3)(= [[B]] 4)))))
 
   %10 = smt.exists {
     ^bb0(%arg2: !smt.int, %arg3: !smt.int):

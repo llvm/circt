@@ -327,11 +327,9 @@ struct ExpressionVisitor
 
     info.stream << ")\n";
 
-    if (weight != 0 || !patterns.empty())
-      info.stream << "( ! ";
-
     // Print the quantifier body. This assumes that quantifiers are not deeply
     // nested (at least not enough that recursive calls could become a problem).
+
     SmallVector<Value> worklist;
     Value yieldedValue = op.getBody().front().getTerminator()->getOperand(0);
     worklist.push_back(yieldedValue);
@@ -339,9 +337,13 @@ struct ExpressionVisitor
     VisitorInfo newInfo(info.stream, info.valueMap,
                         info.indentLevel + indentExt, 0);
     if (weight != 0 || !patterns.empty())
-      newInfo.stream.indent(0);
+      newInfo.stream.indent(newInfo.indentLevel);
     else
       newInfo.stream.indent(info.indentLevel);
+
+    if (weight != 0 || !patterns.empty())
+      info.stream << "( ! ";
+
     if (failed(printExpression(worklist, newInfo)))
       return failure();
 
@@ -353,8 +355,8 @@ struct ExpressionVisitor
     if (weight != 0)
       info.stream << " :weight " << weight;
     if (!patterns.empty()) {
-      info.stream << "\n:pattern (";
       bool first = true;
+      info.stream << "\n:pattern (";
       for (auto &p : patterns) {
 
         if (!first)
@@ -367,10 +369,8 @@ struct ExpressionVisitor
         SmallVector<Value> worklist;
 
         // retrieve all yielded operands in pattern region
-        for (int opr = 0; opr < p.front().getTerminator()->getOperands().size();
-             ++opr) {
+        for (auto yieldedValue : p.front().getTerminator()->getOperands()) {
 
-          Value yieldedValue = p.front().getTerminator()->getOperand(opr);
           worklist.push_back(yieldedValue);
           unsigned indentExt = operatorString.size() + 2;
 
