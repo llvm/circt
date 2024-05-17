@@ -1,0 +1,60 @@
+name: PyCDE Test and Publish
+
+# Build the wheels for a series of Python versions and OSes and publish them to
+# PyPI.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Build CIRCT and run its tests using a Docker container with all the
+  # integration testing prerequisite installed.
+  build-circt:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      # Keep the 'matrix' strategy with one data point to make it obvious that
+      # this is one point in the overall matrix.
+      matrix:
+        python-env:
+          - cp38-win_amd64
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      # --------
+      # Build and test CIRCT
+      # --------
+      - name: Install dependencies
+        run: |
+          set -o errexit
+          sudo apt install -y python3-pip
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cibuildwheel twine
+      - name: Build wheel
+        env:
+          CC: clang
+          CXX: clang++
+          CIBW_BUILD: ${{ matrix.python-env }}
+          CIBW_ENVIRONMENT: CMAKE_GENERATOR=Ninja
+          SETUPTOOLS_SCM_DEBUG: True
+          BUILD_TYPE: RelWithAsserts
+          RUN_TESTS: True
+        run: |
+          export PATH=$PATH:$HOME/.local/bin
+          cd $(Pipeline.Workspace)/circt
+
+          echo "Fetching history and tags from CIRCT repo"
+          git fetch --depth=1000000 --tags --no-recurse-submodules
+
+          echo "Building wheel"
+          cibuildwheel --output-dir wheelhouse frontends/PyCDE
+      - name: Upload Binary (Non-Tag)
+        uses: actions/upload-artifact@v3
+        with:
+          path: wheelhouse/*.whl
+          retention-days: 7

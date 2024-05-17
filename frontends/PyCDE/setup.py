@@ -45,6 +45,7 @@ class CMakeBuild(build_py):
 
   def run(self):
     target_dir = self.build_lib
+    test = os.getenv("RUN_TESTS")
     cmake_build_dir = os.getenv("PYCDE_CMAKE_BUILD_DIR")
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
@@ -81,9 +82,24 @@ class CMakeBuild(build_py):
     if os.path.exists(cmake_cache_file):
       os.remove(cmake_cache_file)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
-    subprocess.check_call(["cmake", "--build", ".", "--target", "check-pycde"] +
-                          build_args,
+    subprocess.check_call([
+        "cmake",
+        "--build",
+        ".",
+        "--target",
+        "check-pycde",
+    ] + build_args,
                           cwd=cmake_build_dir)
+    if test.lower() == "true":
+      subprocess.check_call([
+          "cmake",
+          "--build",
+          ".",
+          "--target",
+          "check-pycde-integration",
+          "check-circt",
+      ] + build_args,
+                            cwd=cmake_build_dir)
     install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
     subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),
