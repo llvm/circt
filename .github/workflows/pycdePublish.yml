@@ -42,7 +42,7 @@ jobs:
 
       - name: Get shallow LLVM submodule
         run: |
-          git submodule update --init --recursive --recommend-shallow
+          git submodule update --init --recursive --recommend-shallow --depth 1
 
       # - name: Unshallow CIRCT
       #   run: |
