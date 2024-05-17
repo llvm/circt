@@ -44,8 +44,8 @@ jobs:
           BUILD_TYPE: RelWithAsserts
           RUN_TESTS: True
         run: |
+          set -o errexit
           export PATH=$PATH:$HOME/.local/bin
-          cd $(Pipeline.Workspace)/circt
 
           echo "Fetching history and tags from CIRCT repo"
           git fetch --depth=1000000 --tags --no-recurse-submodules
