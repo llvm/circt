@@ -54,6 +54,8 @@ class CMakeBuild(build_py):
         os.environ.get("CIRCT_DIRECTORY", os.path.join(_thisdir, "..", "..")))
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     cfg = "Release"
+    if "BUILD_TYPE" in os.environ:
+      cfg = os.environ["BUILD_TYPE"]
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
@@ -67,6 +69,10 @@ class CMakeBuild(build_py):
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
     ]
+    if "CC" in os.environ:
+      cmake_args += [f"-DCMAKE_C_COMPILER={os.environ['CC']}"]
+    if "CXX" in os.environ:
+      cmake_args += [f"-DCMAKE_CXX_COMPILER={os.environ['CXX']}"]
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
     build_args = []
