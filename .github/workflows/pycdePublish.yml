@@ -32,7 +32,6 @@ jobs:
       - name: Install dependencies
         run: |
           set -o errexit
-          sudo apt install -y python3-pip
           python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel twine
       - name: Build wheel
