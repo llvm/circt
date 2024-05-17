@@ -32,7 +32,15 @@ static bool hasFlip(Type t) {
 }
 
 static void updateWireUses(mlir::OpBuilder& builder, Operation* op, Value readVal, Value writeVal) {
-  for (auto* user : op->getUsers()) {
+  llvm::errs() << "updateWireUses\n";
+  op->dump();
+  readVal.dump();
+  writeVal.dump();
+  for (auto* user : op->getUsers())
+    user->dump();
+  llvm::errs() << "\n";
+
+  for (auto* user : llvm::make_early_inc_range(op->getUsers())) {
     llvm::TypeSwitch<Operation*, void>(user)
     .Case<StrictConnectOp, ConnectOp>([&](auto con){
       if (con.getDest() == op->getResult(0))
@@ -60,7 +68,7 @@ static void updateWireUses(mlir::OpBuilder& builder, Operation* op, Value readVa
       if (newReadVal.getResult().use_empty())
         newReadVal.erase();
       if (newWriteVal.getResult().use_empty())
-        newWriteVal.erase();      
+        newWriteVal.erase();
     })
     .Case<SubaccessOp>([&](auto index){
       builder.setInsertionPointAfter(index);
@@ -74,9 +82,12 @@ static void updateWireUses(mlir::OpBuilder& builder, Operation* op, Value readVa
         newWriteVal.erase();      
     })
     .Default([&](auto v) {
+      llvm::errs() << "Default\n";
+      v->dump();
       for (auto idx = 0U, e = v->getNumOperands(); idx < e; ++idx)
         if (v->getOperand(idx) == op->getResult(0))
           v->setOperand(idx, readVal);
+      v->dump();
     });
   }
 }

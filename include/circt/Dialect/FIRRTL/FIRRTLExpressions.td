@@ -302,13 +302,12 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), firrtl::type_cast<InputType>(getInput().getType())
-                                            .getFieldID(getFieldIndex()));
+      return FieldRef(getInput(), getInputType().getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return firrtl::type_cast<InputType>(getInput().getType()).getElementName(getFieldIndex());
+      return firrtl::type_cast<InputType>(getInputType()).getElementName(getFieldIndex());
     }
 
     InputType getInputType();
