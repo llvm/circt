@@ -36,6 +36,33 @@ using namespace circt::om;
 
 namespace {
 
+static bool shouldCreateClassImpl(FModuleLike moduleLike) {
+  if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
+    return true;
+
+  // Always create a class for public modules.
+  if (moduleLike.isPublic())
+    return true;
+
+  // Create a class for modules with property ports.
+  bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
+    return isa<PropertyType>(port.type);
+  });
+
+  if (hasClassPorts)
+    return true;
+
+  // Create a class for modules that instantiate classes or modules with
+  // property ports.
+  for (auto op :
+       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>())
+    for (auto result : op->getResults())
+      if (type_isa<PropertyType>(result.getType()))
+        return true;
+
+  return false;
+}
+
 /// Helper class which holds a hierarchical path op reference and a pointer to
 /// to the targeted operation.
 struct PathInfo {
@@ -193,7 +220,316 @@ private:
   DenseMap<FModuleLike, bool> shouldCreateClassMemo;
 };
 
+struct PathTracker {
+  // An entry point for parallely tracking paths in the circuit and apply
+  // changes to `pathInfoTable`.
+  static LogicalResult
+  run(CircuitOp circuit, InstanceGraph &instanceGraph,
+      hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
+      PathInfoTable &pathInfoTable, const SymbolTable &symbolTable,
+      const DenseMap<DistinctAttr, FModuleOp> &owningModules);
+
+private:
+  PathTracker(FModuleLike module, hw::InnerSymbolNamespace &moduleNamespace,
+              InstanceGraph &instanceGraph, const SymbolTable &symbolTable,
+              const DenseMap<DistinctAttr, FModuleOp> &owningModules)
+      : module(module), moduleNamespace(moduleNamespace),
+        instanceGraph(instanceGraph), symbolTable(symbolTable),
+        owningModules(owningModules) {}
+
+  struct PathInfoTableEntry {
+    Operation *op;
+    DistinctAttr id;
+    StringAttr altBasePathModule;
+    // This is null if the path has no owening module.
+    ArrayAttr pathAttr;
+  };
+
+  LogicalResult runOnModule();
+  LogicalResult processPathTrackers(AnnoTarget target);
+  LogicalResult updatePathInfoTable(PathInfoTable &pathInfoTable,
+                                    HierPathCache &cache);
+
+  // Determine it is necessary to use an alternative base path for `moduleName`
+  // and `owningModule`.
+  FailureOr<bool> getOrComputeNeedsAltBasePath(Location loc,
+                                               StringAttr moduleName,
+                                               FModuleOp owningModule);
+  FModuleLike module;
+
+  // Local data structures.
+  hw::InnerSymbolNamespace &moduleNamespace;
+  DenseMap<std::pair<StringAttr, FModuleOp>, bool> needsAltBasePathCache;
+  SmallVector<Attribute> portAnnotations;
+
+  // Thread-unsafe global data structure. Don't mutate.
+  InstanceGraph &instanceGraph;
+  const SymbolTable &symbolTable;
+  const DenseMap<DistinctAttr, FModuleOp> &owningModules;
+
+  // Result.
+  SmallVector<PathInfoTableEntry> entries;
+  SetVector<StringAttr> altBasePathRoots;
+};
+
 } // namespace
+
+LogicalResult
+PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
+                 hw::InnerSymbolNamespaceCollection &namespaces,
+                 HierPathCache &cache, PathInfoTable &pathInfoTable,
+                 const SymbolTable &symbolTable,
+                 const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
+  SmallVector<PathTracker> trackers;
+  // Prepare workers.
+  for (auto module : circuit.getOps<FModuleLike>())
+    trackers.push_back(PathTracker(module, namespaces[module], instanceGraph,
+                                   symbolTable, owningModules));
+
+  if (failed(failableParallelForEach(
+          circuit.getContext(), trackers,
+          [](PathTracker &tracker) { return tracker.runOnModule(); })))
+    return failure();
+
+  // Update the pathInfoTable sequentially.
+  for (auto &tracker : trackers)
+    if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
+      return failure();
+
+  return success();
+}
+
+LogicalResult PathTracker::runOnModule() {
+  // Process the module annotations.
+  if (failed(processPathTrackers(OpAnnoTarget(module))))
+    return failure();
+  // Process module port annotations.
+  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
+    if (failed(processPathTrackers(PortAnnoTarget(module, i))))
+      return failure();
+  module->setAttr("portAnnotations",
+                  ArrayAttr::get(module.getContext(), portAnnotations));
+  // Process ops in the module body.
+  auto result = module.walk([&](hw::InnerSymbolOpInterface op) {
+    if (failed(processPathTrackers(OpAnnoTarget(op))))
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+
+  if (result.wasInterrupted())
+    return failure();
+
+  // Process paththrough.
+  return success();
+}
+
+FailureOr<bool>
+PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
+                                          FModuleOp owningModule) {
+
+  auto it = needsAltBasePathCache.find({moduleName, owningModule});
+  if (it != needsAltBasePathCache.end())
+    return it->second;
+  bool needsAltBasePath = false;
+  auto *node = instanceGraph.lookup(moduleName);
+  while (true) {
+    // If the path is rooted at the owning module, we're done.
+    if (node->getModule() == owningModule)
+      break;
+    // If there are no more parents, then the path op lives in a different
+    // hierarchy than the HW object it references, which needs to handled
+    // specially. Flag this, so we know to create an alternative base path
+    // below.
+    if (node->noUses()) {
+      needsAltBasePath = true;
+      break;
+    }
+    // If there is more than one instance of this module, then the path
+    // operation is ambiguous, which is an error.
+    if (!node->hasOneUse()) {
+      auto diag = mlir::emitError(loc)
+                  << "unable to uniquely resolve target due "
+                     "to multiple instantiation";
+      for (auto *use : node->uses())
+        diag.attachNote(use->getInstance().getLoc()) << "instance here";
+      return diag;
+    }
+    node = (*node->usesBegin())->getParent();
+  }
+  needsAltBasePathCache[{moduleName, owningModule}] = needsAltBasePath;
+  return needsAltBasePath;
+}
+
+LogicalResult PathTracker::processPathTrackers(AnnoTarget target) {
+  auto error = false;
+  auto annotations = target.getAnnotations();
+  auto *op = target.getOp();
+  annotations.removeAnnotations([&](Annotation anno) {
+    // If there has been an error, just skip this annotation.
+    if (error)
+      return false;
+
+    // We are looking for OMIR tracker annotations.
+    if (!anno.isClass("circt.tracker"))
+      return false;
+
+    // The token must have a valid ID.
+    auto id = anno.getMember<DistinctAttr>("id");
+    if (!id) {
+      op->emitError("circt.tracker annotation missing id field");
+      error = true;
+      return false;
+    }
+
+    // Get the fieldID.  If there is none, it is assumed to be 0.
+    uint64_t fieldID = anno.getFieldID();
+
+    // Attach an inner sym to the operation.
+    Attribute targetSym;
+    if (auto portTarget = dyn_cast<PortAnnoTarget>(target)) {
+      targetSym =
+          getInnerRefTo({portTarget.getPortNo(), portTarget.getOp(), fieldID},
+                        [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
+                          return moduleNamespace;
+                        });
+    } else if (auto module = dyn_cast<FModuleLike>(op)) {
+      assert(!fieldID && "field not valid for modules");
+      targetSym = FlatSymbolRefAttr::get(module.getModuleNameAttr());
+    } else {
+      targetSym =
+          getInnerRefTo({target.getOp(), fieldID},
+                        [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
+                          return moduleNamespace;
+                        });
+    }
+
+    // Create the hierarchical path.
+    SmallVector<Attribute> path;
+
+    // Copy the trailing final target part of the path.
+    path.push_back(targetSym);
+
+    auto moduleName = target.getModule().getModuleNameAttr();
+
+    // Verify a nonlocal annotation refers to a HierPathOp.
+    hw::HierPathOp hierPathOp;
+    if (auto hierName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
+      hierPathOp =
+          dyn_cast<hw::HierPathOp>(symbolTable.lookup(hierName.getAttr()));
+      if (!hierPathOp) {
+        op->emitError("annotation does not point at a HierPathOp");
+        error = true;
+        return false;
+      }
+    }
+
+    // Get the owning module. If there is no owning module, then this
+    // declaration does not have a use, and we can return early.
+    auto owningModule = owningModules.lookup(id);
+    if (!owningModule) {
+      PathInfoTableEntry entry;
+      // This entry is used for checking id uniquness.
+      entry.op = op;
+      entry.id = id;
+      entries.push_back(entry);
+      return true;
+    }
+
+    // Copy the middle part from the annotation's NLA.
+    if (hierPathOp) {
+      // Copy the old path, dropping the module name.
+      auto oldPath = hierPathOp.getNamepath().getValue();
+      llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
+
+      // Set the moduleName based on the hierarchical path. If the
+      // owningModule is in the hierarichal path, set the moduleName to the
+      // owning module. Otherwise use the top of the hierarchical path.
+      bool pathContainsOwningModule =
+          llvm::any_of(oldPath, [&](auto pathFragment) {
+            return llvm::TypeSwitch<Attribute, bool>(pathFragment)
+                .Case([&](hw::InnerRefAttr innerRef) {
+                  return innerRef.getModule() ==
+                         owningModule.getModuleNameAttr();
+                })
+                .Case([&](FlatSymbolRefAttr symRef) {
+                  return symRef.getAttr() == owningModule.getModuleNameAttr();
+                })
+                .Default([](auto attr) { return false; });
+          });
+      if (pathContainsOwningModule) {
+        moduleName = owningModule.getModuleNameAttr();
+      } else {
+        moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
+      }
+    }
+
+    // Copy the leading part of the hierarchical path from the owning module
+    // to the start of the annotation's NLA.
+    auto needsAltBasePath =
+        getOrComputeNeedsAltBasePath(op->getLoc(), moduleName, owningModule);
+    if (failed(needsAltBasePath)) {
+      error = true;
+      return false;
+    }
+
+    // Create the HierPathOp.
+    std::reverse(path.begin(), path.end());
+    auto pathAttr = ArrayAttr::get(op->getContext(), path);
+
+    // If we need an alternative base path, save the top module from the
+    // path. We will plumb in the basepath from this module.
+    StringAttr altBasePathModule;
+    if (*needsAltBasePath) {
+      altBasePathModule =
+          TypeSwitch<Attribute, StringAttr>(path.front())
+              .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
+              .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
+
+      altBasePathRoots.insert(altBasePathModule);
+    }
+
+    // Record the path operation associated with the path op.
+    entries.push_back({op, id, altBasePathModule, pathAttr});
+
+    // Remove this annotation from the operation.
+    return true;
+  });
+  if (error)
+    return failure();
+
+  if (isa<PortAnnoTarget>(target))
+    // Port annotations are batch-updated afterwards.
+    portAnnotations.push_back(annotations.getArrayAttr());
+  else
+    // Otherwise it's fine to update immediately.
+    target.setAnnotations(annotations);
+  return success();
+}
+
+LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
+                                               HierPathCache &cache) {
+  for (auto root : altBasePathRoots)
+    pathInfoTable.addAltBasePathRoot(root);
+
+  for (const auto &entry : entries) {
+    // Record the path operation associated with the path op.
+    auto [it, inserted] = pathInfoTable.table.try_emplace(entry.id);
+    auto &pathInfo = it->second;
+    if (!inserted) {
+      auto diag =
+          emitError(pathInfo.op->getLoc(), "duplicate identifier found");
+      diag.attachNote(entry.op->getLoc()) << "other identifier here";
+      return failure();
+    }
+
+    if (entry.pathAttr)
+      pathInfo = {entry.op, cache.getRefFor(entry.pathAttr),
+                  entry.altBasePathModule};
+    else
+      pathInfo.op = entry.op;
+  }
+  return success();
+}
 
 /// This pass removes the OMIR tracker annotations from operations, and ensures
 /// that each thing that was targeted has a hierarchical path targeting it. It
@@ -205,7 +541,6 @@ LogicalResult LowerClassesPass::processPaths(
     InstanceGraph &instanceGraph,
     hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
     PathInfoTable &pathInfoTable, SymbolTable &symbolTable) {
-  auto *context = &getContext();
   auto circuit = getOperation();
 
   // Collect the path declarations and owning modules.
@@ -235,201 +570,21 @@ LogicalResult LowerClassesPass::processPaths(
     }
     return WalkResult::advance();
   });
+
   if (result.wasInterrupted())
     return failure();
 
-  auto processPathTrackers = [&](AnnoTarget target) -> LogicalResult {
-    auto error = false;
-    auto annotations = target.getAnnotations();
-    auto *op = target.getOp();
-    annotations.removeAnnotations([&](Annotation anno) {
-      // If there has been an error, just skip this annotation.
-      if (error)
-        return false;
-
-      // We are looking for OMIR tracker annotations.
-      if (!anno.isClass("circt.tracker"))
-        return false;
-
-      // The token must have a valid ID.
-      auto id = anno.getMember<DistinctAttr>("id");
-      if (!id) {
-        op->emitError("circt.tracker annotation missing id field");
-        error = true;
-        return false;
-      }
-
-      // Get the fieldID.  If there is none, it is assumed to be 0.
-      uint64_t fieldID = anno.getFieldID();
-
-      // Attach an inner sym to the operation.
-      Attribute targetSym;
-      if (auto portTarget = dyn_cast<PortAnnoTarget>(target)) {
-        targetSym = getInnerRefTo(
-            {portTarget.getPortNo(), portTarget.getOp(), fieldID},
-            [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
-              return namespaces[module];
-            });
-      } else if (auto module = dyn_cast<FModuleLike>(op)) {
-        assert(!fieldID && "field not valid for modules");
-        targetSym = FlatSymbolRefAttr::get(module.getModuleNameAttr());
-      } else {
-        targetSym = getInnerRefTo(
-            {target.getOp(), fieldID},
-            [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
-              return namespaces[module];
-            });
-      }
-
-      // Create the hierarchical path.
-      SmallVector<Attribute> path;
-
-      // Copy the trailing final target part of the path.
-      path.push_back(targetSym);
-
-      auto moduleName = target.getModule().getModuleNameAttr();
-
-      // Verify a nonlocal annotation refers to a HierPathOp.
-      hw::HierPathOp hierPathOp;
-      if (auto hierName = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal")) {
-        hierPathOp =
-            dyn_cast<hw::HierPathOp>(symbolTable.lookup(hierName.getAttr()));
-        if (!hierPathOp) {
-          op->emitError("annotation does not point at a HierPathOp");
-          error = true;
-          return false;
-        }
-      }
-
-      auto [it, inserted] = pathInfoTable.table.try_emplace(id);
-      auto &pathInfo = it->second;
-      if (!inserted) {
-        auto diag =
-            emitError(pathInfo.op->getLoc(), "duplicate identifier found");
-        diag.attachNote(op->getLoc()) << "other identifier here";
-        error = true;
-        return false;
-      }
-      pathInfo.op = op;
-
-      // Get the owning module. If there is no owning module, then this
-      // declaration does not have a use, and we can return early.
-      auto owningModule = owningModules.lookup(id);
-      if (!owningModule)
-        return true;
-
-      // Copy the middle part from the annotation's NLA.
-      if (hierPathOp) {
-        // Copy the old path, dropping the module name.
-        auto oldPath = hierPathOp.getNamepath().getValue();
-        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
-
-        // Set the moduleName based on the hierarchical path. If the
-        // owningModule is in the hierarichal path, set the moduleName to the
-        // owning module. Otherwise use the top of the hierarchical path.
-        bool pathContainsOwningModule =
-            llvm::any_of(oldPath, [&](auto pathFragment) {
-              return llvm::TypeSwitch<Attribute, bool>(pathFragment)
-                  .Case([&](hw::InnerRefAttr innerRef) {
-                    return innerRef.getModule() ==
-                           owningModule.getModuleNameAttr();
-                  })
-                  .Case([&](FlatSymbolRefAttr symRef) {
-                    return symRef.getAttr() == owningModule.getModuleNameAttr();
-                  })
-                  .Default([](auto attr) { return false; });
-            });
-        if (pathContainsOwningModule) {
-          moduleName = owningModule.getModuleNameAttr();
-        } else {
-          moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
-        }
-      }
-
-      // Copy the leading part of the hierarchical path from the owning module
-      // to the start of the annotation's NLA.
-      bool needsAltBasePath = false;
-      auto *node = instanceGraph.lookup(moduleName);
-      while (true) {
-        // If the path is rooted at the owning module, we're done.
-        if (node->getModule() == owningModule)
-          break;
-        // If there are no more parents, then the path op lives in a different
-        // hierarchy than the HW object it references, which needs to handled
-        // specially. Flag this, so we know to create an alternative base path
-        // below.
-        if (node->noUses()) {
-          needsAltBasePath = true;
-          break;
-        }
-        // If there is more than one instance of this module, then the path
-        // operation is ambiguous, which is an error.
-        if (!node->hasOneUse()) {
-          auto diag = op->emitError()
-                      << "unable to uniquely resolve target due "
-                         "to multiple instantiation";
-          for (auto *use : node->uses())
-            diag.attachNote(use->getInstance().getLoc()) << "instance here";
-          error = true;
-          return false;
-        }
-        node = (*node->usesBegin())->getParent();
-      }
-
-      // Create the HierPathOp.
-      std::reverse(path.begin(), path.end());
-      auto pathAttr = ArrayAttr::get(context, path);
-
-      // If we need an alternative base path, save the top module from the path.
-      // We will plumb in the basepath from this module.
-      StringAttr altBasePathModule;
-      if (needsAltBasePath) {
-        altBasePathModule =
-            TypeSwitch<Attribute, StringAttr>(path.front())
-                .Case<FlatSymbolRefAttr>([](auto a) { return a.getAttr(); })
-                .Case<hw::InnerRefAttr>([](auto a) { return a.getModule(); });
-
-        pathInfoTable.addAltBasePathRoot(altBasePathModule);
-      }
-
-      // Record the path operation associated with the path op.
-      pathInfo = {op, cache.getRefFor(pathAttr), altBasePathModule};
-
-      // Remove this annotation from the operation.
-      return true;
-    });
-
-    if (error)
-      return failure();
-    target.setAnnotations(annotations);
-    return success();
-  };
-
-  for (auto module : circuit.getOps<FModuleLike>()) {
-    // Process the module annotations.
-    if (failed(processPathTrackers(OpAnnoTarget(module))))
-      return failure();
-    // Process module port annotations.
-    for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
-      if (failed(processPathTrackers(PortAnnoTarget(module, i))))
-        return failure();
-    // Process ops in the module body.
-    auto result = module.walk([&](hw::InnerSymbolOpInterface op) {
-      if (failed(processPathTrackers(OpAnnoTarget(op))))
-        return WalkResult::interrupt();
-      return WalkResult::advance();
-    });
-    if (result.wasInterrupted())
-      return failure();
-  }
+  if (failed(PathTracker::run(circuit, instanceGraph, namespaces, cache,
+                              pathInfoTable, symbolTable, owningModules)))
+    return failure();
 
   // For each module that will be passing through a base path, compute its
   // descendants that need this base path passed through.
   for (auto rootModule : pathInfoTable.getAltBasePathRoots()) {
     InstanceGraphNode *node = instanceGraph.lookup(rootModule);
 
-    // Do a depth first traversal of the instance graph from rootModule, looking
-    // for descendants that need to be passed through.
+    // Do a depth first traversal of the instance graph from rootModule,
+    // looking for descendants that need to be passed through.
     auto start = llvm::df_begin(node);
     auto end = llvm::df_end(node);
     auto it = start;
@@ -447,7 +602,7 @@ LogicalResult LowerClassesPass::processPaths(
       }
 
       // If we are at a leaf, nothing to do.
-      if (std::distance(it->begin(), it->end()) == 0) {
+      if (it->begin() == it->end()) {
         ++it;
         continue;
       }
@@ -477,6 +632,14 @@ void LowerClassesPass::runOnOperation() {
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache cache(circuit, symbolTable);
 
+  // Initialize `shouldCreateClassMemo`.
+  for (auto moduleLike : circuit.getOps<FModuleLike>())
+    shouldCreateClassMemo.insert({moduleLike, false});
+  parallelForEach(circuit.getContext(), circuit.getOps<FModuleLike>(),
+                  [&](FModuleLike op) {
+                    shouldCreateClassMemo[op] = shouldCreateClassImpl(op);
+                  });
+
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
   if (failed(processPaths(instanceGraph, namespaces, cache, pathInfoTable,
@@ -500,7 +663,11 @@ void LowerClassesPass::runOnOperation() {
       // path for each of these instances, which will be used to rebase path
       // operations. Hierarchical paths must be created serially to ensure their
       // order in the circuit is deterministc.
-      moduleLike.walk([&](InstanceOp inst) {
+      auto node = instanceGraph.lookup(moduleLike);
+      for (auto instance : *node) {
+        auto inst = instance->getInstance<firrtl::InstanceOp>();
+        if (!inst)
+          continue;
         // Get the referenced module.
         auto module =
             symbolTable.lookup<FModuleLike>(inst.getReferencedModuleNameAttr());
@@ -514,7 +681,7 @@ void LowerClassesPass::runOnOperation() {
           auto hierPath = cache.getOpFor(pathAttr);
           classLoweringState.paths.push_back(hierPath);
         }
-      });
+      }
 
       if (auto classLike =
               dyn_cast<firrtl::ClassLike>(moduleLike.getOperation()))
@@ -574,44 +741,8 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
   // Memoize calls using the extra state.
   auto it = shouldCreateClassMemo.find(moduleLike);
-  if (it != shouldCreateClassMemo.end())
-    return it->second;
-
-  if (isa<firrtl::ClassLike>(moduleLike.getOperation())) {
-    shouldCreateClassMemo.insert({moduleLike, true});
-    return true;
-  }
-
-  // Always create a class for public modules.
-  if (moduleLike.isPublic()) {
-    shouldCreateClassMemo.insert({moduleLike, true});
-    return true;
-  }
-
-  // Create a class for modules with property ports.
-  bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
-    return isa<PropertyType>(port.type);
-  });
-
-  if (hasClassPorts) {
-    shouldCreateClassMemo.insert({moduleLike, true});
-    return true;
-  }
-
-  // Create a class for modules that instantiate classes or modules with
-  // property ports.
-  for (auto op :
-       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>()) {
-    for (auto result : op->getResults()) {
-      if (type_isa<PropertyType>(result.getType())) {
-        shouldCreateClassMemo.insert({moduleLike, true});
-        return true;
-      }
-    }
-  }
-
-  shouldCreateClassMemo.insert({moduleLike, false});
-  return false;
+  assert(it != shouldCreateClassMemo.end() && "it must be computed beforehand");
+  return it->second;
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
