@@ -16,10 +16,9 @@ using namespace mlir;
 using namespace circt;
 using namespace firrtl;
 
-static size_t knownWidths(FIRRTLBaseType type) {
-  std::function<size_t(FIRRTLBaseType)> getWidth =
-      [&](FIRRTLBaseType type) -> size_t {
-    return TypeSwitch<FIRRTLBaseType, size_t>(type)
+static size_t knownWidths(Type type) {
+  std::function<size_t(Type)> getWidth = [&](Type type) -> size_t {
+    return TypeSwitch<Type, size_t>(type)
         .Case<BundleType>([&](BundleType bundle) -> size_t {
           size_t width = 0;
           for (auto &elt : bundle) {
@@ -71,8 +70,7 @@ struct ModuleSummaryPass : public ModuleSummaryBase<ModuleSummaryPass> {
   SmallVector<size_t> portSig(FModuleOp mod) {
     SmallVector<size_t> ports;
     for (auto p : mod.getPortTypes())
-      ports.push_back(
-          knownWidths(cast<FIRRTLBaseType>(cast<TypeAttr>(p).getValue())));
+      ports.push_back(knownWidths(cast<TypeAttr>(p).getValue()));
     return ports;
   }
 
