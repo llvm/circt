@@ -1199,37 +1199,10 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::DShrOfConstant>(context);
 }
 
-namespace {
-// cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-// consecutive in the input.
-struct CatBitsBits : public mlir::RewritePattern {
-  CatBitsBits(MLIRContext *context)
-      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto cat = cast<CatPrimOp>(op);
-    if (auto lhsBits =
-            dyn_cast_or_null<BitsPrimOp>(cat.getLhs().getDefiningOp())) {
-      if (auto rhsBits =
-              dyn_cast_or_null<BitsPrimOp>(cat.getRhs().getDefiningOp())) {
-        if (lhsBits.getInput() == rhsBits.getInput() &&
-            lhsBits.getLo() - 1 == rhsBits.getHi()) {
-          replaceOpWithNewOpAndCopyName<BitsPrimOp>(
-              rewriter, cat, cat.getType(), lhsBits.getInput(), lhsBits.getHi(),
-              rhsBits.getLo());
-          return success();
-        }
-      }
-    }
-    return failure();
-  }
-};
-} // namespace
-
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits, patterns::CatDoubleConst, patterns::CatCast>(
-      context);
+  results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
+                 patterns::CatCast>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
