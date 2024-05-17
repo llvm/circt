@@ -658,7 +658,7 @@ def MuxPadSel : Pat<
   (MuxPrimOp:$old $cond, $a, $b),
   (MoveNameHint $old, (MuxPrimOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
@@ -668,7 +668,7 @@ def Mux2PadSel : Pat<
   (Mux2CellIntrinsicOp:$old $cond, $a, $b),
   (MoveNameHint $old, (Mux2CellIntrinsicOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
