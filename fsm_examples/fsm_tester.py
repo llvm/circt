@@ -4,7 +4,7 @@ import os
 
 reps = 10
 
-time = 100
+time = 500
 
 for file in os.listdir("linear/"):
     print(file)

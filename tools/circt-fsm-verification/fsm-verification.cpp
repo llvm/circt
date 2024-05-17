@@ -649,7 +649,11 @@ void parse_fsm(string input_file, int time_bound, string to_check){
 
   // counter is always 0 at initial state 
 
-  body = ((findMyFun(transitions->at(1).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) != (solverVars->at(0)==5));
+  // body = ( (findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) && (solverVars->at(0)!=0));
+
+  // s.add(exists(solverVars->at(solverVars->size()-1),  nestedForall(*solverVars, body, 0)));
+
+  body = ((findMyFun(transitions->at(0).from, stateInvMap_fun)(solverVars->size(), solverVars->data())) != (solverVars->at(0)==0));
   
   s.add(forall(solverVars->at(solverVars->size()-1), nestedForall(*solverVars, body, 0)));
 
