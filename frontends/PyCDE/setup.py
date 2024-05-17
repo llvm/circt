@@ -78,9 +78,12 @@ class CMakeBuild(build_py):
       cmake_args += [f"-DCMAKE_C_COMPILER={os.environ['CC']}"]
     if "CXX" in os.environ:
       cmake_args += [f"-DCMAKE_CXX_COMPILER={os.environ['CXX']}"]
-
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
+    if "VCPKG_INSTALLATION_ROOT" in os.environ:
+      cmake_args += [
+          f"-DCMAKE_TOOLCHAIN_FILE={os.environ['VCPKG_INSTALLATION_ROOT']}/scripts/buildsystems/vcpkg.cmake"
+      ]
     build_args = []
     build_parallelism = os.getenv("CMAKE_PARALLELISM")
     if build_parallelism:
@@ -96,26 +99,19 @@ class CMakeBuild(build_py):
     print(f"Running cmake with args: {cmake_args}", file=sys.stderr)
     subprocess.check_call(["echo", "Running: cmake", src_dir] + cmake_args)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
+    targets = ["check-pycde"]
+    if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
+      targets.append("check-pycde-integration")
+      targets.append("check-circt")
     subprocess.check_call([
         "cmake",
         "--build",
         ".",
         "--verbose",
         "--target",
-        "check-pycde",
-    ] + build_args,
+    ] + targets + build_args,
                           cwd=cmake_build_dir)
 
-    if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
-      subprocess.check_call([
-          "cmake",
-          "--build",
-          ".",
-          "--target",
-          "check-pycde-integration",
-          "check-circt",
-      ] + build_args,
-                            cwd=cmake_build_dir)
     install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
     subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),

@@ -120,6 +120,10 @@ jobs:
           python3 -m pip install cibuildwheel twine
 
           choco install ninja sccache
+      - name: Build zlib
+        shell: pwsh
+        run: |
+          & "${VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
       - name: Build wheel
         env:
           CIBW_BUILD: ${{ matrix.python-env }}
