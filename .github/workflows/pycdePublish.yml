@@ -36,12 +36,18 @@ jobs:
       - name: Get CIRCT
         uses: actions/checkout@v4
         with:
-          submodules: true
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: false
 
-      - name: Unshallow CIRCT
+      - name: Get shallow LLVM submodule
         run: |
-          echo "Fetching history and tags from CIRCT repo"
-          git fetch --depth=1000000 --tags --no-recurse-submodules
+          git submodule update --init --recursive --recommend-shallow
+
+      # - name: Unshallow CIRCT
+      #   run: |
+      #     echo "Fetching history and tags from CIRCT repo"
+      #     git fetch --depth=1000000 --tags --no-recurse-submodules
 
       # --------
       # Build and test CIRCT
@@ -54,11 +60,10 @@ jobs:
       - name: Build wheel
         env:
           CIBW_BUILD: ${{ matrix.python-env }}
-          CIBW_ENVIRONMENT: >
-            CMAKE_GENERATOR=Ninja
-            SETUPTOOLS_SCM_DEBUG=True
-            BUILD_TYPE=Release
-            RUN_TESTS=True
+          CMAKE_GENERATOR: Ninja
+          SETUPTOOLS_SCM_DEBUG: True
+          BUILD_TYPE: Release
+          RUN_TESTS: True
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
@@ -66,7 +71,7 @@ jobs:
           echo "Building wheel"
           cibuildwheel --output-dir wheelhouse frontends/PyCDE
       - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: wheelhouse/*.whl
           retention-days: 7

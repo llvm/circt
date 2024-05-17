@@ -92,6 +92,7 @@ class CMakeBuild(build_py):
         "cmake",
         "--build",
         ".",
+        "--verbose",
         "--target",
         "check-pycde",
     ] + build_args,
