@@ -9,9 +9,47 @@
 #include "PassDetails.h"
 #include "mlir/IR/Threading.h"
 
+#include <numeric>
+
 using namespace mlir;
 using namespace circt;
 using namespace firrtl;
+
+static size_t knownWidths(FIRRTLBaseType type) {
+  std::function<size_t(FIRRTLBaseType)> getWidth =
+      [&](FIRRTLBaseType type) -> size_t {
+    return TypeSwitch<FIRRTLBaseType, size_t>(type)
+        .Case<BundleType>([&](BundleType bundle) -> size_t {
+          size_t width = 0;
+          for (auto &elt : bundle) {
+            auto w = getWidth(elt.type);
+            width += w;
+          }
+          return width;
+        })
+        .Case<FEnumType>([&](FEnumType fenum) -> size_t {
+          size_t width = 0;
+          for (auto &elt : fenum) {
+            auto w = getWidth(elt.type);
+            width = std::max(width, w);
+          }
+          return width + llvm::Log2_32_Ceil(fenum.getNumElements());
+        })
+        .Case<FVectorType>([&](auto vector) -> size_t {
+          auto w = getWidth(vector.getElementType());
+          return w * vector.getNumElements();
+        })
+        .Case<IntType>([&](IntType iType) {
+          auto v = iType.getWidth();
+          if (v)
+            return *v;
+          return 0;
+        })
+        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Default([&](auto t) { return 0; });
+  };
+  return getWidth(type);
+}
 
 namespace {
 struct ModuleSummaryPass : public ModuleSummaryBase<ModuleSummaryPass> {
@@ -29,11 +67,11 @@ struct ModuleSummaryPass : public ModuleSummaryBase<ModuleSummaryPass> {
     return retval;
   }
 
-  SmallVector<size_t> protSig(FModuleOp mod) {
+  SmallVector<size_t> portSig(FModuleOp mod) {
     SmallVector<size_t> ports;
     for (auto p : mod.getPortTypes())
-      ports.push_back(cast<FIRRTLBaseType>(cast<TypeAttr>(p).getValue())
-                          .getBitWidthOrSentinel());
+      ports.push_back(
+          knownWidths(cast<FIRRTLBaseType>(cast<TypeAttr>(p).getValue())));
     return ports;
   }
 
@@ -70,7 +108,7 @@ void ModuleSummaryPass::runOnOperation() {
   MapTy data;
 
   for (auto mod : circuit.getOps<FModuleOp>()) {
-    auto p = protSig(mod);
+    auto p = portSig(mod);
     auto n = countOps(mod);
     data[{p, n}].push_back(mod);
   }
@@ -83,13 +121,15 @@ void ModuleSummaryPass::runOnOperation() {
                      std::get<0>(rhs).opcount * std::get<1>(rhs).size() *
                          std::get<1>(rhs).size();
             });
-  llvm::errs() << "cost, opcount, ports, modcount, examplename\n";
+  llvm::errs() << "cost, opcount, portcount, modcount, portBits, examplename\n";
   for (auto &p : sortedData)
     if (p.second.size() > 1) {
       llvm::errs() << (p.first.opcount * p.second.size() * p.second.size())
-                   << "," << p.first.opcount << ", " << p.first.portSizes.size()
-                   << ", " << p.second.size() << ", " << p.second[0].getName()
-                   << "\n";
+                   << "," << p.first.opcount << "," << p.first.portSizes.size()
+                   << "," << p.second.size() << ","
+                   << std::accumulate(p.first.portSizes.begin(),
+                                      p.first.portSizes.end(), 0)
+                   << "," << p.second[0].getName() << "\n";
     }
   markAllAnalysesPreserved();
 }
