@@ -39,7 +39,7 @@ environment-pass = [
   "SETUPTOOLS_SCM_DEBUG",
   "BUILD_TYPE",
   "RUN_TESTS",
-  "COMPILER_PREFIX"
+  "COMPILER_LAUNCHER"
 ]
 
 [project]

@@ -118,6 +118,8 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel twine
+
+          choco install ninja sccache
       - name: Build wheel
         env:
           CIBW_BUILD: ${{ matrix.python-env }}
@@ -126,7 +128,7 @@ jobs:
           BUILD_TYPE: Release
           # PyCDE integration tests are not yet implemented on Windows.
           RUN_TESTS: False
-          COMPILER_PREFIX: sccache
+          COMPILER_LAUNCHER: sccache
         run: |
           echo "Building wheel"
           python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
