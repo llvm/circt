@@ -59,7 +59,7 @@ jobs:
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
           RUN_TESTS: True
-          COMPILER_PREFIX: sccache
+          COMPILER_LAUNCHER: sccache
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
