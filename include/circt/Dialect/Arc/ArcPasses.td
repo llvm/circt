@@ -58,6 +58,13 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
+def FindInitialVectors : Pass<"find-initial-vectors", "mlir::ModuleOp"> {
+  let summary = "Finds the ops that can be grouped together into a vector";
+  let constructor = "circt::arc::createFindInitialVectorsPass()";
+  let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
+                           "hw::HWDialect"];
+}
+
 def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
                                  "mlir::ModuleOp"> {
   let summary = "Group reset and enable conditions of lowered states";
