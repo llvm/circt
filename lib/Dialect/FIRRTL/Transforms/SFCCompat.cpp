@@ -46,13 +46,21 @@ void SFCCompatPass::runOnOperation() {
   bool madeModifications = false;
   SmallVector<InvalidValueOp> invalidOps;
 
-  bool fullAsyncResetExists = false;
-  AnnotationSet::removePortAnnotations(
+  auto fullAsyncResetAttr =
+      StringAttr::get(&getContext(), fullAsyncResetAnnoClass);
+  auto isFullAsyncResetAnno = [fullAsyncResetAttr](Annotation anno) {
+    return anno.getClassAttr() == fullAsyncResetAttr;
+  };
+  bool fullAsyncResetExists = AnnotationSet::removePortAnnotations(
       getOperation(), [&](unsigned argNum, Annotation anno) {
-        if (!anno.isClass(fullAsyncResetAnnoClass))
-          return false;
-        return fullAsyncResetExists = true;
+        return isFullAsyncResetAnno(anno);
       });
+  getOperation()->walk(
+      [isFullAsyncResetAnno, &fullAsyncResetExists](Operation *op) {
+        fullAsyncResetExists |=
+            AnnotationSet::removeAnnotations(op, isFullAsyncResetAnno);
+      });
+  madeModifications |= fullAsyncResetExists;
 
   auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.

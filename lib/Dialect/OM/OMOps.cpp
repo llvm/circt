@@ -331,69 +331,6 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// ObjectFieldOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Get the ObjectInstOp and the ClassLike it is an instance of.
-  ObjectOp objectInst = getObject().getDefiningOp<ObjectOp>();
-  ClassLike classDef = cast<ClassLike>(symbolTable.lookupNearestSymbolFrom(
-      *this, objectInst.getClassNameAttr()));
-
-  // Traverse the field path, verifying each field exists.
-  ClassFieldLike finalField;
-  auto fields = SmallVector<FlatSymbolRefAttr>(
-      getFieldPath().getAsRange<FlatSymbolRefAttr>());
-  for (size_t i = 0, e = fields.size(); i < e; ++i) {
-    // Verify the field exists on the ClassOp.
-    auto field = fields[i];
-    ClassFieldLike fieldDef;
-    classDef.walk([&](ClassFieldLike fieldLike) {
-      if (fieldLike.getNameAttr() == field.getAttr()) {
-        fieldDef = fieldLike;
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-    if (!fieldDef) {
-      auto error = emitOpError("referenced non-existant field ") << field;
-      error.attachNote(classDef.getLoc()) << "class defined here";
-      return error;
-    }
-
-    // If there are more fields, verify the current field is of ClassType, and
-    // look up the ClassOp for that field.
-    if (i < e - 1) {
-      auto classType = dyn_cast<ClassType>(fieldDef.getType());
-      if (!classType)
-        return emitOpError("nested field access into ")
-               << field << " requires a ClassType, but found "
-               << fieldDef.getType();
-
-      // The nested ClassOp must exist, since a field with ClassType must be
-      // an ObjectInstOp, which already verifies the class exists.
-      classDef = cast<ClassLike>(
-          symbolTable.lookupNearestSymbolFrom(*this, classType.getClassName()));
-
-      // Proceed to the next field in the path.
-      continue;
-    }
-
-    // On the last iteration down the path, save the final field being accessed.
-    finalField = fieldDef;
-  }
-
-  // Verify the accessed field type matches the result type.
-  if (finalField.getType() != getResult().getType())
-    return emitOpError("expected type ")
-           << getResult().getType() << ", but accessed field has type "
-           << finalField.getType();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 

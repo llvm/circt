@@ -6,10 +6,18 @@ from .common import Clock, Input
 from .constructs import Wire
 from .module import Module, ModuleBuilder, generator
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Channel,
-                    StructType, Type)
+from .types import (
+    Bits,
+    Bundle,
+    BundledChannel,
+    ChannelDirection,
+    Channel,
+    StructType,
+    Type,
+)
 
-from .circt.dialects import hw
+from .circt.dialects import hw, esi
+from .circt import ir
 
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, get_type_hints
@@ -24,21 +32,29 @@ if "IBIS_SVSUPPORT" in os.environ:
 
 class IbisMethod:
   """Replace a decorated method with this class as a record. Used during class
-  scanning to identify Ibis methods."""
+    scanning to identify Ibis methods."""
 
-  def __init__(self, name: Optional[str], arg_types: Dict[str, Type],
-               return_type: Optional[Type]):
+  def __init__(
+      self,
+      name: Optional[str],
+      arg_types: Dict[str, Type],
+      return_type: Optional[Type],
+  ):
     self.name = name
     self.arg_types = arg_types
-    # Assemble the args into a single struct type.
-    self.arg_type = StructType(self.arg_types)
+    if self.arg_types:
+      # Assemble the args into a single struct type.
+      self.arg_type = StructType(self.arg_types)
+    else:
+      self.arg_type = Bits(0)
+
     # i0 is used for void.
     if return_type is None:
       return_type = Bits(0)
     self.return_type = return_type
     self.func_type = Bundle([
         BundledChannel("arg", ChannelDirection.TO, self.arg_type),
-        BundledChannel("result", ChannelDirection.FROM, self.return_type)
+        BundledChannel("result", ChannelDirection.FROM, self.return_type),
     ])
 
 
@@ -60,7 +76,7 @@ def method(func: Callable):
 
 class IbisClassBuilder(ModuleBuilder):
   """Ibis-specific module builder. This is used to scan a class for Ibis
-  methods, import the Ibis module, and create the wrapper module."""
+    methods, import the Ibis module, and create the wrapper module."""
 
   SupportFiles: List[Path] = []
 
@@ -84,11 +100,12 @@ class IbisClassBuilder(ModuleBuilder):
   @property
   def circt_mod(self):
     """Get the raw CIRCT operation for the module definition. DO NOT store the
-    returned value!!! It needs to get reaped after the current action (e.g.
-    instantiation, generation). Memory safety when interacting with native code
-    can be painful."""
+        returned value!!! It needs to get reaped after the current action (e.g.
+        instantiation, generation). Memory safety when interacting with native code
+        can be painful."""
 
     from .system import System
+
     sys: System = System.current()
     ret = sys._op_cache.get_circt_mod(self)
     if ret is None:
@@ -166,8 +183,12 @@ class IbisClassBuilder(ModuleBuilder):
 
     # Ports we shouldn't touch.
     exclude_ports = {
-        "clk", "clk1", "rst_in", "stall_rate_in", "inspection_value_in",
-        "stall_rate_valid_in"
+        "clk",
+        "clk1",
+        "rst_in",
+        "stall_rate_in",
+        "inspection_value_in",
+        "stall_rate_valid_in",
     }
 
     # Create wires for all the inputs and instantiate the Ibis module.
@@ -193,8 +214,12 @@ class IbisClassBuilder(ModuleBuilder):
       mname = m.name + "_"
 
       # Return side is FIFO.
-      return_out_untyped = inst_outputs[mname + "result_out"]
-      return_out = return_out_untyped.bitcast(m.return_type)
+      if m.return_type == Bits(0):
+        # Void return type; hw.constant 0 : i0
+        return_out = Bits(0)(0)
+      else:
+        return_out_untyped = inst_outputs[mname + "result_out"]
+        return_out = return_out_untyped.bitcast(m.return_type)
 
       empty_out = inst_outputs[mname + "empty_out"]
       return_chan, rdy = Channel(m.return_type).wrap(return_out, ~empty_out)

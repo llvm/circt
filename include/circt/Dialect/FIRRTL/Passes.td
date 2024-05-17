@@ -711,6 +711,9 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
     This pass lowers generic intrinsic ops to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let statistics = [
+    Statistic<"numConverted", "num-converted", "Number of intrinsic operations lowered">,
+  ];
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
@@ -850,20 +853,6 @@ def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
       "Number of ref-type drivers processed">,
     Statistic<"numHWDrivers", "num-hw-drivers",
       "Number of hw-type drivers processed">
-  ];
-}
-
-def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
-  let summary = "Delete dead probe ports and operations.";
-  let description = [{
-    Simple pass to delete dead probe ports and operations.
-    Diagnoses illegal or unsupported input probe uses.
-    Post-condition: no input probe ports.
-  }];
-  let constructor = "circt::firrtl::createProbeDCEPass()";
-  let statistics = [
-    Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
-    Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
   ];
 }
 

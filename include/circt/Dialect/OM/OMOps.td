@@ -33,7 +33,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    SingleBlock, NoTerminator, Symbol, RegionKindInterface,
+    SingleBlock, NoTerminator, Symbol, RegionKindInterface, IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
@@ -149,8 +149,7 @@ def ObjectOp : OMOp<"object",
   }];
 }
 
-def ObjectFieldOp : OMOp<"object.field",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+def ObjectFieldOp : OMOp<"object.field", [Pure]> {
   let arguments = (ins
     ClassType:$object,
     FlatSymbolRefArrayAttr:$fieldPath

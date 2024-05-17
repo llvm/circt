@@ -63,8 +63,11 @@ struct StmtVisitor {
         return failure();
     }
 
-    builder.create<moore::VariableOp>(loc, type,
-                                      builder.getStringAttr(var.name), initial);
+    // Collect local temporary variables.
+    auto varOp = builder.create<moore::VariableOp>(
+        loc, type, builder.getStringAttr(var.name), initial);
+    context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
+                                         &var, varOp);
     return success();
   }
 
@@ -206,7 +209,7 @@ struct StmtVisitor {
     auto count = context.convertExpression(stmt.count);
     if (!count)
       return failure();
-    auto type = count.getType();
+    auto type = cast<moore::IntType>(count.getType());
     auto whileOp = builder.create<scf::WhileOp>(loc, type, count);
     OpBuilder::InsertionGuard guard(builder);
 

@@ -59,22 +59,100 @@ hw.module @decomposedAnd(in %in1: i1, in %in2: i1, out out: i1) {
 // TODO
 
 // comb.divs
-// TODO
+// RUN: circt-lec %s -c1=divs_unsafe -c2=divs_unsafe --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVS_UNSAFE
+// RUN: circt-lec %s -c1=divs -c2=divs --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVS
+// COMB_DIVS_UNSAFE: c1 != c2
+// COMB_DIVS: c1 == c2
+
+hw.module @divs_unsafe(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = comb.divs %in1, %in2 : i32
+  hw.output %0 : i32
+}
+
+hw.module @divs(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = hw.constant 0 : i32
+  %1 = comb.icmp eq %in2, %0 : i32
+  %2 = comb.divs %in1, %in2 : i32
+  %3 = comb.mux %1, %0, %2 : i32
+  hw.output %3 : i32
+}
 
 // comb.divu
-// TODO
+// RUN: circt-lec %s -c1=divu_unsafe -c2=divu_unsafe --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVU_UNSAFE
+// RUN: circt-lec %s -c1=divu -c2=divu --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVU
+// COMB_DIVU_UNSAFE: c1 != c2
+// COMB_DIVU: c1 == c2
+
+hw.module @divu_unsafe(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = comb.divu %in1, %in2 : i32
+  hw.output %0 : i32
+}
+
+hw.module @divu(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = hw.constant 0 : i32
+  %1 = comb.icmp eq %in2, %0 : i32
+  %2 = comb.divu %in1, %in2 : i32
+  %3 = comb.mux %1, %0, %2 : i32
+  hw.output %3 : i32
+}
 
 // comb.extract
 // TODO
 
 // comb.icmp
-// TODO
+//  RUN: circt-lec %s -c1=eqInv -c2=constFalse --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMPEQ
+//  COMB_ICMPEQ: c1 == c2
+hw.module @eqInv(in %a: i8, out eq: i1) {
+  %ones = hw.constant -1 : i8
+  %inv_a = comb.xor bin %a, %ones : i8
+  %eq = comb.icmp bin eq %a, %inv_a : i8
+  hw.output %eq : i1
+}
+
+hw.module @constFalse(in %a: i8, out eq: i1) {
+  %eq = hw.constant false
+  hw.output %eq : i1
+}
+
+// TODO: Other icmp predicates
 
 // comb.mods
-// TODO
+// RUN: circt-lec %s -c1=mods_unsafe -c2=mods_unsafe --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODS_UNSAFE
+// RUN: circt-lec %s -c1=mods -c2=mods --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODS
+// COMB_MODS_UNSAFE: c1 != c2
+// COMB_MODS: c1 == c2
+
+hw.module @mods_unsafe(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = comb.mods %in1, %in2 : i32
+  hw.output %0 : i32
+}
+
+hw.module @mods(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = hw.constant 0 : i32
+  %1 = comb.icmp eq %in2, %0 : i32
+  %2 = comb.mods %in1, %in2 : i32
+  %3 = comb.mux %1, %0, %2 : i32
+  hw.output %3 : i32
+}
 
 // comb.modu
-// TODO
+// RUN: circt-lec %s -c1=modu_unsafe -c2=modu_unsafe --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODU_UNSAFE
+// RUN: circt-lec %s -c1=modu -c2=modu --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODU
+// COMB_MODU_UNSAFE: c1 != c2
+// COMB_MODU: c1 == c2
+
+hw.module @modu_unsafe(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = comb.modu %in1, %in2 : i32
+  hw.output %0 : i32
+}
+
+hw.module @modu(in %in1: i32, in %in2: i32, out out: i32) {
+  %0 = hw.constant 0 : i32
+  %1 = comb.icmp eq %in2, %0 : i32
+  %2 = comb.modu %in1, %in2 : i32
+  %3 = comb.mux %1, %0, %2 : i32
+  hw.output %3 : i32
+}
 
 // comb.mul
 //  RUN: circt-lec %s -c1=mulBy2 -c2=addTwice --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL

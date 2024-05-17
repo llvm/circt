@@ -99,7 +99,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
       /*hoistHWDrivers=*/!opt.shouldDisableOptimization() &&
       !opt.shouldDisableHoistingHWPassthrough()));
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbeDCEPass());
 
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
@@ -244,6 +243,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
+  pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -260,6 +260,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   return success();
 }
@@ -308,6 +311,9 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
 
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
+
   return success();
 }
 
@@ -340,6 +346,9 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespacePass());
+
+  // Check OM object fields.
+  pm.addPass(om::createVerifyObjectFieldsPass());
 
   return success();
 }
@@ -387,6 +396,7 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
                                          llvm::raw_ostream &os) {
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
+  pm.addPass(circt::hw::createFlattenModulesPass());
   pm.addNestedPass<hw::HWModuleOp>(circt::createConvertHWToBTOR2Pass(os));
   return success();
 }

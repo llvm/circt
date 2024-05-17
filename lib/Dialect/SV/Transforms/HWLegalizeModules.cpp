@@ -256,7 +256,7 @@ Value HWLegalizeModulesPass::lowerLookupToCasez(Operation &op, Value input,
                                            builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(&op);
 
-  auto loc = input.getDefiningOp()->getLoc();
+  auto loc = input.getLoc();
   // A casez is a procedural operation, so if we're in a
   // non-procedural region we need to inject an always_comb
   // block.

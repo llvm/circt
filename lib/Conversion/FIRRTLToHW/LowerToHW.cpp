@@ -4599,7 +4599,7 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
 
   auto label = op.getNameAttr();
   StringAttr assumeLabel;
-  if (label)
+  if (label && !label.empty())
     assumeLabel =
         StringAttr::get(builder.getContext(), "assume__" + label.getValue());
   auto predicate = getLoweredValue(op.getPredicate());

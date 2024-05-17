@@ -196,6 +196,9 @@ add_custom_target(circt-headers)
 set_target_properties(circt-headers PROPERTIES FOLDER "Misc")
 add_custom_target(circt-doc)
 
+# Umbrella target that builds all C API bindings.
+add_custom_target(circt-capi)
+
 # Add MLIR and LLVM headers to the include path
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
