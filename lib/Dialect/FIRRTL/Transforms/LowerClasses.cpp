@@ -36,7 +36,8 @@ using namespace circt::om;
 
 namespace {
 
-static bool shouldCreateClassImpl(FModuleLike moduleLike) {
+static bool shouldCreateClassImpl(FModuleLike moduleLike,
+                                  InstanceGraph &instanceGraph) {
   if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
     return true;
 
@@ -54,11 +55,13 @@ static bool shouldCreateClassImpl(FModuleLike moduleLike) {
 
   // Create a class for modules that instantiate classes or modules with
   // property ports.
-  for (auto op :
-       moduleLike.getOperation()->getRegion(0).getOps<FInstanceLike>())
-    for (auto result : op->getResults())
-      if (type_isa<PropertyType>(result.getType()))
-        return true;
+  auto *node = instanceGraph.lookup(moduleLike);
+  for (auto *instance : *node) {
+    if (auto op = instance->getInstance<FInstanceLike>())
+      for (auto result : op->getResults())
+        if (type_isa<PropertyType>(result.getType()))
+          return true;
+  }
 
   return false;
 }
@@ -241,7 +244,7 @@ private:
     Operation *op;
     DistinctAttr id;
     StringAttr altBasePathModule;
-    // This is null if the path has no owening module.
+    // This is null if the path has no owning module.
     ArrayAttr pathAttr;
   };
 
@@ -632,13 +635,13 @@ void LowerClassesPass::runOnOperation() {
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache cache(circuit, symbolTable);
 
-  // Initialize `shouldCreateClassMemo`.
+  // Fill `shouldCreateClassMemo`.
   for (auto moduleLike : circuit.getOps<FModuleLike>())
     shouldCreateClassMemo.insert({moduleLike, false});
-  parallelForEach(circuit.getContext(), circuit.getOps<FModuleLike>(),
-                  [&](FModuleLike op) {
-                    shouldCreateClassMemo[op] = shouldCreateClassImpl(op);
-                  });
+  parallelForEach(
+      circuit.getContext(), circuit.getOps<FModuleLike>(), [&](FModuleLike op) {
+        shouldCreateClassMemo[op] = shouldCreateClassImpl(op, instanceGraph);
+      });
 
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
@@ -663,8 +666,8 @@ void LowerClassesPass::runOnOperation() {
       // path for each of these instances, which will be used to rebase path
       // operations. Hierarchical paths must be created serially to ensure their
       // order in the circuit is deterministc.
-      auto node = instanceGraph.lookup(moduleLike);
-      for (auto instance : *node) {
+      auto *node = instanceGraph.lookup(moduleLike);
+      for (auto *instance : *node) {
         auto inst = instance->getInstance<firrtl::InstanceOp>();
         if (!inst)
           continue;
@@ -739,10 +742,8 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 
 // Predicate to check if a module-like needs a Class to be created.
 bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
-  // Memoize calls using the extra state.
-  auto it = shouldCreateClassMemo.find(moduleLike);
-  assert(it != shouldCreateClassMemo.end() && "it must be computed beforehand");
-  return it->second;
+  // Return a memoized result.
+  return shouldCreateClassMemo.at(moduleLike);
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
