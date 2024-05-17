@@ -91,7 +91,7 @@ class CMakeBuild(build_py):
     cmake_cache_file = os.path.join(cmake_build_dir, "CMakeCache.txt")
     if os.path.exists(cmake_cache_file):
       os.remove(cmake_cache_file)
-    print(f"Running cmake with args: {cmake_args}")
+    print(f"Running cmake with args: {cmake_args}", file=sys.stderr)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
     subprocess.check_call([
         "cmake",
