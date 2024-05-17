@@ -72,10 +72,14 @@ class CMakeBuild(build_py):
     prefix = os.getenv("COMPILER_PREFIX", "")
     if prefix != "":
       prefix += " "
+    cc = "gcc"
     if "CC" in os.environ:
-      cmake_args += [f"-DCMAKE_C_COMPILER=\"{prefix}{os.environ['CC']}\""]
+      cc = os.environ["CC"]
+    cmake_args += [f"-DCMAKE_C_COMPILER={prefix}{cc}"]
+    cxx = "g++"
     if "CXX" in os.environ:
-      cmake_args += [f"-DCMAKE_CXX_COMPILER=\"{prefix}{os.environ['CXX']}\""]
+      cxx = os.environ["CXX"]
+    cmake_args += [f"-DCMAKE_CXX_COMPILER={prefix}{cxx}"]
 
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
@@ -91,7 +95,8 @@ class CMakeBuild(build_py):
     cmake_cache_file = os.path.join(cmake_build_dir, "CMakeCache.txt")
     if os.path.exists(cmake_cache_file):
       os.remove(cmake_cache_file)
-    print(f"Running cmake with args: {cmake_args}", file=sys.stderr)
+    subprocess.check_call(["echo", "cmake", src_dir] + cmake_args,
+                          cwd=cmake_build_dir)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
     subprocess.check_call([
         "cmake",

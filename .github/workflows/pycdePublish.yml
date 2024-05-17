@@ -128,10 +128,8 @@ jobs:
           RUN_TESTS: False
           COMPILER_PREFIX: sccache
         run: |
-          export PATH=$PATH:$HOME/.local/bin
-
           echo "Building wheel"
-          cibuildwheel --output-dir wheelhouse frontends/PyCDE
+          python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
       - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
