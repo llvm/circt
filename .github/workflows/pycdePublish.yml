@@ -45,7 +45,7 @@ jobs:
           CIBW_ENVIRONMENT: >
             CMAKE_GENERATOR=Ninja
             SETUPTOOLS_SCM_DEBUG=True
-            BUILD_TYPE=RelWithAsserts
+            BUILD_TYPE=Release
             RUN_TESTS=True
         run: |
           set -o errexit
