@@ -18,6 +18,8 @@
 
 #include "cosim/Endpoint.h"
 #include "cosim/LowLevel.h"
+
+#include <atomic>
 #include <thread>
 
 namespace kj {
@@ -31,9 +33,6 @@ namespace cosim {
 /// threads and communicate with the outside world through thread safe channels.
 class CapnpCosimThread {
 public:
-  EndpointRegistry endpoints;
-  LowLevel lowLevelBridge;
-
   CapnpCosimThread();
   ~CapnpCosimThread();
 
@@ -41,15 +40,37 @@ public:
   /// capnp thread has stopped.
   void stop();
 
+  // Get an endpoint by its ID.
+  Endpoint *getEndpoint(std::string epId);
+  // Get the low level bridge.
+  LowLevel *getLowLevel() { return &lowLevelBridge; }
+
+  // Get the ESI version and compressed manifest. Returns false if the manifest
+  // has yet to be loaded.
+  bool getCompressedManifest(unsigned int &esiVersion,
+                             std::vector<uint8_t> &manifest) {
+    esiVersion = this->esiVersion;
+    manifest = compressedManifest;
+    return this->esiVersion >= 0;
+  }
+
 protected:
   /// Start capnp polling loop. Does not return until stop() is called. Must be
-  /// called in the same thread the RPC server/client was created.
-  void loop(kj::WaitScope &waitScope);
+  /// called in the same thread the RPC server/client was created. 'poll' is
+  /// called on each iteration of the loop.
+  void loop(kj::WaitScope &waitScope, std::function<void()> poll);
 
   using Lock = std::lock_guard<std::mutex>;
+
+  EndpointRegistry endpoints;
+  LowLevel lowLevelBridge;
+
   std::thread *myThread;
   volatile bool stopSig;
   std::mutex m;
+
+  unsigned int esiVersion = -1;
+  std::vector<uint8_t> compressedManifest;
 };
 
 /// The main RpcServer. Does not implement any capnp RPC interfaces but contains
@@ -67,12 +88,31 @@ public:
     compressedManifest = manifest;
   }
 
+  bool registerEndpoint(std::string epId, std::string fromHostTypeId,
+                        std::string toHostTypeId) {
+    return endpoints.registerEndpoint(epId, fromHostTypeId, toHostTypeId);
+  }
+
 private:
   /// The thread's main loop function. Exits on shutdown.
   void mainLoop(uint16_t port);
+};
 
-  unsigned int esiVersion = -1;
-  std::vector<uint8_t> compressedManifest;
+/// The Capnp RpcClient.
+class RpcClient : public CapnpCosimThread {
+  // To hide the ugly details of the capnp headers.
+  struct Impl;
+  friend struct Impl;
+
+public:
+  /// Start client thread.
+  void run(std::string host, uint16_t port);
+
+private:
+  void mainLoop(std::string host, uint16_t port);
+
+  /// The 'capnp' sets this to true when it is ready to go.
+  std::atomic<bool> started;
 };
 
 } // namespace cosim

@@ -14,8 +14,7 @@
 
 using namespace esi::cosim;
 
-Endpoint::Endpoint(std::string fromHostTypeId, int fromHostTypeMaxSize,
-                   std::string toHostTypeId, int toHostTypeMaxSize)
+Endpoint::Endpoint(std::string fromHostTypeId, std::string toHostTypeId)
     : fromHostTypeId(fromHostTypeId), toHostTypeId(toHostTypeId), inUse(false) {
 }
 Endpoint::~Endpoint() {}
@@ -37,9 +36,7 @@ void Endpoint::returnForUse() {
 
 bool EndpointRegistry::registerEndpoint(std::string epId,
                                         std::string fromHostTypeId,
-                                        int fromHostTypeMaxSize,
-                                        std::string toHostTypeId,
-                                        int toHostTypeMaxSize) {
+                                        std::string toHostTypeId) {
   Lock g(m);
   if (endpoints.find(epId) != endpoints.end()) {
     fprintf(stderr, "Endpoint ID already exists!\n");
@@ -51,8 +48,7 @@ bool EndpointRegistry::registerEndpoint(std::string epId,
                     // Map key.
                     std::forward_as_tuple(epId),
                     // Endpoint constructor args.
-                    std::forward_as_tuple(fromHostTypeId, fromHostTypeMaxSize,
-                                          toHostTypeId, toHostTypeMaxSize));
+                    std::forward_as_tuple(fromHostTypeId, toHostTypeId));
   return true;
 }
 

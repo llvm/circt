@@ -33,15 +33,17 @@ static std::mutex serverMutex;
 // ---- Helper functions ----
 
 /// Emit the contents of 'msg' to the log file in hex.
-static void log(char *epId, bool toClient, const Endpoint::BlobPtr &msg) {
+static void log(char *epId, bool toClient,
+                const Endpoint::MessageDataPtr &msg) {
   std::lock_guard<std::mutex> g(serverMutex);
   if (!logFile)
     return;
 
   fprintf(logFile, "[ep: %50s to: %4s]", epId, toClient ? "host" : "sim");
-  size_t msgSize = msg->size();
+  size_t msgSize = msg->getSize();
+  auto bytes = msg->getBytes();
   for (size_t i = 0; i < msgSize; ++i) {
-    auto b = (*msg)[i];
+    auto b = bytes[i];
     // Separate 32-bit words.
     if (i % 4 == 0 && i > 0)
       fprintf(logFile, " ");
@@ -107,9 +109,7 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeId,
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
   // Then register with it.
-  if (server->endpoints.registerEndpoint(endpointId, fromHostTypeId,
-                                         fromHostTypeSize, toHostTypeId,
-                                         toHostTypeSize))
+  if (server->registerEndpoint(endpointId, fromHostTypeId, toHostTypeId))
     return 0;
   return -1;
 }
@@ -127,13 +127,13 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   if (server == nullptr)
     return -1;
 
-  Endpoint *ep = server->endpoints[endpointId];
+  Endpoint *ep = server->getEndpoint(endpointId);
   if (!ep) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
 
-  Endpoint::BlobPtr msg;
+  Endpoint::MessageDataPtr msg;
   // Poll for a message.
   if (!ep->getMessageToSim(msg)) {
     // No message.
@@ -161,7 +161,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
     return -3;
   }
   // Verify it'll fit.
-  size_t msgSize = msg->size();
+  size_t msgSize = msg->getSize();
   if (msgSize > *dataSize) {
     printf("ERROR: Message size too big to fit in HW buffer\n");
     return -5;
@@ -169,8 +169,9 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
 
   // Copy the message data.
   size_t i;
+  auto bytes = msg->getBytes();
   for (i = 0; i < msgSize; ++i) {
-    auto b = (*msg)[i];
+    auto b = bytes[i];
     *(char *)svGetArrElemPtr1(data, i) = b;
   }
   // Zero out the rest of the buffer.
@@ -178,7 +179,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
     *(char *)svGetArrElemPtr1(data, i) = 0;
   }
   // Set the output data size.
-  *dataSize = msg->size();
+  *dataSize = msg->getSize();
   return 0;
 }
 
@@ -207,13 +208,15 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     return -3;
   }
 
-  Endpoint::BlobPtr blob = std::make_unique<Endpoint::Blob>(dataSize);
   // Copy the message data into 'blob'.
+  std::vector<uint8_t> dataVec(dataSize);
   for (int i = 0; i < dataSize; ++i) {
-    (*blob)[i] = *(char *)svGetArrElemPtr1(data, i);
+    dataVec[i] = *(char *)svGetArrElemPtr1(data, i);
   }
+  Endpoint::MessageDataPtr blob = std::make_unique<esi::MessageData>(dataVec);
+
   // Queue the blob.
-  Endpoint *ep = server->endpoints[endpointId];
+  Endpoint *ep = server->getEndpoint(endpointId);
   if (!ep) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
@@ -297,42 +300,46 @@ DPI int sv2cCosimserverMMIORegister() {
 
 DPI int sv2cCosimserverMMIOReadTryGet(uint32_t *address) {
   assert(server);
-  std::optional<int> reqAddress = server->lowLevelBridge.readReqs.pop();
+  LowLevel *ll = server->getLowLevel();
+  std::optional<int> reqAddress = ll->readReqs.pop();
   if (!reqAddress.has_value())
     return -1;
   *address = reqAddress.value();
-  server->lowLevelBridge.readsOutstanding++;
+  ll->readsOutstanding++;
   return 0;
 }
 
 DPI void sv2cCosimserverMMIOReadRespond(uint32_t data, char error) {
   assert(server);
-  if (server->lowLevelBridge.readsOutstanding == 0) {
+  LowLevel *ll = server->getLowLevel();
+  if (ll->readsOutstanding == 0) {
     printf("ERROR: More read responses than requests! Not queuing response.\n");
     return;
   }
-  server->lowLevelBridge.readsOutstanding--;
-  server->lowLevelBridge.readResps.push(data, error);
+  ll->readsOutstanding--;
+  ll->readResps.push(data, error);
 }
 
 DPI void sv2cCosimserverMMIOWriteRespond(char error) {
   assert(server);
-  if (server->lowLevelBridge.writesOutstanding == 0) {
+  LowLevel *ll = server->getLowLevel();
+  if (ll->writesOutstanding == 0) {
     printf(
         "ERROR: More write responses than requests! Not queuing response.\n");
     return;
   }
-  server->lowLevelBridge.writesOutstanding--;
-  server->lowLevelBridge.writeResps.push(error);
+  ll->writesOutstanding--;
+  ll->writeResps.push(error);
 }
 
 DPI int sv2cCosimserverMMIOWriteTryGet(uint32_t *address, uint32_t *data) {
   assert(server);
-  auto req = server->lowLevelBridge.writeReqs.pop();
+  LowLevel *ll = server->getLowLevel();
+  auto req = ll->writeReqs.pop();
   if (!req.has_value())
     return -1;
   *address = req.value().first;
   *data = req.value().second;
-  server->lowLevelBridge.writesOutstanding++;
+  ll->writesOutstanding++;
   return 0;
 }

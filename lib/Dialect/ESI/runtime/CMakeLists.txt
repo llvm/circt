@@ -129,6 +129,10 @@ if(ESI_COSIM)
       ${ESIRuntimeLinkLibraries}
       EsiCosimCapnp
     )
+    set(ESIRuntimeIncludeDirs
+      ${ESIRuntimeIncludeDirs}
+      ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
+    )
   else()
     message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
                         Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
