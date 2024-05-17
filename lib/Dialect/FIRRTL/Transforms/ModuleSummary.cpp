@@ -95,8 +95,10 @@ struct DenseMapInfo<ModuleSummaryPass::KeyTy> {
   using KeyTy = ModuleSummaryPass::KeyTy;
   static KeyTy getEmptyKey() { return {{}, ~0ULL}; }
   static KeyTy getTombstoneKey() { return {{}, ~0ULL - 1}; }
-  static unsigned getHashValue(KeyTy val) { return mlir::hash_value(val); }
-  static bool isEqual(KeyTy LHS, KeyTy RHS) { return LHS == RHS; }
+  static unsigned getHashValue(const KeyTy &val) {
+    return mlir::hash_value(val);
+  }
+  static bool isEqual(const KeyTy &lhs, const KeyTy &rhs) { return lhs == rhs; }
 };
 } // namespace llvm
 
@@ -106,14 +108,14 @@ void ModuleSummaryPass::runOnOperation() {
   using MapTy = DenseMap<KeyTy, SmallVector<FModuleOp>>;
   MapTy data;
 
-  std::mutex data_mutex; // protects g_i
+  std::mutex dataMutex; // protects data
 
   mlir::parallelForEach(circuit.getContext(),
                         circuit.getBodyBlock()->getOps<FModuleOp>(),
                         [&](auto mod) {
                           auto p = portSig(mod);
                           auto n = countOps(mod);
-                          const std::lock_guard<std::mutex> lock(data_mutex);
+                          const std::lock_guard<std::mutex> lock(dataMutex);
                           data[{p, n}].push_back(mod);
                         });
 
