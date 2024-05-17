@@ -160,12 +160,9 @@ public:
                           "' in cosimulation");
     if (ep->getSendTypeId() == "")
       throw runtime_error("Channel '" + name + "' is not a read channel");
-    // TODO: disabled since the generated hardware uses a different type id
-    // system. if (ep->getSendTypeId() != getType()->getID())
-    //   throw runtime_error("Channel '" + name + "' has wrong type. Expected "
-    //   +
-    //                       getType()->getID() + ", got " +
-    //                       ep->getSendTypeId());
+    if (ep->getSendTypeId() != getType()->getID())
+      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
+                          getType()->getID() + ", got " + ep->getSendTypeId());
     ep->setInUse();
   }
   virtual void disconnect() override {
@@ -198,12 +195,9 @@ public:
                           "' in cosimulation");
     if (ep->getRecvTypeId() == "")
       throw runtime_error("Channel '" + name + "' is not a read channel");
-    // TODO: disabled since the generated hardware uses a different type id
-    // system. if (ep->getRecvTypeId() != getType()->getID())
-    //   throw runtime_error("Channel '" + name + "' has wrong type. Expected "
-    //   +
-    //                       getType()->getID() + ", got " +
-    //                       ep->getRecvTypeId());
+    if (ep->getRecvTypeId() != getType()->getID())
+      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
+                          getType()->getID() + ", got " + ep->getRecvTypeId());
     ep->setInUse();
   }
   virtual void disconnect() override {

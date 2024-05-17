@@ -125,7 +125,7 @@ kj::Promise<void> EndpointServer::recvToHost(RecvToHostContext context) {
   auto msgPresent = endpoint.getMessageToClient(blob);
   context.getResults().setHasData(msgPresent);
   if (msgPresent) {
-    Data::Builder data((byte *)blob->getBytes(), blob->getSize());
+    Data::Builder data(const_cast<byte *>(blob->getBytes()), blob->getSize());
     context.getResults().setResp(data.asReader());
   }
   return kj::READY_NOW;
