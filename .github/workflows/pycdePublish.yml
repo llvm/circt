@@ -44,8 +44,6 @@ jobs:
           CIBW_BUILD: ${{ matrix.python-env }}
           CIBW_ENVIRONMENT: >
             CMAKE_GENERATOR=Ninja
-            CC=clang
-            CXX=clang++
             SETUPTOOLS_SCM_DEBUG=True
             BUILD_TYPE=RelWithAsserts
             RUN_TESTS=True

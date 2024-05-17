@@ -45,7 +45,6 @@ class CMakeBuild(build_py):
 
   def run(self):
     target_dir = self.build_lib
-    test = os.getenv("RUN_TESTS")
     cmake_build_dir = os.getenv("PYCDE_CMAKE_BUILD_DIR")
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
@@ -68,6 +67,7 @@ class CMakeBuild(build_py):
         "-DCIRCT_ENABLE_FRONTENDS=PyCDE",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
+        "-DESI_RUNTIME=ON",
     ]
     if "CC" in os.environ:
       cmake_args += [f"-DCMAKE_C_COMPILER={os.environ['CC']}"]
@@ -96,7 +96,8 @@ class CMakeBuild(build_py):
         "check-pycde",
     ] + build_args,
                           cwd=cmake_build_dir)
-    if test.lower() == "true":
+
+    if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
       subprocess.check_call([
           "cmake",
           "--build",
