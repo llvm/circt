@@ -20,11 +20,14 @@ add_library(EsiCosimCapnp SHARED
   ${COSIM_SCHEMA_HDR}
 
   lib/CapnpThreads.cpp
+  lib/Client.cpp
   lib/Endpoint.cpp
   lib/Server.cpp
 )
 target_include_directories(EsiCosimCapnp PUBLIC ${CAPNPC_OUTPUT_DIR})
 target_include_directories(EsiCosimCapnp PUBLIC ${CAPNP_INCLUDE_DIRS})
+target_include_directories(EsiCosimCapnp PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/../cpp/include)
 target_link_libraries(EsiCosimCapnp PUBLIC
   CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip
   CapnProto::capnp CapnProto::capnp-rpc 

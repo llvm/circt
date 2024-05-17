@@ -121,11 +121,11 @@ kj::Promise<void> EndpointServer::recvToHost(RecvToHostContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
 
   // Try to pop a message.
-  Endpoint::BlobPtr blob;
+  Endpoint::MessageDataPtr blob;
   auto msgPresent = endpoint.getMessageToClient(blob);
   context.getResults().setHasData(msgPresent);
   if (msgPresent) {
-    Data::Builder data(blob->data(), blob->size());
+    Data::Builder data((byte *)blob->getBytes(), blob->getSize());
     context.getResults().setResp(data.asReader());
   }
   return kj::READY_NOW;
@@ -139,8 +139,8 @@ kj::Promise<void> EndpointServer::sendFromHost(SendFromHostContext context) {
   KJ_REQUIRE(open, "EndPoint closed already");
   KJ_REQUIRE(context.getParams().hasMsg(), "Send request must have a message.");
   kj::ArrayPtr<const kj::byte> data = context.getParams().getMsg().asBytes();
-  Endpoint::BlobPtr blob =
-      std::make_unique<Endpoint::Blob>(data.begin(), data.end());
+  Endpoint::MessageDataPtr blob = std::make_unique<esi::MessageData>(
+      (const uint8_t *)data.begin(), data.size());
   endpoint.pushMessageToSim(std::move(blob));
   return kj::READY_NOW;
 }
@@ -265,7 +265,7 @@ void RpcServer::mainLoop(uint16_t port) {
   }
   writePort(port);
   printf("[COSIM] Listening on port: %u\n", (unsigned int)port);
-  loop(waitScope);
+  loop(waitScope, []() {});
 }
 
 /// Start the server if not already started.

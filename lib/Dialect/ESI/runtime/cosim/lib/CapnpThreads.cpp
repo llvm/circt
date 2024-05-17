@@ -22,7 +22,8 @@ using namespace esi::cosim;
 CapnpCosimThread::CapnpCosimThread() : myThread(nullptr), stopSig(false) {}
 CapnpCosimThread::~CapnpCosimThread() { stop(); }
 
-void CapnpCosimThread::loop(kj::WaitScope &waitScope) {
+void CapnpCosimThread::loop(kj::WaitScope &waitScope,
+                            std::function<void()> poll) {
   // OK, this is uber hacky, but it unblocks me and isn't _too_ inefficient. The
   // problem is that I can't figure out how read the stop signal from libkj
   // asyncrony land.
@@ -35,7 +36,9 @@ void CapnpCosimThread::loop(kj::WaitScope &waitScope) {
   // TODO: Figure out how to do this properly, if possible.
   while (!stopSig) {
     waitScope.poll();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    poll();
+    waitScope.poll();
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
   }
 }
 
@@ -48,4 +51,8 @@ void CapnpCosimThread::stop() {
     stopSig = true;
     myThread->join();
   }
+}
+
+Endpoint *CapnpCosimThread::getEndpoint(std::string epId) {
+  return endpoints[epId];
 }

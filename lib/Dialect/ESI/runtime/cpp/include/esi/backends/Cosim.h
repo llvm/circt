@@ -23,20 +23,23 @@
 #include "esi/Accelerator.h"
 
 #include <memory>
+#include <set>
 
 // Only expose this backend class directly if the cosimulation backend is
 // enabled.
 #ifdef ESI_COSIM
 
 namespace esi {
+namespace cosim {
+class RpcClient;
+} // namespace cosim
+
 namespace backends {
 namespace cosim {
 
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::AcceleratorConnection {
 public:
-  struct Impl;
-
   CosimAccelerator(Context &, std::string hostname, uint16_t port);
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
@@ -62,7 +65,15 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  std::unique_ptr<Impl> impl;
+  std::unique_ptr<esi::cosim::RpcClient> rpcClient;
+
+  // We own all channels connected to rpcClient since their lifetime is tied to
+  // rpcClient.
+  std::set<std::unique_ptr<ChannelPort>> channels;
+  // Map from client path to channel assignments for that client.
+  std::map<AppIDPath, std::map<std::string, std::string>>
+      clientChannelAssignments;
+
   ManifestMethod manifestMethod = Cosim;
 };
 
