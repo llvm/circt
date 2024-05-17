@@ -11,14 +11,26 @@ jobs:
   # integration testing prerequisite installed.
   build-circt:
     name: Build
-    runs-on: ubuntu-latest
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    # runs-on: ubuntu-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
       matrix:
         python-env:
           - cp38-manylinux_x86_64
+    env:
+      SCCACHE_GHA_ENABLED: "true"
     steps:
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT

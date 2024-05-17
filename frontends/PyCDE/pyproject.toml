@@ -31,6 +31,7 @@ manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
 [tool.cibuildwheel.linux]
 # Use our internal auditwheel script so as to not mess up the collateral.
 repair-wheel-command = "frontends/PyCDE/auditwheel.sh {dest_dir} {wheel}"
+environment-pass = ["SCCACHE_GHA_ENABLED", "ACTIONS_CACHE_URL", "ACTIONS_RUNTIME_TOKEN"]
 
 [project]
 name = "pycde"
