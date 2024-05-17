@@ -38,7 +38,8 @@ environment-pass = [
   "CMAKE_GENERATOR",
   "SETUPTOOLS_SCM_DEBUG",
   "BUILD_TYPE",
-  "RUN_TESTS"
+  "RUN_TESTS",
+  "COMPILER_PREFIX"
 ]
 
 [project]

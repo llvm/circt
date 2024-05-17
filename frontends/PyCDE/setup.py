@@ -69,10 +69,14 @@ class CMakeBuild(build_py):
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
         "-DESI_RUNTIME=ON",
     ]
+    prefix = os.getenv("COMPILER_PREFIX", "")
+    if prefix != "":
+      prefix += " "
     if "CC" in os.environ:
-      cmake_args += [f"-DCMAKE_C_COMPILER={os.environ['CC']}"]
+      cmake_args += [f"-DCMAKE_C_COMPILER=\"{prefix}{os.environ['CC']}\""]
     if "CXX" in os.environ:
-      cmake_args += [f"-DCMAKE_CXX_COMPILER={os.environ['CXX']}"]
+      cmake_args += [f"-DCMAKE_CXX_COMPILER=\"{prefix}{os.environ['CXX']}\""]
+
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
     build_args = []
