@@ -1,4 +1,4 @@
-//===- ModuleSummaryt.cpp ---------------------------------------*- C++ -*-===//
+//===- ModuleSummary.cpp ----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,6 +9,7 @@
 #include "PassDetails.h"
 #include "mlir/IR/Threading.h"
 
+#include <mutex>
 #include <numeric>
 
 using namespace mlir;
@@ -107,11 +108,17 @@ void ModuleSummaryPass::runOnOperation() {
   using MapTy = DenseMap<KeyTy, SmallVector<FModuleOp>>;
   MapTy data;
 
-  for (auto mod : circuit.getOps<FModuleOp>()) {
-    auto p = portSig(mod);
-    auto n = countOps(mod);
-    data[{p, n}].push_back(mod);
-  }
+  std::mutex data_mutex; // protects g_i
+
+  mlir::parallelForEach(circuit.getContext(),
+                        circuit.getBodyBlock()->getOps<FModuleOp>(),
+                        [&](auto mod) {
+                          auto p = portSig(mod);
+                          auto n = countOps(mod);
+                          const std::lock_guard<std::mutex> lock(data_mutex);
+                          data[{p, n}].push_back(mod);
+                        });
+
   SmallVector<MapTy::value_type> sortedData(data.begin(), data.end());
   std::sort(sortedData.begin(), sortedData.end(),
             [](const std::tuple<KeyTy, SmallVector<FModuleOp>> &lhs,
