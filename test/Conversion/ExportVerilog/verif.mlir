@@ -108,22 +108,22 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   verif.assert %g3 : !ltl.sequence
 
   // CHECK: assert property (a[*0]);
-  // CHECK: assert property (a[*4]);
-  // CHECK: assert property (a[*5:6]);
-  // CHECK: assert property (a[*7:$]);
-  // CHECK: assert property (a[*]);
-  // CHECK: assert property (a[+]);
   %r0 = ltl.repeat %a, 0, 0 : i1
-  %r1 = ltl.repeat %a, 4, 0 : i1
-  %r2 = ltl.repeat %a, 5, 1 : i1
-  %r3 = ltl.repeat %a, 7 : i1
-  %r4 = ltl.repeat %a, 0 : i1
-  %r5 = ltl.repeat %a, 1 : i1
   verif.assert %r0 : !ltl.sequence
+  // CHECK: assert property (a[*4]);
+  %r1 = ltl.repeat %a, 4, 0 : i1
   verif.assert %r1 : !ltl.sequence
+  // CHECK: assert property (a[*5:6]);
+  %r2 = ltl.repeat %a, 5, 1 : i1
   verif.assert %r2 : !ltl.sequence
+  // CHECK: assert property (a[*7:$]);
+  %r3 = ltl.repeat %a, 7 : i1
   verif.assert %r3 : !ltl.sequence
+  // CHECK: assert property (a[*]);
+  %r4 = ltl.repeat %a, 0 : i1
   verif.assert %r4 : !ltl.sequence
+  // CHECK: assert property (a[+]);
+  %r5 = ltl.repeat %a, 1 : i1
   verif.assert %r5 : !ltl.sequence
 
   // CHECK: assert property (@(posedge clk) a);
