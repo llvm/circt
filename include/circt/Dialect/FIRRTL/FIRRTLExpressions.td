@@ -1429,10 +1429,20 @@ def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
   }];
 }
 def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
+def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       OptionalAttr<I64Attr>:$more);
+  let assemblyFormat = [{
+    $input `,` $base (`,` $more^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Properties
 def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
+def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 
 // Clocking
