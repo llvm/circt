@@ -104,7 +104,7 @@ jobs:
       - name: Build zlib
         shell: pwsh
         run: |
-          & "${VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
