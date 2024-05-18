@@ -130,7 +130,7 @@ jobs:
           choco install ninja sccache
  
       - name: Build wheel
-        shell: pwsh
+        shell: cmd
         env:
           CIBW_BUILD: ${{ matrix.python-env }}
           CMAKE_GENERATOR: Ninja
@@ -142,7 +142,7 @@ jobs:
         run: |
           echo "Building wheel"
 
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 `
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && `
             python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
       - name: Upload Binary
         uses: actions/upload-artifact@v4
