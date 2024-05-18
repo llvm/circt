@@ -12,7 +12,7 @@ on:
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
-  build-circt-linux:
+  build-linux:
     name: Build
     # Run on an internal MSFT subscription. Please DO NOT use this for any other
     # workflows without talking to John Demme (john.demme@microsoft.com, GH
@@ -31,6 +31,10 @@ jobs:
       matrix:
         python-env:
           - cp38-manylinux_x86_64
+          - cp39-manylinux_x86_64
+          - cp310-manylinux_x86_64
+          - cp311-manylinux_x86_64
+          - cp312-manylinux_x86_64
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_CACHE_SIZE: 15GB
@@ -90,7 +94,7 @@ jobs:
           if-no-files-found: error
 
   # Build PyCDE, test it, and publish it to PyPI.
-  build-circt-windows:
+  build-windows:
     name: Build
     # Run on an internal MSFT subscription. Please DO NOT use this for any other
     # workflows without talking to John Demme (john.demme@microsoft.com, GH
@@ -109,6 +113,10 @@ jobs:
       matrix:
         python-env:
           - cp38-win_amd64
+          - cp39-win_amd64
+          - cp310-win_amd64
+          - cp311-win_amd64
+          - cp312-win_amd64
     env:
       SCCACHE_GHA_ENABLED: "true"
     steps:
@@ -171,3 +179,33 @@ jobs:
           path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
+
+  push_wheels:
+    name: Push wheels (Tag or Weekly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt' 
+    # && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    needs:
+      - build-linux
+      - build-windows
+    environment:
+      name: pypi
+      url: https://pypi.org/p/esiaccel
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v3
+        with:
+          path: ./wheelhouse/
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          verify-metadata: false

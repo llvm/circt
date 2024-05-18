@@ -101,6 +101,8 @@ class CMakeBuild(build_py):
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
     targets = ["check-pycde"]
     if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
+      # The pycde integration tests test both PyCDE and the ESIRuntime so
+      # failure shouldn't gate publishing PyCDE.
       targets.append("check-pycde-integration")
       targets.append("check-circt")
     subprocess.check_call([
@@ -110,7 +112,6 @@ class CMakeBuild(build_py):
         "--target",
     ] + targets + build_args,
                           cwd=cmake_build_dir)
-
     install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
     subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),
