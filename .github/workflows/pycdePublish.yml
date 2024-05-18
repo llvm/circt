@@ -32,7 +32,7 @@ jobs:
   #     SCCACHE_GHA_ENABLED: "true"
   #   steps:
   #     - name: Set up sccache
-  #       uses: mozilla-actions/sccache-action@v0.0.3
+  #       uses: mozilla-actions/sccache-action@v0.0.4
 
   #     # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
   #     # time.
@@ -99,12 +99,12 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
     steps:
       - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
+        uses: mozilla-actions/sccache-action@v0.0.4
 
       - name: Build zlib
         shell: pwsh
         run: |
-          gc "${env:VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake"
+          C:\BuildTools\Common7\Tools\VsDevCmd.bat -arch=x64 -host_arch=x64
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
