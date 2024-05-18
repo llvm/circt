@@ -88,7 +88,7 @@ jobs:
       - self-hosted
       - 1ES.Pool=1ES-CIRCT-builds
       - 1ES.ImageOverride=1esMMSWindows2022
-    runs-on: windows-latest
+    # runs-on: windows-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
