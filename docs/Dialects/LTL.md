@@ -188,11 +188,10 @@ The `ltl.delay` sequence operation represents various shorthands for the *next*/
 | `ltl.delay %a, 2`    | **XXF**a                    |
 
 
-### Until, Always and Eventually
+### Until and Eventually
 
 `ltl.until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.eventually` is *strong*, where `ltl.eventually %p` means `p` must hold at some point in the trace.
 
-The operator of week `always` is not implemented for now, but week `always p` could be expressed by `not s_eventually not p`. Notice that assertions work globally. Properties will be checked from every cycle.
 
 ### Concatenation and Repetition
 
