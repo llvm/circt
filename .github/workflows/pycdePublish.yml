@@ -20,11 +20,11 @@ jobs:
     # much.
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
-    runs-on:
-      - self-hosted
-      - 1ES.Pool=1ES-CIRCT-builds
-      - 1ES.ImageOverride=CIRCT-StdUbuntu2204
-    # runs-on: ubuntu-latest
+    # runs-on:
+    #   - self-hosted
+    #   - 1ES.Pool=1ES-CIRCT-builds
+    #   - 1ES.ImageOverride=CIRCT-StdUbuntu2204
+    runs-on: ubuntu-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
@@ -73,10 +73,12 @@ jobs:
           echo "Building wheel"
           cibuildwheel --output-dir wheelhouse frontends/PyCDE
       - name: Upload Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          path: wheelhouse/*.whl
+          name: python-wheels
+          path: ./wheelhouse/*.whl
           retention-days: 7
+          if-no-files-found: error
 
   # Build PyCDE, test it, and publish it to PyPI.
   build-circt-windows:
@@ -145,8 +147,11 @@ jobs:
         run: |
           echo "Building wheel"
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
+
       - name: Upload Binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          path: wheelhouse/*.whl
+          name: python-wheels
+          path: ./wheelhouse/*.whl
           retention-days: 7
+          if-no-files-found: error
