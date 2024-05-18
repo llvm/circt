@@ -80,7 +80,6 @@ jobs:
       - name: Download wheels
         uses: actions/download-artifact@v3
         with:
-          name: python-wheels
           path: ./wheelhouse/
 
       - name: List downloaded wheels
