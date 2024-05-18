@@ -50,11 +50,17 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/circt/images/pycde-build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload (stage) wheels as artifacts
-        uses: actions/upload-artifact@v3
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          echo WHL=`ls ./wheelhouse/*.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: python-wheels
-          path: ./wheelhouse/*.whl
+          path: ./wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
 

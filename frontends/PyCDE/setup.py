@@ -107,7 +107,6 @@ class CMakeBuild(build_py):
         "cmake",
         "--build",
         ".",
-        "--verbose",
         "--target",
     ] + targets + build_args,
                           cwd=cmake_build_dir)
