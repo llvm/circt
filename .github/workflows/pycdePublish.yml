@@ -101,10 +101,10 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.4
 
-      - name: Build zlib
-        shell: pwsh
-        run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
+      # - name: Build zlib
+      #   shell: pwsh
+      #   run: |
+      #     & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -115,19 +115,19 @@ jobs:
           fetch-tags: true
           submodules: false
 
-      - name: Get shallow LLVM submodule
-        run: |
-          git submodule update --init --recursive --recommend-shallow --depth 1
+      # - name: Get shallow LLVM submodule
+      #   run: |
+      #     git submodule update --init --recursive --recommend-shallow --depth 1
 
-      # --------
-      # Build and test CIRCT
-      # --------
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install cibuildwheel twine
+      # # --------
+      # # Build and test CIRCT
+      # # --------
+      # - name: Install dependencies
+      #   run: |
+      #     python3 -m pip install --upgrade pip
+      #     python3 -m pip install cibuildwheel twine
 
-          choco install ninja sccache
+      #     choco install ninja sccache
  
       - name: Build wheel
         shell: cmd
@@ -141,8 +141,7 @@ jobs:
           COMPILER_LAUNCHER: sccache
         run: |
           echo "Building wheel"
-
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && `
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && `
             python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
       - name: Upload Binary
         uses: actions/upload-artifact@v4
