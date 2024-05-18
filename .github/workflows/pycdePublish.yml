@@ -20,8 +20,8 @@ jobs:
     # much.
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
-    # runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds"]
+    # runs-on: ubuntu-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
       # this is one point in the overall matrix.
@@ -84,10 +84,10 @@ jobs:
     # much.
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
-    # runs-on:
-    #   - self-hosted
-    #   - 1ES.Pool=1ES-CIRCT-builds
-    #   - 1ES.ImageOverride=1esMMSWindows2022
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=1ES-CIRCT-builds
+      - 1ES.ImageOverride=1esMMSWindows2022
     runs-on: windows-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
@@ -104,8 +104,7 @@ jobs:
       - name: Build additional c++ deps
         shell: pwsh
         run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install capnproto
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib capnproto
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
