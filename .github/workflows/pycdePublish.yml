@@ -12,68 +12,68 @@ on:
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
-  # build-circt-linux:
-  #   name: Build
-  #   # Run on an internal MSFT subscription. Please DO NOT use this for any other
-  #   # workflows without talking to John Demme (john.demme@microsoft.com, GH
-  #   # teqdruid) first. We may lose funding for this if it ends up costing too
-  #   # much.
-  #   # If individual jobs fail due to timeouts or disconnects, please report to
-  #   # John and re-run the job.
-  #   runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
-  #   # runs-on: ubuntu-latest
-  #   strategy:
-  #     # Keep the 'matrix' strategy with one data point to make it obvious that
-  #     # this is one point in the overall matrix.
-  #     matrix:
-  #       python-env:
-  #         - cp38-manylinux_x86_64
-  #   env:
-  #     SCCACHE_GHA_ENABLED: "true"
-  #   steps:
-  #     - name: Set up sccache
-  #       uses: mozilla-actions/sccache-action@v0.0.4
+  build-circt-linux:
+    name: Build
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    # runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    runs-on: ubuntu-latest
+    strategy:
+      # Keep the 'matrix' strategy with one data point to make it obvious that
+      # this is one point in the overall matrix.
+      matrix:
+        python-env:
+          - cp38-manylinux_x86_64
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
 
-  #     # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-  #     # time.
-  #     - name: Get CIRCT
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #         fetch-tags: true
-  #         submodules: false
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: false
 
-  #     - name: Get shallow LLVM submodule
-  #       run: |
-  #         git submodule update --init --recursive --recommend-shallow --depth 1
+      - name: Get shallow LLVM submodule
+        run: |
+          git submodule update --init --recursive --recommend-shallow --depth 1
 
-  #     # --------
-  #     # Build and test CIRCT
-  #     # --------
-  #     - name: Install dependencies
-  #       run: |
-  #         set -o errexit
-  #         python3 -m pip install --upgrade pip
-  #         python3 -m pip install cibuildwheel twine
-  #     - name: Build wheel
-  #       env:
-  #         CIBW_BUILD: ${{ matrix.python-env }}
-  #         CMAKE_GENERATOR: Ninja
-  #         SETUPTOOLS_SCM_DEBUG: True
-  #         BUILD_TYPE: Release
-  #         RUN_TESTS: True
-  #         COMPILER_LAUNCHER: sccache
-  #       run: |
-  #         set -o errexit
-  #         export PATH=$PATH:$HOME/.local/bin
+      # --------
+      # Build and test CIRCT
+      # --------
+      - name: Install dependencies
+        run: |
+          set -o errexit
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cibuildwheel twine
+      - name: Build wheel
+        env:
+          CIBW_BUILD: ${{ matrix.python-env }}
+          CMAKE_GENERATOR: Ninja
+          SETUPTOOLS_SCM_DEBUG: True
+          BUILD_TYPE: Release
+          RUN_TESTS: True
+          COMPILER_LAUNCHER: sccache
+        run: |
+          set -o errexit
+          export PATH=$PATH:$HOME/.local/bin
 
-  #         echo "Building wheel"
-  #         cibuildwheel --output-dir wheelhouse frontends/PyCDE
-  #     - name: Upload Binary
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         path: wheelhouse/*.whl
-  #         retention-days: 7
+          echo "Building wheel"
+          cibuildwheel --output-dir wheelhouse frontends/PyCDE
+      - name: Upload Binary
+        uses: actions/upload-artifact@v4
+        with:
+          path: wheelhouse/*.whl
+          retention-days: 7
 
   # Build PyCDE, test it, and publish it to PyPI.
   build-circt-windows:
@@ -101,7 +101,7 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.4
 
-      - name: Build zlib
+      - name: Build additional c++ deps
         shell: pwsh
         run: |
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
