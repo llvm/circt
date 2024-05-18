@@ -105,10 +105,9 @@ jobs:
         shell: pwsh
         run: |
           ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\"
-          ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\BuildTools"
-          ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\BuildTools\Common7"
-          ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\BuildTools\Common7\Tools"
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\BuildTools\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7"
+          ls "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools"
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
