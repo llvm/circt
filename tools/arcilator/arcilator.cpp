@@ -62,7 +62,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include <iostream>
 #include <optional>
 
 using namespace mlir;
