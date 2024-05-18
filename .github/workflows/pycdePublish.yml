@@ -33,6 +33,7 @@ jobs:
           - cp38-manylinux_x86_64
     env:
       SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_CACHE_SIZE: 15GB
     steps:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.4
@@ -72,11 +73,19 @@ jobs:
 
           echo "Building wheel"
           cibuildwheel --output-dir wheelhouse frontends/PyCDE
-      - name: Upload Binary
-        uses: actions/upload-artifact@v3
+
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
-          path: ./wheelhouse/*.whl
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
 
@@ -148,15 +157,17 @@ jobs:
           echo "Building wheel"
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
 
-      - name: ls
+      - name: Get wheel name
         shell: bash
         id: whl-name
         run: |
-          echo WHL=`ls ./wheelhouse/*.whl` >> "$GITHUB_OUTPUT"
-      - name: Upload Binary
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
-          path: ./wheelhouse/${{ steps.whl-name.outputs.WHL }}
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
