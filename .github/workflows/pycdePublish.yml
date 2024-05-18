@@ -101,10 +101,10 @@ jobs:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.4
 
-      # - name: Build zlib
-      #   shell: pwsh
-      #   run: |
-      #     & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
+      - name: Build zlib
+        shell: pwsh
+        run: |
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" install zlib:x64-windows-static
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -115,19 +115,19 @@ jobs:
           fetch-tags: true
           submodules: false
 
-      # - name: Get shallow LLVM submodule
-      #   run: |
-      #     git submodule update --init --recursive --recommend-shallow --depth 1
+      - name: Get shallow LLVM submodule
+        run: |
+          git submodule update --init --recursive --recommend-shallow --depth 1
 
-      # # --------
-      # # Build and test CIRCT
-      # # --------
-      # - name: Install dependencies
-      #   run: |
-      #     python3 -m pip install --upgrade pip
-      #     python3 -m pip install cibuildwheel twine
+      # --------
+      # Build and test CIRCT
+      # --------
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cibuildwheel twine
 
-      #     choco install ninja sccache
+          choco install ninja sccache
  
       - name: Build wheel
         shell: cmd
