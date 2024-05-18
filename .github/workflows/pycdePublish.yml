@@ -105,7 +105,7 @@ jobs:
         shell: pwsh
         run: |
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
-          gc C:\\vcpkg/scripts/buildsystems/vcpkg.cmake
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install capnproto
 
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
