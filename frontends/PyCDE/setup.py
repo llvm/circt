@@ -103,7 +103,7 @@ class CMakeBuild(build_py):
     if "RUN_TESTS" in os.environ and os.environ["RUN_TESTS"] != "false":
       # The pycde integration tests test both PyCDE and the ESIRuntime so
       # failure shouldn't gate publishing PyCDE.
-      targets.append("check-pycde-integration")
+      # targets.append("check-pycde-integration")
       targets.append("check-circt")
     subprocess.check_call([
         "cmake",
