@@ -54,13 +54,14 @@ jobs:
         shell: bash
         id: whl-name
         run: |
-          echo WHL=`ls wheelhouse/*.whl` >> "$GITHUB_OUTPUT"
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
 
       - name: Upload wheels as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
-          path: ${{ steps.whl-name.outputs.WHL }}
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
 
