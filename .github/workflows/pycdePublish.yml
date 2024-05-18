@@ -20,7 +20,10 @@ jobs:
     # much.
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
-    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds"]
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=1ES-CIRCT-builds
+      - 1ES.ImageOverride=CIRCT-StdUbuntu2204
     # runs-on: ubuntu-latest
     strategy:
       # Keep the 'matrix' strategy with one data point to make it obvious that
