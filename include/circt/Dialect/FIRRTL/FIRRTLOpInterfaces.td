@@ -142,6 +142,12 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
         getAttrOfType<ArrayAttr>(FModuleLike::getPortAnnotationsAttrName());
     }]>,
 
+    InterfaceMethod<"Set the port annotations attribute",
+    "void", "setPortAnnotationsAttr", (ins "ArrayAttr":$annotations), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->setAttr(FModuleLike::getPortAnnotationsAttrName(), annotations);
+    }]>,
+
     InterfaceMethod<"Get the port annotations attribute",
     "ArrayRef<Attribute>", "getPortAnnotations", (ins), [{}],
     /*defaultImplementation=*/[{

@@ -36,8 +36,11 @@ using namespace circt::om;
 
 namespace {
 
-static bool shouldCreateClassImpl(FModuleLike moduleLike,
-                                  InstanceGraph &instanceGraph) {
+static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
+  auto moduleLike = node->getModule<FModuleLike>();
+  if (!moduleLike)
+    return false;
+
   if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
     return true;
 
@@ -55,7 +58,6 @@ static bool shouldCreateClassImpl(FModuleLike moduleLike,
 
   // Create a class for modules that instantiate classes or modules with
   // property ports.
-  auto *node = instanceGraph.lookup(moduleLike);
   for (auto *instance : *node) {
     if (auto op = instance->getInstance<FInstanceLike>())
       for (auto result : op->getResults())
@@ -232,7 +234,6 @@ struct PathTracker {
       PathInfoTable &pathInfoTable, const SymbolTable &symbolTable,
       const DenseMap<DistinctAttr, FModuleOp> &owningModules);
 
-private:
   PathTracker(FModuleLike module, hw::InnerSymbolNamespace &moduleNamespace,
               InstanceGraph &instanceGraph, const SymbolTable &symbolTable,
               const DenseMap<DistinctAttr, FModuleOp> &owningModules)
@@ -240,6 +241,7 @@ private:
         instanceGraph(instanceGraph), symbolTable(symbolTable),
         owningModules(owningModules) {}
 
+private:
   struct PathInfoTableEntry {
     Operation *op;
     DistinctAttr id;
@@ -248,10 +250,14 @@ private:
     ArrayAttr pathAttr;
   };
 
+  // Run the main logic.
   LogicalResult runOnModule();
-  LogicalResult processPathTrackers(AnnoTarget target);
+
+  // Return updated annotations for a given AnnoTarget if success.
+  FailureOr<AnnotationSet> processPathTrackers(const AnnoTarget &target);
+
   LogicalResult updatePathInfoTable(PathInfoTable &pathInfoTable,
-                                    HierPathCache &cache);
+                                    HierPathCache &cache) const;
 
   // Determine it is necessary to use an alternative base path for `moduleName`
   // and `owningModule`.
@@ -263,7 +269,6 @@ private:
   // Local data structures.
   hw::InnerSymbolNamespace &moduleNamespace;
   DenseMap<std::pair<StringAttr, FModuleOp>, bool> needsAltBasePathCache;
-  SmallVector<Attribute> portAnnotations;
 
   // Thread-unsafe global data structure. Don't mutate.
   InstanceGraph &instanceGraph;
@@ -285,9 +290,10 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
   SmallVector<PathTracker> trackers;
   // Prepare workers.
-  for (auto module : circuit.getOps<FModuleLike>())
-    trackers.push_back(PathTracker(module, namespaces[module], instanceGraph,
-                                   symbolTable, owningModules));
+  for (auto *node : instanceGraph)
+    if (auto module = node->getModule<FModuleLike>())
+      trackers.emplace_back(module, namespaces[module], instanceGraph,
+                            symbolTable, owningModules);
 
   if (failed(failableParallelForEach(
           circuit.getContext(), trackers,
@@ -295,7 +301,7 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
     return failure();
 
   // Update the pathInfoTable sequentially.
-  for (auto &tracker : trackers)
+  for (const auto &tracker : trackers)
     if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
       return failure();
 
@@ -303,18 +309,34 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
 }
 
 LogicalResult PathTracker::runOnModule() {
-  // Process the module annotations.
-  if (failed(processPathTrackers(OpAnnoTarget(module))))
-    return failure();
-  // Process module port annotations.
-  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i)
-    if (failed(processPathTrackers(PortAnnoTarget(module, i))))
+  auto processAndUpdateAnnoTarget = [&](AnnoTarget target) -> LogicalResult {
+    auto anno = processPathTrackers(target);
+    if (failed(anno))
       return failure();
-  module->setAttr("portAnnotations",
-                  ArrayAttr::get(module.getContext(), portAnnotations));
+    target.setAnnotations(*anno);
+    return success();
+  };
+
+  // Process the module annotations.
+  if (failed(processAndUpdateAnnoTarget(OpAnnoTarget(module))))
+    return failure();
+
+  // Process module port annotations.
+  SmallVector<Attribute> portAnnotations;
+  portAnnotations.reserve(module.getNumPorts());
+  for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
+    auto annos = processPathTrackers(PortAnnoTarget(module, i));
+    if (failed(annos))
+      return failure();
+    portAnnotations.push_back(annos->getArrayAttr());
+  }
+  // Batch update port annotations.
+  module.setPortAnnotationsAttr(
+      ArrayAttr::get(module.getContext(), portAnnotations));
+
   // Process ops in the module body.
   auto result = module.walk([&](hw::InnerSymbolOpInterface op) {
-    if (failed(processPathTrackers(OpAnnoTarget(op))))
+    if (failed(processAndUpdateAnnoTarget(OpAnnoTarget(op))))
       return WalkResult::interrupt();
     return WalkResult::advance();
   });
@@ -363,7 +385,8 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
   return needsAltBasePath;
 }
 
-LogicalResult PathTracker::processPathTrackers(AnnoTarget target) {
+FailureOr<AnnotationSet>
+PathTracker::processPathTrackers(const AnnoTarget &target) {
   auto error = false;
   auto annotations = target.getAnnotations();
   auto *op = target.getOp();
@@ -497,20 +520,15 @@ LogicalResult PathTracker::processPathTrackers(AnnoTarget target) {
     // Remove this annotation from the operation.
     return true;
   });
-  if (error)
-    return failure();
 
-  if (isa<PortAnnoTarget>(target))
-    // Port annotations are batch-updated afterwards.
-    portAnnotations.push_back(annotations.getArrayAttr());
-  else
-    // Otherwise it's fine to update immediately.
-    target.setAnnotations(annotations);
-  return success();
+  if (error)
+    return {};
+
+  return std::move(annotations);
 }
 
 LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
-                                               HierPathCache &cache) {
+                                               HierPathCache &cache) const {
   for (auto root : altBasePathRoots)
     pathInfoTable.addAltBasePathRoot(root);
 
@@ -636,12 +654,16 @@ void LowerClassesPass::runOnOperation() {
   HierPathCache cache(circuit, symbolTable);
 
   // Fill `shouldCreateClassMemo`.
-  for (auto moduleLike : circuit.getOps<FModuleLike>())
-    shouldCreateClassMemo.insert({moduleLike, false});
-  parallelForEach(
-      circuit.getContext(), circuit.getOps<FModuleLike>(), [&](FModuleLike op) {
-        shouldCreateClassMemo[op] = shouldCreateClassImpl(op, instanceGraph);
-      });
+  for (auto *node : instanceGraph)
+    if (auto moduleLike = node->getModule<firrtl::FModuleLike>())
+      shouldCreateClassMemo.insert({moduleLike, false});
+
+  parallelForEach(circuit.getContext(), instanceGraph,
+                  [&](igraph::InstanceGraphNode *node) {
+                    if (auto moduleLike = node->getModule<FModuleLike>())
+                      shouldCreateClassMemo[moduleLike] =
+                          shouldCreateClassImpl(node);
+                  });
 
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
@@ -655,7 +677,11 @@ void LowerClassesPass::runOnOperation() {
 
   // Create new OM Class ops serially.
   DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
-  for (auto moduleLike : circuit.getOps<FModuleLike>()) {
+  for (auto *node : instanceGraph) {
+    auto moduleLike = node->getModule<firrtl::FModuleLike>();
+    if (!moduleLike)
+      continue;
+
     if (shouldCreateClass(moduleLike)) {
       auto omClass = createClass(moduleLike, pathInfoTable);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
@@ -666,15 +692,13 @@ void LowerClassesPass::runOnOperation() {
       // path for each of these instances, which will be used to rebase path
       // operations. Hierarchical paths must be created serially to ensure their
       // order in the circuit is deterministc.
-      auto *node = instanceGraph.lookup(moduleLike);
       for (auto *instance : *node) {
         auto inst = instance->getInstance<firrtl::InstanceOp>();
         if (!inst)
           continue;
         // Get the referenced module.
-        auto module =
-            symbolTable.lookup<FModuleLike>(inst.getReferencedModuleNameAttr());
-        if (shouldCreateClass(module)) {
+        auto module = instance->getTarget()->getModule<FModuleLike>();
+        if (module && shouldCreateClass(module)) {
           auto targetSym = getInnerRefTo(
               {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                 return namespaces[module];
