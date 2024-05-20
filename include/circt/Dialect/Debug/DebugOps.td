@@ -63,7 +63,10 @@ def VariableOp : DebugOp<"variable"> {
     compiler's pass pipelines. The debug info analysis uses this op to populate
     a module's scope with named source language values, and to establish how
     these source language values can be reconstituted from the actual IR values
-    present at the end of compilation.
+    present at the end of compilation. 
+    In addition, the `dbg.variable` operation may contain extra information about 
+    the variable, such as its source language type and eventual constructor 
+    parameters. This is allows to reconstruct more precisely the source language.
 
     See the rationale for examples and details. See the `dbg.scope` operation
     for additional details on how to use the `scope` operand.
@@ -71,13 +74,44 @@ def VariableOp : DebugOp<"variable"> {
   let arguments = (ins
     StrAttr:$name,
     AnyType:$value,
+    OptionalAttr<StrAttr>:$typeName,
+    OptionalAttr<ArrayAttr>:$params,
     Optional<ScopeType>:$scope
   );
+  // let results = (outs VariableType:$result);
   let assemblyFormat = [{
     $name `,` $value (`scope` $scope^)? attr-dict `:` type($value)
   }];
 }
 
+def SubFieldOp : DebugOp<"subfield"> {
+  let summary = "A named value to be captured in debug info which is a subfield of an aggregate";
+  let description = [{
+    Marks a subfield of aggregate to be tracked in DI under the given name. 
+    It is similar to `dbg.variable`, both store a value and contain source language name, type, 
+    and constructor parameters, but `dbg.subfield` returns also a value. Unlike a `dbg.variable`, 
+    it is contained in other debug operations like `dbg.struct` or `dbg.array` (here the usage of 
+    the returned value). It is only used to represent a subfield of an aggregate and it cannot be
+    used to represent a variable directly declared in a module.
+
+    The addition of support for source language type and constructor parameters for top variables 
+    and subfields (also nested) required to build this additional operation. The `dbg.variable` 
+    explicitly represents the "top" variable instances in a module. For this reason, it wasn't used to mark
+    and it cannot mark subfields of aggregates.
+
+    The `dbg.subfield` doesn't have a `scope` operand, because it is a descendant of a `dbg.variable`.
+  }];
+  let arguments = (ins
+    StrAttr:$name,
+    AnyType:$value,
+    OptionalAttr<StrAttr>:$typeName,
+    OptionalAttr<ArrayAttr>:$params
+  );
+  let results = (outs SubFieldType:$result);
+  let assemblyFormat = [{
+    $name `,` $value attr-dict `:` type($value)
+  }];
+}
 
 def StructOp : DebugOp<"struct", [
   Pure,

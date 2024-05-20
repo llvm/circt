@@ -32,4 +32,10 @@ def ArrayType : DebugTypeDef<"Array"> {
   let description = "The result of a `dbg.array` operation.";
 }
 
+def SubFieldType : DebugTypeDef<"SubField"> {
+  let mnemonic = "subfield";
+  let summary = "debug variable subfield of an aggregate";
+  let description = "The result of a `dbg.subfield` operation.";
+}
+
 #endif // CIRCT_DIALECT_DEBUG_DEBUGTYPES_TD
