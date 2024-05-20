@@ -32,13 +32,15 @@ jobs:
 
     steps:
       - name: Get CIRCT
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: false
 
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==2.16.2
@@ -50,11 +52,18 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/circt/images/pycde-build
           SETUPTOOLS_SCM_DEBUG: True
 
-      - name: Upload (stage) wheels as artifacts
-        uses: actions/upload-artifact@v3
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
-          path: ./wheelhouse/*.whl
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
 
@@ -73,7 +82,6 @@ jobs:
       - name: Download wheels
         uses: actions/download-artifact@v3
         with:
-          name: python-wheels
           path: ./wheelhouse/
 
       - name: List downloaded wheels

@@ -59,8 +59,6 @@
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
 
-#include <iostream>
-
 using namespace llvm;
 using namespace mlir;
 using namespace circt;

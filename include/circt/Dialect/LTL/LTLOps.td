@@ -151,6 +151,31 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
+def RepeatOp : LTLOp<"repeat", [Pure]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    OptionalAttr<I64Attr>:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base (`,` $more^)? attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+
+  let summary = "Repeats a sequence by a number of times.";
+  let description = [{
+    Repeat the `$input` sequence at least `$base` times, at most `$base` +
+    `$more` times. The number must be greater than or equal to zero. Omitting
+    `$more` indicates an unbounded but finite repetition. For example:
+
+    - `ltl.repeat %seq, 2, 0` repeats `%seq` exactly 2 times.
+    - `ltl.repeat %seq, 2, 2` repeats `%seq` 2, 3, or 4 times.
+    - `ltl.repeat %seq, 2` repeats `%seq` 2 or more times. The number of times
+      is unbounded but finite.
+    - `ltl.repeat %seq, 0, 0` represents an empty sequence.
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
@@ -188,6 +213,23 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
     `$antecedent` does *not* match at a given point in time, the result property
     trivially holds. This is conceptually identical to the implication operator
     →, but with additional temporal semantics.
+  }];
+}
+
+def UntilOp: LTLOp<"until", [Pure]> {
+  let arguments = (ins LTLAnyPropertyType:$input,
+                       LTLAnyPropertyType:$condition);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    operands attr-dict `:` type(operands)
+  }];
+
+  let summary = "Property always holds until another property holds.";
+  let description = [{
+    Checks that the `$input` property always holds until the `$condition`
+    property holds once. This operator is weak: the property will hold even if
+    `$input` always holds and `$condition` never holds. This operator is
+    nonoverlapping: `$input` does not have to hold when `$condition` holds.
   }];
 }
 

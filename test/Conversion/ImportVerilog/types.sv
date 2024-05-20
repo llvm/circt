@@ -109,8 +109,8 @@ endmodule
 // CHECK-LABEL: moore.module @RealType
 module RealType;
   // CHECK-NEXT: %d0 = moore.variable : !moore.real
-  // CHECK-NEXT: %d1 = moore.variable : !moore.realtime
-  // CHECK-NEXT: %d2 = moore.variable : !moore.shortreal
+  // CHECK-NEXT: %d1 = moore.variable : !moore.real
+  // CHECK-NEXT: %d2 = moore.variable : !moore.real
   real d0;
   realtime d1;
   shortreal d2;

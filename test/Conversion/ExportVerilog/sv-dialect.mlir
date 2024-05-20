@@ -3,6 +3,14 @@
 sv.macro.decl @SYNTHESIS
 sv.macro.decl @VERILATOR
 
+// CHECK-NOT: module ReservedName1(
+// CHECK-NOT:   input reservedName2{{$}}
+// CHECK-NOT:   reg reservedName3;
+sv.reserve_names ["ReservedName1", "reservedName2", "reservedName3"]
+hw.module @ReservedName1 (in %reservedName2 : i1) {
+  %reservedName3 = sv.reg : !hw.inout<i1>
+}
+
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {

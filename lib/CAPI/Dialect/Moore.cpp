@@ -26,18 +26,6 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Moore, moore, MooreDialect)
 // Types
 //===----------------------------------------------------------------------===//
 
-static RealType::Kind convertMooreRealKind(enum MooreRealKind kind) {
-  switch (kind) {
-  case MooreRealKind::MooreShortReal:
-    return circt::moore::RealType::ShortReal;
-  case MooreRealKind::MooreReal:
-    return circt::moore::RealType::Real;
-  case MooreRealKind::MooreRealTime:
-    return circt::moore::RealType::RealTime;
-  }
-  llvm_unreachable("All cases should be covered.");
-}
-
 /// Create a void type.
 MlirType mooreVoidTypeGet(MlirContext ctx) {
   return wrap(VoidType::get(unwrap(ctx)));
@@ -69,8 +57,8 @@ MlirType mooreIntTypeGetLogic(MlirContext ctx, unsigned width) {
 }
 
 /// Create a real type.
-MlirType mooreRealTypeGet(MlirContext ctx, enum MooreRealKind kind) {
-  return wrap(RealType::get(unwrap(ctx), convertMooreRealKind(kind)));
+MlirType mooreRealTypeGet(MlirContext ctx) {
+  return wrap(RealType::get(unwrap(ctx)));
 }
 
 /// Create a packed unsized dimension type.

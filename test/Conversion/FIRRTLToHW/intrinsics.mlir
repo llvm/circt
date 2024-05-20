@@ -75,11 +75,19 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[C0:%.+]] = ltl.concat [[D0]], [[L1]] : !ltl.sequence, !ltl.sequence
     %c0 = firrtl.int.ltl.concat %d0, %l1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
+    // CHECK-NEXT: [[R0:%.+]] = ltl.repeat %a, 42 : i1
+    // CHECK-NEXT: [[R1:%.+]] = ltl.repeat %b, 42, 1337 : i1
+    %r0 = firrtl.int.ltl.repeat %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %r1 = firrtl.int.ltl.repeat %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
     // CHECK-NEXT: [[N0:%.+]] = ltl.not [[C0]] : !ltl.sequence
     %n0 = firrtl.int.ltl.not %c0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[I0:%.+]] = ltl.implication [[C0]], [[N0]] : !ltl.sequence, !ltl.property
     %i0 = firrtl.int.ltl.implication %c0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[U0:%.+]] = ltl.until [[N0]], [[N0]] : !ltl.property, !ltl.property
+    %u0 = firrtl.int.ltl.until %n0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
     %e0 = firrtl.int.ltl.eventually %i0 : (!firrtl.uint<1>) -> !firrtl.uint<1>

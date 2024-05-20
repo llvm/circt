@@ -31,7 +31,7 @@ circuit Top :
   ; SCALARIZE_TTF:     attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_FFT-NOT: attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_TFT-NOT: attributes {convention = #firrtl<convention scalarized>}
-  ; SCALARIZE_FTT   :  attributes {convention = #firrtl<convention scalarized>}
+  ; SCALARIZE_FTT:     attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_TTT:     attributes {convention = #firrtl<convention scalarized>}
   extmodule External :
     output port: UInt<8>[2]

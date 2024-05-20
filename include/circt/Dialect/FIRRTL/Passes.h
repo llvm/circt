@@ -201,6 +201,8 @@ std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
 
 std::unique_ptr<mlir::Pass> createCreateCompanionAssume();
 
+std::unique_ptr<mlir::Pass> createModuleSummaryPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

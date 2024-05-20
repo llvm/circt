@@ -107,6 +107,25 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   verif.assert %g2 : !ltl.sequence
   verif.assert %g3 : !ltl.sequence
 
+  // CHECK: assert property (a[*0]);
+  %r0 = ltl.repeat %a, 0, 0 : i1
+  verif.assert %r0 : !ltl.sequence
+  // CHECK: assert property (a[*4]);
+  %r1 = ltl.repeat %a, 4, 0 : i1
+  verif.assert %r1 : !ltl.sequence
+  // CHECK: assert property (a[*5:6]);
+  %r2 = ltl.repeat %a, 5, 1 : i1
+  verif.assert %r2 : !ltl.sequence
+  // CHECK: assert property (a[*7:$]);
+  %r3 = ltl.repeat %a, 7 : i1
+  verif.assert %r3 : !ltl.sequence
+  // CHECK: assert property (a[*]);
+  %r4 = ltl.repeat %a, 0 : i1
+  verif.assert %r4 : !ltl.sequence
+  // CHECK: assert property (a[+]);
+  %r5 = ltl.repeat %a, 1 : i1
+  verif.assert %r5 : !ltl.sequence
+
   // CHECK: assert property (@(posedge clk) a);
   // CHECK: assert property (@(negedge clk) a);
   // CHECK: assert property (@(edge clk) a);
@@ -145,6 +164,10 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %i5 = ltl.concat %a, %i1, %i4 : i1, !ltl.sequence, !ltl.sequence
   %i6 = ltl.implication %i5, %n0 : !ltl.sequence, !ltl.property
   verif.assert %i6 : !ltl.property
+
+  // CHECK: assert property (a until b);
+  %u0 = ltl.until %a, %b : i1, i1
+  verif.assert %u0 : !ltl.property
 
   // CHECK: assert property (s_eventually a);
   %e0 = ltl.eventually %a : i1
@@ -196,6 +219,11 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   %e2 = ltl.and %b, %e0 : i1, !ltl.property
   verif.assert %e1 : !ltl.property
   verif.assert %e2 : !ltl.property
+
+  // CHECK: assert property ((a until b) and a);
+  %u0 = ltl.until %a, %b : i1, i1
+  %u1 = ltl.and %u0, %a : !ltl.property, i1
+  verif.assert %u1 : !ltl.property
 }
 
 // CHECK-LABEL: module SystemVerilogSpecExamples

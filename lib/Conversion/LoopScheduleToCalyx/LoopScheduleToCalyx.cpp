@@ -1630,9 +1630,9 @@ void LoopScheduleToCalyxPass::runOnOperation() {
     return;
   }
 
-  //===----------------------------------------------------------------------===//
+  //===--------------------------------------------------------------------===//
   // Cleanup patterns
-  //===----------------------------------------------------------------------===//
+  //===--------------------------------------------------------------------===//
   RewritePatternSet cleanupPatterns(&getContext());
   cleanupPatterns.add<calyx::MultipleGroupDonePattern,
                       calyx::NonTerminatingGroupDonePattern>(&getContext());
