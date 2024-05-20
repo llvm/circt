@@ -23,6 +23,13 @@ namespace detail {
 struct DebugInfoBuilder;
 } // namespace detail
 
+struct DISourceLang {
+  /// The name of the type.
+  StringAttr typeName;
+  /// The constructor parameters of the type.
+  ArrayAttr params;
+};
+
 struct DIModule {
   /// The operation that generated this level of hierarchy.
   Operation *op = nullptr;
@@ -36,6 +43,10 @@ struct DIModule {
   bool isExtern = false;
   /// If this is an inline scope created by a `dbg.scope` operation.
   bool isInline = false;
+
+  // TODO: add support for source language type info to a module
+  // /// The source language type of this module.
+  // DISourceLang sourceLangType;
 };
 
 struct DIInstance {
@@ -54,6 +65,9 @@ struct DIVariable {
   LocationAttr loc;
   /// The SSA value representing the value of this variable.
   Value value = nullptr;
+
+  /// The source language type of this module.
+  DISourceLang sourceLangType;
 };
 
 /// Debug information attached to an operation and the operations nested within.

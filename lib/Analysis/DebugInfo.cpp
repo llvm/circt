@@ -57,7 +57,11 @@ void DebugInfoBuilder::visitRoot(Operation *op) {
                  << "Collect DI for module " << moduleOp.getNameAttr() << "\n");
       auto &module = getOrCreateModule(moduleOp.getNameAttr());
       module.op = op;
-      visitModule(moduleOp, module);
+
+      // TODO: add source language type info to the module (similarly to
+      // variables)
+
+      visitModule(moduleOp, module); // Visit the module
       return WalkResult::skip();
     }
 
@@ -139,6 +143,12 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
       var->name = varOp.getNameAttr();
       var->loc = varOp.getLoc();
       var->value = varOp.getValue();
+
+      // Attach to the variable the type information from the source language
+      // type information.
+      var->sourceLangType.typeName = varOp.getTypeNameAttr();
+      var->sourceLangType.params = varOp.getParamsAttr();
+
       getScope(varOp.getScope()).variables.push_back(var);
       return;
     }
