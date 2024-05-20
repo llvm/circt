@@ -524,7 +524,7 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
   if (error)
     return {};
 
-  return std::move(annotations);
+  return annotations;
 }
 
 LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
