@@ -20,7 +20,6 @@ add_circt_dialect_library(
   MLIROMIncGen
   MLIROMAttrIncGen
   MLIROMOpInterfacesIncGen
-  MLIRBuiltinTypeInterfacesIncGen
 
   LINK_COMPONENTS
   Support
