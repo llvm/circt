@@ -91,13 +91,6 @@ struct Context {
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
 
-  /// A map of values, such as variables, that may be referred to by multi names
-  /// in expressions. The expressions use this table to lookup the MLIR value
-  /// that was created for a given declaration in the Slang AST node.
-  using ValueMultiSymbols =
-      std::map<llvm::SmallVector<const slang::ast::ValueSymbol *>, Value>;
-  ValueMultiSymbols valueMultiSymbols;
-
   /// A stack of assignment left-hand side values. Each assignment will push its
   /// lowered left-hand side onto this stack before lowering its right-hand
   /// side. This allows expressions to resolve the opaque

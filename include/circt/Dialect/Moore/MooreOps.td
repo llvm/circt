@@ -788,4 +788,40 @@ def ExtractOp : MooreOp<"extract"> {
   }];
 } 
 
+def StructFieldOp : MooreOp<"sturct_field"> {
+  let summary = "Struct Field operation";
+  let description = [{
+    Structures can be converted to bits preserving the bit pattern.
+    In other words, they can be converted back to the same value 
+    without any loss of information. When unpacked data are converted 
+    to the packed representation, the order of the data in the packed 
+    representation is such that the first field in the structure 
+    occupies the MSBs. The effect is the same as a concatenation of 
+    the data items (struct fields or array elements) in order. 
+    The type of the elements in an unpacked structure or array 
+    shall be valid for a packed representation in order to be 
+    cast to any other type, whether packed or unpacked.
+    See IEEE 1800-2017 § 6.24.1 "Cast operator"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$structName);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $structName `,`   $memberName  attr-dict `:` 
+    type($structName) `->` type($result)
+  }];
+} 
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

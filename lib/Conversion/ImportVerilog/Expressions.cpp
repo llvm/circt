@@ -429,30 +429,10 @@ struct ExprVisitor {
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
-    llvm::SmallVector<const slang::ast::ValueSymbol *> symbolVec;
-    const auto *exprIt = &(expr.value());
-    std::string concatName(expr.member.name);
-    symbolVec.push_back(
-        static_cast<const slang::ast::ValueSymbol *>(&expr.member));
-    while (true) {
-      std::string structName((*exprIt).getSymbolReference()->name);
-      concatName = structName + "." + concatName;
-      symbolVec.push_back(static_cast<const slang::ast::ValueSymbol *>(
-          exprIt->getSymbolReference()));
-      if (exprIt->kind == slang::ast::ExpressionKind::MemberAccess) {
-        exprIt = &(exprIt->as<slang::ast::MemberAccessExpression>().value());
-      } else {
-        break;
-      }
-    }
-    auto type = context.convertType(*expr.type);
-    if (context.valueMultiSymbols.count(symbolVec)) {
-      return context.valueMultiSymbols.at(symbolVec);
-    }
-    auto varOp = builder.create<moore::VariableOp>(
-        loc, type, builder.getStringAttr(concatName), Value());
-    context.valueMultiSymbols.insert({symbolVec, varOp});
-    return varOp;
+    return builder.create<moore::StructFieldOp>(
+        loc, context.convertType(*expr.type),
+        builder.getStringAttr(expr.member.name),
+        context.convertExpression(expr.value()));
   }
 
   /// Emit an error for all other expressions.
