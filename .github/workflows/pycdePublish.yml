@@ -24,9 +24,6 @@ jobs:
           - cp311-manylinux_x86_64
           - cp312-manylinux_x86_64
     steps:
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
       - name: Get CIRCT (no submodules)
         uses: actions/checkout@v4
         with:
@@ -53,8 +50,6 @@ jobs:
           SETUPTOOLS_SCM_DEBUG: True
           BUILD_TYPE: Release
           RUN_TESTS: True
-          COMPILER_LAUNCHER: sccache
-          SCCACHE_GHA_ENABLED: True
         run: |
           set -o errexit
           export PATH=$PATH:$HOME/.local/bin
@@ -94,9 +89,6 @@ jobs:
           - cp311-win_amd64
           - cp312-win_amd64
     steps:
-      - name: Set up sccache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
       # Since we don't use docker on Windows, we need to install the dependencies.
       - name: Build additional c++ deps
         shell: pwsh
@@ -118,7 +110,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel twine
-          choco install ninja sccache
+          choco install ninja
 
       - name: Build wheel
         shell: cmd
@@ -129,8 +121,6 @@ jobs:
           BUILD_TYPE: Release
           # PyCDE integration tests are not yet implemented on Windows.
           RUN_TESTS: False
-          COMPILER_LAUNCHER: sccache
-          SCCACHE_GHA_ENABLED: True
         run: |
           echo "Building wheel"
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
