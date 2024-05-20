@@ -93,7 +93,6 @@ jobs:
           - cp310-win_amd64
           - cp311-win_amd64
           - cp312-win_amd64
-    env:
     steps:
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.4
