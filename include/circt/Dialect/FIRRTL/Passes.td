@@ -43,6 +43,8 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Create normal ports, not ref type ports.">,
     Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public-modules", "bool", "false",
       "Allow public modules to gain additional ports as a result of wiring.">,
+    Option<"shouldEnableDebugInfo", "should-enable-debug-info", "bool", "true", 
+      "Enable to consume debug annotations.">
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [

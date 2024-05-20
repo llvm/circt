@@ -34,7 +34,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
       opt.shouldDisableUnknownAnnotations(),
       opt.shouldDisableClasslessAnnotations(),
       opt.shouldLowerNoRefTypePortAnnotations(),
-      opt.shouldAllowAddingPortsOnPublic()));
+      opt.shouldAllowAddingPortsOnPublic(), opt.shouldEnableDebugInfo()));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(

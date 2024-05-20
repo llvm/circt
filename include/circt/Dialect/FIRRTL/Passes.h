@@ -31,7 +31,8 @@ std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false,
                                  bool noRefTypePorts = false,
-                                 bool allowAddingPortsOnPublic = false);
+                                 bool allowAddingPortsOnPublic = false, 
+                                 bool shouldEnableDebugInfo = false);
 
 std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
 

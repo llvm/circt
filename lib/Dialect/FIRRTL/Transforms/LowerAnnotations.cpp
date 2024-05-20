@@ -387,6 +387,38 @@ static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
   return success();
 }
 
+namespace {
+// Local flag to check if the tywaves annotations should be passed to the next
+// compiler pass. It is set to true only when debug information are required.
+// The flag avoids to process the annotations unnecessarily when the input file
+// contains tywaves annotations but the debug information are not required.
+bool shouldAddTywavesAnno = false;
+} // namespace
+
+/// Apply the tywaves annotation on a target and make it available for the
+/// translated firrtl op (and consequently for the debug info).
+static LogicalResult applyTywaves(const AnnoPathValue &target,
+                                  DictionaryAttr anno, ApplyState &state) {
+  // Add the tywaves annotation to the target only if the flag is set.
+  if (shouldAddTywavesAnno) {
+    LLVM_DEBUG(llvm::dbgs() << "Apply tywaves annotations on: "
+                            << target.ref.getOp()->getName() << "\n");
+
+    // Collect all the named attributes from the annotation
+    SmallVector<NamedAttribute> newAnnoAttrs;
+    for (auto &na : anno) {
+      // Maybe skip the target field
+      // if (na.getName().getValue() == "target")
+      //   continue;
+      newAnnoAttrs.push_back(na);
+    }
+
+    // Add the annotation to the target
+    addAnnotation(target.ref, target.fieldIdx, newAnnoAttrs);
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -506,7 +538,9 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyLoadMemoryAnno<true>}},
     {wiringSinkAnnoClass, {stdResolve, applyWiring}},
     {wiringSourceAnnoClass, {stdResolve, applyWiring}},
-    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
+    {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}},
+
+    {tywavesAnnoClass, {stdResolve, applyTywaves}}}};
 
 LogicalResult
 registerAnnotationRecord(StringRef annoClass, AnnoRecord annoRecord,
@@ -549,6 +583,7 @@ struct LowerAnnotationsPass
   using LowerFIRRTLAnnotationsBase::ignoreAnnotationClassless;
   using LowerFIRRTLAnnotationsBase::ignoreAnnotationUnknown;
   using LowerFIRRTLAnnotationsBase::noRefTypePorts;
+  using LowerFIRRTLAnnotationsBase::shouldEnableDebugInfo;
   SmallVector<DictionaryAttr> worklistAttrs;
 };
 } // end anonymous namespace
@@ -556,6 +591,10 @@ struct LowerAnnotationsPass
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
                                                     ApplyState &state) {
   LLVM_DEBUG(llvm::dbgs() << "  - anno: " << anno << "\n";);
+
+  // Set the flag according to the pass (consume tywaves annotations only when
+  // needed)
+  shouldAddTywavesAnno = shouldEnableDebugInfo;
 
   // Lookup the class
   StringRef annoClassVal;
@@ -1068,11 +1107,17 @@ void LowerAnnotationsPass::runOnOperation() {
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
     bool ignoreAnnotationUnknown, bool ignoreAnnotationClassless,
-    bool noRefTypePorts, bool allowAddingPortsOnPublic) {
+    bool noRefTypePorts, bool allowAddingPortsOnPublic,
+    bool shouldEnableDebugInfo) {
   auto pass = std::make_unique<LowerAnnotationsPass>();
   pass->ignoreAnnotationUnknown = ignoreAnnotationUnknown;
   pass->ignoreAnnotationClassless = ignoreAnnotationClassless;
   pass->noRefTypePorts = noRefTypePorts;
   pass->allowAddingPortsOnPublic = allowAddingPortsOnPublic;
+  pass->shouldEnableDebugInfo = shouldEnableDebugInfo;
+
+  // Set the local flag
+  // TODO: this is done in LowerAnnotationsPass::applyAnno()
+  shouldAddTywavesAnno = pass->shouldEnableDebugInfo;
   return pass;
 }
