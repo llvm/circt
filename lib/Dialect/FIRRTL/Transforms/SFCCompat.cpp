@@ -75,7 +75,7 @@ void SFCCompatPass::runOnOperation() {
     // If the `RegResetOp` has an invalidated initialization and we
     // are not running FART, then replace it with a `RegOp`.
     if (!fullAsyncResetExists &&
-        walkDrivers(reg.getResetValue(), true, false, false,
+        walkDrivers(reg.getResetValue(), true, true, false,
                     [](FieldRef dst, FieldRef src) {
                       return src.isa<InvalidValueOp>();
                     })) {
