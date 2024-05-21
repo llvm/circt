@@ -26,5 +26,4 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT:  %b = firrtl.node %[[inv]] : !firrtl.uint<3>
     // CHECK-NEXT:  %a = firrtl.node %b : !firrtl.uint<3>
   }
-
 }

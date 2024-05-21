@@ -38,7 +38,6 @@ struct EliminateWiresPass : public EliminateWiresBase<EliminateWiresPass> {
 };
 } // end anonymous namespace
 
-// This is the main entrypoint for the lowering pass.
 void EliminateWiresPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n";);
   auto module = getOperation();
@@ -52,13 +51,17 @@ void EliminateWiresPass::runOnOperation() {
       ++complexTypeWires;
       continue;
     }
+    // This will fail if there are multiple connects (due to aggregate
+    // decomposition or whens) or if there are connects in blocks (due to whens
+    // or matches).  We are fine with this, we don't want to reason about those
+    // cases as other passes will handle them.
     auto writer = getSingleConnectUserOf(wire.getResult());
     if (!writer) {
       ++complexWriteWires;
       continue;
     }
     bool safe = true;
-    for (auto user : wire->getUsers()) {
+    for (auto* user : wire->getUsers()) {
       if (!dominance.dominates(writer, user)) {
         ++notDomWires;
         safe = false;
