@@ -4672,7 +4672,8 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
 LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
                                                PPExtString opName) {
-
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
   // If we are inside a procedural region we have the option of emitting either
   // an `assert` or `assert property`. If we are in a non-procedural region,
   // e.g., the body of a module, we have to use the concurrent form `assert
