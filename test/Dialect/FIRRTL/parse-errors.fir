@@ -1430,3 +1430,11 @@ circuit GenericIntParamRedef:
   public module GenericIntParamRedef:
     ; expected-error @below {{redefinition of parameter 'x'}}
     intrinsic(dummy<x = 5, x = 3>)
+
+;// -----
+FIRRTL version 4.0.0
+circuit IntrinsicModule:
+  ; expected-error @below {{intrinsic modules were removed in FIRRTL 4.0.0}}
+  intmodule MyIntModule :
+    intrinsic = testIntrinsic1
+

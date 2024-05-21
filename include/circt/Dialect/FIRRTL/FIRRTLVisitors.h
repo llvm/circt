@@ -50,10 +50,11 @@ public:
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
             ClockDividerIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLNotIntrinsicOp,
-            LTLImplicationIntrinsicOp, LTLEventuallyIntrinsicOp,
-            LTLClockIntrinsicOp, LTLDisableIntrinsicOp, Mux2CellIntrinsicOp,
-            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
+            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLRepeatIntrinsicOp,
+            LTLNotIntrinsicOp, LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
+            LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
+            HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -171,8 +172,10 @@ public:
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLDelayIntrinsicOp, Unhandled);
   HANDLE(LTLConcatIntrinsicOp, Unhandled);
+  HANDLE(LTLRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLNotIntrinsicOp, Unhandled);
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
+  HANDLE(LTLUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(LTLDisableIntrinsicOp, Unhandled);
