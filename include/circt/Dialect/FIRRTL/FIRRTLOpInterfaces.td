@@ -459,10 +459,12 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     }]>,
     InterfaceMethod<"Completely drop a name.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
-      this->getOperation()->setAttr("nameKind",
-        NameKindEnumAttr::get(this->getOperation()->getContext(),
+      auto* op = this->getOperation();
+      auto* ctx = op->getContext();
+      op->setAttr("nameKind",
+        NameKindEnumAttr::get(ctx,
                               NameKindEnum::DroppableName));
-      this->getOperation()->setAttr("name", StringAttr::get(this->getOperation()->getContext(), ""));
+      op->setAttr("name", StringAttr::get(ctx, ""));
     }]>,
     InterfaceMethod<"Set a namekind.",
     "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),
