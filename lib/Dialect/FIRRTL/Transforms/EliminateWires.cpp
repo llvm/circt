@@ -67,7 +67,7 @@ void EliminateWiresPass::runOnOperation() {
     }
     if (!safe)
       continue;
-    worklist.push_back(std::make_pair(wire, writer));
+    worklist.emplace_back(wire, writer);
   }
 
   for (auto [wire, writer] : worklist) {
