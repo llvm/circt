@@ -61,7 +61,7 @@ void EliminateWiresPass::runOnOperation() {
       continue;
     }
     bool safe = true;
-    for (auto* user : wire->getUsers()) {
+    for (auto *user : wire->getUsers()) {
       if (!dominance.dominates(writer, user)) {
         ++notDomWires;
         safe = false;
