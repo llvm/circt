@@ -18,8 +18,6 @@
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace verif;
