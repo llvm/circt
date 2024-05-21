@@ -85,6 +85,8 @@ std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
 
 std::unique_ptr<mlir::Pass> createDedupPass();
 
+std::unique_ptr<mlir::Pass> createEliminateWiresPass();
+
 std::unique_ptr<mlir::Pass>
 createEmitOMIRPass(mlir::StringRef outputFilename = "");
 
