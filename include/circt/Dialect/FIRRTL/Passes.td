@@ -284,7 +284,9 @@ def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
     Statistic<"complexWriteWires", "num-complex-wires",
       "Number of wires not erased due to complex writes">,
     Statistic<"notDomWires", "num-not-dominating-wires",
-      "Number of wires not erased due to dominance issues">
+      "Number of wires not erased due to dominance issues">,
+    Statistic<"complexTypeWires", "num-not-passive-wires",
+      "Number of wires not erased due to type issues">
   ];
   let constructor = "circt::firrtl::createEliminateWiresPass()";
 }

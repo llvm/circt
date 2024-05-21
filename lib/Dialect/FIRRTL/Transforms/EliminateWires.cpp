@@ -47,6 +47,11 @@ void EliminateWiresPass::runOnOperation() {
   std::deque<std::pair<WireOp, StrictConnectOp>> worklist;
 
   for (auto wire : module.getOps<WireOp>()) {
+    auto type = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
+    if (!type || !type.isPassive()) {
+      ++complexTypeWires;
+      continue;
+    }
     auto writer = getSingleConnectUserOf(wire.getResult());
     if (!writer) {
       ++complexWriteWires;
