@@ -241,7 +241,9 @@ if (WHEEL_BUILD)
 endif()
 
 # Pybind11 is used to wrap the ESIRuntime APIs.
-find_package(Python3 COMPONENTS Interpreter Development)
+if(NOT DEFINED Python3_FOUND)
+  find_package(Python3 COMPONENTS Interpreter Development)
+endif()
 if(Python3_FOUND)
   IF(MSVC)
     # Work around an issue with pybind11 and cmake incompatibility on Windows in debug mode.

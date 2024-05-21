@@ -55,13 +55,20 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
     // CHECK-NEXT: firrtl.int.ltl.concat %in0, %in1 :
     // CHECK-NEXT: firrtl.int.ltl.not %in0 :
     // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
+    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
     // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_concat"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_ltl_not"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_ltl_implication"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.clock %in0, %clk :
