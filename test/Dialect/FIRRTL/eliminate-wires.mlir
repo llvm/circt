@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-eliminate-wires)))' --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-eliminate-wires)))' %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 
