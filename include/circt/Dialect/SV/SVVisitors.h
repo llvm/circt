@@ -39,11 +39,13 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            FWriteOp, SystemFunctionOp, VerbatimOp,
+            FWriteOp, SystemFunctionOp, VerbatimOp, FuncCallOp,
+            FuncCallProceduralOp, ReturnOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp,
+            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp, FuncOp,
+            FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
@@ -127,6 +129,9 @@ public:
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
+  HANDLE(FuncCallProceduralOp, Unhandled);
+  HANDLE(FuncCallOp, Unhandled);
+  HANDLE(ReturnOp, Unhandled);
   HANDLE(VerbatimOp, Unhandled);
 
   // Type declarations.
@@ -139,6 +144,8 @@ public:
   HANDLE(ReadInterfaceSignalOp, Unhandled);
   HANDLE(MacroDefOp, Unhandled);
   HANDLE(MacroDeclOp, Unhandled);
+  HANDLE(FuncDPIImportOp, Unhandled);
+  HANDLE(FuncOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);

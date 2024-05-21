@@ -87,6 +87,7 @@ public:
   /// Adopts the data vector buffer.
   MessageData() = default;
   MessageData(std::vector<uint8_t> &data) : data(std::move(data)) {}
+  MessageData(const uint8_t *data, size_t size) : data(data, data + size) {}
   ~MessageData() = default;
 
   const uint8_t *getBytes() const { return data.data(); }

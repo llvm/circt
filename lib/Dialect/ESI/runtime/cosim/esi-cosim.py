@@ -188,7 +188,7 @@ class Simulator:
         time.sleep(0.05)
 
       # Run the inner command, passing the connection info via environment vars.
-      testEnv = Simulator.get_env()
+      testEnv = os.environ.copy()
       testEnv["ESI_COSIM_PORT"] = str(port)
       testEnv["ESI_COSIM_HOST"] = "localhost"
       return subprocess.run(inner_command, cwd=os.getcwd(),

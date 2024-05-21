@@ -125,54 +125,7 @@ Os &operator<<(Os &os, const Range &range) {
 
 class PackedType;
 
-/// A simple bit vector type.
-///
-/// The SystemVerilog standard somewhat loosely defines a "Simple Bit Vector"
-/// type. In essence, this is a zero or one-dimensional integer type. For
-/// example, `bit`, `logic [0:0]`, `reg [31:0]`, or `int` are SBVs, but `bit
-/// [1:0][2:0]`, `int [4:0]`, `bit [5:2]`, or `bit []` are not.
-struct SimpleBitVectorType {
-  /// Create a null SBVT.
-  SimpleBitVectorType() {}
-
-  /// Create a new SBVT with the given domain and size.
-  SimpleBitVectorType(Domain domain, unsigned size)
-      : size(size), domain(domain) {
-    assert(size > 0 && "SBVT requires non-zero size");
-  }
-
-  /// Convert this SBVT to an actual type.
-  PackedType getType(MLIRContext *context) const;
-
-  /// Get a single bit version of this type by setting its size to 1.
-  SimpleBitVectorType toSingleBit() const {
-    auto type = *this;
-    type.size = 1;
-    return type;
-  }
-
-  /// Check whether this type is equivalent to another.
-  bool operator==(const SimpleBitVectorType &other) const {
-    return domain == other.domain && size == other.size;
-  }
-
-  /// Check whether this is a null type.
-  operator bool() const { return size > 0; }
-
-  /// The size of the vector.
-  unsigned size = 0;
-  /// The domain, which dictates whether this is a `bit` or `logic` vector.
-  Domain domain : 8;
-};
-
-// NOLINTNEXTLINE(readability-identifier-naming)
-inline llvm::hash_code hash_value(const SimpleBitVectorType &x) {
-  return llvm::hash_combine(x.size, x.domain);
-}
-
 namespace detail {
-struct RealTypeStorage;
-struct IntTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
@@ -241,40 +194,6 @@ public:
   /// a queue, or the core type itself has no known size.
   std::optional<unsigned> getBitSize() const;
 
-  /// Get this type as a simple bit vector, if it is one. Returns a null type
-  /// otherwise.
-  SimpleBitVectorType getSimpleBitVectorOrNull() const;
-
-  /// Check whether this is a simple bit vector type.
-  bool isSimpleBitVector() const { return !!getSimpleBitVectorOrNull(); }
-
-  /// Get this type as a simple bit vector. Aborts if it is no simple bit
-  /// vector.
-  SimpleBitVectorType getSimpleBitVector() const {
-    auto sbv = getSimpleBitVectorOrNull();
-    assert(sbv && "getSimpleBitVector called on type that is no SBV");
-    return sbv;
-  }
-
-  /// Cast this type to a simple bit vector. Returns null if this type cannot be
-  /// cast to a simple bit vector.
-  SimpleBitVectorType castToSimpleBitVectorOrNull() const;
-
-  /// Check whether this type can be cast to a simple bit vector type.
-  bool isCastableToSimpleBitVector() const {
-    return !!castToSimpleBitVectorOrNull();
-  }
-
-  /// Cast this type to a simple bit vector. Aborts if this type cannot be cast
-  /// to a simple bit vector.
-  SimpleBitVectorType castToSimpleBitVector() const {
-    auto sbv = castToSimpleBitVectorOrNull();
-    assert(
-        sbv &&
-        "castToSimpleBitVector called on type that cannot be cast to an SBV");
-    return sbv;
-  }
-
 protected:
   using SVType::SVType;
 };
@@ -326,120 +245,6 @@ public:
 
 protected:
   using UnpackedType::UnpackedType;
-};
-
-//===----------------------------------------------------------------------===//
-// Packed Integers
-//===----------------------------------------------------------------------===//
-
-/// An integer vector or atom type.
-class IntType
-    : public Type::TypeBase<IntType, PackedType, detail::IntTypeStorage> {
-public:
-  enum Kind {
-    // The integer vector types. These are the builtin single-bit integer types.
-    /// A `bit`.
-    Bit,
-    /// A `logic`.
-    Logic,
-    /// A `reg`.
-    Reg,
-
-    // The integer atom types. These are the builtin multi-bit integer types.
-    /// A `byte`.
-    Byte,
-    /// A `shortint`.
-    ShortInt,
-    /// An `int`.
-    Int,
-    /// A `longint`.
-    LongInt,
-    /// An `integer`.
-    Integer,
-    /// A `time`.
-    Time,
-  };
-
-  /// Get the integer type that corresponds to a keyword (like `bit`).
-  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
-  /// Get the keyword (like `bit`) for one of the integer types.
-  static StringRef getKeyword(Kind kind);
-  /// Get the value domain for one of the integer types.
-  static Domain getDomain(Kind kind);
-  /// Get the size of one of the integer types.
-  static unsigned getBitSize(Kind kind);
-  /// Get the integer type that corresponds to a single bit of the given domain.
-  static Kind getAtomForDomain(Domain domain);
-  /// Get the integer type that corresponds to a domain and bit size. For
-  /// example, returns `int` for `(TwoValued, 32)`.
-  static std::optional<Kind> getKindFromDomainAndSize(Domain domain,
-                                                      unsigned size);
-
-  static IntType get(MLIRContext *context, Kind kind);
-
-  /// Create a `logic` type.
-  static IntType getLogic(MLIRContext *context) { return get(context, Logic); }
-
-  /// Create a `int` type.
-  static IntType getInt(MLIRContext *context) { return get(context, Int); }
-
-  /// Create a `time` type.
-  static IntType getTime(MLIRContext *context) { return get(context, Time); }
-
-  /// Get the concrete integer vector or atom type.
-  Kind getKind() const;
-
-  /// Get the keyword (like `bit`) for this type.
-  StringRef getKeyword() const { return getKeyword(getKind()); }
-  /// Get the value domain for this type.
-  Domain getDomain() const { return getDomain(getKind()); }
-  /// Get the size of this type.
-  unsigned getBitSize() const { return getBitSize(getKind()); }
-
-  static constexpr StringLiteral name = "moore.int";
-
-protected:
-  using Base::Base;
-};
-
-//===----------------------------------------------------------------------===//
-// Unpacked Reals
-//===----------------------------------------------------------------------===//
-
-/// A real type.
-class RealType
-    : public Type::TypeBase<RealType, UnpackedType, detail::RealTypeStorage> {
-public:
-  enum Kind {
-    /// A `shortreal`.
-    ShortReal,
-    /// A `real`.
-    Real,
-    /// A `realtime`.
-    RealTime,
-  };
-
-  /// Get the integer type that corresponds to a keyword (like `bit`).
-  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
-  /// Get the keyword (like `bit`) for one of the integer types.
-  static StringRef getKeyword(Kind kind);
-  /// Get the size of one of the integer types.
-  static unsigned getBitSize(Kind kind);
-
-  static RealType get(MLIRContext *context, Kind kind);
-
-  /// Get the concrete integer vector or atom type.
-  Kind getKind() const;
-
-  /// Get the keyword (like `bit`) for this type.
-  StringRef getKeyword() const { return getKeyword(getKind()); }
-  /// Get the size of this type.
-  unsigned getBitSize() const { return getBitSize(getKind()); }
-
-  static constexpr StringLiteral name = "moore.real";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//

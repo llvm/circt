@@ -2211,7 +2211,8 @@ static Value extractOperandFromFullyAssociative(Operation *fullyAssoc,
 
   // If the operation has a single use, mutate it in place.
   if (fullyAssoc->hasOneUse()) {
-    fullyAssoc->eraseOperand(operandNo);
+    rewriter.modifyOpInPlace(fullyAssoc,
+                             [&]() { fullyAssoc->eraseOperand(operandNo); });
     return fullyAssoc->getResult(0);
   }
 

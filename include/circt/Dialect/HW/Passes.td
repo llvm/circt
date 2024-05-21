@@ -75,4 +75,16 @@ def VerifyInnerRefNamespace : Pass<"hw-verify-irn"> {
   let constructor =  "circt::hw::createVerifyInnerRefNamespacePass()";
 }
 
+/**
+ * Tutorial Pass, doesn't do anything interesting
+ */
+def FooWires : Pass<"hw-foo-wires", "hw::HWModuleOp"> {
+  let summary = "Change all wires' name to foo_<n>.";
+  let description = [{
+    Very basic pass that numbers all of the wires in a given module.
+    The wires' names are then all converte to foo_<that number>.
+  }];
+  let constructor = "circt::hw::createFooWiresPass()";
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD

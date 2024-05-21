@@ -108,7 +108,7 @@ struct ObjectModelIR {
         StringType::get(context),  // direction
         FIntegerType::get(context) // Width
     };
-    StringRef extraPortFields[3] = {"name", "drection", "width"};
+    StringRef extraPortFields[3] = {"name", "direction", "width"};
 
     extraPortsClass =
         buildSimpleClassOp(builderOM, unknownLoc, "ExtraPortsMemorySchema",

@@ -27,6 +27,7 @@ struct LoweringOptions;
 
 namespace ExportVerilog {
 class GlobalNameResolver;
+struct NameCollisionResolver;
 
 /// Check if the value is from read of a wire or reg or is a port.
 bool isSimpleReadOrPort(Value v);
@@ -57,6 +58,9 @@ struct GlobalNameTable {
     return it != enumPrefixes.end() ? it->second : StringAttr();
   }
 
+  // Add the set of reserved names to a resolver.
+  void addReservedNames(NameCollisionResolver &nameResolver) const;
+
 private:
   friend class GlobalNameResolver;
   GlobalNameTable() {}
@@ -76,6 +80,9 @@ private:
   // This contains prefixes for any typedecl'd enum types. Keys are type-aliases
   // of enum types.
   DenseMap<Type, StringAttr> enumPrefixes;
+
+  /// List of names which are marked as reserved for any name.
+  DenseSet<StringAttr> reservedNames;
 };
 
 //===----------------------------------------------------------------------===//

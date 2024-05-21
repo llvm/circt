@@ -900,4 +900,13 @@ def SpecializeOption :
   ];
 }
 
+def ModuleSummary :
+  Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
+    let summary = "Print a summary of modules.";
+    let description = [{
+      The pass produces a summary of modules.
+    }];
+    let constructor = "circt::firrtl::createModuleSummaryPass()";
+  }
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -24,8 +24,6 @@ using namespace circt::hw;
 using namespace circt::sv;
 
 StringAttr circt::esi::detail::getTypeID(Type t) {
-  if (auto ch = dyn_cast<ChannelType>(t))
-    t = ch.getInner();
   std::string typeID;
   llvm::raw_string_ostream(typeID) << t;
   return StringAttr::get(t.getContext(), typeID);

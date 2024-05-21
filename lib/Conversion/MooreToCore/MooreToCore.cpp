@@ -160,16 +160,13 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
   LogicalResult
   matchAndRewrite(BoolCastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (cast<UnpackedType>(op.getInput().getType())
-            .castToSimpleBitVectorOrNull()) {
-      Type resultType = typeConverter->convertType(op.getInput().getType());
+    Type resultType = typeConverter->convertType(op.getInput().getType());
+    if (isa_and_nonnull<IntegerType>(resultType)) {
       Value zero = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
-
       rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
                                                 adaptor.getInput(), zero);
       return success();
     }
-
     return failure();
   }
 };
@@ -415,15 +412,13 @@ static void populateLegality(ConversionTarget &target) {
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
-    return mlir::IntegerType::get(type.getContext(), type.getBitSize());
+    return mlir::IntegerType::get(type.getContext(), type.getWidth());
   });
 
   // Directly map simple bit vector types to a compact integer type. This needs
   // to be added after all of the other conversions above, such that SBVs
   // conversion gets tried first before any of the others.
   typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
-    if (auto sbv = type.getSimpleBitVectorOrNull())
-      return mlir::IntegerType::get(type.getContext(), sbv.size);
     if (isa<UnpackedRangeDim, PackedRangeDim>(type))
       return mlir::IntegerType::get(type.getContext(),
                                     type.getBitSize().value());

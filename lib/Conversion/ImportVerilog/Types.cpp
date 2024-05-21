@@ -11,6 +11,7 @@
 
 using namespace circt;
 using namespace ImportVerilog;
+using moore::Domain;
 
 namespace {
 struct TypeVisitor {
@@ -18,68 +19,32 @@ struct TypeVisitor {
   Location loc;
   TypeVisitor(Context &context, Location loc) : context(context), loc(loc) {}
 
+  // Handle simple bit vector types such as `bit`, `int`, or `bit [41:0]`.
+  Type getSimpleBitVectorType(const slang::ast::IntegralType &type) {
+    return moore::IntType::get(context.getContext(), type.bitWidth,
+                               type.isFourState ? Domain::FourValued
+                                                : Domain::TwoValued);
+  }
+
   // NOLINTBEGIN(misc-no-recursion)
   Type visit(const slang::ast::ScalarType &type) {
-    moore::IntType::Kind kind;
-    switch (type.scalarKind) {
-    case slang::ast::ScalarType::Bit:
-      kind = moore::IntType::Bit;
-      break;
-    case slang::ast::ScalarType::Logic:
-      kind = moore::IntType::Logic;
-      break;
-    case slang::ast::ScalarType::Reg:
-      kind = moore::IntType::Reg;
-      break;
-    }
-
-    return moore::IntType::get(context.getContext(), kind);
+    return getSimpleBitVectorType(type);
   }
 
   Type visit(const slang::ast::FloatingType &type) {
-    moore::RealType::Kind kind;
-    switch (type.floatKind) {
-    case slang::ast::FloatingType::Real:
-      kind = moore::RealType::Real;
-      break;
-    case slang::ast::FloatingType::ShortReal:
-      kind = moore::RealType::ShortReal;
-      break;
-    case slang::ast::FloatingType::RealTime:
-      kind = moore::RealType::RealTime;
-      break;
-    }
-
-    return moore::RealType::get(context.getContext(), kind);
+    return moore::RealType::get(context.getContext());
   }
 
   Type visit(const slang::ast::PredefinedIntegerType &type) {
-    moore::IntType::Kind kind;
-    switch (type.integerKind) {
-    case slang::ast::PredefinedIntegerType::Int:
-      kind = moore::IntType::Int;
-      break;
-    case slang::ast::PredefinedIntegerType::ShortInt:
-      kind = moore::IntType::ShortInt;
-      break;
-    case slang::ast::PredefinedIntegerType::LongInt:
-      kind = moore::IntType::LongInt;
-      break;
-    case slang::ast::PredefinedIntegerType::Integer:
-      kind = moore::IntType::Integer;
-      break;
-    case slang::ast::PredefinedIntegerType::Byte:
-      kind = moore::IntType::Byte;
-      break;
-    case slang::ast::PredefinedIntegerType::Time:
-      kind = moore::IntType::Time;
-      break;
-    }
-
-    return moore::IntType::get(context.getContext(), kind);
+    return getSimpleBitVectorType(type);
   }
 
   Type visit(const slang::ast::PackedArrayType &type) {
+    // Handle simple bit vector types of the form `bit [41:0]`.
+    if (type.elementType.as_if<slang::ast::ScalarType>())
+      return getSimpleBitVectorType(type);
+
+    // Handle all other packed arrays.
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};

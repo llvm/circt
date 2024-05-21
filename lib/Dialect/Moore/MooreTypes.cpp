@@ -34,10 +34,9 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<IntType, RealType, PackedUnsizedDim, PackedRangeDim,
-           UnpackedUnsizedDim, UnpackedArrayDim, UnpackedRangeDim,
-           UnpackedAssocDim, UnpackedQueueDim, PackedStructType,
-           UnpackedStructType>();
+  addTypes<PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
+           UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
+           UnpackedQueueDim, PackedStructType, UnpackedStructType>();
 
   addTypes<
 #define GET_TYPEDEF_LIST
@@ -60,25 +59,6 @@ StringRef moore::getKeywordFromSign(const Sign &sign) {
 }
 
 //===----------------------------------------------------------------------===//
-// Simple Bit Vector Type
-//===----------------------------------------------------------------------===//
-
-PackedType SimpleBitVectorType::getType(MLIRContext *context) const {
-  if (!*this)
-    return {};
-
-  // Build the core integer bit type.
-  auto kind = domain == Domain::TwoValued ? IntType::Bit : IntType::Logic;
-  auto intType = IntType::get(context, kind);
-
-  // If the vector is wider than a single bit, or the dimension was explicit in
-  // the original type, add a dimension around the bit type.
-  if (size > 1)
-    return PackedRangeDim::get(intType, size);
-  return intType;
-}
-
-//===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
 
@@ -93,7 +73,8 @@ Domain UnpackedType::getDomain() const {
 
 std::optional<unsigned> UnpackedType::getBitSize() const {
   return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
-      .Case<PackedType, RealType>([](auto type) { return type.getBitSize(); })
+      .Case<PackedType>([](auto type) { return type.getBitSize(); })
+      .Case<RealType>([](auto type) { return 64; })
       .Case<UnpackedUnsizedDim>([](auto) { return std::nullopt; })
       .Case<UnpackedArrayDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
@@ -108,57 +89,6 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
       .Default([](auto) { return std::nullopt; });
-}
-
-/// Map an `IntType` to the corresponding SBVT. Never returns a null type.
-static SimpleBitVectorType getSimpleBitVectorFromIntType(IntType type) {
-  return SimpleBitVectorType(type.getDomain(), type.getBitSize());
-}
-
-SimpleBitVectorType UnpackedType::getSimpleBitVectorOrNull() const {
-  return TypeSwitch<UnpackedType, SimpleBitVectorType>(*this)
-      .Case<IntType>([](auto type) {
-        // Integer types trivially map to SBVTs.
-        return getSimpleBitVectorFromIntType(type);
-      })
-      .Case<PackedRangeDim>([](auto rangeType) {
-        // Inner type must be an integer.
-        auto innerType = llvm::dyn_cast<IntType>(rangeType.getInner());
-        if (!innerType)
-          return SimpleBitVectorType{};
-
-        // Inner type must be a single-bit integer. Cannot have integer atom
-        // vectors like `int [31:0]`.
-        if (innerType.getBitSize() > 1)
-          return SimpleBitVectorType{};
-
-        // Range must be have non-zero size, and go downwards to zero.
-        auto range = rangeType.getRange();
-        if (range.size == 0 || range.offset != 0 || range.dir != RangeDir::Down)
-          return SimpleBitVectorType{};
-        auto sbv = getSimpleBitVectorFromIntType(innerType);
-        sbv.size = range.size;
-        return sbv;
-      })
-      .Default([](auto) { return SimpleBitVectorType{}; });
-}
-
-SimpleBitVectorType UnpackedType::castToSimpleBitVectorOrNull() const {
-  // If the type is already a valid SBVT, return that immediately without
-  // casting.
-  if (auto sbv = getSimpleBitVectorOrNull())
-    return sbv;
-
-  // All packed types with a known size (i.e., with no `[]` dimensions) can be
-  // cast to an SBVT.
-  auto packed = llvm::dyn_cast<PackedType>(*this);
-  if (!packed)
-    return {};
-  auto bitSize = packed.getBitSize();
-  if (!bitSize || *bitSize == 0)
-    return {};
-
-  return SimpleBitVectorType(packed.getDomain(), *bitSize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -177,7 +107,7 @@ Domain PackedType::getDomain() const {
 std::optional<unsigned> PackedType::getBitSize() const {
   return TypeSwitch<PackedType, std::optional<unsigned>>(*this)
       .Case<VoidType>([](auto) { return 0; })
-      .Case<IntType>([](auto type) { return type.getBitSize(); })
+      .Case<IntType>([](auto type) { return type.getWidth(); })
       .Case<PackedUnsizedDim>([](auto) { return std::nullopt; })
       .Case<PackedRangeDim>([](auto type) -> std::optional<unsigned> {
         if (auto size = type.getInner().getBitSize())
@@ -187,217 +117,6 @@ std::optional<unsigned> PackedType::getBitSize() const {
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
 }
-
-//===----------------------------------------------------------------------===//
-// Packed Integers
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-struct IntTypeStorage : TypeStorage {
-  using KeyTy = unsigned;
-  using Kind = IntType::Kind;
-
-  IntTypeStorage(KeyTy key) : kind(static_cast<Kind>(key)) {}
-  static KeyTy pack(Kind kind) { return static_cast<unsigned>(kind); }
-  bool operator==(const KeyTy &key) const { return pack(kind) == key; }
-  static IntTypeStorage *construct(TypeStorageAllocator &allocator,
-                                   const KeyTy &key) {
-    return new (allocator.allocate<IntTypeStorage>()) IntTypeStorage(key);
-  }
-
-  Kind kind;
-};
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-std::optional<IntType::Kind> IntType::getKindFromKeyword(StringRef keyword) {
-  return StringSwitch<std::optional<Kind>>(keyword)
-      .Case("bit", IntType::Bit)
-      .Case("logic", IntType::Logic)
-      .Case("reg", IntType::Reg)
-      .Case("byte", IntType::Byte)
-      .Case("shortint", IntType::ShortInt)
-      .Case("int", IntType::Int)
-      .Case("longint", IntType::LongInt)
-      .Case("integer", IntType::Integer)
-      .Case("time", IntType::Time)
-      .Default({});
-}
-
-StringRef IntType::getKeyword(Kind kind) {
-  switch (kind) {
-  case IntType::Bit:
-    return "bit";
-  case IntType::Logic:
-    return "logic";
-  case IntType::Reg:
-    return "reg";
-  case IntType::Byte:
-    return "byte";
-  case IntType::ShortInt:
-    return "shortint";
-  case IntType::Int:
-    return "int";
-  case IntType::LongInt:
-    return "longint";
-  case IntType::Integer:
-    return "integer";
-  case IntType::Time:
-    return "time";
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-Domain IntType::getDomain(Kind kind) {
-  switch (kind) {
-  case IntType::Bit:
-  case IntType::Byte:
-  case IntType::ShortInt:
-  case IntType::Int:
-  case IntType::LongInt:
-  case IntType::Time:
-    return Domain::TwoValued;
-  case IntType::Logic:
-  case IntType::Reg:
-  case IntType::Integer:
-    return Domain::FourValued;
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-unsigned IntType::getBitSize(Kind kind) {
-  switch (kind) {
-  case IntType::Bit:
-  case IntType::Logic:
-  case IntType::Reg:
-    return 1;
-  case IntType::Byte:
-    return 8;
-  case IntType::ShortInt:
-    return 16;
-  case IntType::Int:
-    return 32;
-  case IntType::LongInt:
-    return 64;
-  case IntType::Integer:
-    return 32;
-  case IntType::Time:
-    return 64;
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-IntType::Kind IntType::getAtomForDomain(Domain domain) {
-  switch (domain) {
-  case Domain::TwoValued:
-    return IntType::Bit;
-  case Domain::FourValued:
-    return IntType::Logic;
-  }
-  llvm_unreachable("all domains should be handled");
-}
-
-std::optional<IntType::Kind> IntType::getKindFromDomainAndSize(Domain domain,
-                                                               unsigned size) {
-  if (size == 1)
-    return getAtomForDomain(domain);
-  switch (domain) {
-  case Domain::TwoValued:
-    switch (size) {
-    case 8:
-      return IntType::Byte;
-    case 16:
-      return IntType::ShortInt;
-    case 32:
-      return IntType::Int;
-    case 64:
-      return IntType::LongInt;
-    default:
-      return {};
-    }
-  case Domain::FourValued:
-    switch (size) {
-    case 32:
-      return IntType::Integer;
-    default:
-      return {};
-    }
-  }
-  llvm_unreachable("all domains should be handled");
-}
-
-IntType IntType::get(MLIRContext *context, Kind kind) {
-  return Base::get(context, detail::IntTypeStorage::pack(kind));
-}
-
-IntType::Kind IntType::getKind() const { return getImpl()->kind; }
-
-//===----------------------------------------------------------------------===//
-// Unpacked Reals
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-struct RealTypeStorage : TypeStorage {
-  using KeyTy = unsigned;
-  using Kind = RealType::Kind;
-
-  RealTypeStorage(KeyTy key) : kind(static_cast<Kind>(key)) {}
-  bool operator==(const KeyTy &key) const {
-    return kind == static_cast<Kind>(key);
-  }
-  static RealTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<RealTypeStorage>()) RealTypeStorage(key);
-  }
-
-  Kind kind;
-};
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-std::optional<RealType::Kind> RealType::getKindFromKeyword(StringRef keyword) {
-  return StringSwitch<std::optional<Kind>>(keyword)
-      .Case("shortreal", ShortReal)
-      .Case("real", Real)
-      .Case("realtime", RealTime)
-      .Default({});
-}
-
-StringRef RealType::getKeyword(Kind kind) {
-  switch (kind) {
-  case ShortReal:
-    return "shortreal";
-  case Real:
-    return "real";
-  case RealTime:
-    return "realtime";
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-unsigned RealType::getBitSize(Kind kind) {
-  switch (kind) {
-  case ShortReal:
-    return 32;
-  case Real:
-    return 64;
-  case RealTime:
-    return 64;
-  }
-  llvm_unreachable("all kinds should be handled");
-}
-
-RealType RealType::get(MLIRContext *context, Kind kind) {
-  return Base::get(context, static_cast<unsigned>(kind));
-}
-
-RealType::Kind RealType::getKind() const { return getImpl()->kind; }
 
 //===----------------------------------------------------------------------===//
 // Packed Dimensions
@@ -720,13 +439,15 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   }
 
   // Packed primary types.
-  if (auto kind = IntType::getKindFromKeyword(mnemonic)) {
-    return yieldPacked(IntType::get(context, *kind));
+  if (mnemonic.size() > 1 && (mnemonic[0] == 'i' || mnemonic[0] == 'l') &&
+      isdigit(mnemonic[1])) {
+    auto domain = mnemonic[0] == 'i' ? Domain::TwoValued : Domain::FourValued;
+    auto spelling = mnemonic.drop_front(1);
+    unsigned width;
+    if (spelling.getAsInteger(10, width))
+      return parser.emitError(loc, "integer width invalid");
+    return yieldPacked(IntType::get(context, width, domain));
   }
-
-  // Unpacked primary types.
-  if (auto kind = RealType::getKindFromKeyword(mnemonic))
-    return yieldUnpacked(RealType::get(context, *kind));
 
   // Everything that follows can be packed or unpacked. The packing is inferred
   // from the last `packed<...>` or `unpacked<...>` that we've seen. The
@@ -852,11 +573,10 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
   return TypeSwitch<Type, LogicalResult>(type)
       // Integers and reals
       .Case<IntType>([&](auto type) {
-        printer << type.getKeyword();
+        printer << (type.getDomain() == Domain::TwoValued ? "i" : "l");
+        printer << type.getWidth();
         return success();
       })
-      .Case<RealType>(
-          [&](auto type) { return printer << type.getKeyword(), success(); })
 
       // Packed and unpacked dimensions
       .Case<PackedUnsizedDim, UnpackedUnsizedDim>([&](auto type) {
