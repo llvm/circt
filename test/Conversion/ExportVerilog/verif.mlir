@@ -300,8 +300,8 @@ hw.module @Issue5763(in %a: i3) {
 }
 
 
-// CHECK-LABEL: module ClokedAsserts
-hw.module @ClokedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
+// CHECK-LABEL: module ClockedAsserts
+hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
   %true = hw.constant true
   %n0 = ltl.not %a : i1
 

@@ -33,16 +33,19 @@ namespace {
 // contain one clock and one disable condition.
 struct VerifyClockedAssertLikePass
     : VerifyClockedAssertLikeBase<VerifyClockedAssertLikePass> {
+private:
+  // Used to perform a DFS search through the module to visit all operands
+  // before they are used
+  llvm::SmallMapVector<Operation *, OperandRange::iterator, 16> worklist;
+
+  // Keeps track of operations that have been visited
+  llvm::DenseSet<Operation *> handledOps;
+
+public:
   void runOnOperation() override;
 
 private:
-  static void verify(Operation *clockedAssertLikeOp) {
-    // Used to perform a DFS search through the module to visit all operands
-    // before they are used
-    llvm::SmallMapVector<Operation *, OperandRange::iterator, 16> worklist;
-
-    // Keeps track of operations that have been visited
-    llvm::DenseSet<Operation *> handledOps;
+  void verify(Operation *clockedAssertLikeOp) {
 
     Operation *property = clockedAssertLikeOp->getOperand(0).getDefiningOp();
 
@@ -83,6 +86,10 @@ private:
         return;
       }
     }
+
+    // Clear worklist and such
+    worklist.clear();
+    handledOps.clear();
   }
 };
 } // namespace
