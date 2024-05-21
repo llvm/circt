@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_VERIFPASSES_H
-#define CIRCT_DIALECT_VERIFPASSES_H
+#ifndef CIRCT_DIALECT_VERIF_VERIFPASSES_H
+#define CIRCT_DIALECT_VERIF_VERIFPASSES_H
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Pass/Pass.h"
@@ -31,4 +31,4 @@ std::unique_ptr<mlir::Pass> createVerifyClockedAssertLikePass();
 } // namespace verif
 } // namespace circt
 
-#endif // CIRCT_DIALECT_VERIFPASSES_H
+#endif // CIRCT_DIALECT_VERIF_VERIFPASSES_H
