@@ -17,6 +17,7 @@
 #define DIALECT_VERIF_TRANSFORMS_PASSDETAILS_H
 
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

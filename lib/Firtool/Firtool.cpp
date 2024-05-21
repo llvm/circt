@@ -266,7 +266,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.addPass(om::createVerifyObjectFieldsPass());
 
   // Run the verif op verification pass
-  pm.addPass(verif::createVerifyClockedAssertLikePass());
+  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
   return success();
 }
@@ -327,7 +327,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
                                 const firtool::FirtoolOptions &opt) {
 
   // Run the verif op verification pass
-  pm.addPass(verif::createVerifyClockedAssertLikePass());
+  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());

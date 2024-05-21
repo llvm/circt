@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_VERIF_PASSES_H
 #define CIRCT_DIALECT_VERIF_PASSES_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include <memory>

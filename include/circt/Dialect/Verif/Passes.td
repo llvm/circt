@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the passes that work on the Verfi dialect.
+// This file defines the passes that work on the Verif dialect.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +18,7 @@ include "mlir/Pass/PassBase.td"
 /**
  * Checks the validity of clocked assertions, assumptions, and cover ops.
  */
-def VerifyClockedAssertLike : Pass<"verif-verify-clocked-assert-like"> {
+def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp"> {
   let summary = "Check that clocked-assert-like are valid.";
   let description = [{
     Checks that every `clocked_assert`, `clocked_assume` or `clocked_cover` op does not contain 

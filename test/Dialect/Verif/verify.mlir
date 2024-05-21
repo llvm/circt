@@ -1,4 +1,4 @@
-// RUN: circt-opt --verif-verify-clocked-assert-like %s --split-input-file --verify-diagnostics
+// RUN: circt-opt --verify-clocked-assert-like %s --split-input-file --verify-diagnostics | circt-opt
 
 hw.module @verifyDisables(in %clk: i1, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
