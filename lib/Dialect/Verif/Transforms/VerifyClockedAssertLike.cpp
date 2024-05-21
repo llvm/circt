@@ -27,7 +27,10 @@ using namespace circt;
 using namespace verif;
 
 namespace {
-// A test pass that simply replaces all wire names with foo_<n>
+// Verify function for clocked assert / assume / cover ops.
+// This checks that they do not contiain any nested clocks or disable operations
+// Clocked assertlike ops are a simple form of assertions that only
+// contain one clock and one disable condition.
 struct VerifyClockedAssertLikePass
     : VerifyClockedAssertLikeBase<VerifyClockedAssertLikePass> {
   void runOnOperation() override;

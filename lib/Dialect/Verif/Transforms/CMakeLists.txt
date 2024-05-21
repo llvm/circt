@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTVerifTransforms
   CIRCTVerifTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTVerif
   CIRCTLTL
   CIRCTHW
   CIRCTSupport

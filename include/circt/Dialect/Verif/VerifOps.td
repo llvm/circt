@@ -71,7 +71,6 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
     $property `disable` $disable `clock` $edge $clock 
     (`label` $label^)? attr-dict `:` type($property)
   }];
-  let hasVerifier = 1;
 }
 
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
