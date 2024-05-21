@@ -25,8 +25,6 @@ def VerifyClockedAssertLike : Pass<"verif-verify-clocked-assert-like"> {
     a nested `ltl.clock` or `ltl.disable` operation in its operand tree.
   }];
   let constructor = "circt::verif::createVerifyClockedAssertLikePass()";
-
-  let dependentDialects = ["hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
