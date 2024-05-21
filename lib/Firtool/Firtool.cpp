@@ -119,10 +119,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       opt.getPreserveAggregate(), firrtl::PreserveAggregate::None));
 
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
-      firrtl::createExpandWhensPass());
-
   auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+  modulePM.addPass(firrtl::createExpandWhensPass());
   modulePM.addPass(firrtl::createSFCCompatPass());
   modulePM.addPass(firrtl::createLayerMergePass());
   modulePM.addPass(firrtl::createLayerSinkPass());
