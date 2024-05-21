@@ -70,7 +70,6 @@ jobs:
   push_wheels:
     name: Push wheels (Tag or Weekly)
     runs-on: ubuntu-20.04
-    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
     needs: build_wheels
     environment:
       name: pypi
@@ -80,9 +79,10 @@ jobs:
 
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: ./wheelhouse/
+          merge-multiple: true
 
       - name: List downloaded wheels
         run: ls -laR
@@ -90,6 +90,7 @@ jobs:
 
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
         with:
           packages-dir: wheelhouse/
           verify-metadata: false
