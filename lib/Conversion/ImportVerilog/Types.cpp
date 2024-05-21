@@ -148,22 +148,6 @@ struct TypeVisitor {
                                           moore::StructKind::Struct, members);
   }
 
-  Type visit(const slang::ast::PackedUnionType &type) {
-    SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, true)))
-      return {};
-    return moore::PackedStructType::get(context.getContext(),
-                                        moore::StructKind::Union, members);
-  }
-
-  Type visit(const slang::ast::UnpackedUnionType &type) {
-    SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, false)))
-      return {};
-    return moore::UnpackedStructType::get(context.getContext(),
-                                          moore::StructKind::Union, members);
-  }
-
   /// Emit an error for all other types.
   template <typename T>
   Type visit(T &&node) {

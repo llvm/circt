@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/expressions/SelectExpressions.h"
+#include "slang/ast/types/Type.h"
 #include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
@@ -84,6 +86,22 @@ struct ExprVisitor {
     context.lvalueStack.pop_back();
     if (!lhs || !rhs)
       return {};
+
+    if (auto *rightMAE =
+            expr.right().as_if<slang::ast::MemberAccessExpression>()) {
+      std::string memberName(rightMAE->member.name);
+      auto type = lhs.getType();
+      rhs = context.convertExpression(rightMAE->value());
+      rhs = builder.create<moore::StructExtractOp>(loc, type, memberName, rhs);
+    }
+    if (auto *leftMAE =
+            expr.left().as_if<slang::ast::MemberAccessExpression>()) {
+      std::string memberName(leftMAE->member.name);
+      lhs = context.convertExpression(leftMAE->value());
+      auto type = lhs.getType();
+      rhs = builder.create<moore::StructInjectOp>(loc, type, lhs, memberName,
+                                                  rhs);
+    }
 
     if (lhs.getType() != rhs.getType())
       rhs = builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
@@ -429,10 +447,8 @@ struct ExprVisitor {
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
-    return builder.create<moore::StructFieldOp>(
-        loc, context.convertType(*expr.type),
-        builder.getStringAttr(expr.member.name),
-        context.convertExpression(expr.value()));
+    // will be handled in AssignmentExpression
+    return context.convertExpression(expr.value());
   }
 
   /// Emit an error for all other expressions.

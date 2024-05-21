@@ -788,8 +788,8 @@ def ExtractOp : MooreOp<"extract"> {
   }];
 } 
 
-def StructFieldOp : MooreOp<"sturct_field"> {
-  let summary = "Struct Field operation";
+def StructExtractOp : MooreOp<"struct_extract"> {
+  let summary = "Struct Extract operation";
   let description = [{
     Structures can be converted to bits preserving the bit pattern.
     In other words, they can be converted back to the same value 
@@ -814,7 +814,7 @@ def StructFieldOp : MooreOp<"sturct_field"> {
     packet1 p1; // initialization defined by the typedef.
                 // p1.crc will use the default value for an int
     ```
-    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+    See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
   }];
   let arguments = (ins StrAttr:$memberName, UnpackedType:$structName);
   let results = (outs UnpackedType:$result);
@@ -822,6 +822,39 @@ def StructFieldOp : MooreOp<"sturct_field"> {
     $structName `,`   $memberName  attr-dict `:` 
     type($structName) `->` type($result)
   }];
-} 
+}
+
+def StructInjectOp : MooreOp<"struct_inject"> {
+  let summary = "Struct Field operation";
+  let description = [{
+    A structure can be assigned as a whole and passed to 
+    or from a subroutine as a whole. Members of a structure 
+    data type can be assigned individual default member 
+    values by using an initial assignment with the declaration
+    of each member. The assigned expression shall be 
+    a constant expression.
+    See IEEE 1800-2017 § 7.2.2 "Assigning to structures"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+  }];
+  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName, 
+  UnpackedType:$RHS);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $LHS `,`   $memberName `,` $RHS
+    attr-dict `:` type($LHS) type($RHS) `->` type($result)
+  }];
+}
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

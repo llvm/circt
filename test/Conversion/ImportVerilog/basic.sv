@@ -303,9 +303,6 @@ module Expressions;
   // CHECK: %myStruct = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   // CHECK: %myStruct2 = moore.variable  : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
   // CHECK: %myStruct3 = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
-  // CHECK: %myUnion = moore.variable  : !moore.packed<union<{a: i1, b: l1}>>
-  // CHECK: %myUnion2 = moore.variable  : !moore.unpacked<union<{a: i1, b: l1}>>
-  // CHECK: %myUnion3 = moore.variable  : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>>
   int a, b, c;
   int unsigned u, w;
   bit [1:0][3:0] v;
@@ -323,13 +320,6 @@ module Expressions;
   structTemp2 myStruct2;
   typedef struct packed unsigned {int a, b;} structTemp3;
   structTemp3 myStruct3;
-  typedef union packed { bit a; logic b; } unionTemp;
-  unionTemp myUnion;
-  typedef union {bit a; logic b; } unionTemp2;
-  unionTemp2 myUnion2;
-  typedef union{unionTemp a; bit b;} unionTemp3;
-  unionTemp3 myUnion3;
-
 
   initial begin
     // CHECK: moore.constant 0 : !moore.i32
@@ -626,81 +616,29 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[A_STRUCT:%.+]] = moore.sturct_field %myStruct, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign [[A_STRUCT]], %a : !moore.i32
+    // CHECK: [[A_STRUCT:%.+]] = moore.struct_inject %myStruct, "a", %a : !moore.packed<struct<{a: i32, b: i32}>> !moore.i32 -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: moore.blocking_assign %myStruct, [[A_STRUCT]] : !moore.packed<struct<{a: i32, b: i32}>>
     myStruct.a = a;
 
-    // CHECK: [[B_STRUCT:%.+]]  = moore.sturct_field %myStruct, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: [[B_STRUCT:%.+]]  = moore.struct_extract %myStruct, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
     // CHECK: moore.blocking_assign %b, [[B_STRUCT]] : !moore.i32
     b = myStruct.b;
 
-    // CHECK: [[C_STRUCT:%.+]] = moore.sturct_field %myStruct2, "c" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
-    // CHECK: [[D_STRUCT:%.+]] = moore.sturct_field [[C_STRUCT]], "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign [[D_STRUCT]], %a : !moore.i32
+    // CHECK: [[C_STRUCT:%.+]] = moore.struct_inject %myStruct2, "a", %a :  !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> !moore.i32 -> !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+    // CHECK: moore.blocking_assign %myStruct2, [[C_STRUCT]] : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
     myStruct2.c.a = a;
 
-    // CHECK: [[E_STRUCT:%.+]] = moore.sturct_field %myStruct2, "d" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
-    // CHECK: [[F_STRUCT:%.+]] = moore.sturct_field [[E_STRUCT]], "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign %b, [[F_STRUCT]] : !moore.i32
+    // CHECK: [[D_STRUCT:%.+]] = moore.struct_extract %myStruct2, "b" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[D_STRUCT]] : !moore.i32
     b = myStruct2.d.b;
 
-    // CHECK: [[G_STRUCT:%.+]] = moore.sturct_field %myStruct3, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign [[G_STRUCT]], %a : !moore.i3
+    // CHECK: [[E_STRUCT:%.+]] = moore.struct_inject %myStruct3, "a", %a : !moore.packed<struct<{a: i32, b: i32}>> !moore.i32 -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: moore.blocking_assign %myStruct3, [[E_STRUCT]] : !moore.packed<struct<{a: i32, b: i32}>>
     myStruct3.a = a;
 
-    // CHECK: [[H_STRUCT:%.+]] = moore.sturct_field %myStruct3, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign %b, [[H_STRUCT]] : !moore.i32
+    // CHECK: [[F_STRUCT:%.+]] = moore.struct_extract %myStruct3, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[F_STRUCT]] : !moore.i32
     b = myStruct3.b;
-
-    // CHECK: [[A_UNION:%.+]] = moore.sturct_field %myUnion, "a" : !moore.packed<union<{a: i1, b: l1}>> -> !moore.i1
-    // CHECK: moore.blocking_assign [[A_UNION]], %x : !moore.i1
-    myUnion.a = x;
-
-    // CHECK: [[B_UNION:%.+]] = moore.sturct_field %myUnion, "b" : !moore.packed<union<{a: i1, b: l1}>> -> !moore.l1
-    // CHECK: moore.blocking_assign [[B_UNION]], %y : !moore.l1
-    myUnion.b = y;
-
-    // CHECK: [[C_UNION:%.+]] = moore.sturct_field %myUnion, "a" : !moore.packed<union<{a: i1, b: l1}>> -> !moore.i1
-    // CHECK: moore.blocking_assign %x, [[C_UNION]] : !moore.i1
-    x = myUnion.a;
-
-    // CHECK: [[D_UNION:%.+]] = moore.sturct_field %myUnion, "b" : !moore.packed<union<{a: i1, b: l1}>> -> !moore.l1
-    // CHECK: moore.blocking_assign %y, [[D_UNION]] : !moore.l1
-    y = myUnion.b;
-
-    // CHECK: [[E_UNION:%.+]] = moore.sturct_field %myUnion2, "a" : !moore.unpacked<union<{a: i1, b: l1}>> -> !moore.i1
-    // CHECK: moore.blocking_assign [[E_UNION]], %x : !moore.i1
-    myUnion2.a = x;
-
-    // CHECK: [[F_UNION:%.+]] = moore.sturct_field %myUnion2, "b" : !moore.unpacked<union<{a: i1, b: l1}>> -> !moore.l1
-    // CHECK: moore.blocking_assign [[F_UNION]], %y : !moore.l1
-    myUnion2.b = y;
-
-    // CHECK: [[G_UNION:%.+]] = moore.sturct_field %myUnion2, "a" : !moore.unpacked<union<{a: i1, b: l1}>> -> !moore.i1
-    // CHECK: moore.blocking_assign %x, [[G_UNION]] : !moore.i1
-    x = myUnion2.a;
-
-    // CHECK: [[H_UNION:%.+]] = moore.sturct_field %myUnion2, "b" : !moore.unpacked<union<{a: i1, b: l1}>> -> !moore.l1
-    // CHECK: moore.blocking_assign %y, [[H_UNION]] : !moore.l1
-    y = myUnion2.b;
-
-    // CHECK: [[I_UNION:%.+]] = moore.sturct_field %myUnion3, "a" : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>> -> !moore.packed<union<{a: i1, b: l1}>>
-    // CHECK: moore.blocking_assign [[I_UNION]], %myUnion : !moore.packed<union<{a: i1, b: l1}>>
-    myUnion3.a = myUnion;
-
-    // CHECK: [[J_UNION:%.+]] = moore.sturct_field %myUnion3, "b" : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>> -> !moore.i1
-    // CHECK: [[K_UNION:%.+]] = moore.conversion %y : !moore.l1 -> !moore.i1
-    // CHECK: moore.blocking_assign [[J_UNION]], [[K_UNION]] : !moore.i1
-    myUnion3.b = y;
-
-    // CHECK: [[L_UNION:%.+]] = moore.sturct_field %myUnion3, "a" : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>> -> !moore.packed<union<{a: i1, b: l1}>>
-    // CHECK:  moore.blocking_assign %myUnion, [[L_UNION]] : !moore.packed<union<{a: i1, b: l1}>>
-    myUnion = myUnion3.a;
-
-    // CHECK: [[M_UNION:%.+]]  = moore.sturct_field %myUnion3, "b" : !moore.unpacked<union<{a: packed<union<{a: i1, b: l1}>>, b: i1}>> -> !moore.i1
-    // CHECK: [[N_UNION:%.+]]  = moore.conversion [[M_UNION]] : !moore.i1 -> !moore.l1
-    // CHECK: moore.blocking_assign %y, [[N_UNION]] : !moore.l1
-    y = myUnion3.b;
   end
 endmodule
 

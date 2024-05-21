@@ -7,5 +7,5 @@
 module Foo;
   // expected-error @below {{unsupported type}}
   // expected-note @below {{}}
-  event done;
+  union { bit a; logic b; } x;
 endmodule
