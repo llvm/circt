@@ -9,11 +9,11 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Tools/circt-lec/Passes.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/TopologicalSortUtils.h"
 
 using namespace mlir;
 using namespace circt;
