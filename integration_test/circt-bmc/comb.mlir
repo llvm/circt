@@ -1,7 +1,7 @@
 // These tests will be only enabled if circt-mc is built.
 
 
-//  RUN: circt-bmc %s -b 10 --module OrCommutes | FileCheck %s --check-prefix=ORCOMMUTES
+//  RUN: circt-bmc %s -b 10 --module OrCommutes --shared-libs=%libz3 | FileCheck %s --check-prefix=ORCOMMUTES
 //  ORCOMMUTES: Success!
 
 hw.module @OrCommutes(in %i0: i1, in %i1: i1) {
@@ -12,7 +12,7 @@ hw.module @OrCommutes(in %i0: i1, in %i1: i1) {
   verif.assert %cond : i1
 }
 
-//  RUN: circt-bmc %s -b 10 --module demorgan | FileCheck %s --check-prefix=DEMORGAN
+//  RUN: circt-bmc %s -b 10 --module demorgan --shared-libs=%libz3 | FileCheck %s --check-prefix=DEMORGAN
 //  DEMORGAN: Success!
 
 hw.module @demorgan(in %i0: i1, in %i1: i1) {

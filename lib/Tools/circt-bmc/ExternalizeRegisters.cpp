@@ -75,9 +75,8 @@ void ExternalizeRegistersPass::runOnOperation() {
           OpBuilder builder(regOp);
           Value clk =
               builder.create<seq::FromClockOp>(op->getLoc(), regOp.getClk());
-          builder.create<comb::MuxOp>(op->getLoc(), clk, ) regOp.getResult()
-              .replaceAllUsesWith(
-                  module.appendInput("", regOp.getType()).second);
+          regOp.getResult().replaceAllUsesWith(
+              module.appendInput("", regOp.getType()).second);
           module.appendOutput("", regOp.getInput());
           regOp->erase();
           ++numRegs;

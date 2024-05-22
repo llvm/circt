@@ -16,7 +16,7 @@ hw.module @ClkProp(in %clk: !seq.clock, in %i0: i1) {
 
 // Check propagation of state through comb ops
 
-//  RUN: circt-bmc %s -b 10 --module StateProp | FileCheck %s --check-prefix=STATEPROP
+//  RUN: circt-bmc %s -b 10 --module StateProp --shared-libs=%libz3 | FileCheck %s --check-prefix=STATEPROP
 //  STATEPROP: Success!
 
 hw.module @StateProp(in %clk: !seq.clock, in %i0: i1) {

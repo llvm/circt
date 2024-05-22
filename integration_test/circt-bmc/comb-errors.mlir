@@ -1,4 +1,4 @@
-//  RUN: circt-mc %s -b 10 --module OrEqAnd --verify-diagnostics
+//  RUN: circt-bmc %s -b 10 --module OrEqAnd --verify-diagnostics --shared-libs=%libz3
 
 // expected-error @+1 {{Properties do not hold on module.}}
 module {
