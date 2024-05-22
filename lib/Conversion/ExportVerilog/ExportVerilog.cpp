@@ -3408,9 +3408,12 @@ private:
   EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
+  EmittedProperty visitLTL(ltl::IntersectOp op);
   EmittedProperty visitLTL(ltl::DelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
   EmittedProperty visitLTL(ltl::RepeatOp op);
+  EmittedProperty visitLTL(ltl::GoToRepeatOp op);
+  EmittedProperty visitLTL(ltl::NonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::NotOp op);
   EmittedProperty visitLTL(ltl::ImplicationOp op);
   EmittedProperty visitLTL(ltl::UntilOp op);
@@ -3599,9 +3602,9 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
   auto more = op.getMore();
   ps << "[->";
   ps.addAsString(op.getBase());
-  if (*more != 0) {
+  if (more != 0) {
     ps << ":";
-    ps.addAsString(op.getBase() + *more);
+    ps.addAsString(op.getBase() + more);
   }
   ps << "]";
 
@@ -3614,9 +3617,9 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
   auto more = op.getMore();
   ps << "[=";
   ps.addAsString(op.getBase());
-  if (*more != 0) {
+  if (more != 0) {
     ps << ":";
-    ps.addAsString(op.getBase() + *more);
+    ps.addAsString(op.getBase() + more);
   }
   ps << "]";
 

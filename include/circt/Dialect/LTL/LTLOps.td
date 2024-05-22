@@ -194,7 +194,6 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
 
   let summary = "`goto`-style non-consecutively repeating sequence.";
   let description = [{
@@ -215,7 +214,6 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
 
   let summary = "`goto`-style non-consecutively repeating sequence.";
   let description = [{
