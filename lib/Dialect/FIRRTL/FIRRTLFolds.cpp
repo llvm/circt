@@ -3188,7 +3188,7 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
   if (op->hasOneUse() &&
       isa<BitsPrimOp, HeadPrimOp, ShrPrimOp, TailPrimOp, SubfieldOp, SubindexOp,
           AsSIntPrimOp, AsUIntPrimOp, NotPrimOp>(*op->user_begin())) {
-    auto modop = *op->user_begin();
+    auto *modop = *op->user_begin();
     auto inv = rewriter.create<InvalidValueOp>(op.getLoc(),
                                                modop->getResult(0).getType());
     rewriter.replaceAllOpUsesWith(modop, inv);
