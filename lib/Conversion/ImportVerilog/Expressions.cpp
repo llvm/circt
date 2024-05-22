@@ -7,8 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "slang/ast/expressions/SelectExpressions.h"
-#include "slang/ast/types/Type.h"
 #include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
