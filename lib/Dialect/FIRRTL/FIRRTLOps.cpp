@@ -2092,13 +2092,6 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    llvm::report_fatal_error("instance op not in circuit");
-  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
-}
-
 void InstanceOp::build(
     OpBuilder &builder, OperationState &result, TypeRange resultTypes,
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
