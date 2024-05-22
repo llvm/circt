@@ -3098,7 +3098,7 @@ firrtl.module @RemoveUnusedInvalid() {
 // CHECK-NEXT: }
 
 // CHECK-LABEL: firrtl.module @PropInvalids
-firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint<4>) {
+firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint<4>, out %out1 : !firrtl.uint<1>) {
   // CHECK-NOT firrtl.not
   %inv = firrtl.invalidvalue : !firrtl.uint<4>
   %not = firrtl.not %inv : (!firrtl.uint<4>) -> !firrtl.uint<4>
@@ -3159,6 +3159,38 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   %inv8 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 6 >
   %subindex = firrtl.subindex %inv8[2] : !firrtl.vector<uint<4>, 6 >
   firrtl.strictconnect %out, %subindex : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.bitcast
+  %inv9 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 1 >
+  %bitcast = firrtl.bitcast %inv9 : (!firrtl.vector<uint<4>, 1 >) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %bitcast : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.andr
+  %inva = firrtl.invalidvalue : !firrtl.uint<4>
+  %andr = firrtl.andr %inva : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1, %andr : !firrtl.uint<1>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.orr
+  %invb = firrtl.invalidvalue : !firrtl.uint<4>
+  %orr = firrtl.orr %invb : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1, %orr : !firrtl.uint<1>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.xorr
+  %invc = firrtl.invalidvalue : !firrtl.uint<4>
+  %xorr = firrtl.xorr %invc : (!firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1, %xorr : !firrtl.uint<1>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect

@@ -3184,10 +3184,17 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
   }
   // Propagate invalids through a single use which is a unary op.  You cannot
   // propagate through multiple uses as that breaks invalid semantics.  Nor
-  // can you propagate through binary ops.
+  // can you propagate through binary ops or generally any op which computes.
+  // Not is an exception as it is a pure, all-bits inverse.
   if (op->hasOneUse() &&
-      isa<BitsPrimOp, HeadPrimOp, ShrPrimOp, TailPrimOp, SubfieldOp, SubindexOp,
-          AsSIntPrimOp, AsUIntPrimOp, NotPrimOp>(*op->user_begin())) {
+      (isa<BitsPrimOp, HeadPrimOp, ShrPrimOp, TailPrimOp, SubfieldOp,
+           SubindexOp, AsSIntPrimOp, AsUIntPrimOp, NotPrimOp, BitCastOp>(
+           *op->user_begin()) ||
+       (isa<CvtPrimOp>(*op->user_begin()) &&
+        type_isa<SIntType>(op->user_begin()->getOperand(0).getType())) ||
+       (isa<AndRPrimOp, XorRPrimOp, OrRPrimOp>(*op->user_begin()) &&
+        type_cast<FIRRTLBaseType>(op->user_begin()->getOperand(0).getType())
+                .getBitWidthOrSentinel() > 0))) {
     auto *modop = *op->user_begin();
     auto inv = rewriter.create<InvalidValueOp>(op.getLoc(),
                                                modop->getResult(0).getType());
