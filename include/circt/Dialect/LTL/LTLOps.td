@@ -192,7 +192,7 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
     I64Attr:$more);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
-    $input `,` $base (`,` $more^)? attr-dict `:` type($input)
+    $input `,` $base `,` $more attr-dict `:` type($input)
   }];
   let hasFolder = 1;
 
@@ -213,7 +213,7 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
     I64Attr:$more);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
-    $input `,` $base (`,` $more^)? attr-dict `:` type($input)
+    $input `,` $base `,` $more attr-dict `:` type($input)
   }];
   let hasFolder = 1;
 
