@@ -193,3 +193,24 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: return
   return
 }
+
+// CHECK-LABEL: func @Statements
+func.func @Statements(){
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i32
+  %a = moore.variable : <i32>
+
+  // CHECK-NEXT: [[V1:%.+]] = hw.constant 10 : i32
+  // CHECK-NEXT: %b = hw.wire [[V1]]  : i32
+  %0 = moore.constant 10 : !moore.i32
+  %b = moore.variable %0: <i32>
+
+  // CHECK-NEXT: [[V2:%.+]] = hw.bitcast [[V1]] : (i32) -> i32
+  // CHECK-NEXT: %c = hw.wire [[V2]]  : i32
+  %1 = moore.conversion %0 : !moore.i32 -> !moore.l32
+  %c = moore.variable %1 : <l32>
+
+  // CHECK-NEXT: %a = hw.wire %c10_i32  : i32
+  moore.blocking_assign %a, %0 : i32
+  // CHECK-NEXT: return
+  return 
+}

@@ -59,6 +59,36 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
 }
 
 //===----------------------------------------------------------------------===//
+// Declaration Conversion
+//===----------------------------------------------------------------------===//
+
+struct VariableOpConversion : public OpConversionPattern<VariableOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(VariableOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Value init = adaptor.getInitial();
+
+    // TODO: Unsupport x/z, so the initial value is 0.
+    if (!init &&
+        cast<RefType>(op.getResult().getType()).getNestedType().getDomain() ==
+            Domain::FourValued)
+      return emitError(
+          op->getLoc(),
+          "unsupport a variable of four-state value without an initial value");
+
+    if (!init)
+      init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
+
+    rewriter.replaceOpWithNewOp<hw::WireOp>(
+        op, resultType, init, adaptor.getNameAttr(), hw::InnerSymAttr{});
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
 
@@ -235,6 +265,27 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
+
+struct AssignOpConversion : public OpConversionPattern<BlockingAssignOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BlockingAssignOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultType = typeConverter->convertType(op.getDst().getType());
+    StringAttr nameAttr;
+    if (auto varOp =
+            llvm::dyn_cast_or_null<VariableOp>(op.getDst().getDefiningOp()))
+      nameAttr = varOp.getNameAttr();
+    // rewriter.setInsertionPointAfterValue(op.getDst());
+    auto from = rewriter.getRemappedValue(op.getDst());
+    rewriter.replaceOpWithNewOp<hw::WireOp>(from.getDefiningOp(), resultType,
+                                            adaptor.getSrc(), nameAttr,
+                                            hw::InnerSymAttr{});
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
 
 struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -415,6 +466,13 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return mlir::IntegerType::get(type.getContext(), type.getWidth());
   });
 
+  typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
+    if (auto nestedType = llvm::dyn_cast_or_null<IntType>(type.getNestedType()))
+      return mlir::IntegerType::get(nestedType.getContext(),
+                                    nestedType.getWidth());
+    return std::nullopt;
+  });
+
   // Valid target types.
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
@@ -424,6 +482,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
+    // Patterns of declaration operations.
+    VariableOpConversion,
+
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, ConversionOpConversion,
@@ -462,6 +523,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,
+
+    // Patterns of assignment operations.
+    AssignOpConversion,
 
     // Patterns of branch operations.
     CondBranchOpConversion, BranchOpConversion,
