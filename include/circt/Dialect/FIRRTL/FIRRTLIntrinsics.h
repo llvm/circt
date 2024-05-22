@@ -82,7 +82,7 @@ struct GenericIntrinsic {
 
   ParamDeclAttr getParamByName(StringRef name) {
     for (auto param : op.getParameters().getAsRange<ParamDeclAttr>())
-      if (param.getName().getValue().equals(name))
+      if (param.getName().getValue() == name)
         return param;
     return {};
   }

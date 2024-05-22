@@ -266,6 +266,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
   let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }

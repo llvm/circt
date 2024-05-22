@@ -53,7 +53,7 @@ ParseResult GenericIntrinsic::hasNParam(unsigned n, unsigned c) {
 ParseResult GenericIntrinsic::namedParam(StringRef paramName, bool optional) {
   for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
+    if (param.getName().getValue() == paramName) {
       if (isa<StringAttr>(param.getValue()))
         return success();
 
@@ -70,7 +70,7 @@ ParseResult GenericIntrinsic::namedIntParam(StringRef paramName,
                                             bool optional) {
   for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
+    if (param.getName().getValue() == paramName) {
       if (isa<IntegerAttr>(param.getValue()))
         return success();
 

@@ -36,7 +36,6 @@ declare_mlir_python_sources(PyCDESources
   pycde/ndarray.py
   pycde/esi.py
   pycde/fsm.py
-  pycde/ibis.py
   pycde/testing.py
 
   pycde/bsp/__init__.py

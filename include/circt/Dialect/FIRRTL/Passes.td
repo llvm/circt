@@ -272,6 +272,25 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDedupPass()";
 }
 
+def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
+  let summary = "Eliminate Unneeded Wires";
+  let description = [{
+    This pass eliminates wires for which the write dominates the reads and
+    for which there are no other preservation reasons.
+  }];
+  let statistics = [
+    Statistic<"erasedWires", "num-erased-wires",
+      "Number of wires erased">,
+    Statistic<"complexWriteWires", "num-complex-wires",
+      "Number of wires not erased due to complex writes">,
+    Statistic<"notDomWires", "num-not-dominating-wires",
+      "Number of wires not erased due to dominance issues">,
+    Statistic<"complexTypeWires", "num-not-passive-wires",
+      "Number of wires not erased due to type issues">
+  ];
+  let constructor = "circt::firrtl::createEliminateWiresPass()";
+}
+
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let summary = "Emit OMIR annotations";
   let description = [{

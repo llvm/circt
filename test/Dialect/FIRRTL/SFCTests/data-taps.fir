@@ -200,6 +200,8 @@ circuit Top : %[[
     io.d <= d
 
     ; CHECK:      module Top
+    ; TODO: fix having constants carry names
+    ; CHECK:        wire inv = 1'h0
     ; CHECK:        io_b = Top.foo.f_probe;
     ; CHECK-NEXT:   io_c = Top.foo.g_probe;
     ; CHECK-NEXT:   io_d = inv;
