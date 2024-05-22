@@ -3203,6 +3203,24 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   firrtl.strictconnect %out1, %zbits : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %out1, %c0_ui1
 
+  // CHECK-NOT firrtl.cvt
+  %inve = firrtl.invalidvalue : !firrtl.uint<3>
+  %cvtu = firrtl.cvt %inve : (!firrtl.uint<3>) -> !firrtl.sint<4>
+  firrtl.strictconnect %outs, %cvtu : !firrtl.sint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.pad
+  // CHECK-NEXT: firrtl.asSInt
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.cvt
+  %invf = firrtl.invalidvalue : !firrtl.sint<4>
+  %cvts = firrtl.cvt %invf : (!firrtl.sint<4>) -> !firrtl.sint<4>
+  firrtl.strictconnect %outs, %cvts : !firrtl.sint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
 }
 
 // CHECK-LABEL: firrtl.module @AggregateCreate(
