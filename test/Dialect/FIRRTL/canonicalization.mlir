@@ -3097,6 +3097,74 @@ firrtl.module @RemoveUnusedInvalid() {
 }
 // CHECK-NEXT: }
 
+// CHECK-LABEL: firrtl.module @PropInvalids
+firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint<4>) {
+  // CHECK-NOT firrtl.not
+  %inv = firrtl.invalidvalue : !firrtl.uint<4>
+  %not = firrtl.not %inv : (!firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %not : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.bits
+  %inv2 = firrtl.invalidvalue : !firrtl.uint<5>
+  %bits = firrtl.bits %inv2 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %bits : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.head
+  %inv3 = firrtl.invalidvalue : !firrtl.uint<5>
+  %head = firrtl.head %inv3, 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %head : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.tail
+  %inv4 = firrtl.invalidvalue : !firrtl.uint<5>
+  %tail = firrtl.tail %inv4, 1 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %tail : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.asSInt
+  %inv5 = firrtl.invalidvalue : !firrtl.uint<4>
+  %assint = firrtl.asSInt %inv5 : (!firrtl.uint<4>) -> !firrtl.sint<4>
+  firrtl.strictconnect %outs, %assint : !firrtl.sint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.asUInt
+  %inv6 = firrtl.invalidvalue : !firrtl.sint<4>
+  %asuint = firrtl.asUInt %inv6 : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.strictconnect %out, %asuint : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.subfield
+  %inv7 = firrtl.invalidvalue : !firrtl.bundle<a: uint<4>, b: uint<5>>
+  %subfield = firrtl.subfield %inv7[a] : !firrtl.bundle<a: uint<4>, b: uint<5>>
+  firrtl.strictconnect %out, %subfield : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+  // CHECK-NOT firrtl.subindex
+  %inv8 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 6 >
+  %subindex = firrtl.subindex %inv8[2] : !firrtl.vector<uint<4>, 6 >
+  firrtl.strictconnect %out, %subindex : !firrtl.uint<4>
+
+  // CHECK: firrtl.invalidvalue
+  // CHECK-NEXT: firrtl.strictconnect
+
+}
+
 // CHECK-LABEL: firrtl.module @AggregateCreate(
 firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
                                in %bundle_in: !firrtl.bundle<a: uint<1>, b: uint<1>>,

@@ -3182,6 +3182,20 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
     rewriter.eraseOp(op);
     return success();
   }
+  // Propagate invalids through a single use which is a unary op.  You cannot
+  // propagate through multiple uses as that breaks invalid semantics.  Nor
+  // can you propagate through binary ops.
+  if (op->hasOneUse() &&
+      isa<BitsPrimOp, HeadPrimOp, ShrPrimOp, TailPrimOp, SubfieldOp, SubindexOp,
+          AsSIntPrimOp, AsUIntPrimOp, NotPrimOp>(*op->user_begin())) {
+    auto modop = *op->user_begin();
+    auto inv = rewriter.create<InvalidValueOp>(op.getLoc(),
+                                               modop->getResult(0).getType());
+    rewriter.replaceAllOpUsesWith(modop, inv);
+    rewriter.eraseOp(modop);
+    rewriter.eraseOp(op);
+    return success();
+  }
   return failure();
 }
 
