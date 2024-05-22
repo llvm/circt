@@ -127,24 +127,24 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   verif.assert %r5 : !ltl.sequence
 
   // CHECK: assert property (a[->0]);
-  %r0 = ltl.goto_repeat %a, 0, 0 : i1
-  verif.assert %r0 : !ltl.sequence
+  %gtr0 = ltl.goto_repeat %a, 0, 0 : i1
+  verif.assert %gtr0 : !ltl.sequence
   // CHECK: assert property (a[->4]);
-  %r1 = ltl.goto_repeat %a, 4, 0 : i1
-  verif.assert %r1 : !ltl.sequence
+  %gtr1 = ltl.goto_repeat %a, 4, 0 : i1
+  verif.assert %gtr1 : !ltl.sequence
   // CHECK: assert property (a[->5:6]);
-  %r2 = ltl.goto_repeat %a, 5, 1 : i1
-  verif.assert %r2 : !ltl.sequence
+  %gtr2 = ltl.goto_repeat %a, 5, 1 : i1
+  verif.assert %gtr2 : !ltl.sequence
 
   // CHECK: assert property (a[=0]);
-  %r0 = ltl.non_consecutive_repeat %a, 0, 0 : i1
-  verif.assert %r0 : !ltl.sequence
+  %ncr0 = ltl.non_consecutive_repeat %a, 0, 0 : i1
+  verif.assert %ncr0 : !ltl.sequence
   // CHECK: assert property (a[=4]);
-  %r1 = ltl.non_consecutive_repeat %a, 4, 0 : i1
-  verif.assert %r1 : !ltl.sequence
+  %ncr1 = ltl.non_consecutive_repeat %a, 4, 0 : i1
+  verif.assert %ncr1 : !ltl.sequence
   // CHECK: assert property (a[=5:6]);
-  %r2 = ltl.non_consecutive_repeat %a, 5, 1 : i1
-  verif.assert %r2 : !ltl.sequence
+  %ncr2 = ltl.non_consecutive_repeat %a, 5, 1 : i1
+  verif.assert %ncr2 : !ltl.sequence
 
   // CHECK: assert property (@(posedge clk) a);
   %k0 = ltl.clock %a, posedge %clk : i1
