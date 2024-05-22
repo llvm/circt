@@ -3195,6 +3195,14 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
 
+  // This one depends on the folder
+  // CHECK-NOT firrtl.invalidvalue
+  // CHECK-NOT firrtl.xorr
+  %invd = firrtl.invalidvalue : !firrtl.uint<0>
+  %zbits = firrtl.xorr %invd : (!firrtl.uint<0>) -> !firrtl.uint<1>
+  firrtl.strictconnect %out1, %zbits : !firrtl.uint<1>
+  // CHECK: firrtl.strictconnect %out1, %c0_ui1
+
 }
 
 // CHECK-LABEL: firrtl.module @AggregateCreate(

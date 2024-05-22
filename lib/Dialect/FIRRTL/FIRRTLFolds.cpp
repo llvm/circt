@@ -3206,6 +3206,12 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
   return failure();
 }
 
+OpFoldResult InvalidValueOp::fold(FoldAdaptor adaptor) {
+  if (getType().getBitWidthOrSentinel() == 0 && isa<IntType>(getType()))
+    return getIntAttr(getType(), APInt(0, 0, isa<SIntType>(getType())));
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // ClockGateIntrinsicOp
 //===----------------------------------------------------------------------===//
