@@ -200,9 +200,6 @@ private:
   // Predicate to check if a module-like needs a Class to be created.
   bool shouldCreateClass(StringAttr modName);
 
-  // Predicate to check if a module-like needs a Class to be created.
-  bool shouldCreateClass(FModuleLike moduleLike);
-
   // Create an OM Class op from a FIRRTL Class op.
   om::ClassLike createClass(FModuleLike moduleLike,
                             const PathInfoTable &pathInfoTable);
@@ -620,7 +617,8 @@ LogicalResult LowerClassesPass::processPaths(
       }
 
       // If we aren't creating a class for this child, skip this hierarchy.
-      if (!shouldCreateClass(it->getModule<FModuleLike>())) {
+      if (!shouldCreateClass(
+              it->getModule<FModuleLike>().getModuleNameAttr())) {
         it = it.skipChildren();
         continue;
       }
@@ -685,7 +683,7 @@ void LowerClassesPass::runOnOperation() {
     if (!moduleLike)
       continue;
 
-    if (shouldCreateClass(moduleLike)) {
+    if (shouldCreateClass(moduleLike.getModuleNameAttr())) {
       auto omClass = createClass(moduleLike, pathInfoTable);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
       classLoweringState.moduleLike = moduleLike;
@@ -701,7 +699,7 @@ void LowerClassesPass::runOnOperation() {
           continue;
         // Get the referenced module.
         auto module = instance->getTarget()->getModule<FModuleLike>();
-        if (module && shouldCreateClass(module)) {
+        if (module && shouldCreateClass(module.getModuleNameAttr())) {
           auto targetSym = getInnerRefTo(
               {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                 return namespaces[module];
@@ -771,12 +769,6 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   // Return a memoized result.
   return shouldCreateClassMemo.at(modName);
-}
-
-// Predicate to check if a module-like needs a Class to be created.
-bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
-  // Return a memoized result.
-  return shouldCreateClass(moduleLike.getModuleNameAttr());
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
