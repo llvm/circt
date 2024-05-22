@@ -616,28 +616,30 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[A_STRUCT:%.+]] = moore.struct_inject %myStruct, "a", %a : !moore.packed<struct<{a: i32, b: i32}>> !moore.i32 -> !moore.packed<struct<{a: i32, b: i32}>>
-    // CHECK: moore.blocking_assign %myStruct, [[A_STRUCT]] : !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[A_STRUCT:%.+]] = = moore.struct_extract %myStruct, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[A_STRUCT]], %a : !moore.i32
     myStruct.a = a;
 
     // CHECK: [[B_STRUCT:%.+]]  = moore.struct_extract %myStruct, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
     // CHECK: moore.blocking_assign %b, [[B_STRUCT]] : !moore.i32
     b = myStruct.b;
 
-    // CHECK: [[C_STRUCT:%.+]] = moore.struct_inject %myStruct2, "a", %a :  !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> !moore.i32 -> !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
-    // CHECK: moore.blocking_assign %myStruct2, [[C_STRUCT]] : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+    // CHECK: [[C_STRUCT:%.+]] = moore.struct_extract %myStruct2, "c" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[D_STRUCT:%.+]] = moore.struct_extract [[C_STRUCT]], "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[D_STRUCT]], %a : !moore.i32
     myStruct2.c.a = a;
 
-    // CHECK: [[D_STRUCT:%.+]] = moore.struct_extract %myStruct2, "b" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.i32
-    // CHECK: moore.blocking_assign %b, [[D_STRUCT]] : !moore.i32
+    // CHECK: [[E_STRUCT:%.+]] = moore.struct_extract %myStruct2, "d" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[F_STRUCT:%.+]] = moore.struct_extract [[E_STRUCT]], "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[F_STRUCT]] : !moore.i32
     b = myStruct2.d.b;
 
-    // CHECK: [[E_STRUCT:%.+]] = moore.struct_inject %myStruct3, "a", %a : !moore.packed<struct<{a: i32, b: i32}>> !moore.i32 -> !moore.packed<struct<{a: i32, b: i32}>>
-    // CHECK: moore.blocking_assign %myStruct3, [[E_STRUCT]] : !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[G_STRUCT:%.+]] = moore.struct_extract %myStruct3, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[G_STRUCT]], %a : !moore.i3
     myStruct3.a = a;
 
-    // CHECK: [[F_STRUCT:%.+]] = moore.struct_extract %myStruct3, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
-    // CHECK: moore.blocking_assign %b, [[F_STRUCT]] : !moore.i32
+    // CHECK: [[H_STRUCT:%.+]] = moore.struct_extract %myStruct3, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[H_STRUCT]] : !moore.i32
     b = myStruct3.b;
   end
 endmodule
