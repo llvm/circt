@@ -233,19 +233,6 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
 // Properties
 //===----------------------------------------------------------------------===//
 
-def MatchOp : LTLOp<"match", [Pure]> {
-  let arguments = (ins LTLAnyPropertyType:$input);
-  let results = (outs I1:$result);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
-  let summary = "Checks if the given property mathces in the current cycle.";
-  let description = [{
-    Given a property `$input`, this operation evaluates it in the current cycle 
-    and returns and i1 that is the result of that evaluation.
-  }];
-}
-
 def NotOp : LTLOp<"not", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input);
   let results = (outs LTLPropertyType:$result);

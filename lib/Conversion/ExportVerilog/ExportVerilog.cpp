@@ -3513,6 +3513,16 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::OrOp op) {
   return {PropertyPrecedence::Or};
 }
 
+EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
+  llvm::interleave(
+      op.getInputs(),
+      [&](auto input) {
+        emitNestedProperty(input, PropertyPrecedence::Intersect);
+      },
+      [&]() { ps << PP::space << "intersect" << PP::nbsp; });
+  return {PropertyPrecedence::Intersect};
+}
+
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
   ps << "##";
   if (auto length = op.getLength()) {
@@ -3562,17 +3572,13 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
 EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
   emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
   if (auto more = op.getMore()) {
-    if (*more == 0) {
-      ps << "[*";
-      ps.addAsString(op.getBase());
-      ps << "]";
-    } else {
-      ps << "[*";
-      ps.addAsString(op.getBase());
+    ps << "[*";
+    ps.addAsString(op.getBase());
+    if (*more != 0) {
       ps << ":";
       ps.addAsString(op.getBase() + *more);
-      ps << "]";
     }
+    ps << "]";
   } else {
     if (op.getBase() == 0) {
       ps << "[*]";
@@ -3584,6 +3590,36 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
       ps << ":$]";
     }
   }
+  return {PropertyPrecedence::Unary};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[->";
+  ps.addAsString(op.getBase());
+  if (*more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + *more);
+  }
+  ps << "]";
+
+  return {PropertyPrecedence::Unary};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[=";
+  ps.addAsString(op.getBase());
+  if (*more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + *more);
+  }
+  ps << "]";
+
   return {PropertyPrecedence::Unary};
 }
 
