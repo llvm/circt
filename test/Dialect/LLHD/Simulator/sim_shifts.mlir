@@ -16,7 +16,7 @@
 // CHECK-NEXT: 4000ps 0d 0e  root/shl  0x00
 // CHECK-NEXT: 4000ps 0d 0e  root/shru  0x00
 
-llhd.entity @root () -> () {
+hw.module @root() {
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
   %init = hw.constant 8 : i4
@@ -24,17 +24,17 @@ llhd.entity @root () -> () {
   %amnt = hw.constant 1 : i4
 
   %sig = llhd.sig "shrs" %init : i4
-  %prbd = llhd.prb %sig : !llhd.sig<i4>
+  %prbd = llhd.prb %sig : !hw.inout<i4>
   %shrs = comb.shrs %prbd, %amnt : i4
-  llhd.drv %sig, %shrs after %time : !llhd.sig<i4>
+  llhd.drv %sig, %shrs after %time : !hw.inout<i4>
 
   %sig1 = llhd.sig "shru" %init : i4
-  %prbd1 = llhd.prb %sig1 : !llhd.sig<i4>
+  %prbd1 = llhd.prb %sig1 : !hw.inout<i4>
   %shru = comb.shru %prbd1, %amnt : i4
-  llhd.drv %sig1, %shru after %time : !llhd.sig<i4>
+  llhd.drv %sig1, %shru after %time : !hw.inout<i4>
 
   %sig2 = llhd.sig "shl" %init1 : i4
-  %prbd2 = llhd.prb %sig2 : !llhd.sig<i4>
+  %prbd2 = llhd.prb %sig2 : !hw.inout<i4>
   %shl = comb.shl %prbd2, %amnt : i4
-  llhd.drv %sig2, %shl after %time : !llhd.sig<i4>
+  llhd.drv %sig2, %shl after %time : !hw.inout<i4>
 }

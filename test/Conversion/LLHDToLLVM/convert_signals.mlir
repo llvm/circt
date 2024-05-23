@@ -4,8 +4,8 @@
 
 // CHECK-LABEL: llvm.func @convert_sig(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
-llhd.entity @convert_sig() -> () {
-  // Unused in entity definition. Only used at instantiation site.
+hw.module @convert_sig() {
+  // Unused inout entity definition. Only used at instantiation site.
   %0 = hw.constant 0 : i1
   %1 = hw.array_create %0, %0, %0, %0 : i1
 
@@ -17,7 +17,7 @@ llhd.entity @convert_sig() -> () {
 
 // CHECK-LABEL: llvm.func @convert_prb(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
-llhd.entity @convert_prb(%a: !llhd.sig<i1>, %b: !llhd.sig<!hw.array<3xi5>>) -> () {
+hw.module @convert_prb(inout %a: i1, inout %b: !hw.array<3xi5>) {
   // CHECK: [[SIGPTR_A:%.+]] = llvm.getelementptr %arg2[0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[SIGPTR_B:%.+]] = llvm.getelementptr %arg2[1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
 
@@ -29,17 +29,17 @@ llhd.entity @convert_prb(%a: !llhd.sig<i1>, %b: !llhd.sig<!hw.array<3xi5>>) -> (
   // CHECK: [[TMP1:%.+]] = llvm.trunc [[OFFSET_A]] : i64 to i16
   // CHECK: [[TMP2:%.+]] = llvm.lshr [[VALUE_A]], [[TMP1]]  : i16
   // CHECK: [[VALUE_A:%.+]] = llvm.trunc [[TMP2]] : i16 to i1
-  %0 = llhd.prb %a : !llhd.sig<i1>
+  %0 = llhd.prb %a : !hw.inout<i1>
 
   // CHECK: [[TMP:%.+]] = llvm.getelementptr [[SIGPTR_B]][0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[VALUEPTR_B:%.+]] = llvm.load [[TMP]] : !llvm.ptr -> !llvm.ptr
   // CHECK: [[VALUE_B:%.+]] = llvm.load [[VALUEPTR_B]] : !llvm.ptr -> !llvm.array<3 x i5>
-  %1 = llhd.prb %b : !llhd.sig<!hw.array<3xi5>>
+  %1 = llhd.prb %b : !hw.inout<array<3xi5>>
 }
 
 // CHECK-LABEL: llvm.func @convert_drv(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
-llhd.entity @convert_drv(%a: !llhd.sig<i1>, %b: !llhd.sig<!hw.array<3xi5>>) -> () {
+hw.module @convert_drv(inout %a: i1, inout %b: !hw.array<3xi5>) {
   // CHECK: [[SIGPTR_A:%.+]] = llvm.getelementptr %arg2[0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[SIGPTR_B:%.+]] = llvm.getelementptr %arg2[1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
 
@@ -63,7 +63,7 @@ llhd.entity @convert_drv(%a: !llhd.sig<i1>, %b: !llhd.sig<!hw.array<3xi5>>) -> (
   // CHECK: [[DTD:%.+]] = llvm.extractvalue [[DT]][1] : !llvm.array<3 x i64>
   // CHECK: [[DTE:%.+]] = llvm.extractvalue [[DT]][2] : !llvm.array<3 x i64>
   // CHECK: llvm.call @driveSignal(%arg0, [[SIGPTR_A]], [[BUF]], [[C1_I64]], [[DTS]], [[DTD]], [[DTE]])
-  llhd.drv %a, %c0_i1 after %1 : !llhd.sig<i1>
+  llhd.drv %a, %c0_i1 after %1 : !hw.inout<i1>
 
   // CHECK: [[C8_I64:%.+]] = llvm.mlir.constant(8 : i64) : i64
   // CHECK: [[TMP1:%.+]] = llvm.mlir.zero : !llvm.ptr
@@ -78,15 +78,15 @@ llhd.entity @convert_drv(%a: !llhd.sig<i1>, %b: !llhd.sig<!hw.array<3xi5>>) -> (
   // CHECK: [[DTD:%.+]] = llvm.extractvalue [[DT]][1] : !llvm.array<3 x i64>
   // CHECK: [[DTE:%.+]] = llvm.extractvalue [[DT]][2] : !llvm.array<3 x i64>
   // CHECK: llvm.call @driveSignal(%arg0, [[SIGPTR_B]], [[BUF]], [[ARRBITS]], [[DTS]], [[DTD]], [[DTE]])
-  llhd.drv %b, %0 after %1 : !llhd.sig<!hw.array<3xi5>>
+  llhd.drv %b, %0 after %1 : !hw.inout<array<3xi5>>
 }
 
 // CHECK-LABEL: llvm.func @convert_drv_enable(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
-llhd.entity @convert_drv_enable(%a: !llhd.sig<i1>) -> () {
+hw.module @convert_drv_enable(inout %a: i1) {
   // Last piece of read logic.
   // CHECK: [[VALUE_A:%.+]] = llvm.trunc {{%.+}} : i16 to i1
-  %0 = llhd.prb %a : !llhd.sig<i1>
+  %0 = llhd.prb %a : !hw.inout<i1>
   %1 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
   // CHECK: [[C1_I1:%.+]] = llvm.mlir.constant(1 {{.*}}) : i1
@@ -96,7 +96,7 @@ llhd.entity @convert_drv_enable(%a: !llhd.sig<i1>) -> () {
   // CHECK: llvm.call @driveSignal
   // CHECK: llvm.br ^bb2
   // CHECK: ^bb2:
-  llhd.drv %a, %0 after %1 if %0 : !llhd.sig<i1>
+  llhd.drv %a, %0 after %1 if %0 : !hw.inout<i1>
 }
 
 // TODO: Fix `llhd.reg` code generation and add test.

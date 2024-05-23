@@ -65,7 +65,7 @@ public:
   void dumpStateSignalTriggers();
 
 private:
-  void walkEntity(EntityOp entity, Instance &child);
+  void walkEntity(hw::HWModuleOp entity, Instance &child);
 
   llvm::raw_ostream &out;
   std::string root;

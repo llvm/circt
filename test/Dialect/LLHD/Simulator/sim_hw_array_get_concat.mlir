@@ -21,7 +21,7 @@
 // CHECK-NEXT: 1000ps 0d 0e  root/get  0x02
 // CHECK-NEXT: 1000ps 0d 0e  root/slice[0]  0x03
 // CHECK-NEXT: 1000ps 0d 0e  root/slice[1]  0x02
-llhd.entity @root () -> () {
+hw.module @root() {
     %0 = hw.constant 0 : i8
     %1 = hw.constant 1 : i8
     %2 = hw.constant 2 : i8
@@ -44,7 +44,7 @@ llhd.entity @root () -> () {
 
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
-    llhd.drv %concatsig, %array after %time : !llhd.sig<!hw.array<4xi8>>
-    llhd.drv %getsig, %get after %time : !llhd.sig<i8>
-    llhd.drv %slicesig, %slice after %time : !llhd.sig<!hw.array<2xi8>>
+    llhd.drv %concatsig, %array after %time : !hw.inout<array<4xi8>>
+    llhd.drv %getsig, %get after %time : !hw.inout<i8>
+    llhd.drv %slicesig, %slice after %time : !hw.inout<array<2xi8>>
 }

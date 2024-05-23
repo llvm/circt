@@ -29,6 +29,7 @@ add_circt_library(CIRCTLLHDSimEngine
     Engine.cpp
 
     LINK_LIBS PUBLIC
+    CIRCTHW
     CIRCTLLHD
     CIRCTLLHDToLLVM
     CIRCTLLHDSimState

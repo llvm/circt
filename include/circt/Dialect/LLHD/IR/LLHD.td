@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHD
 #define CIRCT_DIALECT_LLHD_IR_LLHD
 
+include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
@@ -30,6 +31,7 @@ include "mlir/IR/SymbolInterfaces.td"
 def LLHD_Dialect : Dialect {
   let name = "llhd";
   let cppNamespace = "::circt::llhd";
+  let dependentDialects = ["circt::hw::HWDialect"];
 
   let description = [{
     A low-level hardware description dialect in MLIR.
@@ -68,28 +70,17 @@ def LLHD_TimeType : DialectType<LLHD_Dialect,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
 // Legal underlying types for signals and pointers.
-def LLHD_AnyUnderlyingType :
+def LLHD_AnyElementType :
   AnyTypeOf<[HWIntegerType, ArrayType, StructType]>;
-
-// LLHD sig type
-class LLHD_SigType<list<Type> allowedTypes>
-  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<SigType>($_self)">,
-    "llvm::cast<SigType>($_self).getUnderlyingType()", "LLHD sig type">;
-
-def LLHD_AnySigType : LLHD_SigType<[LLHD_AnyUnderlyingType]>;
 
 // LLHD ptr type
 class LLHD_PtrType<list<Type> allowedTypes>
   : ContainerType<AnyTypeOf<allowedTypes>, CPred<"llvm::isa<PtrType>($_self)">,
-    "llvm::cast<PtrType>($_self).getUnderlyingType()", "LLHD pointer type">;
+    "llvm::cast<PtrType>($_self).getElementType()", "LLHD pointer type">;
 
-def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
+def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyElementType]>;
 
-// LLHD sig or ptr type
-class LLHD_SigOrPtrType<list<Type> allowedTypes>
-  : AnyTypeOf<[LLHD_SigType<allowedTypes>, LLHD_PtrType<allowedTypes>]>;
-
-def LLHD_AnySigOrPtrType : LLHD_SigOrPtrType<[LLHD_AnyUnderlyingType]>;
+def LLHD_AnySigOrPtrType : AnyTypeOf<[LLHD_AnyPtrType, InOutType]>;
 
 //===----------------------------------------------------------------------===//
 // LLHD op definition

@@ -247,7 +247,7 @@ llhd.proc @multiple_store_one_block() -> () {
 }
 
 // CHECK-LABEL:   llhd.proc @loop(
-// CHECK-SAME:                    %[[VAL_0:.*]] : !llhd.sig<i2>) -> () {
+// CHECK-SAME:                    %[[VAL_0:.*]] : !hw.inout<i2>) -> () {
 // CHECK:           cf.br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_1:.*]] = hw.constant 0 : i32
@@ -257,14 +257,14 @@ llhd.proc @multiple_store_one_block() -> () {
 // CHECK:           %[[VAL_4:.*]] = comb.icmp ult %[[VAL_2]], %[[VAL_3]] : i32
 // CHECK:           cf.cond_br %[[VAL_4]], ^bb4, ^bb3
 // CHECK:         ^bb3:
-// CHECK:           llhd.wait (%[[VAL_0]] : !llhd.sig<i2>), ^bb1
+// CHECK:           llhd.wait (%[[VAL_0]] : !hw.inout<i2>), ^bb1
 // CHECK:         ^bb4:
 // CHECK:           %[[VAL_5:.*]] = hw.constant 0 : i2
 // CHECK:           %[[VAL_6:.*]] = hw.constant 1 : i32
 // CHECK:           %[[VAL_7:.*]] = comb.add %[[VAL_2]], %[[VAL_6]] : i32
 // CHECK:           cf.br ^bb2(%[[VAL_7]] : i32)
 // CHECK:         }
-llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
+llhd.proc @loop(%in_i : !hw.inout<i2>) -> () {
   cf.br ^body
 ^body:
   %0 = hw.constant 0 : i32
@@ -276,7 +276,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   %2 = comb.icmp ult %i_ld, %1 : i32
   cf.cond_br %2, ^loop_continue, ^check
 ^check:
-  llhd.wait (%in_i : !llhd.sig<i2>), ^body
+  llhd.wait (%in_i : !hw.inout<i2>), ^body
 ^loop_continue:
   %3 = hw.constant 0 : i2
   %5 = hw.constant 1 : i32

@@ -13,6 +13,7 @@
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 #include "circt/Conversion/LLHDToLLVM.h"
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
 
@@ -31,14 +32,12 @@ Engine::Engine(
 
   buildLayout(module);
 
-  auto rootEntity = module.lookupSymbol<EntityOp>(root);
+  auto rootEntity = module.lookupSymbol<hw::HWModuleOp>(root);
 
   // Insert explicit instantiation of the design root.
-  OpBuilder insertInst =
-      OpBuilder::atBlockEnd(&rootEntity.getBody().getBlocks().front());
-  insertInst.create<InstOp>(rootEntity.getBlocks().front().back().getLoc(),
-                            std::nullopt, root, root, ArrayRef<Value>(),
-                            ArrayRef<Value>());
+  OpBuilder insertInst = OpBuilder::atBlockEnd(rootEntity.getBodyBlock());
+  insertInst.create<hw::InstanceOp>(rootEntity.getBodyBlock()->back().getLoc(),
+                                    rootEntity, root, ArrayRef<Value>());
 
   if (failed(mlirTransformer(module))) {
     llvm::errs() << "failed to apply the MLIR passes\n";
@@ -216,7 +215,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
 void Engine::buildLayout(ModuleOp module) {
   // Start from the root entity.
-  auto rootEntity = module.lookupSymbol<EntityOp>(root);
+  auto rootEntity = module.lookupSymbol<hw::HWModuleOp>(root);
   assert(rootEntity && "root entity not found!");
 
   // Build root instance, the parent and instance names are the same for the
@@ -242,7 +241,7 @@ void Engine::buildLayout(ModuleOp module) {
   }
 }
 
-void Engine::walkEntity(EntityOp entity, Instance &child) {
+void Engine::walkEntity(hw::HWModuleOp entity, Instance &child) {
   entity.walk([&](Operation *op) {
     assert(op);
 
@@ -300,7 +299,7 @@ void Engine::walkEntity(EntityOp entity, Instance &child) {
 
         // Recursively walk a new entity, otherwise it is a process and cannot
         // define new signals or instances.
-        if (auto ent = dyn_cast<EntityOp>(e)) {
+        if (auto ent = dyn_cast<hw::HWModuleOp>(e)) {
           newChild.isEntity = true;
           walkEntity(ent, newChild);
         } else {

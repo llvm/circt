@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: llvm.func @llhd_init
 // CHECK-SAME:    %arg0: !llvm.ptr) {
-llhd.entity @Root() -> () {
+hw.module @Root() {
   // CHECK: [[SIZE:%.+]] = llvm.ptrtoint
   // CHECK: [[MEM:%.+]] = llvm.call @malloc([[SIZE]])
   // CHECK: llvm.call @allocEntity(%arg0, [[OWNER:%.+]], [[MEM]])
@@ -42,7 +42,7 @@ llhd.entity @Root() -> () {
   // CHECK: [[ELEMENT_SIZE:%.+]] = llvm.ptrtoint [[TMP]]
   // CHECK: llvm.call @addSigStructElement(%arg0, [[SIGID2]], [[ELEMENT_OFFSET]], [[ELEMENT_SIZE]])
 
-  llhd.inst "inst0" @Signals () -> () : () -> ()
+  hw.instance "inst0" @Signals () -> ()
 
   // CHECK: llvm.call @allocEntity(%arg0, [[OWNER:%.+]], {{%.+}})
 
@@ -54,11 +54,10 @@ llhd.entity @Root() -> () {
   // CHECK: llvm.store [[TMP3]], [[BUF:%.+]] : !llvm.array<2 x i1>, !llvm.ptr
   // CHECK: [[SIGID3:%.+]] = llvm.call @allocSignal(%arg0, {{%.+}}, [[OWNER]], [[BUF]], {{%.+}})
 
-  llhd.inst "inst1" @PartiallyLowered () -> () : () -> ()
-  // llhd.inst "inst2" @MultipleResults () -> () : () -> ()
+  hw.instance "inst1" @PartiallyLowered () -> ()
 }
 
-llhd.entity @Signals () -> () {
+hw.module @Signals() {
   %0 = hw.constant 1337 : i42
   %1 = llhd.sig "sig0" %0 : i42
   %2 = hw.aggregate_constant [0 : i1, 1 : i1] : !hw.array<2xi1>
@@ -67,7 +66,7 @@ llhd.entity @Signals () -> () {
   %5 = llhd.sig "sig2" %4 : !hw.struct<f1: i1, f2: i5>
 }
 
-llhd.entity @PartiallyLowered () -> () {
+hw.module @PartiallyLowered() {
   %0 = llvm.mlir.constant(false) : i1
   %1 = llvm.mlir.undef : !llvm.array<2 x i1>
   %2 = llvm.insertvalue %0, %1[0] : !llvm.array<2 x i1>

@@ -4,8 +4,8 @@
 
 // CHECK-LABEL: llvm.func @Foo(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
-llhd.entity @Foo () -> () {
-  // Unused in entity definition. Only used at instantiation site.
+hw.module @Foo () {
+  // Unused inout entity definition. Only used at instantiation site.
   // CHECK: [[C0:%.+]] = llvm.mlir.constant(false) : i1
   %0 = hw.constant 0 : i1
 
@@ -20,7 +20,7 @@ llhd.entity @Foo () -> () {
   // CHECK: [[TMP:%.+]] = llvm.trunc [[SIG_OFFSET]] : i64 to i16
   // CHECK: [[SIG_VALUE_SHIFTED:%.+]] = llvm.lshr [[SIG_VALUE]], [[TMP]]  : i16
   // CHECK: [[SIG_VALUE:%.+]] = llvm.trunc [[SIG_VALUE_SHIFTED]] : i16 to i1
-  %1 = llhd.prb %toggle : !llhd.sig<i1>
+  %1 = llhd.prb %toggle : !hw.inout<i1>
 
   // CHECK: [[DRV_VALUE:%.+]] = llvm.xor
   %allset = hw.constant 1 : i1
@@ -37,7 +37,7 @@ llhd.entity @Foo () -> () {
   // CHECK: [[DT_D:%.+]] = llvm.extractvalue [[DT]][1] : !llvm.array<3 x i64>
   // CHECK: [[DT_E:%.+]] = llvm.extractvalue [[DT]][2] : !llvm.array<3 x i64>
   // CHECK: llvm.call @driveSignal(%arg0, [[SIG_PTR]], [[BUF]], [[C1_I64]], [[DT_S]], [[DT_D]], [[DT_E]])
-  llhd.drv %toggle, %2 after %dt : !llhd.sig<i1>
+  llhd.drv %toggle, %2 after %dt : !hw.inout<i1>
 }
 
 // CHECK-LABEL: @convertConstantTime

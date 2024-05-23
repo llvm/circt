@@ -263,9 +263,9 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   Value toStore;
   if (auto ptr = dyn_cast<PtrType>(persist.getType())) {
     // Unwrap the pointer and store it's value.
-    auto elemTy = converter->convertType(ptr.getUnderlyingType());
+    auto elemTy = converter->convertType(ptr.getElementType());
     toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, convPersist);
-  } else if (isa<SigType>(persist.getType())) {
+  } else if (isa<hw::InOutType>(persist.getType())) {
     // Unwrap and store the signal struct.
     toStore = rewriter.create<LLVM::LoadOp>(loc, getLLVMSigType(dialect),
                                             convPersist);
@@ -303,7 +303,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
           gepPersistenceState(dialect, loc, rewriter, stateTy, i, state);
       // Use the pointer in the state struct directly for pointer and signal
       // types.
-      if (isa<PtrType, SigType>(persist.getType())) {
+      if (isa<PtrType, hw::InOutType>(persist.getType())) {
         use.set(gep1);
       } else {
         auto load1 = rewriter.create<LLVM::LoadOp>(loc, elemTy, gep1);
@@ -559,7 +559,7 @@ static Value shiftArraySigPointer(Location loc,
 // Type conversions
 //===----------------------------------------------------------------------===//
 
-static Type convertSigType(SigType type, LLVMTypeConverter &converter) {
+static Type convertSigType(hw::InOutType type, LLVMTypeConverter &converter) {
   auto &context = converter.getContext();
   // auto i64Ty = IntegerType::get(&context, 64);
   auto voidPtrTy = LLVM::LLVMPointerType::get(&context);
@@ -574,7 +574,6 @@ static Type convertTimeType(TimeType type, LLVMTypeConverter &converter) {
 }
 
 static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
-  // converter.convertType(type.getUnderlyingType())
   return LLVM::LLVMPointerType::get(type.getContext());
 }
 
@@ -583,26 +582,30 @@ static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Convert an `llhd.entity` entity to LLVM dialect. The result is an
+struct HWOutputOpConversion : public OpConversionPattern<hw::OutputOp> {
+  using OpConversionPattern<hw::OutputOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Convert an `hw.module` to LLVM dialect. The result is an
 /// `llvm.func` which takes a pointer to the global simulation state, a pointer
 /// to the entity's local state, and a pointer to the instance's signal table as
 /// arguments.
-struct EntityOpConversion : public ConvertToLLVMPattern {
-  explicit EntityOpConversion(MLIRContext *ctx,
-                              LLVMTypeConverter &typeConverter,
-                              size_t &sigCounter, size_t &regCounter)
-      : ConvertToLLVMPattern(llhd::EntityOp::getOperationName(), ctx,
-                             typeConverter),
+struct HWModuleOpConversion : public ConvertOpToLLVMPattern<hw::HWModuleOp> {
+  HWModuleOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter,
+                       size_t &sigCounter, size_t &regCounter)
+      : ConvertOpToLLVMPattern<hw::HWModuleOp>(typeConverter),
         sigCounter(sigCounter), regCounter(regCounter) {}
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Get adapted operands.
-    EntityOpAdaptor transformed(operands);
-    // Get entity operation.
-    auto entityOp = cast<EntityOp>(op);
-
+  matchAndRewrite(hw::HWModuleOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
     // Collect used llvm types.
     auto voidTy = getVoidType();
     auto voidPtrTy = getVoidPtrType();
@@ -612,18 +615,16 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 
     // Use an intermediate signature conversion to add the arguments for the
     // state and signal table pointer arguments.
-    LLVMTypeConverter::SignatureConversion intermediate(
-        entityOp.getNumArguments());
+    LLVMTypeConverter::SignatureConversion intermediate(op.getNumPorts());
     // Add state and signal table arguments.
     intermediate.addInputs(
         std::array<Type, 3>({voidPtrTy, voidPtrTy, voidPtrTy}));
-    for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
+    for (size_t i = 0, e = op.getNumPorts(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate,
+    rewriter.applySignatureConversion(&op.getBody(), intermediate,
                                       typeConverter);
 
-    OpBuilder bodyBuilder =
-        OpBuilder::atBlockBegin(&entityOp.getBlocks().front());
+    OpBuilder bodyBuilder = OpBuilder::atBlockBegin(op.getBodyBlock());
     LLVMTypeConverter::SignatureConversion final(
         intermediate.getConvertedTypes().size());
     final.addInputs(0, voidPtrTy);
@@ -632,33 +633,32 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
 
     // The first n elements of the signal table represent the entity arguments,
     // while the remaining elements represent the entity's owned signals.
-    sigCounter = entityOp.getNumArguments();
+    sigCounter = op.getNumPorts();
     for (size_t i = 0; i < sigCounter; ++i) {
       // Create gep operations from the signal table for each original argument.
-      auto gep = bodyBuilder.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, sigTy,
-                                                 entityOp.getArgument(2),
-                                                 LLVM::GEPArg(i));
+      auto gep = bodyBuilder.create<LLVM::GEPOp>(
+          op->getLoc(), voidPtrTy, sigTy, op.getBodyBlock()->getArgument(2),
+          LLVM::GEPArg(i));
       // Remap i-th original argument to the gep'd signal pointer.
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&entityOp.getBody(), final,
-                                      typeConverter);
+    rewriter.applySignatureConversion(&op.getBody(), final, typeConverter);
 
     // Get the converted entity signature.
     auto funcTy =
         LLVM::LLVMFunctionType::get(voidTy, {voidPtrTy, voidPtrTy, voidPtrTy});
 
     // Create the a new llvm function to house the lowered entity.
-    auto llvmFunc = rewriter.create<LLVM::LLVMFuncOp>(
-        op->getLoc(), entityOp.getName(), funcTy);
+    auto llvmFunc =
+        rewriter.create<LLVM::LLVMFuncOp>(op->getLoc(), op.getName(), funcTy);
 
     // Add a return to the entity for later inclusion into the LLVM function.
-    rewriter.setInsertionPointToEnd(&entityOp.getBlocks().front());
+    rewriter.setInsertionPointToEnd(op.getBodyBlock());
     rewriter.create<LLVM::ReturnOp>(op->getLoc(), ValueRange{});
 
     // Inline the entity region in the new llvm function.
-    rewriter.inlineRegionBefore(entityOp.getBody(), llvmFunc.getBody(),
+    rewriter.inlineRegionBefore(op.getBody(), llvmFunc.getBody(),
                                 llvmFunc.end());
 
     // Erase the original operation.
@@ -902,18 +902,20 @@ namespace {
 /// Lower an llhd.inst operation to LLVM dialect. This generates malloc calls
 /// and allocSignal calls (to store the pointer into the state) for each signal
 /// in the instantiated entity.
-struct InstOpConversion : public ConvertToLLVMPattern {
-  explicit InstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(InstOp::getOperationName(), ctx, typeConverter) {}
+struct HWInstanceOpConversion : public ConvertToLLVMPattern {
+  explicit HWInstanceOpConversion(MLIRContext *ctx,
+                                  LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(hw::InstanceOp::getOperationName(), ctx,
+                             typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     // Get the inst operation.
-    auto instOp = cast<InstOp>(op);
+    auto instOp = cast<hw::InstanceOp>(op);
     // Get the parent module.
     auto module = op->getParentOfType<ModuleOp>();
-    auto entity = op->getParentOfType<EntityOp>();
+    auto entity = op->getParentOfType<hw::HWModuleOp>();
 
     auto voidTy = getVoidType();
     auto voidPtrTy = getVoidPtrType();
@@ -958,17 +960,237 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         getOrInsertFunction(module, rewriter, op->getLoc(),
                             "addSigStructElement", addSigStructElemFuncTy);
 
-    // Get or insert allocProc library call definition.
-    auto allocProcFuncTy =
-        LLVM::LLVMFunctionType::get(voidTy, {voidPtrTy, voidPtrTy, voidPtrTy});
-    auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
-                                             "allocProc", allocProcFuncTy);
-
     // Get or insert allocEntity library call definition.
     auto allocEntityFuncTy =
         LLVM::LLVMFunctionType::get(voidTy, {voidPtrTy, voidPtrTy, voidPtrTy});
     auto allocEntityFunc = getOrInsertFunction(
         module, rewriter, op->getLoc(), "allocEntity", allocEntityFuncTy);
+
+    Value initStatePtr = initFunc.getArgument(0);
+
+    // Get a builder for the init function.
+    OpBuilder initBuilder =
+        OpBuilder::atBlockTerminator(&initFunc.getBody().getBlocks().front());
+
+    // Use the instance name to retrieve the instance from the state.
+    auto ownerName =
+        entity.getName().str() + "." + instOp.getInstanceName().str();
+
+    // Get or create owner name string
+    Value owner;
+    auto parentSym =
+        module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName);
+    if (!parentSym) {
+      owner = LLVM::createGlobalString(
+          op->getLoc(), initBuilder, "instance." + ownerName, ownerName + '\0',
+          LLVM::Linkage::Internal);
+      parentSym = module.lookupSymbol<LLVM::GlobalOp>("instance." + ownerName);
+    } else {
+      owner =
+          getGlobalString(op->getLoc(), initBuilder, typeConverter, parentSym);
+    }
+
+    // Handle entity instantiation.
+    auto child = module.lookupSymbol<hw::HWModuleOp>(instOp.getModuleName());
+    if (!child)
+      return failure();
+
+    auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
+
+    // Get reg state size.
+    auto regNull = initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
+    auto regGep =
+        initBuilder.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, regStateTy,
+                                        regNull, ArrayRef<LLVM::GEPArg>({1}));
+    auto regSize =
+        initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, regGep);
+
+    // Malloc reg state.
+    auto regMall = initBuilder
+                       .create<LLVM::CallOp>(op->getLoc(), voidPtrTy,
+                                             SymbolRefAttr::get(mallFunc),
+                                             ArrayRef<Value>({regSize}))
+                       .getResult();
+    auto zeroB = initBuilder.create<LLVM::ConstantOp>(
+        op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
+
+    // Zero-initialize reg state entries.
+    for (size_t i = 0,
+                e = cast<LLVM::LLVMStructType>(regStateTy).getBody().size();
+         i < e; ++i) {
+      size_t f = cast<LLVM::LLVMArrayType>(
+                     cast<LLVM::LLVMStructType>(regStateTy).getBody()[i])
+                     .getNumElements();
+      for (size_t j = 0; j < f; ++j) {
+        auto regGep = initBuilder.create<LLVM::GEPOp>(
+            op->getLoc(), voidPtrTy, regStateTy, regMall,
+            ArrayRef<LLVM::GEPArg>({0, i, j}));
+        initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
+      }
+    }
+
+    // Add reg state pointer to global state.
+    initBuilder.create<LLVM::CallOp>(
+        op->getLoc(), std::nullopt, SymbolRefAttr::get(allocEntityFunc),
+        ArrayRef<Value>({initStatePtr, owner, regMall}));
+
+    // Index of the signal in the entity's signal table.
+    int initCounter = 0;
+    // Walk over the entity and generate mallocs for each one of its signals.
+    WalkResult sigWalkResult = child.walk([&](SigOp op) -> WalkResult {
+      // if (auto sigOp = dyn_cast<SigOp>(op)) {
+      auto underlyingTy = typeConverter->convertType(op.getInit().getType());
+      // Get index constant of the signal in the entity's signal table.
+      auto indexConst = initBuilder.create<LLVM::ConstantOp>(
+          op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
+      initCounter++;
+
+      // Clone and insert the operation that defines the signal's init
+      // operand (assmued to be a constant/array op)
+      IRMapping mapping;
+      Value initDef = recursiveCloneInit(initBuilder, mapping, op.getInit());
+
+      if (!initDef)
+        return WalkResult::interrupt();
+
+      Value initDefCast = typeConverter->materializeTargetConversion(
+          initBuilder, initDef.getLoc(),
+          typeConverter->convertType(initDef.getType()), initDef);
+
+      // Compute the required space to malloc.
+      auto twoC = initBuilder.create<LLVM::ConstantOp>(
+          op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
+      auto nullPtr = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
+      auto sizeGep =
+          initBuilder.create<LLVM::GEPOp>(op.getLoc(), voidPtrTy, underlyingTy,
+                                          nullPtr, ArrayRef<LLVM::GEPArg>({1}));
+      auto size =
+          initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i64Ty, sizeGep);
+      // Malloc double the required space to make sure signal
+      // shifts do not segfault.
+      auto mallocSize =
+          initBuilder.create<LLVM::MulOp>(op.getLoc(), i64Ty, size, twoC);
+      std::array<Value, 1> margs({mallocSize});
+      auto mall = initBuilder
+                      .create<LLVM::CallOp>(op.getLoc(), voidPtrTy,
+                                            SymbolRefAttr::get(mallFunc), margs)
+                      .getResult();
+
+      // Store the initial value.
+      initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDefCast, mall);
+
+      // Get the amount of bytes required to represent an integer underlying
+      // type. Use the whole size of the type if not an integer.
+      Value passSize;
+      if (auto intTy = dyn_cast<IntegerType>(underlyingTy)) {
+        auto byteWidth = llvm::divideCeil(intTy.getWidth(), 8);
+        passSize = initBuilder.create<LLVM::ConstantOp>(
+            op.getLoc(), i64Ty, rewriter.getI64IntegerAttr(byteWidth));
+      } else {
+        passSize = size;
+      }
+
+      std::array<Value, 5> args(
+          {initStatePtr, indexConst, owner, mall, passSize});
+      auto sigIndex =
+          initBuilder
+              .create<LLVM::CallOp>(op.getLoc(), i32Ty,
+                                    SymbolRefAttr::get(sigFunc), args)
+              .getResult();
+
+      // Add structured underlying type information.
+      if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(underlyingTy)) {
+        auto numElements = initBuilder.create<LLVM::ConstantOp>(
+            op.getLoc(), i32Ty,
+            rewriter.getI32IntegerAttr(arrayTy.getNumElements()));
+
+        // Get element size.
+        auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
+        auto gepFirst = initBuilder.create<LLVM::GEPOp>(
+            op.getLoc(), voidPtrTy, arrayTy, null,
+            ArrayRef<LLVM::GEPArg>({0, 1}));
+        auto toInt =
+            initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i32Ty, gepFirst);
+
+        // Add information to the state.
+        initBuilder.create<LLVM::CallOp>(
+            op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigElemFunc),
+            ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
+      } else if (auto structTy = dyn_cast<LLVM::LLVMStructType>(underlyingTy)) {
+        auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
+        for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
+          // Get pointer offset.
+          auto gepElem = initBuilder.create<LLVM::GEPOp>(
+              op.getLoc(), voidPtrTy, structTy, null,
+              ArrayRef<LLVM::GEPArg>({0, i}));
+          auto elemToInt =
+              initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i32Ty, gepElem);
+
+          // Get element size.
+          auto elemNull =
+              initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
+          auto gepElemSize = initBuilder.create<LLVM::GEPOp>(
+              op.getLoc(), voidPtrTy, structTy.getBody()[i], elemNull,
+              ArrayRef<LLVM::GEPArg>({1}));
+          auto elemSizeToInt = initBuilder.create<LLVM::PtrToIntOp>(
+              op.getLoc(), i32Ty, gepElemSize);
+
+          // Add information to the state.
+          initBuilder.create<LLVM::CallOp>(
+              op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigStructFunc),
+              ArrayRef<Value>(
+                  {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
+        }
+      }
+      return WalkResult::advance();
+    });
+
+    if (sigWalkResult.wasInterrupted())
+      return failure();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+/// Lower an llhd.inst operation to LLVM dialect. This generates malloc calls
+/// and allocSignal calls (to store the pointer into the state) for each signal
+/// in the instantiated entity.
+struct InstOpConversion : public ConvertToLLVMPattern {
+  explicit InstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(InstOp::getOperationName(), ctx, typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Get the inst operation.
+    auto instOp = cast<InstOp>(op);
+    // Get the parent module.
+    auto module = op->getParentOfType<ModuleOp>();
+    auto entity = op->getParentOfType<hw::HWModuleOp>();
+
+    auto voidTy = getVoidType();
+    auto voidPtrTy = getVoidPtrType();
+    auto i1Ty = IntegerType::get(rewriter.getContext(), 1);
+    auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    auto i64Ty = IntegerType::get(rewriter.getContext(), 64);
+
+    // Init function signature: (i8* %state) -> void.
+    auto initFuncTy = LLVM::LLVMFunctionType::get(voidTy, {voidPtrTy});
+    auto initFunc =
+        getOrInsertFunction(module, rewriter, op->getLoc(), "llhd_init",
+                            initFuncTy, /*insertBodyAndTerminator=*/true);
+
+    // Get or insert the malloc function definition.
+    // Malloc function signature: (i64 %size) -> i8* %pointer.
+    auto mallocSigFuncTy = LLVM::LLVMFunctionType::get(voidPtrTy, {i64Ty});
+    auto mallFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                        "malloc", mallocSigFuncTy);
+
+    // Get or insert allocProc library call definition.
+    auto allocProcFuncTy =
+        LLVM::LLVMFunctionType::get(voidTy, {voidPtrTy, voidPtrTy, voidPtrTy});
+    auto allocProcFunc = getOrInsertFunction(module, rewriter, op->getLoc(),
+                                             "allocProc", allocProcFuncTy);
 
     Value initStatePtr = initFunc.getArgument(0);
 
@@ -993,232 +1215,77 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           getGlobalString(op->getLoc(), initBuilder, typeConverter, parentSym);
     }
 
-    // Handle entity instantiation.
-    if (auto child = module.lookupSymbol<EntityOp>(instOp.getCallee())) {
-      auto regStateTy = getRegStateTy(&getDialect(), child.getOperation());
+    // Handle process instantiation.
+    auto proc = module.lookupSymbol<ProcOp>(instOp.getCallee());
+    if (!proc)
+      return failure();
 
-      // Get reg state size.
-      auto regNull = initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
-      auto regGep =
-          initBuilder.create<LLVM::GEPOp>(op->getLoc(), voidPtrTy, regStateTy,
-                                          regNull, ArrayRef<LLVM::GEPArg>({1}));
-      auto regSize =
-          initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, regGep);
+    auto sensesTy = LLVM::LLVMArrayType::get(i1Ty, proc.getNumArguments());
+    auto procStateTy = LLVM::LLVMStructType::getLiteral(
+        rewriter.getContext(),
+        {i32Ty, i32Ty, voidPtrTy /*ptr(sensesTy)*/,
+         getProcPersistenceTy(&getDialect(), typeConverter, proc)});
 
-      // Malloc reg state.
-      auto regMall = initBuilder
-                         .create<LLVM::CallOp>(op->getLoc(), voidPtrTy,
-                                               SymbolRefAttr::get(mallFunc),
-                                               ArrayRef<Value>({regSize}))
-                         .getResult();
-      auto zeroB = initBuilder.create<LLVM::ConstantOp>(
-          op->getLoc(), i1Ty, rewriter.getBoolAttr(false));
+    auto zeroC = initBuilder.create<LLVM::ConstantOp>(
+        op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
 
-      // Zero-initialize reg state entries.
-      for (size_t i = 0,
-                  e = cast<LLVM::LLVMStructType>(regStateTy).getBody().size();
-           i < e; ++i) {
-        size_t f = cast<LLVM::LLVMArrayType>(
-                       cast<LLVM::LLVMStructType>(regStateTy).getBody()[i])
-                       .getNumElements();
-        for (size_t j = 0; j < f; ++j) {
-          auto regGep = initBuilder.create<LLVM::GEPOp>(
-              op->getLoc(), voidPtrTy, regStateTy, regMall,
-              ArrayRef<LLVM::GEPArg>({0, i, j}));
-          initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroB, regGep);
-        }
-      }
+    // Malloc space for the process state.
+    auto procStateNullPtr =
+        initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
+    auto procStateGep = initBuilder.create<LLVM::GEPOp>(
+        op->getLoc(), voidPtrTy, procStateTy, procStateNullPtr,
+        ArrayRef<LLVM::GEPArg>({1}));
+    auto procStateSize =
+        initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, procStateGep);
+    std::array<Value, 1> procStateMArgs({procStateSize});
+    auto procStateMall =
+        initBuilder
+            .create<LLVM::CallOp>(op->getLoc(), voidPtrTy,
+                                  SymbolRefAttr::get(mallFunc), procStateMArgs)
+            .getResult();
 
-      // Add reg state pointer to global state.
-      initBuilder.create<LLVM::CallOp>(
-          op->getLoc(), std::nullopt, SymbolRefAttr::get(allocEntityFunc),
-          ArrayRef<Value>({initStatePtr, owner, regMall}));
+    // Store the initial resume index.
+    auto resumeGep = initBuilder.create<LLVM::GEPOp>(
+        op->getLoc(), voidPtrTy, procStateTy, procStateMall,
+        ArrayRef<LLVM::GEPArg>({0, 1}));
+    initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroC, resumeGep);
 
-      // Index of the signal in the entity's signal table.
-      int initCounter = 0;
-      // Walk over the entity and generate mallocs for each one of its signals.
-      WalkResult sigWalkResult = child.walk([&](SigOp op) -> WalkResult {
-        // if (auto sigOp = dyn_cast<SigOp>(op)) {
-        auto underlyingTy = typeConverter->convertType(op.getInit().getType());
-        // Get index constant of the signal in the entity's signal table.
-        auto indexConst = initBuilder.create<LLVM::ConstantOp>(
-            op.getLoc(), i32Ty, rewriter.getI32IntegerAttr(initCounter));
-        initCounter++;
+    // Malloc space for the senses table.
+    auto sensesNullPtr =
+        initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
+    auto sensesGep = initBuilder.create<LLVM::GEPOp>(
+        op->getLoc(), voidPtrTy, sensesTy, sensesNullPtr,
+        ArrayRef<LLVM::GEPArg>({1}));
+    auto sensesSize =
+        initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, sensesGep);
+    std::array<Value, 1> senseMArgs({sensesSize});
+    auto sensesMall =
+        initBuilder
+            .create<LLVM::CallOp>(op->getLoc(), voidPtrTy,
+                                  SymbolRefAttr::get(mallFunc), senseMArgs)
+            .getResult();
 
-        // Clone and insert the operation that defines the signal's init
-        // operand (assmued to be a constant/array op)
-        IRMapping mapping;
-        Value initDef = recursiveCloneInit(initBuilder, mapping, op.getInit());
-
-        if (!initDef)
-          return WalkResult::interrupt();
-
-        Value initDefCast = typeConverter->materializeTargetConversion(
-            initBuilder, initDef.getLoc(),
-            typeConverter->convertType(initDef.getType()), initDef);
-
-        // Compute the required space to malloc.
-        auto twoC = initBuilder.create<LLVM::ConstantOp>(
-            op.getLoc(), i64Ty, rewriter.getI32IntegerAttr(2));
-        auto nullPtr = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
-        auto sizeGep = initBuilder.create<LLVM::GEPOp>(
-            op.getLoc(), voidPtrTy, underlyingTy, nullPtr,
-            ArrayRef<LLVM::GEPArg>({1}));
-        auto size =
-            initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i64Ty, sizeGep);
-        // Malloc double the required space to make sure signal
-        // shifts do not segfault.
-        auto mallocSize =
-            initBuilder.create<LLVM::MulOp>(op.getLoc(), i64Ty, size, twoC);
-        std::array<Value, 1> margs({mallocSize});
-        auto mall =
-            initBuilder
-                .create<LLVM::CallOp>(op.getLoc(), voidPtrTy,
-                                      SymbolRefAttr::get(mallFunc), margs)
-                .getResult();
-
-        // Store the initial value.
-        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDefCast, mall);
-
-        // Get the amount of bytes required to represent an integer underlying
-        // type. Use the whole size of the type if not an integer.
-        Value passSize;
-        if (auto intTy = dyn_cast<IntegerType>(underlyingTy)) {
-          auto byteWidth = llvm::divideCeil(intTy.getWidth(), 8);
-          passSize = initBuilder.create<LLVM::ConstantOp>(
-              op.getLoc(), i64Ty, rewriter.getI64IntegerAttr(byteWidth));
-        } else {
-          passSize = size;
-        }
-
-        std::array<Value, 5> args(
-            {initStatePtr, indexConst, owner, mall, passSize});
-        auto sigIndex =
-            initBuilder
-                .create<LLVM::CallOp>(op.getLoc(), i32Ty,
-                                      SymbolRefAttr::get(sigFunc), args)
-                .getResult();
-
-        // Add structured underlying type information.
-        if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(underlyingTy)) {
-          auto numElements = initBuilder.create<LLVM::ConstantOp>(
-              op.getLoc(), i32Ty,
-              rewriter.getI32IntegerAttr(arrayTy.getNumElements()));
-
-          // Get element size.
-          auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
-          auto gepFirst = initBuilder.create<LLVM::GEPOp>(
-              op.getLoc(), voidPtrTy, arrayTy, null,
-              ArrayRef<LLVM::GEPArg>({0, 1}));
-          auto toInt = initBuilder.create<LLVM::PtrToIntOp>(op.getLoc(), i32Ty,
-                                                            gepFirst);
-
-          // Add information to the state.
-          initBuilder.create<LLVM::CallOp>(
-              op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigElemFunc),
-              ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
-        } else if (auto structTy =
-                       dyn_cast<LLVM::LLVMStructType>(underlyingTy)) {
-          auto null = initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
-          for (size_t i = 0, e = structTy.getBody().size(); i < e; ++i) {
-            // Get pointer offset.
-            auto gepElem = initBuilder.create<LLVM::GEPOp>(
-                op.getLoc(), voidPtrTy, structTy, null,
-                ArrayRef<LLVM::GEPArg>({0, i}));
-            auto elemToInt = initBuilder.create<LLVM::PtrToIntOp>(
-                op.getLoc(), i32Ty, gepElem);
-
-            // Get element size.
-            auto elemNull =
-                initBuilder.create<LLVM::ZeroOp>(op.getLoc(), voidPtrTy);
-            auto gepElemSize = initBuilder.create<LLVM::GEPOp>(
-                op.getLoc(), voidPtrTy, structTy.getBody()[i], elemNull,
-                ArrayRef<LLVM::GEPArg>({1}));
-            auto elemSizeToInt = initBuilder.create<LLVM::PtrToIntOp>(
-                op.getLoc(), i32Ty, gepElemSize);
-
-            // Add information to the state.
-            initBuilder.create<LLVM::CallOp>(
-                op.getLoc(), std::nullopt, SymbolRefAttr::get(addSigStructFunc),
-                ArrayRef<Value>(
-                    {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
-          }
-        }
-        return WalkResult::advance();
-      });
-
-      if (sigWalkResult.wasInterrupted())
-        return failure();
-
-    } else if (auto proc = module.lookupSymbol<ProcOp>(instOp.getCallee())) {
-      // Handle process instantiation.
-      auto sensesTy = LLVM::LLVMArrayType::get(i1Ty, proc.getNumArguments());
-      auto procStateTy = LLVM::LLVMStructType::getLiteral(
-          rewriter.getContext(),
-          {i32Ty, i32Ty, voidPtrTy /*ptr(sensesTy)*/,
-           getProcPersistenceTy(&getDialect(), typeConverter, proc)});
-
-      auto zeroC = initBuilder.create<LLVM::ConstantOp>(
-          op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(0));
-
-      // Malloc space for the process state.
-      auto procStateNullPtr =
-          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
-      auto procStateGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, procStateTy, procStateNullPtr,
-          ArrayRef<LLVM::GEPArg>({1}));
-      auto procStateSize = initBuilder.create<LLVM::PtrToIntOp>(
-          op->getLoc(), i64Ty, procStateGep);
-      std::array<Value, 1> procStateMArgs({procStateSize});
-      auto procStateMall = initBuilder
-                               .create<LLVM::CallOp>(
-                                   op->getLoc(), voidPtrTy,
-                                   SymbolRefAttr::get(mallFunc), procStateMArgs)
-                               .getResult();
-
-      // Store the initial resume index.
-      auto resumeGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, procStateTy, procStateMall,
-          ArrayRef<LLVM::GEPArg>({0, 1}));
-      initBuilder.create<LLVM::StoreOp>(op->getLoc(), zeroC, resumeGep);
-
-      // Malloc space for the senses table.
-      auto sensesNullPtr =
-          initBuilder.create<LLVM::ZeroOp>(op->getLoc(), voidPtrTy);
-      auto sensesGep = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, sensesTy, sensesNullPtr,
-          ArrayRef<LLVM::GEPArg>({1}));
-      auto sensesSize =
-          initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, sensesGep);
-      std::array<Value, 1> senseMArgs({sensesSize});
-      auto sensesMall =
-          initBuilder
-              .create<LLVM::CallOp>(op->getLoc(), voidPtrTy,
-                                    SymbolRefAttr::get(mallFunc), senseMArgs)
-              .getResult();
-
-      // Set all initial senses to 1.
-      auto oneB = initBuilder.create<LLVM::ConstantOp>(
-          op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
-      for (size_t i = 0, e = sensesTy.getNumElements(); i < e; ++i) {
-        auto senseGep = initBuilder.create<LLVM::GEPOp>(
-            op->getLoc(), voidPtrTy, i1Ty, sensesMall,
-            ArrayRef<LLVM::GEPArg>({i}));
-        initBuilder.create<LLVM::StoreOp>(op->getLoc(), oneB, senseGep);
-      }
-
-      // Store the senses pointer in the process state.
-      auto procStateSensesPtr = initBuilder.create<LLVM::GEPOp>(
-          op->getLoc(), voidPtrTy, procStateTy, procStateMall,
-          ArrayRef<LLVM::GEPArg>({0, 2}));
-      initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesMall,
-                                        procStateSensesPtr);
-
-      std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
-      initBuilder.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
-                                       SymbolRefAttr::get(allocProcFunc),
-                                       allocProcArgs);
+    // Set all initial senses to 1.
+    auto oneB = initBuilder.create<LLVM::ConstantOp>(
+        op->getLoc(), i1Ty, rewriter.getBoolAttr(true));
+    for (size_t i = 0, e = sensesTy.getNumElements(); i < e; ++i) {
+      auto senseGep = initBuilder.create<LLVM::GEPOp>(
+          op->getLoc(), voidPtrTy, i1Ty, sensesMall,
+          ArrayRef<LLVM::GEPArg>({i}));
+      initBuilder.create<LLVM::StoreOp>(op->getLoc(), oneB, senseGep);
     }
+
+    // Store the senses pointer in the process state.
+    auto procStateSensesPtr = initBuilder.create<LLVM::GEPOp>(
+        op->getLoc(), voidPtrTy, procStateTy, procStateMall,
+        ArrayRef<LLVM::GEPArg>({0, 2}));
+    initBuilder.create<LLVM::StoreOp>(op->getLoc(), sensesMall,
+                                      procStateSensesPtr);
+
+    std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
+    initBuilder.create<LLVM::CallOp>(op->getLoc(), std::nullopt,
+                                     SymbolRefAttr::get(allocProcFunc),
+                                     allocProcArgs);
 
     rewriter.eraseOp(op);
     return success();
@@ -1832,9 +1899,10 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
       converter);
 
   // Unit conversion patterns.
+  patterns.add<HWOutputOpConversion>(converter, ctx);
   patterns.add<ProcOpConversion, WaitOpConversion, HaltOpConversion>(ctx,
                                                                      converter);
-  patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
+  patterns.add<HWModuleOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.
   patterns.add<PrbOpConversion, DrvOpConversion>(ctx, converter);
@@ -1848,7 +1916,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
 
 void circt::populateLLHDToLLVMTypeConversions(LLVMTypeConverter &converter) {
   converter.addConversion(
-      [&](SigType sig) { return convertSigType(sig, converter); });
+      [&](hw::InOutType sig) { return convertSigType(sig, converter); });
   converter.addConversion(
       [&](TimeType time) { return convertTimeType(time, converter); });
   converter.addConversion(
@@ -1876,10 +1944,11 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
-  patterns.add<InstOpConversion>(&getContext(), converter);
+  patterns.add<InstOpConversion, HWInstanceOpConversion>(&getContext(),
+                                                         converter);
 
   LLVMConversionTarget target(getContext());
-  target.addIllegalOp<InstOp>();
+  target.addIllegalOp<InstOp, hw::InstanceOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);

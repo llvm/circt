@@ -29,9 +29,6 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(LLHD, llhd, circt::llhd::LLHDDialect)
 /// Check if a type is a time type.
 bool llhdTypeIsATimeType(MlirType type) { return isa<TimeType>(unwrap(type)); }
 
-/// Check if a type is a signal type.
-bool llhdTypeIsASignalType(MlirType type) { return isa<SigType>(unwrap(type)); }
-
 /// Check if a type is a pointer type.
 bool llhdTypeIsAPointerType(MlirType type) {
   return isa<PtrType>(unwrap(type));
@@ -42,24 +39,14 @@ MlirType llhdTimeTypeGet(MlirContext ctx) {
   return wrap(TimeType::get(unwrap(ctx)));
 }
 
-/// Create a signal type.
-MlirType llhdSignalTypeGet(MlirType element) {
-  return wrap(SigType::get(unwrap(element)));
-}
-
 /// Create a pointer type.
 MlirType llhdPointerTypeGet(MlirType element) {
   return wrap(PtrType::get(unwrap(element)));
 }
 
-/// Get the inner type of a signal.
-MlirType llhdSignalTypeGetElementType(MlirType type) {
-  return wrap(cast<SigType>(unwrap(type)).getUnderlyingType());
-}
-
 /// Get the inner type of a pointer.
 MlirType llhdPointerTypeGetElementType(MlirType type) {
-  return wrap(cast<PtrType>(unwrap(type)).getUnderlyingType());
+  return wrap(cast<PtrType>(unwrap(type)).getElementType());
 }
 
 //===----------------------------------------------------------------------===//

@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: llvm.func @convertSigExtract(
 // CHECK-SAME:    %arg0: i5, %arg1: !llvm.ptr)
-func.func @convertSigExtract(%arg0: i5, %arg1: !llhd.sig<i32>) {
+func.func @convertSigExtract(%arg0: i5, %arg1: !hw.inout<i32>) {
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[VALUE_PTR:%.+]] = llvm.load [[TMP]] : !llvm.ptr -> !llvm.ptr
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
@@ -35,13 +35,13 @@ func.func @convertSigExtract(%arg0: i5, %arg1: !llhd.sig<i32>) {
   // CHECK: [[BUF:%.+]] = llvm.alloca {{%.+}} x !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: llvm.store [[TMP5]], [[BUF]]
 
-  llhd.sig.extract %arg1 from %arg0 : (!llhd.sig<i32>) -> !llhd.sig<i10>
+  llhd.sig.extract %arg1 from %arg0 : (!hw.inout<i32>) -> !hw.inout<i10>
   return
 }
 
 // CHECK-LABEL: llvm.func @convertSigArrayGet(
 // CHECK-SAME:    %arg0: i2, %arg1: !llvm.ptr)
-func.func @convertSigArrayGet(%arg0 : i2, %arg1 : !llhd.sig<!hw.array<4xi4>>) {
+func.func @convertSigArrayGet(%arg0 : i2, %arg1 : !hw.inout<array<4xi4>>) {
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[VALUE_PTR:%.+]] = llvm.load [[TMP]] : !llvm.ptr -> !llvm.ptr
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
@@ -64,13 +64,13 @@ func.func @convertSigArrayGet(%arg0 : i2, %arg1 : !llhd.sig<!hw.array<4xi4>>) {
   // CHECK: [[BUF:%.+]] = llvm.alloca {{%.+}} x !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: llvm.store [[TMP5]], [[BUF]]
 
-  llhd.sig.array_get %arg1[%arg0] : !llhd.sig<!hw.array<4xi4>>
+  llhd.sig.array_get %arg1[%arg0] : !hw.inout<array<4xi4>>
   return
 }
 
 // CHECK-LABEL: llvm.func @convertSigArraySlice(
 // CHECK-SAME:    %arg0: i2, %arg1: !llvm.ptr)
-func.func @convertSigArraySlice(%arg0: i2, %arg1: !llhd.sig<!hw.array<4xi4>>) {
+func.func @convertSigArraySlice(%arg0: i2, %arg1: !hw.inout<array<4xi4>>) {
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[VALUE_PTR:%.+]] = llvm.load [[TMP]] : !llvm.ptr -> !llvm.ptr
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg1[0, 1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
@@ -93,13 +93,13 @@ func.func @convertSigArraySlice(%arg0: i2, %arg1: !llhd.sig<!hw.array<4xi4>>) {
   // CHECK: [[BUF:%.+]] = llvm.alloca {{%.+}} x !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: llvm.store [[TMP5]], [[BUF]]
 
-  llhd.sig.array_slice %arg1 at %arg0 : (!llhd.sig<!hw.array<4xi4>>) -> !llhd.sig<!hw.array<2xi4>>
+  llhd.sig.array_slice %arg1 at %arg0 : (!hw.inout<array<4xi4>>) -> !hw.inout<array<2xi4>>
   return
 }
 
 // CHECK-LABEL: llvm.func @convertSigStructExtract(
 // CHECK-SAME:    %arg0: !llvm.ptr)
-func.func @convertSigStructExtract(%arg0: !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
+func.func @convertSigStructExtract(%arg0: !hw.inout<struct<foo: i1, bar: i2, baz: i3>>) {
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg0[0, 0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: [[VALUE_PTR:%.+]] = llvm.load [[TMP]] : !llvm.ptr -> !llvm.ptr
   // CHECK: [[TMP:%.+]] = llvm.getelementptr %arg0[0, 1] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(ptr, i64, i64, i64)>
@@ -121,6 +121,6 @@ func.func @convertSigStructExtract(%arg0: !llhd.sig<!hw.struct<foo: i1, bar: i2,
   // CHECK: [[BUF:%.+]] = llvm.alloca {{%.+}} x !llvm.struct<(ptr, i64, i64, i64)>
   // CHECK: llvm.store [[TMP5]], [[BUF]]
 
-  llhd.sig.struct_extract %arg0["bar"] : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i3>>
+  llhd.sig.struct_extract %arg0["bar"] : !hw.inout<struct<foo: i1, bar: i2, baz: i3>>
   return
 }
