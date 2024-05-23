@@ -177,5 +177,3 @@ module Foo;
     automatic int b;
   end
 endmodule
-
-// -----
