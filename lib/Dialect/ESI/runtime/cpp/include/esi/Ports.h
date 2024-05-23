@@ -96,6 +96,11 @@ public:
     return channels;
   }
 
+  template <typename T>
+  T *getAs() const {
+    return const_cast<T *>(dynamic_cast<const T *>(this));
+  }
+
 private:
   AppID id;
   std::map<std::string, ChannelPort &> channels;

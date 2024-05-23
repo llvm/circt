@@ -216,7 +216,7 @@ PYBIND11_MODULE(esiCppAccel, m) {
                          [](AcceleratorConnection &acc) {
                            return acc.getService<services::MMIO>({});
                          },
-                         py::return_value_policy::reference);
+                         py::return_value_policy::automatic);
 
 // Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
 // to test both styles of manifest retrieval for cosim. Come up with a more

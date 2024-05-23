@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,15 @@ public:
   const uint8_t *getBytes() const { return data.data(); }
   /// Get the size of the data in bytes.
   size_t getSize() const { return data.size(); }
+
+  template <typename T>
+  T getAs() const {
+    if (data.size() != sizeof(T))
+      throw std::runtime_error("Data size does not match type size. Size is " +
+                               std::to_string(data.size()) + ", expected " +
+                               std::to_string(sizeof(T)) + ".");
+    return *reinterpret_cast<const T *>(data.data());
+  }
 
 private:
   std::vector<uint8_t> data;
