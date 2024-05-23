@@ -253,13 +253,6 @@ static cl::opt<bool>
                           cl::desc("Log executions of toplevel module passes"),
                           cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<bool> noSVA(
-    "no-sva",
-    cl::desc(
-        "Do not use SVA syntax when emitting verilog. Assertions are expected "
-        "to be written without temporal properties for this to be used."),
-    cl::init(false), cl::cat(mainCategory));
-
 static LoweringOptionsOption loweringOptions(mainCategory);
 
 /// Check output stream before writing bytecode to it.
@@ -430,7 +423,7 @@ static LogicalResult processBuffer(
                                             (*outputFile)->os())))
         return failure();
     if (outputFormat != OutputIRHW)
-      if (failed(firtool::populateHWToSV(pm, firtoolOptions, noSVA.getValue())))
+      if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
         return failure();
     if (!svPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(svPassPlugin), pm)))

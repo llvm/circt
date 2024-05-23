@@ -425,8 +425,7 @@ LogicalResult populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult populateLowFIRRTLToHW(mlir::PassManager &pm,
                                     const FirtoolOptions &opt);
 
-LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt,
-                             bool noSva = false);
+LogicalResult populateHWToSV(mlir::PassManager &pm, const FirtoolOptions &opt);
 
 LogicalResult populateExportVerilog(mlir::PassManager &pm,
                                     const FirtoolOptions &opt,
