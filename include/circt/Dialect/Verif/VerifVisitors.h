@@ -21,9 +21,11 @@ public:
   ResultType dispatchVerifVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AssertOp, AssumeOp, CoverOp>([&](auto op) -> ResultType {
-          return thisCast->visitVerif(op, args...);
-        })
+        .template Case<AssertOp, AssumeOp, CoverOp, ClockedAssertOp,
+                       ClockedAssumeOp, ClockedCoverOp>(
+            [&](auto op) -> ResultType {
+              return thisCast->visitVerif(op, args...);
+            })
         .Default([&](auto) -> ResultType {
           return thisCast->visitInvalidVerif(op, args...);
         });
@@ -50,6 +52,9 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+  HANDLE(ClockedAssertOp, Unhandled);
+  HANDLE(ClockedAssumeOp, Unhandled);
+  HANDLE(ClockedCoverOp, Unhandled);
 #undef HANDLE
 };
 
