@@ -266,7 +266,11 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 }
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
-                                      const FirtoolOptions &opt) {
+                                      const FirtoolOptions &opt,
+                                      bool noSva = false) {
+  if (noSva)
+    pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
+
   if (opt.shouldExtractTestCode())
     pm.addPass(sv::createSVExtractTestCodePass(
         opt.shouldEtcDisableInstanceExtraction(),
