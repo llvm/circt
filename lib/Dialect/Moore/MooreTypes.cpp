@@ -34,9 +34,7 @@ using mlir::TypeStorageAllocator;
 #include "circt/Dialect/Moore/MooreTypes.cpp.inc"
 
 void MooreDialect::registerTypes() {
-  addTypes<PackedUnsizedDim, PackedRangeDim, UnpackedUnsizedDim,
-           UnpackedArrayDim, UnpackedRangeDim, UnpackedAssocDim,
-           UnpackedQueueDim, PackedStructType, UnpackedStructType>();
+  addTypes<PackedStructType, UnpackedStructType>();
 
   addTypes<
 #define GET_TYPEDEF_LIST
@@ -65,7 +63,9 @@ StringRef moore::getKeywordFromSign(const Sign &sign) {
 Domain UnpackedType::getDomain() const {
   return TypeSwitch<UnpackedType, Domain>(*this)
       .Case<PackedType>([](auto type) { return type.getDomain(); })
-      .Case<UnpackedDim>([&](auto type) { return type.getInner().getDomain(); })
+      .Case<UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
+            QueueType>(
+          [&](auto type) { return type.getElementType().getDomain(); })
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().domain; })
       .Default([](auto) { return Domain::TwoValued; });
@@ -75,15 +75,9 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
   return TypeSwitch<UnpackedType, std::optional<unsigned>>(*this)
       .Case<PackedType>([](auto type) { return type.getBitSize(); })
       .Case<RealType>([](auto type) { return 64; })
-      .Case<UnpackedUnsizedDim>([](auto) { return std::nullopt; })
-      .Case<UnpackedArrayDim>([](auto type) -> std::optional<unsigned> {
-        if (auto size = type.getInner().getBitSize())
+      .Case<UnpackedArrayType>([](auto type) -> std::optional<unsigned> {
+        if (auto size = type.getElementType().getBitSize())
           return (*size) * type.getSize();
-        return {};
-      })
-      .Case<UnpackedRangeDim>([](auto type) -> std::optional<unsigned> {
-        if (auto size = type.getInner().getBitSize())
-          return (*size) * type.getRange().size;
         return {};
       })
       .Case<UnpackedStructType>(
@@ -99,7 +93,8 @@ Domain PackedType::getDomain() const {
   return TypeSwitch<PackedType, Domain>(*this)
       .Case<VoidType>([](auto) { return Domain::TwoValued; })
       .Case<IntType>([&](auto type) { return type.getDomain(); })
-      .Case<PackedDim>([&](auto type) { return type.getInner().getDomain(); })
+      .Case<ArrayType, OpenArrayType>(
+          [&](auto type) { return type.getElementType().getDomain(); })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().domain; });
 }
@@ -108,175 +103,14 @@ std::optional<unsigned> PackedType::getBitSize() const {
   return TypeSwitch<PackedType, std::optional<unsigned>>(*this)
       .Case<VoidType>([](auto) { return 0; })
       .Case<IntType>([](auto type) { return type.getWidth(); })
-      .Case<PackedUnsizedDim>([](auto) { return std::nullopt; })
-      .Case<PackedRangeDim>([](auto type) -> std::optional<unsigned> {
-        if (auto size = type.getInner().getBitSize())
-          return (*size) * type.getRange().size;
+      .Case<ArrayType>([](auto type) -> std::optional<unsigned> {
+        if (auto size = type.getElementType().getBitSize())
+          return (*size) * type.getSize();
         return {};
       })
+      .Case<OpenArrayType>([](auto) { return std::nullopt; })
       .Case<PackedStructType>(
           [](auto type) { return type.getStruct().bitSize; });
-}
-
-//===----------------------------------------------------------------------===//
-// Packed Dimensions
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-
-struct DimStorage : TypeStorage {
-  using KeyTy = UnpackedType;
-
-  DimStorage(KeyTy key) : inner(key) {}
-  bool operator==(const KeyTy &key) const { return key == inner; }
-  static DimStorage *construct(TypeStorageAllocator &allocator,
-                               const KeyTy &key) {
-    return new (allocator.allocate<DimStorage>()) DimStorage(key);
-  }
-
-  UnpackedType inner;
-};
-
-struct UnsizedDimStorage : DimStorage {
-  UnsizedDimStorage(KeyTy key) : DimStorage(key) {}
-  static UnsizedDimStorage *construct(TypeStorageAllocator &allocator,
-                                      const KeyTy &key) {
-    return new (allocator.allocate<UnsizedDimStorage>()) UnsizedDimStorage(key);
-  }
-};
-
-struct RangeDimStorage : DimStorage {
-  using KeyTy = std::pair<UnpackedType, Range>;
-
-  RangeDimStorage(KeyTy key) : DimStorage(key.first), range(key.second) {}
-  bool operator==(const KeyTy &key) const {
-    return key.first == inner && key.second == range;
-  }
-  static RangeDimStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<RangeDimStorage>()) RangeDimStorage(key);
-  }
-
-  Range range;
-};
-
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-PackedType PackedDim::getInner() const {
-  return llvm::cast<PackedType>(getImpl()->inner);
-}
-
-std::optional<Range> PackedDim::getRange() const {
-  if (auto dim = llvm::dyn_cast<PackedRangeDim>(*this))
-    return dim.getRange();
-  return {};
-}
-
-std::optional<unsigned> PackedDim::getSize() const {
-  return llvm::transformOptional(getRange(), [](auto r) { return r.size; });
-}
-
-const detail::DimStorage *PackedDim::getImpl() const {
-  return static_cast<detail::DimStorage *>(this->impl);
-}
-
-PackedUnsizedDim PackedUnsizedDim::get(PackedType inner) {
-  return Base::get(inner.getContext(), inner);
-}
-
-PackedRangeDim PackedRangeDim::get(PackedType inner, Range range) {
-  return Base::get(inner.getContext(), inner, range);
-}
-
-Range PackedRangeDim::getRange() const { return getImpl()->range; }
-
-//===----------------------------------------------------------------------===//
-// Unpacked Dimensions
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace moore {
-namespace detail {
-
-struct SizedDimStorage : DimStorage {
-  using KeyTy = std::pair<UnpackedType, unsigned>;
-
-  SizedDimStorage(KeyTy key) : DimStorage(key.first), size(key.second) {}
-  bool operator==(const KeyTy &key) const {
-    return key.first == inner && key.second == size;
-  }
-  static SizedDimStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<SizedDimStorage>()) SizedDimStorage(key);
-  }
-
-  unsigned size;
-};
-
-struct AssocDimStorage : DimStorage {
-  using KeyTy = std::pair<UnpackedType, UnpackedType>;
-
-  AssocDimStorage(KeyTy key) : DimStorage(key.first), indexType(key.second) {}
-  bool operator==(const KeyTy &key) const {
-    return key.first == inner && key.second == indexType;
-  }
-  static AssocDimStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<AssocDimStorage>()) AssocDimStorage(key);
-  }
-
-  UnpackedType indexType;
-};
-
-} // namespace detail
-} // namespace moore
-} // namespace circt
-
-UnpackedType UnpackedDim::getInner() const { return getImpl()->inner; }
-
-const detail::DimStorage *UnpackedDim::getImpl() const {
-  return static_cast<detail::DimStorage *>(this->impl);
-}
-
-UnpackedUnsizedDim UnpackedUnsizedDim::get(UnpackedType inner) {
-  return Base::get(inner.getContext(), inner);
-}
-
-UnpackedArrayDim UnpackedArrayDim::get(UnpackedType inner, unsigned size) {
-  return Base::get(inner.getContext(), inner, size);
-}
-
-unsigned UnpackedArrayDim::getSize() const { return getImpl()->size; }
-
-UnpackedRangeDim UnpackedRangeDim::get(UnpackedType inner, Range range) {
-  return Base::get(inner.getContext(), inner, range);
-}
-
-Range UnpackedRangeDim::getRange() const { return getImpl()->range; }
-
-UnpackedAssocDim UnpackedAssocDim::get(UnpackedType inner,
-                                       UnpackedType indexType) {
-  return Base::get(inner.getContext(), inner, indexType);
-}
-
-UnpackedType UnpackedAssocDim::getIndexType() const {
-  return getImpl()->indexType;
-}
-
-UnpackedQueueDim UnpackedQueueDim::get(UnpackedType inner,
-                                       std::optional<unsigned> bound) {
-  return Base::get(inner.getContext(), inner, bound.value_or(-1));
-}
-
-std::optional<unsigned> UnpackedQueueDim::getBound() const {
-  unsigned bound = getImpl()->size;
-  if (bound == static_cast<unsigned>(-1))
-    return {};
-  return bound;
 }
 
 //===----------------------------------------------------------------------===//
@@ -456,68 +290,6 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   // `subset.implied` field is not set, which means there hasn't been any prior
   // `packed` or `unpacked`, the function will emit an error properly.
 
-  // Packed and unpacked ranges.
-  if (mnemonic == "unsized") {
-    UnpackedType inner;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner) ||
-        parser.parseGreater())
-      return failure();
-    return yieldImplied(
-        [&]() { return PackedUnsizedDim::get(cast<PackedType>(inner)); },
-        [&]() { return UnpackedUnsizedDim::get(inner); });
-  }
-  if (mnemonic == "range") {
-    UnpackedType inner;
-    int left, right;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner) ||
-        parser.parseComma() || parser.parseInteger(left) ||
-        parser.parseColon() || parser.parseInteger(right) ||
-        parser.parseGreater())
-      return failure();
-    return yieldImplied(
-        [&]() {
-          return PackedRangeDim::get(cast<PackedType>(inner), left, right);
-        },
-        [&]() { return UnpackedRangeDim::get(inner, left, right); });
-  }
-  if (mnemonic == "array") {
-    UnpackedType inner;
-    unsigned size;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner) ||
-        parser.parseComma() || parser.parseInteger(size) ||
-        parser.parseGreater())
-      return failure();
-    return yieldUnpacked(UnpackedArrayDim::get(inner, size));
-  }
-  if (mnemonic == "assoc") {
-    UnpackedType inner;
-    UnpackedType index;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner))
-      return failure();
-    if (succeeded(parser.parseOptionalComma())) {
-      if (parseMooreType(parser, {Subset::Unpacked, true}, index))
-        return failure();
-    }
-    if (parser.parseGreater())
-      return failure();
-    return yieldUnpacked(UnpackedAssocDim::get(inner, index));
-  }
-  if (mnemonic == "queue") {
-    UnpackedType inner;
-    std::optional<unsigned> size;
-    if (parser.parseLess() || parseMooreType(parser, subset, inner))
-      return failure();
-    if (succeeded(parser.parseOptionalComma())) {
-      unsigned tmpSize;
-      if (parser.parseInteger(tmpSize))
-        return failure();
-      size = tmpSize;
-    }
-    if (parser.parseGreater())
-      return failure();
-    return yieldUnpacked(UnpackedQueueDim::get(inner, size));
-  }
-
   // Structs
   if (auto kind = getStructKindFromMnemonic(mnemonic)) {
     if (parser.parseLess())
@@ -557,8 +329,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
   // If we are printing a type that may be both packed or unpacked, emit a
   // wrapping `packed<...>` or `unpacked<...>` accordingly if not done so
   // previously, in order to disambiguate between the two.
-  if (llvm::isa<PackedDim>(type) || llvm::isa<UnpackedDim>(type) ||
-      llvm::isa<PackedStructType>(type) ||
+  if (llvm::isa<PackedStructType>(type) ||
       llvm::isa<UnpackedStructType>(type)) {
     auto needed =
         llvm::isa<PackedType>(type) ? Subset::Packed : Subset::Unpacked;
@@ -575,44 +346,6 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
       .Case<IntType>([&](auto type) {
         printer << (type.getDomain() == Domain::TwoValued ? "i" : "l");
         printer << type.getWidth();
-        return success();
-      })
-
-      // Packed and unpacked dimensions
-      .Case<PackedUnsizedDim, UnpackedUnsizedDim>([&](auto type) {
-        printer << "unsized<";
-        printMooreType(type.getInner(), printer, subset);
-        printer << ">";
-        return success();
-      })
-      .Case<PackedRangeDim, UnpackedRangeDim>([&](auto type) {
-        printer << "range<";
-        printMooreType(type.getInner(), printer, subset);
-        printer << ", " << type.getRange() << ">";
-        return success();
-      })
-      .Case<UnpackedArrayDim>([&](auto type) {
-        printer << "array<";
-        printMooreType(type.getInner(), printer, subset);
-        printer << ", " << type.getSize() << ">";
-        return success();
-      })
-      .Case<UnpackedAssocDim>([&](auto type) {
-        printer << "assoc<";
-        printMooreType(type.getInner(), printer, subset);
-        if (auto indexType = type.getIndexType()) {
-          printer << ", ";
-          printMooreType(indexType, printer, {Subset::Unpacked, true});
-        }
-        printer << ">";
-        return success();
-      })
-      .Case<UnpackedQueueDim>([&](auto type) {
-        printer << "queue<";
-        printMooreType(type.getInner(), printer, subset);
-        if (auto bound = type.getBound())
-          printer << ", " << *bound;
-        printer << ">";
         return success();
       })
 

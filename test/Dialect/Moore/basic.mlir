@@ -76,7 +76,7 @@ moore.module @Expressions {
   %int2 = moore.variable : !moore.i32
   %integer = moore.variable : !moore.l32
   %integer2 = moore.variable : !moore.l32
-  %arr = moore.variable : !moore.unpacked<range<range<i8, 0:3>, 0:1>>
+  %arr = moore.variable : !moore.uarray<2 x !moore.uarray<4 x !moore.i8>>
 
   // CHECK: moore.constant 0 : !moore.i32
   moore.constant 0 : !moore.i32
@@ -184,13 +184,13 @@ moore.module @Expressions {
   // CHECK: moore.extract %b5 from %b1 : !moore.i5, !moore.i1 -> !moore.i1
   moore.extract %b5 from %b1 : !moore.i5, !moore.i1 -> !moore.i1
   // CHECK: [[VAL1:%.*]] = moore.constant 0 : !moore.i32
-  // CHECK: [[VAL2:%.*]] = moore.extract %arr from [[VAL1]] : !moore.unpacked<range<range<i8, 0:3>, 0:1>>, !moore.i32 -> !moore.unpacked<range<i8, 0:3>>
+  // CHECK: [[VAL2:%.*]] = moore.extract %arr from [[VAL1]] : !moore.uarray<2 x !moore.uarray<4 x !moore.i8>>, !moore.i32 -> !moore.uarray<4 x !moore.i8>
   %1 = moore.constant 0 : !moore.i32
-  %2 = moore.extract %arr from %1 : !moore.unpacked<range<range<i8, 0:3>, 0:1>>, !moore.i32 -> !moore.unpacked<range<i8, 0:3>>
+  %2 = moore.extract %arr from %1 : !moore.uarray<2 x !moore.uarray<4 x !moore.i8>>, !moore.i32 -> !moore.uarray<4 x !moore.i8>
   // CHECK: [[VAL3:%.*]] = moore.constant 3 : !moore.i32
-  // CHECK: [[VAL4:%.*]] = moore.extract [[VAL2]] from [[VAL3]] : !moore.unpacked<range<i8, 0:3>>, !moore.i32 -> !moore.i8
+  // CHECK: [[VAL4:%.*]] = moore.extract [[VAL2]] from [[VAL3]] : !moore.uarray<4 x !moore.i8>, !moore.i32 -> !moore.i8
   %3 = moore.constant 3 : !moore.i32
-  %4 = moore.extract %2 from %3 : !moore.unpacked<range<i8, 0:3>>, !moore.i32 -> !moore.i8
+  %4 = moore.extract %2 from %3 : !moore.uarray<4 x !moore.i8>, !moore.i32 -> !moore.i8
   // CHECK: [[VAL5:%.*]] = moore.constant 2 : !moore.i32
   // CHECK: moore.extract [[VAL4]] from [[VAL5]] : !moore.i8, !moore.i32 -> !moore.i5
   %5 = moore.constant 2 : !moore.i32
