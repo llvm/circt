@@ -300,6 +300,9 @@ module Expressions;
   // CHECK: %y = moore.variable : !moore.l1
   // CHECK: %vec_1 = moore.variable : !moore.l32
   // CHECK: %vec_2 = moore.variable : !moore.l32
+  // CHECK: %myStruct = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
+  // CHECK: %myStruct2 = moore.variable  : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+  // CHECK: %myStruct3 = moore.variable  : !moore.packed<struct<{a: i32, b: i32}>>
   int a, b, c;
   int unsigned u, w;
   bit [1:0][3:0] v;
@@ -311,6 +314,12 @@ module Expressions;
   logic [0:31] vec_2;
   bit [4:1] arr [1:3][2:7];
   bit [3:2] s;
+  typedef struct packed signed {int a, b;} structTemp;
+  structTemp myStruct;
+  typedef struct packed signed {structTemp c,d;} structTemp2;
+  structTemp2 myStruct2;
+  typedef struct packed unsigned {int a, b;} structTemp3;
+  structTemp3 myStruct3;
 
   initial begin
     // CHECK: moore.constant 0 : !moore.i32
@@ -606,6 +615,32 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
+
+    // CHECK: [[A_STRUCT:%.+]] = moore.struct_extract %myStruct, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[A_STRUCT]], %a : !moore.i32
+    myStruct.a = a;
+
+    // CHECK: [[B_STRUCT:%.+]]  = moore.struct_extract %myStruct, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[B_STRUCT]] : !moore.i32
+    b = myStruct.b;
+
+    // CHECK: [[C_STRUCT:%.+]] = moore.struct_extract %myStruct2, "c" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[D_STRUCT:%.+]] = moore.struct_extract [[C_STRUCT]], "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[D_STRUCT]], %a : !moore.i32
+    myStruct2.c.a = a;
+
+    // CHECK: [[E_STRUCT:%.+]] = moore.struct_extract %myStruct2, "d" : !moore.packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> !moore.packed<struct<{a: i32, b: i32}>>
+    // CHECK: [[F_STRUCT:%.+]] = moore.struct_extract [[E_STRUCT]], "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[F_STRUCT]] : !moore.i32
+    b = myStruct2.d.b;
+
+    // CHECK: [[G_STRUCT:%.+]] = moore.struct_extract %myStruct3, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign [[G_STRUCT]], %a : !moore.i3
+    myStruct3.a = a;
+
+    // CHECK: [[H_STRUCT:%.+]] = moore.struct_extract %myStruct3, "b" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: moore.blocking_assign %b, [[H_STRUCT]] : !moore.i32
+    b = myStruct3.b;
   end
 endmodule
 

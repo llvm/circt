@@ -428,6 +428,13 @@ struct ExprVisitor {
     return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
   }
 
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    return builder.create<moore::StructExtractOp>(
+        loc, context.convertType(*expr.type),
+        builder.getStringAttr(expr.member.name),
+        context.convertExpression(expr.value()));
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
