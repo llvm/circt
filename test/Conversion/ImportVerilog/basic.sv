@@ -616,7 +616,7 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[A_STRUCT:%.+]] = = moore.struct_extract %myStruct, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
+    // CHECK: [[A_STRUCT:%.+]] = moore.struct_extract %myStruct, "a" : !moore.packed<struct<{a: i32, b: i32}>> -> !moore.i32
     // CHECK: moore.blocking_assign [[A_STRUCT]], %a : !moore.i32
     myStruct.a = a;
 
