@@ -369,10 +369,6 @@ public:
   }
 };
 
-//===----------------------------------------------------------------------===//
-// RepeatLikeOps
-//===----------------------------------------------------------------------===//
-
 class CirctLTLRepeatConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -444,9 +440,6 @@ public:
         gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
   }
 };
-
-//===----------------------------------------------------------------------===//
-//===----------------------------------------------------------------------===//
 
 template <class Op>
 class CirctVerifConverter : public IntrinsicConverter {

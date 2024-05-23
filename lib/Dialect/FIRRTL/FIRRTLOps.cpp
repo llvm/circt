@@ -165,7 +165,7 @@ Flow firrtl::swapFlow(Flow flow) {
     return Flow::Duplex;
   }
   // Unreachable but silences warning
-  return Flow::None;
+  llvm_unreachable("Unsupported Flow type.");
 }
 
 constexpr const char *toString(Flow flow) {
@@ -180,7 +180,7 @@ constexpr const char *toString(Flow flow) {
     return "duplex flow";
   }
   // Unreachable but silences warning
-  return "";
+  llvm_unreachable("Unsupported Flow type.");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {

@@ -3573,7 +3573,7 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
   if (auto more = op.getMore()) {
     ps << "[*";
     ps.addAsString(op.getBase());
@@ -3593,11 +3593,11 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
       ps << ":$]";
     }
   }
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
   // More always exists
   auto more = op.getMore();
   ps << "[->";
@@ -3608,11 +3608,11 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
   }
   ps << "]";
 
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
   // More always exists
   auto more = op.getMore();
   ps << "[=";
@@ -3623,7 +3623,7 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
   }
   ps << "]";
 
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
