@@ -13,6 +13,8 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
+#include "circt/Dialect/Verif/Passes.h.inc"
 #include "circt/Dialect/Verif/VerifDialect.h.inc"
+#include "circt/Dialect/Verif/VerifEnums.h.inc"
 
 #endif // CIRCT_DIALECT_VERIF_VERIFDIALECT_H

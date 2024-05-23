@@ -32,3 +32,4 @@ Operation *VerifDialect::materializeConstant(OpBuilder &builder,
 }
 
 #include "circt/Dialect/Verif/VerifDialect.cpp.inc"
+#include "circt/Dialect/Verif/VerifEnums.cpp.inc"

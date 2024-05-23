@@ -298,3 +298,19 @@ hw.module @Issue5763(in %a: i3) {
   %2 = comb.and bin %1, %0 : i1
   verif.assert %2 : i1
 }
+
+
+// CHECK-LABEL: module ClockedAsserts
+hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
+  %true = hw.constant true
+  %n0 = ltl.not %a : i1
+
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assert %n0 disable %b clock posedge %clk : !ltl.property
+
+  // CHECK: assume property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assume %n0 disable %b clock posedge %clk : !ltl.property
+
+  // CHECK: cover property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_cover %n0 disable %b clock posedge %clk : !ltl.property
+}

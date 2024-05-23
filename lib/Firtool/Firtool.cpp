@@ -14,6 +14,7 @@
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
@@ -262,6 +263,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Check OM object fields.
   pm.addPass(om::createVerifyObjectFieldsPass());
 
+  // Run the verif op verification pass
+  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
+
   return success();
 }
 
@@ -319,6 +323,9 @@ namespace detail {
 LogicalResult
 populatePrepareForExportVerilog(mlir::PassManager &pm,
                                 const firtool::FirtoolOptions &opt) {
+
+  // Run the verif op verification pass
+  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
