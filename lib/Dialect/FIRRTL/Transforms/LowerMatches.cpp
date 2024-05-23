@@ -74,7 +74,13 @@ static void lowerMatch(MatchOp match) {
 }
 
 void LowerMatchesPass::runOnOperation() {
-  getOperation()->walk(&lowerMatch);
+  bool changed = false;
+  getOperation()->walk([&changed](MatchOp op) {
+    changed = true;
+    lowerMatch(op);
+  });
+  if (!changed)
+    return markAllAnalysesPreserved();
   markAnalysesPreserved<InstanceGraph>();
 }
 

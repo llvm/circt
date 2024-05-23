@@ -2,6 +2,7 @@ from typing import List, Optional
 import esiaccel
 import esiaccel.types as types
 import sys
+import time
 
 platform = sys.argv[1]
 acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
@@ -27,13 +28,15 @@ mysvc_send.write(None)
 print(f"mysvc_send.type: {mysvc_send.type}")
 assert isinstance(mysvc_send.type, types.VoidType)
 
-mysvc_send = loopback.ports[esiaccel.AppID("mysvc_send")].read_port("send")
-mysvc_send.connect()
+mysvc_recv = loopback.ports[esiaccel.AppID("mysvc_send")].read_port("send")
+mysvc_recv.connect()
 resp: bool = False
 # Reads are non-blocking, so we need to poll.
 while not resp:
   print("i0 polling")
-  (resp, _) = mysvc_send.read()
+  (resp, _) = mysvc_recv.read()
+  if not resp:
+    time.sleep(0.1)
 print(f"i0 resp: {resp}")
 
 recv = loopback.ports[esiaccel.AppID("loopback_tohw")].write_port("recv")
@@ -51,6 +54,8 @@ resp_data: bytearray
 while not resp:
   print("polling")
   (resp, resp_data) = send.read()
+  if not resp:
+    time.sleep(0.1)
 resp_int = int.from_bytes(resp_data, "little")
 
 print(f"data: {data}")
@@ -83,6 +88,8 @@ resp = False
 while not resp:
   print("polling")
   (resp, result) = result_chan.read()
+  if not resp:
+    time.sleep(0.1)
 
 print(f"result: {result}")
 if platform != "trace":

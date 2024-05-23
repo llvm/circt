@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   DropConst.cpp
   DropName.cpp
+  EliminateWires.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
@@ -41,6 +42,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   MemToRegOfVec.cpp
   MergeConnections.cpp
   ModuleInliner.cpp
+  ModuleSummary.cpp
   PassiveWires.cpp
   PrefixModules.cpp
   PrintFIRRTLFieldSource.cpp

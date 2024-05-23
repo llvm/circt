@@ -126,8 +126,6 @@ Os &operator<<(Os &os, const Range &range) {
 class PackedType;
 
 namespace detail {
-struct RealTypeStorage;
-struct IntTypeStorage;
 struct DimStorage;
 struct UnsizedDimStorage;
 struct RangeDimStorage;
@@ -247,78 +245,6 @@ public:
 
 protected:
   using UnpackedType::UnpackedType;
-};
-
-//===----------------------------------------------------------------------===//
-// Packed Integers
-//===----------------------------------------------------------------------===//
-
-/// A signed or unsigned, two- or four-valued bit vector. SystemVerilog calls
-/// these "simple bit vectors".
-class IntType
-    : public Type::TypeBase<IntType, PackedType, detail::IntTypeStorage> {
-public:
-  /// Return the width of the integer.
-  unsigned getWidth() const;
-  /// Return whether this is a two- or four-valued integer.
-  Domain getDomain() const;
-
-  static IntType get(MLIRContext *context, unsigned width, Domain domain);
-
-  /// Create a signless `bit [width-1:0]` type.
-  static IntType getInt(MLIRContext *context, unsigned width) {
-    return get(context, width, Domain::TwoValued);
-  }
-
-  /// Create a signless `logic [width-1:0]` type.
-  static IntType getLogic(MLIRContext *context, unsigned width) {
-    return get(context, width, Domain::FourValued);
-  }
-
-  static constexpr StringLiteral name = "moore.int";
-
-protected:
-  using Base::Base;
-};
-
-//===----------------------------------------------------------------------===//
-// Unpacked Reals
-//===----------------------------------------------------------------------===//
-
-/// A real type.
-class RealType
-    : public Type::TypeBase<RealType, UnpackedType, detail::RealTypeStorage> {
-public:
-  enum Kind {
-    /// A `shortreal`.
-    ShortReal,
-    /// A `real`.
-    Real,
-    /// A `realtime`.
-    RealTime,
-  };
-
-  /// Get the integer type that corresponds to a keyword (like `bit`).
-  static std::optional<Kind> getKindFromKeyword(StringRef keyword);
-  /// Get the keyword (like `bit`) for one of the integer types.
-  static StringRef getKeyword(Kind kind);
-  /// Get the size of one of the integer types.
-  static unsigned getBitSize(Kind kind);
-
-  static RealType get(MLIRContext *context, Kind kind);
-
-  /// Get the concrete integer vector or atom type.
-  Kind getKind() const;
-
-  /// Get the keyword (like `bit`) for this type.
-  StringRef getKeyword() const { return getKeyword(getKind()); }
-  /// Get the size of this type.
-  unsigned getBitSize() const { return getBitSize(getKind()); }
-
-  static constexpr StringLiteral name = "moore.real";
-
-protected:
-  using Base::Base;
 };
 
 //===----------------------------------------------------------------------===//

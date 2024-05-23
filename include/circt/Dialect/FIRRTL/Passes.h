@@ -85,6 +85,8 @@ std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
 
 std::unique_ptr<mlir::Pass> createDedupPass();
 
+std::unique_ptr<mlir::Pass> createEliminateWiresPass();
+
 std::unique_ptr<mlir::Pass>
 createEmitOMIRPass(mlir::StringRef outputFilename = "");
 
@@ -200,6 +202,8 @@ std::unique_ptr<mlir::Pass> createLintingPass();
 std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
 
 std::unique_ptr<mlir::Pass> createCreateCompanionAssume();
+
+std::unique_ptr<mlir::Pass> createModuleSummaryPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

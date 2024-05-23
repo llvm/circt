@@ -1,4 +1,5 @@
 # RUN: rm -rf %t
+# RUN: mkdir %t && cd %t
 # RUN: %PYTHON% py-split-input-file.py %s 2>&1 | FileCheck %s
 
 from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,

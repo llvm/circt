@@ -389,3 +389,24 @@ hw.module @XMRRefOp() {
   // CHECK: %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
   %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
 }
+
+// Functions.
+// CHECK-LABEL: sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+// CHECK-NEXT: sv.func.dpi.import linkage "c_func_name" @function_declare
+sv.func.dpi.import linkage "c_func_name" @function_declare
+
+// CHECK-LABEL: sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>) attributes {test = "foo"} {
+  %0 = comb.icmp eq %in_0, %in_1: i2
+  // CHECK: sv.return %{{.+}} : i1
+  sv.return %0 : i1
+}
+
+// CHECK-LABEL: sv.func @recurse(in %n : i32, out out : i32) {
+// CHECK: %0 = sv.func.call.procedural @recurse(%n) : (i32) -> i32
+// CHECK-NEXT:  sv.return %0
+sv.func @recurse(in %n : i32, out out : i32) {
+  %v = sv.func.call.procedural @recurse(%n) : (i32) -> i32
+  sv.return %v : i32
+}

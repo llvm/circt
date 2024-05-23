@@ -44,9 +44,10 @@ struct DropNamesPass : public DropNameBase<DropNamesPass> {
     } else if (preserveMode == PreserveValues::Named) {
       // Drop the name if it isn't considered meaningful.
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
-        if (isUselessName(op.getName()))
+        auto name = op.getName();
+        if (isUselessName(name))
           return ModAction::Drop;
-        if (op.getName().starts_with("_"))
+        if (name.starts_with("_"))
           return ModAction::Demote;
         return ModAction::Keep;
       });
