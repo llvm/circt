@@ -3427,9 +3427,12 @@ private:
   EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
+  EmittedProperty visitLTL(ltl::IntersectOp op);
   EmittedProperty visitLTL(ltl::DelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
   EmittedProperty visitLTL(ltl::RepeatOp op);
+  EmittedProperty visitLTL(ltl::GoToRepeatOp op);
+  EmittedProperty visitLTL(ltl::NonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::NotOp op);
   EmittedProperty visitLTL(ltl::ImplicationOp op);
   EmittedProperty visitLTL(ltl::UntilOp op);
@@ -3561,6 +3564,16 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::OrOp op) {
   return {PropertyPrecedence::Or};
 }
 
+EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
+  llvm::interleave(
+      op.getInputs(),
+      [&](auto input) {
+        emitNestedProperty(input, PropertyPrecedence::Intersect);
+      },
+      [&]() { ps << PP::space << "intersect" << PP::nbsp; });
+  return {PropertyPrecedence::Intersect};
+}
+
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
   ps << "##";
   if (auto length = op.getLength()) {
@@ -3608,19 +3621,15 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
   if (auto more = op.getMore()) {
-    if (*more == 0) {
-      ps << "[*";
-      ps.addAsString(op.getBase());
-      ps << "]";
-    } else {
-      ps << "[*";
-      ps.addAsString(op.getBase());
+    ps << "[*";
+    ps.addAsString(op.getBase());
+    if (*more != 0) {
       ps << ":";
       ps.addAsString(op.getBase() + *more);
-      ps << "]";
     }
+    ps << "]";
   } else {
     if (op.getBase() == 0) {
       ps << "[*]";
@@ -3632,7 +3641,37 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
       ps << ":$]";
     }
   }
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Repeat};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[->";
+  ps.addAsString(op.getBase());
+  if (more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + more);
+  }
+  ps << "]";
+
+  return {PropertyPrecedence::Repeat};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[=";
+  ps.addAsString(op.getBase());
+  if (more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + more);
+  }
+  ps << "]";
+
+  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {

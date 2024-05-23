@@ -357,6 +357,18 @@ public:
   }
 };
 
+class CirctLTLClockConverter
+    : public IntrinsicOpConverter<LTLClockIntrinsicOp> {
+public:
+  using IntrinsicOpConverter::IntrinsicOpConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.hasNParam(0);
+  }
+};
+
 class CirctLTLRepeatConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -381,15 +393,51 @@ public:
   }
 };
 
-class CirctLTLClockConverter
-    : public IntrinsicOpConverter<LTLClockIntrinsicOp> {
+class CirctLTLGoToRepeatConverter : public IntrinsicConverter {
 public:
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
-           gi.hasNParam(0);
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("base") ||
+           gi.namedIntParam("more") || gi.hasNParam(1, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    rewriter.replaceOpWithNewOp<LTLGoToRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
+  }
+};
+
+class CirctLTLNonConsecutiveRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("base") ||
+           gi.namedIntParam("more") || gi.hasNParam(1, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    rewriter.replaceOpWithNewOp<LTLNonConsecutiveRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
   }
 };
 
@@ -613,6 +661,8 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
                                                            "circt_ltl_and");
   lowering.add<CirctLTLBinaryConverter<LTLOrIntrinsicOp>>("circt.ltl.or",
                                                           "circt_ltl_or");
+  lowering.add<CirctLTLBinaryConverter<LTLIntersectIntrinsicOp>>(
+      "circt.ltl.intersect", "circt_ltl_intersect");
   lowering.add<CirctLTLBinaryConverter<LTLConcatIntrinsicOp>>(
       "circt.ltl.concat", "circt_ltl_concat");
   lowering.add<CirctLTLBinaryConverter<LTLImplicationIntrinsicOp>>(
@@ -628,6 +678,10 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
 
   lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
   lowering.add<CirctLTLRepeatConverter>("circt.ltl.repeat", "circt_ltl_repeat");
+  lowering.add<CirctLTLGoToRepeatConverter>("circt.ltl.goto_repeat",
+                                            "circt_ltl_goto_repeat");
+  lowering.add<CirctLTLNonConsecutiveRepeatConverter>(
+      "circt.ltl.non_consecutive_repeat", "circt_ltl_non_consecutive_repeat");
   lowering.add<CirctLTLClockConverter>("circt.ltl.clock", "circt_ltl_clock");
 
   lowering.add<CirctVerifConverter<VerifAssertIntrinsicOp>>(

@@ -1418,6 +1418,7 @@ class BinaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 // Generic
 def LTLAndIntrinsicOp : BinaryLTLIntrinsicOp<"and", [Commutative]>;
 def LTLOrIntrinsicOp : BinaryLTLIntrinsicOp<"or", [Commutative]>;
+def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 
 // Sequences
 def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
@@ -1436,6 +1437,26 @@ def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
                        OptionalAttr<I64Attr>:$more);
   let assemblyFormat = [{
     $input `,` $base (`,` $more^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLNonConsecutiveRepeatIntrinsicOp : LTLIntrinsicOp<"non_consecutive_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
     functional-type(operands, results)
   }];
 }
