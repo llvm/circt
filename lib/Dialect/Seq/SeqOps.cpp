@@ -677,9 +677,10 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   if (!isTrivialFeedback && !isNeverClocked)
     return {};
 
-  // If the register has a reset value, we can replace it with that.
+  // If the register has a const reset value, we can replace it with that.
+  // We cannot replace it with a non-constant reset value.
   if (auto resetValue = getResetValue())
-    return resetValue;
+    return resetValue.getDefiningOp<hw::ConstantOp>() ? resetValue : Value();
 
   // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
