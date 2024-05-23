@@ -19,5 +19,3 @@ verif.lec first {
 ^bb0(%arg0: i32):
   verif.yield %arg0 : i32
 }
-
-

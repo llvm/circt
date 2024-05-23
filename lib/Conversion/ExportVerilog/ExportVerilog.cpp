@@ -4674,14 +4674,15 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
                                                PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
+
   // If we are inside a procedural region we have the option of emitting either
   // an `assert` or `assert property`. If we are in a non-procedural region,
   // e.g., the body of a module, we have to use the concurrent form `assert
   // property` (which also supports plain booleans).
   //
-  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion
-  // statements outside procedural code" and 16.14.6 "Embedding concurrent
-  // assertions in procedural code".
+  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
+  // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
+  // procedural code".
   bool isTemporal = !property.getType().isSignlessInteger(1);
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;

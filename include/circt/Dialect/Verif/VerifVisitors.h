@@ -52,6 +52,9 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+  HANDLE(ClockedAssertOp, Unhandled);
+  HANDLE(ClockedAssumeOp, Unhandled);
+  HANDLE(ClockedCoverOp, Unhandled);
 #undef HANDLE
 };
 
