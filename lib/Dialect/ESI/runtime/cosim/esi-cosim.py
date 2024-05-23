@@ -112,15 +112,14 @@ class Simulator:
 
   def compile(self) -> int:
     cmds = self.compile_commands()
-    with open(self.run_dir / "compile_stdout.log",
-              "w") as stdout, open(self.run_dir / "compile_stderr.log",
-                                   "w") as stderr:
+    self.run_dir.mkdir(parents=True, exist_ok=True)
+    with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
+        self.run_dir / "compile_stderr.log").open("w") as stderr:
       for cmd in cmds:
         cp = subprocess.run(cmd,
                             env=Simulator.get_env(),
                             capture_output=True,
                             text=True)
-        self.run_dir.mkdir(parents=True, exist_ok=True)
         stdout.write(cp.stdout)
         stderr.write(cp.stderr)
         if cp.returncode != 0:
