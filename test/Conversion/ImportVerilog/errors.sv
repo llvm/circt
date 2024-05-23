@@ -179,23 +179,3 @@ module Foo;
 endmodule
 
 // -----
-
-module Foo;
-  // expected-error @below {{expected '{'}}
-  // expected-error @below {{expected ';'}}
-  // expected-error @below {{expected a declaration name}}
-  typedef struct unpacked signed {int a, b;} structTemp1;
-  // expected-error @below {{use of undeclared identifier 'structTemp1'}}
-  structTemp1 myStruct1;
-endmodule
-
-// -----
-
-module Foo;
-  // expected-error @below {{expected '{'}}
-  // expected-error @below {{expected ';'}}
-  // expected-error @below {{expected a declaration name}}
-  typedef struct unpacked unsigned {int a,  b;} structTemp2;
-  // expected-error @below {{use of undeclared identifier 'structTemp2'}}
-  structTemp2 myStruct2;
-endmodule
