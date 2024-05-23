@@ -162,8 +162,7 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
 
 def RepeatOp : LTLOp<"repeat", [
   Pure,
-  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>,
-  PredOpTrait<"'more' must be >= 0", CPred<"$more >= 0">>
+  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>
 ]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
