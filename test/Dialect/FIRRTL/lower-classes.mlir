@@ -178,6 +178,10 @@ firrtl.circuit "PathModule" {
     // CHECK: %non_local = firrtl.wire sym [[NONLOCAL_SYM]] : !firrtl.uint<8>
     %non_local = firrtl.wire {annotations = [{circt.nonlocal = @NonLocal, class = "circt.tracker", id = distinct[3]<>}]} : !firrtl.uint<8>
   }
+  // CHECK: om.class @PathModule_Class(%basepath: !om.basepath) {
+  // CHECK:   om.basepath_create %basepath
+  // CHECK:   om.object @Child_Class
+  // CHECK:   om.object @PathTest
   // CHECK: om.class @PathTest(%basepath: !om.basepath)
   firrtl.class @PathTest() {
     

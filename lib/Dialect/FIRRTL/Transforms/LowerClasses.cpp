@@ -198,7 +198,7 @@ private:
                              SymbolTable &symbolTable);
 
   // Predicate to check if a module-like needs a Class to be created.
-  bool shouldCreateClass(FModuleLike moduleLike);
+  bool shouldCreateClass(StringAttr modName);
 
   // Create an OM Class op from a FIRRTL Class op.
   om::ClassLike createClass(FModuleLike moduleLike,
@@ -222,7 +222,7 @@ private:
       const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
 
   // State to memoize repeated calls to shouldCreateClass.
-  DenseMap<FModuleLike, bool> shouldCreateClassMemo;
+  DenseMap<StringAttr, bool> shouldCreateClassMemo;
 };
 
 struct PathTracker {
@@ -617,7 +617,8 @@ LogicalResult LowerClassesPass::processPaths(
       }
 
       // If we aren't creating a class for this child, skip this hierarchy.
-      if (!shouldCreateClass(it->getModule<FModuleLike>())) {
+      if (!shouldCreateClass(
+              it->getModule<FModuleLike>().getModuleNameAttr())) {
         it = it.skipChildren();
         continue;
       }
@@ -656,12 +657,12 @@ void LowerClassesPass::runOnOperation() {
   // Fill `shouldCreateClassMemo`.
   for (auto *node : instanceGraph)
     if (auto moduleLike = node->getModule<firrtl::FModuleLike>())
-      shouldCreateClassMemo.insert({moduleLike, false});
+      shouldCreateClassMemo.insert({moduleLike.getModuleNameAttr(), false});
 
   parallelForEach(circuit.getContext(), instanceGraph,
                   [&](igraph::InstanceGraphNode *node) {
                     if (auto moduleLike = node->getModule<FModuleLike>())
-                      shouldCreateClassMemo[moduleLike] =
+                      shouldCreateClassMemo[moduleLike.getModuleNameAttr()] =
                           shouldCreateClassImpl(node);
                   });
 
@@ -682,7 +683,7 @@ void LowerClassesPass::runOnOperation() {
     if (!moduleLike)
       continue;
 
-    if (shouldCreateClass(moduleLike)) {
+    if (shouldCreateClass(moduleLike.getModuleNameAttr())) {
       auto omClass = createClass(moduleLike, pathInfoTable);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
       classLoweringState.moduleLike = moduleLike;
@@ -698,7 +699,7 @@ void LowerClassesPass::runOnOperation() {
           continue;
         // Get the referenced module.
         auto module = instance->getTarget()->getModule<FModuleLike>();
-        if (module && shouldCreateClass(module)) {
+        if (module && shouldCreateClass(module.getModuleNameAttr())) {
           auto targetSym = getInnerRefTo(
               {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                 return namespaces[module];
@@ -765,9 +766,9 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 }
 
 // Predicate to check if a module-like needs a Class to be created.
-bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
+bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   // Return a memoized result.
-  return shouldCreateClassMemo.at(moduleLike);
+  return shouldCreateClassMemo.at(modName);
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
@@ -882,13 +883,16 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
       return isa<PropertyType>(type);
     });
+    bool needsClone = false;
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      needsClone = shouldCreateClass(instance.getReferencedModuleNameAttr());
 
     // Check if any result is a property.
     auto propertyResults = llvm::any_of(
         op.getResultTypes(), [](Type type) { return isa<PropertyType>(type); });
 
     // If there are no properties here, move along.
-    if (!propertyOperands && !propertyResults)
+    if (!needsClone && !propertyOperands && !propertyResults)
       continue;
 
     // Actually clone the op over to the OM Class.
