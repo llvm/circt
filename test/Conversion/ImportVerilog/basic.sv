@@ -78,6 +78,25 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
+  // CHECK: [[TMP1:%.+]] = moore.constant 1 : i32
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+  // CHECK: %p1 = moore.named_constant parameter [[TMP2]] : l32
+  parameter p1 = 1;
+  // CHECK: %p2 = moore.named_constant parameter %p1 : l32
+  parameter p2 = p1;
+  // CHECK: [[TMP1:%.+]] = moore.constant 2 : i32
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+  // CHECK: %lp1 = moore.named_constant localparam [[TMP2]] : l32
+  localparam lp1 = 2;
+  // CHECK: %lp2 = moore.named_constant localparam %lp1 : l32
+  localparam lp2 = lp1;
+  // CHECK: [[TMP1:%.+]] = moore.constant 3 : i32
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+  // CHECK: %sp1 = moore.named_constant specparam [[TMP2]] : l32
+  specparam sp1 = 3;
+  // CHECK: %sp2 = moore.named_constant specparam %sp1 : l32
+  specparam sp2 = sp1;
+
   // CHECK: moore.procedure initial {
   // CHECK: }
   initial;
