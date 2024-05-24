@@ -62,12 +62,16 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // Registers that are never clocked should be replaced with their reset value.
   %clk_true = seq.to_clock %true
   %clk_false = seq.to_clock %false
+  %c0_i32 = hw.constant 0 : i32
   %reg3a = seq.firreg %in clock %clk_false reset sync %r, %v : i32
   %reg3b = seq.firreg %in clock %clk_true reset sync %r, %v : i32
+  %reg3c = seq.firreg %in clock %clk_true reset sync %r, %c0_i32 : i32
   hw.instance "reg3a" @Observe(x: %reg3a: i32) -> ()
   hw.instance "reg3b" @Observe(x: %reg3b: i32) -> ()
-  // CHECK: hw.instance "reg3a" @Observe(x: %v: i32) -> ()
-  // CHECK: hw.instance "reg3b" @Observe(x: %v: i32) -> ()
+  hw.instance "reg3c" @Observe(x: %reg3c: i32) -> ()
+  // CHECK: hw.instance "reg3a" @Observe(x: %reg3a: i32) -> ()
+  // CHECK: hw.instance "reg3b" @Observe(x: %reg3b: i32) -> ()
+  // CHECK: hw.instance "reg3c" @Observe(x: %c0_i32: i32) -> ()
 }
 
 // CHECK-LABEL: @FirRegAggregate
