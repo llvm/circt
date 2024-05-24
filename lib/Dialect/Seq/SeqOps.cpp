@@ -680,7 +680,7 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   // If the register has a const reset value, we can replace it with that.
   // We cannot replace it with a non-constant reset value.
   if (auto resetValue = getResetValue()) {
-    if (auto op = resetValue.getDefiningOp())
+    if (auto *op = resetValue.getDefiningOp())
       if (op->hasTrait<OpTrait::ConstantLike>())
         return resetValue;
     return {};
