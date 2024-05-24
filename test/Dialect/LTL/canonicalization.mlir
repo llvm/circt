@@ -109,6 +109,26 @@ func.func @RepeatFolds(%arg0: !ltl.sequence) {
   return
 }
 
+// CHECK-LABEL: @GoToRepeatFolds
+func.func @GoToRepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.goto_repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
+  return
+}
+
+// CHECK-LABEL: @NonConsecutiveRepeatFolds
+func.func @NonConsecutiveRepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.non_consecutive_repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
+  return
+}
+
 // CHECK-LABEL: @ClockingFolds
 func.func @ClockingFolds(%arg0: !ltl.property) {
   // disable(p, false) -> p

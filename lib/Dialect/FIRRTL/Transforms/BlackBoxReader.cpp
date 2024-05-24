@@ -419,8 +419,7 @@ OutputFileInfo BlackBoxReaderPass::getOutputFile(Operation *origOp,
   // testbench dir annotation, not have a blackbox target directory annotation
   // (or one set to the current directory), have a DUT annotation, and the
   // module needs to be in or under the DUT.
-  else if (!testBenchDir.empty() && targetDir.equals(".") && dut &&
-           !isDut(origOp))
+  else if (!testBenchDir.empty() && targetDir == "." && dut && !isDut(origOp))
     outDir = {testBenchDir, Priority::TestBench};
   else if (isCover)
     outDir = {coverDir, Priority::Verification};

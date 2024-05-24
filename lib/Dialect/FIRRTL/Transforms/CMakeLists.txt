@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   Dedup.cpp
   DropConst.cpp
   DropName.cpp
+  EliminateWires.cpp
   EmitOMIR.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp

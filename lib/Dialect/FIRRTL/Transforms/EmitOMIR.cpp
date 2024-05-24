@@ -179,7 +179,7 @@ static IntegerAttr isOMSRAM(Attribute &node) {
       if (auto valueArr = omTy.getAs<ArrayAttr>("value"))
         for (auto attr : valueArr)
           if (auto str = dyn_cast<StringAttr>(attr))
-            if (str.getValue().equals("OMString:OMSRAM"))
+            if (str.getValue() == "OMString:OMSRAM")
               return id;
   }
   return {};
@@ -900,7 +900,7 @@ void EmitOMIRPass::emitOMField(StringAttr fieldName, DictionaryAttr field,
     jsonStream.attribute("name", fieldName.strref());
     jsonStream.attributeBegin("value");
     emitValue(field.get("value"), jsonStream,
-              fieldName.strref().equals("dutInstance"));
+              fieldName.strref() == "dutInstance");
     jsonStream.attributeEnd();
   });
 }

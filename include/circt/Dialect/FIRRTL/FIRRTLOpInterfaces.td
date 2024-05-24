@@ -142,6 +142,12 @@ def FModuleLike : OpInterface<"FModuleLike", [Symbol, PortList, InstanceGraphMod
         getAttrOfType<ArrayAttr>(FModuleLike::getPortAnnotationsAttrName());
     }]>,
 
+    InterfaceMethod<"Set the port annotations attribute",
+    "void", "setPortAnnotationsAttr", (ins "ArrayAttr":$annotations), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->setAttr(FModuleLike::getPortAnnotationsAttrName(), annotations);
+    }]>,
+
     InterfaceMethod<"Get the port annotations attribute",
     "ArrayRef<Attribute>", "getPortAnnotations", (ins), [{}],
     /*defaultImplementation=*/[{
@@ -453,10 +459,12 @@ def FNamableOp : OpInterface<"FNamableOp"> {
     }]>,
     InterfaceMethod<"Completely drop a name.",
     "void", "dropName", (ins), [{}], /*defaultImplementation=*/[{
-      this->getOperation()->setAttr("nameKind",
-        NameKindEnumAttr::get(this->getOperation()->getContext(),
+      auto* op = this->getOperation();
+      auto* ctx = op->getContext();
+      op->setAttr("nameKind",
+        NameKindEnumAttr::get(ctx,
                               NameKindEnum::DroppableName));
-      this->getOperation()->setAttr("name", StringAttr::get(this->getOperation()->getContext(), ""));
+      op->setAttr("name", StringAttr::get(ctx, ""));
     }]>,
     InterfaceMethod<"Set a namekind.",
     "void", "setNameKindAttr", (ins "firrtl::NameKindEnumAttr":$nameKind),

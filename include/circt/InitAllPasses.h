@@ -34,6 +34,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/SystemC/SystemCPasses.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Tools/circt-lec/Passes.h"
 #include "circt/Transforms/Passes.h"
 
@@ -68,6 +69,7 @@ inline void registerAllPasses() {
   pipeline::registerPasses();
   ssp::registerPasses();
   systemc::registerPasses();
+  verif::registerPasses();
 }
 
 } // namespace circt

@@ -308,7 +308,7 @@ struct ObjectModelIR {
               .Case("inDut", BoolAttr::get(context, inDut))
               .Case("extraPorts", {}));
       if (!propVal) {
-        if (field.value().equals("hierarchy"))
+        if (field.value() == "hierarchy")
           propVal = hierpaths;
         else
           propVal = extraPorts;

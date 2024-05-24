@@ -17,6 +17,7 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -783,9 +784,111 @@ def ExtractOp : MooreOp<"extract"> {
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` 
+    $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
   }];
 } 
+
+def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
+  let summary = "Struct Create operation";
+  let description = [{
+    A structure represents a collection of data types
+    that can be referenced as a whole, or the individual data types
+    that make up the structure can be referenced by name.
+    By default, structures are unpacked, meaning that there is
+    an implementation-dependent packing of the data types.
+    Unpacked structures can contain any data type.
+    See IEEE 1800-2017 § 7.2 "Structures"
+
+    Example:
+    ```
+    struct { bit [7:0] opcode; bit [23:0] addr; }IR;
+    IR.opcode = 1;   // set field in IR.
+    // anonymous structure
+    // defines variable IR
+    typedef struct {
+    bit [7:0] opcode;
+    bit [23:0] addr;
+    } instruction; // named structure type
+    instruction IR; // define variable
+    ```
+    See IEEE 1800-2017 § 7.2. "Structures".
+  }];
+  let arguments = (ins UnpackedType:$structName);
+  let results = (outs UnpackedType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $structName attr-dict `:` type($structName)
+  }];
+}
+
+def StructExtractOp : MooreOp<"struct_extract"> {
+  let summary = "Struct Extract operation";
+  let description = [{
+    Structures can be converted to bits preserving the bit pattern.
+    In other words, they can be converted back to the same value
+    without any loss of information. When unpacked data are converted
+    to the packed representation, the order of the data in the packed
+    representation is such that the first field in the structure
+    occupies the MSBs. The effect is the same as a concatenation of
+    the data items (struct fields or array elements) in order.
+    The type of the elements in an unpacked structure or array
+    shall be valid for a packed representation in order to be
+    cast to any other type, whether packed or unpacked.
+    See IEEE 1800-2017 § 6.24.1 "Cast operator"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$structName);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $structName `,`   $memberName  attr-dict `:`
+    type($structName) `->` type($result)
+  }];
+}
+
+def StructInjectOp : MooreOp<"struct_inject"> {
+  let summary = "Struct Field operation";
+  let description = [{
+    A structure can be assigned as a whole and passed to
+    or from a subroutine as a whole. Members of a structure
+    data type can be assigned individual default member
+    values by using an initial assignment with the declaration
+    of each member. The assigned expression shall be
+    a constant expression.
+    See IEEE 1800-2017 § 7.2.2 "Assigning to structures"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+  }];
+  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName,
+  UnpackedType:$RHS);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $LHS `,`   $memberName `,` $RHS
+    attr-dict `:` type($LHS) type($RHS) `->` type($result)
+  }];
+}
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

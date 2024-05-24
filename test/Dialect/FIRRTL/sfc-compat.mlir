@@ -93,13 +93,14 @@ firrtl.circuit "SFCCompatTests" {
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // A regreset invalid value should NOT propagate through a node.
+  // A regreset invalid value should propagate through a node.
+  // Change from SFC behavior.
   firrtl.module @InvalidNode(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %d: !firrtl.uint<8>, out %q: !firrtl.uint<8>) {
     %inv = firrtl.wire  : !firrtl.uint<8>
     %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
     firrtl.connect %inv, %invalid_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
     %_T = firrtl.node %inv  : !firrtl.uint<8>
-    // CHECK: firrtl.regreset %clock
+    // CHECK: firrtl.reg %clock
     %r = firrtl.regreset %clock, %reset, %_T  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %r, %d : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %q, %r : !firrtl.uint<8>, !firrtl.uint<8>
