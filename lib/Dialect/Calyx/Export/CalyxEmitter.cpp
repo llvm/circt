@@ -22,6 +22,7 @@
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
@@ -479,6 +480,17 @@ private:
           emitValue(op.getInputs()[0], /*isIndented=*/false);
         })
         .Case<CycleOp>([&](auto op) { emitCycleValue(op); })
+        .Case<calyx::ConstantOp>([&](auto op) {
+          TypedAttr attr = op.getValueAttr();
+          if (auto fltAttr = dyn_cast<FloatAttr>(attr)) {
+            APFloat value = fltAttr.getValue();
+            auto type = cast<FloatType>(fltAttr.getType());
+            double doubleValue = value.convertToDouble();
+            (isIndented ? indent() : os)
+                << std::to_string(value.getSizeInBits(type.getFloatSemantics()))
+                << apostrophe() << "d" << std::to_string(doubleValue);
+          }
+        })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -637,7 +649,8 @@ void Emitter::emitComponent(ComponentInterface op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<SeqMemoryOp>([&](auto op) { emitSeqMemory(op); })
-          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<hw::ConstantOp, calyx::ConstantOp>(
+              [&](auto op) { /*Do nothing*/ })
           .Case<SliceLibOp, PadLibOp, ExtSILibOp>(
               [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
@@ -954,8 +967,8 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp, CycleOp>(
-              [&](auto op) { /* Do nothing. */ })
+          .Case<hw::ConstantOp, calyx::ConstantOp, comb::AndOp, comb::OrOp,
+                comb::XorOp, CycleOp>([&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
