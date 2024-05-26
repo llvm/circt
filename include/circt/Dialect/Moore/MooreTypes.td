@@ -273,6 +273,40 @@ def QueueType : MooreTypeDef<"Queue", [], "moore::UnpackedType"> {
 
 
 //===----------------------------------------------------------------------===//
+// Structs
+//===----------------------------------------------------------------------===//
+
+// Common pieces of struct-like types.
+class StructLikeType<
+  string name, list<Trait> traits = [], string baseCppClass = "::mlir::Type"
+> : MooreTypeDef<name, traits, baseCppClass> {
+  let parameters = (ins ArrayRefParameter<"StructMember">:$members);
+  let assemblyFormat = [{
+    `<` custom<Members>($members) `>`
+  }];
+}
+
+def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
+  let mnemonic = "struct";
+  let summary = "a packed struct type";
+  let description = [{
+    A packed struct. All members are guaranteed to be packed as well.
+  }];
+  let genVerifyDecl = 1;
+}
+
+def UnpackedStructType : StructLikeType<
+  "UnpackedStruct", [], "moore::UnpackedType"
+> {
+  let mnemonic = "ustruct";
+  let summary = "an unpacked struct type";
+  let description = [{
+    An unpacked struct.
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
 

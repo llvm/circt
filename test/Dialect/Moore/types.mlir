@@ -35,14 +35,22 @@ unrealized_conversion_cast to !moore.assoc_array<string, chandle>
 // CHECK: !moore.queue<string, 42>
 unrealized_conversion_cast to !moore.queue<string, 42>
 
-// CHECK-LABEL: func @StructTypes(
-func.func @StructTypes(
-  // CHECK-SAME: %arg0: !moore.packed<struct<{}>>
-  // CHECK-SAME: %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>
-  %arg0: !moore.packed<struct<{}>>,
-  %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<struct<{}>>
-  // CHECK-SAME: %arg3: !moore.unpacked<struct<{foo: string, bar: event}>>
-  %arg2: !moore.unpacked<struct<{}>>,
-  %arg3: !moore.unpacked<struct<{foo: string, bar: event}>>
-) { return }
+// Packed structs
+// CHECK: !moore.struct<{}>
+unrealized_conversion_cast to !moore.struct<{}>
+// CHECK: !moore.struct<{foo: i42}>
+unrealized_conversion_cast to !moore.struct<{foo: i42}>
+// CHECK: !moore.struct<{foo: i42, bar: i1337}>
+unrealized_conversion_cast to !moore.struct<{foo: i42, bar: i1337}>
+// CHECK: !moore.struct<{"a b": i42}>
+unrealized_conversion_cast to !moore.struct<{"a b": i42}>
+
+// Unpacked structs
+// CHECK: !moore.ustruct<{}>
+unrealized_conversion_cast to !moore.ustruct<{}>
+// CHECK: !moore.ustruct<{foo: string}>
+unrealized_conversion_cast to !moore.ustruct<{foo: string}>
+// CHECK: !moore.ustruct<{foo: i42, bar: string}>
+unrealized_conversion_cast to !moore.ustruct<{foo: i42, bar: string}>
+// CHECK: !moore.ustruct<{"a b": string}>
+unrealized_conversion_cast to !moore.ustruct<{"a b": string}>

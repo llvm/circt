@@ -311,11 +311,11 @@ module Expressions;
   logic [0:31] vec_2;
   // CHECK: %arr = moore.variable : uarray<3 x uarray<6 x i4>>
   bit [4:1] arr [1:3][2:7];
-  // CHECK: %struct0 = moore.variable : packed<struct<{a: i32, b: i32}>>
+  // CHECK: %struct0 = moore.variable : struct<{a: i32, b: i32}>
   struct packed {
     int a, b;
   } struct0;
-  // CHECK: %struct1 = moore.variable : packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
+  // CHECK: %struct1 = moore.variable : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
   struct packed {
     struct packed {
       int a, b;
@@ -643,21 +643,21 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[TMP:%.+]] = moore.struct_extract %struct0, "a" : packed<struct<{a: i32, b: i32}>> -> i32
+    // CHECK: [[TMP:%.+]] = moore.struct_extract %struct0, "a" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign [[TMP]], %a : i32
     struct0.a = a;
 
-    // CHECK: [[TMP:%.+]]  = moore.struct_extract %struct0, "b" : packed<struct<{a: i32, b: i32}>> -> i32
+    // CHECK: [[TMP:%.+]]  = moore.struct_extract %struct0, "b" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP]] : i32
     b = struct0.b;
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract %struct1, "c" : packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> packed<struct<{a: i32, b: i32}>>
-    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "a" : packed<struct<{a: i32, b: i32}>> -> i32
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract %struct1, "c" : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}> -> struct<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "a" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign [[TMP2]], %a : i32
     struct1.c.a = a;
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract %struct1, "d" : packed<struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> packed<struct<{a: i32, b: i32}>>
-    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "b" : packed<struct<{a: i32, b: i32}>> -> i32
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract %struct1, "d" : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}> -> struct<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "b" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = struct1.d.b;
   end
