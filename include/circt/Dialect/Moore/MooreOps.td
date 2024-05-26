@@ -236,7 +236,7 @@ def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [SameTypeOperands]> {
-  let arguments = (ins AnyType:$dst, AnyType:$src);
+  let arguments = (ins UnpackedType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
     $dst `,` $src attr-dict `:` type($src)
   }];
@@ -262,7 +262,10 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
 
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
-  let arguments = (ins Arg<AnyType, "", [MemWrite]>:$dst, AnyType:$src);
+  let arguments = (ins
+    Arg<UnpackedType, "", [MemWrite]>:$dst,
+    UnpackedType:$src
+  );
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
@@ -285,7 +288,7 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
   let arguments = (ins APIntAttr:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let builders = [
@@ -721,10 +724,10 @@ def ConcatOp : MooreOp<"concat", [
     is the sum of the sizes of all operands. If any of the operands is
     four-valued, the result is four-valued; otherwise it is two-valued.
   }];
-  let arguments = (ins Variadic<SimpleBitVectorType>:$values);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins Variadic<IntType>:$values);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $values attr-dict `:` functional-type($values, $result)
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
 }
 
@@ -746,10 +749,10 @@ def ReplicateOp : MooreOp<"replicate", [
     ```
     See IEEE 1800-2017 §11.4.12 "Concatenation operators".
   }];
-  let arguments = (ins SimpleBitVectorType:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` functional-type($value, $result)
+    $value attr-dict `:` type($value) `->` type($result)
   }];
 }
 

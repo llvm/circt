@@ -54,8 +54,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
 
   // CHECK-NEXT: comb.replicate %arg0 : (i1) -> i2
   // CHECK-NEXT: comb.replicate %arg1 : (i1) -> i2
-  moore.replicate %arg0 : (!moore.i1) -> !moore.i2
-  moore.replicate %arg1 : (!moore.l1) -> !moore.l2
+  moore.replicate %arg0 : i1 -> i2
+  moore.replicate %arg1 : l1 -> l2
 
   // CHECK-NEXT: %c12_i32 = hw.constant 12 : i32
   // CHECK-NEXT: %c3_i6 = hw.constant 3 : i6

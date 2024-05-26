@@ -18,8 +18,8 @@
 
 using namespace circt;
 using namespace circt::moore;
-using mlir::DialectAsmParser;
-using mlir::DialectAsmPrinter;
+using mlir::AsmParser;
+using mlir::AsmPrinter;
 using mlir::LocationAttr;
 using mlir::OptionalParseResult;
 using mlir::StringSwitch;
@@ -56,6 +56,14 @@ StringRef moore::getKeywordFromSign(const Sign &sign) {
   llvm_unreachable("all signs should be handled");
 }
 
+struct Subset {
+  enum { None, Unpacked, Packed } implied = None;
+  bool allowUnpacked = true;
+};
+
+static ParseResult parseMooreType(AsmParser &parser, Subset subset, Type &type);
+static void printMooreType(Type type, AsmPrinter &printer, Subset subset);
+
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -83,6 +91,17 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
       .Case<UnpackedStructType>(
           [](auto type) { return type.getStruct().bitSize; })
       .Default([](auto) { return std::nullopt; });
+}
+
+Type UnpackedType::parse(mlir::AsmParser &parser) {
+  Type type;
+  if (parseMooreType(parser, {Subset::None, true}, type))
+    return {};
+  return type;
+}
+
+void UnpackedType::print(mlir::AsmPrinter &printer) const {
+  printMooreType(*this, printer, {Subset::None, true});
 }
 
 //===----------------------------------------------------------------------===//
@@ -212,18 +231,8 @@ const Struct &UnpackedStructType::getStruct() const {
 // Parsing and Printing
 //===----------------------------------------------------------------------===//
 
-struct Subset {
-  enum { None, Unpacked, Packed } implied = None;
-  bool allowUnpacked = true;
-};
-
-static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
-                                  Type &type);
-static void printMooreType(Type type, DialectAsmPrinter &printer,
-                           Subset subset);
-
 /// Parse a type with custom syntax.
-static OptionalParseResult customTypeParser(DialectAsmParser &parser,
+static OptionalParseResult customTypeParser(AsmParser &parser,
                                             StringRef mnemonic, Subset subset,
                                             llvm::SMLoc loc, Type &type) {
   auto *context = parser.getContext();
@@ -324,7 +333,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
 }
 
 /// Print a type with custom syntax.
-static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
+static LogicalResult customTypePrinter(Type type, AsmPrinter &printer,
                                        Subset subset) {
   // If we are printing a type that may be both packed or unpacked, emit a
   // wrapping `packed<...>` or `unpacked<...>` accordingly if not done so
@@ -365,7 +374,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &printer,
 }
 
 /// Parse a type registered with this dialect.
-static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
+static ParseResult parseMooreType(AsmParser &parser, Subset subset,
                                   Type &type) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   StringRef mnemonic;
@@ -383,8 +392,7 @@ static ParseResult parseMooreType(DialectAsmParser &parser, Subset subset,
 }
 
 /// Print a type registered with this dialect.
-static void printMooreType(Type type, DialectAsmPrinter &printer,
-                           Subset subset) {
+static void printMooreType(Type type, AsmPrinter &printer, Subset subset) {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   if (succeeded(customTypePrinter(type, printer, subset)))

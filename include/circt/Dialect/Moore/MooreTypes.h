@@ -54,12 +54,6 @@ namespace detail {
 struct StructTypeStorage;
 } // namespace detail
 
-/// Base class for all SystemVerilog types in the Moore dialect.
-class SVType : public Type {
-protected:
-  using Type::Type;
-};
-
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -99,7 +93,7 @@ class UnpackedStructType;
 /// - Ranges (`[x:y]`)
 /// - Associative (`[T]` or `[*]`)
 /// - Queues (`[$]` or `[$:x]`)
-class UnpackedType : public SVType {
+class UnpackedType : public Type {
 public:
   static bool classof(Type type) {
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
@@ -116,8 +110,13 @@ public:
   /// a queue, or the core type itself has no known size.
   std::optional<unsigned> getBitSize() const;
 
+  // Support parsing and printing of unpacked types in their prefix-stripped
+  // form.
+  static Type parse(mlir::AsmParser &odsParser);
+  void print(mlir::AsmPrinter &odsPrinter) const;
+
 protected:
-  using SVType::SVType;
+  using Type::Type;
 };
 
 //===----------------------------------------------------------------------===//
