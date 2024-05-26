@@ -292,7 +292,7 @@ module Expressions;
   // CHECK: %b = moore.variable : !moore.i32
   // CHECK: %c = moore.variable : !moore.i32
   // CHECK: %u = moore.variable : !moore.i32
-  // CHECK: %v = moore.variable : !moore.packed<range<i4, 1:0>>
+  // CHECK: %v = moore.variable : !moore.array<2 x !moore.i4>
   // CHECK: %d = moore.variable : !moore.l32
   // CHECK: %e = moore.variable : !moore.l32
   // CHECK: %f = moore.variable : !moore.l32
@@ -364,9 +364,9 @@ module Expressions;
     // CHECK: moore.extract %vec_1 from %[[VAL_2]] : !moore.l32, !moore.i32 -> !moore.l1
     y = vec_1[1*a-:1];
     // CHECK: %[[VAL_1:.*]] = moore.constant 3 : !moore.i32
-    // CHECK: %[[VAL_2:.*]] = moore.extract %arr from %[[VAL_1]] : !moore.unpacked<range<range<i4, 2:7>, 1:3>>, !moore.i32 -> !moore.unpacked<range<i4, 2:7>>
+    // CHECK: %[[VAL_2:.*]] = moore.extract %arr from %[[VAL_1]] : !moore.uarray<3 x !moore.uarray<6 x !moore.i4>>, !moore.i32 -> !moore.uarray<6 x !moore.i4>
     // CHECK: %[[VAL_3:.*]] = moore.constant 7 : !moore.i32
-    // CHECK: %[[VAL_4:.*]] = moore.extract %[[VAL_2]] from %[[VAL_3]] : !moore.unpacked<range<i4, 2:7>>, !moore.i32 -> !moore.i4
+    // CHECK: %[[VAL_4:.*]] = moore.extract %[[VAL_2]] from %[[VAL_3]] : !moore.uarray<6 x !moore.i4>, !moore.i32 -> !moore.i4
     // CHECK: %[[VAL_5:.*]] = moore.constant 3 : !moore.i32
     // CHECK: moore.extract %[[VAL_4]] from %[[VAL_5]] : !moore.i4, !moore.i32 -> !moore.i2
     s = arr[3][7][4:3];
@@ -381,7 +381,7 @@ module Expressions;
     c = +a;
     // CHECK: moore.neg %a : !moore.i32
     c = -a;
-    // CHECK: [[TMP1:%.+]] = moore.conversion %v : !moore.packed<range<i4, 1:0>> -> !moore.i32
+    // CHECK: [[TMP1:%.+]] = moore.conversion %v : !moore.array<2 x !moore.i4> -> !moore.i32
     // CHECK: [[TMP2:%.+]] = moore.neg [[TMP1]] : !moore.i32
     // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i32 -> !moore.i32
     c = -v;
@@ -441,7 +441,7 @@ module Expressions;
     // CHECK: moore.add %a, %b : !moore.i32
     c = a + b;
     // CHECK: [[TMP1:%.+]] = moore.conversion %a : !moore.i32 -> !moore.i32
-    // CHECK: [[TMP2:%.+]] = moore.conversion %v : !moore.packed<range<i4, 1:0>> -> !moore.i32
+    // CHECK: [[TMP2:%.+]] = moore.conversion %v : !moore.array<2 x !moore.i4> -> !moore.i32
     // CHECK: [[TMP3:%.+]] = moore.add [[TMP1]], [[TMP2]] : !moore.i32
     // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i32 -> !moore.i32
     c = a + v;

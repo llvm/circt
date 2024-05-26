@@ -36,35 +36,7 @@ TEST(TypesTest, UnitTypes) {
   ASSERT_EQ(eventType.getDomain(), Domain::TwoValued);
 }
 
-TEST(TypesTest, Ranges) {
-  Range a(42);
-  Range b(32, RangeDir::Down, -5);
-  Range c(16, RangeDir::Up, -3);
-
-  ASSERT_EQ(a.toString(), "41:0");
-  ASSERT_EQ(b.toString(), "26:-5");
-  ASSERT_EQ(c.toString(), "-3:12");
-
-  ASSERT_EQ(a.left(), 41);
-  ASSERT_EQ(a.right(), 0);
-  ASSERT_EQ(a.low(), 0);
-  ASSERT_EQ(a.high(), 41);
-  ASSERT_EQ(a.increment(), -1);
-
-  ASSERT_EQ(b.left(), 26);
-  ASSERT_EQ(b.right(), -5);
-  ASSERT_EQ(b.low(), -5);
-  ASSERT_EQ(b.high(), 26);
-  ASSERT_EQ(b.increment(), -1);
-
-  ASSERT_EQ(c.left(), -3);
-  ASSERT_EQ(c.right(), 12);
-  ASSERT_EQ(c.low(), -3);
-  ASSERT_EQ(c.high(), 12);
-  ASSERT_EQ(c.increment(), 1);
-}
-
-TEST(TypesTest, PackedInt) {
+TEST(TypesTest, Ints) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
@@ -87,39 +59,65 @@ TEST(TypesTest, Reals) {
   ASSERT_EQ(t0.getBitSize(), 64u);
 }
 
-TEST(TypesTest, PackedDim) {
+TEST(TypesTest, PackedArrays) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
-  auto arrayType1 = IntType::getInt(&context, 3);
-  auto arrayType2 = PackedRangeDim::get(arrayType1, 2);
-  auto arrayType3 = PackedUnsizedDim::get(arrayType2);
+  auto i3 = IntType::getInt(&context, 3);
+  auto l3 = IntType::getLogic(&context, 3);
+  auto arrayType1 = ArrayType::get(2, i3);
+  auto arrayType2 = OpenArrayType::get(l3);
 
-  ASSERT_EQ(arrayType2.getRange(), Range(2));
-  ASSERT_EQ(arrayType3.getRange(), std::nullopt);
-  ASSERT_EQ(arrayType2.getSize(), 2u);
-  ASSERT_EQ(arrayType3.getSize(), std::nullopt);
+  // Value domain
+  ASSERT_EQ(arrayType1.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(arrayType2.getDomain(), Domain::FourValued);
+
+  // Bit size
+  ASSERT_EQ(arrayType1.getBitSize(), 6u);
+  ASSERT_EQ(arrayType2.getBitSize(), std::nullopt);
+
+  // Element types
+  ASSERT_EQ(arrayType1.getElementType(), i3);
+  ASSERT_EQ(arrayType2.getElementType(), l3);
+
+  // Other attributes
+  ASSERT_EQ(arrayType1.getSize(), 2u);
 }
 
-TEST(TypesTest, UnpackedDim) {
+TEST(TypesTest, UnpackedArrays) {
   MLIRContext context;
   context.loadDialect<MooreDialect>();
 
+  auto logicType = IntType::getLogic(&context, 1);
   auto stringType = StringType::get(&context);
-  auto arrayType1 = UnpackedUnsizedDim::get(stringType);
-  auto arrayType2 = UnpackedArrayDim::get(arrayType1, 42);
-  auto arrayType3 = UnpackedRangeDim::get(arrayType2, 2);
-  auto arrayType4 = UnpackedAssocDim::get(arrayType3);
-  auto arrayType5 = UnpackedAssocDim::get(arrayType4, stringType);
-  auto arrayType6 = UnpackedQueueDim::get(arrayType5);
-  auto arrayType7 = UnpackedQueueDim::get(arrayType6, 9);
+  auto eventType = EventType::get(&context);
+  auto arrayType1 = UnpackedArrayType::get(2, logicType);
+  auto arrayType2 = OpenUnpackedArrayType::get(stringType);
+  auto arrayType3 = AssocArrayType::get(stringType, eventType);
+  auto arrayType4 = QueueType::get(stringType, 9);
 
-  ASSERT_EQ(arrayType2.getSize(), 42u);
-  ASSERT_EQ(arrayType3.getRange(), Range(2));
-  ASSERT_EQ(arrayType4.getIndexType(), UnpackedType{});
-  ASSERT_EQ(arrayType5.getIndexType(), stringType);
-  ASSERT_EQ(arrayType6.getBound(), std::nullopt);
-  ASSERT_EQ(arrayType7.getBound(), 9u);
+  // Value domain
+  ASSERT_EQ(arrayType1.getDomain(), Domain::FourValued);
+  ASSERT_EQ(arrayType2.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(arrayType3.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(arrayType4.getDomain(), Domain::TwoValued);
+
+  // Bit size
+  ASSERT_EQ(arrayType1.getBitSize(), 2u);
+  ASSERT_EQ(arrayType2.getBitSize(), std::nullopt);
+  ASSERT_EQ(arrayType3.getBitSize(), std::nullopt);
+  ASSERT_EQ(arrayType4.getBitSize(), std::nullopt);
+
+  // Element types
+  ASSERT_EQ(arrayType1.getElementType(), logicType);
+  ASSERT_EQ(arrayType2.getElementType(), stringType);
+  ASSERT_EQ(arrayType3.getElementType(), stringType);
+  ASSERT_EQ(arrayType4.getElementType(), stringType);
+
+  // Other attributes
+  ASSERT_EQ(arrayType1.getSize(), 2u);
+  ASSERT_EQ(arrayType3.getIndexType(), eventType);
+  ASSERT_EQ(arrayType4.getBound(), 9u);
 }
 
 TEST(TypesTest, Structs) {
@@ -131,7 +129,7 @@ TEST(TypesTest, Structs) {
   auto bitType = IntType::getInt(&context, 1);
   auto logicType = IntType::getLogic(&context, 1);
   auto bit8Type = IntType::getInt(&context, 8);
-  auto bitDynArrayType = PackedUnsizedDim::get(bitType);
+  auto bitDynArrayType = OpenUnpackedArrayType::get(bitType);
 
   auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
                                     {StructMember{foo, bitType}});

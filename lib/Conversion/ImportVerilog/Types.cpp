@@ -49,17 +49,16 @@ struct TypeVisitor {
     if (!innerType)
       return {};
     // The Slang frontend guarantees the inner type to be packed.
-    auto packedInnerType = cast<moore::PackedType>(innerType);
-    return moore::PackedRangeDim::get(
-        packedInnerType, moore::Range(type.range.left, type.range.right));
+    return moore::ArrayType::get(type.range.width(),
+                                 cast<moore::PackedType>(innerType));
   }
 
   Type visit(const slang::ast::QueueType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedQueueDim::get(cast<moore::UnpackedType>(innerType),
-                                        type.maxBound);
+    return moore::QueueType::get(cast<moore::UnpackedType>(innerType),
+                                 type.maxBound);
   }
 
   Type visit(const slang::ast::AssociativeArrayType &type) {
@@ -69,24 +68,24 @@ struct TypeVisitor {
     auto indexType = type.indexType->visit(*this);
     if (!indexType)
       return {};
-    return moore::UnpackedAssocDim::get(cast<moore::UnpackedType>(innerType),
-                                        cast<moore::UnpackedType>(indexType));
+    return moore::AssocArrayType::get(cast<moore::UnpackedType>(innerType),
+                                      cast<moore::UnpackedType>(indexType));
   }
 
   Type visit(const slang::ast::FixedSizeUnpackedArrayType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedRangeDim::get(
-        cast<moore::UnpackedType>(innerType),
-        moore::Range(type.range.left, type.range.right));
+    return moore::UnpackedArrayType::get(type.range.width(),
+                                         cast<moore::UnpackedType>(innerType));
   }
 
   Type visit(const slang::ast::DynamicArrayType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedUnsizedDim::get(cast<moore::UnpackedType>(innerType));
+    return moore::OpenUnpackedArrayType::get(
+        cast<moore::UnpackedType>(innerType));
   }
 
   // Handle type defs.

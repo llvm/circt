@@ -40,32 +40,22 @@ MLIR_CAPI_EXPORTED MlirType mooreIntTypeGetLogic(MlirContext ctx,
                                                  unsigned width);
 /// Create a real type.
 MLIR_CAPI_EXPORTED MlirType mooreRealTypeGet(MlirContext ctx);
-/// Create a packed unsized dimension type.
-MLIR_CAPI_EXPORTED MlirType moorePackedUnsizedDimTypeGet(MlirType inner);
-/// Create a packed range dimension type.
-MLIR_CAPI_EXPORTED MlirType moorePackedRangeDimTypeGet(MlirType inner,
-                                                       unsigned size,
-                                                       bool upDir, int offset);
-/// Create a unpacked unsized dimension type.
-MLIR_CAPI_EXPORTED MlirType mooreUnpackedUnsizedDimTypeGet(MlirType inner);
-/// Create a unpacked array dimension type.
-MLIR_CAPI_EXPORTED MlirType mooreUnpackedArrayDimTypeGet(MlirType inner,
-                                                         unsigned size);
-/// Create a unpacked range dimension type.
-MLIR_CAPI_EXPORTED MlirType mooreUnpackedRangeDimTypeGet(MlirType inner,
-                                                         unsigned size,
-                                                         bool upDir,
-                                                         int offset);
-/// Create a unpacked assoc dimension type without index.
-MLIR_CAPI_EXPORTED MlirType mooreUnpackedAssocDimTypeGet(MlirType inner);
-/// Create a unpacked assoc dimension type width index.
-MLIR_CAPI_EXPORTED MlirType
-mooreUnpackedAssocDimTypeGetWithIndex(MlirType inner, MlirType indexType);
-/// Create a unpacked queue dimension type without bound.
-MLIR_CAPI_EXPORTED MlirType mooreUnpackedQueueDimTypeGet(MlirType inner);
-/// Create a unpacked queue dimension type with bound.
-MLIR_CAPI_EXPORTED MlirType
-mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound);
+/// Create a packed open array type.
+MLIR_CAPI_EXPORTED MlirType mooreOpenArrayTypeGet(MlirType elementType);
+/// Create a packed array type.
+MLIR_CAPI_EXPORTED MlirType mooreArrayTypeGet(unsigned size,
+                                              MlirType elementType);
+/// Create an unpacked open array type.
+MLIR_CAPI_EXPORTED MlirType mooreOpenUnpackedArrayTypeGet(MlirType elementType);
+/// Create an unpacked array type.
+MLIR_CAPI_EXPORTED MlirType mooreUnpackedArrayTypeGet(unsigned size,
+                                                      MlirType elementType);
+/// Create an unpacked associative array type.
+MLIR_CAPI_EXPORTED MlirType mooreAssocArrayTypeGet(MlirType elementType,
+                                                   MlirType indexType);
+/// Create an unpacked queue type.
+MLIR_CAPI_EXPORTED MlirType mooreQueueTypeGet(MlirType elementType,
+                                              unsigned bound);
 /// Checks whether the passed UnpackedType is a two-valued type.
 MLIR_CAPI_EXPORTED bool mooreIsTwoValuedType(MlirType type);
 /// Checks whether the passed UnpackedType is a four-valued type.

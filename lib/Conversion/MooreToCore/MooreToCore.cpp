@@ -415,16 +415,6 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return mlir::IntegerType::get(type.getContext(), type.getWidth());
   });
 
-  // Directly map simple bit vector types to a compact integer type. This needs
-  // to be added after all of the other conversions above, such that SBVs
-  // conversion gets tried first before any of the others.
-  typeConverter.addConversion([&](UnpackedType type) -> std::optional<Type> {
-    if (isa<UnpackedRangeDim, PackedRangeDim>(type))
-      return mlir::IntegerType::get(type.getContext(),
-                                    type.getBitSize().value());
-    return std::nullopt;
-  });
-
   // Valid target types.
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
 }
