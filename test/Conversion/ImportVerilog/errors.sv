@@ -32,13 +32,6 @@ module Foo;
 endmodule
 
 // -----
-module Foo(
-  // expected-error @below {{unsupported module port}}
-  input a
-);
-endmodule
-
-// -----
 module Foo;
   // expected-error @below {{unsupported construct}}
   nettype real x;

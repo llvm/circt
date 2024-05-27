@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 
 using namespace circt;

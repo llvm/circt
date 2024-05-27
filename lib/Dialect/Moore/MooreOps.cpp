@@ -11,30 +11,222 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/HW/CustomDirectiveImpl.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/SmallString.h"
 
 using namespace circt;
 using namespace circt::moore;
+
+//===----------------------------------------------------------------------===//
+// SVModuleOp
+//===----------------------------------------------------------------------===//
+
+void SVModuleOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+  hw::module_like_impl::printModuleSignatureNew(p, getBodyRegion(),
+                                                getModuleType(), {}, {});
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
+  p << " ";
+  p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the module name.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
+                             result.attributes))
+    return failure();
+
+  // Parse the ports.
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+  result.addAttribute(getModuleTypeAttrName(result.name), modType);
+
+  // Parse the attributes.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // Add the entry block arguments.
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  for (auto &port : ports)
+    if (port.direction != hw::ModulePort::Direction::Output)
+      entryArgs.push_back(port);
+
+  // Parse the optional function body.
+  auto &bodyRegion = *result.addRegion();
+  if (parser.parseRegion(bodyRegion, entryArgs))
+    return failure();
+
+  ensureTerminator(bodyRegion, parser.getBuilder(), result.location);
+  return success();
+}
+
+void SVModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                          mlir::OpAsmSetValueNameFn setNameFn) {
+  if (&region != &getBodyRegion())
+    return;
+  auto moduleType = getModuleType();
+  for (auto [index, arg] : llvm::enumerate(region.front().getArguments()))
+    setNameFn(arg, moduleType.getInputNameAttr(index));
+}
+
+OutputOp SVModuleOp::getOutputOp() {
+  return cast<OutputOp>(getBody()->getTerminator());
+}
+
+OperandRange SVModuleOp::getOutputs() { return getOutputOp().getOperands(); }
+
+//===----------------------------------------------------------------------===//
+// OutputOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult OutputOp::verify() {
+  auto module = getParentOp();
+
+  // Check that the number of operands matches the number of output ports.
+  auto outputTypes = module.getModuleType().getOutputTypes();
+  if (outputTypes.size() != getNumOperands())
+    return emitOpError("has ")
+           << getNumOperands() << " operands, but enclosing module @"
+           << module.getSymName() << " has " << outputTypes.size()
+           << " outputs";
+
+  // Check that the operand types match the output ports.
+  for (unsigned i = 0, e = outputTypes.size(); i != e; ++i)
+    if (outputTypes[i] != getOperand(i).getType())
+      return emitOpError() << "operand " << i << " (" << getOperand(i).getType()
+                           << ") does not match output type (" << outputTypes[i]
+                           << ") of module @" << module.getSymName();
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *module =
+  // Resolve the target symbol.
+  auto *symbol =
       symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
-  if (module == nullptr)
-    return emitError("unknown symbol name '") << getModuleName() << "'";
+  if (!symbol)
+    return emitOpError("references unknown symbol @") << getModuleName();
 
-  // It must be some sort of module.
-  if (!isa<SVModuleOp>(module))
-    return emitError("symbol '")
-           << getModuleName()
-           << "' must reference a 'moore.module', but got a '"
-           << module->getName() << "' instead";
+  // Check that the symbol is a SVModuleOp.
+  auto module = dyn_cast<SVModuleOp>(symbol);
+  if (!module)
+    return emitOpError("must reference a 'moore.module', but @")
+           << getModuleName() << " is a '" << symbol->getName() << "'";
+
+  // Check that the input ports match.
+  auto moduleType = module.getModuleType();
+  auto inputTypes = moduleType.getInputTypes();
+
+  if (inputTypes.size() != getNumOperands())
+    return emitOpError("has ")
+           << getNumOperands() << " operands, but target module @"
+           << module.getSymName() << " has " << inputTypes.size() << " inputs";
+
+  for (unsigned i = 0, e = inputTypes.size(); i != e; ++i)
+    if (inputTypes[i] != getOperand(i).getType())
+      return emitOpError() << "operand " << i << " (" << getOperand(i).getType()
+                           << ") does not match input type (" << inputTypes[i]
+                           << ") of module @" << module.getSymName();
+
+  // Check that the output ports match.
+  auto outputTypes = moduleType.getOutputTypes();
+
+  if (outputTypes.size() != getNumResults())
+    return emitOpError("has ")
+           << getNumOperands() << " results, but target module @"
+           << module.getSymName() << " has " << outputTypes.size()
+           << " outputs";
+
+  for (unsigned i = 0, e = outputTypes.size(); i != e; ++i)
+    if (outputTypes[i] != getResult(i).getType())
+      return emitOpError() << "result " << i << " (" << getResult(i).getType()
+                           << ") does not match output type (" << outputTypes[i]
+                           << ") of module @" << module.getSymName();
 
   return success();
+}
+
+void InstanceOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  p << " ";
+  p.printAttributeWithoutType(getModuleNameAttr());
+  printInputPortList(p, getOperation(), getInputs(), getInputs().getTypes(),
+                     getInputNames());
+  p << " -> ";
+  printOutputPortList(p, getOperation(), getOutputs().getTypes(),
+                      getOutputNames());
+  p.printOptionalAttrDict(getOperation()->getAttrs(), getAttributeNames());
+}
+
+ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the instance name.
+  StringAttr instanceName;
+  if (parser.parseAttribute(instanceName, "instanceName", result.attributes))
+    return failure();
+
+  // Parse the module name.
+  FlatSymbolRefAttr moduleName;
+  if (parser.parseAttribute(moduleName, "moduleName", result.attributes))
+    return failure();
+
+  // Parse the input port list.
+  auto loc = parser.getCurrentLocation();
+  SmallVector<OpAsmParser::UnresolvedOperand> inputs;
+  SmallVector<Type> types;
+  ArrayAttr names;
+  if (parseInputPortList(parser, inputs, types, names))
+    return failure();
+  if (parser.resolveOperands(inputs, types, loc, result.operands))
+    return failure();
+  result.addAttribute("inputNames", names);
+
+  // Parse `->`.
+  if (parser.parseArrow())
+    return failure();
+
+  // Parse the output port list.
+  types.clear();
+  if (parseOutputPortList(parser, types, names))
+    return failure();
+  result.addAttribute("outputNames", names);
+  result.addTypes(types);
+
+  // Parse the attributes.
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
+void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallString<32> name;
+  name += getInstanceName();
+  name += '.';
+  auto baseLen = name.size();
+
+  for (auto [result, portName] :
+       llvm::zip(getOutputs(), getOutputNames().getAsRange<StringAttr>())) {
+    if (!portName || portName.empty())
+      continue;
+    name.resize(baseLen);
+    name += portName.getValue();
+    setNameFn(result, name);
+  }
 }
 
 //===----------------------------------------------------------------------===//
