@@ -24,6 +24,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MathExtras.h"
 
 namespace circt {
@@ -160,6 +161,65 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
   }
 };
 
+struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::GlobalOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    MemRefType type = op.getType();
+    if (isUniDimensional(type) || !type.hasStaticShape())
+      return failure();
+    MemRefType newType = MemRefType::get(
+        SmallVector<int64_t>{type.getNumElements()}, type.getElementType());
+    auto cstAttr =
+        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
+
+    SmallVector<Attribute> flattenedVals;
+    for (auto attr : cstAttr.getValues<Attribute>()) {
+      flattenedVals.push_back(attr);
+    }
+
+    auto newTypeAttr = TypeAttr::get(newType);
+    std::string constName = op.getConstantAttrName().str();
+    auto newNameAttr = rewriter.getStringAttr(llvm::formatv(
+        "{0}_{1}x{2}", constName, flattenedVals.size(), type.getElementType()));
+    RankedTensorType tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
+    auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
+
+    rewriter.replaceOpWithNewOp<memref::GlobalOp>(
+        op, newNameAttr, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
+        op.getConstantAttr(), op.getAlignmentAttr());
+
+    return success();
+  }
+};
+
+struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::GetGlobalOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto *symbolTableOp = op->getParentWithTrait<mlir::OpTrait::SymbolTable>();
+    auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+        SymbolTable::lookupSymbolIn(symbolTableOp, op.getNameAttr()));
+
+    MemRefType type = globalOp.getType();
+    if (isUniDimensional(type) || !type.hasStaticShape())
+      return failure();
+    MemRefType newType = MemRefType::get(
+        SmallVector<int64_t>{type.getNumElements()}, type.getElementType());
+    auto newName = llvm::formatv("{0}_{1}x{2}", globalOp.getConstantAttrName(), type.getNumElements(),
+                                 type.getElementType());
+    rewriter.replaceOpWithNewOp<memref::GetGlobalOp>(
+        op, newType, rewriter.getStringAttr(newName));
+
+    return success();
+  }
+};
+
 // A generic pattern which will replace an op with a new op of the same type
 // but using the adaptor (type converted) operands.
 template <typename TOp>
@@ -255,7 +315,10 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
       [](memref::StoreOp op) { return op.getIndices().size() == 1; });
   target.addDynamicallyLegalOp<memref::LoadOp>(
       [](memref::LoadOp op) { return op.getIndices().size() == 1; });
-
+  target.addDynamicallyLegalOp<memref::GlobalOp>(
+      [](memref::GlobalOp op) { return isUniDimensional(op.getType()); });
+  target.addDynamicallyLegalOp<memref::GetGlobalOp>(
+      [](memref::GetGlobalOp op) { return isUniDimensional(op.getType()); });
   addGenericLegalityConstraint<mlir::cf::CondBranchOp, mlir::cf::BranchOp,
                                func::CallOp, func::ReturnOp, memref::DeallocOp,
                                memref::CopyOp>(target);
@@ -322,6 +385,7 @@ public:
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
+                 GlobalOpConversion, GetGlobalOpConversion,
                  OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  CondBranchOpConversion,
