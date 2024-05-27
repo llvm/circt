@@ -102,16 +102,12 @@ struct TypeVisitor {
 
   // Collect the members in a struct or union.
   LogicalResult collectMembers(const slang::ast::Scope &structType,
-                               SmallVectorImpl<moore::StructMember> &members,
-                               bool enforcePacked) {
+                               SmallVectorImpl<moore::StructMember> &members) {
     for (auto &field : structType.membersOfType<slang::ast::FieldSymbol>()) {
       auto name = StringAttr::get(context.getContext(), field.name);
       auto innerType = context.convertType(*field.getDeclaredType());
       if (!innerType)
         return failure();
-      // The Slang frontend guarantees the inner type to be packed if the struct
-      // is packed.
-      assert(!enforcePacked || isa<moore::PackedType>(innerType));
       members.push_back({name, cast<moore::UnpackedType>(innerType)});
     }
     return success();
@@ -120,18 +116,16 @@ struct TypeVisitor {
   // Handle packed and unpacked structs.
   Type visit(const slang::ast::PackedStructType &type) {
     SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, true)))
+    if (failed(collectMembers(type, members)))
       return {};
-    return moore::PackedStructType::get(context.getContext(),
-                                        moore::StructKind::Struct, members);
+    return moore::StructType::get(context.getContext(), members);
   }
 
   Type visit(const slang::ast::UnpackedStructType &type) {
     SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, false)))
+    if (failed(collectMembers(type, members)))
       return {};
-    return moore::UnpackedStructType::get(context.getContext(),
-                                          moore::StructKind::Struct, members);
+    return moore::UnpackedStructType::get(context.getContext(), members);
   }
 
   /// Emit an error for all other types.

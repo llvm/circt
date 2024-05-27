@@ -131,17 +131,14 @@ TEST(TypesTest, Structs) {
   auto bit8Type = IntType::getInt(&context, 8);
   auto bitDynArrayType = OpenUnpackedArrayType::get(bitType);
 
-  auto s0 = UnpackedStructType::get(&context, StructKind::Struct,
-                                    {StructMember{foo, bitType}});
-  auto s1 = UnpackedStructType::get(
-      &context, StructKind::Struct,
-      {StructMember{foo, bitType}, StructMember{bar, bit8Type}});
-  auto s2 = UnpackedStructType::get(
-      &context, StructKind::Struct,
-      {StructMember{foo, bitType}, StructMember{bar, logicType}});
-  auto s3 = UnpackedStructType::get(
-      &context, StructKind::Struct,
-      {StructMember{foo, bitType}, StructMember{bar, bitDynArrayType}});
+  auto s0 = StructType::get(&context, {StructMember{foo, bitType}});
+  auto s1 = StructType::get(
+      &context, {StructMember{foo, bitType}, StructMember{bar, bit8Type}});
+  auto s2 = StructType::get(
+      &context, {StructMember{foo, bitType}, StructMember{bar, logicType}});
+  auto s3 =
+      UnpackedStructType::get(&context, {StructMember{foo, bitType},
+                                         StructMember{bar, bitDynArrayType}});
 
   // Value domain
   ASSERT_EQ(s0.getDomain(), Domain::TwoValued);

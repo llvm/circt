@@ -23,6 +23,23 @@
 namespace circt {
 namespace moore {
 
+class ArrayType;
+class AssocArrayType;
+class ChandleType;
+class EventType;
+class IntType;
+class OpenArrayType;
+class OpenUnpackedArrayType;
+class PackedType;
+class QueueType;
+class RealType;
+class StringType;
+class StructType;
+class UnpackedType;
+class UnpackedArrayType;
+class UnpackedStructType;
+class VoidType;
+
 /// The number of values each bit of a type can assume.
 enum class Domain {
   /// Two-valued types such as `bit` or `int`.
@@ -31,43 +48,9 @@ enum class Domain {
   FourValued,
 };
 
-/// Whether a type is signed or unsigned.
-enum class Sign {
-  /// An `unsigned` type.
-  Unsigned,
-  /// A `signed` type.
-  Signed,
-};
-
-/// Map a `Sign` to the corresponding keyword.
-StringRef getKeywordFromSign(const Sign &sign);
-/// Map the keywords `unsigned` and `signed` to the corresponding `Sign`.
-std::optional<Sign> getSignFromKeyword(StringRef keyword);
-
-template <typename Os>
-Os &operator<<(Os &os, const Sign &sign) {
-  os << getKeywordFromSign(sign);
-  return os;
-}
-
-namespace detail {
-struct StructTypeStorage;
-} // namespace detail
-
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
-
-class PackedType;
-class StringType;
-class ChandleType;
-class EventType;
-class RealType;
-class UnpackedArrayType;
-class OpenUnpackedArrayType;
-class AssocArrayType;
-class QueueType;
-class UnpackedStructType;
 
 /// An unpacked SystemVerilog type.
 ///
@@ -123,12 +106,6 @@ protected:
 // Packed Type
 //===----------------------------------------------------------------------===//
 
-class VoidType;
-class IntType;
-class ArrayType;
-class OpenArrayType;
-class PackedStructType;
-
 /// A packed SystemVerilog type.
 ///
 /// Packed types are the core types of SystemVerilog. They combine a core packed
@@ -153,8 +130,8 @@ class PackedStructType;
 class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
-    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType,
-                     PackedStructType>(type);
+    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType>(
+        type);
   }
 
   /// Get the value domain of this type.
@@ -170,30 +147,8 @@ protected:
 };
 
 //===----------------------------------------------------------------------===//
-// Packed and Unpacked Structs
+// Struct Members
 //===----------------------------------------------------------------------===//
-
-/// Whether a struct is a `struct`, `union`, or `union tagged`.
-enum class StructKind {
-  /// A `struct`.
-  Struct,
-  /// A `union`.
-  Union,
-  /// A `union tagged`.
-  TaggedUnion,
-};
-
-/// Map a `StructKind` to the corresponding mnemonic.
-StringRef getMnemonicFromStructKind(StructKind kind);
-/// Map a mnemonic to the corresponding `StructKind`.
-std::optional<StructKind> getStructKindFromMnemonic(StringRef mnemonic);
-
-template <typename Os>
-Os &operator<<(Os &os, const StructKind &kind) {
-  static constexpr StringRef keywords[] = {"struct", "union", "union tagged"};
-  os << keywords[static_cast<unsigned>(kind)];
-  return os;
-}
 
 /// A member of a struct.
 struct StructMember {
@@ -211,78 +166,6 @@ struct StructMember {
 inline llvm::hash_code hash_value(const StructMember &x) {
   return llvm::hash_combine(x.name, x.type);
 }
-
-/// A struct.
-///
-/// This represents both packed and unpacked structs. Which one it is depends on
-/// whether this struct is embedded in a `PackedStructType` or a
-/// `UnpackedStructType`. For the packed version the struct members are
-/// guaranteed to be packed types as well.
-struct Struct {
-  /// Whether this is a `struct`, `union`, or `union tagged`.
-  StructKind kind;
-  /// The list of members.
-  SmallVector<StructMember, 4> members;
-  /// The value domain of this struct. If all members are two-valued, the
-  /// overall struct is two-valued. Otherwise the struct is four-valued.
-  Domain domain;
-  /// The size of this struct in bits. This is `None` if any member type has an
-  /// unknown size. This is commonly the case for unpacked member types, or
-  /// dimensions with unknown size such as `[]` or `[$]`.
-  std::optional<unsigned> bitSize;
-
-  /// Create a new struct.
-  Struct(StructKind kind, ArrayRef<StructMember> members);
-};
-
-/// A packed struct.
-class PackedStructType : public Type::TypeBase<PackedStructType, PackedType,
-                                               detail::StructTypeStorage,
-                                               ::mlir::TypeTrait::IsMutable> {
-public:
-  static PackedStructType get(MLIRContext *context, StructKind kind,
-                              ArrayRef<StructMember> members);
-  static PackedStructType get(MLIRContext *context, const Struct &strukt) {
-    return get(context, strukt.kind, strukt.members);
-  }
-
-  /// Get the struct definition.
-  const Struct &getStruct() const;
-
-  /// Allow implicit casts from `PackedStructType` to the actual struct
-  /// definition.
-  operator const Struct &() const { return getStruct(); }
-
-  static constexpr StringLiteral name = "moore.packed_struct";
-
-protected:
-  using Base::Base;
-};
-
-/// An unpacked struct.
-class UnpackedStructType
-    : public Type::TypeBase<UnpackedStructType, UnpackedType,
-                            detail::StructTypeStorage,
-                            ::mlir::TypeTrait::IsMutable> {
-public:
-  static UnpackedStructType get(MLIRContext *context, StructKind kind,
-                                ArrayRef<StructMember> members);
-  static UnpackedStructType get(MLIRContext *context, const Struct &strukt) {
-    return get(context, strukt.kind, strukt.members);
-  }
-
-  /// Get the struct definition.
-  const Struct &getStruct() const;
-
-  /// Allow implicit casts from `UnpackedStructType` to the actual struct
-  /// definition.
-  operator const Struct &() const { return getStruct(); }
-
-  static constexpr StringLiteral name = "moore.unpacked_struct";
-
-protected:
-  using Base::Base;
-};
 
 } // namespace moore
 } // namespace circt
