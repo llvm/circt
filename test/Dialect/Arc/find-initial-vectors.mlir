@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --find-initial-vectors | FileCheck %s
+// RUN: circt-opt %s --arc-find-initial-vectors | FileCheck %s
 
 hw.module @Foo(in %clock: !seq.clock, in %en: i1, in %inA: i3, in %inB: i3) {
   %4 = arc.state @FooMux(%en, %21753, %4) clock %clock latency 1 : (i1, i3, i3) -> i3

@@ -58,8 +58,8 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
-def FindInitialVectors : Pass<"find-initial-vectors", "mlir::ModuleOp"> {
-  let summary = "Finds the ops that can be grouped together into a vector";
+def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
+  let summary = "Find initial groups of vectorizable ops";
   let constructor = "circt::arc::createFindInitialVectorsPass()";
   let dependentDialects = ["arc::ArcDialect"];
 }
