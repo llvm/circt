@@ -43,8 +43,6 @@ namespace arc {
 using namespace circt;
 using namespace arc;
 using llvm::SmallMapVector;
-using llvm::SmallVector;
-using mlir::Operation;
 
 namespace {
 struct TopologicalOrder {
@@ -102,7 +100,7 @@ LogicalResult TopologicalOrder::compute(Block *block) {
 
 namespace {
 using Key = std::tuple<unsigned, StringRef, SmallVector<Type>,
-                       SmallVector<Type>, ArrayRef<NamedAttribute>>;
+                       SmallVector<Type>, DictionaryAttr>;
 
 Key computeKey(Operation *op, unsigned rank) {
   // The key = concat(op_rank, op_name, op_operands_types, op_result_types,
@@ -111,7 +109,7 @@ Key computeKey(Operation *op, unsigned rank) {
       rank, op->getName().getStringRef(),
       SmallVector<Type>(op->operand_type_begin(), op->operand_type_end()),
       SmallVector<Type>(op->result_type_begin(), op->result_type_end()),
-      op->getAttrs());
+      op->getAttrDictionary());
 }
 
 struct Vectorizer {
@@ -139,20 +137,20 @@ template <>
 struct DenseMapInfo<Key> {
   static inline Key getEmptyKey() {
     return Key(0, StringRef(), SmallVector<Type>(), SmallVector<Type>(),
-               ArrayRef<NamedAttribute>());
+               DictionaryAttr());
   }
 
   static inline Key getTombstoneKey() {
     static StringRef tombStoneKeyOpName =
         DenseMapInfo<StringRef>::getTombstoneKey();
     return Key(1, tombStoneKeyOpName, SmallVector<Type>(), SmallVector<Type>(),
-               ArrayRef<NamedAttribute>());
+               DictionaryAttr());
   }
 
   static unsigned getHashValue(const Key &key) {
     return hash_value(std::get<0>(key)) ^ hash_value(std::get<1>(key)) ^
            hash_value(std::get<2>(key)) ^ hash_value(std::get<3>(key)) ^
-           hash_value(ArrayRef(std::get<4>(key)));
+           hash_value(std::get<4>(key));
   }
 
   static bool isEqual(const Key &lhs, const Key &rhs) { return lhs == rhs; }
