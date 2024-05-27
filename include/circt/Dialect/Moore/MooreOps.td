@@ -15,6 +15,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
@@ -41,8 +42,8 @@ class ResultIsSingleBitMatchingInputDomain<string result, string input> :
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
   Symbol,
-  NoTerminator,
-  SingleBlock
+  SingleBlockImplicitTerminator<"OutputOp">,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
 ]> {
   let summary = "A module definition";
   let description = [{
@@ -55,15 +56,43 @@ def SVModuleOp : MooreOp<"module", [
     See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type
+  );
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $bodyRegion
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Return the `moore.output` op terminator of this module.
+    OutputOp getOutputOp();
+    /// Return the list of values assigned to output ports.
+    OperandRange getOutputs();
   }];
 }
 
+def OutputOp : MooreOp<"output", [
+  Terminator, HasParent<"SVModuleOp">, Pure, ReturnLike
+]> {
+  let summary = "Assign module outputs";
+  let description = [{
+    The `moore.output` operation marks the end of a `moore.module` body region
+    and specifies the values to present for the module's output ports.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$outputs);
+  let builders = [
+    OpBuilder<(ins), [{ build($_builder, $_state, std::nullopt); }]>
+  ];
+  let assemblyFormat = [{
+    attr-dict ($outputs^ `:` type($outputs))?
+  }];
+  let hasVerifier = 1;
+}
+
 def InstanceOp : MooreOp<"instance", [
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -72,11 +101,15 @@ def InstanceOp : MooreOp<"instance", [
     See IEEE 1800-2017 § 23.3 "Module instances".
   }];
 
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName);
-  let assemblyFormat = [{
-    $instanceName $moduleName attr-dict
-  }];
+  let arguments = (ins
+    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$moduleName,
+    Variadic<AnyType>:$inputs,
+    StrArrayAttr:$inputNames,
+    StrArrayAttr:$outputNames
+  );
+  let results = (outs Variadic<AnyType>:$outputs);
+  let hasCustomAssemblyFormat = 1;
 }
 
 def Initial: I32EnumAttrCase<"Initial", 0, "initial">;
@@ -158,7 +191,7 @@ def VariableOp : MooreOp<"variable", [
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
   let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
 }

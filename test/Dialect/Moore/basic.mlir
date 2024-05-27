@@ -1,9 +1,35 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: moore.module @Foo
-moore.module @Foo {
-  // CHECK: moore.instance "foo" @Foo
-  moore.instance "foo" @Foo
+// CHECK-LABEL: moore.module @Empty()
+moore.module @Empty() {
+  // CHECK: moore.output
+}
+
+// CHECK-LABEL: moore.module @Ports
+moore.module @Ports(
+  // CHECK-SAME: in %a : !moore.string
+  in %a : !moore.string,
+  // CHECK-SAME: out b : !moore.string
+  out b : !moore.string,
+  // CHECK-SAME: in %c : !moore.event
+  in %c : !moore.event,
+  // CHECK-SAME: out d : !moore.event
+  out d : !moore.event
+) {
+  // CHECK: moore.output %a, %c : !moore.string, !moore.event
+  moore.output %a, %c : !moore.string, !moore.event
+}
+
+// CHECK-LABEL: moore.module @Module
+moore.module @Module() {
+  // CHECK: moore.instance "empty" @Empty() -> ()
+  moore.instance "empty" @Empty() -> ()
+
+  // CHECK: moore.instance "ports" @Ports(a: %i1: !moore.string, c: %i2: !moore.event) -> (b: !moore.string, d: !moore.event)
+  %i1 = moore.variable : !moore.string
+  %i2 = moore.variable : !moore.event
+  %o1, %o2 = moore.instance "ports" @Ports(a: %i1: !moore.string, c: %i2: !moore.event) -> (b: !moore.string, d: !moore.event)
+
   // CHECK: %v1 = moore.variable : i1
   %v1 = moore.variable : i1
   %v2 = moore.variable : i1
@@ -63,12 +89,8 @@ moore.module @Foo {
   }
 }
 
-// CHECK-LABEL: moore.module @Bar
-moore.module @Bar {
-}
-
 // CHECK-LABEL: moore.module @Expressions
-moore.module @Expressions {
+moore.module @Expressions() {
   %b1 = moore.variable : i1
   %l1 = moore.variable : l1
   %b5 = moore.variable : i5
