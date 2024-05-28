@@ -280,7 +280,7 @@ def QueueType : MooreTypeDef<"Queue", [], "moore::UnpackedType"> {
 class StructLikeType<
   string name, list<Trait> traits = [], string baseCppClass = "::mlir::Type"
 > : MooreTypeDef<name, traits, baseCppClass> {
-  let parameters = (ins ArrayRefParameter<"StructMember">:$members);
+  let parameters = (ins ArrayRefParameter<"StructLikeMember">:$members);
   let assemblyFormat = [{
     `<` custom<Members>($members) `>`
   }];

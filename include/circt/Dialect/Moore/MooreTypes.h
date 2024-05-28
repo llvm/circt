@@ -153,19 +153,19 @@ protected:
 //===----------------------------------------------------------------------===//
 
 /// A member of a struct.
-struct StructMember {
+struct StructLikeMember {
   /// The name of this member.
   StringAttr name;
   /// The type of this member.
   UnpackedType type;
 
-  bool operator==(const StructMember &other) const {
+  bool operator==(const StructLikeMember &other) const {
     return name == other.name && type == other.type;
   }
 };
 
 // NOLINTNEXTLINE(readability-identifier-naming)
-inline llvm::hash_code hash_value(const StructMember &x) {
+inline llvm::hash_code hash_value(const StructLikeMember &x) {
   return llvm::hash_combine(x.name, x.type);
 }
 

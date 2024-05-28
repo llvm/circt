@@ -23,14 +23,15 @@ using mlir::AsmParser;
 using mlir::AsmPrinter;
 
 static LogicalResult parseMembers(AsmParser &parser,
-                                  SmallVector<StructMember> &members);
-static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members);
+                                  SmallVector<StructLikeMember> &members);
+static void printMembers(AsmPrinter &printer,
+                         ArrayRef<StructLikeMember> members);
 
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
 
 static LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
-                                  ArrayRef<StructMember> members);
+                                  ArrayRef<StructLikeMember> members);
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type
@@ -132,7 +133,7 @@ std::optional<unsigned> PackedType::getBitSize() const {
 
 /// Parse a list of struct members.
 static LogicalResult parseMembers(AsmParser &parser,
-                                  SmallVector<StructMember> &members) {
+                                  SmallVector<StructLikeMember> &members) {
   return parser.parseCommaSeparatedList(AsmParser::Delimiter::Braces, [&]() {
     std::string name;
     UnpackedType type;
@@ -146,10 +147,11 @@ static LogicalResult parseMembers(AsmParser &parser,
 }
 
 /// Print a list of struct members.
-static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members) {
+static void printMembers(AsmPrinter &printer,
+                         ArrayRef<StructLikeMember> members) {
   printer << "{";
   llvm::interleaveComma(members, printer.getStream(),
-                        [&](const StructMember &member) {
+                        [&](const StructLikeMember &member) {
                           printer.printKeywordOrString(member.name);
                           printer << ": ";
                           printer.printStrippedAttrOrType(member.type);
@@ -158,12 +160,12 @@ static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members) {
 }
 
 LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 ArrayRef<StructMember> members) {
+                                 ArrayRef<StructLikeMember> members) {
   return packedVerify(emitError, members);
 }
 
 LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                ArrayRef<StructMember> members) {
+                                ArrayRef<StructLikeMember> members) {
   return packedVerify(emitError, members);
 }
 
@@ -241,10 +243,10 @@ void MooreDialect::printType(Type type, DialectAsmPrinter &printer) const {
 }
 
 LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
-                           ArrayRef<StructMember> members) {
+                           ArrayRef<StructLikeMember> members) {
   if (!llvm::all_of(members, [](const auto &member) {
         return llvm::isa<PackedType>(member.type);
       }))
-    return emitError() << "Members must be packed types";
+    return emitError() << "Struct/Union members must be packed types";
   return success();
 }
