@@ -68,22 +68,26 @@ moore.constant -2 : !moore.i1
 
 // -----
 
-%y = moore.variable : i8
+%y = moore.variable : <i8>
 
 moore.module @Cond() {
+  %0 = moore.read %y : i8
   // expected-error @below {{'moore.yield' op expects parent op 'moore.conditional'}}
-  moore.yield %y : i8
+  moore.yield %0 : i8
 }
 
 // -----
 
-%x = moore.variable : i1
-%t = moore.variable : i8
-%f = moore.variable : i8
+%x = moore.variable : <i1>
+%t = moore.variable : <i8>
+%f = moore.variable : <i8>
 
-moore.conditional %x : i1 -> i32 {
+%1 = moore.read %x : i1
+moore.conditional %1 : i1 -> i32 {
+  %2 = moore.read %t : i8
   // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
-  moore.yield %t : i8
+  moore.yield %2 : i8
 } {
-  moore.yield %f : i8
+  %2 = moore.read %f : i8
+  moore.yield %2 : i8
 }
