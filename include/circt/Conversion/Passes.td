@@ -709,7 +709,9 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert combinational ops and constants to SMT ops";
   // Need to depend on HWDialect because some 'comb' canonicalization patterns
   // build 'hw.constant' operations.
-  let dependentDialects = ["smt::SMTDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "smt::SMTDialect", "hw::HWDialect", "mlir::func::FuncDialect"
+  ];
 }
 
 //===----------------------------------------------------------------------===//
