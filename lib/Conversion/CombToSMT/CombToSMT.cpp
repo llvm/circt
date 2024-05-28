@@ -10,6 +10,7 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
