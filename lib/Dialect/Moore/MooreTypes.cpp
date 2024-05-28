@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
-#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
