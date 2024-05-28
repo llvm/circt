@@ -64,12 +64,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-        Value lhs;
-        if (isDuplexValue(dst))
-        lhs = builder.create<DeduplexFlowOp>(dst).getResult(1);
-        else
-        lhs = builder.create<WrapSinkOp>(dst);
-      builder.create<StrictConnectOp>(lhs, src);
+    Value lhs;
+    if (isDuplexValue(dst))
+      lhs = builder.create<DeduplexFlowOp>(dst).getResult(1);
+    else
+      lhs = builder.create<WrapSinkOp>(dst);
+    builder.create<StrictConnectOp>(lhs, src);
     return;
   }
 
@@ -521,6 +521,8 @@ FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
       .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
             ObjectSubfieldOp>(
           [](auto subOp) { return subOp.getAccessedField(); })
+      .Case<DeduplexFlowOp, WrapSinkOp>(
+          [](auto op) { return FieldRef(op.getOperand(), 0); })
       .Default(FieldRef());
 }
 

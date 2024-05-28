@@ -673,6 +673,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
+      .Case<LHSType>(
+          [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -1248,8 +1250,7 @@ bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
   return lhs.getAnonymousType() == rhs.getAnonymousType();
 }
 
-bool firrtl::areAnonymousLHSandTypeEquivalent(LHSType lhs,
-                                         FIRRTLBaseType rhs) {
+bool firrtl::areAnonymousLHSandTypeEquivalent(LHSType lhs, FIRRTLBaseType rhs) {
   auto baseLHS = lhs.getType();
   return baseLHS.getAnonymousType() == rhs.getAnonymousType();
 }

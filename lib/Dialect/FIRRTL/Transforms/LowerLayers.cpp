@@ -584,16 +584,16 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         if (isa<RefType>(src.getType()))
           src = builder.create<RefResolveOp>(
               newModule.getPortLocationAttr(portNum), src);
-        builder.create<StrictConnectOp>(newModule.getPortLocationAttr(portNum),
-                                        instanceOp.getResult(portNum), src);
+        emitConnect(builder, newModule.getPortLocationAttr(portNum),
+                    instanceOp.getResult(portNum), src);
       } else if (isa<RefType>(instanceOp.getResult(portNum).getType()) &&
                  connectValues[portNum].kind == ConnectKind::Ref)
         builder.create<RefDefineOp>(getPortLoc(connectValues[portNum].value),
                                     connectValues[portNum].value,
                                     instanceOp.getResult(portNum));
       else
-        builder.create<StrictConnectOp>(
-            getPortLoc(connectValues[portNum].value),
+        emitConnect(
+            builder, getPortLoc(connectValues[portNum].value),
             connectValues[portNum].value,
             builder.create<RefResolveOp>(newModule.getPortLocationAttr(portNum),
                                          instanceOp.getResult(portNum)));

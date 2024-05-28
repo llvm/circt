@@ -1730,6 +1730,12 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
   if (!connectedDecl)
     return failure();
 
+  // Look through simple flow deduplexes.
+  if (isa<DeduplexFlowOp>(connectedDecl))
+    connectedDecl = connectedDecl->getOperand(0).getDefiningOp();
+  if (!connectedDecl)
+    return failure();
+
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
