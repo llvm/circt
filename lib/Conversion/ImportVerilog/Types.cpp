@@ -101,8 +101,9 @@ struct TypeVisitor {
   }
 
   // Collect the members in a struct or union.
-  LogicalResult collectMembers(const slang::ast::Scope &structType,
-                               SmallVectorImpl<moore::StructLikeMember> &members) {
+  LogicalResult
+  collectMembers(const slang::ast::Scope &structType,
+                 SmallVectorImpl<moore::StructLikeMember> &members) {
     for (auto &field : structType.membersOfType<slang::ast::FieldSymbol>()) {
       auto name = StringAttr::get(context.getContext(), field.name);
       auto innerType = context.convertType(*field.getDeclaredType());
