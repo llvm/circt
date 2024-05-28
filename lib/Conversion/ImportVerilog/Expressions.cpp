@@ -429,14 +429,17 @@ struct ExprVisitor {
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
-    auto type = expr.value().type;
-    if (type->isStruct()) {
+    auto type = context.convertType(*expr.type);
+    auto valueType = expr.value().type;
+    if (!type)
+      return {};
+    if (valueType->isStruct()) {
       return builder.create<moore::StructExtractOp>(
           loc, context.convertType(*expr.type),
           builder.getStringAttr(expr.member.name),
           context.convertExpression(expr.value()));
     }
-    if (type->isPackedUnion() || type->isUnpackedUnion()) {
+    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
       return builder.create<moore::UnionExtractOp>(
           loc, context.convertType(*expr.type),
           builder.getStringAttr(expr.member.name),
