@@ -35,9 +35,11 @@ class QueueType;
 class RealType;
 class StringType;
 class StructType;
+class UnionType;
 class UnpackedType;
 class UnpackedArrayType;
 class UnpackedStructType;
+class UnpackedUnionType;
 class VoidType;
 
 /// The number of values each bit of a type can assume.
@@ -81,7 +83,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
-                     QueueType, UnpackedStructType>(type);
+                     QueueType, UnpackedStructType, UnpackedUnionType>(type);
   }
 
   /// Get the value domain of this type.
@@ -130,8 +132,8 @@ protected:
 class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
-    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType>(
-        type);
+    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType,
+                     UnionType>(type);
   }
 
   /// Get the value domain of this type.

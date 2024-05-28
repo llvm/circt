@@ -429,10 +429,20 @@ struct ExprVisitor {
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
-    return builder.create<moore::StructExtractOp>(
-        loc, context.convertType(*expr.type),
-        builder.getStringAttr(expr.member.name),
-        context.convertExpression(expr.value()));
+    auto type = expr.value().type;
+    if (type->isStruct()) {
+      return builder.create<moore::StructExtractOp>(
+          loc, context.convertType(*expr.type),
+          builder.getStringAttr(expr.member.name),
+          context.convertExpression(expr.value()));
+    }
+    if (type->isPackedUnion() || type->isUnpackedUnion()) {
+      return builder.create<moore::UnionExtractOp>(
+          loc, context.convertType(*expr.type),
+          builder.getStringAttr(expr.member.name),
+          context.convertExpression(expr.value()));
+    }
+    llvm_unreachable("unsupported symbol kind");
   }
 
   // Handle set membership operator.

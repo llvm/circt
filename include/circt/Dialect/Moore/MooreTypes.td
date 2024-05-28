@@ -305,6 +305,25 @@ def UnpackedStructType : StructLikeType<
   }];
 }
 
+def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
+  let mnemonic = "union";
+  let summary = "a packed union type";
+  let description = [{
+    A packed union. All members are guaranteed to be packed as well.
+  }];
+  let genVerifyDecl = 1;
+}
+
+
+def UnpackedUnionType : StructLikeType<
+  "UnpackedUnion", [], "moore::UnpackedType"
+> {
+  let mnemonic = "uunion";
+  let summary = "an unpacked union type";
+  let description = [{
+    An unpacked union.
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Constraints

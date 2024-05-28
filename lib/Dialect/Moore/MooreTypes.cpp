@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -27,6 +28,9 @@ static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members);
 
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
+
+static LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
+                                  ArrayRef<StructMember> members);
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type
@@ -155,11 +159,12 @@ static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members) {
 
 LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<StructMember> members) {
-  if (!llvm::all_of(members, [](const auto &member) {
-        return llvm::isa<PackedType>(member.type);
-      }))
-    return emitError() << "StructType members must be packed types";
-  return success();
+  return packedVerify(emitError, members);
+}
+
+LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                ArrayRef<StructMember> members) {
+  return packedVerify(emitError, members);
 }
 
 //===----------------------------------------------------------------------===//
@@ -233,4 +238,13 @@ Type MooreDialect::parseType(DialectAsmParser &parser) const {
 /// Print a type registered with this dialect.
 void MooreDialect::printType(Type type, DialectAsmPrinter &printer) const {
   printMooreType(type, printer);
+}
+
+LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
+                           ArrayRef<StructMember> members) {
+  if (!llvm::all_of(members, [](const auto &member) {
+        return llvm::isa<PackedType>(member.type);
+      }))
+    return emitError() << "Members must be packed types";
+  return success();
 }
