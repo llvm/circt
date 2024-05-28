@@ -63,7 +63,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+      auto lhs = builder.create<WrapSinkOp>(dst);
+      builder.create<StrictConnectOp>(lhs, src);
     return;
   }
 
@@ -159,7 +160,8 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // connecting uint<1> to abstract reset types.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+    auto lhs = builder.create<WrapSinkOp>(dst);
+    builder.create<StrictConnectOp>(lhs, src);
   } else
     builder.create<ConnectOp>(dst, src);
 }

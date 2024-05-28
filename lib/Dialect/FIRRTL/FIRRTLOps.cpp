@@ -3278,7 +3278,14 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWriteport(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictWireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
@@ -3290,6 +3297,15 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
 
+LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
   build(builder, state, klass.getInstanceType(),
@@ -3559,24 +3575,6 @@ LogicalResult ConnectOp::verify() {
 }
 
 LogicalResult StrictConnectOp::verify() {
-  if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
-    auto baseType = type_cast<FIRRTLBaseType>(type);
-
-    // Analog types cannot be connected and must be attached.
-    if (baseType && baseType.containsAnalog())
-      return emitError("analog types may not be connected");
-
-    // The anonymous types of operands must be equivalent.
-    assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
-                                       baseType) &&
-           "`SameAnonTypeOperands` trait should have already rejected "
-           "structurally non-equivalent types");
-  }
-
-  // Check that the flows make sense.
-  if (failed(checkConnectFlow(*this)))
-    return failure();
-
   if (failed(checkConnectConditionality(*this)))
     return failure();
 
@@ -4430,6 +4428,10 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
 ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
 }
+ParseResult LHSSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<LHSSubfieldOp>(parser, result);
+}
+
 
 template <typename OpTy>
 static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
@@ -4447,6 +4449,9 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
 void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   return printSubfieldLikeOp<OpenSubfieldOp>(*this, printer);
 }
+void LHSSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<LHSSubfieldOp>(*this, printer);
+}
 
 void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << getInput() << '[';
@@ -4458,20 +4463,23 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-template <typename OpTy>
-static LogicalResult verifySubfieldLike(OpTy op) {
+template <typename OpTy, typename ITy>
+static LogicalResult verifySubfieldLike(OpTy op, ITy ty) {
   if (op.getFieldIndex() >=
-      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+      firrtl::type_cast<typename OpTy::InputType>(ty)
           .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
 }
 LogicalResult SubfieldOp::verify() {
-  return verifySubfieldLike<SubfieldOp>(*this);
+  return verifySubfieldLike<SubfieldOp>(*this, getInput().getType());
 }
 LogicalResult OpenSubfieldOp::verify() {
-  return verifySubfieldLike<OpenSubfieldOp>(*this);
+  return verifySubfieldLike<OpenSubfieldOp>(*this, getInput().getType());
+}
+LogicalResult LHSSubfieldOp::verify() {
+  return verifySubfieldLike<LHSSubfieldOp>(*this, stripLHS(getInput().getType()));
 }
 
 LogicalResult SubtagOp::verify() {
@@ -4565,6 +4573,24 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
   return inType.getElementTypePreservingConst(fieldIndex);
 }
 
+FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  auto aType = cast<LHSType>(operands[0].getType()).getType();
+  auto inType = type_cast<BundleType>(aType);
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // LHSSubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElementTypePreservingConst(fieldIndex);
+}
+
 bool SubfieldOp::isFieldFlipped() {
   BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
@@ -4599,6 +4625,23 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementTypePreservingConst();
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in vector type ", inType);
+  }
+
+  return emitInferRetTypeError(loc, "subindex requires vector operand");
+}
+
+FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  auto inType = cast<LHSType>(operands[0].getType()).getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
@@ -5846,7 +5889,12 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void LHSSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
@@ -5859,6 +5907,10 @@ void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void LHSSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
@@ -6167,6 +6219,49 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DeduplexFlowOp.
+//===----------------------------------------------------------------------===//
+
+LogicalResult DeduplexFlowOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto inputType = operands.front().getType();
+  results.push_back(inputType);
+  results.push_back(
+      LHSType::get(context, type_cast<FIRRTLBaseType>(inputType)));
+  return success();
+}
+
+LogicalResult DeduplexFlowOp::verify() {
+  auto srcFlow = foldFlow(getInput());
+  if (!isValidSrc(srcFlow) && !isValidDst(srcFlow))
+    return emitOpError("Trying to deduplex a non-dupelx value");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WrapSinkOp.
+//===----------------------------------------------------------------------===//
+
+LogicalResult WrapSinkOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto inputType = operands.front().getType();
+  results.push_back(
+      LHSType::get(context, type_cast<FIRRTLBaseType>(inputType)));
+  return success();
+}
+
+LogicalResult WrapSinkOp::verify() {
+  auto srcFlow = foldFlow(getInput());
+  if (isValidSrc(srcFlow) || !isValidDst(srcFlow))
+    return emitOpError("Trying to wrap a non-sink value");
   return success();
 }
 

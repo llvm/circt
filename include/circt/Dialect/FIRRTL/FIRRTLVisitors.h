@@ -60,7 +60,8 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, ConstCastOp, RefCastOp,
+            UninferredResetCastOp, ConstCastOp, RefCastOp, DeduplexFlowOp,
+            WrapSinkOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
@@ -206,6 +207,8 @@ public:
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
+  HANDLE(DeduplexFlowOp, Unhandled);
+  HANDLE(WrapSinkOp, Unhandled);
 
   // Property expressions.
   HANDLE(StringConstantOp, Unhandled);
@@ -294,7 +297,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<InstanceOp, ObjectOp, MemOp, NodeOp, RegOp, RegResetOp,
-                       WireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
+                       WireOp, StrictWireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -326,6 +329,7 @@ public:
   HANDLE(RegOp);
   HANDLE(RegResetOp);
   HANDLE(WireOp);
+  HANDLE(StrictWireOp);
   HANDLE(VerbatimWireOp);
 #undef HANDLE
 };

@@ -53,8 +53,8 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 }
 
 def SameAnonTypeOperands: PredOpTrait<
-        "operands must be structurally equivalent",
-        CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
+        "operands must be structurally equivalent with LHS wrapper",
+        CPred<"areAnonymousLHSandTypeEquivalent(getDest().getType(), getSrc().getType())">>;
 def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
@@ -66,8 +66,8 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
     ```
     }];
 
-  let arguments = (ins StrictConnectableType:$dest,
-                       StrictConnectableType:$src);
+  let arguments = (ins LHSType:$dest,
+                       SizedPassiveType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 

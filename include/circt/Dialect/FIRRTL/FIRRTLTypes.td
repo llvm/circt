@@ -90,13 +90,12 @@ def SizedType : FIRRTLDialectType<CPred<"type_isa<FIRRTLBaseType>($_self) && "
     "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
-    "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLType">;
+    "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
 
 def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
-
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 
@@ -110,8 +109,19 @@ def RWProbeConcreteReset : FIRRTLDialectType<
          !type_cast<RefType>($_self).hasUninferredReset()}]>,
    "rwprobe type (with concrete resets only)", "::circt::firrtl::RefType">;
 
-def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
+def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
+                                      "writable type", "::circt::firrtl::LHSType">;
+
+class LHSTypeConstraint<string result, string input>
+  : TypesMatchWith<"Result must be lhs of element type",
+                   input, result,
+                   "type_cast<LHSType>($_self).getType()">;
+
+class OptRefTypeConstraint<string result, string input>
+  : OptionalTypesMatchWith<"Result must be lhw of element type",
+                   input, result,
+                   "type_cast<RefType>($_self).getType()">;
+                   def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers

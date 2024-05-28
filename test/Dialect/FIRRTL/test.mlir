@@ -366,4 +366,14 @@ firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
   firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
 }
 
+
+// CHECK-LABEL: FlowFix
+firrtl.module @FlowFix(in %in: !firrtl.bundle<a: uint<4>>, out %out : !firrtl.bundle<a: uint<4>>) {
+  %rp, %wp = firrtl.deduplex %out : !firrtl.bundle<a: uint<4>>
+  %wire = firrtl.wire : !firrtl.bundle<a: uint<3>>
+  %rw, %ww = firrtl.deduplex %wire : !firrtl.bundle<a: uint<3>>
+  %wire2, %wire2_write = firrtl.strictwire : !firrtl.bundle<a: uint<5>>
+
+}
+
 }
