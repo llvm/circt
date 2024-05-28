@@ -34,7 +34,8 @@ firrtl.module @Ports(
   // CHECK-NEXT: dbg.variable "outA", %outA
 
   // CHECK-NEXT: firrtl.strictconnect
-  firrtl.strictconnect %outA, %inA : !firrtl.uint<42>
+  %outA_read, %outA_write = firrtl.deduplex %outA : !firrtl.uint<42>
+  firrtl.strictconnect %outA_write, %inA : !firrtl.uint<42>
 }
 
 // CHECK-LABEL: firrtl.module @Decls

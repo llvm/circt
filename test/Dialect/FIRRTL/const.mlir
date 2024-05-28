@@ -137,7 +137,8 @@ firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.a
 // CHECK-LABEL: firrtl.module @ConstCast
 firrtl.module @ConstCast(in %in: !firrtl.const.uint<1>, out %out: !firrtl.uint<1>) {
   %0 = firrtl.constCast %in : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out, %0 : !firrtl.uint<1> 
+  %out_read, %out_write = firrtl.deduplex %out : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %0 : !firrtl.uint<1> 
 }
 
 // CHECK-LABEL: firrtl.module @ConstCastToMixedConstBundle
@@ -149,7 +150,8 @@ firrtl.module @ConstCastToMixedConstBundle(in %in: !firrtl.const.bundle<a: uint<
 // CHECK-LABEL: firrtl.module @ConstCastToMixedConstVector
 firrtl.module @ConstCastToMixedConstVector(in %in: !firrtl.const.vector<uint<1>, 2>, out %out: !firrtl.vector<const.uint<1>, 2>) {
   %0 = firrtl.constCast %in : (!firrtl.const.vector<uint<1>, 2>) -> !firrtl.vector<const.uint<1>, 2>
-  firrtl.strictconnect %out, %0 : !firrtl.vector<const.uint<1>, 2>
+  %out_read, %out_write = firrtl.deduplex %out : !firrtl.vector<const.uint<1>, 2>
+  firrtl.strictconnect %out_write, %0 : !firrtl.vector<const.uint<1>, 2>
 }
 
 // Sub access of a ref to a const vector should always have a ref to a const result.

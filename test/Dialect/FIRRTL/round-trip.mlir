@@ -62,7 +62,8 @@ firrtl.module @Foo(in %clock: !firrtl.clock) {
   // CHECK-SAME: { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
   %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTarget alternatives @Platform
     { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
-  firrtl.strictconnect %inst_clock, %clock : !firrtl.clock
+  %inst_clock_read, %inst_clock_write = firrtl.deduplex %inst_clock : !firrtl.clock
+  firrtl.strictconnect %inst_clock_write, %clock : !firrtl.clock
 }
 
 // CHECK-LABEL: firrtl.layer @LayerA bind

@@ -164,7 +164,8 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %w = firrtl.wire : !firrtl.uint<1>
       firrtl.when %test : !firrtl.uint<1> {
-        firrtl.strictconnect %w, %c0_ui1 : !firrtl.uint<1>
+        %w_read, %w_write = firrtl.deduplex %w : !firrtl.uint<1>
+        firrtl.strictconnect %w_write, %c0_ui1 : !firrtl.uint<1>
       }
     }
   }

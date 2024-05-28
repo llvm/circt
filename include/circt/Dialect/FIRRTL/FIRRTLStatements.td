@@ -72,8 +72,7 @@ def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
   let hasCanonicalizeMethod = true;
 
   let hasVerifier = 1;
-  let assemblyFormat = [{$dest `,` $src  attr-dict `:`
-      custom<OptionalBinaryOpTypes>(type($dest), type($src))}];
+  let assemblyFormat = [{$dest `,` $src  attr-dict `:` custom<OptionalLHSOpTypes>(type($dest), type($src))}];
 }
 
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {

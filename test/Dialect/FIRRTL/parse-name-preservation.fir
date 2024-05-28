@@ -10,7 +10,8 @@ circuit Bar :
 
     ; Should use the non-tap wire in expressions.
     a <= in
-    ; CHECK: firrtl.strictconnect %a, %in
+    ; CHECK: %[[t:.*]], %[[wr_a:.*]] = firrtl.deduplex %a
+    ; CHECK: firrtl.strictconnect %[[wr_a]], %in
 
     ; When the type is not passive, the tap should be a wire with the passive
     ; type of the original wire.

@@ -57,7 +57,8 @@ firrtl.circuit "ProbeIntrinsicTest" {
     // CHECK-NEXT: firrtl.strictconnect [[CLOCK]], %clock : !firrtl.clock
     // CHECK-NEXT: firrtl.connect [[DATA]], %data : !firrtl.uint, !firrtl.uint<32>
     %mod_data, %mod_clock = firrtl.instance mod @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock)
-    firrtl.strictconnect %mod_clock, %clock : !firrtl.clock
+    %mod_clock_read, %mod_clock_write = firrtl.deduplex %mod_clock : !firrtl.clock
+    firrtl.strictconnect %mod_clock_write, %clock : !firrtl.clock
     firrtl.connect %mod_data, %data : !firrtl.uint, !firrtl.uint<32>
   }
 }

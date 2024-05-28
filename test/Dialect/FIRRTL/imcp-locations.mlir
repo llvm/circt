@@ -5,8 +5,10 @@ firrtl.circuit "Test" {
   firrtl.module private @Consts(out %c2 : !firrtl.uint<3>, out %c4 : !firrtl.uint<3>) {
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     %c4_ui3 = firrtl.constant 4 : !firrtl.uint<3>
-    firrtl.strictconnect %c2, %c2_ui3 : !firrtl.uint<3>
-    firrtl.strictconnect %c4, %c4_ui3 : !firrtl.uint<3>
+    %c2_read, %c2_write = firrtl.deduplex %c2 : !firrtl.uint<3>
+    %c4_read, %c4_write = firrtl.deduplex %c4 : !firrtl.uint<3>
+    firrtl.strictconnect %c2_write, %c2_ui3 : !firrtl.uint<3>
+    firrtl.strictconnect %c4_write, %c4_ui3 : !firrtl.uint<3>
   }
   // CHECK-LABEL: module @Test
   firrtl.module @Test() {
@@ -22,8 +24,11 @@ firrtl.circuit "Test" {
     %add = firrtl.add %c2, %c4: (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<4>
     %addtrunc = firrtl.bits %add 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
 
-    firrtl.strictconnect %w_or, %or : !firrtl.uint<3>
-    firrtl.strictconnect %w_add, %addtrunc : !firrtl.uint<3>
+    %w_or_read, %w_or_write = firrtl.deduplex %w_or : !firrtl.uint<3>
+    %w_add_read, %w_add_write = firrtl.deduplex %w_add : !firrtl.uint<3>
+
+    firrtl.strictconnect %w_or_write, %or : !firrtl.uint<3>
+    firrtl.strictconnect %w_add_write, %addtrunc : !firrtl.uint<3>
 
     // CHECK: %n_or = firrtl.node sym @n_or %[[SIX]]
     // CHECK: %n_add = firrtl.node sym @n_add %[[SIX]]

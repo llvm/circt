@@ -10,7 +10,8 @@ firrtl.circuit "Prop" {
   }
 
   firrtl.module private @emptyVec(in %vi : !firrtl.vector<uint<4>, 0>, out %vo : !firrtl.vector<uint<4>, 0>) attributes {convention = #firrtl<convention scalarized>} {
-    firrtl.strictconnect %vo, %vi : !firrtl.vector<uint<4>, 0>
+    %vo_read, %vo_write = firrtl.deduplex %vo : !firrtl.vector<uint<4>, 0>
+    firrtl.strictconnect %vo_write, %vi : !firrtl.vector<uint<4>, 0>
   }
 
   // CHECK-LABEL: @Annos
