@@ -97,10 +97,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConstPass());
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
-      /*hoistHWDrivers=*/!opt.shouldDisableOptimization() &&
-      !opt.shouldDisableHoistingHWPassthrough()));
-
   if (opt.shouldDedup())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDedupPass());
 
@@ -160,15 +156,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         circt::firrtl::createCreateCompanionAssume());
 
-  if (!opt.shouldDisableOptimization()) {
+  if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createHoistPassthroughPass(
-        /*hoistHWDrivers=*/!opt.shouldDisableOptimization() &&
-        !opt.shouldDisableHoistingHWPassthrough()));
-    // Cleanup after hoisting passthroughs, for separation-of-concerns.
-    pm.addPass(firrtl::createIMDeadCodeElimPass());
-  }
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createAddSeqMemPortsPass());
 
@@ -536,11 +525,6 @@ struct FirtoolCmdOptions {
           "connections into bulk connections)"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> disableHoistingHWPassthrough{
-      "disable-hoisting-hw-passthrough",
-      llvm::cl::desc("Disable hoisting HW passthrough signals"),
-      llvm::cl::init(true), llvm::cl::Hidden};
-
   llvm::cl::opt<bool> emitOMIR{
       "emit-omir", llvm::cl::desc("Emit OMIR annotations to a JSON file"),
       llvm::cl::init(true)};
@@ -731,8 +715,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       buildMode(BuildModeRelease), disableOptimization(false),
       exportChiselInterface(false), chiselInterfaceOutDirectory(""),
       vbToBV(false), noDedup(false), companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false),
-      disableHoistingHWPassthrough(true), emitOMIR(true), omirOutFile(""),
+      disableAggressiveMergeConnections(false), emitOMIR(true), omirOutFile(""),
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
       replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
@@ -765,7 +748,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   companionMode = clOptions->companionMode;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
-  disableHoistingHWPassthrough = clOptions->disableHoistingHWPassthrough;
   emitOMIR = clOptions->emitOMIR;
   omirOutFile = clOptions->omirOutFile;
   lowerMemories = clOptions->lowerMemories;
