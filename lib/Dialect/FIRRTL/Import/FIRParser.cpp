@@ -5199,6 +5199,8 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_intmodule:
+    if (removedFeature({4, 0, 0}, "intrinsic modules"))
+      return failure();
     return parseIntModule(circuit, indent);
   case FIRToken::kw_layer:
     if (requireFeature({4, 0, 0}, "layers"))
@@ -5390,38 +5392,30 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
   if (failed(result))
     return result;
 
-  // Convert print-encoded verifications after parsing.
-
+  // Scan for printf-encoded verif's to error on their use, no longer supported.
   {
-    // Gather PrintFOps and then process to avoid walking while mutating.
-    SmallVector<PrintFOp> buffer;
-    deferredModule.moduleOp.walk(
-        [&buffer](PrintFOp printFOp) { buffer.push_back(printFOp); });
-
     size_t numVerifPrintfs = 0;
     std::optional<Location> printfLoc;
-    for (auto printFOp : buffer) {
-      auto loc = printFOp.getLoc();
-      auto result = circt::firrtl::foldWhenEncodedVerifOp(printFOp);
-      if (failed(result))
-        return failure();
-      if (*result) {
-        ++numVerifPrintfs;
-        if (!printfLoc)
-          printfLoc = loc;
-      }
-    }
+
+    deferredModule.moduleOp.walk([&](PrintFOp printFOp) {
+      if (!circt::firrtl::isRecognizedPrintfEncodedVerif(printFOp))
+        return;
+      ++numVerifPrintfs;
+      if (!printfLoc)
+        printfLoc = printFOp.getLoc();
+    });
+
     if (numVerifPrintfs > 0) {
       auto diag =
-          mlir::emitWarning(deferredModule.moduleOp.getLoc(),
-                            "module contains ")
+          mlir::emitError(deferredModule.moduleOp.getLoc(), "module contains ")
           << numVerifPrintfs
-          << " printf-encoded verification operation(s), which are deprecated "
-             "and will be removed in the future";
+          << " printf-encoded verification operation(s), which are no longer "
+             "supported.";
       diag.attachNote(*printfLoc)
-          << "example printf here, will just be a printf in the future";
+          << "example printf here, this is now just a printf and nothing more";
       diag.attachNote() << "For more information, see "
                            "https://github.com/llvm/circt/issues/6970";
+      return diag;
     }
   }
 

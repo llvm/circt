@@ -469,15 +469,15 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
         // At each location where we drive a value to the index, set the enable.
         for (auto *driver : drivers) {
-          OpBuilder(driver).create<StrictConnectOp>(driver->getLoc(), enable,
-                                                    getConst(1));
+          ImplicitLocOpBuilder builder(driver->getLoc(), driver);
+          emitConnect(builder, enable, getConst(1));
           success = true;
         }
       } else if (isa<NodeOp>(indexOp)) {
         // If using a Node for the address, then the we place the enable at the
         // Node op's
-        OpBuilder(indexOp).create<StrictConnectOp>(indexOp->getLoc(), enable,
-                                                   getConst(1));
+        ImplicitLocOpBuilder builder(indexOp->getLoc(), indexOp);
+        emitConnect(builder, enable, getConst(1));
         success = true;
       }
 

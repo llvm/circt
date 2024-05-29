@@ -428,6 +428,92 @@ struct ExprVisitor {
     return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
   }
 
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto valueType = expr.value().type;
+    auto value = context.convertExpression(expr.value());
+    if (!type || !value)
+      return {};
+    if (valueType->isStruct()) {
+      return builder.create<moore::StructExtractOp>(
+          loc, type, builder.getStringAttr(expr.member.name), value);
+    }
+    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      return builder.create<moore::UnionExtractOp>(
+          loc, type, builder.getStringAttr(expr.member.name), value);
+    }
+    llvm_unreachable("unsupported symbol kind");
+  }
+
+  // Handle set membership operator.
+  Value visit(const slang::ast::InsideExpression &expr) {
+    auto lhs = convertToSimpleBitVector(context.convertExpression(expr.left()));
+    if (!lhs)
+      return {};
+    // All conditions for determining whether it is inside.
+    SmallVector<Value> conditions;
+
+    // Traverse open range list.
+    for (const auto *listExpr : expr.rangeList()) {
+      Value cond;
+      // The open range list on the right-hand side of the inside operator is a
+      // comma-separated list of expressions or ranges.
+      if (const auto *openRange =
+              listExpr->as_if<slang::ast::OpenRangeExpression>()) {
+        // Handle ranges.
+        auto lowBound = convertToSimpleBitVector(
+            context.convertExpression(openRange->left()));
+        auto highBound = convertToSimpleBitVector(
+            context.convertExpression(openRange->right()));
+        if (!lowBound || !highBound)
+          return {};
+        Value leftValue, rightValue;
+        // Determine if the expression on the left-hand side is inclusively
+        // within the range.
+        if (openRange->left().type->isSigned() ||
+            expr.left().type->isSigned()) {
+          leftValue = builder.create<moore::SgeOp>(loc, lhs, lowBound);
+        } else {
+          leftValue = builder.create<moore::UgeOp>(loc, lhs, lowBound);
+        }
+        if (openRange->right().type->isSigned() ||
+            expr.left().type->isSigned()) {
+          rightValue = builder.create<moore::SleOp>(loc, lhs, highBound);
+        } else {
+          rightValue = builder.create<moore::UleOp>(loc, lhs, highBound);
+        }
+        cond = builder.create<moore::AndOp>(loc, leftValue, rightValue);
+      } else {
+        // Handle expressions.
+        if (!listExpr->type->isSimpleBitVector()) {
+          if (listExpr->type->isUnpackedArray()) {
+            mlir::emitError(
+                loc, "unpacked arrays in 'inside' expressions not supported");
+            return {};
+          }
+          mlir::emitError(
+              loc, "only simple bit vectors supported in 'inside' expressions");
+          return {};
+        }
+        auto value =
+            convertToSimpleBitVector(context.convertExpression(*listExpr));
+        if (!value)
+          return {};
+        cond = builder.create<moore::WildcardEqOp>(loc, lhs, value);
+      }
+      conditions.push_back(cond);
+    }
+
+    // Calculate the final result by `or` op.
+    auto result = conditions.back();
+    conditions.pop_back();
+    while (!conditions.empty()) {
+      result = builder.create<moore::OrOp>(loc, conditions.back(), result);
+      conditions.pop_back();
+    }
+    return result;
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {

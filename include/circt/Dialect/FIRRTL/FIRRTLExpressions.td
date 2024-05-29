@@ -266,6 +266,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
   let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
@@ -1413,6 +1414,7 @@ class BinaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 // Generic
 def LTLAndIntrinsicOp : BinaryLTLIntrinsicOp<"and", [Commutative]>;
 def LTLOrIntrinsicOp : BinaryLTLIntrinsicOp<"or", [Commutative]>;
+def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 
 // Sequences
 def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
@@ -1425,10 +1427,40 @@ def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
   }];
 }
 def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
+def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       OptionalAttr<I64Attr>:$more);
+  let assemblyFormat = [{
+    $input `,` $base (`,` $more^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLNonConsecutiveRepeatIntrinsicOp : LTLIntrinsicOp<"non_consecutive_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 
 // Properties
 def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
+def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 
 // Clocking

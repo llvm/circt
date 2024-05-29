@@ -238,3 +238,45 @@ hw.module @NoMessage(in %clock: i1, in %value : i4) {
    "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()
   }
 }
+
+// -----
+
+sv.func private @function() {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op must have same number of operands as region results}}
+  sv.return %0 : i1
+}
+
+// -----
+
+sv.func private @function(out out: i2) {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op output types must match function. In operand 0, expected 'i2', but got 'i1'}}
+  sv.return %0 : i1
+}
+
+// -----
+
+hw.module private @module(out out: i2) {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op expects parent op 'sv.func'}}
+  sv.return %0 : i1
+}
+
+// -----
+
+// expected-note @below {{doesn't satisfy the constraint}}
+sv.func private @func(out out: i1)
+hw.module private @call(){
+  // expected-error @below {{function called in a non-procedural region must return a single result}}
+  %0 = sv.func.call @func() : () -> (i1)
+}
+
+// -----
+
+sv.func private @func() {
+  sv.return
+}
+
+// expected-error @below {{imported function must be a declaration but 'func' is defined}}
+sv.func.dpi.import @func

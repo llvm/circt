@@ -17,6 +17,7 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -235,7 +236,7 @@ def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [SameTypeOperands]> {
-  let arguments = (ins AnyType:$dst, AnyType:$src);
+  let arguments = (ins UnpackedType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
     $dst `,` $src attr-dict `:` type($src)
   }];
@@ -261,7 +262,10 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
 
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
-  let arguments = (ins Arg<AnyType, "", [MemWrite]>:$dst, AnyType:$src);
+  let arguments = (ins
+    Arg<UnpackedType, "", [MemWrite]>:$dst,
+    UnpackedType:$src
+  );
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
@@ -284,7 +288,7 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
   let arguments = (ins APIntAttr:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let builders = [
@@ -720,10 +724,10 @@ def ConcatOp : MooreOp<"concat", [
     is the sum of the sizes of all operands. If any of the operands is
     four-valued, the result is four-valued; otherwise it is two-valued.
   }];
-  let arguments = (ins Variadic<SimpleBitVectorType>:$values);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins Variadic<IntType>:$values);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $values attr-dict `:` functional-type($values, $result)
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
 }
 
@@ -745,10 +749,10 @@ def ReplicateOp : MooreOp<"replicate", [
     ```
     See IEEE 1800-2017 §11.4.12 "Concatenation operators".
   }];
-  let arguments = (ins SimpleBitVectorType:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` functional-type($value, $result)
+    $value attr-dict `:` type($value) `->` type($result)
   }];
 }
 
@@ -783,9 +787,175 @@ def ExtractOp : MooreOp<"extract"> {
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` 
+    $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
   }];
-} 
+}
 
+def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
+  let summary = "Struct Create operation";
+  let description = [{
+    A structure represents a collection of data types
+    that can be referenced as a whole, or the individual data types
+    that make up the structure can be referenced by name.
+    By default, structures are unpacked, meaning that there is
+    an implementation-dependent packing of the data types.
+    Unpacked structures can contain any data type.
+    See IEEE 1800-2017 § 7.2 "Structures"
+
+    Example:
+    ```
+    struct { bit [7:0] opcode; bit [23:0] addr; }IR;
+    IR.opcode = 1;   // set field in IR.
+    // anonymous structure
+    // defines variable IR
+    typedef struct {
+    bit [7:0] opcode;
+    bit [23:0] addr;
+    } instruction; // named structure type
+    instruction IR; // define variable
+    ```
+    See IEEE 1800-2017 § 7.2. "Structures".
+  }];
+  let arguments = (ins UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+  $input attr-dict `:` type($input)
+  }];
+}
+
+def StructExtractOp : MooreOp<"struct_extract"> {
+  let summary = "Struct Extract operation";
+  let description = [{
+    Structures can be converted to bits preserving the bit pattern.
+    In other words, they can be converted back to the same value
+    without any loss of information. When unpacked data are converted
+    to the packed representation, the order of the data in the packed
+    representation is such that the first field in the structure
+    occupies the MSBs. The effect is the same as a concatenation of
+    the data items (struct fields or array elements) in order.
+    The type of the elements in an unpacked structure or array
+    shall be valid for a packed representation in order to be
+    cast to any other type, whether packed or unpacked.
+    See IEEE 1800-2017 § 6.24.1 "Cast operator"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->`
+  type($result)
+  }];
+}
+
+def StructInjectOp : MooreOp<"struct_inject"> {
+  let summary = "Struct Field operation";
+  let description = [{
+    A structure can be assigned as a whole and passed to
+    or from a subroutine as a whole. Members of a structure
+    data type can be assigned individual default member
+    values by using an initial assignment with the declaration
+    of each member. The assigned expression shall be
+    a constant expression.
+    See IEEE 1800-2017 § 7.2.2 "Assigning to structures"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+  }];
+  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName,
+  UnpackedType:$RHS);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $LHS `,`   $memberName `,` $RHS
+    attr-dict `:` type($LHS) type($RHS) `->` type($result)
+  }];
+}
+
+def UnionCreateOp : MooreOp<"union_create"> {
+  let summary = "Union Create operation";
+  let description = [{
+  A union is a data type that represents a single piece
+  of storage that can be accessed using one of
+  the named member data types. Only one of the
+  data types in the union can be used at a time.
+  By default, a union is unpacked, meaning there
+  is no required representation for how members
+  of the union are stored. Dynamic types and chandle
+  types can only be used in tagged unions.
+  See IEEE 1800-2017 § 7.3 "Unions"
+
+  Example:
+  ```
+  typedef union { int i; shortreal f; } num; // named union type
+  num n;
+  n.f = 0.0; // set n in floating point format
+  typedef struct {
+  bit isfloat;
+  union { int i; shortreal f; } n;           // anonymous union type
+  } tagged_st;                               // named structure
+  ```
+  See IEEE 1800-2017 § 7.3 "Unions"
+  }];
+  let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $unionName `,` $input attr-dict `:`
+  type($input) `->` type($result)
+  }];
+ }
+
+ def UnionExtractOp : MooreOp<"union_extract"> {
+  let summary = "Union Extract operation";
+  let description = [{
+  With packed unions, writing one member and reading another is
+  independent of the byte ordering of the machine,
+  unlike an unpacked union of unpacked structures,
+  which are C-compatible and have members in ascending address order.
+  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+
+  Example:
+  ```
+  typedef union packed { // default unsigned
+  s_atmcell acell;
+  bit [423:0] bit_slice;
+  bit [52:0][7:0] byte_slice;
+  } u_atmcell;
+  u_atmcell u1;
+  byte b; bit [3:0] nib;
+  b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
+  nib = u1.bit_slice [423:420];
+  ```
+  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->` type($result)
+  }];
+ }
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

@@ -59,6 +59,8 @@ class SourceFiles:
     for file in sorted(dir.iterdir()):
       if file.is_file() and (file.suffix == ".sv" or file.suffix == ".v"):
         self.user.append(file)
+      elif file.is_dir():
+        self.add_dir(file)
 
   def dpi_so_paths(self) -> List[Path]:
     """Return a list of all the DPI shared object files."""
@@ -104,25 +106,30 @@ class Simulator:
         _thisdir.parent / "lib")
     return env
 
-  def compile_command(self) -> List[str]:
+  def compile_commands(self) -> List[List[str]]:
     """Compile the sources. Returns the exit code of the simulation compiler."""
     assert False, "Must be implemented by subclass"
 
   def compile(self) -> int:
-    cp = subprocess.run(self.compile_command(),
-                        env=Simulator.get_env(),
-                        capture_output=True,
-                        text=True)
+    cmds = self.compile_commands()
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    open(self.run_dir / "compile_stdout.log", "w").write(cp.stdout)
-    open(self.run_dir / "compile_stderr.log", "w").write(cp.stderr)
-    if cp.returncode != 0:
-      print("====== Compilation failure:")
-      if self.UsesStderr:
-        print(cp.stderr)
-      else:
-        print(cp.stdout)
-    return cp.returncode
+    with (self.run_dir / "compile_stdout.log").open("w") as stdout, (
+        self.run_dir / "compile_stderr.log").open("w") as stderr:
+      for cmd in cmds:
+        cp = subprocess.run(cmd,
+                            env=Simulator.get_env(),
+                            capture_output=True,
+                            text=True)
+        stdout.write(cp.stdout)
+        stderr.write(cp.stderr)
+        if cp.returncode != 0:
+          print("====== Compilation failure:")
+          if self.UsesStderr:
+            print(cp.stderr)
+          else:
+            print(cp.stdout)
+          return cp.returncode
+    return 0
 
   def run_command(self) -> List[str]:
     """Return the command to run the simulation."""
@@ -188,7 +195,7 @@ class Simulator:
         time.sleep(0.05)
 
       # Run the inner command, passing the connection info via environment vars.
-      testEnv = Simulator.get_env()
+      testEnv = os.environ.copy()
       testEnv["ESI_COSIM_PORT"] = str(port)
       testEnv["ESI_COSIM_HOST"] = "localhost"
       return subprocess.run(inner_command, cwd=os.getcwd(),
@@ -217,7 +224,7 @@ class Verilator(Simulator):
     if "VERILATOR_PATH" in os.environ:
       self.verilator = os.environ["VERILATOR_PATH"]
 
-  def compile_command(self) -> List[str]:
+  def compile_commands(self) -> List[List[str]]:
     cmd: List[str] = [
         self.verilator,
         "--cc",
@@ -241,7 +248,7 @@ class Verilator(Simulator):
     if len(self.sources.dpi_so) > 0:
       cmd += ["-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])]
     cmd += [str(p) for p in self.sources.rtl_sources]
-    return cmd
+    return [cmd]
 
   def run_command(self):
     exe = Path.cwd() / "obj_dir" / ("V" + self.sources.top)
@@ -256,16 +263,27 @@ class Questa(Simulator):
   # Questa doesn't use stderr for error messages. Everything goes to stdout.
   UsesStderr = False
 
-  def compile_command(self) -> List[str]:
-    cmd = [
-        "vlog",
-        "-sv",
-        "+define+TOP_MODULE=" + self.sources.top,
-        "+define+SIMULATION",
-        str(Questa.DefaultDriver),
+  def internal_compile_commands(self) -> List[str]:
+    cmds = [
+        "onerror { quit -f -code 1 }",
     ]
-    cmd += [str(p) for p in self.sources.rtl_sources]
-    return cmd
+    sources = self.sources.rtl_sources
+    sources.append(Questa.DefaultDriver)
+    for src in sources:
+      cmds.append(f"vlog -incr -sv +define+TOP_MODULE={self.sources.top}"
+                  f" +define+SIMULATION {str(src)}")
+    cmds.append(f"vopt -incr driver -o driver_opt")
+    return cmds
+
+  def compile_commands(self) -> List[List[str]]:
+    with open("compile.do", "w") as f:
+      for cmd in self.internal_compile_commands():
+        f.write(cmd)
+        f.write("\n")
+      f.write("quit\n")
+    return [
+        ["vsim", "-batch", "-do", "compile.do"],
+    ]
 
   def run_command(self) -> List[str]:
     vsim = "vsim"
@@ -273,7 +291,7 @@ class Questa(Simulator):
     # if $fatal is encountered in the simulation.
     cmd = [
         vsim,
-        "driver",
+        "driver_opt",
         "-batch",
         "-do",
         "run -all",
@@ -328,13 +346,15 @@ def __main__(args):
       "--top",
       default="ESI_Cosim_Top",
       help="Name of the 'top' module to use in the simulation.")
+  argparser.add_argument("--no-compile",
+                         action="store_true",
+                         help="Do not run the compile.")
   argparser.add_argument("--debug",
                          action="store_true",
                          help="Enable debug output.")
   argparser.add_argument("--source",
                          help="Directories containing the source files.",
-                         nargs="+",
-                         default=["hw"])
+                         default="hw")
 
   argparser.add_argument("inner_cmd",
                          nargs=argparse.REMAINDER,
@@ -346,8 +366,7 @@ def __main__(args):
   args = argparser.parse_args(args[1:])
 
   sources = SourceFiles(args.top)
-  for src in args.source:
-    sources.add_dir(Path(src))
+  sources.add_dir(Path(args.source))
 
   if args.sim == "verilator":
     sim = Verilator(sources, Path(args.rundir), args.debug)
@@ -360,9 +379,10 @@ def __main__(args):
     print("  - questa")
     return 1
 
-  rc = sim.compile()
-  if rc != 0:
-    return rc
+  if not args.no_compile:
+    rc = sim.compile()
+    if rc != 0:
+      return rc
   return sim.run(args.inner_cmd[1:])
 
 

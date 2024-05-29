@@ -17,6 +17,9 @@
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
+namespace hw {
+class HWModuleLike;
+} // namespace hw
 
 std::unique_ptr<mlir::Pass>
 createTestApplyLoweringOptionPass(llvm::StringRef options);

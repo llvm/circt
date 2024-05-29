@@ -1,22 +1,14 @@
 ; RUN: firtool %s | FileCheck %s --check-prefixes=CHECK,CHECK-DEFAULT
 ; RUN: firtool %s --ckg-name=MyClockGate --ckg-input=CI --ckg-output=CO --ckg-enable=E --ckg-test-enable=TE | FileCheck %s --check-prefixes=CHECK,CHECK-CUSTOM
+FIRRTL version 4.0.0
 
 circuit Foo:
-  intmodule ClockGate:
-    input in: Clock
-    input en: UInt<1>
-    output out: Clock
-    intrinsic = circt_clock_gate
-
-  module Foo:
+  public module Foo:
     input clk: Clock
     input enable: UInt<1>
     output gated_clk: Clock
 
-    inst ckg of ClockGate
-    ckg.in <= clk
-    ckg.en <= enable
-    gated_clk <= ckg.out
+    connect gated_clk, intrinsic(circt_clock_gate : Clock, clk, enable)
 
 ; CHECK-LABEL: module Foo(
 

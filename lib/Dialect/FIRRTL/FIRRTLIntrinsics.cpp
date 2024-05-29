@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
@@ -51,7 +53,7 @@ ParseResult GenericIntrinsic::hasNParam(unsigned n, unsigned c) {
 ParseResult GenericIntrinsic::namedParam(StringRef paramName, bool optional) {
   for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
+    if (param.getName().getValue() == paramName) {
       if (isa<StringAttr>(param.getValue()))
         return success();
 
@@ -68,7 +70,7 @@ ParseResult GenericIntrinsic::namedIntParam(StringRef paramName,
                                             bool optional) {
   for (auto a : op.getParameters()) {
     auto param = cast<ParamDeclAttr>(a);
-    if (param.getName().getValue().equals(paramName)) {
+    if (param.getName().getValue() == paramName) {
       if (isa<IntegerAttr>(param.getValue()))
         return success();
 
@@ -90,15 +92,13 @@ namespace {
 class IntrinsicOpConversion final
     : public OpConversionPattern<GenericIntrinsicOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
-
   using ConversionMapTy = IntrinsicLowerings::ConversionMapTy;
 
-  IntrinsicOpConversion(MLIRContext *context,
+  IntrinsicOpConversion(TypeConverter &typeConverter, MLIRContext *context,
                         const ConversionMapTy &conversions,
                         size_t &numConversions,
                         bool allowUnknownIntrinsics = false)
-      : OpConversionPattern(context), conversions(conversions),
+      : OpConversionPattern(typeConverter, context), conversions(conversions),
         numConversions(numConversions),
         allowUnknownIntrinsics(allowUnknownIntrinsics) {}
 
@@ -146,10 +146,36 @@ FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
   else
     target.addIllegalOp<GenericIntrinsicOp>();
 
+  // Automatically insert wires + connect for compatible FIRRTL base types.
+  // For now, this is not customizable/extendable.
+  TypeConverter typeConverter;
+  typeConverter.addConversion([](Type type) { return type; });
+  auto firrtlBaseTypeMaterialization =
+      [](OpBuilder &builder, FIRRTLBaseType resultType, ValueRange inputs,
+         Location loc) -> Value {
+    if (inputs.size() != 1)
+      return {};
+    auto inputType = type_dyn_cast<FIRRTLBaseType>(inputs.front().getType());
+    if (!inputType)
+      return {};
+
+    if (!areTypesEquivalent(resultType, inputType) ||
+        !isTypeLarger(resultType, inputType))
+      return {};
+
+    auto w = builder.create<WireOp>(loc, resultType).getResult();
+    emitConnect(builder, loc, w, inputs.front());
+    return w;
+  };
+  // New result doesn't match? Add wire + connect.
+  typeConverter.addSourceMaterialization(firrtlBaseTypeMaterialization);
+  // New operand doesn't match? Add wire + connect.
+  typeConverter.addTargetMaterialization(firrtlBaseTypeMaterialization);
+
   RewritePatternSet patterns(context);
   size_t count = 0;
-  patterns.add<IntrinsicOpConversion>(context, conversions, count,
-                                      allowUnknownIntrinsics);
+  patterns.add<IntrinsicOpConversion>(typeConverter, context, conversions,
+                                      count, allowUnknownIntrinsics);
 
   if (failed(mlir::applyPartialConversion(mod, target, std::move(patterns))))
     return failure();
@@ -343,6 +369,78 @@ public:
   }
 };
 
+class CirctLTLRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("base") ||
+           gi.namedIntParam("more", true) || gi.hasNParam(1, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    rewriter.replaceOpWithNewOp<LTLRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
+  }
+};
+
+class CirctLTLGoToRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("base") ||
+           gi.namedIntParam("more") || gi.hasNParam(1, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    rewriter.replaceOpWithNewOp<LTLGoToRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
+  }
+};
+
+class CirctLTLNonConsecutiveRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedIntParam("base") ||
+           gi.namedIntParam("more") || gi.hasNParam(1, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    rewriter.replaceOpWithNewOp<LTLNonConsecutiveRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
+  }
+};
+
 template <class Op>
 class CirctVerifConverter : public IntrinsicConverter {
 public:
@@ -362,23 +460,35 @@ public:
   }
 };
 
-class CirctMux2CellConverter
-    : public IntrinsicOpConverter<Mux2CellIntrinsicOp> {
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+class CirctMux2CellConverter : public IntrinsicConverter {
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(3) || gi.typedInput<UIntType>(0) || gi.hasNParam(0) ||
            gi.hasOutput();
   }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<Mux2CellIntrinsicOp>(gi.op, operands[0],
+                                                     operands[1], operands[2]);
+  }
 };
 
-class CirctMux4CellConverter
-    : public IntrinsicOpConverter<Mux4CellIntrinsicOp> {
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+class CirctMux4CellConverter : public IntrinsicConverter {
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
     return gi.hasNInputs(5) || gi.typedInput<UIntType>(0) || gi.hasNParam(0) ||
            gi.hasOutput();
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<Mux4CellIntrinsicOp>(
+        gi.op, operands[0], operands[1], operands[2], operands[3], operands[4]);
   }
 };
 
@@ -551,10 +661,14 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
                                                            "circt_ltl_and");
   lowering.add<CirctLTLBinaryConverter<LTLOrIntrinsicOp>>("circt.ltl.or",
                                                           "circt_ltl_or");
+  lowering.add<CirctLTLBinaryConverter<LTLIntersectIntrinsicOp>>(
+      "circt.ltl.intersect", "circt_ltl_intersect");
   lowering.add<CirctLTLBinaryConverter<LTLConcatIntrinsicOp>>(
       "circt.ltl.concat", "circt_ltl_concat");
   lowering.add<CirctLTLBinaryConverter<LTLImplicationIntrinsicOp>>(
       "circt.ltl.implication", "circt_ltl_implication");
+  lowering.add<CirctLTLBinaryConverter<LTLUntilIntrinsicOp>>("circt.ltl.until",
+                                                             "circt_ltl_until");
   lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
       "circt.ltl.disable", "circt_ltl_disable");
   lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not",
@@ -563,6 +677,11 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
       "circt.ltl.eventually", "circt_ltl_eventually");
 
   lowering.add<CirctLTLDelayConverter>("circt.ltl.delay", "circt_ltl_delay");
+  lowering.add<CirctLTLRepeatConverter>("circt.ltl.repeat", "circt_ltl_repeat");
+  lowering.add<CirctLTLGoToRepeatConverter>("circt.ltl.goto_repeat",
+                                            "circt_ltl_goto_repeat");
+  lowering.add<CirctLTLNonConsecutiveRepeatConverter>(
+      "circt.ltl.non_consecutive_repeat", "circt_ltl_non_consecutive_repeat");
   lowering.add<CirctLTLClockConverter>("circt.ltl.clock", "circt_ltl_clock");
 
   lowering.add<CirctVerifConverter<VerifAssertIntrinsicOp>>(

@@ -272,6 +272,25 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDedupPass()";
 }
 
+def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
+  let summary = "Eliminate Unneeded Wires";
+  let description = [{
+    This pass eliminates wires for which the write dominates the reads and
+    for which there are no other preservation reasons.
+  }];
+  let statistics = [
+    Statistic<"erasedWires", "num-erased-wires",
+      "Number of wires erased">,
+    Statistic<"complexWriteWires", "num-complex-wires",
+      "Number of wires not erased due to complex writes">,
+    Statistic<"notDomWires", "num-not-dominating-wires",
+      "Number of wires not erased due to dominance issues">,
+    Statistic<"complexTypeWires", "num-not-passive-wires",
+      "Number of wires not erased due to type issues">
+  ];
+  let constructor = "circt::firrtl::createEliminateWiresPass()";
+}
+
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let summary = "Emit OMIR annotations";
   let description = [{
@@ -836,26 +855,6 @@ def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
   ];
 }
 
-def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
-  let summary = "Hoist passthrough logic";
-  let description = [{
-    This pass hoists simple passthrough connections up.
-  }];
-  let constructor = "circt::firrtl::createHoistPassthroughPass()";
-  let options = [
-    Option<"hoistHWDrivers", "hoist-hw", "bool", "true",
-      "Hoist HW drivers.">
-  ];
-  let statistics = [
-    Statistic<"numUTurnsHoisted", "num-u-turns",
-      "Number of u-turns hoisted">,
-    Statistic<"numRefDrivers", "num-ref-drivers",
-      "Number of ref-type drivers processed">,
-    Statistic<"numHWDrivers", "num-hw-drivers",
-      "Number of hw-type drivers processed">
-  ];
-}
-
 def MaterializeDebugInfo :
     Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
   let summary = "Generate debug ops to track FIRRTL values";
@@ -899,5 +898,14 @@ def SpecializeOption :
       "Number of instances specialized">
   ];
 }
+
+def ModuleSummary :
+  Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
+    let summary = "Print a summary of modules.";
+    let description = [{
+      The pass produces a summary of modules.
+    }];
+    let constructor = "circt::firrtl::createModuleSummaryPass()";
+  }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

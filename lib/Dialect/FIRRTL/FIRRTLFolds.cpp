@@ -1199,37 +1199,10 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::DShrOfConstant>(context);
 }
 
-namespace {
-// cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-// consecutive in the input.
-struct CatBitsBits : public mlir::RewritePattern {
-  CatBitsBits(MLIRContext *context)
-      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
-                                PatternRewriter &rewriter) const override {
-    auto cat = cast<CatPrimOp>(op);
-    if (auto lhsBits =
-            dyn_cast_or_null<BitsPrimOp>(cat.getLhs().getDefiningOp())) {
-      if (auto rhsBits =
-              dyn_cast_or_null<BitsPrimOp>(cat.getRhs().getDefiningOp())) {
-        if (lhsBits.getInput() == rhsBits.getInput() &&
-            lhsBits.getLo() - 1 == rhsBits.getHi()) {
-          replaceOpWithNewOpAndCopyName<BitsPrimOp>(
-              rewriter, cat, cat.getType(), lhsBits.getInput(), lhsBits.getHi(),
-              rhsBits.getLo());
-          return success();
-        }
-      }
-    }
-    return failure();
-  }
-};
-} // namespace
-
 void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<CatBitsBits, patterns::CatDoubleConst, patterns::CatCast>(
-      context);
+  results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
+                 patterns::CatCast>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1960,9 +1933,7 @@ struct NodeBypass : public mlir::RewritePattern {
     if (node.getInnerSym() || !AnnotationSet(node).canBeDeleted() ||
         node.use_empty() || node.isForceable())
       return failure();
-    rewriter.startOpModification(node);
-    node.getResult().replaceAllUsesWith(node.getInput());
-    rewriter.finalizeOpModification(node);
+    rewriter.replaceAllUsesWith(node.getResult(), node.getInput());
     return success();
   }
 };
@@ -2370,7 +2341,7 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     if (!subfield) {
       auto ty = port.getType();
       auto reg = rewriter.create<RegOp>(port.getLoc(), ty, getClock());
-      port.replaceAllUsesWith(reg.getResult());
+      rewriter.replaceAllUsesWith(port, reg.getResult());
       return;
     }
   }
@@ -2552,7 +2523,7 @@ struct FoldUnusedPorts : public mlir::RewritePattern {
       if (deadPorts[i])
         erasePort(rewriter, port);
       else
-        port.replaceAllUsesWith(newOp.getResult(nextPort++));
+        rewriter.replaceAllUsesWith(port, newOp.getResult(nextPort++));
     }
 
     rewriter.eraseOp(op);
@@ -2644,7 +2615,7 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
           rewriter.replaceOpWithNewOp<WireOp>(wmodeField, wmodeField.getType());
         }
       } else {
-        result.replaceAllUsesWith(newResult);
+        rewriter.replaceAllUsesWith(result, newResult);
       }
     }
     rewriter.eraseOp(op);
@@ -3211,7 +3182,34 @@ LogicalResult InvalidValueOp::canonicalize(InvalidValueOp op,
     rewriter.eraseOp(op);
     return success();
   }
+  // Propagate invalids through a single use which is a unary op.  You cannot
+  // propagate through multiple uses as that breaks invalid semantics.  Nor
+  // can you propagate through binary ops or generally any op which computes.
+  // Not is an exception as it is a pure, all-bits inverse.
+  if (op->hasOneUse() &&
+      (isa<BitsPrimOp, HeadPrimOp, ShrPrimOp, TailPrimOp, SubfieldOp,
+           SubindexOp, AsSIntPrimOp, AsUIntPrimOp, NotPrimOp, BitCastOp>(
+           *op->user_begin()) ||
+       (isa<CvtPrimOp>(*op->user_begin()) &&
+        type_isa<SIntType>(op->user_begin()->getOperand(0).getType())) ||
+       (isa<AndRPrimOp, XorRPrimOp, OrRPrimOp>(*op->user_begin()) &&
+        type_cast<FIRRTLBaseType>(op->user_begin()->getOperand(0).getType())
+                .getBitWidthOrSentinel() > 0))) {
+    auto *modop = *op->user_begin();
+    auto inv = rewriter.create<InvalidValueOp>(op.getLoc(),
+                                               modop->getResult(0).getType());
+    rewriter.replaceAllOpUsesWith(modop, inv);
+    rewriter.eraseOp(modop);
+    rewriter.eraseOp(op);
+    return success();
+  }
   return failure();
+}
+
+OpFoldResult InvalidValueOp::fold(FoldAdaptor adaptor) {
+  if (getType().getBitWidthOrSentinel() == 0 && isa<IntType>(getType()))
+    return getIntAttr(getType(), APInt(0, 0, isa<SIntType>(getType())));
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

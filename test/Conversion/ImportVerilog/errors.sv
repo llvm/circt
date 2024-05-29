@@ -177,3 +177,22 @@ module Foo;
     automatic int b;
   end
 endmodule
+
+// -----
+
+module Foo;
+  int a, b, c;
+  bit d [3:0];
+  initial begin
+    // expected-error @below {{literals with X or Z bits not supported}}
+    c = 'x inside { a };
+    // expected-error @below {{literals with X or Z bits not supported}}
+    c = a inside { 'z, a };
+    // expected-error @below {{literals with X or Z bits not supported}}
+    c = a inside { a, ['x:b] };
+    // expected-error @below {{literals with X or Z bits not supported}}
+    c = a inside { a, [b:'z] };
+    // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
+    c = a inside { d };
+  end
+endmodule

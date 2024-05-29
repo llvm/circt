@@ -13,6 +13,8 @@
 #ifndef COSIM_ENDPOINT_H
 #define COSIM_ENDPOINT_H
 
+#include "esi/Common.h"
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -35,12 +37,10 @@ public:
   /// Representing messages as shared pointers to vectors may be a performance
   /// issue in the future but it is the easiest way to ensure memory
   /// correctness.
-  using Blob = std::vector<uint8_t>;
-  using BlobPtr = std::unique_ptr<Blob>;
+  using MessageDataPtr = std::unique_ptr<MessageData>;
 
   /// Construct an endpoint which knows and the type IDs in both directions.
-  Endpoint(std::string fromHostTypeId, int sendTypeMaxSize,
-           std::string toHostTypeId, int recvTypeMaxSize);
+  Endpoint(std::string fromHostTypeId, std::string toHostTypeId);
   ~Endpoint();
   /// Disallow copying. There is only ONE endpoint object per logical endpoint
   /// so copying is almost always a bug.
@@ -55,14 +55,14 @@ public:
   void returnForUse();
 
   /// Queue message to the simulation.
-  void pushMessageToSim(BlobPtr msg) {
+  void pushMessageToSim(MessageDataPtr msg) {
     Lock g(m);
     toCosim.push(std::move(msg));
   }
 
   /// Pop from the to-simulator queue. Return true if there was a message in the
   /// queue.
-  bool getMessageToSim(BlobPtr &msg) {
+  bool getMessageToSim(MessageDataPtr &msg) {
     Lock g(m);
     if (toCosim.empty())
       return false;
@@ -72,14 +72,14 @@ public:
   }
 
   /// Queue message to the RPC client.
-  void pushMessageToClient(BlobPtr msg) {
+  void pushMessageToClient(MessageDataPtr msg) {
     Lock g(m);
     toClient.push(std::move(msg));
   }
 
   /// Pop from the to-RPC-client queue. Return true if there was a message in
   /// the queue.
-  bool getMessageToClient(BlobPtr &msg) {
+  bool getMessageToClient(MessageDataPtr &msg) {
     Lock g(m);
     if (toClient.empty())
       return false;
@@ -100,9 +100,9 @@ private:
   /// in the future.
   std::mutex m;
   /// Message queue from RPC client to the simulation.
-  std::queue<BlobPtr> toCosim;
+  std::queue<MessageDataPtr> toCosim;
   /// Message queue to RPC client from the simulation.
-  std::queue<BlobPtr> toClient;
+  std::queue<MessageDataPtr> toClient;
 };
 
 /// The Endpoint registry is where Endpoints report their existence (register)
@@ -112,8 +112,7 @@ public:
   /// Register an Endpoint. Creates the Endpoint object and owns it. Returns
   /// false if unsuccessful.
   bool registerEndpoint(std::string epId, std::string fromHostTypeId,
-                        int sendTypeMaxSize, std::string toHostTypeId,
-                        int recvTypeMaxSize);
+                        std::string toHostTypeId);
 
   /// Get the specified endpoint. Return nullptr if it does not exist. This
   /// method is defined inline so it can be inlined at compile time. Performance

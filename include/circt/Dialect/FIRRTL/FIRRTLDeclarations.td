@@ -156,11 +156,6 @@ def InstanceOp : HardwareDeclOp<"instance", [
       Operation *moduleOp = node->getModule();
       return dyn_cast_or_null<T>(moduleOp);
     }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let hasVerifier = true;

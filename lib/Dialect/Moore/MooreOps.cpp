@@ -62,7 +62,7 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(getValueAttr());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
   p << " : ";
-  p.printType(getType());
+  p.printStrippedAttrOrType(getType());
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -76,7 +76,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
   // Parse the result type.
   IntType type;
-  if (parser.parseType(type))
+  if (parser.parseCustomTypeWithFallback(type))
     return failure();
 
   // Extend or truncate the constant value to match the size of the type.

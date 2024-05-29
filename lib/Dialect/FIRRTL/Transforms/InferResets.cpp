@@ -126,7 +126,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
               auto zero = createZeroValue(builder, fieldType, cache);
               auto acc =
                   builder.create<SubfieldOp>(fieldType, wireOp.getResult(), i);
-              builder.create<StrictConnectOp>(acc, zero);
+              emitConnect(builder, acc, zero);
             }
             return wireOp.getResult();
           })
@@ -137,7 +137,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
             for (unsigned i = 0, e = type.getNumElements(); i < e; ++i) {
               auto acc = builder.create<SubindexOp>(zero.getType(),
                                                     wireOp.getResult(), i);
-              builder.create<StrictConnectOp>(acc, zero);
+              emitConnect(builder, acc, zero);
             }
             return wireOp.getResult();
           })
@@ -665,7 +665,7 @@ static bool getDeclName(Value value, SmallString<32> &string) {
             op.getPortName(cast<OpResult>(value).getResultNumber()).getValue();
         return true;
       })
-      .Case<WireOp, RegOp, RegResetOp>([&](auto op) {
+      .Case<WireOp, NodeOp, RegOp, RegResetOp>([&](auto op) {
         string += op.getName();
         return true;
       })
@@ -1703,7 +1703,7 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
             nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
-        builder.create<StrictConnectOp>(wireOp.getResult(), nodeOp.getInput());
+        emitConnect(builder, wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
         resetOp = wireOp;
@@ -1807,7 +1807,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Connect the instance's reset to the actual reset.
     assert(instReset && actualReset);
     builder.setInsertionPointAfter(instOp);
-    builder.create<StrictConnectOp>(instReset, actualReset);
+    emitConnect(builder, instReset, actualReset);
     return;
   }
 

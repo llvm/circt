@@ -196,14 +196,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   }
 
   auto *context = parser.getContext();
-  if (name.equals("clock"))
+  if (name == "clock")
     return result = ClockType::get(context, isConst), success();
-  if (name.equals("reset"))
+  if (name == "reset")
     return result = ResetType::get(context, isConst), success();
-  if (name.equals("asyncreset"))
+  if (name == "asyncreset")
     return result = AsyncResetType::get(context, isConst), success();
 
-  if (name.equals("sint") || name.equals("uint") || name.equals("analog")) {
+  if (name == "sint" || name == "uint" || name == "analog") {
     // Parse the width specifier if it exists.
     int32_t width = -1;
     if (!parser.parseOptionalLess()) {
@@ -215,18 +215,18 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                failure();
     }
 
-    if (name.equals("sint"))
+    if (name == "sint")
       result = SIntType::get(context, width, isConst);
-    else if (name.equals("uint"))
+    else if (name == "uint")
       result = UIntType::get(context, width, isConst);
     else {
-      assert(name.equals("analog"));
+      assert(name == "analog");
       result = AnalogType::get(context, width, isConst);
     }
     return success();
   }
 
-  if (name.equals("bundle")) {
+  if (name == "bundle") {
     SmallVector<BundleType::BundleElement, 4> elements;
 
     auto parseBundleElement = [&]() -> ParseResult {
@@ -252,7 +252,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
     return result = BundleType::get(context, elements, isConst), success();
   }
-  if (name.equals("openbundle")) {
+  if (name == "openbundle") {
     SmallVector<OpenBundleType::BundleElement, 4> elements;
 
     auto parseBundleElement = [&]() -> ParseResult {
@@ -280,7 +280,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return failure(!result);
   }
 
-  if (name.equals("enum")) {
+  if (name == "enum") {
     SmallVector<FEnumType::EnumElement, 4> elements;
 
     auto parseEnumElement = [&]() -> ParseResult {
@@ -310,7 +310,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = FEnumType::get(context, elements, isConst), success();
   }
 
-  if (name.equals("vector")) {
+  if (name == "vector") {
     FIRRTLBaseType elementType;
     uint64_t width = 0;
 
@@ -321,7 +321,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
     return result = FVectorType::get(elementType, width, isConst), success();
   }
-  if (name.equals("openvector")) {
+  if (name == "openvector") {
     FIRRTLType elementType;
     uint64_t width = 0;
 
@@ -336,7 +336,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   }
 
   // For now, support both firrtl.ref and firrtl.probe.
-  if (name.equals("ref") || name.equals("probe")) {
+  if (name == "ref" || name == "probe") {
     FIRRTLBaseType type;
     SymbolRefAttr layer;
     // Don't pass `isConst` to `parseNestedBaseType since `ref` can point to
@@ -382,7 +382,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 
     return result = RefType::get(type, true, layer), success();
   }
-  if (name.equals("class")) {
+  if (name == "class") {
     if (isConst)
       return parser.emitError(parser.getNameLoc(), "classes cannot be const");
     ClassType classType;
@@ -392,14 +392,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = classType;
     return success();
   }
-  if (name.equals("anyref")) {
+  if (name == "anyref") {
     if (isConst)
       return parser.emitError(parser.getNameLoc(), "any refs cannot be const");
 
     result = AnyRefType::get(parser.getContext());
     return success();
   }
-  if (name.equals("string")) {
+  if (name == "string") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "strings cannot be const");
       return failure();
@@ -407,7 +407,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = StringType::get(parser.getContext());
     return success();
   }
-  if (name.equals("integer")) {
+  if (name == "integer") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "bigints cannot be const");
       return failure();
@@ -415,7 +415,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = FIntegerType::get(parser.getContext());
     return success();
   }
-  if (name.equals("bool")) {
+  if (name == "bool") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "bools cannot be const");
       return failure();
@@ -423,7 +423,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = BoolType::get(parser.getContext());
     return success();
   }
-  if (name.equals("double")) {
+  if (name == "double") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "doubles cannot be const");
       return failure();
@@ -431,7 +431,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = DoubleType::get(parser.getContext());
     return success();
   }
-  if (name.equals("list")) {
+  if (name == "list") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "lists cannot be const");
       return failure();
@@ -445,7 +445,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
     return success();
   }
-  if (name.equals("path")) {
+  if (name == "path") {
     if (isConst) {
       parser.emitError(parser.getNameLoc(), "path cannot be const");
       return failure();
@@ -453,7 +453,7 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     result = PathType::get(parser.getContext());
     return success();
   }
-  if (name.equals("alias")) {
+  if (name == "alias") {
     FIRRTLBaseType type;
     StringRef name;
     if (parser.parseLess() || parser.parseKeyword(&name) ||

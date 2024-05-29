@@ -84,10 +84,10 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
             auto fName = sf.getFieldName();
             // If this is the enable field, record the product terms(the And
             // expression tree).
-            if (fName.equals("en"))
+            if (fName == "en")
               getProductTerms(sf, isReadPort ? readTerms : writeTerms);
 
-            else if (fName.equals("clk")) {
+            else if (fName == "clk") {
               if (isReadPort)
                 rClock = getConnectSrc(sf);
               else

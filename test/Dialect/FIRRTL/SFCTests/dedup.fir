@@ -905,7 +905,7 @@ circuit Top18 : %[[
   ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECK-NEXT: firrtl.wire
+    ; CHECK: firrtl.wire
     ; CHECK-SAME: [{class = "firrtl.transforms.DontTouchAnnotation"}]
     wire b: UInt<1>
     b is invalid

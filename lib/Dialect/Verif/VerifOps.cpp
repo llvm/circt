@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
@@ -16,6 +17,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "llvm/ADT/MapVector.h"
 
 using namespace circt;
 using namespace verif;

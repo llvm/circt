@@ -63,64 +63,103 @@ hw.module @BasicEmissionTemporal(in %a: i1) {
 // CHECK-LABEL: module Sequences
 hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (##0 a);
-  // CHECK: assert property (##4 a);
-  // CHECK: assert property (##[5:6] a);
-  // CHECK: assert property (##[7:$] a);
-  // CHECK: assert property (##[*] a);
-  // CHECK: assert property (##[+] a);
   %d0 = ltl.delay %a, 0, 0 : i1
-  %d1 = ltl.delay %a, 4, 0 : i1
-  %d2 = ltl.delay %a, 5, 1 : i1
-  %d3 = ltl.delay %a, 7 : i1
-  %d4 = ltl.delay %a, 0 : i1
-  %d5 = ltl.delay %a, 1 : i1
   verif.assert %d0 : !ltl.sequence
+  // CHECK: assert property (##4 a);
+  %d1 = ltl.delay %a, 4, 0 : i1
   verif.assert %d1 : !ltl.sequence
+  // CHECK: assert property (##[5:6] a);
+  %d2 = ltl.delay %a, 5, 1 : i1
   verif.assert %d2 : !ltl.sequence
+  // CHECK: assert property (##[7:$] a);
+  %d3 = ltl.delay %a, 7 : i1
   verif.assert %d3 : !ltl.sequence
+  // CHECK: assert property (##[*] a);
+  %d4 = ltl.delay %a, 0 : i1
   verif.assert %d4 : !ltl.sequence
+  // CHECK: assert property (##[+] a);
+  %d5 = ltl.delay %a, 1 : i1
   verif.assert %d5 : !ltl.sequence
 
   // CHECK: assert property (a ##0 a);
-  // CHECK: assert property (a ##4 a);
-  // CHECK: assert property (a ##4 a ##[5:6] a);
-  // CHECK: assert property (##4 a ##[5:6] a ##[7:$] a);
   %c0 = ltl.concat %a, %a : i1, i1
-  %c1 = ltl.concat %a, %d1 : i1, !ltl.sequence
-  %c2 = ltl.concat %a, %d1, %d2 : i1, !ltl.sequence, !ltl.sequence
-  %c3 = ltl.concat %d1, %d2, %d3 : !ltl.sequence, !ltl.sequence, !ltl.sequence
   verif.assert %c0 : !ltl.sequence
+  // CHECK: assert property (a ##4 a);
+  %c1 = ltl.concat %a, %d1 : i1, !ltl.sequence
   verif.assert %c1 : !ltl.sequence
+  // CHECK: assert property (a ##4 a ##[5:6] a);
+  %c2 = ltl.concat %a, %d1, %d2 : i1, !ltl.sequence, !ltl.sequence
   verif.assert %c2 : !ltl.sequence
+  // CHECK: assert property (##4 a ##[5:6] a ##[7:$] a);
+  %c3 = ltl.concat %d1, %d2, %d3 : !ltl.sequence, !ltl.sequence, !ltl.sequence
   verif.assert %c3 : !ltl.sequence
 
   // CHECK: assert property (a and b);
-  // CHECK: assert property (a ##0 a and a ##4 a);
-  // CHECK: assert property (a or b);
-  // CHECK: assert property (a ##0 a or a ##4 a);
   %g0 = ltl.and %a, %b : i1, i1
-  %g1 = ltl.and %c0, %c1 : !ltl.sequence, !ltl.sequence
-  %g2 = ltl.or %a, %b : i1, i1
-  %g3 = ltl.or %c0, %c1 : !ltl.sequence, !ltl.sequence
   verif.assert %g0 : !ltl.sequence
+  // CHECK: assert property (a ##0 a and a ##4 a);
+  %g1 = ltl.and %c0, %c1 : !ltl.sequence, !ltl.sequence
   verif.assert %g1 : !ltl.sequence
+  // CHECK: assert property (a or b);
+  %g2 = ltl.or %a, %b : i1, i1
   verif.assert %g2 : !ltl.sequence
+  // CHECK: assert property (a ##0 a or a ##4 a);
+  %g3 = ltl.or %c0, %c1 : !ltl.sequence, !ltl.sequence
   verif.assert %g3 : !ltl.sequence
 
+  // CHECK: assert property (a[*0]);
+  %r0 = ltl.repeat %a, 0, 0 : i1
+  verif.assert %r0 : !ltl.sequence
+  // CHECK: assert property (a[*4]);
+  %r1 = ltl.repeat %a, 4, 0 : i1
+  verif.assert %r1 : !ltl.sequence
+  // CHECK: assert property (a[*5:6]);
+  %r2 = ltl.repeat %a, 5, 1 : i1
+  verif.assert %r2 : !ltl.sequence
+  // CHECK: assert property (a[*7:$]);
+  %r3 = ltl.repeat %a, 7 : i1
+  verif.assert %r3 : !ltl.sequence
+  // CHECK: assert property (a[*]);
+  %r4 = ltl.repeat %a, 0 : i1
+  verif.assert %r4 : !ltl.sequence
+  // CHECK: assert property (a[+]);
+  %r5 = ltl.repeat %a, 1 : i1
+  verif.assert %r5 : !ltl.sequence
+
+  // CHECK: assert property (a[->0]);
+  %gtr0 = ltl.goto_repeat %a, 0, 0 : i1
+  verif.assert %gtr0 : !ltl.sequence
+  // CHECK: assert property (a[->4]);
+  %gtr1 = ltl.goto_repeat %a, 4, 0 : i1
+  verif.assert %gtr1 : !ltl.sequence
+  // CHECK: assert property (a[->5:6]);
+  %gtr2 = ltl.goto_repeat %a, 5, 1 : i1
+  verif.assert %gtr2 : !ltl.sequence
+
+  // CHECK: assert property (a[=0]);
+  %ncr0 = ltl.non_consecutive_repeat %a, 0, 0 : i1
+  verif.assert %ncr0 : !ltl.sequence
+  // CHECK: assert property (a[=4]);
+  %ncr1 = ltl.non_consecutive_repeat %a, 4, 0 : i1
+  verif.assert %ncr1 : !ltl.sequence
+  // CHECK: assert property (a[=5:6]);
+  %ncr2 = ltl.non_consecutive_repeat %a, 5, 1 : i1
+  verif.assert %ncr2 : !ltl.sequence
+
   // CHECK: assert property (@(posedge clk) a);
-  // CHECK: assert property (@(negedge clk) a);
-  // CHECK: assert property (@(edge clk) a);
-  // CHECK: assert property (@(posedge clk) ##4 a);
-  // CHECK: assert property (b ##0 (@(posedge clk) a));
   %k0 = ltl.clock %a, posedge %clk : i1
-  %k1 = ltl.clock %a, negedge %clk : i1
-  %k2 = ltl.clock %a, edge %clk : i1
-  %k3 = ltl.clock %d1, posedge %clk : !ltl.sequence
-  %k4 = ltl.concat %b, %k0 : i1, !ltl.sequence
   verif.assert %k0 : !ltl.sequence
+  // CHECK: assert property (@(negedge clk) a);
+  %k1 = ltl.clock %a, negedge %clk : i1
   verif.assert %k1 : !ltl.sequence
+  // CHECK: assert property (@(edge clk) a);
+  %k2 = ltl.clock %a, edge %clk : i1
   verif.assert %k2 : !ltl.sequence
+  // CHECK: assert property (@(posedge clk) ##4 a);
+  %k3 = ltl.clock %d1, posedge %clk : !ltl.sequence
   verif.assert %k3 : !ltl.sequence
+  // CHECK: assert property (b ##0 (@(posedge clk) a));
+  %k4 = ltl.concat %b, %k0 : i1, !ltl.sequence
   verif.assert %k4 : !ltl.sequence
 }
 
@@ -145,6 +184,10 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %i5 = ltl.concat %a, %i1, %i4 : i1, !ltl.sequence, !ltl.sequence
   %i6 = ltl.implication %i5, %n0 : !ltl.sequence, !ltl.property
   verif.assert %i6 : !ltl.property
+
+  // CHECK: assert property (a until b);
+  %u0 = ltl.until %a, %b : i1, i1
+  verif.assert %u0 : !ltl.property
 
   // CHECK: assert property (s_eventually a);
   %e0 = ltl.eventually %a : i1
@@ -196,6 +239,11 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   %e2 = ltl.and %b, %e0 : i1, !ltl.property
   verif.assert %e1 : !ltl.property
   verif.assert %e2 : !ltl.property
+
+  // CHECK: assert property ((a until b) and a);
+  %u0 = ltl.until %a, %b : i1, i1
+  %u1 = ltl.and %u0, %a : !ltl.property, i1
+  verif.assert %u1 : !ltl.property
 }
 
 // CHECK-LABEL: module SystemVerilogSpecExamples
@@ -269,4 +317,20 @@ hw.module @Issue5763(in %a: i3) {
   %1 = comb.icmp bin eq %a, %c-1_i3 : i3
   %2 = comb.and bin %1, %0 : i1
   verif.assert %2 : i1
+}
+
+
+// CHECK-LABEL: module ClockedAsserts
+hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
+  %true = hw.constant true
+  %n0 = ltl.not %a : i1
+
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assert %n0 disable %b clock posedge %clk : !ltl.property
+
+  // CHECK: assume property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assume %n0 disable %b clock posedge %clk : !ltl.property
+
+  // CHECK: cover property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_cover %n0 disable %b clock posedge %clk : !ltl.property
 }

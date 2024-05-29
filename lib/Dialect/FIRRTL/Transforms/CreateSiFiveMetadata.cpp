@@ -108,7 +108,7 @@ struct ObjectModelIR {
         StringType::get(context),  // direction
         FIntegerType::get(context) // Width
     };
-    StringRef extraPortFields[3] = {"name", "drection", "width"};
+    StringRef extraPortFields[3] = {"name", "direction", "width"};
 
     extraPortsClass =
         buildSimpleClassOp(builderOM, unknownLoc, "ExtraPortsMemorySchema",
@@ -308,7 +308,7 @@ struct ObjectModelIR {
               .Case("inDut", BoolAttr::get(context, inDut))
               .Case("extraPorts", {}));
       if (!propVal) {
-        if (field.value().equals("hierarchy"))
+        if (field.value() == "hierarchy")
           propVal = hierpaths;
         else
           propVal = extraPorts;

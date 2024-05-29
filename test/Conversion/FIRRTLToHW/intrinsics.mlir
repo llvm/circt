@@ -63,23 +63,43 @@ firrtl.circuit "Intrinsics" {
   firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1
-    // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
     %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
     %d1 = firrtl.int.ltl.delay %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[L0:%.+]] = ltl.and [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
-    // CHECK-NEXT: [[L1:%.+]] = ltl.or %a, [[L0]] : i1, !ltl.sequence
     %l0 = firrtl.int.ltl.and %d0, %d1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[L1:%.+]] = ltl.or %a, [[L0]] : i1, !ltl.sequence
     %l1 = firrtl.int.ltl.or %a, %l0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[L2:%.+]] = ltl.intersect [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
+    %l2 = firrtl.int.ltl.intersect %d0, %d1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[C0:%.+]] = ltl.concat [[D0]], [[L1]] : !ltl.sequence, !ltl.sequence
     %c0 = firrtl.int.ltl.concat %d0, %l1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[R0:%.+]] = ltl.repeat %a, 42 : i1
+    %r0 = firrtl.int.ltl.repeat %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[R1:%.+]] = ltl.repeat %b, 42, 1337 : i1
+    %r1 = firrtl.int.ltl.repeat %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[GTR0:%.+]] = ltl.goto_repeat %a, 42, 0 : i1
+    %gtr0 = firrtl.int.ltl.goto_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[GTR1:%.+]] = ltl.goto_repeat %b, 1337, 9001 : i1
+    %gtr1 = firrtl.int.ltl.goto_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[NCR0:%.+]] = ltl.non_consecutive_repeat %a, 42, 0 : i1
+    %ncr0 = firrtl.int.ltl.non_consecutive_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[NCR1:%.+]] = ltl.non_consecutive_repeat %b, 1337, 9001 : i1
+    %ncr1 = firrtl.int.ltl.non_consecutive_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[N0:%.+]] = ltl.not [[C0]] : !ltl.sequence
     %n0 = firrtl.int.ltl.not %c0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[I0:%.+]] = ltl.implication [[C0]], [[N0]] : !ltl.sequence, !ltl.property
     %i0 = firrtl.int.ltl.implication %c0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+    // CHECK-NEXT: [[U0:%.+]] = ltl.until [[N0]], [[N0]] : !ltl.property, !ltl.property
+    %u0 = firrtl.int.ltl.until %n0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
     %e0 = firrtl.int.ltl.eventually %i0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -91,16 +111,16 @@ firrtl.circuit "Intrinsics" {
     %d2 = firrtl.int.ltl.disable %k0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: verif.assert %a : i1
-    // CHECK-NEXT: verif.assert %a label "hello" : i1
-    // CHECK-NEXT: verif.assume [[C0]] : !ltl.sequence
-    // CHECK-NEXT: verif.assume [[C0]] label "hello" : !ltl.sequence
-    // CHECK-NEXT: verif.cover [[K0]] : !ltl.property
-    // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.property
     firrtl.int.verif.assert %a : !firrtl.uint<1>
+    // CHECK-NEXT: verif.assert %a label "hello" : i1
     firrtl.int.verif.assert %a {label = "hello"} : !firrtl.uint<1>
+    // CHECK-NEXT: verif.assume [[C0]] : !ltl.sequence
     firrtl.int.verif.assume %c0 : !firrtl.uint<1>
+    // CHECK-NEXT: verif.assume [[C0]] label "hello" : !ltl.sequence
     firrtl.int.verif.assume %c0 {label = "hello"} : !firrtl.uint<1>
+    // CHECK-NEXT: verif.cover [[K0]] : !ltl.property
     firrtl.int.verif.cover %k0 : !firrtl.uint<1>
+    // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.property
     firrtl.int.verif.cover %k0 {label = "hello"} : !firrtl.uint<1>
   }
 
