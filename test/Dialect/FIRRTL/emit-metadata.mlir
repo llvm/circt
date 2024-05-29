@@ -39,8 +39,10 @@ firrtl.circuit "retime0" attributes { annotations = [{
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata
-// CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata
+// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.any
+// CHECK:           [[SIFIVE_METADATA:%.+]] = firrtl.object @SiFive_Metadata
+// CHECK:           [[METADATA_OBJ:%.+]] = firrtl.object.anyref_cast [[SIFIVE_METADATA]]
+// CHECK:           propassign %metadataObj, [[METADATA_OBJ]]
 // CHECK:         firrtl.module @retime1() {
 // CHECK:         firrtl.module @retime2()
 

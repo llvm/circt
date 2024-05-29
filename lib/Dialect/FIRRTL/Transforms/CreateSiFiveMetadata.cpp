@@ -856,11 +856,12 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       SmallVector<std::pair<unsigned, PortInfo>> ports = {
           {portIndex,
            PortInfo(StringAttr::get(objectOp->getContext(), "metadataObj"),
-                    objectOp.getType(), Direction::Out)}};
+                    AnyRefType::get(objectOp->getContext()), Direction::Out)}};
       topMod.insertPorts(ports);
       auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
           topMod->getLoc(), topMod.getBodyBlock());
-      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectOp);
+      auto objectCast = builderOM.create<ObjectAnyRefCastOp>(objectOp);
+      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectCast);
     }
 
   // This pass modifies the hierarchy, InstanceGraph is not preserved.
