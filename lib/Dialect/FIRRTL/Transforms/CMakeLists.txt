@@ -14,7 +14,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   FinalizeIR.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
-  HoistPassthrough.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
   InferReadWrite.cpp
