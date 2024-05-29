@@ -21,7 +21,6 @@
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <optional>
 
 using namespace mlir;
 using namespace circt;
@@ -380,11 +379,15 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
       return emitError(op->getLoc(), "Unsupported procedure operation");
       return failure();
     case ProcedureKind::Initial:
-      rewriter.replaceOpWithNewOp<llhd::ProcOp>(
+      auto procOp = rewriter.replaceOpWithNewOp<llhd::ProcOp>(
           op,
           mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
                                   std::nullopt),
           uint64_t(0), mlir::ArrayAttr(), mlir::ArrayAttr());
+      procOp.getBody().emplaceBlock();
+      return success();
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToEnd(procOp->getBlock());
       return success();
     };
   }
