@@ -184,7 +184,7 @@ verifyAllMembersPacked(function_ref<InFlightDiagnostic()> emitError,
   if (!llvm::all_of(members, [](const auto &member) {
         return llvm::isa<PackedType>(member.type);
       }))
-    return emitError() << "Struct/Union members must be packed types";
+    return emitError() << "StructType/UnionType members must be packed types";
   return success();
 }
 
