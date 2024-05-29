@@ -790,7 +790,7 @@ def ExtractOp : MooreOp<"extract"> {
     $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
   }];
-} 
+}
 
 def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
   let summary = "Struct Create operation";
@@ -817,11 +817,11 @@ def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins UnpackedType:$structName);
+  let arguments = (ins UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let hasCustomAssemblyFormat = 1;
   let assemblyFormat = [{
-    $structName attr-dict `:` type($structName)
+  $input attr-dict `:` type($input)
   }];
 }
 
@@ -853,11 +853,12 @@ def StructExtractOp : MooreOp<"struct_extract"> {
     ```
     See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
   }];
-  let arguments = (ins StrAttr:$memberName, UnpackedType:$structName);
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $structName `,`   $memberName  attr-dict `:`
-    type($structName) `->` type($result)
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->`
+  type($result)
   }];
 }
 
@@ -894,4 +895,67 @@ def StructInjectOp : MooreOp<"struct_inject"> {
   }];
 }
 
+def UnionCreateOp : MooreOp<"union_create"> {
+  let summary = "Union Create operation";
+  let description = [{
+  A union is a data type that represents a single piece
+  of storage that can be accessed using one of
+  the named member data types. Only one of the
+  data types in the union can be used at a time.
+  By default, a union is unpacked, meaning there
+  is no required representation for how members
+  of the union are stored. Dynamic types and chandle
+  types can only be used in tagged unions.
+  See IEEE 1800-2017 § 7.3 "Unions"
+
+  Example:
+  ```
+  typedef union { int i; shortreal f; } num; // named union type
+  num n;
+  n.f = 0.0; // set n in floating point format
+  typedef struct {
+  bit isfloat;
+  union { int i; shortreal f; } n;           // anonymous union type
+  } tagged_st;                               // named structure
+  ```
+  See IEEE 1800-2017 § 7.3 "Unions"
+  }];
+  let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $unionName `,` $input attr-dict `:`
+  type($input) `->` type($result)
+  }];
+ }
+
+ def UnionExtractOp : MooreOp<"union_extract"> {
+  let summary = "Union Extract operation";
+  let description = [{
+  With packed unions, writing one member and reading another is
+  independent of the byte ordering of the machine,
+  unlike an unpacked union of unpacked structures,
+  which are C-compatible and have members in ascending address order.
+  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+
+  Example:
+  ```
+  typedef union packed { // default unsigned
+  s_atmcell acell;
+  bit [423:0] bit_slice;
+  bit [52:0][7:0] byte_slice;
+  } u_atmcell;
+  u_atmcell u1;
+  byte b; bit [3:0] nib;
+  b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
+  nib = u1.bit_slice [423:420];
+  ```
+  See IEEE 1800-2017 § 7.3.1 "Packed unions"
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->` type($result)
+  }];
+ }
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

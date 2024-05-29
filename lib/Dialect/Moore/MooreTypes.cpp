@@ -22,8 +22,9 @@ using mlir::AsmParser;
 using mlir::AsmPrinter;
 
 static LogicalResult parseMembers(AsmParser &parser,
-                                  SmallVector<StructMember> &members);
-static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members);
+                                  SmallVector<StructLikeMember> &members);
+static void printMembers(AsmPrinter &printer,
+                         ArrayRef<StructLikeMember> members);
 
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
@@ -38,7 +39,7 @@ Domain UnpackedType::getDomain() const {
       .Case<UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
             QueueType>(
           [&](auto type) { return type.getElementType().getDomain(); })
-      .Case<UnpackedStructType>([](auto type) {
+      .Case<UnpackedStructType, UnpackedUnionType>([](auto type) {
         for (const auto &member : type.getMembers())
           if (member.type.getDomain() == Domain::FourValued)
             return Domain::FourValued;
@@ -61,6 +62,17 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
         for (const auto &member : type.getMembers()) {
           if (auto memberSize = member.type.getBitSize()) {
             size += *memberSize;
+          } else {
+            return std::nullopt;
+          }
+        }
+        return size;
+      })
+      .Case<UnpackedUnionType>([](auto type) -> std::optional<unsigned> {
+        unsigned size = 0;
+        for (const auto &member : type.getMembers()) {
+          if (auto memberSize = member.type.getBitSize()) {
+            size = (*memberSize > size) ? *memberSize : size;
           } else {
             return std::nullopt;
           }
@@ -91,7 +103,7 @@ Domain PackedType::getDomain() const {
       .Case<IntType>([&](auto type) { return type.getDomain(); })
       .Case<ArrayType, OpenArrayType>(
           [&](auto type) { return type.getElementType().getDomain(); })
-      .Case<StructType>([](auto type) {
+      .Case<StructType, UnionType>([](auto type) {
         for (const auto &member : type.getMembers())
           if (member.type.getDomain() == Domain::FourValued)
             return Domain::FourValued;
@@ -119,7 +131,19 @@ std::optional<unsigned> PackedType::getBitSize() const {
           }
         }
         return size;
-      });
+      })
+      .Case<UnionType>([](auto type) -> std::optional<unsigned> {
+        unsigned size = 0;
+        for (const auto &member : type.getMembers()) {
+          if (auto memberSize = member.type.getBitSize()) {
+            size = (*memberSize > size) ? *memberSize : size;
+          } else {
+            return std::nullopt;
+          }
+        }
+        return size;
+      })
+      .Default([](auto) { return std::nullopt; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -128,7 +152,7 @@ std::optional<unsigned> PackedType::getBitSize() const {
 
 /// Parse a list of struct members.
 static LogicalResult parseMembers(AsmParser &parser,
-                                  SmallVector<StructMember> &members) {
+                                  SmallVector<StructLikeMember> &members) {
   return parser.parseCommaSeparatedList(AsmParser::Delimiter::Braces, [&]() {
     std::string name;
     UnpackedType type;
@@ -142,10 +166,11 @@ static LogicalResult parseMembers(AsmParser &parser,
 }
 
 /// Print a list of struct members.
-static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members) {
+static void printMembers(AsmPrinter &printer,
+                         ArrayRef<StructLikeMember> members) {
   printer << "{";
   llvm::interleaveComma(members, printer.getStream(),
-                        [&](const StructMember &member) {
+                        [&](const StructLikeMember &member) {
                           printer.printKeywordOrString(member.name);
                           printer << ": ";
                           printer.printStrippedAttrOrType(member.type);
@@ -153,13 +178,24 @@ static void printMembers(AsmPrinter &printer, ArrayRef<StructMember> members) {
   printer << "}";
 }
 
-LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 ArrayRef<StructMember> members) {
+static LogicalResult
+verifyAllMembersPacked(function_ref<InFlightDiagnostic()> emitError,
+                       ArrayRef<StructLikeMember> members) {
   if (!llvm::all_of(members, [](const auto &member) {
         return llvm::isa<PackedType>(member.type);
       }))
-    return emitError() << "StructType members must be packed types";
+    return emitError() << "StructType/UnionType members must be packed types";
   return success();
+}
+
+LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<StructLikeMember> members) {
+  return verifyAllMembersPacked(emitError, members);
+}
+
+LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                ArrayRef<StructLikeMember> members) {
+  return verifyAllMembersPacked(emitError, members);
 }
 
 //===----------------------------------------------------------------------===//

@@ -131,14 +131,14 @@ TEST(TypesTest, Structs) {
   auto bit8Type = IntType::getInt(&context, 8);
   auto bitDynArrayType = OpenUnpackedArrayType::get(bitType);
 
-  auto s0 = StructType::get(&context, {StructMember{foo, bitType}});
-  auto s1 = StructType::get(
-      &context, {StructMember{foo, bitType}, StructMember{bar, bit8Type}});
-  auto s2 = StructType::get(
-      &context, {StructMember{foo, bitType}, StructMember{bar, logicType}});
-  auto s3 =
-      UnpackedStructType::get(&context, {StructMember{foo, bitType},
-                                         StructMember{bar, bitDynArrayType}});
+  auto s0 = StructType::get(&context, {StructLikeMember{foo, bitType}});
+  auto s1 = StructType::get(&context, {StructLikeMember{foo, bitType},
+                                       StructLikeMember{bar, bit8Type}});
+  auto s2 = StructType::get(&context, {StructLikeMember{foo, bitType},
+                                       StructLikeMember{bar, logicType}});
+  auto s3 = UnpackedStructType::get(
+      &context,
+      {StructLikeMember{foo, bitType}, StructLikeMember{bar, bitDynArrayType}});
 
   // Value domain
   ASSERT_EQ(s0.getDomain(), Domain::TwoValued);
@@ -151,6 +151,27 @@ TEST(TypesTest, Structs) {
   ASSERT_EQ(s1.getBitSize(), 9u);
   ASSERT_EQ(s2.getBitSize(), 2u);
   ASSERT_EQ(s3.getBitSize(), std::nullopt);
+
+  auto u0 = UnionType::get(&context, {StructLikeMember{foo, bitType}});
+  auto u1 = UnionType::get(&context, {StructLikeMember{foo, bitType},
+                                      StructLikeMember{bar, bit8Type}});
+  auto u2 = UnionType::get(&context, {StructLikeMember{foo, bitType},
+                                      StructLikeMember{bar, logicType}});
+  auto u3 = UnpackedUnionType::get(
+      &context,
+      {StructLikeMember{foo, bitType}, StructLikeMember{bar, bitDynArrayType}});
+
+  // Value domain
+  ASSERT_EQ(u0.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(u1.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(u2.getDomain(), Domain::FourValued);
+  ASSERT_EQ(u3.getDomain(), Domain::TwoValued);
+
+  // Bit size
+  ASSERT_EQ(u0.getBitSize(), 1u);
+  ASSERT_EQ(u1.getBitSize(), 8u);
+  ASSERT_EQ(u2.getBitSize(), 1u);
+  ASSERT_EQ(u3.getBitSize(), std::nullopt);
 }
 
 } // namespace
