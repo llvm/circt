@@ -8,6 +8,7 @@
 firrtl.circuit "TywavesTop" attributes {
   rawAnnotations = [
     {
+      // Annotation of a module
       class = "chisel3.tywaves.TywavesAnnotation",
       target = "~TywavesTop|DUT",
       typeName = "TywavesDut",

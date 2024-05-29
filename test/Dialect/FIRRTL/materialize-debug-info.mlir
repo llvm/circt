@@ -153,3 +153,32 @@ firrtl.module @ConstructorParams() {
 
 }
 }
+firrtl.circuit "TopCircuitMultiModule" {
+    // CHECK-LABEL: firrtl.module private @MyModule()
+    // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
+    firrtl.module private @MyModule() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule", typeName = "MyModule"}]} {
+      firrtl.skip
+    }
+    // CHECK-LABEL: firrtl.module private @MyModule_1()
+    // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
+    firrtl.module private @MyModule_1() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_1", typeName = "MyModule"}]} {
+      firrtl.skip
+    }
+    // CHECK-LABEL: firrtl.module private @MyModule_2()
+    // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
+    firrtl.module private @MyModule_2() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_2", typeName = "MyModule"}]} {
+      firrtl.skip
+    }
+    // CHECK-LABEL: firrtl.module private @MyModule_3()
+    // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
+    firrtl.module private @MyModule_3() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_3", typeName = "MyModule"}]} {
+      firrtl.skip
+    }
+    firrtl.module @TopCircuitMultiModule() attributes {annotations = [{class = "firrtl.transforms.DedupGroupAnnotation", group = "TopCircuitMultiModule"}, {class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|TopCircuitMultiModule", typeName = "TopCircuitMultiModule"}], convention = #firrtl<convention scalarized>} {
+      firrtl.instance mod    interesting_name @MyModule()
+      firrtl.instance mod1   interesting_name @MyModule()
+      firrtl.instance mod2   interesting_name @MyModule_1()
+      firrtl.instance mods_0 interesting_name @MyModule_2()
+      firrtl.instance mods_1 interesting_name @MyModule_3()
+    }
+}

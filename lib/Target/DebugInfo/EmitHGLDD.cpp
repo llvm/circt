@@ -608,7 +608,11 @@ void FileEmitter::emitModule(JOStream &json, DIModule *module) {
     findAndEmitLocOrGuess(json, "hgl_loc", op, false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
-  // TODO: emit source language type information
+  
+  // Emit source language type information for a module
+  auto sourceLangTypeInfo = emitSourceLangTypeInfo(module->sourceLangType);
+  if (!sourceLangTypeInfo.empty())
+    json.attribute("source_lang_type_info", std::move(sourceLangTypeInfo));
 
   emitModuleBody(json, module);
   json.objectEnd();

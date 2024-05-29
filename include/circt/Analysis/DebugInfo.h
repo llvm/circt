@@ -44,9 +44,8 @@ struct DIModule {
   /// If this is an inline scope created by a `dbg.scope` operation.
   bool isInline = false;
 
-  // TODO: add support for source language type info to a module
-  // /// The source language type of this module.
-  // DISourceLang sourceLangType;
+  /// The source language type of this module.
+  DISourceLang sourceLangType;
 };
 
 struct DIInstance {

@@ -150,4 +150,21 @@ def ArrayOp : DebugOp<"array", [Pure, SameTypeOperands]> {
   let hasCustomAssemblyFormat = 1;
 }
 
+
+def ModuleInfoOp : DebugOp<"moduleinfo"> {
+  let summary = "Define extra debug information for a module";
+  let description = [{
+    Creates debug information for a module. If present, this operations provides
+    extra information about the module type in the source language, such as its
+    type name and constructor parameters. 
+  }];
+
+  let arguments = (ins
+    StrAttr:$typeName,
+    OptionalAttr<ArrayAttr>:$params
+  );
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
 #endif // CIRCT_DIALECT_DEBUG_DEBUGOPS_TD

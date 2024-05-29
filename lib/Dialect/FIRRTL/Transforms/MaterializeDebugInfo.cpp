@@ -52,6 +52,9 @@ struct MaterializeDebugInfoPass
   void materializeVariable(OpBuilder &builder, StringAttr name, Value value,
                            const mlir::ArrayAttr &annoList);
 
+  void materializeModuleInfo(OpBuilder &builder, const mlir::Location &loc,
+                             const mlir::ArrayAttr &annoList);
+
   std::optional<TywavesAnnotation> getTywavesInfo(Operation *op);
 
   std::optional<TywavesAnnotation>
@@ -262,6 +265,22 @@ void MaterializeDebugInfoPass::runOnOperation() {
           // op->removeAttr("annotations");
         });
   });
+
+  // Create DI variables for the module.
+  materializeModuleInfo(builder, module.getLoc(), module.getAnnotations());
+}
+
+/// Materialize debug information for a module.
+void MaterializeDebugInfoPass::materializeModuleInfo(
+    OpBuilder &builder, const mlir::Location &loc,
+    const mlir::ArrayAttr &annoList) {
+
+  // Get the tywaves annotation for the module
+  if (auto tywavesAnno = getTywavesInfo(annoList, loc)) {
+    // Create the module info
+    builder.create<debug::ModuleInfoOp>(loc, tywavesAnno->typeName,
+                                        /*params=*/tywavesAnno->params);
+  }
 }
 
 /// Materialize debug variable ops for a value.

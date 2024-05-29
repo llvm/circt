@@ -107,6 +107,12 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
       node->op = scopeOp;
       scopes.insert({scopeOp, node});
     }
+
+    // Add the source language information to the module
+    if (auto sourceLangType = dyn_cast<debug::ModuleInfoOp>(op)) {
+      module.sourceLangType.typeName = sourceLangType.getTypeNameAttr();
+      module.sourceLangType.params = sourceLangType.getParamsAttr();
+    }
   });
 
   // Helper function to resolve a `scope` operand on a variable to the
