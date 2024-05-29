@@ -214,7 +214,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
       auto &use = *(*iter);
       auto *user = use.getOwner();
       ++(*iter);
-      if (isa<SubindexOp, SubfieldOp>(user)) {
+      if (isa<SubindexOp, SubfieldOp, WrapSinkOp>(user)) {
         // We recurse into Subindex ops to find the leaf-uses.
         auto output = user->getResult(0);
         stack.emplace_back(output, output.use_begin(), MemDirAttr::Infer);
@@ -460,7 +460,8 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.getSrc().getDefiningOp());
               } else if (auto connectOp = dyn_cast<StrictConnectOp>(op)) {
-                if (cmemoryPortAccess.getIndex() == connectOp.getDest())
+                auto realDest = connectOp.getDest().getDefiningOp<WrapSinkOp>();
+                if (cmemoryPortAccess.getIndex() == realDest.getInput())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.getSrc().getDefiningOp());
               }
@@ -469,14 +470,16 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
         // At each location where we drive a value to the index, set the enable.
         for (auto *driver : drivers) {
-          OpBuilder(driver).create<StrictConnectOp>(driver->getLoc(), enable,
+          ImplicitLocOpBuilder builder(driver->getLoc(), driver);
+          emitConnect(builder, enable,
                                                     getConst(1));
           success = true;
         }
       } else if (isa<NodeOp>(indexOp)) {
         // If using a Node for the address, then the we place the enable at the
         // Node op's
-        OpBuilder(indexOp).create<StrictConnectOp>(indexOp->getLoc(), enable,
+        ImplicitLocOpBuilder builder(indexOp->getLoc(), indexOp);
+        emitConnect(builder, enable,
                                                    getConst(1));
         success = true;
       }
@@ -539,10 +542,11 @@ void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
 void LowerCHIRRTLPass::visitStmt(StrictConnectOp connect) {
   // Check if we are writing to a memory and, if we are, replace the
   // destination.
+  auto actualDest = connect.getDest().getDefiningOp<WrapSinkOp>();
   auto writeIt = wdataValues.find(connect.getDest());
   if (writeIt != wdataValues.end()) {
     auto writeData = writeIt->second;
-    connect.getDestMutable().assign(writeData.data);
+    actualDest.getInputMutable().assign(writeData.data);
     // Assign the write mask.
     ImplicitLocOpBuilder builder(connect.getLoc(), connect);
     connectLeafsTo(builder, writeData.mask, getConst(1));
