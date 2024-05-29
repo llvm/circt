@@ -29,9 +29,6 @@ static void printMembers(AsmPrinter &printer,
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
 
-static LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
-                                  ArrayRef<StructLikeMember> members);
-
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -42,7 +39,7 @@ Domain UnpackedType::getDomain() const {
       .Case<UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
             QueueType>(
           [&](auto type) { return type.getElementType().getDomain(); })
-      .Case<UnpackedStructType>([](auto type) {
+      .Case<UnpackedStructType, UnpackedUnionType>([](auto type) {
         for (const auto &member : type.getMembers())
           if (member.type.getDomain() == Domain::FourValued)
             return Domain::FourValued;
@@ -65,6 +62,17 @@ std::optional<unsigned> UnpackedType::getBitSize() const {
         for (const auto &member : type.getMembers()) {
           if (auto memberSize = member.type.getBitSize()) {
             size += *memberSize;
+          } else {
+            return std::nullopt;
+          }
+        }
+        return size;
+      })
+      .Case<UnpackedUnionType>([](auto type) -> std::optional<unsigned> {
+        unsigned size = 0;
+        for (const auto &member : type.getMembers()) {
+          if (auto memberSize = member.type.getBitSize()) {
+            size = (*memberSize > size) ? *memberSize : size;
           } else {
             return std::nullopt;
           }
@@ -95,7 +103,7 @@ Domain PackedType::getDomain() const {
       .Case<IntType>([&](auto type) { return type.getDomain(); })
       .Case<ArrayType, OpenArrayType>(
           [&](auto type) { return type.getElementType().getDomain(); })
-      .Case<StructType>([](auto type) {
+      .Case<StructType, UnionType>([](auto type) {
         for (const auto &member : type.getMembers())
           if (member.type.getDomain() == Domain::FourValued)
             return Domain::FourValued;
@@ -123,7 +131,19 @@ std::optional<unsigned> PackedType::getBitSize() const {
           }
         }
         return size;
-      });
+      })
+      .Case<UnionType>([](auto type) -> std::optional<unsigned> {
+        unsigned size = 0;
+        for (const auto &member : type.getMembers()) {
+          if (auto memberSize = member.type.getBitSize()) {
+            size = (*memberSize > size) ? *memberSize : size;
+          } else {
+            return std::nullopt;
+          }
+        }
+        return size;
+      })
+      .Default([](auto) { return std::nullopt; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -158,14 +178,24 @@ static void printMembers(AsmPrinter &printer,
   printer << "}";
 }
 
+static LogicalResult
+verifyAllMembersPacked(function_ref<InFlightDiagnostic()> emitError,
+                       ArrayRef<StructLikeMember> members) {
+  if (!llvm::all_of(members, [](const auto &member) {
+        return llvm::isa<PackedType>(member.type);
+      }))
+    return emitError() << "Struct/Union members must be packed types";
+  return success();
+}
+
 LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<StructLikeMember> members) {
-  return packedVerify(emitError, members);
+  return verifyAllMembersPacked(emitError, members);
 }
 
 LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 ArrayRef<StructLikeMember> members) {
-  return packedVerify(emitError, members);
+  return verifyAllMembersPacked(emitError, members);
 }
 
 //===----------------------------------------------------------------------===//
@@ -239,13 +269,4 @@ Type MooreDialect::parseType(DialectAsmParser &parser) const {
 /// Print a type registered with this dialect.
 void MooreDialect::printType(Type type, DialectAsmPrinter &printer) const {
   printMooreType(type, printer);
-}
-
-LogicalResult packedVerify(function_ref<InFlightDiagnostic()> emitError,
-                           ArrayRef<StructLikeMember> members) {
-  if (!llvm::all_of(members, [](const auto &member) {
-        return llvm::isa<PackedType>(member.type);
-      }))
-    return emitError() << "Struct/Union members must be packed types";
-  return success();
 }
