@@ -70,5 +70,5 @@ hw.module @deeplynested(in %clk: i1, in %a: i1, in %b: i1) {
   %a1 = ltl.and %b, %i1 : i1, !ltl.property
   %o1 = ltl.or %b, %a1 : i1, !ltl.property
 
-  verif.clocked_assert %o1clock posedge %clk disable %b : !ltl.property
+  verif.clocked_assert %o1 clock posedge %clk disable %b : !ltl.property
 }

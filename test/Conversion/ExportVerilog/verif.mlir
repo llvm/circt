@@ -334,3 +334,22 @@ hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: cover property (@(posedge clk) disable iff (b) not a);
   verif.clocked_cover %n0 clock posedge %clk disable %b : !ltl.property
 }
+
+
+// CHECK-LABEL: module InferredDisable
+hw.module @InferredDisable(in %clk: i1, in %a: i1, in %b: i1) {
+  %true = hw.constant true
+  %n0 = ltl.not %a : i1
+  %nb = comb.xor %b, %true : i1
+  %cov = ltl.and %nb, %n0 : i1, !ltl.property
+  %dis = ltl.or %n0, %b : !ltl.property, i1
+
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assert %dis clock posedge %clk : !ltl.property
+
+  // CHECK: assume property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_assume %dis clock posedge %clk : !ltl.property
+
+  // CHECK: cover property (@(posedge clk) disable iff (b) not a);
+  verif.clocked_cover %cov clock posedge %clk : !ltl.property
+}

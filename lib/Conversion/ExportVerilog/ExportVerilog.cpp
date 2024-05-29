@@ -4872,9 +4872,19 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
 
   // Try to identify a disable pattern in the property
   Value disableVal, property;
-  bool disablePattern = mlir::matchPattern(
-      op.getProperty(),
-      mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property)));
+  bool disablePattern =
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::OrOp>(mProperty(&property), mBool(&disableVal))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::OrOp>(mProperty(&property), mBool(&disableVal))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::OrOp>(mBool(&disableVal), mProperty(&property)));
 
   if (!disablePattern) {
     mlir::OpBuilder builder(op.getContext());
@@ -4897,9 +4907,19 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
 
   // Try to identify a disable pattern in the property
   Value disableVal, property;
-  bool disablePattern = mlir::matchPattern(
-      op.getProperty(),
-      mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property)));
+  bool disablePattern =
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::OrOp>(mProperty(&property), mBool(&disableVal))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::OrOp>(mProperty(&property), mBool(&disableVal))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::OrOp>(mBool(&disableVal), mProperty(&property)));
 
   if (!disablePattern) {
     mlir::OpBuilder builder(op.getContext());
@@ -4918,7 +4938,7 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
   if (auto disable = op.getDisable())
     return emitVerifClockedAssertLike(op, op.getProperty(), disable,
                                       op.getClock(), op.getEdge(),
-                                      PPExtString("assume"));
+                                      PPExtString("cover"));
 
   // Try to identify a disable pattern in the property
   Value disableVal, property, one;
@@ -4934,7 +4954,17 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
           op.getProperty(),
           mlir::m_Op<comb::AndOp>(
               mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one)),
-              mProperty(&property)));
+              mProperty(&property))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::AndOp>(
+              mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one)),
+              mProperty(&property))) ||
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<ltl::AndOp>(
+              mProperty(&property),
+              mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one))));
 
   if (!disablePattern) {
     mlir::OpBuilder builder(op.getContext());
