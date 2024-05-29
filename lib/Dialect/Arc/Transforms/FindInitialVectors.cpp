@@ -171,8 +171,10 @@ LogicalResult Vectorizer::vectorize() {
   for (const auto &[key, ops] : candidates) {
     // If the group has only one scalar then it doesn't worth vectorizing,
     // We skip also ops with more than one result as `arc.vectorize` supports
-    // only one result in its body region.
-    if (ops.size() == 1 || ops[0]->getNumResults() > 1)
+    // only one result in its body region. Ignore zero-result and zero operands
+    // ops as well.
+    if (ops.size() == 1 || ops[0]->getNumResults() != 1 ||
+        ops[0]->getNumOperands() == 0)
       continue;
 
     // Here, we have a bunch of isomorphic ops, we need to extract the operands

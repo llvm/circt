@@ -875,7 +875,7 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   HasParent<"VectorizeOp">, Pure, ReturnLike, Terminator
 ]> {
   let summary = "arc.vectorized terminator";
-  let arguments = (ins IntOr1DVectorOfInt:$value);
+  let arguments = (ins AnyType:$value);
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
 }
 
