@@ -21,6 +21,7 @@
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <optional>
 
 using namespace mlir;
 using namespace circt;
@@ -365,6 +366,30 @@ struct AShrOpConversion : public OpConversionPattern<AShrOp> {
   }
 };
 
+struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ProcedureOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    switch (adaptor.getKind()) {
+    case ProcedureKind::AlwaysComb:
+    case ProcedureKind::Always:
+    case ProcedureKind::AlwaysFF:
+    case ProcedureKind::AlwaysLatch:
+    case ProcedureKind::Final:
+      return emitError(op->getLoc(), "Unsupported procedure operation");
+      return failure();
+    case ProcedureKind::Initial:
+      rewriter.replaceOpWithNewOp<llhd::ProcOp>(
+          op,
+          mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
+                                  std::nullopt),
+          uint64_t(0), mlir::ArrayAttr(), mlir::ArrayAttr());
+      return success();
+    };
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -467,7 +492,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CondBranchOpConversion, BranchOpConversion,
 
     // Patterns of other operations outside Moore dialect.
-    ReturnOpConversion, CallOpConversion, UnrealizedConversionCastConversion
+    ReturnOpConversion, CallOpConversion, UnrealizedConversionCastConversion,
+    ProcedureOpConversion
   >(typeConverter, context);
   // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
