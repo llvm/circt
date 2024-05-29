@@ -280,7 +280,7 @@ def QueueType : MooreTypeDef<"Queue", [], "moore::UnpackedType"> {
 class StructLikeType<
   string name, list<Trait> traits = [], string baseCppClass = "::mlir::Type"
 > : MooreTypeDef<name, traits, baseCppClass> {
-  let parameters = (ins ArrayRefParameter<"StructMember">:$members);
+  let parameters = (ins ArrayRefParameter<"StructLikeMember">:$members);
   let assemblyFormat = [{
     `<` custom<Members>($members) `>`
   }];
@@ -305,6 +305,25 @@ def UnpackedStructType : StructLikeType<
   }];
 }
 
+def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
+  let mnemonic = "union";
+  let summary = "a packed union type";
+  let description = [{
+    A packed union. All members are guaranteed to be packed as well.
+  }];
+  let genVerifyDecl = 1;
+}
+
+
+def UnpackedUnionType : StructLikeType<
+  "UnpackedUnion", [], "moore::UnpackedType"
+> {
+  let mnemonic = "uunion";
+  let summary = "an unpacked union type";
+  let description = [{
+    An unpacked union.
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Constraints

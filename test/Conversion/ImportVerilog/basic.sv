@@ -122,7 +122,7 @@ module Statements;
     automatic int a;
     // CHECK moore.blocking_assign %i, %a : i32
     i = a;
-    
+
     //===------------------------------------------------------------------===//
     // Conditional statements
 
@@ -321,6 +321,16 @@ module Expressions;
       int a, b;
     } c, d;
   } struct1;
+  // CHECK: %union0 = moore.variable : union<{a: i32, b: i32}>
+  union packed {
+    int a, b;
+  } union0;
+  // CHECK: %union1 = moore.variable : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}>
+  union packed {
+    union packed {
+      int a, b;
+    } c, d;
+  } union1;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -660,6 +670,24 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "b" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = struct1.d.b;
+
+    // CHECK: [[TMP:%.+]] = moore.union_extract %union0, "a" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign [[TMP]], %a : i32
+    union0.a = a;
+
+    // CHECK: [[TMP:%.+]]  = moore.union_extract %union0, "b" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP]] : i32
+    b = union0.b;
+
+    // CHECK: [[TMP1:%.+]] = moore.union_extract %union1, "c" : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}> -> union<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]] = moore.union_extract [[TMP1]], "a" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign [[TMP2]], %a : i32
+    union1.c.a = a;
+
+    // CHECK: [[TMP1:%.+]] = moore.union_extract %union1, "d" : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}> -> union<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]] = moore.union_extract [[TMP1]], "b" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
+    b = union1.d.b;
   end
 endmodule
 

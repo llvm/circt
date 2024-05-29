@@ -35,9 +35,11 @@ class QueueType;
 class RealType;
 class StringType;
 class StructType;
+class UnionType;
 class UnpackedType;
 class UnpackedArrayType;
 class UnpackedStructType;
+class UnpackedUnionType;
 class VoidType;
 
 /// The number of values each bit of a type can assume.
@@ -81,7 +83,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
-                     QueueType, UnpackedStructType>(type);
+                     QueueType, UnpackedStructType, UnpackedUnionType>(type);
   }
 
   /// Get the value domain of this type.
@@ -130,8 +132,8 @@ protected:
 class PackedType : public UnpackedType {
 public:
   static bool classof(Type type) {
-    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType>(
-        type);
+    return llvm::isa<VoidType, IntType, ArrayType, OpenArrayType, StructType,
+                     UnionType>(type);
   }
 
   /// Get the value domain of this type.
@@ -151,19 +153,19 @@ protected:
 //===----------------------------------------------------------------------===//
 
 /// A member of a struct.
-struct StructMember {
+struct StructLikeMember {
   /// The name of this member.
   StringAttr name;
   /// The type of this member.
   UnpackedType type;
 
-  bool operator==(const StructMember &other) const {
+  bool operator==(const StructLikeMember &other) const {
     return name == other.name && type == other.type;
   }
 };
 
 // NOLINTNEXTLINE(readability-identifier-naming)
-inline llvm::hash_code hash_value(const StructMember &x) {
+inline llvm::hash_code hash_value(const StructLikeMember &x) {
   return llvm::hash_combine(x.name, x.type);
 }
 
