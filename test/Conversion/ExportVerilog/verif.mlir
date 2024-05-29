@@ -326,11 +326,11 @@ hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
   %n0 = ltl.not %a : i1
 
   // CHECK: assert property (@(posedge clk) disable iff (b) not a);
-  verif.clocked_assert %n0 disable %b clock posedge %clk : !ltl.property
+  verif.clocked_assert %n0 clock posedge %clk disable %b : !ltl.property
 
   // CHECK: assume property (@(posedge clk) disable iff (b) not a);
-  verif.clocked_assume %n0 disable %b clock posedge %clk : !ltl.property
+  verif.clocked_assume %n0 clock posedge %clk disable %b : !ltl.property
 
   // CHECK: cover property (@(posedge clk) disable iff (b) not a);
-  verif.clocked_cover %n0 disable %b clock posedge %clk : !ltl.property
+  verif.clocked_cover %n0 clock posedge %clk disable %b : !ltl.property
 }

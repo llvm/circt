@@ -41,10 +41,12 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -4804,23 +4806,146 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
   return success();
 }
 
-// FIXME: emit property assertion wrapped in a clock and disabled
+namespace {
+
+// Custom pattern matchers
+
+// Matches and records a boolean attribute
+struct I1ValueMatcher {
+  Value *what;
+  I1ValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    if (!op.getType().isSignlessInteger(1))
+      return false;
+    *what = op;
+    return true;
+  }
+};
+
+// Matches and records a one constant
+struct OneValueMatcher {
+  Value *what;
+  OneValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    if (auto constone = dyn_cast<hw::ConstantOp>(op.getDefiningOp()))
+      if (constone.getValue().isOne()) {
+        *what = op;
+        return true;
+      }
+
+    return false;
+  }
+};
+
+struct PropertyValueMatcher {
+  Value *what;
+  PropertyValueMatcher(Value *what) : what(what) {}
+  bool match(Value op) const {
+    if (!isa<ltl::PropertyType, ltl::SequenceType>(op.getType()) &&
+        !op.getType().isSignlessInteger(1))
+      return false;
+    *what = op;
+    return true;
+  }
+};
+
+static inline PropertyValueMatcher mProperty(Value *const val) {
+  return PropertyValueMatcher(val);
+}
+
+static inline I1ValueMatcher mBool(Value *const val) {
+  return I1ValueMatcher(val);
+}
+
+static inline OneValueMatcher mOne(Value *const val) {
+  return OneValueMatcher(val);
+}
+} // namespace
+
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
-                                    PPExtString("assert"));
+
+  // If the op has a disable, then emit it traditionally
+  if (auto disable = op.getDisable())
+    return emitVerifClockedAssertLike(op, op.getProperty(), disable,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("assert"));
+
+  // Try to identify a disable pattern in the property
+  Value disableVal, property;
+  bool disablePattern = mlir::matchPattern(
+      op.getProperty(),
+      mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property)));
+
+  if (!disablePattern) {
+    mlir::OpBuilder builder(op.getContext());
+    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
+        op.getLoc(), builder.getI1Type(), 0);
+
+    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
+                                      op.getEdge(), PPExtString("assert"));
+  }
+  return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
+                                    op.getEdge(), PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
-                                    PPExtString("assume"));
+  // If the op has a disable, then emit it traditionally
+  if (auto disable = op.getDisable())
+    return emitVerifClockedAssertLike(op, op.getProperty(), disable,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("assume"));
+
+  // Try to identify a disable pattern in the property
+  Value disableVal, property;
+  bool disablePattern = mlir::matchPattern(
+      op.getProperty(),
+      mlir::m_Op<comb::OrOp>(mBool(&disableVal), mProperty(&property)));
+
+  if (!disablePattern) {
+    mlir::OpBuilder builder(op.getContext());
+    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
+        op.getLoc(), builder.getI1Type(), 0);
+
+    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
+                                      op.getEdge(), PPExtString("assume"));
+  }
+  return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
+                                    op.getEdge(), PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
-                                    PPExtString("cover"));
+  // If the op has a disable, then emit it traditionally
+  if (auto disable = op.getDisable())
+    return emitVerifClockedAssertLike(op, op.getProperty(), disable,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("assume"));
+
+  // Try to identify a disable pattern in the property
+  Value disableVal, property, one;
+  bool disablePattern =
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::AndOp>(
+              mProperty(&property),
+              mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one)))) ||
+      // Not sure if the pattern matchers are naturally commutative, so just to
+      // be safe I'll manually check both options
+      mlir::matchPattern(
+          op.getProperty(),
+          mlir::m_Op<comb::AndOp>(
+              mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one)),
+              mProperty(&property)));
+
+  if (!disablePattern) {
+    mlir::OpBuilder builder(op.getContext());
+    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
+        op.getLoc(), builder.getI1Type(), 0);
+
+    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
+                                      op.getEdge(), PPExtString("cover"));
+  }
+  return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
+                                    op.getEdge(), PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
