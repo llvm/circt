@@ -90,7 +90,7 @@ firrtl.circuit "Component" {
   firrtl.module @Component(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>, out %omir_out: !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.object @ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)
     firrtl.propassign %omir_out, %0 : !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
-    %output_read, %output_write = firrtl.deduplex %output : !firrtl.uint<1>
+    %output_write = firrtl.wrapSink %output : !firrtl.uint<1>
     firrtl.strictconnect %output_write, %input : !firrtl.uint<1>
   }
 

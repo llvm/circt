@@ -37,6 +37,12 @@ static bool isWireOrReg(Operation *op) {
 
 /// Return true if this is an aggregate indexer.
 static bool isAggregate(Operation *op) {
+  if (isa<WrapSinkOp>(op)) {
+    Value src = op->getOperand(0);
+    if (auto srcOp = src.getDefiningOp())
+      return isAggregate(srcOp); // check source
+    return false;
+  }
   return isa<SubindexOp, SubaccessOp, SubfieldOp, OpenSubfieldOp,
              OpenSubindexOp, RefSubOp>(op);
 }
@@ -285,7 +291,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   // the result to avoid extra IR traversal if the value is an aggregate
   // element.
   FieldRef getOrCacheFieldRefFromValue(Value value) {
-    if (!value.getDefiningOp() || !isAggregate(value.getDefiningOp()))
+    if (!value.getDefiningOp() || (!isa<WrapSinkOp>(value.getDefiningOp()) && !isAggregate(value.getDefiningOp())))
       return FieldRef(value, 0);
     auto &fieldRef = valueToFieldRef[value];
     if (fieldRef)
@@ -744,6 +750,7 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
     connect.emitError("connectlike operation unhandled by IMConstProp")
             .attachNote(connect.getDest().getLoc())
         << "connect destination is here";
+    abort();
   };
 
   if (auto srcOffset = getFieldIDOffset(changedFieldRef, destType, fieldRefSrc))

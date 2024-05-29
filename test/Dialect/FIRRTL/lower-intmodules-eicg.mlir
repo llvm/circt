@@ -16,11 +16,11 @@ firrtl.circuit "FixupEICGWrapper" {
     // CHECK-EICG-NOT: firrtl.instance
     // CHECK-EICG: firrtl.int.generic "circt_clock_gate"
     %ckg_in, %ckg_test_en, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGate(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    %ckg_in_read, %ckg_in_write = firrtl.deduplex %ckg_in : !firrtl.clock
+    %ckg_in_write = firrtl.wrapSink %ckg_in : !firrtl.clock
     firrtl.strictconnect %ckg_in_write, %clock : !firrtl.clock
-    %ckg_test_en_read, %ckg_test_en_write = firrtl.deduplex %ckg_test_en : !firrtl.uint<1>
+    %ckg_test_en_write = firrtl.wrapSink %ckg_test_en : !firrtl.uint<1>
     firrtl.strictconnect %ckg_test_en_write, %en : !firrtl.uint<1>
-    %ckg_en_read, %ckg_en_write = firrtl.deduplex %ckg_en : !firrtl.uint<1>
+    %ckg_en_write = firrtl.wrapSink %ckg_en : !firrtl.uint<1>
     firrtl.strictconnect %ckg_en_write, %en : !firrtl.uint<1>
   }
 }
@@ -39,9 +39,9 @@ firrtl.circuit "FixupEICGWrapper2" {
     // CHECK-EICG-NOT: firrtl.instance
     // CHECK-EICG: firrtl.int.generic "circt_clock_gate"
     %ckg_in, %ckg_en, %ckg_out = firrtl.instance ckg @LegacyClockGateNoTestEn(in in: !firrtl.clock, in en: !firrtl.uint<1>, out out: !firrtl.clock)
-    %ckg_in_read, %ckg_in_write = firrtl.deduplex %ckg_in : !firrtl.clock
+    %ckg_in_write = firrtl.wrapSink %ckg_in : !firrtl.clock
     firrtl.strictconnect %ckg_in_write, %clock : !firrtl.clock
-    %ckg_en_read, %ckg_en_write = firrtl.deduplex %ckg_en : !firrtl.uint<1>
+    %ckg_en_write = firrtl.wrapSink %ckg_en : !firrtl.uint<1>
     firrtl.strictconnect %ckg_en_write, %en : !firrtl.uint<1>
   }
 }

@@ -1731,7 +1731,7 @@ static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
     return failure();
 
   // Look through simple flow deduplexes.
-  if (isa<DeduplexFlowOp>(connectedDecl))
+  if (isa<WrapSinkOp>(connectedDecl))
     connectedDecl = connectedDecl->getOperand(0).getDefiningOp();
   if (!connectedDecl)
     return failure();

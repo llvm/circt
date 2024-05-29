@@ -141,9 +141,10 @@ firrtl.circuit "strictConnectAndConnect" {
   // expected-error @below {{strictConnectAndConnect.{a <- b <- a}}}
   firrtl.module @strictConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
     %w = firrtl.wire : !firrtl.uint<11>
-    firrtl.strictconnect %b, %w : !firrtl.uint<11>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<11>
+    firrtl.strictconnect %b_write, %w : !firrtl.uint<11>
     firrtl.connect %a, %b : !firrtl.uint<11>, !firrtl.uint<11>
-    firrtl.strictconnect %b, %a : !firrtl.uint<11>
+    firrtl.strictconnect %b_write, %a : !firrtl.uint<11>
   }
 }
 

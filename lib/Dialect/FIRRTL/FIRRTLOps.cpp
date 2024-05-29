@@ -6223,28 +6223,6 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// DeduplexFlowOp.
-//===----------------------------------------------------------------------===//
-
-LogicalResult DeduplexFlowOp::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  auto inputType = operands.front().getType();
-  results.push_back(inputType);
-  results.push_back(
-      LHSType::get(context, type_cast<FIRRTLBaseType>(inputType)));
-  return success();
-}
-
-LogicalResult DeduplexFlowOp::verify() {
-  auto srcFlow = foldFlow(getInput());
-  if (!isValidSrc(srcFlow) && !isValidDst(srcFlow))
-    return emitOpError("Trying to deduplex a non-dupelx value");
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // WrapSinkOp.
 //===----------------------------------------------------------------------===//
 
@@ -6260,7 +6238,7 @@ LogicalResult WrapSinkOp::inferReturnTypes(
 
 LogicalResult WrapSinkOp::verify() {
   auto srcFlow = foldFlow(getInput());
-  if (isValidSrc(srcFlow) || !isValidDst(srcFlow))
+  if (!isValidDst(srcFlow))
     return emitOpError("Trying to wrap a non-sink value");
   return success();
 }

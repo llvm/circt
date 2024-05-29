@@ -743,7 +743,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                               out %sink: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>) {
     %0 = firrtl.istag %source valid : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
     %1 = firrtl.subtag %source[valid] : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
-    firrtl.strictconnect %sink, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    %sink_write = firrtl.wrapSink %sink : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
+    firrtl.strictconnect %sink_write, %source : !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>
   }
 
   // CHECK-LABEL: hw.module private @SimpleEnumCreate(out sink : !hw.enum<a, b, c>) {
@@ -753,6 +754,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @SimpleEnumCreate(in %input: !firrtl.uint<0>,
                                          out %sink: !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>) {
     %0 = firrtl.enumcreate a(%input) : (!firrtl.uint<0>) -> !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
+    %sink_write = firrtl.wrapSink %sink : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
     firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<0>, b: uint<0>, c: uint<0>>
   }
 
@@ -768,7 +770,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                               out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
     %0 = firrtl.istag %source a : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     %1 = firrtl.subtag %source[a] : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
-    firrtl.strictconnect %sink, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    %sink_write = firrtl.wrapSink %sink : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    firrtl.strictconnect %sink_write, %source : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
   // CHECK-LABEL: hw.module private @DataEnumCreate(in %input : i2, out sink : !hw.struct<tag: !hw.enum<a, b, c>, body: !hw.union<a: i2, b: i1, c: i32>>) {
@@ -780,7 +783,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @DataEnumCreate(in %input: !firrtl.uint<2>,
                                        out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
     %0 = firrtl.enumcreate a (%input) : (!firrtl.uint<2>) -> !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
-    firrtl.strictconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    %sink_write = firrtl.wrapSink %sink : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+    firrtl.strictconnect %sink_write, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
   // CHECK-LABEL: IsInvalidIssue572

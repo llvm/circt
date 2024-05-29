@@ -60,8 +60,7 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, ConstCastOp, RefCastOp, DeduplexFlowOp,
-            WrapSinkOp,
+            UninferredResetCastOp, ConstCastOp, RefCastOp, WrapSinkOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
@@ -207,7 +206,6 @@ public:
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
-  HANDLE(DeduplexFlowOp, Unhandled);
   HANDLE(WrapSinkOp, Unhandled);
 
   // Property expressions.

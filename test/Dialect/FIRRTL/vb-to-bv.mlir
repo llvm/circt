@@ -247,14 +247,16 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.strictconnect %w0, %c1_ui1 : !firrtl.uint<1>
     %c1 = firrtl.constant 1 : !firrtl.uint<1>
     %w0 = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %w0, %c1 : !firrtl.uint<1>
+    %w0_write = firrtl.wrapSink %w0 : !firrt.uint<1>
+    firrtl.strictconnect %w0_write, %c1 : !firrtl.uint<1>
 
     // CHECK: %w1 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     // CHECK: %w2 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     // CHECK: firrtl.strictconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
     %w1 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     %w2 = firrtl.wire : !firrtl.bundle<a: bundle<>>
-    firrtl.strictconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
+    %w1_write = firrtl.wrapSink %w1 : !firrtl.bundle<a: bundle<>>
+    firrtl.strictconnect %w1_write, %w2 : !firrtl.bundle<a: bundle<>>
 
     // CHECK: %w3 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
     // CHECK: %w4 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
@@ -303,7 +305,8 @@ firrtl.circuit "Test" {
     %w10_a_b = firrtl.subfield %w10_a[b] : !firrtl.bundle<b flip: uint<8>>
 
     // CHECK: firrtl.strictconnect %1, %3 : !firrtl.uint<8>
-    firrtl.strictconnect %w9_a_b, %w10_a_b : !firrtl.uint<8>
+    %tr, %tw = firrtl.wrapSink %w9_a_b : !firrtl.uint<8>
+    firrtl.strictconnect %tw, %w10_a_b : !firrtl.uint<8>
   }
 
   //===--------------------------------------------------------------------===//
@@ -321,7 +324,8 @@ firrtl.circuit "Test" {
     %b2 = firrtl.wire : !firrtl.bundle<b: uint<1>>
     %a = firrtl.subfield %b1[a] : !firrtl.bundle<a: uint<1>>
     %b = firrtl.subfield %b2[b] : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+    %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+    firrtl.strictconnect %a_write, %b : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: @TestSubindex

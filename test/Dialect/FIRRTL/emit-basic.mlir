@@ -137,7 +137,7 @@ firrtl.circuit "Foo" {
     // CHECK-NOT: _invalid
     // CHECK: invalidate someOut
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
-    %someOut_read, %someOut_write = firrtl.deduplex %someOut : !firrtl.uint<1>
+    %someOut_write = firrtl.wrapSink %someOut : !firrtl.uint<1>
     firrtl.strictconnect %someOut_write, %invalid_ui2 : !firrtl.uint<1>
 
     // CHECK: connect unknownReset, knownReset
@@ -145,7 +145,7 @@ firrtl.circuit "Foo" {
     %unknownReset = firrtl.wire : !firrtl.reset
     %resetCast = firrtl.resetCast %knownReset :
       (!firrtl.asyncreset) -> !firrtl.reset
-    %unknownReset_read, %unknownReset_write = firrtl.deduplex %unknownReset : !firrtl.reset
+    %unknownReset_write = firrtl.wrapSink %unknownReset : !firrtl.reset
     firrtl.strictconnect %unknownReset_write, %resetCast : !firrtl.reset
 
     // CHECK: attach(an0, an1)

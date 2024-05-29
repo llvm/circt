@@ -55,8 +55,8 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: hw.output [[CLK0]], [[CLK1]]
     %0 = firrtl.int.clock_gate %clk, %enable
     %1 = firrtl.int.clock_gate %clk, %enable, %testEnable
-    %gated_clk0_read, %gated_clk0_write = firrtl.deduplex %0 : !firrtl.clock
-    %gated_clk1_read, %gated_clk1_write = firrtl.deduplex %1 : !firrtl.clock
+    %gated_clk0_write = firrtl.wrapSink %0 : !firrtl.clock
+    %gated_clk1_write = firrtl.wrapSink %1 : !firrtl.clock
     firrtl.strictconnect %gated_clk0_write, %0 : !firrtl.clock
     firrtl.strictconnect %gated_clk1_write, %1 : !firrtl.clock
   }
@@ -137,31 +137,31 @@ firrtl.circuit "Intrinsics" {
     // !ltl.property
     // CHECK-NEXT: [[G]] = ltl.implication [[E]], [[F]] : !ltl.sequence, !ltl.property
     %4 = firrtl.int.ltl.implication %e, %f : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %g_read, %g_write = firrtl.deduplex %g : !firrtl.uint<1>
+    %g_write = firrtl.wrapSink %g : !firrtl.uint<1>
     firrtl.strictconnect %g_write, %4 : !firrtl.uint<1>
 
     // inferred as !ltl.property
     // CHECK-NEXT: [[F]] = ltl.or %b, [[D:%.+]] : i1, !ltl.property
     %3 = firrtl.int.ltl.or %b, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %f_read, %f_write = firrtl.deduplex %f : !firrtl.uint<1>
+    %f_write = firrtl.wrapSink %f : !firrtl.uint<1>
     firrtl.strictconnect %f_write, %3 : !firrtl.uint<1>
 
     // inferred as !ltl.sequence
     // CHECK-NEXT: [[E]] = ltl.and %b, [[C:%.+]] : i1, !ltl.sequence
     %2 = firrtl.int.ltl.and %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %e_read, %e_write = firrtl.deduplex %e : !firrtl.uint<1>
+    %e_write = firrtl.wrapSink %e : !firrtl.uint<1>
     firrtl.strictconnect %e_write, %2 : !firrtl.uint<1>
 
     // !ltl.property
     // CHECK-NEXT: [[D]] = ltl.not %b : i1
     %1 = firrtl.int.ltl.not %b : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %d_read, %d_write = firrtl.deduplex %d : !firrtl.uint<1>
+    %d_write = firrtl.wrapSink %d : !firrtl.uint<1>
     firrtl.strictconnect %d_write, %1 : !firrtl.uint<1>
 
     // !ltl.sequence
     // CHECK-NEXT: [[C]] = ltl.delay %a, 42 : i1
     %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    %c_read, %c_write = firrtl.deduplex %c : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
     firrtl.strictconnect %c_write, %0 : !firrtl.uint<1>
   }
 
@@ -179,8 +179,8 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
     %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
     %1 = firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
-    %hbr1_read, %hbr1_write = firrtl.deduplex : !firrtl.uint<1>
-    %hbr2_read, %hbr2_write = firrtl.deduplex : !firrtl.uint<1>
+    %hbr1_write = firrtl.wrapSink : !firrtl.uint<1>
+    %hbr2_write = firrtl.wrapSink : !firrtl.uint<1>
     firrtl.strictconnect %hbr1_write, %0 : !firrtl.uint<1>
     firrtl.strictconnect %hbr2_write, %1 : !firrtl.uint<1>
   }
@@ -203,12 +203,12 @@ firrtl.circuit "Intrinsics" {
   ) {
     // CHECK: seq.clock_inv %clock_in
     %clock_inv_out = firrtl.int.clock_inv %clock_in
-    %clock_inv_read, %clock_inv.write = %firrtl.deduplex %clock_inv : !firrtl.clock
+    %clock_inv.write = %firrtl.wrapSink %clock_inv : !firrtl.clock
     firrtl.strictconnect %clock_inv_write, %clock_inv_out : !firrtl.clock
 
     // CHECK: seq.clock_div %clock_in
     %clock_div_out = firrtl.int.clock_div %clock_in by 4
-    %clock_div_read, %clock_div_write = firrtl.deduplex %clock_div : !firrtl.clock
+    %clock_div_write = firrtl.wrapSink %clock_div : !firrtl.clock
     firrtl.strictconnect %clock_div_write, %clock_div_out : !firrtl.clock
   }
 }

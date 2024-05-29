@@ -1496,6 +1496,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(SubindexOp op);
   LogicalResult visitExpr(SubaccessOp op);
   LogicalResult visitExpr(SubfieldOp op);
+  LogicalResult visitExpr(WrapSinkOp op);
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
   LogicalResult visitExpr(FEnumCreateOp op);
@@ -2811,6 +2812,15 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   if (failed(result))
     return failure();
   return setLowering(op, *result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(WrapSinkOp op) {
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  return setLowering(op, input);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {

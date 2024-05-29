@@ -197,7 +197,9 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   %t = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
   // CHECK: = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  firrtl.strictconnect %out, %v : !firrtl.uint<2>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<2>
+  %tag_write = firrtl.wrapSink %tag : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %v : !firrtl.uint<2>
   firrtl.strictconnect %tag, %t : !firrtl.uint<1>
 
   %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
@@ -369,9 +371,9 @@ firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
 
 // CHECK-LABEL: FlowFix
 firrtl.module @FlowFix(in %in: !firrtl.bundle<a: uint<4>>, out %out : !firrtl.bundle<a: uint<4>>) {
-  %rp, %wp = firrtl.deduplex %out : !firrtl.bundle<a: uint<4>>
+  %rp, %wp = firrtl.wrapSink %out : !firrtl.bundle<a: uint<4>>
   %wire = firrtl.wire : !firrtl.bundle<a: uint<3>>
-  %rw, %ww = firrtl.deduplex %wire : !firrtl.bundle<a: uint<3>>
+  %rw, %ww = firrtl.wrapSink %wire : !firrtl.bundle<a: uint<3>>
   %wire2, %wire2_write = firrtl.strictwire : !firrtl.bundle<a: uint<5>>
 
 }

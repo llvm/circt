@@ -5,23 +5,32 @@ firrtl.circuit "Mem" {
   firrtl.module public  @Mem(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>) {
     %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
     %0 = firrtl.subfield %memory_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
-    firrtl.strictconnect %0, %clock : !firrtl.clock
+    %0_write = firrtl.wrapSink %0 : !firrtl.clock
+    firrtl.strictconnect %0_write, %clock : !firrtl.clock
     %1 = firrtl.subfield %memory_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
-    firrtl.strictconnect %1, %rEn : !firrtl.uint<1>
+    %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+    firrtl.strictconnect %1_write, %rEn : !firrtl.uint<1>
     %2 = firrtl.subfield %memory_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
-    firrtl.strictconnect %2, %rAddr : !firrtl.uint<4>
+    %2_write = firrtl.wrapSink %2 : !firrtl.uint<4>
+    firrtl.strictconnect %2_write, %rAddr : !firrtl.uint<4>
     %3 = firrtl.subfield %memory_r[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
-    firrtl.strictconnect %rData, %3 : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %3_write = firrtl.wrapSink %3 : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    firrtl.strictconnect %rData_write, %3 : !firrtl.bundle<a: uint<8>, b: uint<8>>
     %4 = firrtl.subfield %memory_w[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %4, %clock : !firrtl.clock
+    %4_write = firrtl.wrapSink %4 : !firrtl.clock
+    firrtl.strictconnect %4_write, %clock : !firrtl.clock
     %5 = firrtl.subfield %memory_w[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %5, %wEn : !firrtl.uint<1>
+    %5_write = firrtl.wrapSink %5 : !firrtl.uint<1>
+    firrtl.strictconnect %5_write, %wEn : !firrtl.uint<1>
     %6 = firrtl.subfield %memory_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %6, %wAddr : !firrtl.uint<4>
+    %6_write = firrtl.wrapSink %6 : !firrtl.uint<4>
+    firrtl.strictconnect %6_write, %wAddr : !firrtl.uint<4>
     %7 = firrtl.subfield %memory_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %7, %wMask : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %7_write = firrtl.wrapSink %7 : !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.strictconnect %7_write, %wMask : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %8 = firrtl.subfield %memory_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    firrtl.strictconnect %8, %wData : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %8_write = firrtl.wrapSink %8 : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    firrtl.strictconnect %8_write, %wData : !firrtl.bundle<a: uint<8>, b: uint<8>>
     // ---------------------------------------------------------------------------------
     // After flattenning the memory data
     // CHECK: %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32}

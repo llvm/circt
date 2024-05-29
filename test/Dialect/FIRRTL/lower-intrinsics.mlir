@@ -6,25 +6,25 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     // CHECK: firrtl.int.sizeof %clk
     %size = firrtl.int.generic "circt.sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    %s_read, %s_write = firrtl.deduplex %s : !firrtl.uint<32>
+    %s_write = firrtl.wrapSink %s : !firrtl.uint<32>
     firrtl.strictconnect %s_write, %size : !firrtl.uint<32>
 
     // CHECK: firrtl.int.isX
     %isX = firrtl.int.generic "circt.isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    %io1_read, %io1_write = firrtl.deduplex %io1 : !firrtl.uint<1>
+    %io1_write = firrtl.wrapSink %io1 : !firrtl.uint<1>
     firrtl.strictconnect %io1_write, %isX : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.test "foo"
     %foo = firrtl.int.generic "circt.plusargs.test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    %io2_read, %io2_write = firrtl.deduplex %io2 : !firrtl.uint<1>
+    %io2_write = firrtl.wrapSink %io2 : !firrtl.uint<1>
     firrtl.strictconnect %io2_write, %foo : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     %pav = firrtl.int.generic "circt.plusargs.value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     %found = firrtl.subfield %pav[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %result = firrtl.subfield %pav[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    %io3_read, %io3_write = firrtl.deduplex %io3 : !firrtl.uint<1>
-    %io4_read, %io4_write = firrtl.deduplex %io4 : !firrtl.uint<5>
+    %io3_write = firrtl.wrapSink %io3 : !firrtl.uint<1>
+    %io4_write = firrtl.wrapSink %io4 : !firrtl.uint<5>
     firrtl.strictconnect %io3_write, %found : !firrtl.uint<1>
     firrtl.strictconnect %io4_write, %result : !firrtl.uint<5>
   }

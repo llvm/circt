@@ -11,7 +11,7 @@ firrtl.module @BitcastIsANop1(
   // CHECK: hw.output %a_data, %a_strb, %a_last : i3, i2, i1
   %0 = firrtl.bitcast %a : (!firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>) -> !firrtl.uint<6>
   %1 = firrtl.bitcast %0 : (!firrtl.uint<6>) -> !firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>
-  %b_read, %b_write = firrtl.deduplex %b : !firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>
+  %b_write = firrtl.wrapSink %b : !firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>
   firrtl.strictconnect %b_write, %1 : !firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>
 }
 
@@ -25,7 +25,7 @@ firrtl.module @BitcastIsANop2(
   // CHECK: hw.output %a : i6
   %0 = firrtl.bitcast %a : (!firrtl.uint<6>) -> !firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>
   %1 = firrtl.bitcast %0 : (!firrtl.bundle<data: uint<3>, strb: uint<2>, last: uint<1>>) -> !firrtl.uint<6>
-  %b_read, %b_write = firrtl.deduplex %b : !firrtl.uint<6>
+  %b_write = firrtl.wrapSink %b : !firrtl.uint<6>
   firrtl.strictconnect %b_write, %1 : !firrtl.uint<6>
 }
 

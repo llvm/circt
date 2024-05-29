@@ -64,11 +64,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    Value lhs;
-    if (isDuplexValue(dst))
-      lhs = builder.create<DeduplexFlowOp>(dst).getResult(1);
-    else
-      lhs = builder.create<WrapSinkOp>(dst);
+    auto lhs = builder.create<WrapSinkOp>(dst);
     builder.create<StrictConnectOp>(lhs, src);
     return;
   }
@@ -165,11 +161,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // connecting uint<1> to abstract reset types.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    Value lhs;
-    if (isDuplexValue(dst))
-      lhs = builder.create<DeduplexFlowOp>(dst).getResult(1);
-    else
-      lhs = builder.create<WrapSinkOp>(dst);
+    auto lhs = builder.create<WrapSinkOp>(dst);
     builder.create<StrictConnectOp>(lhs, src);
   } else
     builder.create<ConnectOp>(dst, src);
@@ -521,8 +513,8 @@ FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
       .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
             ObjectSubfieldOp>(
           [](auto subOp) { return subOp.getAccessedField(); })
-      .Case<DeduplexFlowOp, WrapSinkOp>(
-          [](auto op) { return FieldRef(op.getOperand(), 0); })
+      .Case<WrapSinkOp>(
+          [](auto flow) { return FieldRef(flow.getInput(), 0); })
       .Default(FieldRef());
 }
 

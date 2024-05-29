@@ -43,15 +43,15 @@ firrtl.circuit "Simple" attributes {
     %w5 = firrtl.wire sym @w5 : !firrtl.uint<1>
 
     %c0_ui1 = firrtl.constant 0: !firrtl.uint<1>
-    %out_read, %out_write = firrtl.deduplex %out : !firrtl.uint<1>
-    %out2_read, %out2_write = firrtl.deduplex %out2 : !firrtl.uint<1>
+    %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+    %out2_write = firrtl.wrapSink %out2 : !firrtl.uint<1>
     firrtl.strictconnect %out_write, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %out2_write, %c0_ui1 : !firrtl.uint<1>
 
     // CHECK: @x
     // CHECK-NOT: @y
     %wire = firrtl.wire sym [<@x,1,public>,<@y,2,public>] : !firrtl.vector<uint<1>,2>
-    %out3_read, %out3_write = firrtl.deduplex %out3 : !firrtl.vector<uint<1>,2>
+    %out3_write = firrtl.wrapSink %out3 : !firrtl.vector<uint<1>,2>
     firrtl.strictconnect %out3_write, %wire : !firrtl.vector<uint<1>,2>
   }
 

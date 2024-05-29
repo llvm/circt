@@ -36,7 +36,7 @@ firrtl.circuit "Bar" {
 // ALL-NEXT: mux
   firrtl.module @Bar(in %a1: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, in %a2: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, in %cond: !firrtl.uint<1>, out %b: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.mux(%cond, %a1, %a2) : (!firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>) -> !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
-    %b_read, %b_write = firrtl.deduplex %b : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
+    %b_write = firrtl.wrapSink %b : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
     firrtl.strictconnect %b_write, %0 : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
   }
 }

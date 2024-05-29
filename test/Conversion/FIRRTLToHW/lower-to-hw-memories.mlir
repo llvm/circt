@@ -20,9 +20,12 @@ firrtl.circuit "Foo" {
     %mem1_r.en = firrtl.subfield %mem1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.addr = firrtl.subfield %mem1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.data = firrtl.subfield %mem1_r[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem1_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem1_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem1_r.addr, %addr : !firrtl.uint<4>
+    %mem1_r.clk_read, %mem1_r.clk_write = firrtl.wrapSink %mem1_r.clk : !firrtl.clock
+    %mem1_r.en_read, %mem1_r.en_write = firrtl.wrapSink %mem1_r.en : !firrtl.uint<1>
+    %mem1_r.addr_read, %mem1_r.addr_write = firrtl.wrapSink %mem1_r.addr_write : !firrtl.uint<4>
+    firrtl.strictconnect %mem1_r.clk_write, %clk : !firrtl.clock
+    firrtl.strictconnect %mem1_r.en_write, %en : !firrtl.uint<1>
+    firrtl.strictconnect %mem1_r.addr_write, %addr : !firrtl.uint<4>
     %mem1_data = firrtl.node sym @mem1_data %mem1_r.data : !firrtl.uint<42>
 
     // CHECK-NEXT: %mem2 = seq.firmem 1, 2, old, port_order : <13 x 42, mask 2>

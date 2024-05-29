@@ -488,7 +488,8 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   firrtl.extmodule @Bar(in bar: !firrtl.uint<1>)
   firrtl.module @Foo(in %foo: !firrtl.uint<1>) {
     %bar_bar = firrtl.instance bar  @Bar(in bar: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_bar, %foo : !firrtl.uint<1>
+    %bar_bar_write = firrtl.wrapSink %bar_Bar : !firrtl.uint<1>
+    firrtl.strictconnect %bar_bar_write, %foo : !firrtl.uint<1>
   }
 }
 

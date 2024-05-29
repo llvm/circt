@@ -15,21 +15,21 @@ firrtl.circuit "Test"   {
      %1 = firrtl.subindex %b[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %2 = firrtl.subfield %0[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
      %3 = firrtl.subfield %1[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
-     %3_read, %3_write = firrtl.deduplex %3 : !firrtl.clock
+     %3_write = firrtl.wrapSink %3 : !firrtl.clock
      firrtl.strictconnect %3_write, %2 : !firrtl.clock
      %4 = firrtl.subfield %0[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      %5 = firrtl.subfield %1[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
-     %5_read, %5_write = firrtl.deduplex %5 : !firrtl.uint<1>
+     %5_write = firrtl.wrapSink %5 : !firrtl.uint<1>
      firrtl.strictconnect %5_write, %4 : !firrtl.uint<1>
      %6 = firrtl.subindex %a[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %7 = firrtl.subindex %b[1] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
      %8 = firrtl.subfield %6[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
      %9 = firrtl.subfield %7[clock] : !firrtl.bundle<clock: clock, valid: uint<1>>
-     %9_read, %9_write = firrtl.deduplex %9 : !firrtl.clock
+     %9_write = firrtl.wrapSink %9 : !firrtl.clock
      firrtl.strictconnect %9_write, %8 : !firrtl.clock
      %10 = firrtl.subfield %6[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
      %11 = firrtl.subfield %7[valid] : !firrtl.bundle<clock: clock, valid: uint<1>>
-     %11_read, %11_write = firrtl.deduplex %11 : !firrtl.uint<1>
+     %11_write = firrtl.wrapSink %11 : !firrtl.uint<1>
      firrtl.strictconnect %11_write, %10 : !firrtl.uint<1>
   }
 
@@ -47,8 +47,8 @@ firrtl.circuit "Test"   {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %0 = firrtl.subfield %a[b] : !firrtl.bundle<b: uint<1>, c: uint<1>>
     %1 = firrtl.subfield %a[c] : !firrtl.bundle<b: uint<1>, c: uint<1>>
-    %0_read, %0_write = firrtl.deduplex %0 : !firrtl.uint<1>
-    %1_read, %1_write = firrtl.deduplex %1 : !firrtl.uint<1>
+    %0_write = firrtl.wrapSink %0 : !firrtl.uint<1>
+    %1_write = firrtl.wrapSink %1 : !firrtl.uint<1>
     firrtl.strictconnect %0_write, %c0_ui1 : !firrtl.uint<1>
     firrtl.strictconnect %1_write, %c1_ui1 : !firrtl.uint<1>
   }
@@ -67,8 +67,8 @@ firrtl.circuit "Test"   {
   firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %sink[0] : !firrtl.vector<uint<1>, 2>
-    %0_read, %0_write = firrtl.deduplex %0 : !firrtl.uint<1>
-    %1_read, %1_write = firrtl.deduplex %1 : !firrtl.uint<1>
+    %0_write = firrtl.wrapSink %0 : !firrtl.uint<1>
+    %1_write = firrtl.wrapSink %1 : !firrtl.uint<1>
     firrtl.strictconnect %1_write %s1 : !firrtl.uint<1>
     firrtl.strictconnect %0_write, %s2 : !firrtl.uint<1>
   }
@@ -90,8 +90,8 @@ firrtl.circuit "Test"   {
     %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %s1[0] : !firrtl.vector<uint<1>, 2>
     %2 = firrtl.subindex %sink[0] : !firrtl.vector<uint<1>, 2>
-    %0_read, %0_write = firrtl.deduplex %0 : !firrtl.uint<1>
-    %2_read, %2_write = firrtl.deduplex %2 : !firrtl.uint<1>
+    %0_write = firrtl.wrapSink %0 : !firrtl.uint<1>
+    %2_write = firrtl.wrapSink %2 : !firrtl.uint<1>
     firrtl.strictconnect %2_write, %1 : !firrtl.uint<1>
     firrtl.strictconnect %0_write, %s2 : !firrtl.uint<1>
   }
@@ -113,7 +113,7 @@ firrtl.circuit "Test"   {
                              in %y_b: !firrtl.uint<2>) {
     %p = firrtl.wire : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
     %0 = firrtl.subfield %p[a] : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
-    %0_read, %0_write = firrtl.deduplex %0 : !firrtl.uint<2>
+    %0_write = firrtl.wrapSink %0 : !firrtl.uint<2>
     firrtl.strictconnect %0_write, %x_a : !firrtl.uint<2>
     %1 = firrtl.subfield %p[b] : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
     firrtl.strictconnect %x_b, %1 : !firrtl.uint<2>

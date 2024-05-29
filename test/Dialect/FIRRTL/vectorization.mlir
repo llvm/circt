@@ -16,17 +16,17 @@ firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vec
   %4 = firrtl.or %3, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %5 = firrtl.or %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %6 = firrtl.vectorcreate %4, %5 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  %c_0_read, %c_0_write = firrtl.deduplex %c_0 : !firrtl.vector<uint<1>, 2>
+  %c_0_write = firrtl.wrapSink %c_0 : !firrtl.vector<uint<1>, 2>
   firrtl.strictconnect %c_0_write, %6 : !firrtl.vector<uint<1>, 2>
   %7 = firrtl.and %3, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %8 = firrtl.and %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %9 = firrtl.vectorcreate %7, %8 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  %c_1_read, %c_1_write = firrtl.deduplex %c_1 : !firrtl.vector<uint<1>, 2>
+  %c_1_write = firrtl.wrapSink %c_1 : !firrtl.vector<uint<1>, 2>
   firrtl.strictconnect %c_1_write, %9 : !firrtl.vector<uint<1>, 2>
   %10 = firrtl.xor %3, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %11 = firrtl.xor %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %12 = firrtl.vectorcreate %10, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  %c_2_read, %c_2_write = firrtl.deduplex %c_2 : !firrtl.vector<uint<1>, 2>
+  %c_2_write = firrtl.wrapSink %c_2 : !firrtl.vector<uint<1>, 2>
   firrtl.strictconnect %c_2_write, %12 : !firrtl.vector<uint<1>, 2>
 }
 }

@@ -1500,22 +1500,6 @@ def LTLDisableIntrinsicOp : BinaryLTLIntrinsicOp<"disable">;
 // Transitional Operations
 //===----------------------------------------------------------------------===//
 
-def DeduplexFlowOp : FIRRTLOp<"deduplex", [DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>, Pure]> {
-  let summary = "Turn a duplex value into individual read (source) and write (sink) values";
-  let description = [{
-    This is a transitional operation which splits duplex-flow values into their
-    individual source and sink components.  The operands to this op must be a 
-    port, instance, wire, register, or memory.
-  }];
-  let arguments = (ins PassiveType:$input);
-  let results = (outs PassiveType:$read, LHSType:$write);
-
-  let assemblyFormat =
-    "$input attr-dict `:` type($input)";
-
-  let hasVerifier = 1;
-}
-
 def WrapSinkOp : FIRRTLOp<"wrapSink", [DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>, Pure]> {
   let summary = "Turn an output value into a writable (sink) values";
   let description = [{

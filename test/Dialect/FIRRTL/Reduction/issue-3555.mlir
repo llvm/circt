@@ -9,7 +9,7 @@ firrtl.circuit "Foo"  {
   firrtl.module @Foo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %x1_x = firrtl.wire   : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    %y_read, %y_write = firrtl.deduplex %y : !firrtl.uint<1>
+    %y_write = firrtl.wrapSink %y : !firrtl.uint<1>
     // CHECK-NOT: firrtl.strictconnect %y
     firrtl.strictconnect %y_write, %invalid_ui1 : !firrtl.uint<1>
   }

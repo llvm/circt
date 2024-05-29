@@ -15,7 +15,7 @@ firrtl.module @OneVariant(in %enum : !firrtl.enum<a: uint<8>>, out %out : !firrt
   // CHECK: firrtl.strictconnect %out_write, %0
   firrtl.match %enum : !firrtl.enum<a: uint<8>> {
     case a(%arg0) {
-      %out_read, %out_write = firrtl.deduplex %out : !firrtl.uint<8>
+      %out_write = firrtl.wrapSink %out : !firrtl.uint<8>
       firrtl.strictconnect %out_write, %arg0 : !firrtl.uint<8>
     }
   }
@@ -38,7 +38,7 @@ firrtl.module @LowerMatches(in %enum : !firrtl.enum<a: uint<8>, b: uint<8>, c: u
    // CHECK-NEXT:     firrtl.strictconnect %out_write, %2
    // CHECK-NEXT:   }
    // CHECK-NEXT: }
-  %out_read, %out_write = firrtl.deduplex %out : !firrtl.uint<8>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<8>
   firrtl.match %enum : !firrtl.enum<a: uint<8>, b: uint<8>, c: uint<8>> {
     case a(%arg0) {
       firrtl.strictconnect %out_write, %arg0 : !firrtl.uint<8>
@@ -70,7 +70,7 @@ firrtl.module @ConstLowerMatches(in %enum : !firrtl.const.enum<a: uint<8>, b: ui
    // CHECK-NEXT:     firrtl.strictconnect %out, %2 : !firrtl.const.uint<8>
    // CHECK-NEXT:   }
    // CHECK-NEXT: }
-  %out_read, %out_write = firrtl.deduplex %out : !firrtl.const.uint<8>
+  %out_write = firrtl.wrapSink %out : !firrtl.const.uint<8>
   firrtl.match %enum : !firrtl.const.enum<a: uint<8>, b: uint<8>, c: uint<8>> {
     case a(%arg0) {
       firrtl.strictconnect %out_write, %arg0 : !firrtl.const.uint<8>

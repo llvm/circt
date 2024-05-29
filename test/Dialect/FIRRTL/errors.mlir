@@ -920,8 +920,8 @@ firrtl.circuit "Top"   {
 firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
+    %a_write = firrtl.wrapSink %a : !firrtl.uint
     // expected-error @+1 {{op operand #0 must be a sized passive base type}}
-    %a_read, %a_write = firrtl.deduplex %a : !firrtl.uint
     firrtl.strictconnect %a_write, %in : !firrtl.uint
   }
 }
@@ -1161,8 +1161,9 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (out %out: !firrtl.probe<uint<2>>) {}
   firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
     %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
+    %out_write = firrtl.wrapSink %out : !firrtl.probe<uint<2>>
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
+    firrtl.strictconnect %out_write, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1323,6 +1324,7 @@ firrtl.circuit "PropertyDoubleDrive" {
 firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
+    %out_write = firrtl.wrapSink %out : !firrtl.string
     // expected-error @below {{must be a sized passive base type}}
     firrtl.strictconnect %out, %0 : !firrtl.string
   }
@@ -1810,8 +1812,9 @@ firrtl.circuit "ConstOpenBundle" {
 
 firrtl.circuit "NonEquivalenctStrictConnect" {
   firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+    %out_write = firrtl.wrapSink %out : firrtl.lhs<alias<foo, uint<2>>>
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
-    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+    firrtl.strictconnect %out_write, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
 

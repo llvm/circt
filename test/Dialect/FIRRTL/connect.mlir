@@ -257,7 +257,7 @@ firrtl.module @NonConstToNonConstFlipFromConstSubaccess(in %in    : !firrtl.bund
 // Const connections can occur within const-conditioned whens
 // CHECK-LABEL: firrtl.module @ConstConditionConstAssign
 firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
-  %out_read, %out_write = firrtl.deduplex %out : !firrtl.const.sint<2>
+  %out_write = firrtl.wrapSink %out : !firrtl.const.sint<2>
   firrtl.when %cond : !firrtl.const.uint<1> {
     firrtl.strictconnect %out_write, %in1 : !firrtl.const.sint<2>
   } else {
@@ -268,7 +268,7 @@ firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in
 // Non-const connections can occur within const-conditioned whens
 // CHECK-LABEL: firrtl.module @ConstConditionNonConstAssign
 firrtl.module @ConstConditionNonConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.sint<2>, in %in2: !firrtl.sint<2>, out %out: !firrtl.sint<2>) {
-  %out_read, %out_write = firrtl.deduplex %out : !firrtl.sint<2>
+  %out_write = firrtl.wrapSink %out : !firrtl.sint<2>
   firrtl.when %cond : !firrtl.const.uint<1> {
     firrtl.strictconnect %out_write, %in1 : !firrtl.sint<2>
   } else {
@@ -282,7 +282,7 @@ firrtl.module @NonConstWhenLocalConstAssign(in %cond: !firrtl.uint<1>) {
   firrtl.when %cond : !firrtl.uint<1> {
     %w = firrtl.wire : !firrtl.const.uint<9>
     %c = firrtl.constant 0 : !firrtl.const.uint<9>
-    %w_read, %w_write = firrtl.deduplex %w : !firrtl.const.uint<9>
+    %w_write = firrtl.wrapSink %w : !firrtl.const.uint<9>
     firrtl.strictconnect %w_write, %c : !firrtl.const.uint<9>
   }
 }
@@ -293,7 +293,7 @@ firrtl.module @NonConstWhenLocalConstAssign(in %cond: !firrtl.uint<1>) {
 firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign(in %cond: !firrtl.uint<1>, in %constCond: !firrtl.const.uint<1>) {
   firrtl.when %cond : !firrtl.uint<1> {
     %w = firrtl.wire : !firrtl.const.uint<9>
-    %w_read, %w_write = firrtl.deduplex %w : !firrtl.const.uint<9>
+    %w_write = firrtl.wrapSink %w : !firrtl.const.uint<9>
     firrtl.when %constCond : !firrtl.const.uint<1> {
       %c = firrtl.constant 0 : !firrtl.const.uint<9>
       firrtl.strictconnect %w_write, %c : !firrtl.const.uint<9>
