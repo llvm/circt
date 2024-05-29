@@ -5850,6 +5850,7 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
