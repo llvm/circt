@@ -142,34 +142,43 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
-struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
-  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
-
+struct AssertLikeOp {
+private:
+  // Assert and assume are disable by creating a disjunction between the
+  // disable condition and the assertion condition.
+  // Coverops are disabled instead visa a negative conjunction.
   Value visit(ltl::DisableOp op, ConversionPatternRewriter &rewriter,
-              Value operand = nullptr) const {
+              Value operand = nullptr, bool isCover = false) const {
     // Replace the ltl::DisableOp with an OR op as it represents a disabling
     // implication: (implies (not condition) input) is equivalent to
     // (or (not (not condition)) input) which becomes (or condition input)
-    return rewriter.replaceOpWithNewOp<comb::OrOp>(
-        op, op.getCondition(), operand ? operand : op.getInput());
+    // for assertions and assumptions, otherwised with an NOT cond AND pred
+    Value inp = operand ? operand : op.getInput();
+
+    if (isCover) {
+      Value constOne =
+          rewriter.create<hw::ConstantOp>(op.getLoc(), rewriter.getI1Type(), 1);
+      Value notDisable = rewriter.create<comb::XorOp>(
+          op.getLoc(), op.getCondition(), constOne);
+      return rewriter.replaceOpWithNewOp<comb::AndOp>(op, notDisable, inp);
+    }
+
+    return rewriter.replaceOpWithNewOp<comb::OrOp>(op, op.getCondition(), inp);
   }
 
-  // Special case : we want to detect the Non-overlapping implication,
-  // Overlapping Implication or simply AssertProperty patterns and reject
-  // everything else for now: antecedent : ltl::concatOp || immediate predicate
-  // consequent : any other non-sequence op
-  // We want to support a ##n true |-> b and a |-> b
-  LogicalResult
-  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
+public:
+  // We currently want to support the AssertProperty pattern of
+  // verif.assertlike(ltl.clock(ltl.disable(pred, disable), clock))
+  static LogicalResult visitAssertLike(Operation *op, Value property,
+                                       ConversionPatternRewriter &rewriter,
+                                       bool isCover = false) {
     Value ltlClock, disableCond, disableInput, disableVal;
     ltl::ClockOp clockOp;
     ltl::DisableOp disableOp;
 
     // Look for the Assert Property pattern
     bool matchedProperty = matchPattern(
-        op.getProperty(),
+        property,
         mOpWithBind<ltl::ClockOp>(
             &clockOp,
             mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
@@ -177,11 +186,11 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
             mBool(&ltlClock)));
 
     if (!matchedProperty)
-      return rewriter.notifyMatchFailure(
-          op, " verif.assert used outside of an assert property!");
+      return rewriter.notifyMatchFailure(op,
+                                         " unsupported assert-like pattern!");
 
     // Then visit the disable op
-    disableVal = visit(disableOp, rewriter, disableInput);
+    disableVal = visit(disableOp, rewriter, disableInput, isCover);
 
     // Generate the parenting sv.always posedge clock from the ltl
     // clock, containing the generated sv.assert
@@ -194,13 +203,43 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
               op, disableVal,
               sv::DeferAssertAttr::get(getContext(),
                                        sv::DeferAssert::Immediate),
-              op.getLabelAttr());
+              op->getLabelAttr());
         });
 
     // Erase Converted Ops
     rewriter.eraseOp(clockOp);
 
     return success();
+  }
+};
+
+struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
+  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    return AssertLikeOp::visitAssertLike(op, op.getProperty(), rewriter);
+  }
+};
+
+struct AssumeOpConversionPattern : OpConversionPattern<verif::AssumeOp> {
+  using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(verif::AssumeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    return AssertLikeOp::visitAssertLike(op, op.getProperty(), rewriter);
+  }
+};
+
+struct CoverOpConversionPattern : OpConversionPattern<verif::CoverOp> {
+  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(verif::CoverOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    return AssertLikeOp::visitAssertLike(op, op.getProperty(), rewriter, true);
   }
 };
 
