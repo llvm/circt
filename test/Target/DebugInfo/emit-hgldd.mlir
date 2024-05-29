@@ -64,6 +64,10 @@
 // CHECK-NEXT:     "end_line": 42
 // CHECK-NEXT:     "file": 2
 // CHECK-NEXT:   }
+// CHECK-NEXT:   "source_lang_type_info"
+// CHECK-NOT:         "params"
+// CHECK-NEXT:        "type_name": "Foo_SourceLangTypeName"
+// CHECK-NEXT:   }
 // CHECK-NEXT:   "port_vars"
 // CHECK:          "var_name": "inA"
 // CHECK:          "source_lang_type_info"
@@ -107,6 +111,7 @@
 // CHECK:          "hgl_loc"
 // CHECK:            "file": 3
 hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
+  dbg.moduleinfo { typeName = "Foo_SourceLangTypeName" }
   dbg.variable "inA", %a { typeName = "SInt<32>" }: i32 loc(#loc2)
   dbg.variable "outB", %b1.y { params = [{name = "size", type = "uint", value = "32"}] }: i32 loc(#loc3)
   %c42_i8 = hw.constant 42 : i8
@@ -120,11 +125,27 @@ hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
 
 // CHECK-LABEL: FILE "Bar.dd"
 // CHECK: "module_name": "Bar"
+// CHECK:   "source_lang_type_info"
+// CHECK-NEXT:        "params": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "size"
+// CHECK-NEXT:            "type": "int"
+// CHECK-NEXT:            "value": "32"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "other"
+// CHECK-NEXT:            "type": "bool"
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ]
+// CHECK-NEXT:        "type_name": "BarType"
+// CHECK-NEXT:   }
 // CHECK:   "port_vars"
 // CHECK:     "var_name": "inX"
 // CHECK:     "var_name": "outY"
 // CHECK:     "var_name": "varZ"
 hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
+  dbg.moduleinfo { typeName = "BarType", params = [{name = "size", type="int", value="32"}, {name="other", type="bool"}] }
+
   %0 = comb.mul %x, %x : i32 loc(#loc9)
   dbg.variable "inX", %x : i32 loc(#loc7)
   dbg.variable "outY", %0 : i32 loc(#loc8)
