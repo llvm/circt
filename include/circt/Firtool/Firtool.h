@@ -103,9 +103,6 @@ public:
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldEmitOMIR() const { return emitOMIR; }
   bool shouldExportChiselInterface() const { return exportChiselInterface; }
-  bool shouldDisableHoistingHWPassthrough() const {
-    return disableHoistingHWPassthrough;
-  }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldEtcDisableInstanceExtraction() const {
     return etcDisableInstanceExtraction;
@@ -215,11 +212,6 @@ public:
 
   FirtoolOptions &setDisableAggressiveMergeConnections(bool value) {
     disableAggressiveMergeConnections = value;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableHoistingHWPassthrough(bool value) {
-    disableHoistingHWPassthrough = value;
     return *this;
   }
 
@@ -381,7 +373,6 @@ private:
   bool noDedup;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
-  bool disableHoistingHWPassthrough;
   bool emitOMIR;
   std::string omirOutFile;
   bool lowerMemories;

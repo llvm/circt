@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 import esiaccel as esi
 import random
@@ -43,6 +44,16 @@ def read(addr: int) -> bytearray:
 data = bytearray([random.randint(0, 2**8 - 1) for _ in range(8)])
 mem_write.write({"address": [2], "data": data})
 resp = read(2)
+try_count = 0
+
+# Spin until the accelerator has updated the data. Only try a certain number of
+# times. In practice, this should not be used (write should be a function which
+# blocks until the write is complete). Since we are testing functionality, this
+# is appropriate.
+while resp != data and try_count < 10:
+  time.sleep(0.01)
+  try_count += 1
+  resp = read(2)
 assert resp == data
 resp = read(3)
 assert resp == data
