@@ -211,6 +211,8 @@ struct EmittedType {
   SmallVector<int64_t, 1> packedDims;
   SmallVector<int64_t, 1> unpackedDims;
 
+  DISourceLang sourceLangType;
+
   EmittedType() = default;
   EmittedType(StringRef name) : name(name) {}
   EmittedType(Type type) {
@@ -291,6 +293,7 @@ struct FileEmitter {
   void emit(llvm::raw_ostream &os);
   void emit(JOStream &json);
   JValue emitLoc(FileLineColLoc loc, FileLineColLoc endLoc, bool emitted);
+  JObject emitSourceLangTypeInfo(const DISourceLang &sourceLangType);
   void emitModule(JOStream &json, DIModule *module);
   void emitModuleBody(JOStream &json, DIModule *module);
   void emitInstance(JOStream &json, DIInstance *instance);
@@ -552,6 +555,30 @@ JValue FileEmitter::emitLoc(FileLineColLoc loc, FileLineColLoc endLoc,
   return obj;
 }
 
+JObject
+FileEmitter::emitSourceLangTypeInfo(const DISourceLang &sourceLangType) {
+  JObject obj;
+  if (const auto &typeName = sourceLangType.typeName)
+    obj["type_name"] = typeName.getValue();
+  if (const auto &params = sourceLangType.params) {
+    JArray paramsArray;
+    for (const auto &param : params) {
+      if (isa<DictionaryAttr>(param)) {
+
+        auto paramObj = JObject{};
+        for (const auto &entry : cast<DictionaryAttr>(param))
+          paramObj[entry.getName().getValue()] =
+              cast<StringAttr>(entry.getValue()).getValue();
+
+        paramsArray.push_back(std::move(paramObj));
+      }
+    }
+    obj["params"] = std::move(paramsArray);
+  }
+
+  return obj;
+}
+
 StringAttr getVerilogModuleName(DIModule &module) {
   if (auto *op = module.op)
     if (auto attr = op->getAttrOfType<StringAttr>("verilogName"))
@@ -581,6 +608,8 @@ void FileEmitter::emitModule(JOStream &json, DIModule *module) {
     findAndEmitLocOrGuess(json, "hgl_loc", op, false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
+  // TODO: emit source language type information
+
   emitModuleBody(json, module);
   json.objectEnd();
 }
@@ -665,6 +694,11 @@ void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
     if (auto dims = emitted.type.emitUnpackedDims(); !dims.empty())
       json.attribute("unpacked_range", std::move(dims));
   }
+
+  // Emit source language type information for a variable (if any)
+  auto sourceLangTypeInfo = emitSourceLangTypeInfo(variable->sourceLangType);
+  if (!sourceLangTypeInfo.empty())
+    json.attribute("source_lang_type_info", std::move(sourceLangTypeInfo));
 
   json.objectEnd();
 }
@@ -773,6 +807,12 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
         fieldDef["packed_range"] = std::move(dims);
       if (auto dims = type.emitUnpackedDims(); !dims.empty())
         fieldDef["unpacked_range"] = std::move(dims);
+
+      // Emit the source language type information for the field definition
+      auto sourceLangTypeInfo = emitSourceLangTypeInfo(type.sourceLangType);
+      if (!sourceLangTypeInfo.empty())
+        fieldDef["source_lang_type_info"] = std::move(sourceLangTypeInfo);
+
       findAndSetLocs(fieldDef, loc);
       fieldDefs.push_back(std::move(fieldDef));
     }
@@ -808,6 +848,28 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
 
     type.addUnpackedDim(values.size());
     return {hglddOperator("'{", values), type};
+  }
+
+  // Emit subfield as =>
+  // variable: { name: "name", type_name: "type_name", real_type: { ... } }
+  // A subvar is a debug variable that is a part of a struct or array
+  // containing chisel types information
+  if (auto subField = dyn_cast<debug::SubFieldOp>(op)) {
+    LLVM_DEBUG(llvm::dbgs() << "Emitting subField: " << subField << "\n");
+
+    if (auto value = subField.getValue()) {
+      if (auto emittedExpr = emitExpression(value)) {
+
+        // Return the emitted expression with the source lang type information
+        emittedExpr.type.sourceLangType =
+            DISourceLang{subField.getTypeNameAttr(), subField.getParamsAttr()};
+
+        return {emittedExpr.expr, emittedExpr.type};
+      }
+    }
+
+    // Is it a ground field type? Yes probably
+    return {};
   }
 
   // Look through read inout ops.

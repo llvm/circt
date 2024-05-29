@@ -66,7 +66,35 @@
 // CHECK-NEXT:   }
 // CHECK-NEXT:   "port_vars"
 // CHECK:          "var_name": "inA"
+// CHECK:          "source_lang_type_info"
+// CHECK-NOT:         "params"
+// CHECK-NEXT:        "type_name": "SInt<32>"
 // CHECK:          "var_name": "outB"
+// CHECK:          "source_lang_type_info"
+// CHECK-NEXT:        "params": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "size"
+// CHECK-NEXT:            "type": "uint"
+// CHECK-NEXT:            "value": "32"
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ]
+// CHECK-NOT:         "type_name"
+// CHECK:          "var_name": "var1"
+// CHECK:          "source_lang_type_info"
+// CHECK-NEXT:        "params": [
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "n"
+// CHECK-NEXT:            "type": "int"
+// CHECK-NEXT:            "value": "42"
+// CHECK-NEXT:          },
+// CHECK-NEXT:          {
+// CHECK-NEXT:            "name": "a"
+// CHECK-NEXT:            "type": "myType"
+// CHECK-NEXT:          }
+// CHECK-NEXT:        ]
+// CHECK-NEXT:        "type_name": "UInt<8>"
+// CHECK:          "var_name": "var2"
+// CHECK-NOT:      "source_lang_type_info"
 // CHECK:        "children"
 // CHECK-LABEL:    "name": "b0"
 // CHECK:          "obj_name": "Bar"
@@ -79,10 +107,12 @@
 // CHECK:          "hgl_loc"
 // CHECK:            "file": 3
 hw.module @Foo(in %a: i32 loc(#loc2), out b: i32 loc(#loc3)) {
-  dbg.variable "inA", %a : i32 loc(#loc2)
-  dbg.variable "outB", %b1.y : i32 loc(#loc3)
+  dbg.variable "inA", %a { typeName = "SInt<32>" }: i32 loc(#loc2)
+  dbg.variable "outB", %b1.y { params = [{name = "size", type = "uint", value = "32"}] }: i32 loc(#loc3)
   %c42_i8 = hw.constant 42 : i8
-  dbg.variable "var1", %c42_i8 : i8 loc(#loc3)
+  dbg.variable "var1", %c42_i8 { typeName = "UInt<8>", params = [{name = "n", type = "int", value = "42" }, {name="a", type="myType"}] }: i8 loc(#loc3)
+   %c21_i8 = hw.constant 21 : i8
+  dbg.variable "var2", %c21_i8 : i8 loc(#loc3)
   %b0.y = hw.instance "b0" @Bar(x: %a: i32) -> (y: i32) loc(#loc4)
   %b1.y = hw.instance "b1" @Bar(x: %b0.y: i32) -> (y: i32) loc(#loc5)
   hw.output %b1.y : i32 loc(#loc1)
@@ -106,16 +136,33 @@ hw.module private @Bar(in %x: i32 loc(#loc7), out y: i32 loc(#loc8)) {
 
 // CHECK-LABEL: FILE "global.dd"
 // CHECK-LABEL: "obj_name": "Aggregates_data"
+// CHECK:         "source_lang_type_info"
+// CHECK-NOT:       "params"
+// CHECK-NEXT:      "type_name": "i32"
 // CHECK:         "var_name": "a"
+// CHECK:         "source_lang_type_info"
+// CHECK-NOT:       "params"
+// CHECK-NEXT:      "type_name": "i42"
 // CHECK:         "var_name": "b"
+// CHECK:         "source_lang_type_info"
+// CHECK-NOT:       "params"
+// CHECK-NEXT:      "type_name": "i17[2]"
 // CHECK:         "var_name": "c"
 // CHECK-LABEL: "obj_name": "Aggregates"
 // CHECK:       "module_name": "Aggregates"
 // CHECK:         "var_name": "data"
+// CHECK:         "source_lang_type_info"
+// CHECK-NOT:       "params"
+// CHECK-NEXT:      "type_name": "abc_struct"
 hw.module @Aggregates(in %data_a: i32, in %data_b: i42, in %data_c_0: i17, in %data_c_1: i17) {
-  %0 = dbg.array [%data_c_0, %data_c_1] : i17
-  %1 = dbg.struct {"a": %data_a, "b": %data_b, "c": %0} : i32, i42, !dbg.array
-  dbg.variable "data", %1 : !dbg.struct
+  %0 = dbg.subfield "data_a_dbg", %data_a {typeName = "i32"}: i32
+  %1 = dbg.subfield "data_b_dbg", %data_b {typeName = "i42"}: i42
+  %2 = dbg.subfield "data_c_dbg", %data_c_0 {typeName = "i17"}: i17
+  %3 = dbg.subfield "data_c_dbg", %data_c_1 {typeName = "i17"}: i17
+  %4 = dbg.array [%2, %3] : !dbg.subfield
+  %5 = dbg.subfield "c", %4 {typeName = "i17[2]"}: !dbg.array
+  %6 = dbg.struct {"a": %0, "b": %1, "c": %5} : !dbg.subfield, !dbg.subfield, !dbg.subfield
+  dbg.variable "data", %6 {typeName = "abc_struct"}: !dbg.struct
 }
 
 // CHECK-LABEL: "obj_name": "EmptyAggregates"
