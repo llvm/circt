@@ -47,6 +47,8 @@ namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
 
+using json = nlohmann::json;
+
 //===----------------------------------------------------------------------===//
 // Utility types
 //===----------------------------------------------------------------------===//
@@ -283,7 +285,7 @@ class BuildOpGroups : public calyx::FuncOpPartialLoweringPattern {
                              scf::ParallelOp, scf::ReduceOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
-                             memref::StoreOp,
+                             memref::StoreOp, memref::GetGlobalOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
                              AndIOp, XOrIOp, OrIOp, ExtUIOp, ExtSIOp, TruncIOp,
@@ -341,6 +343,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        memref::GetGlobalOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, scf::WhileOp whileOp) const;
@@ -962,6 +966,71 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
                     IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
+
+  if (isa<memref::GetGlobalOp>(allocOp)) {
+    auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
+    auto shape = getGlobalOp.getType().getShape();
+    std::vector<int> dimensions;
+    for (auto dim : shape) {
+      dimensions.push_back(dim);
+    }
+
+    // Flatten the values in the attribute
+    auto *symbolTableOp =
+        getGlobalOp->template getParentWithTrait<mlir::OpTrait::SymbolTable>();
+    auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
+        SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+    auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
+        globalOp.getConstantInitValue());
+    std::vector<float> flattenedVals;
+    for (auto attr : cstAttr.template getValues<Attribute>()) {
+      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr))
+        flattenedVals.push_back(fltAttr.getValueAsDouble());
+    }
+
+    // Helper function to get the correct indices
+    auto getIndices = [&dimensions](int flatIndex) {
+      std::vector<int> indices(dimensions.size(), 0);
+      for (int i = dimensions.size() - 1; i >= 0; --i) {
+        indices[i] = flatIndex % dimensions[i];
+        flatIndex /= dimensions[i];
+      }
+      return indices;
+    };
+
+    json result = json::array();
+
+    // Put the flattened values in the multi-dimensional structure
+    for (size_t i = 0; i < flattenedVals.size(); ++i) {
+      std::vector<int> indices = getIndices(i);
+      json *nested = &result;
+      for (size_t j = 0; j < indices.size() - 1; ++j) {
+        while (nested->size() <= static_cast<json::size_type>(indices[j])) {
+          nested->push_back(json::array());
+        }
+        nested = &(*nested)[indices[j]];
+      }
+      nested->push_back(flattenedVals[i]);
+    }
+
+    componentState.setDataField(memoryOp.getName(), result);
+    auto width = memtype.getElementType().getIntOrFloatBitWidth();
+
+    std::string numType;
+    bool isSigned;
+    if (memtype.getElementType().isInteger()) {
+      numType = "bitnum";
+      isSigned = false;
+    } else {
+      numType = "floating_point";
+      isSigned = true;
+    }
+
+    componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
+
+    rewriter.eraseOp(globalOp);
+  }
+
   return success();
 }
 
@@ -973,6 +1042,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocaOp allocOp) const {
   return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::GetGlobalOp getGlobalOp) const {
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter,
+                      getGlobalOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
