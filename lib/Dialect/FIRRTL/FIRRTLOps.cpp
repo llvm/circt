@@ -168,7 +168,7 @@ Flow firrtl::swapFlow(Flow flow) {
   llvm_unreachable("Unsupported Flow type.");
 }
 
-constexpr const char *toString(Flow flow) {
+const char *toString(Flow flow) {
   switch (flow) {
   case Flow::None:
     return "no flow";
@@ -5850,6 +5850,7 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
