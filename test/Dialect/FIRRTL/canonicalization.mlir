@@ -46,20 +46,23 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
   // CHECK: firrtl.strictconnect %outreset, %inreset : !firrtl.reset
   %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
-  firrtl.strictconnect %outreset, %8 : !firrtl.reset
+  %outreset_write = firrtl.wrapSink %outreset : !firrtl.reset
+  firrtl.strictconnect %outreset_write, %8 : !firrtl.reset
 
   // Transparent
   // CHECK: firrtl.strictconnect %out2_si1, %si1
   %9 = firrtl.asUInt %si1 : (!firrtl.sint<1>) -> !firrtl.uint<1>
   %10 = firrtl.asSInt %9 : (!firrtl.uint<1>) -> !firrtl.sint<1>
-  firrtl.strictconnect %out2_si1, %10 : !firrtl.sint<1>
+  %out2_si1_write = firrtl.wrapSink %out2_si1 : !firrtl.sint<1>
+  firrtl.strictconnect %out2_si1_write, %10 : !firrtl.sint<1>
   // CHECK: firrtl.strictconnect %out2_ui1, %ui1
   %11 = firrtl.asSInt %ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
   %12 = firrtl.asUInt %11 : (!firrtl.sint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out2_ui1, %12 : !firrtl.uint<1>
+  %out2_ui1_write = firrtl.wrapSink %out2_ui1 : !firrtl.uint<1>
+  firrtl.strictconnect %out2_ui1_write, %12 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %out2_si1, %si1
   %13 = firrtl.cvt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
-  firrtl.strictconnect %out2_si1, %13 : !firrtl.sint<1>
+  firrtl.strictconnect %out2_si1_write, %13 : !firrtl.sint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Div
@@ -151,7 +154,8 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %outz, %c0_ui0
   %zw = firrtl.and %zin1, %zin2 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   firrtl.connect %out, %zw : !firrtl.uint<4>, !firrtl.uint<0>
-  firrtl.strictconnect %outz, %zw : !firrtl.uint<0>
+  %outz_write = firrtl.wrapSink %outz : !firrtl.uint<0>
+  firrtl.strictconnect %outz_write, %zw : !firrtl.uint<0>
 
   // Mixed type inputs - the constant is zero extended, not sign extended, so it
   // cannot be folded!
@@ -179,7 +183,8 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %out, %c0_ui4
   %c0_si2 = firrtl.constant 0 : !firrtl.sint<2>
   %7 = firrtl.and %sin, %c0_si2 : (!firrtl.sint<4>, !firrtl.sint<2>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %7 : !firrtl.uint<4>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %7 : !firrtl.uint<4>
 
   // CHECK: %[[trunc:.*]] = firrtl.bits %in6
   // CHECK: %[[ANDPAD:.*]] = firrtl.and %[[trunc]], %in
@@ -187,13 +192,15 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %out6, %[[POST]]
   %8 = firrtl.pad %in, 6 : (!firrtl.uint<4>) -> !firrtl.uint<6>
   %9 = firrtl.and %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
-  firrtl.strictconnect %out6, %9 : !firrtl.uint<6>
+  %out6_write = firrtl.wrapSink %out6 : !firrtl.uint<6>
+  firrtl.strictconnect %out6_write, %9 : !firrtl.uint<6>
 
   // CHECK: %[[AND:.*]] = firrtl.and %in, %c3_ui4
   // CHECK: firrtl.pad %[[AND]], 5
   %10 = firrtl.cvt %in : (!firrtl.uint<4>) -> !firrtl.sint<5>
   %11 = firrtl.and %10, %c3_si5 : (!firrtl.sint<5>, !firrtl.sint<5>) -> !firrtl.uint<5>
-  firrtl.strictconnect %out5, %11 : !firrtl.uint<5>
+  %out5_write = firrtl.wrapSink %out5 : !firrtl.uint<5>
+  firrtl.strictconnect %out5_write, %11 : !firrtl.uint<5>
 }
 
 // CHECK-LABEL: firrtl.module @Or
@@ -233,7 +240,8 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %outz, %c0_ui0
   %zw = firrtl.or %zin1, %zin2 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   firrtl.connect %out, %zw : !firrtl.uint<4>, !firrtl.uint<0>
-  firrtl.strictconnect %outz, %zw : !firrtl.uint<0>
+  %outz_write = firrtl.wrapSink %outz : !firrtl.uint<0>
+  firrtl.strictconnect %outz_write, %zw : !firrtl.uint<0>
 
   // Mixed type input and outputs.
 
@@ -291,7 +299,8 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.strictconnect %outz, %c0_ui0
   %zw = firrtl.xor %zin1, %zin2 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   firrtl.connect %out, %zw : !firrtl.uint<4>, !firrtl.uint<0>
-  firrtl.strictconnect %outz, %zw : !firrtl.uint<0>
+  %outz_write = firrtl.wrapSink %outz : !firrtl.uint<0>
+  firrtl.strictconnect %outz_write, %zw : !firrtl.uint<0>
 
   // Mixed type input and outputs.
 
@@ -335,37 +344,38 @@ firrtl.module @Not(in %in: !firrtl.uint<4>,
   %c5_ui4 = firrtl.constant 5 : !firrtl.uint<4>
   %5 = firrtl.eq %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %6 = firrtl.not %5 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %6 : !firrtl.uint<1>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %6 : !firrtl.uint<1>
   // CHECK: firrtl.neq
   // CHECK-NEXT: firrtl.strictconnect
 
   %7 = firrtl.neq %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %8 = firrtl.not %7 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %8 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %8 : !firrtl.uint<1>
   // CHECK: firrtl.eq
   // CHECK-NEXT: firrtl.strictconnect
 
   %9 = firrtl.lt %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %10 = firrtl.not %9 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %10 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %10 : !firrtl.uint<1>
   // CHECK: firrtl.geq
   // CHECK-NEXT: firrtl.strictconnect
 
   %11 = firrtl.leq %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %12 = firrtl.not %11 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %12 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %12 : !firrtl.uint<1>
   // CHECK: firrtl.gt
   // CHECK-NEXT: firrtl.strictconnect
 
   %13 = firrtl.gt %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %14 = firrtl.not %13 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %14 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %14 : !firrtl.uint<1>
   // CHECK: firrtl.leq
   // CHECK-NEXT: firrtl.strictconnect
 
   %15 = firrtl.geq %in, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %16 = firrtl.not %15 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %16 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %16 : !firrtl.uint<1>
   // CHECK: firrtl.lt
   // CHECK-NEXT: firrtl.strictconnect
 
@@ -408,7 +418,8 @@ firrtl.module @EQ(in %in1: !firrtl.uint<1>,
   %c5_ui4 = firrtl.constant 5 : !firrtl.uint<4>
   %5 = firrtl.neq %in4, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %6 = firrtl.eq %5, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out, %6 : !firrtl.uint<1>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %6 : !firrtl.uint<1>
   // CHECK: firrtl.eq
   // CHECK-NEXT: firrtl.strictconnect
 
@@ -444,7 +455,8 @@ firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
   %c5_ui4 = firrtl.constant 5 : !firrtl.uint<4>
   %5 = firrtl.eq %in4, %c5_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %6 = firrtl.neq %5, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out, %6 : !firrtl.uint<1>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %6 : !firrtl.uint<1>
   // CHECK: firrtl.neq
   // CHECK-NEXT: firrtl.strictconnect
 }
@@ -496,7 +508,8 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.strictconnect %outu8, %[[fixedsign]]
   %tcast = firrtl.asUInt %sin4 : (!firrtl.sint<4>) -> !firrtl.uint<4>
   %11 = firrtl.cat %tcast, %tcast : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
-  firrtl.strictconnect %outu8, %11 : !firrtl.uint<8>
+  %outu8_write = firrtl.wrapSink %outu8 : !firrtl.uint<8>
+  firrtl.strictconnect %outu8_write, %11 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @Bits
@@ -534,7 +547,8 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
   %6 = firrtl.mux( %in1, %c10_ui4, %c11_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   %7 = firrtl.bits %6 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-  firrtl.strictconnect %out2b, %7 : !firrtl.uint<2>
+  %out2b_write = firrtl.wrapSink %out2b : !firrtl.uint<2>
+  firrtl.strictconnect %out2b_write, %7 : !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @Head
@@ -610,7 +624,8 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
 
   %13 = firrtl.mux (%cond, %val0, %val0) : (!firrtl.uint<1>, !firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   // CHECK-NEXT: firrtl.strictconnect %out2, %c0_ui0
-  firrtl.strictconnect %out2, %13 : !firrtl.uint<0>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.uint<0>
+  firrtl.strictconnect %out2_write, %13 : !firrtl.uint<0>
 
   %14 = firrtl.mux (%cond, %c0_ui1, %c1_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   // CHECK-NEXT: [[V1:%.+]] = firrtl.not %cond
@@ -626,12 +641,14 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
 
   // CHECK-NEXT: firrtl.strictconnect %out5, %val2
   %16 = firrtl.mux (%val0, %val1, %val2) : (!firrtl.uint<0>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out5, %16 : !firrtl.uint<1>
+  %out5_write = firrtl.wrapSink %out5 : !firrtl.uint<1>
+  firrtl.strictconnect %out5_write, %16 : !firrtl.uint<1>
 
   // CHECK-NEXT: %[[SEL:.+]] = firrtl.pad %val1, 2 : (!firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK-NEXT: mux4cell(%[[SEL]],
   %17 = firrtl.int.mux4cell (%val1, %val1, %val2, %val1, %val2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out6, %17 : !firrtl.uint<1>
+  %out6_write = firrtl.wrapSink %out6 : !firrtl.uint<1>
+  firrtl.strictconnect %out6_write, %17 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -739,22 +756,26 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // CHECK: firrtl.strictconnect %out0u, %c0_ui0
   %10 = firrtl.shr %in0u, 0 : (!firrtl.uint<0>) -> !firrtl.uint<0>
-  firrtl.strictconnect %out0u, %10 : !firrtl.uint<0>
+  %out0u_write = firrtl.wrapSink %out0u : !firrtl.uint<0>
+  firrtl.strictconnect %out0u_write, %10 : !firrtl.uint<0>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // CHECK: firrtl.strictconnect %out1s, %c0_si1
   %11 = firrtl.shr %in0s, 0 : (!firrtl.sint<0>) -> !firrtl.sint<1>
-  firrtl.strictconnect %out1s, %11 : !firrtl.sint<1>
+  %out1s_write = firrtl.wrapSink %out1s : !firrtl.sint<1>
+  firrtl.strictconnect %out1s_write, %11 : !firrtl.sint<1>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // CHECK: firrtl.strictconnect %out4u, %in4u
   %12 = firrtl.shr %in4u, 0 : (!firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out4u, %12 : !firrtl.uint<4>
+  %out4u_write = firrtl.wrapSink %out4u : !firrtl.uint<4>
+  firrtl.strictconnect %out4u_write, %12 : !firrtl.uint<4>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // CHECK: firrtl.strictconnect %out4s, %in4s
   %13 = firrtl.shr %in4s, 0 : (!firrtl.sint<4>) -> !firrtl.sint<4>
-  firrtl.strictconnect %out4s, %13 : !firrtl.sint<4>
+  %out4s_write = firrtl.wrapSink %out4s : !firrtl.sint<4>
+  firrtl.strictconnect %out4s_write, %13 : !firrtl.sint<4>
 
   // Issue #6608: https://github.com/llvm/circt/issues/6608
   // Will change to drop op once FIRRTL spec changes sizeof(shr(uint))
@@ -838,20 +859,23 @@ firrtl.module @Andr(in %in0 : !firrtl.uint<0>, in %in1 : !firrtl.sint<2>,
   %6 = firrtl.asUInt %5 : (!firrtl.sint<64>) -> !firrtl.uint<64>
   %9 = firrtl.cvt %6 : (!firrtl.uint<64>) -> !firrtl.sint<65>
   %10 = firrtl.andr %9 : (!firrtl.sint<65>) -> !firrtl.uint<1>
-  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+  %g_write = firrtl.wrapSink %g : !firrtl.uint<1>
+  firrtl.strictconnect %g_write, %10 : !firrtl.uint<1>
 
   // CHECK: %[[andr:.*]] = firrtl.andr %in1
   // CHECK-NEXT: firrtl.strictconnect %i, %[[andr]]
   %11 = firrtl.pad %in1, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
   %12 = firrtl.andr %11 : (!firrtl.sint<3>) -> !firrtl.uint<1>
-  firrtl.strictconnect %i, %12 : !firrtl.uint<1>
+  %i_write = firrtl.wrapSink %i : !firrtl.uint<1>
+  firrtl.strictconnect %i_write, %12 : !firrtl.uint<1>
 
   // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
   // CHECK-NEXT: firrtl.andr %[[cat]]
   %13 = firrtl.andr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
   %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
   %15 = firrtl.andr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
-  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
+  %j_write = firrtl.wrapSink %j : !firrtl.uint<1>
+  firrtl.strictconnect %j_write, %15 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Orr
@@ -892,14 +916,16 @@ firrtl.module @Orr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
   %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.orr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
-  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+  %g_write = firrtl.wrapSink %g : !firrtl.uint<1>
+  firrtl.strictconnect %g_write, %10 : !firrtl.uint<1>
 
   // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
   // CHECK-NEXT: firrtl.orr %[[cat]]
   %13 = firrtl.orr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
   %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
   %15 = firrtl.orr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
-  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
+  %j_write = firrtl.wrapSink %j : !firrtl.uint<1>
+  firrtl.strictconnect %j_write, %15 : !firrtl.uint<1>
 
 }
 
@@ -942,14 +968,16 @@ firrtl.module @Xorr(in %in0 : !firrtl.uint<0>, in %in2 : !firrtl.uint<2>,
   %8 = firrtl.cat %c0_ui2, %7 : (!firrtl.uint<2>, !firrtl.uint<66>) -> !firrtl.uint<68>
   %9 = firrtl.cvt %8 : (!firrtl.uint<68>) -> !firrtl.sint<69>
   %10 = firrtl.xorr %9 : (!firrtl.sint<69>) -> !firrtl.uint<1>
-  firrtl.strictconnect %g, %10 : !firrtl.uint<1>
+  %g_write = firrtl.wrapSink %g : !firrtl.uint<1>
+  firrtl.strictconnect %g_write, %10 : !firrtl.uint<1>
 
   // CHECK: %[[cat:.*]] = firrtl.cat %in2, %h
   // CHECK-NEXT: firrtl.xorr %[[cat]]
   %13 = firrtl.xorr %in2 : (!firrtl.uint<2>) -> !firrtl.uint<1>
   %14 = firrtl.cat %13, %h : (!firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<65>
   %15 = firrtl.xorr %14 : (!firrtl.uint<65>) -> !firrtl.uint<1>
-  firrtl.strictconnect %j, %15 : !firrtl.uint<1>
+  %j_write = firrtl.wrapSink %j : !firrtl.uint<1>
+  firrtl.strictconnect %j_write, %15 : !firrtl.uint<1>
 
 }
 
@@ -987,7 +1015,8 @@ firrtl.module @subindex(out %out : !firrtl.uint<8>) {
   // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
   %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.vector<uint<8>, 1>
   %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<8>, 1>
-  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<8>
+  firrtl.strictconnect %out_write, %1 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @subindex_agg
@@ -996,7 +1025,8 @@ firrtl.module @subindex_agg(out %out : !firrtl.bundle<a: uint<8>>) {
   // CHECK: firrtl.strictconnect %out, %0 : !firrtl.bundle<a: uint<8>>
   %0 = firrtl.aggregateconstant [[8 : ui8]] : !firrtl.vector<bundle<a: uint<8>>, 1>
   %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<8>>, 1>
-  firrtl.strictconnect %out, %1 : !firrtl.bundle<a: uint<8>>
+  %out_write = firrtl.wrapSink %out : !firrtl.bundle<a: uint<8>>
+  firrtl.strictconnect %out_write, %1 : !firrtl.bundle<a: uint<8>>
 }
 
 // CHECK-LABEL: firrtl.module @subfield
@@ -1005,7 +1035,8 @@ firrtl.module @subfield(out %out : !firrtl.uint<8>) {
   // CHECK: firrtl.strictconnect %out, %c8_ui8 : !firrtl.uint<8>
   %0 = firrtl.aggregateconstant [8 : ui8] : !firrtl.bundle<a: uint<8>>
   %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<8>>
-  firrtl.strictconnect %out, %1 : !firrtl.uint<8>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<8>
+  firrtl.strictconnect %out_write, %1 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @subfield_agg
@@ -1014,7 +1045,8 @@ firrtl.module @subfield_agg(out %out : !firrtl.vector<uint<8>, 1>) {
   // CHECK: firrtl.strictconnect %out, %0 : !firrtl.vector<uint<8>, 1>
   %0 = firrtl.aggregateconstant [[8 : ui8]] : !firrtl.bundle<a: vector<uint<8>, 1>>
   %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: vector<uint<8>, 1>>
-  firrtl.strictconnect %out, %1 : !firrtl.vector<uint<8>, 1>
+  %out_write = firrtl.wrapSink %out : !firrtl.vector<uint<8>, 1>
+  firrtl.strictconnect %out_write, %1 : !firrtl.vector<uint<8>, 1>
 }
 
 // CHECK-LABEL: firrtl.module @issue326
@@ -1952,7 +1984,8 @@ firrtl.module @zeroWidth(out %out: !firrtl.uint<2>, in %in1 : !firrtl.uint<0>, i
   %ret8 = firrtl.cat %ret7, %and : (!firrtl.uint<2>, !firrtl.uint<0>) -> !firrtl.uint<2>
   %ret9 = firrtl.cat %ret8, %or : (!firrtl.uint<2>, !firrtl.uint<0>) -> !firrtl.uint<2>
   %ret10 = firrtl.cat %ret9, %xor : (!firrtl.uint<2>, !firrtl.uint<0>) -> !firrtl.uint<2>
-  firrtl.strictconnect %out, %ret10 : !firrtl.uint<2>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<2>
+  firrtl.strictconnect %out_write, %ret10 : !firrtl.uint<2>
 }
 
 // CHECK-LABEL: @zeroWidthOperand(
@@ -1978,11 +2011,16 @@ firrtl.module @zeroWidthOperand(
   %dshlw1 = firrtl.dshlw %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
   %dshr1 = firrtl.dshr %in0, %in1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
 
-  firrtl.strictconnect %y6, %div1 : !firrtl.uint<0>
-  firrtl.strictconnect %y8, %rem1 : !firrtl.uint<0>
-  firrtl.strictconnect %y9, %rem2 : !firrtl.uint<0>
-  firrtl.strictconnect %y12, %dshlw1 : !firrtl.uint<0>
-  firrtl.strictconnect %y14, %dshr1 : !firrtl.uint<0>
+  %y6_write = firrtl.wrapSink %y6 : !firrtl.uint<0>
+  firrtl.strictconnect %y6_write, %div1 : !firrtl.uint<0>
+  %y8_write = firrtl.wrapSink %y8 : !firrtl.uint<0>
+  firrtl.strictconnect %y8_write, %rem1 : !firrtl.uint<0>
+  %y9_write = firrtl.wrapSink %y9 : !firrtl.uint<0>
+  firrtl.strictconnect %y9_write, %rem2 : !firrtl.uint<0>
+  %y12_write = firrtl.wrapSink %y12 : !firrtl.uint<0>
+  firrtl.strictconnect %y12_write, %dshlw1 : !firrtl.uint<0>
+  %y14_write = firrtl.wrapSink %y14 : !firrtl.uint<0>
+  firrtl.strictconnect %y14_write, %dshr1 : !firrtl.uint<0>
 }
 
 // CHECK-LABEL: @add_cst_prop1
@@ -2062,9 +2100,12 @@ firrtl.module @add_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>
   %add1 = firrtl.add %t1, %t2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
   %add2 = firrtl.add %in1, %t2 : (!firrtl.uint<4>, !firrtl.uint<6>) -> !firrtl.uint<7>
   %add3 = firrtl.add %t1, %in2 : (!firrtl.uint<6>, !firrtl.uint<2>) -> !firrtl.uint<7>
-  firrtl.strictconnect %out1, %add1 : !firrtl.uint<7>
-  firrtl.strictconnect %out2, %add2 : !firrtl.uint<7>
-  firrtl.strictconnect %out3, %add3 : !firrtl.uint<7>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<7>
+  firrtl.strictconnect %out1_write, %add1 : !firrtl.uint<7>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.uint<7>
+  firrtl.strictconnect %out2_write, %add2 : !firrtl.uint<7>
+  %out3_write = firrtl.wrapSink %out3 : !firrtl.uint<7>
+  firrtl.strictconnect %out3_write, %add3 : !firrtl.uint<7>
 }
 
 // CHECK-LABEL: @adds_narrow
@@ -2083,9 +2124,12 @@ firrtl.module @adds_narrow(out %out1: !firrtl.sint<7>, out %out2: !firrtl.sint<7
   %add1 = firrtl.add %t1, %t2 : (!firrtl.sint<6>, !firrtl.sint<6>) -> !firrtl.sint<7>
   %add2 = firrtl.add %in1, %t2 : (!firrtl.sint<4>, !firrtl.sint<6>) -> !firrtl.sint<7>
   %add3 = firrtl.add %t1, %in2 : (!firrtl.sint<6>, !firrtl.sint<2>) -> !firrtl.sint<7>
-  firrtl.strictconnect %out1, %add1 : !firrtl.sint<7>
-  firrtl.strictconnect %out2, %add2 : !firrtl.sint<7>
-  firrtl.strictconnect %out3, %add3 : !firrtl.sint<7>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.sint<7>
+  firrtl.strictconnect %out1_write, %add1 : !firrtl.sint<7>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.sint<7>
+  firrtl.strictconnect %out2_write, %add2 : !firrtl.sint<7>
+  %out3_write = firrtl.wrapSink %out3 : !firrtl.sint<7>
+  firrtl.strictconnect %out3_write, %add3 : !firrtl.sint<7>
 }
 
 // CHECK-LABEL: @sub_narrow
@@ -2104,9 +2148,12 @@ firrtl.module @sub_narrow(out %out1: !firrtl.uint<7>, out %out2: !firrtl.uint<7>
   %add1 = firrtl.sub %t1, %t2 : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<7>
   %add2 = firrtl.sub %in1, %t2 : (!firrtl.uint<4>, !firrtl.uint<6>) -> !firrtl.uint<7>
   %add3 = firrtl.sub %t1, %in2 : (!firrtl.uint<6>, !firrtl.uint<2>) -> !firrtl.uint<7>
-  firrtl.strictconnect %out1, %add1 : !firrtl.uint<7>
-  firrtl.strictconnect %out2, %add2 : !firrtl.uint<7>
-  firrtl.strictconnect %out3, %add3 : !firrtl.uint<7>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<7>
+  firrtl.strictconnect %out1_write, %add1 : !firrtl.uint<7>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.uint<7>
+  firrtl.strictconnect %out2_write, %add2 : !firrtl.uint<7>
+  %out3_write = firrtl.wrapSink %out3 : !firrtl.uint<7>
+  firrtl.strictconnect %out3_write, %add3 : !firrtl.uint<7>
 }
 
 // CHECK-LABEL: @subs_narrow
@@ -2125,9 +2172,12 @@ firrtl.module @subs_narrow(out %out1: !firrtl.sint<7>, out %out2: !firrtl.sint<7
   %add1 = firrtl.sub %t1, %t2 : (!firrtl.sint<6>, !firrtl.sint<6>) -> !firrtl.sint<7>
   %add2 = firrtl.sub %in1, %t2 : (!firrtl.sint<4>, !firrtl.sint<6>) -> !firrtl.sint<7>
   %add3 = firrtl.sub %t1, %in2 : (!firrtl.sint<6>, !firrtl.sint<2>) -> !firrtl.sint<7>
-  firrtl.strictconnect %out1, %add1 : !firrtl.sint<7>
-  firrtl.strictconnect %out2, %add2 : !firrtl.sint<7>
-  firrtl.strictconnect %out3, %add3 : !firrtl.sint<7>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.sint<7>
+  firrtl.strictconnect %out1_write, %add1 : !firrtl.sint<7>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.sint<7>
+  firrtl.strictconnect %out2_write, %add2 : !firrtl.sint<7>
+  %out3_write = firrtl.wrapSink %out3 : !firrtl.sint<7>
+  firrtl.strictconnect %out3_write, %add3 : !firrtl.sint<7>
 }
 
 // CHECK-LABEL: @sub_cst_prop1
@@ -2272,7 +2322,8 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<
   %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
 
-  firrtl.strictconnect %bar2, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
+  %bar2_write = firrtl.wrapSink %bar2 : !firrtl.uint<1>
+  firrtl.strictconnect %bar2_write, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
 
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -2507,9 +2558,11 @@ firrtl.module @SingleConnectInWhen(in %p1: !firrtl.uint<8>, in %p2: !firrtl.uint
   // CHECK-NEXT: firrtl.strictconnect %w, %p1
   // CHECK: firrtl.strictconnect %out, %w
   firrtl.when %p2 : !firrtl.uint<1> {
-    firrtl.strictconnect %w, %p1 : !firrtl.uint<8>
+    %w_write = firrtl.wrapSink %w : !firrtl.uint<8>
+    firrtl.strictconnect %w_write, %p1 : !firrtl.uint<8>
   }
-  firrtl.strictconnect %out, %w : !firrtl.uint<8>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<8>
+  firrtl.strictconnect %out_write, %w : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @constReg
@@ -2613,7 +2666,8 @@ firrtl.module @constReg9(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %1 = firrtl.mux(%0, %c0_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.strictconnect %out, %r : !firrtl.uint<1>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %r : !firrtl.uint<1>
 }
 
 firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
@@ -2631,9 +2685,12 @@ firrtl.module @MergeBundle(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>>
   %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   %a0 = firrtl.subfield %a[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   %a1 = firrtl.subfield %a[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-  firrtl.strictconnect %a0, %i : !firrtl.uint<1>
-  firrtl.strictconnect %a1, %i : !firrtl.uint<1>
-  firrtl.strictconnect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  %a0_write = firrtl.wrapSink %a0 : !firrtl.uint<1>
+  firrtl.strictconnect %a0_write, %i : !firrtl.uint<1>
+  %a1_write = firrtl.wrapSink %a1 : !firrtl.uint<1>
+  firrtl.strictconnect %a1_write, %i : !firrtl.uint<1>
+  %o_write = firrtl.wrapSink %o : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
+  firrtl.strictconnect %o_write, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   // CHECK: %0 = firrtl.bundlecreate %i, %i
   // CHECK-NEXT: firrtl.strictconnect %a, %0
 }
@@ -2645,10 +2702,14 @@ firrtl.module @MergeVector(out %o:!firrtl.vector<uint<1>, 3>, in %i:!firrtl.uint
   %a0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 3>
   %a1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 3>
   %a2 = firrtl.subindex %a[2] : !firrtl.vector<uint<1>, 3>
-  firrtl.strictconnect %a0, %i : !firrtl.uint<1>
-  firrtl.strictconnect %a1, %i : !firrtl.uint<1>
-  firrtl.strictconnect %a2, %i : !firrtl.uint<1>
-  firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 3>
+  %a0_write = firrtl.wrapSink %a0 : !firrtl.uint<1>
+  firrtl.strictconnect %a0_write, %i : !firrtl.uint<1>
+  %a1_write = firrtl.wrapSink %a1 : !firrtl.uint<1>
+  firrtl.strictconnect %a1_write, %i : !firrtl.uint<1>
+  %a2_write = firrtl.wrapSink %a2 : !firrtl.uint<1>
+  firrtl.strictconnect %a2_write, %i : !firrtl.uint<1>
+  %o_write = firrtl.wrapSink %o : !firrtl.vector<uint<1>, 3>
+  firrtl.strictconnect %o_write, %a : !firrtl.vector<uint<1>, 3>
   // CHECK: %0 = firrtl.vectorcreate %i, %i, %i
   // CHECK-NEXT: firrtl.strictconnect %a, %0
 }
@@ -2667,13 +2728,20 @@ firrtl.module @MergeAgg(out %o: !firrtl.vector<bundle<valid: uint<1>, ready: uin
   %a11 = firrtl.subfield %a1[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   %a20 = firrtl.subfield %a2[valid] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
   %a21 = firrtl.subfield %a2[ready] : !firrtl.bundle<valid: uint<1>, ready: uint<1>>
-  firrtl.strictconnect %a00, %c : !firrtl.uint<1>
-  firrtl.strictconnect %a01, %c : !firrtl.uint<1>
-  firrtl.strictconnect %a10, %c : !firrtl.uint<1>
-  firrtl.strictconnect %a11, %c : !firrtl.uint<1>
-  firrtl.strictconnect %a20, %c : !firrtl.uint<1>
-  firrtl.strictconnect %a21, %c : !firrtl.uint<1>
-  firrtl.strictconnect %o, %a :  !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  %a00_write = firrtl.wrapSink %a00 : !firrtl.uint<1>
+  %a01_write = firrtl.wrapSink %a01 : !firrtl.uint<1>
+  %a10_write = firrtl.wrapSink %a10 : !firrtl.uint<1>
+  %a11_write = firrtl.wrapSink %a11 : !firrtl.uint<1>
+  %a20_write = firrtl.wrapSink %a20 : !firrtl.uint<1>
+  %a21_write = firrtl.wrapSink %a21 : !firrtl.uint<1>
+  %o_write = firrtl.wrapSink %o : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
+  firrtl.strictconnect %a00_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a01_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a10_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a11_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a20_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %a21_write, %c : !firrtl.uint<1>
+  firrtl.strictconnect %o_write, %a :  !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK: [0 : ui1, 0 : ui1], [0 : ui1, 0 : ui1], [0 : ui1, 0 : ui1]] : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: %a = firrtl.wire   : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
 // CHECK-NEXT: firrtl.strictconnect %o, %a : !firrtl.vector<bundle<valid: uint<1>, ready: uint<1>>, 3>
@@ -2688,7 +2756,8 @@ firrtl.module @DontMergeVector(out %o:!firrtl.vector<uint<1>, 1>, in %i:!firrtl.
   firrtl.when %i : !firrtl.uint<1> {
     firrtl.connect %0, %i : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  firrtl.strictconnect %o, %a : !firrtl.vector<uint<1>, 1>
+  %o_write = firrtl.wrapSink %o : !firrtl.vector<uint<1>, 1>
+  firrtl.strictconnect %o_write, %a : !firrtl.vector<uint<1>, 1>
   // CHECK:      firrtl.when %i
   // CHECK-NEXT: firrtl.strictconnect %0, %i
 }
@@ -2790,7 +2859,8 @@ firrtl.module @Issue3043(out %a: !firrtl.vector<uint<5>, 3>) {
   %_b = firrtl.wire  : !firrtl.vector<uint<5>, 3>
   %b = firrtl.node sym @b %_b  : !firrtl.vector<uint<5>, 3>
   %invalid = firrtl.invalidvalue : !firrtl.vector<uint<5>, 3>
-  firrtl.strictconnect %_b, %invalid : !firrtl.vector<uint<5>, 3>
+  %b_write = firrtl.wrapSink %_b : !firrtl.vector<uint<5>, 3>
+  firrtl.strictconnect %b_write, %invalid : !firrtl.vector<uint<5>, 3>
   firrtl.connect %a, %_b : !firrtl.vector<uint<5>, 3>, !firrtl.vector<uint<5>, 3>
 }
 
@@ -2827,10 +2897,14 @@ firrtl.module @Issue2514(
   %4 = firrtl.geq %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
   %5 = firrtl.geq %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
   %6 = firrtl.geq %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %geq_0, %3 : !firrtl.uint<1>
-  firrtl.strictconnect %geq_1, %4 : !firrtl.uint<1>
-  firrtl.strictconnect %geq_2, %5 : !firrtl.uint<1>
-  firrtl.strictconnect %geq_3, %6 : !firrtl.uint<1>
+  %geq_0_write = firrtl.wrapSink %geq_0 : !firrtl.uint<1>
+  %geq_1_write = firrtl.wrapSink %geq_1 : !firrtl.uint<1>
+  %geq_2_write = firrtl.wrapSink %geq_2 : !firrtl.uint<1>
+  %geq_3_write = firrtl.wrapSink %geq_3 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_0_write, %3 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_1_write, %4 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_2_write, %5 : !firrtl.uint<1>
+  firrtl.strictconnect %geq_3_write, %6 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %geq_0, %[[one_i1]]
   // CHECK: firrtl.strictconnect %geq_1, %[[one_i1]]
   // CHECK: firrtl.strictconnect %geq_2, %[[one_i1]]
@@ -2841,10 +2915,14 @@ firrtl.module @Issue2514(
   %8 = firrtl.gt %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
   %9 = firrtl.gt %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
   %10 = firrtl.gt %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %gt_0, %7 : !firrtl.uint<1>
-  firrtl.strictconnect %gt_1, %8 : !firrtl.uint<1>
-  firrtl.strictconnect %gt_2, %9 : !firrtl.uint<1>
-  firrtl.strictconnect %gt_3, %10 : !firrtl.uint<1>
+  %gt_0_write = firrtl.wrapSink %gt_0 : !firrtl.uint<1>
+  %gt_1_write = firrtl.wrapSink %gt_1 : !firrtl.uint<1>
+  %gt_2_write = firrtl.wrapSink %gt_2 : !firrtl.uint<1>
+  %gt_3_write = firrtl.wrapSink %gt_3 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_0_write, %7 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_1_write, %8 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_2_write, %9 : !firrtl.uint<1>
+  firrtl.strictconnect %gt_3_write, %10 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %gt_0, %[[zero_i1]]
   // CHECK: firrtl.strictconnect %gt_1, %[[zero_i1]]
   // CHECK: firrtl.strictconnect %gt_2, %[[zero_i1]]
@@ -2855,10 +2933,14 @@ firrtl.module @Issue2514(
   %12 = firrtl.lt %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
   %13 = firrtl.lt %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
   %14 = firrtl.lt %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %lt_0, %11 : !firrtl.uint<1>
-  firrtl.strictconnect %lt_1, %12 : !firrtl.uint<1>
-  firrtl.strictconnect %lt_2, %13 : !firrtl.uint<1>
-  firrtl.strictconnect %lt_3, %14 : !firrtl.uint<1>
+  %lt_0_write = firrtl.wrapSink %lt_0 : !firrtl.uint<1>
+  %lt_1_write = firrtl.wrapSink %lt_1 : !firrtl.uint<1>
+  %lt_2_write = firrtl.wrapSink %lt_2 : !firrtl.uint<1>
+  %lt_3_write = firrtl.wrapSink %lt_3 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_0_write, %11 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_1_write, %12 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_2_write, %13 : !firrtl.uint<1>
+  firrtl.strictconnect %lt_3_write, %14 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %lt_0, %[[zero_i1]]
   // CHECK: firrtl.strictconnect %lt_1, %[[zero_i1]]
   // CHECK: firrtl.strictconnect %lt_2, %[[zero_i1]]
@@ -2869,10 +2951,14 @@ firrtl.module @Issue2514(
   %16 = firrtl.leq %t, %s : (!firrtl.sint<0>, !firrtl.sint<0>) -> !firrtl.uint<1>
   %17 = firrtl.leq %u, %v : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
   %18 = firrtl.leq %v, %u : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %leq_0, %15 : !firrtl.uint<1>
-  firrtl.strictconnect %leq_1, %16 : !firrtl.uint<1>
-  firrtl.strictconnect %leq_2, %17 : !firrtl.uint<1>
-  firrtl.strictconnect %leq_3, %18 : !firrtl.uint<1>
+  %leq_0_write = firrtl.wrapSink %leq_0 : !firrtl.uint<1>
+  %leq_1_write = firrtl.wrapSink %leq_1 : !firrtl.uint<1>
+  %leq_2_write = firrtl.wrapSink %leq_2 : !firrtl.uint<1>
+  %leq_3_write = firrtl.wrapSink %leq_3 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_0_write, %15 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_1_write, %16 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_2_write, %17 : !firrtl.uint<1>
+  firrtl.strictconnect %leq_3_write, %18 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %leq_0, %[[one_i1]]
   // CHECK: firrtl.strictconnect %leq_1, %[[one_i1]]
   // CHECK: firrtl.strictconnect %leq_2, %[[one_i1]]
@@ -2885,13 +2971,15 @@ firrtl.module @NamePropagation(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, i
   %1 = firrtl.bits %c 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   %e = firrtl.bits %1 1 to 0 {name = "e"}: (!firrtl.uint<3>) -> !firrtl.uint<2>
   // CHECK-NEXT: firrtl.strictconnect %res1, %e
-  firrtl.strictconnect %res1, %e : !firrtl.uint<2>
+  %res1_write = firrtl.wrapSink %res1 : !firrtl.uint<2>
+  firrtl.strictconnect %res1_write, %e : !firrtl.uint<2>
 
   // CHECK-NEXT: %name_node = firrtl.not %e {name = "name_node"} : (!firrtl.uint<2>) -> !firrtl.uint<2>
   // CHECK-NEXT: firrtl.strictconnect %res2, %name_node
   %2 = firrtl.not %e : (!firrtl.uint<2>) -> !firrtl.uint<2>
   %name_node = firrtl.node droppable_name %2 : !firrtl.uint<2>
-  firrtl.strictconnect %res2, %name_node : !firrtl.uint<2>
+  %res2_write = firrtl.wrapSink %res2 : !firrtl.uint<2>
+  firrtl.strictconnect %res2_write, %name_node : !firrtl.uint<2>
 }
 
 // Issue 3319: https://github.com/llvm/circt/issues/3319
@@ -2903,7 +2991,8 @@ firrtl.module @Foo3319(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   // CHECK: %n = firrtl.node interesting_name %c0_ui1
   %n = firrtl.node interesting_name %0  : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %o, %n
-  firrtl.strictconnect %o, %n : !firrtl.uint<1>
+  %o_out = firrtl.wrapSink %o : !firrtl.uint<1>
+  firrtl.strictconnect %o_out, %n : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: @WireByPass
@@ -2911,9 +3000,11 @@ firrtl.module @WireByPass(in %i: !firrtl.uint<1>, out %o : !firrtl.uint<1>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %n = firrtl.wire interesting_name : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %n, %c0_ui1
-  firrtl.strictconnect %n, %c0_ui1 : !firrtl.uint<1>
+  %n_write = firrtl.wrapSink %n : !firrtl.uint<1>
+  firrtl.strictconnect %n_write, %c0_ui1 : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %o, %n
-  firrtl.strictconnect %o, %n : !firrtl.uint<1>
+  %o_out = firrtl.wrapSink %o : !firrtl.uint<1>
+  firrtl.strictconnect %o_out, %n : !firrtl.uint<1>
 }
 
 // Check that canonicalizeSingleSetConnect doesn't remove a wire with an
@@ -2926,8 +3017,10 @@ firrtl.module @AnnotationsBlockRemoval(
 ) {
   // CHECK: %w = firrtl.wire
   %w = firrtl.wire droppable_name {annotations = [{class = "Foo"}]} : !firrtl.uint<1>
-  firrtl.strictconnect %w, %a : !firrtl.uint<1>
-  firrtl.strictconnect %b, %w : !firrtl.uint<1>
+  %w_write = firrtl.wrapSink %w : !firrtl.uint<1>
+  firrtl.strictconnect %w_write, %a : !firrtl.uint<1>
+  %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+  firrtl.strictconnect %b_write, %w : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Verification
@@ -2956,7 +3049,8 @@ firrtl.module @Verification(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, ou
   firrtl.cover %clock, %c0, %p, "cover0" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK-NOT: firrtl.int.isX
   %x = firrtl.int.isX %c0 : !firrtl.uint<1>
-  firrtl.strictconnect %o, %x : !firrtl.uint<1>
+  %o_write = firrtl.wrapSink %o : !firrtl.uint<1>
+  firrtl.strictconnect %o_write, %x : !firrtl.uint<1>
 }
 
 // COMMON-LABEL:  firrtl.module @MultibitMux
@@ -2967,7 +3061,8 @@ firrtl.module @MultibitMux(in %a: !firrtl.vector<uint<1>, 3>, in %sel: !firrtl.u
   %1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 3>
   %2 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 3>
   %3 = firrtl.multibit_mux %sel, %0, %1, %2 : !firrtl.uint<2>, !firrtl.uint<1>
-  firrtl.strictconnect %b, %3 : !firrtl.uint<1>
+  %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+  firrtl.strictconnect %b_write, %3 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @NameProp
@@ -2978,7 +3073,8 @@ firrtl.module @NameProp(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out 
   %_useless_name_2 = firrtl.node  %useful_name  : !firrtl.uint<1>
   // CHECK-NEXT: %useful_name = firrtl.or %in0, %in1
   // CHECK-NEXT: firrtl.strictconnect %out, %useful_name
-  firrtl.strictconnect %out, %_useless_name_2 : !firrtl.uint<1>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %_useless_name_2 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @CrashAllUnusedPorts
@@ -2986,7 +3082,8 @@ firrtl.module @CrashAllUnusedPorts() {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<2>>
   %26 = firrtl.subfield %foo[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<1>>
-  firrtl.strictconnect %26, %c0_ui1 : !firrtl.uint<1>
+  %out_write = firrtl.wrapSink %26 : !firrtl.uint<1>
+  firrtl.strictconnect %out_write, %c0_ui1 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Issue6237
@@ -2995,7 +3092,8 @@ firrtl.module @CrashAllUnusedPorts() {
 firrtl.module @Issue6237(out %out: !firrtl.uint<0>) {
   %foo, %bar = firrtl.mem  Undefined  {depth = 3 : i64, groupID = 4 : ui32, name = "whatever", portNames = ["MPORT_1", "MPORT_5"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
   %a = firrtl.subfield %bar[data] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<0>>
-  firrtl.strictconnect %out, %a : !firrtl.uint<0>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<0>
+  firrtl.strictconnect %out_write, %a : !firrtl.uint<0>
 }
 
 
@@ -3037,10 +3135,14 @@ firrtl.module @ReadOnlyFileInitialized(
     !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
   %3 = firrtl.subfield %m_r[data] :
     !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
-  firrtl.strictconnect %0, %read_addr : !firrtl.uint<5>
-  firrtl.strictconnect %1, %read_en : !firrtl.uint<1>
-  firrtl.strictconnect %2, %clock : !firrtl.clock
-  firrtl.strictconnect %read_data, %3 : !firrtl.uint<8>
+  %write_0 = firrtl.wrapSink %0 : !firrtl.uint<5>
+  %write_1 = firrtl.wrapSink %1 : !firrtl.uint<1>
+  %write_2 = firrtl.wrapSink %2 : !firrtl.clock
+  %write_read_data = firrtl.wrapSink %read_data : !firrtl.uint<8>
+  firrtl.strictconnect %write_0, %read_addr : !firrtl.uint<5>
+  firrtl.strictconnect %write_1, %read_en : !firrtl.uint<1>
+  firrtl.strictconnect %write_2, %clock : !firrtl.clock
+  firrtl.strictconnect %write_read_data, %3 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: @MuxCondWidth
@@ -3051,7 +3153,8 @@ firrtl.module @MuxCondWidth(in %cond: !firrtl.uint<1>, out %foo: !firrtl.uint<3>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
   %0 = firrtl.mux(%cond, %c0_ui1, %c1_ui3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
-  firrtl.strictconnect %foo, %0 : !firrtl.uint<3>
+  %foo_write = firrtl.wrapSink %foo : !firrtl.uint<3>
+  firrtl.strictconnect %foo_write, %0 : !firrtl.uint<3>
 }
 
 // CHECK-LABEL: @MuxEQ
@@ -3066,28 +3169,33 @@ firrtl.module @MuxEQ(in %a: !firrtl.uint<4>,
   %eq = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %0 = firrtl.mux (%eq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out1, %b
-  firrtl.strictconnect %out1, %0 : !firrtl.uint<4>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<4>
+  firrtl.strictconnect %out1_write, %0 : !firrtl.uint<4>
 
   %eq_swapped = firrtl.eq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %1 = firrtl.mux (%eq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out2, %b
-  firrtl.strictconnect %out2, %1 : !firrtl.uint<4>
+  %out2_write = firrtl.wrapSink %out2 : !firrtl.uint<4>
+  firrtl.strictconnect %out2_write, %1 : !firrtl.uint<4>
 
   %neq = firrtl.neq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %2 = firrtl.mux (%neq, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out3, %a
-  firrtl.strictconnect %out3, %2 : !firrtl.uint<4>
+  %out3_write = firrtl.wrapSink %out3 : !firrtl.uint<4>
+  firrtl.strictconnect %out3_write, %2 : !firrtl.uint<4>
 
   %neq_swapped = firrtl.neq %b, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   %3 = firrtl.mux (%neq_swapped, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out4, %a
-  firrtl.strictconnect %out4, %3 : !firrtl.uint<4>
+  %out4_write = firrtl.wrapSink %out4 : !firrtl.uint<4>
+  firrtl.strictconnect %out4_write, %3 : !firrtl.uint<4>
 
   // CHECK-NEXT: [[EQ:%.+]] = firrtl.eq %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
   // CHECK-NEXT: [[MUX:%.+]] = firrtl.mux([[EQ]], %c, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   // CHECK-NEXT: firrtl.strictconnect %out5, [[MUX]]
   %4 = firrtl.mux (%neq, %a, %c) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out5, %4 : !firrtl.uint<4>
+  %out5_write = firrtl.wrapSink %out5 : !firrtl.uint<4>
+  firrtl.strictconnect %out5_write, %4 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @RemoveUnusedInvalid
@@ -3102,7 +3210,8 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.not
   %inv = firrtl.invalidvalue : !firrtl.uint<4>
   %not = firrtl.not %inv : (!firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %not : !firrtl.uint<4>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %not : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3110,7 +3219,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.bits
   %inv2 = firrtl.invalidvalue : !firrtl.uint<5>
   %bits = firrtl.bits %inv2 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %bits : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %bits : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3118,7 +3227,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.head
   %inv3 = firrtl.invalidvalue : !firrtl.uint<5>
   %head = firrtl.head %inv3, 4 : (!firrtl.uint<5>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %head : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %head : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3126,7 +3235,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.tail
   %inv4 = firrtl.invalidvalue : !firrtl.uint<5>
   %tail = firrtl.tail %inv4, 1 : (!firrtl.uint<5>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %tail : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %tail : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3134,7 +3243,8 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.asSInt
   %inv5 = firrtl.invalidvalue : !firrtl.uint<4>
   %assint = firrtl.asSInt %inv5 : (!firrtl.uint<4>) -> !firrtl.sint<4>
-  firrtl.strictconnect %outs, %assint : !firrtl.sint<4>
+  %outs_write = firrtl.wrapSink %outs : !firrtl.sint<4>
+  firrtl.strictconnect %outs_write, %assint : !firrtl.sint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3142,7 +3252,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.asUInt
   %inv6 = firrtl.invalidvalue : !firrtl.sint<4>
   %asuint = firrtl.asUInt %inv6 : (!firrtl.sint<4>) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %asuint : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %asuint : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3150,7 +3260,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.subfield
   %inv7 = firrtl.invalidvalue : !firrtl.bundle<a: uint<4>, b: uint<5>>
   %subfield = firrtl.subfield %inv7[a] : !firrtl.bundle<a: uint<4>, b: uint<5>>
-  firrtl.strictconnect %out, %subfield : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %subfield : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3158,7 +3268,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.subindex
   %inv8 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 6 >
   %subindex = firrtl.subindex %inv8[2] : !firrtl.vector<uint<4>, 6 >
-  firrtl.strictconnect %out, %subindex : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %subindex : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3166,7 +3276,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.bitcast
   %inv9 = firrtl.invalidvalue : !firrtl.vector<uint<4>, 1 >
   %bitcast = firrtl.bitcast %inv9 : (!firrtl.vector<uint<4>, 1 >) -> !firrtl.uint<4>
-  firrtl.strictconnect %out, %bitcast : !firrtl.uint<4>
+  firrtl.strictconnect %out_write, %bitcast : !firrtl.uint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3174,7 +3284,8 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.andr
   %inva = firrtl.invalidvalue : !firrtl.uint<4>
   %andr = firrtl.andr %inva : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %andr : !firrtl.uint<1>
+  %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %andr : !firrtl.uint<1>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3182,7 +3293,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.orr
   %invb = firrtl.invalidvalue : !firrtl.uint<4>
   %orr = firrtl.orr %invb : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %orr : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %orr : !firrtl.uint<1>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3190,7 +3301,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.xorr
   %invc = firrtl.invalidvalue : !firrtl.uint<4>
   %xorr = firrtl.xorr %invc : (!firrtl.uint<4>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %xorr : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %xorr : !firrtl.uint<1>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3200,13 +3311,13 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.xorr
   %invd = firrtl.invalidvalue : !firrtl.uint<0>
   %zbits = firrtl.xorr %invd : (!firrtl.uint<0>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out1, %zbits : !firrtl.uint<1>
+  firrtl.strictconnect %out1_write, %zbits : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %out1, %c0_ui1
 
   // CHECK-NOT firrtl.cvt
   %inve = firrtl.invalidvalue : !firrtl.uint<3>
   %cvtu = firrtl.cvt %inve : (!firrtl.uint<3>) -> !firrtl.sint<4>
-  firrtl.strictconnect %outs, %cvtu : !firrtl.sint<4>
+  firrtl.strictconnect %outs_write, %cvtu : !firrtl.sint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.pad
@@ -3216,7 +3327,7 @@ firrtl.module @PropInvalids(out %out : !firrtl.uint<4>, out %outs : !firrtl.sint
   // CHECK-NOT firrtl.cvt
   %invf = firrtl.invalidvalue : !firrtl.sint<4>
   %cvts = firrtl.cvt %invf : (!firrtl.sint<4>) -> !firrtl.sint<4>
-  firrtl.strictconnect %outs, %cvts : !firrtl.sint<4>
+  firrtl.strictconnect %outs_write, %cvts : !firrtl.sint<4>
 
   // CHECK: firrtl.invalidvalue
   // CHECK-NEXT: firrtl.strictconnect
@@ -3231,12 +3342,14 @@ firrtl.module @AggregateCreate(in %vector_in: !firrtl.vector<uint<1>, 2>,
   %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 2>
   %1 = firrtl.subindex %vector_in[1] : !firrtl.vector<uint<1>, 2>
   %vector = firrtl.vectorcreate %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+  %vector_out_write = firrtl.wrapSink %vector_out : !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out_write, %vector : !firrtl.vector<uint<1>, 2>
 
   %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   %3 = firrtl.subfield %bundle_in["b"] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   %bundle = firrtl.bundlecreate %2, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
-  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %bundle_out_write = firrtl.wrapSink %bundle_out : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out_write, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 2>
   // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
@@ -3249,11 +3362,13 @@ firrtl.module @AggregateCreateSingle(in %vector_in: !firrtl.vector<uint<1>, 1>,
 
   %0 = firrtl.subindex %vector_in[0] : !firrtl.vector<uint<1>, 1>
   %vector = firrtl.vectorcreate %0 : (!firrtl.uint<1>) -> !firrtl.vector<uint<1>, 1>
-  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 1>
+  %vector_out_write = firrtl.wrapSink %vector_out : !firrtl.vector<uint<1>, 1>
+  firrtl.strictconnect %vector_out_write, %vector : !firrtl.vector<uint<1>, 1>
 
   %2 = firrtl.subfield %bundle_in["a"] : !firrtl.bundle<a: uint<1>>
   %bundle = firrtl.bundlecreate %2 : (!firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>>
-  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>>
+  %bundle_out_write = firrtl.wrapSink %bundle_out : !firrtl.bundle<a: uint<1>>
+  firrtl.strictconnect %bundle_out_write, %bundle : !firrtl.bundle<a: uint<1>>
   // CHECK-NEXT: firrtl.strictconnect %vector_out, %vector_in : !firrtl.vector<uint<1>, 1>
   // CHECK-NEXT: firrtl.strictconnect %bundle_out, %bundle_in : !firrtl.bundle<a: uint<1>>
 }
@@ -3264,10 +3379,12 @@ firrtl.module @AggregateCreateEmpty(
                                out %bundle_out: !firrtl.bundle<>) {
 
   %vector = firrtl.vectorcreate : () -> !firrtl.vector<uint<1>, 0>
-  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 0>
+  %vector_out_write = firrtl.wrapSink %vector_out : !firrtl.vector<uint<1>, 0>
+  firrtl.strictconnect %vector_out_write, %vector : !firrtl.vector<uint<1>, 0>
 
   %bundle = firrtl.bundlecreate : () -> !firrtl.bundle<>
-  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<>
+  %bundle_out_write = firrtl.wrapSink %bundle_out : !firrtl.bundle<>
+  firrtl.strictconnect %bundle_out_write, %bundle : !firrtl.bundle<>
   // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [] : !firrtl.vector<uint<1>, 0>
   // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [] : !firrtl.bundle<>
   // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 0>
@@ -3281,10 +3398,12 @@ firrtl.module @AggregateCreateConst(
 
   %const = firrtl.constant 0 : !firrtl.uint<1>
   %vector = firrtl.vectorcreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  firrtl.strictconnect %vector_out, %vector : !firrtl.vector<uint<1>, 2>
+  %vector_out_write = firrtl.wrapSink %vector_out : !firrtl.vector<uint<1>, 2>
+  firrtl.strictconnect %vector_out_write, %vector : !firrtl.vector<uint<1>, 2>
 
   %bundle = firrtl.bundlecreate %const, %const : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
-  firrtl.strictconnect %bundle_out, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %bundle_out_write = firrtl.wrapSink %bundle_out : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  firrtl.strictconnect %bundle_out_write, %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK-DAG: %[[VEC:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.vector<uint<1>, 2>
   // CHECK-DAG: %[[BUNDLE:.+]] = firrtl.aggregateconstant [0 : ui1, 0 : ui1] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   // CHECK-DAG: firrtl.strictconnect %vector_out, %[[VEC]] : !firrtl.vector<uint<1>, 2>
@@ -3348,13 +3467,15 @@ firrtl.module @RefTypes(
   %a_ref = firrtl.ref.send  %a : !firrtl.uint<1>
   %a_read_ref = firrtl.ref.resolve %a_ref : !firrtl.probe<uint<1>>
   // CHECK: firrtl.strictconnect %b, %a
-  firrtl.strictconnect %b, %a_read_ref : !firrtl.uint<1>
+  %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+  firrtl.strictconnect %b_write, %a_read_ref : !firrtl.uint<1>
 
   // Don't collapse if types don't match.
   // CHECK: ref.resolve
   %x_ref = firrtl.ref.send %x : !firrtl.bundle<a flip: uint<1>>
   %x_read = firrtl.ref.resolve %x_ref : !firrtl.probe<bundle<a: uint<1>>>
-  firrtl.strictconnect %y, %x_read : !firrtl.bundle<a: uint<1>>
+  %y_write = firrtl.wrapSink %y : !firrtl.bundle<a: uint<1>>
+  firrtl.strictconnect %y_write, %x_read : !firrtl.bundle<a: uint<1>>
 
   // CHECK-NOT: forceable
   // CHECK: firrtl.strictconnect %f_wire, %b
@@ -3362,14 +3483,16 @@ firrtl.module @RefTypes(
   %f, %f_rw = firrtl.node %b forceable : !firrtl.uint<1>
   %f_read = firrtl.ref.resolve %f_rw : !firrtl.rwprobe<uint<1>>
   %f_wire = firrtl.wire : !firrtl.uint<1>
-  firrtl.strictconnect %f_wire, %f_read : !firrtl.uint<1>
+  %f_wire_write = firrtl.wrapSink %f_wire : !firrtl.uint<1>
+  firrtl.strictconnect %f_wire_write, %f_read : !firrtl.uint<1>
 
   // CHECK: firrtl.wire forceable
   // CHECK: ref.resolve
   %flipbundle, %flipbundle_rw = firrtl.wire forceable : !firrtl.bundle<a flip: uint<1>>, !firrtl.rwprobe<bundle<a: uint<1>>>
   %flipbundle_read = firrtl.ref.resolve %flipbundle_rw : !firrtl.rwprobe<bundle<a: uint<1>>>
   %flipbundle_wire = firrtl.wire : !firrtl.bundle<a : uint<1>>
-  firrtl.strictconnect %flipbundle_wire, %flipbundle_read : !firrtl.bundle<a: uint<1>>
+  %flipbundle_wire_write = firrtl.wrapSink %flipbundle_wire : !firrtl.bundle<a: uint<1>>
+  firrtl.strictconnect %flipbundle_wire_write, %flipbundle_read : !firrtl.bundle<a: uint<1>>
 }
 
 // Do not rename InstanceOp: https://github.com/llvm/circt/issues/5351
@@ -3378,7 +3501,8 @@ firrtl.module @DonotUpdateInstanceName(in %in: !firrtl.uint<1>, out %a: !firrtl.
   %system_foo = firrtl.instance system @System(out foo: !firrtl.uint<1>)
   // CHECK: firrtl.instance system
   %b = firrtl.node %system_foo : !firrtl.uint<1>
-  firrtl.strictconnect %a, %b : !firrtl.uint<1>
+  %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+  firrtl.strictconnect %a_write, %b : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: @RefCastSame
@@ -3399,7 +3523,8 @@ firrtl.module @Issue5527(in %x: !firrtl.uint<1>, out %out: !firrtl.uint<2>) attr
   %1 = firrtl.and %0, %c2_si4 : (!firrtl.sint<2>, !firrtl.sint<4>) -> !firrtl.uint<4>
   %2 = firrtl.tail %1, 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   // CHECK: firrtl.strictconnect %out, %c0_ui2
-  firrtl.strictconnect %out, %2 : !firrtl.uint<2>
+  %out_write = firrtl.wrapSink %out : !firrtl.uint<2>
+  firrtl.strictconnect %out_write, %2 : !firrtl.uint<2>
 }
 
 // Test dropping force/release statements with constant-zero predicates.
@@ -3427,10 +3552,13 @@ firrtl.module @ForceRelease(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
 firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) {
   %io = firrtl.wire : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
   %2 = firrtl.subfield %io[y] : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
-  firrtl.strictconnect %2, %io_y : !firrtl.uint<1>
+  %write_2 = firrtl.wrapSink %2 : !firrtl.uint<1>
+  firrtl.strictconnect %write_2, %io_y : !firrtl.uint<1>
   %3 = firrtl.subfield %io[x] : !firrtl.bundle<y flip: uint<1>, x: uint<1>>
-  firrtl.strictconnect %io_x, %3 : !firrtl.uint<1>
-  firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+  %io_x_write = firrtl.wrapSink %io_x : !firrtl.uint<1>
+  firrtl.strictconnect %io_x_write, %3 : !firrtl.uint<1>
+  %write_3 = firrtl.wrapSink %3 : !firrtl.uint<1>
+  firrtl.strictconnect %write_3, %2 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: @HasBeenReset
@@ -3505,9 +3633,11 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
       }
     ]} : !firrtl.uint<1>
   %a = firrtl.wire : !firrtl.uint<1>
-  firrtl.strictconnect %tmp_0, %source : !firrtl.uint<1>
+  %tmp_0_write = firrtl.wrapSink %tmp_0 : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_0_write, %source : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %a, %source
-  firrtl.strictconnect %a, %tmp_0 : !firrtl.uint<1>
+  %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+  firrtl.strictconnect %a_write, %tmp_0 : !firrtl.uint<1>
 
   // CHECK-NOT: %tmp_1
   %tmp_1 = firrtl.wire {
@@ -3519,9 +3649,11 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
       }
     ]} : !firrtl.uint<1>
   %b = firrtl.wire : !firrtl.uint<1>
-  firrtl.strictconnect %tmp_1, %source : !firrtl.uint<1>
+  %tmp_1_write = firrtl.wrapSink %tmp_1 : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_1_write, %source : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %b, %source
-  firrtl.strictconnect %b, %tmp_1 : !firrtl.uint<1>
+  %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+  firrtl.strictconnect %b_write, %tmp_1 : !firrtl.uint<1>
 
   // CHECK-NOT: %tmp_2
   %tmp_2 = firrtl.wire {
@@ -3533,9 +3665,11 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
       }
     ]} : !firrtl.uint<1>
   %c = firrtl.wire : !firrtl.uint<1>
-  firrtl.strictconnect %tmp_2, %source : !firrtl.uint<1>
+  %tmp_2_write = firrtl.wrapSink %tmp_2 : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_2_write, %source : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %c, %source
-  firrtl.strictconnect %c, %tmp_2 : !firrtl.uint<1>
+  %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+  firrtl.strictconnect %c_write, %tmp_2 : !firrtl.uint<1>
 
   // Adding one additional annotation will block removal.
   //
@@ -3552,9 +3686,11 @@ firrtl.module @OMIRRemoval(in %source : !firrtl.uint<1>) {
       }
     ]} : !firrtl.uint<1>
   %d = firrtl.wire : !firrtl.uint<1>
-  firrtl.strictconnect %tmp_3, %source : !firrtl.uint<1>
+  %tmp_3_write = firrtl.wrapSink %tmp_3 : !firrtl.uint<1>
+  firrtl.strictconnect %tmp_3_write, %source : !firrtl.uint<1>
   // CHECK: firrtl.strictconnect %d, %tmp_3
-  firrtl.strictconnect %d, %tmp_3 : !firrtl.uint<1>
+  %d_write = firrtl.wrapSink %d : !firrtl.uint<1>
+  firrtl.strictconnect %d_write, %tmp_3 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Whens
