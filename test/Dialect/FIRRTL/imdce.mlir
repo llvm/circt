@@ -9,16 +9,20 @@ firrtl.circuit "top" {
     %dead_node = firrtl.node %source: !firrtl.uint<1>
 
     %dead_wire = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %dead_wire, %dead_node : !firrtl.uint<1>
+    %dead_wire_write = firrtl.wrapSink %dead_wire : !firrtl.uint<1>
+    firrtl.strictconnect %dead_wire_write, %dead_node : !firrtl.uint<1>
 
     %dead_reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %dead_reg, %dead_wire : !firrtl.uint<1>
+    %dead_reg_write = firrtl.wrapSink %dead_reg : !firrtl.uint<1>
+    firrtl.strictconnect %dead_reg_write, %dead_wire : !firrtl.uint<1>
 
     %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.strictconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
+    %dead_reg_reset_write = firrtl.wrapSink %dead_reg_reset : !firrtl.uint<1>
+    firrtl.strictconnect %dead_reg_reset_write, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.strictconnect %dest, %not : !firrtl.uint<1>
+    %dest_write = firrtl.wrapSink %dest : !firrtl.uint<1>
+    firrtl.strictconnect %dest_write, %not : !firrtl.uint<1>
   }
 
   // `%dontTouch` port has a symbol so it shouldn't be removed. `%sym_wire` also has a
@@ -29,7 +33,8 @@ firrtl.circuit "top" {
     // CHECK-NEXT: firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
     %sym_wire = firrtl.wire sym @sym2 : !firrtl.uint<1>
-    firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
+    %sym_wire_write = firrtl.wrapSink %sym_wire : !firrtl.uint<1>
+    firrtl.strictconnect %sym_wire_write, %source : !firrtl.uint<1>
 
   }
 
@@ -51,27 +56,35 @@ firrtl.circuit "top" {
     // CHECK-NEXT: %tmp = firrtl.node %source
     // CHECK-NEXT: firrtl.strictconnect %dest, %tmp
     %tmp = firrtl.node %source: !firrtl.uint<1>
-    firrtl.strictconnect %dest, %tmp : !firrtl.uint<1>
+    %dest_write = firrtl.wrapSink %dest : !firrtl.uint<1>
+    firrtl.strictconnect %dest_write, %tmp : !firrtl.uint<1>
 
     // CHECK-NOT: @dead_module
     %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
-    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
-    firrtl.strictconnect %clock1, %clock : !firrtl.clock
-    firrtl.strictconnect %reset1, %reset : !firrtl.uint<1>
+    %source1_write = firrtl.wrapSink %source1 : !firrtl.uint<1>
+    firrtl.strictconnect %source1_write, %source : !firrtl.uint<1>
+    %clock1_write = firrtl.wrapSink %clock1 : !firrtl.clock
+    firrtl.strictconnect %clock1_write, %clock : !firrtl.clock
+    %reset1_write = firrtl.wrapSink %reset1 : !firrtl.uint<1>
+    firrtl.strictconnect %reset1_write, %reset : !firrtl.uint<1>
 
     // Check that ports with dontTouch are not removed.
     // CHECK-NEXT: %testDontTouch_dontTouch, %testDontTouch_source = firrtl.instance testDontTouch @dontTouch(in dontTouch: !firrtl.uint<1>, in source: !firrtl.uint<1>)
     // CHECK-NEXT: firrtl.strictconnect %testDontTouch_dontTouch, %source
     // CHECK-NEXT: firrtl.strictconnect %testDontTouch_source, %source
     %testDontTouch_dontTouch, %testDontTouch_source,  %dead = firrtl.instance testDontTouch @dontTouch(in dontTouch: !firrtl.uint<1>, in source: !firrtl.uint<1>, in dead:!firrtl.uint<1>)
-    firrtl.strictconnect %testDontTouch_dontTouch, %source : !firrtl.uint<1>
-    firrtl.strictconnect %testDontTouch_source, %source : !firrtl.uint<1>
-    firrtl.strictconnect %dead, %source : !firrtl.uint<1>
+    %testDontTouch_dontTouch_write = firrtl.wrapSink %testDontTouch_dontTouch : !firrtl.uint<1>
+    firrtl.strictconnect %testDontTouch_dontTouch_write, %source : !firrtl.uint<1>
+    %testDontTouch_source_write = firrtl.wrapSink %testDontTouch_source : !firrtl.uint<1>
+    firrtl.strictconnect %testDontTouch_source_write, %source : !firrtl.uint<1>
+    %dead_write = firrtl.wrapSink %dead : !firrtl.uint<1>
+    firrtl.strictconnect %dead_write, %source : !firrtl.uint<1>
 
     // CHECK-NEXT: %mem_source = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
     // CHECK-NEXT: firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
     %mem_source  = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
-    firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
+    %mem_source_write = firrtl.wrapSink %mem_source : !firrtl.uint<1>
+    firrtl.strictconnect %mem_source_write, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
   }
 }
@@ -82,13 +95,16 @@ firrtl.circuit "top" {
 firrtl.circuit "top"  {
   // CHECK-NOT: @Child1
   firrtl.module private @Child1(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>) {
-    firrtl.strictconnect %output, %input : !firrtl.uint<1>
+    %output_write = firrtl.wrapSink %output : !firrtl.uint<1>
+    firrtl.strictconnect %output_write, %input : !firrtl.uint<1>
   }
   // CHECK-NOT: @Child2
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
     %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %r, %input : !firrtl.uint<1>
-    firrtl.strictconnect %output, %r : !firrtl.uint<1>
+    %r_write = firrtl.wrapSink %r : !firrtl.uint<1>
+    firrtl.strictconnect %r_write, %input : !firrtl.uint<1>
+    %output_write = firrtl.wrapSink %output : !firrtl.uint<1>
+    firrtl.strictconnect %output_write, %r : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
@@ -96,11 +112,14 @@ firrtl.circuit "top"  {
   // expected-warning @below {{module `top` is empty but cannot be removed because the module is public}}
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
-    firrtl.strictconnect %tile_input, %input : !firrtl.uint<1>
+    %tile_input_write = firrtl.wrapSink %tile_input : !firrtl.uint<1>
+    firrtl.strictconnect %tile_input_write, %input : !firrtl.uint<1>
     %named = firrtl.node  %tile_output  : !firrtl.uint<1>
     %bar_input, %bar_clock, %bar_output = firrtl.instance bar  @Child2(in input: !firrtl.uint<1>, in clock: !firrtl.clock, out output: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
-    firrtl.strictconnect %bar_input, %named : !firrtl.uint<1>
+    %bar_clock_write = firrtl.wrapSink %bar_clock : !firrtl.clock
+    firrtl.strictconnect %bar_clock_write, %clock : !firrtl.clock
+    %bar_input_write = firrtl.wrapSink %bar_input : !firrtl.uint<1>
+    firrtl.strictconnect %bar_input_write, %named : !firrtl.uint<1>
   }
 }
 
@@ -113,18 +132,23 @@ firrtl.circuit "UnusedOutput"  {
   firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire
     // CHECK-NEXT: firrtl.strictconnect %b, %[[c_wire]]
-    firrtl.strictconnect %b, %c : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %[[c_wire]], %[[not_a]]
-    firrtl.strictconnect %c, %0 : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %0 : !firrtl.uint<1>
   }
   // CHECK-LABEL: @UnusedOutput
+  // expected-warning @below{{is empty but cannot be removed because the module is public}}
   firrtl.module @UnusedOutput(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: %singleDriver_a, %singleDriver_b = firrtl.instance singleDriver
     %singleDriver_a, %singleDriver_b, %singleDriver_c = firrtl.instance singleDriver @SingleDriver(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    firrtl.strictconnect %singleDriver_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %singleDriver_b : !firrtl.uint<1>
+    %singleDriver_a_write = firrtl.wrapSink %singleDriver_a: !firrtl.uint<1>
+    firrtl.strictconnect %singleDriver_a_write, %a : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %singleDriver_b : !firrtl.uint<1>
   }
 }
 
@@ -176,14 +200,17 @@ firrtl.circuit "ForwardConstant" {
   // CHECK-NOT: Zero
   firrtl.module private @Zero(out %zero: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
+    %zero_write = firrtl.wrapSink %zero : !firrtl.uint<1>
+    firrtl.strictconnect %zero_write, %c0_ui1 : !firrtl.uint<1>
   }
   // CHECK-LABEL: @ForwardConstant
+  // expected-warning @below{{is empty but cannot be removed because the module is public}}
   firrtl.module @ForwardConstant(out %zero: !firrtl.uint<1>) {
     // CHECK: %c0_ui1 = firrtl.constant 0
     %sub_zero = firrtl.instance sub @Zero(out zero: !firrtl.uint<1>)
     // CHECK-NEXT: firrtl.strictconnect %zero, %c0_ui1
-    firrtl.strictconnect %zero, %sub_zero : !firrtl.uint<1>
+    %zero_write = firrtl.wrapSink %zero : !firrtl.uint<1>
+    firrtl.strictconnect %zero_write, %sub_zero : !firrtl.uint<1>
   }
 }
 
@@ -204,7 +231,8 @@ firrtl.circuit "RefPorts" {
   firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.probe<uint<1>>) {
     %ref_not = firrtl.ref.send %source: !firrtl.uint<1>
     firrtl.ref.define %ref_dest, %ref_not : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %source : !firrtl.uint<1>
+    %dest_write = firrtl.wrapSink %dest : !firrtl.uint<1>
+    firrtl.strictconnect %dest_write, %source : !firrtl.uint<1>
   }
 
   // CHECK: @live_ref
@@ -214,32 +242,38 @@ firrtl.circuit "RefPorts" {
   }
 
   // CHECK-LABEL: @RefPorts
+  // expected-warning @below{{is empty but cannot be removed because the module is public}}
   firrtl.module @RefPorts(in %source : !firrtl.uint<1>, out %dest : !firrtl.uint<1>) {
     // Delete send's that aren't resolved, and check deletion of modules with ref ops + ports.
     // CHECK-NOT: @dead_ref_send
     %source1, %dest1 = firrtl.instance dead_ref_send @dead_ref_send(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
+    %source1_write = firrtl.wrapSink %source1 : !firrtl.uint<1>
+    firrtl.strictconnect %source1_write, %source : !firrtl.uint<1>
 
     // Check that an unused resolve doesn't keep send alive, and test ref port removal.
     // CHECK: @dead_ref_port
     // CHECK-NOT: firrtl.ref
     %source2, %dest2, %ref_dest2 = firrtl.instance dead_ref_port @dead_ref_port(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, out ref_dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source2, %source : !firrtl.uint<1>
+    %source2_write = firrtl.wrapSink %source2 : !firrtl.uint<1>
+    firrtl.strictconnect %source2_write, %source : !firrtl.uint<1>
     %unused = firrtl.ref.resolve %ref_dest2 : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %dest2 : !firrtl.uint<1>
+    %dest_write = firrtl.wrapSink %dest : !firrtl.uint<1>
+    firrtl.strictconnect %dest_write, %dest2 : !firrtl.uint<1>
 
     // Check not deleted if live.
     // CHECK: @live_ref
     %source3, %dest3 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source3, %source : !firrtl.uint<1>
+    %source3_write = firrtl.wrapSink %source3 : !firrtl.uint<1>
+    firrtl.strictconnect %source3_write, %source : !firrtl.uint<1>
     // CHECK: firrtl.ref.resolve
     %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %dest3_resolved : !firrtl.uint<1>
+    firrtl.strictconnect %dest_write, %dest3_resolved : !firrtl.uint<1>
 
     // Check dead resolve is deleted.
     // CHECK-NOT: dead_instance
     %source4, %dest4 = firrtl.instance dead_instance @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source4, %source : !firrtl.uint<1>
+    %source4_write = firrtl.wrapSink %source4 : !firrtl.uint<1>
+    firrtl.strictconnect %source4_write, %source : !firrtl.uint<1>
     // CHECK-NOT: firrtl.ref.resolve
     %unused5 = firrtl.ref.resolve %dest4 : !firrtl.probe<uint<1>>
   }
@@ -305,13 +339,16 @@ firrtl.circuit "DeadInputPort"  {
   }
 
   // CHECK-LABEL: firrtl.module @DeadInputPort
+  // expected-warning @below{{is empty but cannot be removed because the module is public}}
   firrtl.module @DeadInputPort(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK-NEXT: %0 = firrtl.wire
     // CHECK-NEXT: firrtl.strictconnect %0, %a
     // CHECK-NEXT: firrtl.strictconnect %b, %0
     %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %bar_a : !firrtl.uint<1>
+    %bar_a_write = firrtl.wrapSink %bar_a : !firrtl.uint<1>
+    firrtl.strictconnect %bar_a_write, %a : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %bar_a : !firrtl.uint<1>
   }
 }
 
@@ -327,11 +364,14 @@ firrtl.circuit "DeleteInstance" {
   }
   firrtl.module private @SideEffect2(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
     %s1_a, %s1_clock = firrtl.instance s1 @SideEffect1(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
-    firrtl.strictconnect %s1_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %s1_clock, %clock : !firrtl.clock
+    %s1_a_write = firrtl.wrapSink %s1_a : !firrtl.uint<1>
+    firrtl.strictconnect %s1_a_write, %a : !firrtl.uint<1>
+    %s1_clock_write = firrtl.wrapSink %s1_clock : !firrtl.clock
+    firrtl.strictconnect %s1_clock_write, %clock : !firrtl.clock
   }
   firrtl.module private @PassThrough(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %a : !firrtl.uint<1>
   }
   // CHECK-LABEL: DeleteInstance
   firrtl.module @DeleteInstance(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
@@ -347,11 +387,16 @@ firrtl.circuit "DeleteInstance" {
     // CHECK-NEXT: firrtl.strictconnect %s_clock, %clock : !firrtl.clock
     // CHECK-NEXT: firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
-    firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %s_clock, %clock : !firrtl.clock
-    firrtl.strictconnect %p1_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
+    %s_a_write = firrtl.wrapSink %s_a : !firrtl.uint<1>
+    firrtl.strictconnect %s_a_write, %a : !firrtl.uint<1>
+    %s_clock_write = firrtl.wrapSink %s_clock : !firrtl.clock
+    firrtl.strictconnect %s_clock_write, %clock : !firrtl.clock
+    %p1_a_write = firrtl.wrapSink %p1_a : !firrtl.uint<1>
+    firrtl.strictconnect %p1_a_write, %a : !firrtl.uint<1>
+    %p2_a_write = firrtl.wrapSink %p2_a : !firrtl.uint<1>
+    firrtl.strictconnect %p2_a_write, %a : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %p2_b : !firrtl.uint<1>
   }
 }
 
@@ -365,29 +410,37 @@ firrtl.circuit "Top" {
   // CHECK-NOT: @nla_1
   // CHECK-SAME: @nla_2
   firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
-    firrtl.strictconnect %a, %in : !firrtl.uint<1>
+    %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+    firrtl.strictconnect %a_write, %in : !firrtl.uint<1>
   }
   // CHECK-NOT: @Foo1
   firrtl.module private @Foo1(in %in: !firrtl.uint<1>) {
     %c_in, %c_a = firrtl.instance c sym @dead @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
+    %c_in_write = firrtl.wrapSink %c_in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in_write, %in : !firrtl.uint<1>
   }
   // CHECK-LABEL: @Foo2
   firrtl.module private @Foo2(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %c_in, %c_a = firrtl.instance c sym @live @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %a, %c_a : !firrtl.uint<1>
-    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
+    %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+    firrtl.strictconnect %a_write, %c_a : !firrtl.uint<1>
+    %c_in_write = firrtl.wrapSink %c_in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in_write, %in : !firrtl.uint<1>
   }
   // CHECK-LABEL: @Top
   // CHECK-NOT: @Foo1
   // CHECK-NOT: firrtl.strictconnect %foo1_in, %in
   // CHECK: @Foo2
+  // expected-warning @below{{is empty but cannot be removed because the module is public}}
   firrtl.module @Top(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
     %foo1_in = firrtl.instance foo1 @Foo1(in in: !firrtl.uint<1>)
-    firrtl.strictconnect %foo1_in, %in : !firrtl.uint<1>
+    %foo1_in_write = firrtl.wrapSink %foo1_in : !firrtl.uint<1>
+    firrtl.strictconnect %foo1_in_write, %in : !firrtl.uint<1>
     %foo2_in, %foo2_a = firrtl.instance foo2 @Foo2(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %a, %foo2_a : !firrtl.uint<1>
-    firrtl.strictconnect %foo2_in, %in : !firrtl.uint<1>
+    %a_write = firrtl.wrapSink %a : !firrtl.uint<1>
+    firrtl.strictconnect %a_write, %foo2_a : !firrtl.uint<1>
+    %foo2_in_write = firrtl.wrapSink %foo2_in : !firrtl.uint<1>
+    firrtl.strictconnect %foo2_in_write, %in : !firrtl.uint<1>
 
   }
 }
@@ -414,9 +467,12 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
   firrtl.module @Top(in %in: !firrtl.uint<1>) {
     %c_in1, %c_in2, %c_in3 = firrtl.instance c sym @foo1 @Bar(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, in in3: !firrtl.uint<1>)
-    firrtl.strictconnect %c_in1, %in : !firrtl.uint<1>
-    firrtl.strictconnect %c_in2, %in : !firrtl.uint<1>
-    firrtl.strictconnect %c_in3, %in : !firrtl.uint<1>
+    %c_in1_write = firrtl.wrapSink %c_in1 : !firrtl.uint<1>
+    %c_in2_write = firrtl.wrapSink %c_in2 : !firrtl.uint<1>
+    %c_in3_write = firrtl.wrapSink %c_in3 : !firrtl.uint<1>
+    firrtl.strictconnect %c_in1_write, %in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in2_write, %in : !firrtl.uint<1>
+    firrtl.strictconnect %c_in3_write, %in : !firrtl.uint<1>
     // CHECK: sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
     sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
     // Don't remove the instance if there is an unknown use of inner reference.
@@ -440,7 +496,8 @@ firrtl.circuit "Test" {
   // CHECK: firrtl.module private @Blah() {
   firrtl.module private @Blah(out %out : !firrtl.uint<1>) {
     %extmodule_out = firrtl.instance extmodule @ExtModule(out out : !firrtl.uint<1>)
-    firrtl.strictconnect %out, %extmodule_out : !firrtl.uint<1>
+    %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+    firrtl.strictconnect %out_write, %extmodule_out : !firrtl.uint<1>
   }
   firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>} {
     // CHECK: firrtl.instance blah interesting_name @Blah()
@@ -450,7 +507,8 @@ firrtl.circuit "Test" {
   // CHECK-NOT: firrtl.module private @Other
   firrtl.module private @Other(out %out : !firrtl.uint<1>) {
     %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
-    firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
+    %out_write = firrtl.wrapSink %out : !firrtl.uint<1>
+    firrtl.strictconnect %out_write, %blah_out : !firrtl.uint<1>
   }
 }
 
@@ -535,7 +593,8 @@ firrtl.circuit "Issue5898" {
   firrtl.module @Issue5898(in %x: !firrtl.uint<5>, out %p: !firrtl.rwprobe<uint<5>>) {
     // CHECK: connect
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<5>, !firrtl.rwprobe<uint<5>>
-    firrtl.strictconnect %w, %x : !firrtl.uint<5>
+    %w_write = firrtl.wrapSink %w : !firrtl.uint<5>
+    firrtl.strictconnect %w_write, %x : !firrtl.uint<5>
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<5>>
   }
 }

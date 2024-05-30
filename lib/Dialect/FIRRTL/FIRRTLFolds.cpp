@@ -1701,14 +1701,14 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 /// which does likely not dominate the original value.
 StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
   StrictConnectOp connect;
+
   for (Operation *user : value.getUsers()) {
     // If we see an attach or aggregate sublements, just conservatively fail.
     if (isa<AttachOp, SubfieldOp, SubaccessOp, SubindexOp>(user))
       return {};
 
-    if (auto aConnect = dyn_cast<FConnectLike>(user))
-      if (aConnect.getDest() == value) {
-        auto strictConnect = dyn_cast<StrictConnectOp>(*aConnect);
+    if (auto aWrap = dyn_cast<WrapSinkOp>(user)) {
+        auto strictConnect = getSingleConnectUserOf(aWrap);
         // If this is not a strict connect, a second strict connect or in a
         // different block, fail.
         if (!strictConnect || (connect && connect != strictConnect) ||
