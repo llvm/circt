@@ -3252,7 +3252,14 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -3279,7 +3286,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getWriteport(), (getName() + "_write").str());
+  setNameFn(getWrite(), (getName() + "_write").str());
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
@@ -3306,6 +3313,15 @@ LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable)
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+Value StrictWireOp::getResult() {
+  return getRead();
+}
+
+Value StrictRegOp::getResult() {
+  return getRead();
+}
+
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
   build(builder, state, klass.getInstanceType(),

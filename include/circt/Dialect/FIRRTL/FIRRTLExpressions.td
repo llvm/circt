@@ -416,7 +416,6 @@ def LHSSubindexOp : FIRRTLExprOp<"lhssubindex"> {
   }];
 }
 
-
 def SubaccessOp : FIRRTLExprOp<"subaccess"> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{

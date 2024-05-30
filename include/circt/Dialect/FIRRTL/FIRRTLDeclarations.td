@@ -573,6 +573,41 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
   let hasVerifier = 1;
 }
 
+def StrictRegOp : HardwareDeclOp<"strictreg", [Forceable, SameVariadicOperandSize]> {
+  let summary = "Define a new register with an optional reset";
+  let description = [{
+    Declare a new register:
+    ```
+      %name, %name_write = firrtl.regreset %clockVal (reset %resetSignal, %resetValue)? : t1 (, rt)?
+    ```
+    }];
+
+  let arguments = (
+    ins ClockType:$clockVal, 
+        Optional<AnyResetType>:$resetSignal,
+        Optional<AnyRegisterType>:$resetValue,
+        StrAttr:$name, NameKindAttr:$nameKind,
+        AnnotationArrayAttr:$annotations,
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
+  let results = (outs AnyRegisterType:$read, LHSType:$write, Optional<RefType>:$ref);
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    $clockVal (`,` `reset` `(` $resetSignal^ `:` type($resetSignal) `,` $resetValue `:` type($resetValue) `)` )? (`,` `forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
+    `:` type($clockVal) `,` type($read) `,` type($write) (`,` qualified(type($ref))^)?
+
+  }];
+
+//  let hasCanonicalizer = true;
+//  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Value getResult();
+  }];
+}
+
+
 def WireOp : HardwareDeclOp<"wire", [
     Forceable,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
@@ -666,8 +701,8 @@ def WireOp : HardwareDeclOp<"wire", [
 
 def StrictWireOp : HardwareDeclOp<"strictwire", [
     Forceable,
-    LHSTypeConstraint<"result", "writeport">,
-    OptRefTypeConstraint<"result", "ref">,
+    LHSTypeConstraint<"read", "write">,
+    OptRefTypeConstraint<"read", "ref">,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Define a new wire";
@@ -682,8 +717,8 @@ def StrictWireOp : HardwareDeclOp<"strictwire", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable); // ReferenceKinds
-  let results = (outs PassiveType:$result, 
-                      LHSType:$writeport,
+  let results = (outs PassiveType:$read, 
+                      LHSType:$write,
                       Optional<RefType>:$ref);
 
 //  let hasCanonicalizer = true;
@@ -691,7 +726,11 @@ def StrictWireOp : HardwareDeclOp<"strictwire", [
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
-    qualified(type($result)) `,` qualified(type($writeport)) (`,` qualified(type($ref))^)?
+    type($read) `,` type($write) (`,` qualified(type($ref))^)?
+  }];
+
+  let extraClassDeclaration = [{
+    Value getResult();
   }];
 }
 

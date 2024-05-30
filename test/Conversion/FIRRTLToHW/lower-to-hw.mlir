@@ -1699,3 +1699,29 @@ firrtl.circuit "Directories" attributes {
     firrtl.instance dut_A @Directories_A()
   }
 }
+
+// -----
+
+firrtl.circuit "Strict" {
+  // CHECK-LABEL: hw.module @Strict
+  firrtl.module @Strict(in %clk : !firrtl.clock,
+                        in %reset : !firrtl.asyncreset,
+                        in %in1: !firrtl.uint<4>,
+                        out %out1: !firrtl.uint<5>  ) {
+
+    %c12_ui4 = firrtl.constant 12 : !firrtl.uint<4>
+
+    // CHECK: %out4 = hw.wire [[OUT4_VAL:%.+]] sym @{{.*}} : i4
+    %wire, %wire_write = firrtl.strictwire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>, !firrtl.lhs<uint<4>>
+    firrtl.strictconnect %wire_write, %in1 : !firrtl.uint<4>
+
+    %reg, %reg_write = firrtl.strictreg %clk : !firrtl.clock, !firrtl.uint<4>, !firrtl.lhs<uint<4>>
+    firrtl.strictconnect %reg_write, %wire : !firrtl.uint<4>
+
+    %regr, %regr_write = firrtl.strictreg %clk, reset ( %reset : !firrtl.asyncreset, %c12_ui4 : !firrtl.uint<4>) : !firrtl.clock, !firrtl.uint<4>, !firrtl.lhs<uint<4>>
+    firrtl.strictconnect %regr_write, %reg : !firrtl.uint<4>
+
+    %out1_write = firrtl.wrapSink %out1 : !firrtl.uint<4>
+    firrtl.strictconnect %out1_write, %regr : !firrtl.uint<4>
+  }
+}

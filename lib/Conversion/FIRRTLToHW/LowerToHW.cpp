@@ -1512,9 +1512,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Declarations.
   LogicalResult visitDecl(WireOp op);
+  LogicalResult visitDecl(StrictWireOp op);
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegResetOp op);
+  LogicalResult visitDecl(StrictRegOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp op);
   LogicalResult visitDecl(VerbatimWireOp op);
@@ -2936,6 +2938,32 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   return setLowering(op.getResult(), wire);
 }
 
+LogicalResult FIRRTLLowering::visitDecl(StrictWireOp op) {
+  auto origResultType = op.getResult().getType();
+
+  auto resultType = lowerType(origResultType);
+  if (!resultType)
+    return failure();
+
+  if (resultType.isInteger(0))
+    return setLowering(op.getResult(), Value());
+
+  // Name attr is required on sv.wire but optional on firrtl.wire.
+  auto innerSym = lowerInnerSymbol(op);
+  auto name = op.getNameAttr();
+  // This is not a temporary wire created by the compiler, so attach a symbol
+  // name.
+  auto wire = builder.create<hw::WireOp>(
+      op.getLoc(), getOrCreateZConstant(resultType), name, innerSym);
+
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(wire, svAttrs);
+
+   (void)setLowering(op.getWrite(), wire);
+   (void)setLowering(op.getRead(), wire);
+   return success();
+}
+
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
@@ -3059,6 +3087,61 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 
   return success();
 }
+
+LogicalResult FIRRTLLowering::visitDecl(StrictRegOp op) {
+  auto resultType = lowerType(op.getResult().getType());
+  if (!resultType)
+    return failure();
+  if (resultType.isInteger(0))
+    return setLowering(op.getResult(), Value());
+
+  Value clockVal = getLoweredValue(op.getClockVal());
+  if (!clockVal)
+    return failure();
+
+  seq::FirRegOp reg;
+  auto innerSym = lowerInnerSymbol(op);
+
+  // Create a reg op, wiring itself to its input.
+  Backedge inputEdge = backedgeBuilder.get(resultType);
+
+  if (op.getResetSignal()) {
+    Value resetSignal = getLoweredValue(op.getResetSignal());
+    // Reset values may be narrower than the register.  Extend appropriately.
+    Value resetValue = getLoweredValue(op.getResetValue());
+
+    if (!resetSignal || !resetValue)
+      return failure();
+
+    bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
+  reg =
+      builder.create<seq::FirRegOp>(inputEdge, clockVal, op.getNameAttr(),
+                                    resetSignal, resetValue, innerSym, isAsync);
+
+  } else {
+      reg = builder.create<seq::FirRegOp>(inputEdge, clockVal,
+                                           op.getNameAttr(), innerSym);
+  }
+
+  // Pass along the start and end random initialization bits for this register.
+  if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
+    reg->setAttr("firrtl.random_init_register", randomRegister);
+  if (auto randomStart = op->getAttr("firrtl.random_init_start"))
+    reg->setAttr("firrtl.random_init_start", randomStart);
+  if (auto randomEnd = op->getAttr("firrtl.random_init_end"))
+    reg->setAttr("firrtl.random_init_end", randomEnd);
+
+  // Move SV attributes.
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(reg, svAttrs);
+
+  inputEdge.setValue(reg);
+  (void)setLowering(op.getRead(), reg);
+  (void)setLowering(op.getWrite(), reg);
+
+  return success();
+}
+
 
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // TODO: Remove this restriction and preserve aggregates in
