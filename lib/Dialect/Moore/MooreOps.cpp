@@ -134,6 +134,14 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 }
 
 //===----------------------------------------------------------------------===//
+// NamedConstantOp
+//===----------------------------------------------------------------------===//
+
+void NamedConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
