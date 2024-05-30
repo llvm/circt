@@ -3488,12 +3488,14 @@ void PropertyEmitter::emitClockedProperty(
     ps << ")";
   });
 
-  ps << PP::space;
-  ps << "disable iff" << PP::nbsp << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(disable, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
+  if (disable) {
+    ps << PP::space;
+    ps << "disable iff" << PP::nbsp << "(";
+    ps.scopedBox(PP::ibox2, [&] {
+      emitNestedProperty(disable, PropertyPrecedence::Lowest);
+      ps << ")";
+    });
+  }
 
   ps << PP::space;
   ps.scopedBox(PP::ibox0,
@@ -4886,14 +4888,11 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
           op.getProperty(),
           mlir::m_Op<ltl::OrOp>(mBool(&disableVal), mProperty(&property)));
 
-  if (!disablePattern) {
-    mlir::OpBuilder builder(op.getContext());
-    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
-        op.getLoc(), builder.getI1Type(), 0);
+  if (!disablePattern)
+    return emitVerifClockedAssertLike(op, op.getProperty(), disableVal,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("assert"));
 
-    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
-                                      op.getEdge(), PPExtString("assert"));
-  }
   return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
                                     op.getEdge(), PPExtString("assert"));
 }
@@ -4921,14 +4920,11 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
           op.getProperty(),
           mlir::m_Op<ltl::OrOp>(mBool(&disableVal), mProperty(&property)));
 
-  if (!disablePattern) {
-    mlir::OpBuilder builder(op.getContext());
-    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
-        op.getLoc(), builder.getI1Type(), 0);
+  if (!disablePattern)
+    return emitVerifClockedAssertLike(op, op.getProperty(), disableVal,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("assume"));
 
-    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
-                                      op.getEdge(), PPExtString("assume"));
-  }
   return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
                                     op.getEdge(), PPExtString("assume"));
 }
@@ -4966,14 +4962,11 @@ LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
               mProperty(&property),
               mlir::m_Op<comb::XorOp>(mBool(&disableVal), mOne(&one))));
 
-  if (!disablePattern) {
-    mlir::OpBuilder builder(op.getContext());
-    mlir::Value f = builder.createOrFold<hw::ConstantOp>(
-        op.getLoc(), builder.getI1Type(), 0);
+  if (!disablePattern)
+    return emitVerifClockedAssertLike(op, op.getProperty(), disableVal,
+                                      op.getClock(), op.getEdge(),
+                                      PPExtString("cover"));
 
-    return emitVerifClockedAssertLike(op, op.getProperty(), f, op.getClock(),
-                                      op.getEdge(), PPExtString("cover"));
-  }
   return emitVerifClockedAssertLike(op, property, disableVal, op.getClock(),
                                     op.getEdge(), PPExtString("cover"));
 }
