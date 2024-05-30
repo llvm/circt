@@ -292,11 +292,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     else :
       _t <= _t_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" (%_t, %_t_2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
-    printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
+    node fd = SInt<32>(-2147483646)
 
-    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" {name = "printf_0"} (%_t, %_t_2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
-    printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2) : printf_0
+    ; CHECK: firrtl.printf %clock, %reset, %fd, "Something interesting!\0A %x %x" (%_t, %_t_2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.sint<32>, !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    printf(clock, reset, fd, "Something interesting!\n %x %x", _t, _t_2)
+
+    ; CHECK: firrtl.printf %clock, %reset, %fd, "Something interesting!\0A %x %x" {name = "printf_0"} (%_t, %_t_2) : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.sint<32>, !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    printf(clock, reset, fd, "Something interesting!\n %x %x", _t, _t_2) : printf_0
 
     ; CHECK: firrtl.stop %clock, %reset, 42 : !firrtl.clock, !firrtl.uint<1>
     stop(clock, reset, 42)
@@ -357,7 +359,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %myext_in, %myext_out = firrtl.instance myext interesting_name @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
     inst myext of MyExtModule
     myext.in <= i8
-    printf(clock, reset, "Something interesting! %x", myext.out)
+    printf(clock, reset, fd, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset : !firrtl.uint<1> {
     when reset :

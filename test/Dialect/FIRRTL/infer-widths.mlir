@@ -456,7 +456,8 @@ firrtl.circuit "Foo" {
     // CHECK: %ui = firrtl.wire : !firrtl.uint<5>
     %ui = firrtl.wire : !firrtl.uint
 
-    firrtl.printf %clk, %false, "foo" : !firrtl.clock, !firrtl.uint<1>
+    %fd = firrtl.constant -2 : !firrtl.sint<32>
+    firrtl.printf %clk, %false, %fd, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
     firrtl.skip
     firrtl.stop %clk, %false, 0 : !firrtl.clock, !firrtl.uint<1>
     firrtl.when %a : !firrtl.uint<1> {

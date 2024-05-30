@@ -110,13 +110,13 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, SInt32Type:$fd, StrAttr:$formatString,
                        Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
-    $clock `,` $cond `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
-    (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
+    $clock `,` $cond `,` $fd `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
+    (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) `,` type($fd) (`,` qualified(type($substitutions))^)?
   }];
 }
 

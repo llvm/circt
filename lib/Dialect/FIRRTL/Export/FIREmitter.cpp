@@ -781,6 +781,8 @@ void Emitter::emitStatement(PrintFOp op) {
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
+    emitExpression(op.getFd());
+    ps << "," << PP::space;
     ps.writeQuotedEscaped(op.getFormatString());
     for (auto operand : op.getSubstitutions()) {
       ps << "," << PP::space;

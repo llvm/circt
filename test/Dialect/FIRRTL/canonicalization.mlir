@@ -3562,6 +3562,8 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   %true = firrtl.constant 1: !firrtl.uint<1>
   %false = firrtl.constant 0: !firrtl.uint<1>
 
+  %fd = firrtl.constant -2 : !firrtl.sint<32>
+
   // Erase empty whens.
   // CHECK-NOT: when %a
   firrtl.when %a : !firrtl.uint<1> {
@@ -3570,24 +3572,25 @@ firrtl.module @Whens(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %reset
   } else {
   }
   // Erase an empty else block.
-  // CHECK:      firrtl.when %reset : !firrtl.uint<1> {
-  // CHECK-NEXT:   firrtl.printf %clock, %reset, "foo!"  : !firrtl.clock, !firrtl.uint<1>
+  // CHECK:      [[fd:%.+]] = firrtl.constant -2 : !firrtl.sint<32>
+  // CHECK-NEXT: firrtl.when %reset : !firrtl.uint<1> {
+  // CHECK-NEXT:   firrtl.printf %clock, %reset, [[fd]], "foo!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   // CHECK-NEXT: }
   firrtl.when %reset : !firrtl.uint<1> {
-    firrtl.printf %clock, %reset, "foo!"  : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, %fd, "foo!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   } else {
   }
 
-  // CHECK-NEXT:  firrtl.printf %clock, %reset, "bar!"  : !firrtl.clock, !firrtl.uint<1>
+  // CHECK-NEXT:  firrtl.printf %clock, %reset, [[fd]], "bar!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   firrtl.when %false : !firrtl.uint<1> {
   } else {
-    firrtl.printf %clock, %reset, "bar!"  : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, %fd, "bar!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   }
 
   // CHECK-NOT:  firrtl.when
   firrtl.when %true : !firrtl.uint<1> {
   } else {
-    firrtl.printf %clock, %reset, "baz!"  : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, %fd, "baz!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   }
 }
 

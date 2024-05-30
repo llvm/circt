@@ -114,8 +114,10 @@ firrtl.circuit "Foo" {
     firrtl.stop %someClock, %ui1, 42 {name = "foo"} : !firrtl.clock, !firrtl.uint<1>
     // CHECK: skip
     firrtl.skip
-    // CHECK: printf(someClock, ui1, "some\n magic\"stuff\"", ui1, someReset) : foo
-    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+    %fd = firrtl.constant 0x80000002 : !firrtl.sint<32>
+    // CHECK: printf(someClock, ui1, SInt<32>(-2147483646), "some\n magic\"stuff\"", ui1,
+    // CHECK:        someReset) : foo
+    firrtl.printf %someClock, %ui1, %fd, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>, !firrtl.uint<1>, !firrtl.reset
     // CHECK: assert(someClock, ui1, ui1, "msg") : foo
     // CHECK: assume(someClock, ui1, ui1, "msg") : foo
     // CHECK: cover(someClock, ui1, ui1, "msg") : foo

@@ -331,8 +331,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>,
                        in %c: !firrtl.sint<4>, in %d: !firrtl.sint<4>) {
     // CHECK: [[CLOCK:%.+]] = seq.from_clock %clock
+    // CHECK: [[STDERR:%.+]] = hw.constant -2147483646 : i32
+    // CHECK: [[FILENAME:%.+]] = sv.constantStr "file.txt"
+    // CHECK: [[MODE:%.+]] = sv.constantStr "a"
+    // CHECK: [[FILE:%.+]] = sv.system "fopen"([[FILENAME]], [[MODE]]) : (!hw.string, !hw.string) -> i32
     // CHECK: [[ADD:%.+]] = comb.add
-    
     // CHECK: [[ADDSIGNED:%.+]] = comb.add
     // CHECK: [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
     // CHECK: [[DSIGNED:%.+]] = sv.system "signed"(%d)
@@ -343,32 +346,38 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "No operands!\0A"
+    // CHECK-NEXT:       sv.fwrite [[STDERR]], "No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__0 = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__0, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
+    // CHECK-NEXT:       sv.fwrite [[FILE]], "(File) No operands!\0A"
     // CHECK-NEXT:     }
     // CHECK-NEXT:     %PRINTF_COND__1 = sv.macro.ref @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__1, %reset : i1
     // CHECK-NEXT:     sv.if [[AND]] {
-    // CHECK-NEXT:       [[FD:%.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:       sv.fwrite [[FD]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:       sv.fwrite [[STDERR]], "Hi %x %x\0A"([[ADD]], %b) : i5, i4
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %PRINTF_COND__2 = sv.macro.ref @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %PRINTF_COND__2, %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       sv.fwrite [[STDERR]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.printf %clock, %reset, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>
+    %stderr = firrtl.constant 0x80000002 : !firrtl.sint<32>
+    %file = firrtl.int.fopen "file.txt", "a" : !firrtl.sint<32>
+
+    firrtl.printf %clock, %reset, %stderr, "No operands!\0A" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
+    firrtl.printf %clock, %reset, %file, "(File) No operands!\0A" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<4>
+    firrtl.printf %clock, %reset, %stderr, "Hi %x %x\0A"(%0, %b) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>, !firrtl.uint<5>, !firrtl.uint<4>
 
     %1 = firrtl.add %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
 
-    firrtl.printf %clock, %reset, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<4>
+    firrtl.printf %clock, %reset, %stderr, "Hi signed %d %d\0A"(%1, %d) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>, !firrtl.sint<5>, !firrtl.sint<4>
 
     firrtl.skip
 

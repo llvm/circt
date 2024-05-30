@@ -36,15 +36,16 @@ firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
 
 // Test all simulation constructs
 firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in %enable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>) {
+  %fd = firrtl.constant -2 : !firrtl.sint<32>
   firrtl.when %p : !firrtl.uint<1> {
-    firrtl.printf %clock, %enable, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %enable, %fd, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
     firrtl.stop %clock, %enable, 0 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.unclocked_assume %p, %enable, "" : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
-    firrtl.printf %clock, %reset, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+    firrtl.printf %clock, %reset, %fd, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
     firrtl.stop %clock, %enable, 1 : !firrtl.clock, !firrtl.uint<1>
     firrtl.assert %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.assume %clock, %p, %enable, "" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
@@ -53,8 +54,9 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
   }
 }
 // CHECK-LABEL: firrtl.module @simulation(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
+// CHECK-NEXT:   [[fd:%.+]] = firrtl.constant -2 : !firrtl.sint<32>
 // CHECK-NEXT:   %0 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.printf %clock, %0, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.printf %clock, %0, [[fd]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
 // CHECK-NEXT:   %1 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %1, 0 : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %2 = firrtl.and %p, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -67,7 +69,7 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 // CHECK-NEXT:   firrtl.int.unclocked_assume %p, %5, "" : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:   %6 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %7 = firrtl.and %6, %reset : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.printf %clock, %7, "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.printf %clock, %7, [[fd]], "CIRCT Rocks!"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
 // CHECK-NEXT:   %8 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.stop %clock, %8, 1 : !firrtl.clock, !firrtl.uint<1>
 // CHECK-NEXT:   %9 = firrtl.and %6, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -85,14 +87,16 @@ firrtl.module @simulation(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, in
 firrtl.module @nested_whens(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p1 : !firrtl.uint<1>, in %enable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>) {
   firrtl.when %p0 : !firrtl.uint<1> {
     firrtl.when %p1 : !firrtl.uint<1> {
-      firrtl.printf %clock, %enable, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+      %fd = firrtl.constant -2 : !firrtl.sint<32>
+      firrtl.printf %clock, %enable, %fd, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
     }
   }
 }
 // CHECK-LABEL: firrtl.module @nested_whens(in %clock: !firrtl.clock, in %p0: !firrtl.uint<1>, in %p1: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
 // CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:   [[fd:%.+]] = firrtl.constant -2 : !firrtl.sint<32>
 // CHECK-NEXT:   %1 = firrtl.and %0, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.printf %clock, %1, "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>
+// CHECK-NEXT:   firrtl.printf %clock, %1, [[fd]], "CIRCT Rocks!" : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
 // CHECK-NEXT: }
 
 

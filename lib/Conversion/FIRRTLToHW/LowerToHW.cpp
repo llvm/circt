@@ -4334,7 +4334,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
-  if (!clock || !cond)
+  auto fd = getLoweredValue(op.getFd());
+  if (!clock || !cond || !fd)
     return failure();
 
   SmallVector<Value, 4> operands;
@@ -4359,9 +4360,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
 
       addIfProceduralBlock(ifCond, [&]() {
-        // Emit the sv.fwrite, writing to stderr by default.
-        Value fdStderr = builder.create<hw::ConstantOp>(APInt(32, 0x80000002));
-        builder.create<sv::FWriteOp>(fdStderr, op.getFormatString(), operands);
+        builder.create<sv::FWriteOp>(fd, op.getFormatString(), operands);
       });
     });
   });

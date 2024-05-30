@@ -2824,14 +2824,15 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
-/// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
+/// printf ::= 'printf(' exp exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
 
-  Value clock, condition;
+  Value clock, condition, fd;
   StringRef formatString;
   if (parseExp(clock, "expected clock expression in printf") ||
       parseExp(condition, "expected condition in printf") ||
+      parseExp(fd, "expected fd expression in printf") ||
       parseGetSpelling(formatString) ||
       parseToken(FIRToken::string, "expected format string in printf"))
     return failure();
@@ -2853,7 +2854,7 @@ ParseResult FIRStmtParser::parsePrintf() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  builder.create<PrintFOp>(clock, condition,
+  builder.create<PrintFOp>(clock, condition, fd,
                            builder.getStringAttr(formatStrUnescaped), operands,
                            name);
   return success();

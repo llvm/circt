@@ -51,11 +51,12 @@ firrtl.circuit "Simple" {
                               in %clock: !firrtl.clock,
                               in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
-    // CHECK-NEXT: %c0_i2 = hw.constant
+    // CHECK-NEXT: [[fd:%.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT: [[c0_i2:%.+]] = hw.constant 0 : i2
     // CHECK-NEXT: %xyz.out4 = hw.instance "xyz" @Simple(in1: [[ARG1:%.+]]: i4, in2: %u2: i2, in3: %s8: i8) -> (out4: i4)
     %xyz:4 = firrtl.instance xyz @Simple(in in1: !firrtl.uint<4>, in in2: !firrtl.uint<2>, in in3: !firrtl.sint<8>, out out4: !firrtl.uint<4>)
 
-    // CHECK: [[ARG1]] = comb.concat %c0_i2, %u2 : i2, i2
+    // CHECK: [[ARG1]] = comb.concat [[c0_i2]], %u2 : i2, i2
     firrtl.connect %xyz#0, %u2 : !firrtl.uint<4>, !firrtl.uint<2>
 
     // CHECK-NOT: hw.connect
@@ -63,7 +64,9 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    %fd = firrtl.constant 0x80000002 : !firrtl.sint<32>
+
+    firrtl.printf %clock, %reset, %fd, "%x"(%xyz#3) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>, !firrtl.uint<4>
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -71,13 +74,12 @@ firrtl.circuit "Simple" {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %reset: i1) -> (out: i8)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
-    // CHECK: [[FD:%.*]] = hw.constant -2147483646 : i32
-    // CHECK: sv.fwrite [[FD]], "%x"(%xyz.out4) : i4
-    // CHECK: sv.fwrite [[FD]], "Something interesting! %x"(%myext.out) : i8
+    // CHECK: sv.fwrite %c-2147483646_i32, "%x"(%xyz.out4) : i4
+    // CHECK: sv.fwrite %c-2147483646_i32, "Something interesting! %x"(%myext.out) : i8
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
-    firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>
+    firrtl.printf %clock, %reset, %fd, "Something interesting! %x"(%myext#1) : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>, !firrtl.uint<8>
   }
 
   // CHECK-LABEL: hw.module private @OutputFirst(out out4 : i4, in %in1 : i1, in %in4 : i4) {

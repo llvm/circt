@@ -26,6 +26,6 @@ circuit StopAndFinishTest:
     ; CHECK:   }
     ; CHECK: }
 
-    printf(clock, cond, "Stop message")
+    printf(clock, cond, SInt<32>(-2147483646), "Stop message")
     stop(clock, cond, 0)
     stop(clock, cond, 1)

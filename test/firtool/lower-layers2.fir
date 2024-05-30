@@ -89,7 +89,7 @@ circuit TestHarness:
     connect b, dut.b
 
     layerblock Verification:
-      printf(clock, reset, "The last PC was: %x", read(dut.trace))
+      printf(clock, reset, SInt<32>(-0h7FFFFFFE), "The last PC was: %x", read(dut.trace))
 
 ; CHECK: // ----- 8< ----- FILE "layers_TestHarness_Verification.sv" ----- 8< -----
 ; CHECK: `ifndef layers_TestHarness_Verification

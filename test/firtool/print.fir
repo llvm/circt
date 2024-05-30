@@ -6,7 +6,7 @@ circuit PrintTest:
     input clock : Clock
     input cond : UInt<1>
     input var : UInt<32>
-    printf(clock, cond, "test %d\n", var)
+    printf(clock, cond, SInt<32>(-2147483646), "test %d\n", var)
 
     ; CHECK:      sv.ifdef  @SYNTHESIS {
     ; CHECK-NEXT: } else {

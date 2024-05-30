@@ -323,7 +323,8 @@ firrtl.circuit "DeleteInstance" {
       %invalid_ui289 = firrtl.invalidvalue : !firrtl.uint<289>
   }
   firrtl.module private @SideEffect1(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
-    firrtl.printf %clock, %a, "foo"  : !firrtl.clock, !firrtl.uint<1>
+    %fd = firrtl.constant -2 : !firrtl.sint<32>
+    firrtl.printf %clock, %a, %fd, "foo"  : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<32>
   }
   firrtl.module private @SideEffect2(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
     %s1_a, %s1_clock = firrtl.instance s1 @SideEffect1(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
