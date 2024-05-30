@@ -4,11 +4,11 @@ firrtl.circuit "ElementWise" {
 // CHECK-LABEL: @ElementWise
 firrtl.module @ElementWise(in %a: !firrtl.vector<uint<1>, 2>, in %b: !firrtl.vector<uint<1>, 2>, out %c_0: !firrtl.vector<uint<1>, 2>, out %c_1: !firrtl.vector<uint<1>, 2>, out %c_2: !firrtl.vector<uint<1>, 2>) {
   // CHECK-NEXT: %0 = firrtl.elementwise_or %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
-  // CHECK: firrtl.strictconnect %c_0_write, %0 : !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT: %1 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
-  // CHECK: firrtl.strictconnect %c_1_write, %1 : !firrtl.vector<uint<1>, 2>
-  // CHECK-NEXT: %2 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
-  // CHECK: firrtl.strictconnect %c_2_write, %2 : !firrtl.vector<uint<1>, 2>
+  // CHECK: firrtl.strictconnect %1, %0 : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: %2 = firrtl.elementwise_and %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+  // CHECK: firrtl.strictconnect %3, %2 : !firrtl.vector<uint<1>, 2>
+  // CHECK-NEXT: %4 = firrtl.elementwise_xor %a, %b : (!firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+  // CHECK: firrtl.strictconnect %5, %4 : !firrtl.vector<uint<1>, 2>
   %0 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
   %1 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 2>
   %2 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
