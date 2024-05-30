@@ -48,6 +48,9 @@ func.func @Foo(%arg0: i32, %arg1: index, %arg2: f64) {
   %5 = dbg.array [%3, %4] : !dbg.subfield
   dbg.variable "megaVar", %5 : !dbg.array
 
+  // CHECK-NEXT: dbg.moduleinfo {params = [{name = "foo", type = "i32"}, {name = "bar", type = "index", value = "18"}], typeName = "FooType"}
+  dbg.moduleinfo {typeName = "FooType", params = [{name = "foo", type = "i32"}, {name = "bar", type = "index", value = "18"}]}
+
   return
 }
 
