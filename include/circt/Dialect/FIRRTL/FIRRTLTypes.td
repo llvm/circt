@@ -123,6 +123,11 @@ def UnsizedUIntType :
           "type_cast<UIntType>($_self).getWidth() == std::nullopt">,
     "uint with uninferred width", "::circt::firrtl::UIntType">;
 
+class SizedSIntType<int width> : FIRRTLDialectType<
+    CPred<"type_isa<SIntType>($_self) && "
+          "type_cast<SIntType>($_self).getWidth() == " # width>,
+    width # "-bit uint", "::circt::firrtl::SIntType">;
+
 class SizedUIntType<int width> : FIRRTLDialectType<
     CPred<"type_isa<UIntType>($_self) && "
           "type_cast<UIntType>($_self).getWidth() == " # width>,
@@ -138,6 +143,8 @@ class NonConstSizedUIntType<int width> :
   SizedUIntType<width>,
   BuildableType<
     "::circt::firrtl::UIntType::get($_builder.getContext(), " # width # ")">;
+
+def SInt32Type : SizedSIntType<32>;
 
 def UInt1Type : SizedUIntType<1>;
 def UInt2Type : SizedUIntType<2>;

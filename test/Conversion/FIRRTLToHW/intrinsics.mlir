@@ -40,6 +40,12 @@ firrtl.circuit "Intrinsics" {
     %6 = firrtl.int.isX %c : !firrtl.bundle<a: uint<3>, b: uint<3>>
     %x6 = firrtl.node interesting_name %6 : !firrtl.uint<1>
 
+    // CHECK-NEXT: [[filename:%.+]] = sv.constantStr "file.txt"
+    // CHECK-NEXT: [[mode:%.+]] = sv.constantStr "w"
+    // CHECK-NEXT: [[fd:%.+]] = sv.system "fopen"([[filename]], [[mode]]) : (!hw.string, !hw.string) -> i32
+    // CHECK-NEXT: %x7 = hw.wire [[fd]]
+    %7 = firrtl.int.fopen "file.txt", "w" : !firrtl.sint<32>
+    %x7 = firrtl.node interesting_name %7 : !firrtl.sint<32>
   }
 
   // CHECK-LABEL: hw.module @ClockGate

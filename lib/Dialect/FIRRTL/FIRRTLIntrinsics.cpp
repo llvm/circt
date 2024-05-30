@@ -638,6 +638,23 @@ public:
   }
 };
 
+class CirctFOpenConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.namedParam("filename") || gi.namedParam("mode") ||
+           gi.hasNParam(2) || gi.sizedOutput<SIntType>(32);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<FOpenIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), gi.getParamValue<StringAttr>("filename"),
+        gi.getParamValue<StringAttr>("mode"));
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -704,4 +721,5 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
+  lowering.add<CirctFOpenConverter>("circt.fopen", "circt_fopen");
 }

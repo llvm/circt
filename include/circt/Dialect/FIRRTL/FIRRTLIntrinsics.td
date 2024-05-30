@@ -169,6 +169,25 @@ def UnclockedAssumeIntrinsicOp : FIRRTLOp<"int.unclocked_assume", []> {
 }
 
 //===----------------------------------------------------------------------===//
+// File IO intrinsics
+//===----------------------------------------------------------------------===//
+
+def FOpenIntrinsicOp : FIRRTLOp<"int.fopen", []> {
+  let summary = "Open a file and return a file descriptor";
+  let description = [{
+    The `firrtl.int.fopen` intrinsic opens a file and returns a file descriptor.
+    It will be lowered into a SV `fopen` system task.
+  }];
+
+  let arguments = (ins StrAttr:$filename, StrAttr:$mode);
+  let results = (outs SInt32Type:$fd);
+
+  let assemblyFormat = [{
+    $filename `,` $mode attr-dict `:` qualified(type($fd))
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Other intrinsics
 //===----------------------------------------------------------------------===//
 

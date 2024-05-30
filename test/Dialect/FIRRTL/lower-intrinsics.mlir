@@ -156,4 +156,10 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.int.fpga_probe %clock, %data : !firrtl.uint<32>
     firrtl.int.generic "circt_fpga_probe"  %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
   }
+
+  // CHECK-LABEL: firrtl.module private @FOpenIntrinsicTest
+  firrtl.module private @FOpenIntrinsicTest() {
+    // CHECK-NEXT: firrtl.int.fopen "file.txt", "w" : !firrtl.sint<32>
+    %fd = firrtl.int.generic "circt_fopen" <filename: none = "file.txt", mode: none = "w"> : () -> !firrtl.sint<32>
+  }
 }

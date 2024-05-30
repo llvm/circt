@@ -1633,6 +1633,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
   LogicalResult visitExpr(HasBeenResetIntrinsicOp op);
   LogicalResult visitStmt(UnclockedAssumeIntrinsicOp op);
+  LogicalResult visitExpr(FOpenIntrinsicOp op);
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -4667,6 +4668,18 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
                 assumeLabel, op.getMessageAttr(), messageOps);
         });
   });
+}
+
+LogicalResult FIRRTLLowering::visitExpr(FOpenIntrinsicOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+
+  auto filename = builder.create<sv::ConstantStrOp>(op.getFilename());
+  auto mode = builder.create<sv::ConstantStrOp>(op.getMode());
+
+  return setLoweringTo<sv::SystemFunctionOp>(
+      op, resultTy, builder.getStringAttr("fopen"), ValueRange{filename, mode});
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
