@@ -249,8 +249,8 @@ struct EmittedExpr {
   operator bool() const { return expr != nullptr && type; }
 };
 
-static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const EmittedType &type) {
+[[maybe_unused]] static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                                      const EmittedType &type) {
   if (!type)
     return os << "<null>";
   os << type.name;
@@ -264,8 +264,8 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   return os;
 }
 
-static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const EmittedExpr &expr) {
+[[maybe_unused]] static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                                      const EmittedExpr &expr) {
   if (!expr)
     return os << "<null>";
   return os << expr.expr << " : " << expr.type;
