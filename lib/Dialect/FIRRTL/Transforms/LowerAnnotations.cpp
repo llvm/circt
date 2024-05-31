@@ -857,11 +857,23 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // (connectable).
       if (sourceFType != sinkFType &&
           !areTypesEquivalent(sinkFType, sourceFType)) {
-        auto diag = mlir::emitError(source.getLoc())
-                    << "Wiring Problem source type " << sourceType
-                    << " does not match sink type " << sinkType;
-        diag.attachNote(sink.getLoc()) << "The sink is here.";
-        return failure();
+        // Support tapping mixed alignment -> passive , emulate probe behavior.
+        if (auto sourceBaseType = dyn_cast<FIRRTLBaseType>(sourceFType);
+            problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer &&
+            sourceBaseType &&
+            areTypesEquivalent(sinkFType, sourceBaseType.getPassiveType())) {
+          // Change "sourceType" to the passive version that's type-equivalent,
+          // this will be used for wiring on the "up" side.
+          // This relies on `emitConnect` supporting connecting to the passive
+          // version from the original source.
+          sourceType = sourceBaseType.getPassiveType();
+        } else {
+          auto diag = mlir::emitError(source.getLoc())
+                      << "Wiring Problem source type " << sourceType
+                      << " does not match sink type " << sinkType;
+          diag.attachNote(sink.getLoc()) << "The sink is here.";
+          return failure();
+        }
       }
     }
     // If wiring using references, check that the sink value we connect to is

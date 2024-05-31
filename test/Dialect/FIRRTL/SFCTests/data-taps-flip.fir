@@ -1,5 +1,7 @@
 ; RUN: firtool --parse-only %s -verify-each=true | FileCheck %s
 ; RUN: firtool --verilog %s
+; RUN: firtool --parse-only %s --lower-annotations-no-ref-type-ports | FileCheck %s --check-prefixes NOREF --implicit-check-not firrtl.ref
+; RUN: firtool --verilog %s --lower-annotations-no-ref-type-ports
 
 ; Test tapping a bundle with flips, tap sink is passive.
 
@@ -9,6 +11,13 @@
 ; CHECK-LABEL: module @Top(
 ; CHECK: firrtl.ref.resolve
 ; CHECK-SAME: !firrtl.probe<bundle<a: uint<2>, b: uint<2>>>
+
+; NOREF-LABEL: module private @Child(
+; NOREF-SAME: out %[[OUT_PORT:.+]]: !firrtl.bundle<a: uint<2>, b: uint<2>>
+; NOREF-DAG: %[[A:.+]] = firrtl.subfield %[[OUT_PORT]][a]
+; NOREF-DAG: firrtl.strictconnect %[[A]],
+; NOREF-DAG: %[[B:.+]] = firrtl.subfield %[[OUT_PORT]][b]
+; NOREF-DAG: firrtl.strictconnect %[[B]],
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
