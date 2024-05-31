@@ -105,6 +105,10 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // invalid or constant
         Operation *op = arg.use_begin().getUser();
         auto connectLike = dyn_cast<FConnectLike>(op);
+        if (auto wrapper = dyn_cast<WrapSinkOp>(op))
+          if (wrapper->hasOneUse())
+            connectLike = dyn_cast<FConnectLike>(wrapper.getResult().use_begin().getUser());
+
         if (!connectLike)
           continue;
         auto *srcOp = connectLike.getSrc().getDefiningOp();
@@ -119,7 +123,12 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         }
 
         // Erase connect op because we are going to remove this output ports.
-        op->erase();
+        if (op == connectLike)
+          op->erase();
+        else {
+          connectLike.erase();
+          op->erase();
+        }
 
         if (srcOp->use_empty())
           srcOp->erase();
@@ -159,6 +168,12 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
         // Check that the input port is only written. Sometimes input ports are
         // used as temporary wires. In that case, we cannot erase connections.
         bool onlyWritten = llvm::all_of(result.getUsers(), [&](Operation *op) {
+          if (auto wrapper = dyn_cast<WrapSinkOp>(op)) {
+            if (!wrapper->hasOneUse())
+              return false;
+            if (auto connect = dyn_cast<FConnectLike>(wrapper.getResult().use_begin().getUser()))
+              return true; // No need for extra checks.
+          }
           if (auto connect = dyn_cast<FConnectLike>(op))
             return connect.getDest() == result;
           return false;
@@ -166,9 +181,15 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
 
         result.replaceUsesWithIf(wire.getResult(), [&](OpOperand &op) -> bool {
           // Connects can be deleted directly.
-          if (onlyWritten && isa<FConnectLike>(op.getOwner())) {
-            op.getOwner()->erase();
-            return false;
+          if (onlyWritten) {
+            if (auto wrapper = dyn_cast<WrapSinkOp>(op.getOwner())) {
+              wrapper.getResult().user_begin()->erase();
+              op.getOwner()->erase();
+              return false;
+            } else if (isa<FConnectLike>(op.getOwner())) {
+              op.getOwner()->erase();
+              return false;
+            }
           }
           return true;
         });

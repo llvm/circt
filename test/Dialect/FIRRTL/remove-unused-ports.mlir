@@ -77,31 +77,42 @@ firrtl.circuit "Top"   {
                      out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>) {
     %A_a, %A_b, %A_c, %A_d_unused, %A_d_invalid, %A_d_constant = firrtl.instance A  @UseBar(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d_unused: !firrtl.uint<1>, out d_invalid: !firrtl.uint<1>, out d_constant: !firrtl.uint<1>)
     // CHECK: %A_b, %A_c = firrtl.instance A @UseBar(in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    // CHECK-NEXT: firrtl.strictconnect %A_b, %b
-    // CHECK-NEXT: firrtl.strictconnect %c, %A_c
-    // CHECK-NEXT: firrtl.strictconnect %d_unused, %{{invalid_ui1.*}}
-    // CHECK-NEXT: firrtl.strictconnect %d_invalid, %{{invalid_ui1.*}}
-    // CHECK-NEXT: firrtl.strictconnect %d_constant, %{{c1_ui1.*}}
-    firrtl.strictconnect %A_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %A_b, %b : !firrtl.uint<1>
-    firrtl.strictconnect %c, %A_c : !firrtl.uint<1>
-    firrtl.strictconnect %d_unused, %A_d_unused : !firrtl.uint<1>
-    firrtl.strictconnect %d_invalid, %A_d_invalid : !firrtl.uint<1>
-    firrtl.strictconnect %d_constant, %A_d_constant : !firrtl.uint<1>
+    // CHECK: firrtl.wrapSink %A_b
+    // CHECK: firrtl.wrapSink %c
+    // CHECK: firrtl.wrapSink %d_unused
+    // CHECK: firrtl.wrapSink %d_invalid
+    // CHECK: firrtl.wrapSink %d_constant
+    %A_a_write = firrtl.wrapSink %A_a : !firrtl.uint<1>
+    firrtl.strictconnect %A_a_write, %a : !firrtl.uint<1>
+    firrtl.strictconnect %A_a_write, %a : !firrtl.uint<1>
+    %A_b_write = firrtl.wrapSink %A_b : !firrtl.uint<1>
+    firrtl.strictconnect %A_b_write, %b : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %A_c : !firrtl.uint<1>
+    %d_unused_write = firrtl.wrapSink %d_unused : !firrtl.uint<1>
+    firrtl.strictconnect %d_unused_write, %A_d_unused : !firrtl.uint<1>
+    %d_invalid_write = firrtl.wrapSink %d_invalid : !firrtl.uint<1>
+    firrtl.strictconnect %d_invalid_write, %A_d_invalid : !firrtl.uint<1>
+    %d_constant_write = firrtl.wrapSink %d_constant : !firrtl.uint<1>
+    firrtl.strictconnect %d_constant_write, %A_d_constant : !firrtl.uint<1>
   }
 
   // Check that %a, %d_unused, %d_invalid and %d_constant are removed.
   // CHECK-LABEL: firrtl.module private @Bar(in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
-  // CHECK-NEXT:    firrtl.strictconnect %c, %b
+  // CHECK-NEXT:    %[[cw:.*]] = firrtl.wrapSink %c
+  // CHECK-NEXT:    firrtl.strictconnect %[[cw]], %b
   // CHECK-NEXT:  }
   firrtl.module private @Bar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
                      out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>) {
-    firrtl.strictconnect %c, %b : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %b : !firrtl.uint<1>
 
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.strictconnect %d_invalid, %invalid_ui1 : !firrtl.uint<1>
+    %d_invalid_write = firrtl.wrapSink %d_invalid : !firrtl.uint<1>
+    firrtl.strictconnect %d_invalid_write, %invalid_ui1 : !firrtl.uint<1>
     %c1_i1 = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.strictconnect %d_constant, %c1_i1 : !firrtl.uint<1>
+    %d_constant_write = firrtl.wrapSink %d_constant : !firrtl.uint<1>
+    firrtl.strictconnect %d_constant_write, %c1_i1 : !firrtl.uint<1>
   }
 
   // Check that %a, %d_unused, %d_invalid and %d_constant are removed.
@@ -109,13 +120,19 @@ firrtl.circuit "Top"   {
   firrtl.module private @UseBar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
                         out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>) {
     %A_a, %A_b, %A_c, %A_d_unused, %A_d_invalid, %A_d_constant = firrtl.instance A  @Bar(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>, out d_unused: !firrtl.uint<1>, out d_invalid: !firrtl.uint<1>, out d_constant: !firrtl.uint<1>)
-    firrtl.strictconnect %A_a, %a : !firrtl.uint<1>
+    %A_a_write = firrtl.wrapSink %A_a : !firrtl.uint<1>
+    firrtl.strictconnect %A_a_write, %a : !firrtl.uint<1>
     // CHECK: %A_b, %A_c = firrtl.instance A  @Bar(in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    firrtl.strictconnect %A_b, %b : !firrtl.uint<1>
-    firrtl.strictconnect %c, %A_c : !firrtl.uint<1>
-    firrtl.strictconnect %d_unused, %A_d_unused : !firrtl.uint<1>
-    firrtl.strictconnect %d_invalid, %A_d_invalid : !firrtl.uint<1>
-    firrtl.strictconnect %d_constant, %A_d_constant : !firrtl.uint<1>
+    %A_b_write = firrtl.wrapSink %A_b : !firrtl.uint<1>
+    firrtl.strictconnect %A_b_write, %b : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %A_c : !firrtl.uint<1>
+    %d_unused_write = firrtl.wrapSink %d_unused : !firrtl.uint<1>
+    firrtl.strictconnect %d_unused_write, %A_d_unused : !firrtl.uint<1>
+    %d_invalid_write = firrtl.wrapSink %d_invalid : !firrtl.uint<1>
+    firrtl.strictconnect %d_invalid_write, %A_d_invalid : !firrtl.uint<1>
+    %d_constant_write = firrtl.wrapSink %d_constant : !firrtl.uint<1>
+    firrtl.strictconnect %d_constant_write, %A_d_constant : !firrtl.uint<1>
   }
 
   // Make sure that %a, %b and %c are not erased because they have an annotation or a symbol.
@@ -123,18 +140,23 @@ firrtl.circuit "Top"   {
   firrtl.module private @Foo(in %a: !firrtl.uint<1> sym @dntSym, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1> sym @dntSym2) attributes {
     portAnnotations = [[], [{a = "a"}], []]}
   {
-    // CHECK: firrtl.strictconnect %c, %{{invalid_ui1.*}}
+    // CHECK: firrtl.wrapSink %c
+    // CHECK-NEXT: firrtl.strictconnect %0, %{{invalid_ui1.*}}
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.strictconnect %c, %invalid_ui1 : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %invalid_ui1 : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>)
   firrtl.module private @UseFoo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     %A_a, %A_b, %A_c = firrtl.instance A  @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
     // CHECK: %A_a, %A_b, %A_c = firrtl.instance A @Foo(in a: !firrtl.uint<1>, in b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    firrtl.strictconnect %A_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %A_b, %b : !firrtl.uint<1>
-    firrtl.strictconnect %c, %A_c : !firrtl.uint<1>
+    %A_a_write = firrtl.wrapSink %A_a : !firrtl.uint<1>
+    firrtl.strictconnect %A_a_write, %a : !firrtl.uint<1>
+    %A_b_write = firrtl.wrapSink %A_b : !firrtl.uint<1>
+    firrtl.strictconnect %A_b_write, %b : !firrtl.uint<1>
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %A_c : !firrtl.uint<1>
   }
 }
 
@@ -165,19 +187,25 @@ firrtl.circuit "UnusedOutput"  {
   // CHECK-NOT:     out %c
   firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire
-    // CHECK-NEXT: firrtl.strictconnect %b, %[[c_wire]]
-    firrtl.strictconnect %b, %c : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.wrapSink %b
+    // CHECK-NEXT: firrtl.strictconnect %1, %[[c_wire]]
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %[[c_wire]], %[[not_a]]
-    firrtl.strictconnect %c, %0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.wrapSink %[[c_wire]]
+    // CHECK-NEXT: firrtl.strictconnect %3, %[[not_a]]
+    %c_write = firrtl.wrapSink %c : !firrtl.uint<1>
+    firrtl.strictconnect %c_write, %0 : !firrtl.uint<1>
   }
   // CHECK-LABEL: @UnusedOutput
   firrtl.module @UnusedOutput(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: %singleDriver_a, %singleDriver_b = firrtl.instance singleDriver
     %singleDriver_a, %singleDriver_b, %singleDriver_c = firrtl.instance singleDriver @SingleDriver(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    firrtl.strictconnect %singleDriver_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %singleDriver_b : !firrtl.uint<1>
+    %singleDriver_a_write = firrtl.wrapSink %singleDriver_a : !firrtl.uint<1>
+    firrtl.strictconnect %singleDriver_a_write, %a : !firrtl.uint<1>
+    %b_write = firrtl.wrapSink %b : !firrtl.uint<1>
+    firrtl.strictconnect %b_write, %singleDriver_b : !firrtl.uint<1>
   }
 }
 
