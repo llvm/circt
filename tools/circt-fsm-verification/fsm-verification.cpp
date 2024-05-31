@@ -765,22 +765,22 @@ void parse_fsm(string input, string property, int time, string arg1, string arg2
     if(t.isOutput){
       vector<expr> tmp = t.output(solverVars);
       llvm::outs()<<"\ntmp size is: "<<tmp.size()<<" while outfun size is: "<<outputFuns.size()<<"\n";
-      for(int i=0; i<int(tmp.size()); i++){
-        expr e1= (outputFuns[i](solverVars[solverVars.size()-1]) == tmp[i]);
-        s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, e1, numArgs))))));
-      }
+      // for(int i=0; i<int(tmp.size()); i++){
+      //   expr e1= (outputFuns[i](solverVars[solverVars.size()-1]) == tmp[i]);
+      //   s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, e1, numArgs))))));
+      // }
       if(t.isGuard && t.isAction){
-        expr body = implies(getInvariant(t.from, solverVars, stateInvFun) && t.guard(solverVars), stateInvFun[t.to](t.action(solverVarsAfter).size(), t.action(solverVarsAfter).data()));
+        expr body = implies(getInvariant(t.from, solverVars, stateInvFun) && t.guard(solverVars), (stateInvFun[t.to](t.action(solverVarsAfter).size(), t.action(solverVarsAfter).data() && (outputs[0] == tmp[0]))));
         s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, body, numArgs))))));
       } 
       else if (t.isGuard){
-        expr body = implies((stateInvFun[t.from](solverVars.size(), solverVars.data()) && t.guard(solverVars)), stateInvFun[t.to](solverVarsAfter.size(), solverVarsAfter.data()));
+        expr body = implies((stateInvFun[t.from](solverVars.size(), solverVars.data()) && t.guard(solverVars)), stateInvFun[t.to](solverVarsAfter.size(), solverVarsAfter.data() && (outputs[0] == tmp[0])));
         s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, body,numArgs))))));
       } else if (t.isAction){
-        expr body = implies(stateInvFun[t.from](solverVars.size(), solverVars.data()), stateInvFun[t.to](t.action(solverVarsAfter).size(), t.action(solverVarsAfter).data()));
+        expr body = implies(stateInvFun[t.from](solverVars.size(), solverVars.data()), stateInvFun[t.to](t.action(solverVarsAfter).size(), t.action(solverVarsAfter).data()&& (outputs[0] == tmp[0])));
         s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, body, numArgs))))));
       } else {
-        expr body = implies((stateInvFun[t.from](solverVars.size(), solverVars.data())), stateInvFun[t.to](solverVarsAfter.size(), solverVarsAfter.data()));
+        expr body = implies((stateInvFun[t.from](solverVars.size(), solverVars.data())), stateInvFun[t.to](solverVarsAfter.size(), solverVarsAfter.data()&& (outputs[0] == tmp[0])));
         s.add(forall(solverVars[solverVars.size()-1],  implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time), ((nestedForall(solverVars, body, numArgs))))));
       }
     } else {
