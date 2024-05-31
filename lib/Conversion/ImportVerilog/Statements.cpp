@@ -46,7 +46,7 @@ struct StmtVisitor {
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
-    return success(context.convertExpression(stmt.expr));
+    return failure(!context.convertExpression(stmt.expr));
   }
 
   // Handle variable declarations.
