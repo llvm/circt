@@ -20,27 +20,32 @@ firrtl.module @Foo() {}
 firrtl.module @MergeNetsChild1(in %reset: !firrtl.reset) {
   // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
   %localReset = firrtl.wire : !firrtl.reset
-  firrtl.strictconnect %localReset, %reset : !firrtl.reset
+  %localReset_write = firrtl.wrapSink %localReset : !firrtl.reset
+  firrtl.strictconnect %localReset_write, %reset : !firrtl.reset
 }
 // CHECK-LABEL: firrtl.module @MergeNetsChild2
 // CHECK-SAME: in %reset: !firrtl.asyncreset
 firrtl.module @MergeNetsChild2(in %reset: !firrtl.reset) {
   // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
   %localReset = firrtl.wire : !firrtl.reset
-  firrtl.strictconnect %localReset, %reset : !firrtl.reset
+  %localReset_write = firrtl.wrapSink %localReset : !firrtl.reset
+  firrtl.strictconnect %localReset_write, %reset : !firrtl.reset
 }
 // CHECK-LABEL: firrtl.module @MergeNetsTop
 firrtl.module @MergeNetsTop(in %reset: !firrtl.asyncreset) {
   // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
   %localReset = firrtl.wire : !firrtl.reset
   %t = firrtl.resetCast %reset : (!firrtl.asyncreset) -> !firrtl.reset
-  firrtl.strictconnect %localReset, %t : !firrtl.reset
+  %localReset_write = firrtl.wrapSink %localReset : !firrtl.reset
+  firrtl.strictconnect %localReset_write, %t : !firrtl.reset
   // CHECK: %c1_reset = firrtl.instance c1 @MergeNetsChild1(in reset: !firrtl.asyncreset)
   // CHECK: %c2_reset = firrtl.instance c2 @MergeNetsChild2(in reset: !firrtl.asyncreset)
   %c1_reset = firrtl.instance c1 @MergeNetsChild1(in reset: !firrtl.reset)
   %c2_reset = firrtl.instance c2 @MergeNetsChild2(in reset: !firrtl.reset)
-  firrtl.strictconnect %c1_reset, %localReset : !firrtl.reset
-  firrtl.strictconnect %c2_reset, %localReset : !firrtl.reset
+  %c1_reset_write = firrtl.wrapSink %c1_reset : !firrtl.reset
+  %c2_reset_write = firrtl.wrapSink %c2_reset : !firrtl.reset
+  firrtl.strictconnect %c1_reset_write, %localReset : !firrtl.reset
+  firrtl.strictconnect %c2_reset_write, %localReset : !firrtl.reset
 }
 
 // Should support casting to other types
@@ -53,11 +58,16 @@ firrtl.module @CastingToOtherTypes(in %a: !firrtl.uint<1>, out %v: !firrtl.uint<
   %2 = firrtl.asClock %r : (!firrtl.reset) -> !firrtl.clock
   %3 = firrtl.asAsyncReset %r : (!firrtl.reset) -> !firrtl.asyncreset
   %4 = firrtl.resetCast %a : (!firrtl.uint<1>) -> !firrtl.reset
-  firrtl.strictconnect %r, %4 : !firrtl.reset
-  firrtl.strictconnect %v, %0 : !firrtl.uint<1>
-  firrtl.strictconnect %w, %1 : !firrtl.sint<1>
-  firrtl.strictconnect %x, %2 : !firrtl.clock
-  firrtl.strictconnect %y, %3 : !firrtl.asyncreset
+  %r_write = firrtl.wrapSink %r : !firrtl.reset
+  %v_write = firrtl.wrapSink %v : !firrtl.uint<1>
+  %w_write = firrtl.wrapSink %w : !firrtl.sint<1>
+  %x_write = firrtl.wrapSink %x : !firrtl.clock
+  %y_write = firrtl.wrapSink %y : !firrtl.asyncreset
+  firrtl.strictconnect %r_write, %4 : !firrtl.reset
+  firrtl.strictconnect %v_write, %0 : !firrtl.uint<1>
+  firrtl.strictconnect %w_write, %1 : !firrtl.sint<1>
+  firrtl.strictconnect %x_write, %2 : !firrtl.clock
+  firrtl.strictconnect %y_write, %3 : !firrtl.asyncreset
 }
 
 // Should support const-casts

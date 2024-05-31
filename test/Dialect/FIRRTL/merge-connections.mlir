@@ -8,7 +8,8 @@ firrtl.circuit "Test"   {
   //     output b : {c: {clock: Clock, valid:UInt<1>}[2]}
   //     b <= a
   // COMMON-LABEL: firrtl.module @Test(
-  // COMMON-NEXT:    firrtl.strictconnect %b, %a
+  // COMMON-NEXT:    %0 = firrtl.wrapSink %b
+  // COMMON-NEXT:    firrtl.strictconnect %0, %a
   // COMMON-NEXT:  }
   firrtl.module @Test(in %a: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>, out %b: !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>) {
      %0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<clock: clock, valid: uint<1>>, 2>
@@ -40,7 +41,8 @@ firrtl.circuit "Test"   {
   //     a.c <= UInt<1>(1)
   // COMMON-LABEL: firrtl.module @Constant(
   // COMMON-NEXT:    %0 = firrtl.aggregateconstant [0 : ui1, 1 : ui1]
-  // COMMON-NEXT:    firrtl.strictconnect %a, %0
+  // COMMON-NEXT:    %1 = firrtl.wrapSink %a
+  // COMMON-NEXT:    firrtl.strictconnect %1, %0
   // COMMON-NEXT:  }
   firrtl.module @Constant(out %a: !firrtl.bundle<b: uint<1>, c: uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -55,13 +57,16 @@ firrtl.circuit "Test"   {
 
   // AGGRESSIVE-LABEL:  firrtl.module @ConcatToVector(
   // AGGRESSIVE-NEXT:     %0 = firrtl.vectorcreate %s1, %s2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.vector<uint<1>, 2>
-  // AGGRESSIVE-NEXT:     firrtl.strictconnect %sink, %0
+  // AGGRESSIVE-NEXT:     %1 = firrtl.wrapSink %sink
+  // AGGRESSIVE-NEXT:     firrtl.strictconnect %1, %0
   // AGGRESSIVE-NEXT:   }
   // CHECK-LABEL:       firrtl.module @ConcatToVector(
   // CHECK-NEXT:          %0 = firrtl.subindex %sink[1]
   // CHECK-NEXT:          %1 = firrtl.subindex %sink[0]
-  // CHECK-NEXT:          firrtl.strictconnect %1, %s1
-  // CHECK-NEXT:          firrtl.strictconnect %0, %s2
+  // CHECK-NEXT:          %2 = firrtl.wrapSink %0
+  // CHECK-NEXT:          %3 = firrtl.wrapSink %1
+  // CHECK-NEXT:          firrtl.strictconnect %3, %s1
+  // CHECK-NEXT:          firrtl.strictconnect %2, %s2
   // CHECK-NEXT:        }
 
   firrtl.module @ConcatToVector(in %s1: !firrtl.uint<1>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
@@ -83,8 +88,10 @@ firrtl.circuit "Test"   {
   // CHECK-NEXT:         %0 = firrtl.subindex %sink[1]
   // CHECK-NEXT:         %1 = firrtl.subindex %s1[0]
   // CHECK-NEXT:         %2 = firrtl.subindex %sink[0]
-  // CHECK-NEXT:         firrtl.strictconnect %2, %1
-  // CHECK-NEXT:         firrtl.strictconnect %0, %s2
+  // CHECK-NEXT:         %3 = firrtl.wrapSink %0
+  // CHECK-NEXT:         %4 = firrtl.wrapSink %2
+  // CHECK-NEXT:         firrtl.strictconnect %4, %1
+  // CHECK-NEXT:         firrtl.strictconnect %3, %s2
   // CHECK-NEXT:        }
   firrtl.module @FailedToUseAggregate(in %s1: !firrtl.vector<uint<1>, 2>, in %s2: !firrtl.uint<1>, out %sink: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %sink[1] : !firrtl.vector<uint<1>, 2>
@@ -101,11 +108,15 @@ firrtl.circuit "Test"   {
   // COMMON-LABEL: firrtl.module private @DUT
   // COMMON-NEXT:    %p = firrtl.wire
   // COMMON-NEXT:    %0 = firrtl.subfield
-  // COMMON-NEXT:    firrtl.strictconnect %0, %x_a
-  // COMMON-NEXT:    %1 = firrtl.subfield
-  // COMMON-NEXT:    firrtl.strictconnect %x_b, %1
-  // COMMON-NEXT:    firrtl.strictconnect %y_a, %0
-  // COMMON-NEXT:    firrtl.strictconnect %1, %y_b
+  // COMMON-NEXT:    %1 = firrtl.wrapSink %0
+  // COMMON-NEXT:    firrtl.strictconnect %1, %x_a
+  // COMMON-NEXT:    %2 = firrtl.subfield
+  // COMMON-NEXT:    %3 = firrtl.wrapSink %x_b
+  // COMMON-NEXT:    %4 = firrtl.wrapSink %y_a
+  // COMMON-NEXT:    %5 = firrtl.wrapSink %2
+  // COMMON-NEXT:    firrtl.strictconnect %3, %2
+  // COMMON-NEXT:    firrtl.strictconnect %4, %0
+  // COMMON-NEXT:    firrtl.strictconnect %5, %y_b
   // COMMON-NEXT:  }
   firrtl.module private @DUT(in %x_a: !firrtl.uint<2>,
                              out %x_b: !firrtl.uint<2>,
@@ -143,7 +154,8 @@ firrtl.circuit "Test"   {
 
   // COMMON-LABEL: @Alias
   firrtl.module @Alias(in %i: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>, out %o: !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>) {
-    // CHECK-NEXT:  firrtl.strictconnect %o, %i
+    // CHECK-NEXT:  %0 = firrtl.wrapSink %o
+    // CHECK-NEXT:  firrtl.strictconnect %0, %i
     %0 = firrtl.subfield %i[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
     %1 = firrtl.subfield %o[f] : !firrtl.alias<MyBundle, bundle<f: uint<1>, b: uint<1>>>
     %write_1 = firrtl.wrapSink %1 : !firrtl.uint<1>

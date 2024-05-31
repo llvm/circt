@@ -111,9 +111,12 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>, out %out_mux2cell_0: !firrtl.uint<1>, out %out_mux2cell_1: !firrtl.uint<1>) {{.*}}{
 ; MLIR:         %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
-; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.strictconnect %cat_c, %b : !firrtl.uint<2>
+; MLIR-NEXT:    %[[CATA:.*]] = firrtl.wrapSink %cat_a
+; MLIR-NEXT:    firrtl.strictconnect %[[CATA]], %b : !firrtl.uint<2>
+; MLIR-NEXT:    %[[CATB:.*]] = firrtl.wrapSink %cat_b
+; MLIR-NEXT:    firrtl.strictconnect %[[CATB]], %b : !firrtl.uint<2>
+; MLIR-NEXT:    %[[CATC:.*]] = firrtl.wrapSink %cat_c
+; MLIR-NEXT:    firrtl.strictconnect %[[CATC]], %b : !firrtl.uint<2>
 ; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance implicitTrunc @ImplicitTrunc(in inp_1: !firrtl.uint<1>, in inp_2: !firrtl.sint<5>, out out1: !firrtl.sint<3>, out out2: !firrtl.sint<3>)
 ; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_1, %a : !firrtl.uint<1>
 ; MLIR-NEXT:    %0 = firrtl.asSInt %cat_d : (!firrtl.uint<6>) -> !firrtl.sint<6>

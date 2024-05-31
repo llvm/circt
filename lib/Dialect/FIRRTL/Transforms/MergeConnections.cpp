@@ -81,25 +81,28 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
   LLVM_DEBUG(llvm::dbgs() << "Visiting " << connect << "\n");
-  auto destTy = type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType());
+  Value realDest = connect.getDest();
+  if (auto wrap = dyn_cast<WrapSinkOp>(realDest.getDefiningOp()))
+    realDest = wrap.getInput();
+  auto destTy = type_dyn_cast<FIRRTLBaseType>(realDest.getType());
   if (!destTy || !destTy.isPassive() ||
       !firrtl::getBitWidth(destTy).has_value())
     return false;
 
-  auto destFieldRef = getFieldRefFromValue(connect.getDest());
+  auto destFieldRef = getFieldRefFromValue(realDest);
   auto destRoot = destFieldRef.getValue();
 
   // If dest is derived from mem op or has a ground type, we cannot merge them.
   // If the connect's destination is a root value, we cannot merge.
-  if (destRoot.getDefiningOp<MemOp>() || destRoot == connect.getDest())
+  if (destRoot.getDefiningOp<MemOp>() || destRoot == realDest)
     return false;
 
   Value parent;
   unsigned index;
-  if (auto subfield = dyn_cast<SubfieldOp>(connect.getDest().getDefiningOp()))
+  if (auto subfield = dyn_cast<SubfieldOp>(realDest.getDefiningOp()))
     parent = subfield.getInput(), index = subfield.getFieldIndex();
   else if (auto subindex =
-               dyn_cast<SubindexOp>(connect.getDest().getDefiningOp()))
+               dyn_cast<SubindexOp>(realDest.getDefiningOp()))
     parent = subindex.getInput(), index = subindex.getIndex();
   else
     llvm_unreachable("unexpected destination");
@@ -162,7 +165,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
     for (auto idx : llvm::seq(0u, (unsigned)aggregateType.getNumElements())) {
       auto src = subConnections[idx].getSrc();
-      assert(src && "all subconnections are guranteed to exist");
+      assert(src && "all subconnections are guaranteed to exist");
       operands.push_back(src);
 
       areOperandsAllConstants &= isConstantLike(src);
@@ -236,8 +239,12 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
-  if (!parentBaseTy.hasUninferredWidth())
-    builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+  if (!parentBaseTy.hasUninferredWidth()) {
+    auto newDst = parent;
+    if (!isa<LHSType>(parent.getType()))
+      newDst = builder->create<WrapSinkOp>(connect.getLoc(), parent);
+    builder->create<StrictConnectOp>(connect.getLoc(), newDst, merged);
+  }
   else
     builder->create<ConnectOp>(connect.getLoc(), parent, merged);
 
@@ -266,7 +273,7 @@ bool MergeConnection::run() {
   // Clean up dead operations introduced by this pass.
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
     if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
-            CatPrimOp>(op))
+            CatPrimOp, WrapSinkOp>(op))
       if (op.use_empty()) {
         changed = true;
         op.erase();
