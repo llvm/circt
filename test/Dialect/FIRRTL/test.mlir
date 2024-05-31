@@ -200,7 +200,7 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   %out_write = firrtl.wrapSink %out : !firrtl.uint<2>
   %tag_write = firrtl.wrapSink %tag : !firrtl.uint<1>
   firrtl.strictconnect %out_write, %v : !firrtl.uint<2>
-  firrtl.strictconnect %tag, %t : !firrtl.uint<1>
+  firrtl.strictconnect %tag_write, %t : !firrtl.uint<1>
 
   %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
   // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
