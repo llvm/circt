@@ -34,10 +34,13 @@ static Value dropWrite(PatternRewriter &rewriter, OpResult old,
   SmallPtrSet<Operation *, 8> users;
   for (auto *user : old.getUsers())
     users.insert(user);
-  for (Operation *user : users)
+  for (Operation *user : users) {
     if (auto connect = dyn_cast<FConnectLike>(user))
       if (connect.getDest() == old)
         rewriter.eraseOp(user);
+    if (auto wrap = dyn_cast<WrapSinkOp>(user))
+      dropWrite(rewriter, wrap->getResult(0), passthrough);
+  }
   return passthrough;
 }
 
@@ -2063,7 +2066,10 @@ struct AggOneShot : public mlir::RewritePattern {
                                                                destType, values)
                        : rewriter.createOrFold<VectorCreateOp>(
                              op->getLoc(), destType, values);
-    rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
+    if (isa<LHSType>(destType))
+      rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
+    else
+      rewriter.createOrFold<ConnectOp>(op->getLoc(), dest, newVal);
     for (Operation *user : dest.getUsers()) {
       if (auto subIndex = dyn_cast<SubindexOp>(user)) {
         for (Operation *subuser :
