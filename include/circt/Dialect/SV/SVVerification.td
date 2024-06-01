@@ -159,3 +159,71 @@ def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
     section 16.5 of the SystemVerilog 2017 specification.
   }];
 }
+
+/// Concurrent Property assertions/assumptions/covers that are clocked and disabled
+class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, [NoSubstitutionsIfNoMessage] # traits> {
+  let arguments = (ins
+    EventControlAttr:$event, I1:$clock, I1: $disable, LTLAnyPropertyType:$property,
+    OptionalAttr<StrAttr>:$label,
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
+
+  let assemblyFormat = [{
+    $event $clock `,` `disable` $disable `,` $property
+    (`label` $label^)?
+    (`message` $message^ (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?)? attr-dict
+  }];
+
+  let builders = [
+    // no label, no message
+    OpBuilder<(ins
+      EventControlAttr.storageType:$event,
+      "mlir::Value":$clock,
+      "mlir::Value":$disable,
+      "mlir::Value":$property),
+      [{ build(odsBuilder, odsState, event, clock, disable, property, StringAttr{},
+        StringAttr{}, ValueRange{}); }]>,
+    // no message
+    OpBuilder<(ins
+      EventControlAttr.storageType:$event,
+      "mlir::Value":$clock,
+      "mlir::Value":$disable,
+      "mlir::Value":$property,
+      StrAttr.storageType:$label),
+      [{ build(odsBuilder, odsState, event, clock, disable, property, label,
+        StringAttr{}, ValueRange{}); }]>
+  ];
+
+  let hasCanonicalizer = 1;
+}
+
+def AssertPropertyOp : AssertPropertyLikeOp<"sva.assert_property"> {
+  let summary = "Property assertion that is both clocked and disabled.";
+  let description = [{
+    Specify that a property of the hardware design is true whenever the property
+    is evaluated.  This can be used to both document the behavior of the design
+    and to test that the design behaves as expected. Supports disable conditions.  
+    See section 16.5 of the SystemVerilog 2017 specification.
+  }];
+}
+
+def AssumePropertyOp : AssertPropertyLikeOp<"sva.assume_property"> {
+  let summary = "Property assumption that is both clocked and disabled.";
+  let description = [{
+    Specify that a property is assumed to be true whenever the property is
+    evaluated.  This can be used to both document the behavior of the design and
+    to test that the design behaves as expected. Supports disable conditions.
+    See section 16.5 of the SystemVerilog 2017 specification.
+  }];
+}
+
+def CoverPropertyOp : AssertPropertyLikeOp<"sva.covert_property",
+                                          [NoMessageVerif]> {
+  let summary = "Cover over a property that is both clocked and disabled.";
+  let description = [{
+    Specify that a specific property should be monitored for coverage, i.e., a
+    simulation will watch if it occurrs and how many times it occurs. 
+    Supports disable conditions. See section 16.5 of the SystemVerilog 2017 specification.
+  }];
+}
