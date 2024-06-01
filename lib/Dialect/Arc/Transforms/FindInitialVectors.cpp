@@ -46,6 +46,22 @@ using namespace arc;
 using llvm::SmallMapVector;
 
 namespace {
+struct FindInitialVectorsPass
+    : public impl::FindInitialVectorsBase<FindInitialVectorsPass> {
+  void runOnOperation() override;
+
+  struct StatisticVars {
+    size_t vecOps{0};
+    size_t savedOps{0};
+    size_t bigSeedVec{0};
+    size_t vecCreated{0};
+  };
+
+  StatisticVars stat;
+};
+} // namespace
+
+namespace {
 struct TopologicalOrder {
   /// An integer rank assigned to each operation.
   SmallMapVector<Operation *, unsigned, 32> opRanks;
@@ -125,17 +141,12 @@ struct Vectorizer {
     return success();
   }
 
-  LogicalResult vectorize();
+  LogicalResult vectorize(FindInitialVectorsPass::StatisticVars &stat);
   // Store Isomorphic ops together
   SmallMapVector<Key, SmallVector<Operation *>, 16> candidates;
   TopologicalOrder order;
   Block *block;
 };
-
-size_t vecOps = 0;
-size_t savedOps = 0;
-size_t bigSeedVec = 0;
-size_t vecCreated = 0;
 } // namespace
 
 namespace llvm {
@@ -165,7 +176,8 @@ struct DenseMapInfo<Key> {
 
 // When calling this function we assume that we have the candidate groups of
 // isomorphic ops so we need to feed them to the `VectorizeOp`
-LogicalResult Vectorizer::vectorize() {
+LogicalResult
+Vectorizer::vectorize(FindInitialVectorsPass::StatisticVars &stat) {
   LLVM_DEBUG(llvm::dbgs() << "- Vectorizing the ops in block" << block << "\n");
 
   if (failed(collectSeeds(block)))
@@ -186,10 +198,10 @@ LogicalResult Vectorizer::vectorize() {
       continue;
 
     // Collect Statistics
-    vecOps += ops.size();
-    savedOps += ops.size() - 1;
-    bigSeedVec = std::max(ops.size(), bigSeedVec);
-    ++vecCreated;
+    stat.vecOps += ops.size();
+    stat.savedOps += ops.size() - 1;
+    stat.bigSeedVec = std::max(ops.size(), stat.bigSeedVec);
+    ++stat.vecCreated;
 
     // Here, we have a bunch of isomorphic ops, we need to extract the operands
     // results and attributes of every op and store them in a vector
@@ -244,18 +256,11 @@ LogicalResult Vectorizer::vectorize() {
   return success();
 }
 
-namespace {
-struct FindInitialVectorsPass
-    : public impl::FindInitialVectorsBase<FindInitialVectorsPass> {
-  void runOnOperation() override;
-};
-} // namespace
-
 void FindInitialVectorsPass::runOnOperation() {
   for (auto moduleOp : getOperation().getOps<hw::HWModuleOp>()) {
     auto result = moduleOp.walk([&](Block *block) {
       if (!mayHaveSSADominance(*block->getParent()))
-        if (failed(Vectorizer(block).vectorize()))
+        if (failed(Vectorizer(block).vectorize(stat)))
           return WalkResult::interrupt();
       return WalkResult::advance();
     });
@@ -263,10 +268,10 @@ void FindInitialVectorsPass::runOnOperation() {
       return signalPassFailure();
   }
 
-  numOfVectorizedOps = vecOps;
-  numOfSavedOps = savedOps;
-  biggestSeedVector = bigSeedVec;
-  numOfVectorsCreated = vecCreated;
+  numOfVectorizedOps = stat.vecOps;
+  numOfSavedOps = stat.savedOps;
+  biggestSeedVector = stat.bigSeedVec;
+  numOfVectorsCreated = stat.vecCreated;
 }
 
 std::unique_ptr<Pass> arc::createFindInitialVectorsPass() {

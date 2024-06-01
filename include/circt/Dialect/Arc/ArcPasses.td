@@ -63,7 +63,7 @@ def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createFindInitialVectorsPass()";
   let dependentDialects = ["arc::ArcDialect"];
   let statistics = [
-    Statistic<"numOfVectorizedOps", "vectorOps",
+    Statistic<"numOfVectorizedOps", "vectorizedOps",
       "Total number of ops that were vectorized">,
     Statistic<"numOfSavedOps", "numOfSavedOps",
       "Total number of ops saved after FindInitialVectors pass">,
