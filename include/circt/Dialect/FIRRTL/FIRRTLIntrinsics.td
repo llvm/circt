@@ -187,6 +187,19 @@ def FOpenIntrinsicOp : FIRRTLOp<"int.fopen", []> {
   }];
 }
 
+def FCloseIntrinsicOp : FIRRTLOp<"int.fclose", []> {
+  let summary = "Close a file descriptor";
+  let description = [{
+    The `firrtl.int.fclose` intrinsic closes a file descriptor.
+    It will be lowered into a SV `fclose` system task.
+  }];
+
+  let arguments = (ins SInt32Type:$fd);
+  let results = (outs);
+
+  let assemblyFormat = "$fd attr-dict `:` qualified(type($fd))";
+}
+
 //===----------------------------------------------------------------------===//
 // Other intrinsics
 //===----------------------------------------------------------------------===//

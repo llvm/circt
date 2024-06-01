@@ -46,6 +46,9 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: %x7 = hw.wire [[fd]]
     %7 = firrtl.int.fopen "file.txt", "w" : !firrtl.sint<32>
     %x7 = firrtl.node interesting_name %7 : !firrtl.sint<32>
+
+    // CHECK-NEXT: sv.system "fclose"(%x7) : (i32) -> none
+    firrtl.int.fclose %x7 : !firrtl.sint<32>
   }
 
   // CHECK-LABEL: hw.module @ClockGate

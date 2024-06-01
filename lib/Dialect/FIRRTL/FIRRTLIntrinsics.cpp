@@ -655,6 +655,22 @@ public:
   }
 };
 
+class CirctFCloseConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNParam(0) || gi.hasNInputs(1) ||
+           gi.sizedInput<SIntType>(0, 32);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    rewriter.replaceOpWithNewOp<FCloseIntrinsicOp>(gi.op,
+                                                   adaptor.getOperands()[0]);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -722,4 +738,5 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
   lowering.add<CirctFOpenConverter>("circt.fopen", "circt_fopen");
+  lowering.add<CirctFCloseConverter>("circt.fclose", "circt_fclose");
 }
