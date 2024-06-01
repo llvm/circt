@@ -4776,6 +4776,18 @@ LogicalResult emitSVAssertPropertyLike(Op op, PPExtString opName) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(AssertPropertyOp op) {
+  return emitSVAssertPropertyLike(op, PPExtString("assert"));
+}
+
+LogicalResult StmtEmitter::visitSV(AssumePropertyOp op) {
+  return emitSVAssertPropertyLike(op, PPExtString("assume"));
+}
+
+LogicalResult StmtEmitter::visitSV(CoverPropertyOp op) {
+  return emitSVAssertPropertyLike(op, PPExtString("cover"));
+}
+
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
 LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
