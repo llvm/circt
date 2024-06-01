@@ -134,8 +134,7 @@ LatencyRetimingPattern::matchAndRewrite(ClockedOpInterface op,
     return failure();
 
   auto setLatency = [&](Operation *op, uint64_t newLatency, Value clock) {
-    bool validOp = isa<StateOp, CallOp>(op);
-    assert(validOp && "must be a state or call op");
+    assert((isa<StateOp, CallOp>(op)) && "must be a state or call op");
     bool isInClockDomain = op->getParentOfType<ClockDomainOp>();
 
     if (auto stateOp = dyn_cast<StateOp>(op)) {

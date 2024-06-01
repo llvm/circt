@@ -48,7 +48,8 @@ public:
             FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
-            CoverConcurrentOp,
+            CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
+            CoverPropertyOp,
             // Bind Statements
             BindOp,
             // Simulator control tasks

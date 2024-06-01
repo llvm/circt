@@ -8,7 +8,7 @@
 
 set (CIRCT_KNOWN_FRONTENDS
   PyCDE)
-option(CIRCT_ENABLE_FRONTENDS "")
+set(CIRCT_ENABLE_FRONTENDS "" CACHE STRING "List of frontends to enable")
 foreach(proj ${CIRCT_KNOWN_FRONTENDS})
   string(TOUPPER "${proj}" upper_proj)
   string(REGEX REPLACE "-" "_" upper_proj ${upper_proj})
