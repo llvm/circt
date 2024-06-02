@@ -63,6 +63,13 @@ struct CLOptions {
                      "CIRCT IR")),
       cl::init(LoweringMode::Full), cl::cat(cat)};
 
+  cl::opt<bool> emitBytecode{
+      "emit-bytecode", cl::desc("Emit bytecode when generating MLIR output"),
+      cl::init(false)};
+
+  cl::opt<bool> force{"f", cl::desc("Enable binary output on terminals"),
+                      cl::init(false)};
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//
@@ -204,6 +211,19 @@ static CLOptions opts;
 // Implementation
 //===----------------------------------------------------------------------===//
 
+/// Check output stream before writing bytecode to it.
+/// Warn and return true if output is known to be displayed.
+static bool checkBytecodeOutputToConsole(raw_ostream &os) {
+  if (os.is_displayed()) {
+    errs() << "WARNING: You're attempting to print out a bytecode file.\n"
+              "This is inadvisable as it may cause display problems. If\n"
+              "you REALLY want to taste MLIR bytecode first-hand, you\n"
+              "can force output with the `-f' option.\n\n";
+    return true;
+  }
+  return false;
+}
+
 static LogicalResult executeWithSources(MLIRContext *context,
                                         llvm::SourceMgr &sourceMgr) {
   // Create the timing manager we use to sample execution times.
@@ -270,7 +290,13 @@ static LogicalResult executeWithSources(MLIRContext *context,
     return failure();
 
   // Print the final MLIR.
-  module->print(outputFile->os());
+  auto& os = outputFile->os();
+  if (opts.emitBytecode && (opts.force || !checkBytecodeOutputToConsole(os)))
+    writeBytecodeToFile(module.get(), os,
+                        mlir::BytecodeWriterConfig(getCirctVersion()));
+  else
+    module->print(os);
+
   outputFile->keep();
   return success();
 }
