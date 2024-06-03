@@ -305,8 +305,8 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
     // OpBuilder<(ins "StringRef":$nextState)>,
     OpBuilder<(ins "fsm::StateOp":$nextState)>,
     OpBuilder<(ins "StringRef":$nextState,
-                   CArg<"const std::function<void()>&", "{}">:$guardCtor,
-                   CArg<"const std::function<void()>&", "{}">:$actionCtor)>
+                   CArg<"llvm::function_ref<void()>", "{}">:$guardCtor,
+                   CArg<"llvm::function_ref<void()>", "{}">:$actionCtor)>
   ];
 
   let skipDefaultBuilders = 1;
