@@ -45,7 +45,7 @@ firrtl.module @MyModule(in %in : !firrtl.uint<8>,
 }
 
 // CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 
@@ -92,7 +92,7 @@ firrtl.module @Mod2(in %in : !firrtl.uint<8>,
 
 // CHECK-LABEL: firrtl.module @Mod2(in %some_name: !firrtl.uint<8>,
 // CHECK:                           out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 // Check that quotes port names are paresable and printed with quote only if needed.

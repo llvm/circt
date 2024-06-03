@@ -46,7 +46,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let results = (outs);
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+    "$dest `,` $src  attr-dict `:` custom<OptionalBinaryOpTypes>(type($dest), type($src))";
 
   let hasVerifier = 1;
   let hasCanonicalizer = true;
