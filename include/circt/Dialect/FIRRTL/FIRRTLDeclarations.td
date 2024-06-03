@@ -388,7 +388,7 @@ def NodeOp : HardwareDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : HardwareDeclOp<"reg", [Forceable]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable, Sequential]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -480,7 +480,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable, Sequential]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:

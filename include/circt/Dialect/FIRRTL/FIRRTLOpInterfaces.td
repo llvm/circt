@@ -523,4 +523,14 @@ def Forceable : OpInterface<"Forceable"> {
   }];
 }
 
+def Sequential : OpInterface<"Sequential"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    This interface is used for sequentional ops, for which the output depends on
+    the current and previous input values. This can be used to denote ops that
+    should be ignored when checking for combinational loops.
+    Memory is not considered a sequential op since it has inputs like the enable
+    and address ports which can form a combinational loop with the result.
+  }];
+}
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD
