@@ -379,15 +379,13 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
       return emitError(op->getLoc(), "Unsupported procedure operation");
       return failure();
     case ProcedureKind::Initial:
-      auto procOp = rewriter.replaceOpWithNewOp<llhd::ProcOp>(
+      rewriter.setInsertionPointToEnd(
+          op->getParentOfType<mlir::ModuleOp>()->getBlock());
+      rewriter.replaceOpWithNewOp<llhd::ProcOp>(
           op,
           mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
                                   std::nullopt),
           uint64_t(0), mlir::ArrayAttr(), mlir::ArrayAttr());
-      SymbolTable(op->getParentOfType<mlir::ModuleOp>()).insert(procOp);
-      procOp.getBody().emplaceBlock();
-      OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToEnd(procOp->getBlock());
       return success();
     };
   }
