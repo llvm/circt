@@ -184,8 +184,6 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 /// bundle-elt ::= identifier flip? ':' type
 /// enum-elt ::= identifier ':' type
 /// ```
-/// enum-elt ::= identifier ':' type
-/// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
                                             Type &result) {
   bool isConst = false;
