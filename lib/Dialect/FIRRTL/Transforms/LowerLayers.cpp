@@ -498,7 +498,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto refResolve = dyn_cast<RefResolveOp>(op))
         if (refResolve.getResult().hasOneUse() &&
             refResolve.getRef().getParentBlock() != body)
-          if (auto connect = dyn_cast<StrictConnectOp>(
+          if (auto connect = dyn_cast<MatchingConnectOp>(
                   *refResolve.getResult().getUsers().begin()))
             if (connect.getDest().getParentBlock() != body) {
               refResolve->moveBefore(layerBlock);

@@ -3590,7 +3590,7 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult StrictConnectOp::verify() {
+LogicalResult MatchingConnectOp::verify() {
   if (failed(checkConnectConditionality(*this)))
     return failure();
 

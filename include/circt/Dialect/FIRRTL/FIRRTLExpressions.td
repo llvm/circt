@@ -412,7 +412,7 @@ def LHSSubindexOp : FIRRTLExprOp<"lhssubindex"> {
       return FieldRef(getInput(), btype.getFieldID(getIndex()));
     }
 
-    using InputType = OpenVectorType;
+    using InputType = FVectorType;
   }];
 }
 
@@ -1493,27 +1493,6 @@ def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
   }];
 }
 def LTLDisableIntrinsicOp : BinaryLTLIntrinsicOp<"disable">;
-
-
-//===----------------------------------------------------------------------===//
-// Transitional Operations
-//===----------------------------------------------------------------------===//
-
-def WrapSinkOp : FIRRTLOp<"wrapSink", [DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>, Pure]> {
-  let summary = "Turn an output value into a writable (sink) values";
-  let description = [{
-    This is a transitional operation which wraps an sink flow into splits duplex-flow values into their
-    individual source and sink components.  The operands to this op must be a 
-    port, instance, wire, register, or memory.
-  }];
-  let arguments = (ins PassiveType:$input);
-  let results = (outs LHSType:$write);
-
-  let assemblyFormat =
-    "$input attr-dict `:` type($input)";
-
-  let hasVerifier = 1;
-}
 
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

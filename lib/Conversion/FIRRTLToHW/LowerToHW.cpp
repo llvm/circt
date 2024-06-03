@@ -1190,7 +1190,7 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
     // destination.
     if (use.getOperandNumber() != 0)
       return {};
-    if (!isa<ConnectOp, StrictConnectOp>(use.getOwner()))
+    if (!isa<ConnectOp, MatchingConnectOp>(use.getOwner()))
       return {};
 
     // We only support things with a single connect.
@@ -1668,7 +1668,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FailureOr<bool> lowerConnect(Value dest, Value srcVal);
   LogicalResult visitStmt(ConnectOp op);
-  LogicalResult visitStmt(StrictConnectOp op);
+  LogicalResult visitStmt(MatchingConnectOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -4276,7 +4276,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   return success();
 }
 
-LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
+LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   auto dest = op.getDest();
   auto srcVal = getLoweredValue(op.getSrc());
   if (!srcVal)

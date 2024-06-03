@@ -60,7 +60,7 @@ public:
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, ConstCastOp, RefCastOp, WrapSinkOp,
+            UninferredResetCastOp, ConstCastOp, RefCastOp, 
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
@@ -206,7 +206,6 @@ public:
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);
-  HANDLE(WrapSinkOp, Unhandled);
 
   // Property expressions.
   HANDLE(StringConstantOp, Unhandled);
@@ -227,7 +226,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
+        .template Case<AttachOp, ConnectOp, MatchingConnectOp, StrictConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
                        AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
@@ -261,6 +260,7 @@ public:
 
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
+  HANDLE(MatchingConnectOp);
   HANDLE(StrictConnectOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);

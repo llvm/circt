@@ -164,13 +164,13 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeClock =
           builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<StrictConnectOp>(
+      builder.create<MatchingConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<StrictConnectOp>(
+      builder.create<MatchingConnectOp>(
           enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
       builder.setInsertionPointToEnd(wmode->getBlock());
-      builder.create<StrictConnectOp>(wmode, complementTerm);
+      builder.create<MatchingConnectOp>(wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
       size_t dbgsIndex = 0;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
@@ -553,7 +553,7 @@ private:
           if (fName.contains("mask")) {
             WireOp dummy = builder.create<WireOp>(oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<StrictConnectOp>(
+            builder.create<MatchingConnectOp>(
                 sf, builder.create<ConstantOp>(
                         UIntType::get(builder.getContext(), 1), APInt(1, 1)));
           } else

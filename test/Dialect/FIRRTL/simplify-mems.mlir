@@ -79,7 +79,7 @@ firrtl.circuit "ReadWriteToWrite" {
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
 
     // CHECK: [[ADDR:%.+]] = firrtl.subfield %Memory_rw[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
-    // CHECK: [[END:%.+]] = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+    // CHECK: [[EN:%.+]] = firrtl.subfield %Memory_rw[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     // CHECK: [[CLK:%.+]] = firrtl.subfield %Memory_rw[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     // CHECK: [[DATA:%.+]] = firrtl.subfield %Memory_rw[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     // CHECK: [[MASK:%.+]] = firrtl.subfield %Memory_rw[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
@@ -87,7 +87,7 @@ firrtl.circuit "ReadWriteToWrite" {
     // CHECK: [[ADDR_W:%.*]] = firrtl.wrapSink [[ADDR]]
     // CHECK: firrtl.strictconnect [[ADDR_W]], %addr : !firrtl.uint<4>
     // CHECK: [[EN_W:%.*]] = firrtl.wrapSink [[EN]]
-    // CHECK: firrtl.strictconnect [[END_W]], %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.strictconnect [[EN_W]], %c1_ui1 : !firrtl.uint<1>
     // CHECK: [[CLK_W:%.*]] = firrtl.wrapSink [[CLK]]
     // CHECK: firrtl.strictconnect [[CLK_W]], %clock : !firrtl.clock
     // CHECK: [[DUMMY_WMODE_W:%.*]] = firrtl.wrapSink [[DUMMY_WMODE]]

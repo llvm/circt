@@ -1607,7 +1607,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
 
-      .Case<ConnectOp, StrictConnectOp>(
+      .Case<ConnectOp, MatchingConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
@@ -1615,7 +1615,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
       // StrictConnect is an identify constraint
-      .Case<StrictConnectOp>([&](auto op) {
+      .Case<MatchingConnectOp>([&](auto op) {
         // This back-propagates width from destination to source,
         // causing source to sometimes be inferred wider than
         // it should be (https://github.com/llvm/circt/issues/5391).

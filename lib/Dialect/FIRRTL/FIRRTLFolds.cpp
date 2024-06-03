@@ -1702,8 +1702,8 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 /// after the definition of the value. Users of this function are likely
 /// interested in the source side of the returned connect, the definition of
 /// which does likely not dominate the original value.
-StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
-  StrictConnectOp connect;
+MatchingConnectOp firrtl::getSingleConnectUserOf(Value value) {
+  MatchingConnectOp connect;
 
   for (Operation *user : value.getUsers()) {
     // If we see an attach or aggregate sublements, just conservatively fail.
@@ -1725,7 +1725,7 @@ StrictConnectOp firrtl::getSingleConnectUserOf(Value value) {
 }
 
 // Forward simple values through wire's and reg's.
-static LogicalResult canonicalizeSingleSetConnect(StrictConnectOp op,
+static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
                                                   PatternRewriter &rewriter) {
   // While we can do this for nearly all wires, we currently limit it to simple
   // things.
@@ -1796,7 +1796,7 @@ void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
       context);
 }
 
-LogicalResult StrictConnectOp::canonicalize(StrictConnectOp op,
+LogicalResult MatchingConnectOp::canonicalize(MatchingConnectOp op,
                                             PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
 
@@ -2000,12 +2000,12 @@ struct AggOneShot : public mlir::RewritePattern {
     for (Operation *user : lhs->getResult(0).getUsers()) {
       if (user->getParentOp() != lhs->getParentOp())
         return {};
-      if (auto aConnect = dyn_cast<StrictConnectOp>(user)) {
+      if (auto aConnect = dyn_cast<MatchingConnectOp>(user)) {
         if (aConnect.getDest() == lhs->getResult(0))
           return {};
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
         for (Operation *subuser : subField.getResult().getUsers()) {
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+          if (auto aConnect = dyn_cast<MatchingConnectOp>(subuser)) {
             if (aConnect.getDest() == subField) {
               if (subuser->getParentOp() != lhs->getParentOp())
                 return {};
@@ -2019,7 +2019,7 @@ struct AggOneShot : public mlir::RewritePattern {
         }
       } else if (auto subIndex = dyn_cast<SubindexOp>(user)) {
         for (Operation *subuser : subIndex.getResult().getUsers()) {
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser)) {
+          if (auto aConnect = dyn_cast<MatchingConnectOp>(subuser)) {
             if (aConnect.getDest() == subIndex) {
               if (subuser->getParentOp() != lhs->getParentOp())
                 return {};
@@ -2067,20 +2067,20 @@ struct AggOneShot : public mlir::RewritePattern {
                        : rewriter.createOrFold<VectorCreateOp>(
                              op->getLoc(), destType, values);
     if (isa<LHSType>(destType))
-      rewriter.createOrFold<StrictConnectOp>(op->getLoc(), dest, newVal);
+      rewriter.createOrFold<MatchingConnectOp>(op->getLoc(), dest, newVal);
     else
       rewriter.createOrFold<ConnectOp>(op->getLoc(), dest, newVal);
     for (Operation *user : dest.getUsers()) {
       if (auto subIndex = dyn_cast<SubindexOp>(user)) {
         for (Operation *subuser :
              llvm::make_early_inc_range(subIndex.getResult().getUsers()))
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+          if (auto aConnect = dyn_cast<MatchingConnectOp>(subuser))
             if (aConnect.getDest() == subIndex)
               rewriter.eraseOp(aConnect);
       } else if (auto subField = dyn_cast<SubfieldOp>(user)) {
         for (Operation *subuser :
              llvm::make_early_inc_range(subField.getResult().getUsers()))
-          if (auto aConnect = dyn_cast<StrictConnectOp>(subuser))
+          if (auto aConnect = dyn_cast<MatchingConnectOp>(subuser))
             if (aConnect.getDest() == subField)
               rewriter.eraseOp(aConnect);
       }
@@ -2420,7 +2420,7 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
           auto zero = rewriter.create<firrtl::ConstantOp>(
               wire.getLoc(), firrtl::type_cast<IntType>(wire.getType()),
               APInt::getZero(0));
-          rewriter.create<StrictConnectOp>(wire.getLoc(), wire, zero);
+          rewriter.create<MatchingConnectOp>(wire.getLoc(), wire, zero);
         }
       }
     }
@@ -2692,7 +2692,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     // Finds the users of write ports. This expects all the data/wdata fields
     // of the ports to be used solely as the destination of strict connects.
     // If a memory has ports with other uses, it is excluded from optimisation.
-    SmallVector<StrictConnectOp> writeOps;
+    SmallVector<MatchingConnectOp> writeOps;
     auto findWriteUsers = [&](Value port, StringRef field) -> LogicalResult {
       auto portTy = type_cast<BundleType>(port.getType());
       auto fieldIndex = portTy.getElementIndex(field);
@@ -2835,7 +2835,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
           catOfSlices = slice;
         }
       }
-      rewriter.replaceOpWithNewOp<StrictConnectOp>(writeOp, writeOp.getDest(),
+      rewriter.replaceOpWithNewOp<MatchingConnectOp>(writeOp, writeOp.getDest(),
                                                    catOfSlices);
     }
 
@@ -2929,7 +2929,7 @@ struct FoldRegMems : public mlir::RewritePattern {
                        .create<RegOp>(mem.getLoc(), value.getType(), clock,
                                       rewriter.getStringAttr(regName))
                        .getResult();
-        rewriter.create<StrictConnectOp>(value.getLoc(), reg, value);
+        rewriter.create<MatchingConnectOp>(value.getLoc(), reg, value);
         value = reg;
       }
       return value;
@@ -3021,7 +3021,7 @@ struct FoldRegMems : public mlir::RewritePattern {
 
       next = rewriter.create<MuxPrimOp>(next.getLoc(), en, masked, next);
     }
-    rewriter.create<StrictConnectOp>(reg.getLoc(), reg, next);
+    rewriter.create<MatchingConnectOp>(reg.getLoc(), reg, next);
 
     // Delete the fields and their associated connects.
     for (Operation *conn : connects)

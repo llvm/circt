@@ -65,7 +65,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     auto lhs = builder.create<WrapSinkOp>(dst);
-    builder.create<StrictConnectOp>(lhs, src);
+    builder.create<MatchingConnectOp>(lhs, src);
     return;
   }
 
@@ -162,7 +162,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     auto lhs = builder.create<WrapSinkOp>(dst);
-    builder.create<StrictConnectOp>(lhs, src);
+    builder.create<MatchingConnectOp>(lhs, src);
   } else
     builder.create<ConnectOp>(dst, src);
 }
