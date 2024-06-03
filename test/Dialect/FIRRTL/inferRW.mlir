@@ -42,12 +42,12 @@ firrtl.circuit "TLRAM" {
 // CHECK:  %[[v8:.+]] = firrtl.or %[[readEnable:.+]], %[[writeEnable]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:  firrtl.matchingconnect %[[v1:.+]], %[[v8]] : !firrtl.uint<1>
 // CHECK:  firrtl.ref.define %dbg_0, %mem_0_dbgs : !firrtl.probe<vector<uint<8>, 16>>
-// CHECK:  firrtl.connect %[[readAddr]], %[[index2:.+]] : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK:  firrtl.connect %[[readEnable]], %mem_MPORT_en : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:  firrtl.connect %[[writeAddr]], %index : !firrtl.uint<4>, !firrtl.uint<4>
-// CHECK:  firrtl.connect %[[writeEnable]], %wen : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:  firrtl.connect %[[readAddr]], %[[index2:.+]] : !firrtl.uint<4>
+// CHECK:  firrtl.connect %[[readEnable]], %mem_MPORT_en : !firrtl.uint<1>
+// CHECK:  firrtl.connect %[[writeAddr]], %index : !firrtl.uint<4>
+// CHECK:  firrtl.connect %[[writeEnable]], %wen : !firrtl.uint<1>
 // CHECK:  %[[v10:.+]] = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:  firrtl.connect %mem_MPORT_en, %[[v10]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:  firrtl.connect %mem_MPORT_en, %[[v10]] : !firrtl.uint<1>
 // CHECK:  firrtl.matchingconnect %[[v4:.+]], %wen : !firrtl.uint<1>
     }
 

@@ -115,7 +115,7 @@ firrtl.circuit "Test" {
 
   // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
   // CHECK:   %w = firrtl.wire : !firrtl.uint<1>
-  // CHECK:   firrtl.connect %w, %[[p]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   firrtl.connect %w, %[[p]] : !firrtl.uint<1>
   // CHECK: }
   // CHECK: firrtl.module @CaptureHardwareViaConnect() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>

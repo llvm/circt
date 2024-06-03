@@ -847,7 +847,7 @@ firrtl.circuit "RefReset" {
   // CHECK-LABEL: firrtl.module @RefReset
   // CHECK-NEXT: in r: !firrtl.asyncreset
   // CHECK-SAME: out ref: !firrtl.probe<asyncreset>
-  // CHECK-NEXT: !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK-NEXT: !firrtl.asyncreset
   // CHECK-NEXT: %s_ref : !firrtl.probe<asyncreset>
   firrtl.module @RefReset(in %r: !firrtl.asyncreset) {
     %s_r, %s_ref = firrtl.instance s @SendReset(in r: !firrtl.reset, out ref: !firrtl.probe<reset>)
