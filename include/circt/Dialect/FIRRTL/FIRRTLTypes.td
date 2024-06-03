@@ -113,9 +113,14 @@ def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
                                       "writable type", "::circt::firrtl::LHSType">;
 
 class LHSTypeConstraint<string result, string input>
-  : TypesMatchWith<"Result must be lhs of element type",
+  : TypesMatchWith<"Result must be lhs of input type",
                    input, result,
                    "type_cast<LHSType>($_self).getType()">;
+
+class OptRefTypeConstraint<string result, string input>
+  : OptionalTypesMatchWith<"Result must be ref of input type",
+                   input, result,
+                   "type_cast<RefType>($_self).getType()">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;

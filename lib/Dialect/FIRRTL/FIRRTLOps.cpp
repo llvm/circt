@@ -3256,7 +3256,14 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -3282,7 +3289,14 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictWireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
@@ -3292,6 +3306,24 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyProbeType(
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+Value StrictWireOp::getResult() {
+  return getRead();
+}
+
+Value StrictRegOp::getResult() {
+  return getRead();
 }
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
