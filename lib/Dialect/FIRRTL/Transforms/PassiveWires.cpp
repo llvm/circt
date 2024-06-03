@@ -53,7 +53,7 @@ void PassiveWiresPass::runOnOperation() {
         worklist.push_back(wire);
       return WalkResult::advance();
     }
-    if (!isa<ConnectOp, StrictConnectOp>(op))
+    if (!isa<ConnectOp, MatchingConnectOp>(op))
       return WalkResult::advance();
     // connect/strictconnect
     if (!hasFlip(op->getOperand(0).getType()))

@@ -277,7 +277,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
     Value instPort = values[i];
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
-    builder.create<StrictConnectOp>(port.loc, modulePort, instPort);
+    builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
   }
   return success();
 }
@@ -442,7 +442,7 @@ void AddSeqMemPortsPass::runOnOperation() {
           auto type = value.getType();
           auto attr = getIntZerosAttr(type);
           auto zero = builder.create<ConstantOp>(portInfo.loc, type, attr);
-          builder.create<StrictConnectOp>(portInfo.loc, value, zero);
+          builder.create<MatchingConnectOp>(portInfo.loc, value, zero);
         }
       }
     }

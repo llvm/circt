@@ -9,8 +9,8 @@ firrtl.module @ReadWrite() {
 }
 // CHECK: firrtl.module private @MReadWrite
 // CHECK:   firrtl.instance MReadWrite_ext  @MReadWrite_ext
-// CHECK:   firrtl.strictconnect %MReadWrite_ext_RW0_addr, %RW0_addr
-// CHECK:   firrtl.strictconnect %RW0_rdata, %MReadWrite_ext_RW0_rdata
+// CHECK:   firrtl.matchingconnect %MReadWrite_ext_RW0_addr, %RW0_addr
+// CHECK:   firrtl.matchingconnect %RW0_rdata, %MReadWrite_ext_RW0_rdata
 // CHECK: }
 }
 

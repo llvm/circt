@@ -8,7 +8,7 @@
 ; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock {{.*}}: !firrtl.clock, !firrtl.uint<8>
 ; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
 ; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
-; CHECK:       firrtl.strictconnect %[[memory_0]], %[[v22:.+]]
+; CHECK:       firrtl.matchingconnect %[[memory_0]], %[[v22:.+]]
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Issue794|Issue794"

@@ -141,9 +141,9 @@ firrtl.circuit "strictConnectAndConnect" {
   // expected-error @below {{strictConnectAndConnect.{a <- b <- a}}}
   firrtl.module @strictConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
     %w = firrtl.wire : !firrtl.uint<11>
-    firrtl.strictconnect %b, %w : !firrtl.uint<11>
+    firrtl.matchingconnect %b, %w : !firrtl.uint<11>
     firrtl.connect %a, %b : !firrtl.uint<11>, !firrtl.uint<11>
-    firrtl.strictconnect %b, %a : !firrtl.uint<11>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<11>
   }
 }
 
@@ -198,8 +198,8 @@ firrtl.circuit "PortReadWrite"  {
   firrtl.module @PortReadWrite() {
     %a = firrtl.wire : !firrtl.uint<1>
     %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %a, %bar_a : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
   }
 }
 
@@ -210,8 +210,8 @@ firrtl.circuit "Foo"  {
   // expected-error @below {{Foo.{a <- bar.a <- a}}}
   firrtl.module @Foo(out %a: !firrtl.uint<1>) {
     %bar_a = firrtl.instance bar interesting_name  @Bar(in a: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %a, %bar_a : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
   }
 }
 
@@ -257,13 +257,13 @@ firrtl.circuit "hasloops"   {
     %bar_b = firrtl.wire : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
+    firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
     %v0 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
     %v1 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %v1, %v0 : !firrtl.uint<1>
+    firrtl.matchingconnect %v1, %v0 : !firrtl.uint<1>
   }
 }
 
@@ -277,19 +277,19 @@ firrtl.circuit "hasLoops"  {
     %bar_a, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 2>, out b: !firrtl.vector<uint<1>, 2>)
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
+    firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
   }
 
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
     %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %2 = firrtl.subindex %a[1] : !firrtl.vector<uint<1>, 2>
     %3 = firrtl.subindex %b[1] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
   }
 }
 
@@ -328,14 +328,14 @@ firrtl.circuit "hasLoops"  {
     %bar_a, %bar_b = firrtl.instance bar  @Bar(in a: !firrtl.vector<uint<1>, 2>, out b: !firrtl.vector<uint<1>, 2>)
     %0 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %bar_a[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %4 = firrtl.subindex %bar_b[0] : !firrtl.vector<uint<1>, 2>
     %5 = firrtl.subindex %b[0] : !firrtl.vector<uint<1>, 2>
-    firrtl.strictconnect %5, %4 : !firrtl.uint<1>
+    firrtl.matchingconnect %5, %4 : !firrtl.uint<1>
   }
 
   firrtl.module private @Bar(in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
-    firrtl.strictconnect %b, %a : !firrtl.vector<uint<1>, 2>
+    firrtl.matchingconnect %b, %a : !firrtl.vector<uint<1>, 2>
   }
 }
 
@@ -461,7 +461,7 @@ firrtl.circuit "subaccess"   {
     %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
     %2 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>
     %3 = firrtl.subfield %2[wo]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %1 : !firrtl.uint<1>
   }
 }
 
@@ -474,7 +474,7 @@ firrtl.circuit "subaccess"   {
     %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
     %2 = firrtl.subaccess %b[%sel2] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
     %3 = firrtl.subfield %2[wo]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %1 : !firrtl.uint<1>
   }
 }
 
@@ -487,7 +487,7 @@ firrtl.circuit "subaccess"   {
     %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
     %2 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>
     %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %1 : !firrtl.uint<1>
   }
 }
 
@@ -500,7 +500,7 @@ firrtl.circuit "subaccess"   {
     %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
     %2 = firrtl.subaccess %b[%sel2] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
     %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %1 : !firrtl.uint<1>
   }
 }
 
@@ -513,7 +513,7 @@ firrtl.circuit "subaccess"   {
     %1 = firrtl.subfield %0[wo] : !firrtl.bundle<wo: uint<1>, wi: uint<1>>
     %2 = firrtl.subaccess %b[%sel1] : !firrtl.vector<bundle<wo: uint<1>, wi: uint<1>>, 4>, !firrtl.uint<2>
     %3 = firrtl.subfield %2[wi]: !firrtl.bundle<wo: uint<1>, wi: uint<1>>
-    firrtl.strictconnect %3, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %1 : !firrtl.uint<1>
   }
 }
 
@@ -616,7 +616,7 @@ firrtl.circuit "CycleWithoutNames"   {
   firrtl.module @CycleWithoutNames() {
     // expected-note @below {{cycle detected here}}
     %0 = firrtl.wire  : !firrtl.uint<1>
-    firrtl.strictconnect %0, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %0, %0 : !firrtl.uint<1>
   }
 }
 
@@ -629,7 +629,7 @@ firrtl.circuit "CycleStartsUnnammed"   {
   firrtl.module @CycleStartsUnnammed() {
     %0 = firrtl.wire  : !firrtl.uint<1>
     %n = firrtl.node %0 : !firrtl.uint<1>
-    firrtl.strictconnect %0, %n : !firrtl.uint<1>
+    firrtl.matchingconnect %0, %n : !firrtl.uint<1>
   }
 }
 
@@ -640,7 +640,7 @@ firrtl.circuit "CycleThroughForceable"   {
   firrtl.module @CycleThroughForceable() {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
     %n, %n_ref = firrtl.node %w forceable : !firrtl.uint<1>
-    firrtl.strictconnect %w, %n : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %n : !firrtl.uint<1>
   }
 }
 
@@ -652,7 +652,7 @@ firrtl.circuit "CycleThroughForceableRef"   {
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
     %n, %n_ref = firrtl.node %w forceable : !firrtl.uint<1>
     %read = firrtl.ref.resolve %n_ref : !firrtl.rwprobe<uint<1>>
-    firrtl.strictconnect %w, %read : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %read : !firrtl.uint<1>
   }
 }
 
@@ -752,7 +752,7 @@ firrtl.circuit "RefSink" {
     %a_ref_send = firrtl.ref.send %b : !firrtl.uint<1>
     firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
     firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 
 // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RefSink.{b <- ... <- refSource.a_ref <- refSource.a_rwref <- b}}}
@@ -787,7 +787,7 @@ firrtl.circuit "RefSink" {
       !firrtl.rwprobe<uint<1>>
     firrtl.ref.define %b_ref, %_b_rwref : !firrtl.rwprobe<uint<1>>
     firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 
 // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: RefSink.{b <- ... <- refSource.b_ref <- refSource.a_rwref <- b}}}
@@ -889,18 +889,18 @@ firrtl.circuit "RefSink" {
 // Incorrect visit of instance op results was resulting in missed cycles.
 firrtl.circuit "Bug5442" {
   firrtl.module private @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
   firrtl.module private @Baz(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c_d: !firrtl.uint<1>) {
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
-    firrtl.strictconnect %c_d, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %c_d, %a : !firrtl.uint<1>
   }
 // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Bug5442.{bar.a <- baz.b <- baz.a <- bar.b <- bar.a}}}
   firrtl.module @Bug5442() attributes {convention = #firrtl<convention scalarized>} {
     %bar_a, %bar_b = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %baz_a, %baz_b, %baz_c_d = firrtl.instance baz @Baz(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c_d: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %baz_b : !firrtl.uint<1>
-    firrtl.strictconnect %baz_a, %bar_b : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %baz_b : !firrtl.uint<1>
+    firrtl.matchingconnect %baz_a, %bar_b : !firrtl.uint<1>
   }
 }
 
@@ -917,9 +917,9 @@ firrtl.circuit "RefSubLoop" {
     %0 = firrtl.ref.sub %c_p[1] : !firrtl.rwprobe<bundle<a: uint<1>, b: uint<1>>>
     %1 = firrtl.subfield %c_bundle[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %2 = firrtl.subfield %c_bundle[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-    firrtl.strictconnect %2, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %2, %x : !firrtl.uint<1>
     %3 = firrtl.ref.resolve %0 : !firrtl.rwprobe<uint<1>>
-    firrtl.strictconnect %1, %3 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %3 : !firrtl.uint<1>
   }
 }
 
@@ -935,7 +935,7 @@ firrtl.circuit "Issue4691" {
     %sub_val, %sub_x = firrtl.instance sub @Send(in val: !firrtl.uint<2>, out x: !firrtl.probe<uint<2>>)
     %res = firrtl.ref.resolve %sub_x : !firrtl.probe<uint<2>>
     firrtl.connect %sub_val, %res : !firrtl.uint<2>, !firrtl.uint<2>
-    firrtl.strictconnect %x, %sub_val : !firrtl.uint<2>
+    firrtl.matchingconnect %x, %sub_val : !firrtl.uint<2>
   }
 }
 
@@ -948,7 +948,7 @@ firrtl.circuit "Issue5462" {
     %n = firrtl.node %w : !firrtl.bundle<a: uint<8>>
     %0 = firrtl.subfield %n[a] : !firrtl.bundle<a: uint<8>>
     %1 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<8>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<8>
   }
 }
 
@@ -959,10 +959,10 @@ firrtl.circuit "Issue5462" {
     %n = firrtl.node %bundle : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %0 = firrtl.subfield %n[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %1 = firrtl.subfield %p[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
     %2 = firrtl.subfield %n[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %3 = firrtl.subfield %p[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-    firrtl.strictconnect %3, %2 : !firrtl.uint<1>
+    firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
   }
   // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: Issue5462.{c.bundle.b <- c.p.b <- c.bundle.b}}}
   firrtl.module @Issue5462(in %x: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
@@ -970,8 +970,8 @@ firrtl.circuit "Issue5462" {
     %0 = firrtl.subfield %c_p[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %1 = firrtl.subfield %c_bundle[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
     %2 = firrtl.subfield %c_bundle[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-    firrtl.strictconnect %2, %x : !firrtl.uint<1>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %2, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
   }
 }
 
@@ -986,9 +986,9 @@ firrtl.circuit "Issue5462" {
     %1 = firrtl.mux(%c, %n, %0) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
     %2 = firrtl.subfield %1[a] : !firrtl.bundle<a: uint<8>>
     %3 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
-    firrtl.strictconnect %3, %2 : !firrtl.uint<8>
+    firrtl.matchingconnect %3, %2 : !firrtl.uint<8>
     %4 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint<8>>
-    firrtl.strictconnect %out_a, %4 : !firrtl.uint<8>
+    firrtl.matchingconnect %out_a, %4 : !firrtl.uint<8>
   }
 }
 
@@ -1003,7 +1003,7 @@ firrtl.circuit "FlipConnect1" {
     // w.a <= x.a
     %w_a = firrtl.subfield %w[a] : !firrtl.bundle<a flip: uint<8>>
     %x_a = firrtl.subfield %x[a] : !firrtl.bundle<a flip: uint<8>>
-    firrtl.strictconnect %w_a, %x_a : !firrtl.uint<8>
+    firrtl.matchingconnect %w_a, %x_a : !firrtl.uint<8>
   }
 }
 
@@ -1030,7 +1030,7 @@ firrtl.circuit "UnrealizedConversionCast" {
     // Casts have cast-like behavior
     %b = firrtl.wire   : !firrtl.uint<32>
     %a = builtin.unrealized_conversion_cast %b : !firrtl.uint<32> to !firrtl.uint<32>
-    firrtl.strictconnect %b, %a : !firrtl.uint<32>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
   }
 }
 
@@ -1045,7 +1045,7 @@ firrtl.circuit "OutsideDialect" {
     %a = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
     // Should only trigger once
     %c = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
-    firrtl.strictconnect %b, %a : !firrtl.uint<32>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
   }
 }
 
@@ -1070,7 +1070,7 @@ firrtl.circuit "OutsideDialectSource" {
     // ops from other dialects
     %b = firrtl.wire   : !firrtl.uint<32>
     %a = "foo"() : () -> !firrtl.uint<32>
-    firrtl.strictconnect %b, %a : !firrtl.uint<32>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
   }
 }
 
@@ -1085,7 +1085,7 @@ firrtl.circuit "Issue6820" {
   }
   firrtl.module @Issue6820(in %clock: !firrtl.clock, out %clockProbe: !firrtl.rwprobe<clock>) attributes {convention = #firrtl<convention scalarized>} {
     %foo_clock, %foo_clockProbe_bore = firrtl.instance foo @Foo(in clock: !firrtl.clock, out clockProbe_bore: !firrtl.rwprobe<clock>)
-    firrtl.strictconnect %foo_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %foo_clock, %clock : !firrtl.clock
     firrtl.ref.define %clockProbe, %foo_clockProbe_bore : !firrtl.rwprobe<clock>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>

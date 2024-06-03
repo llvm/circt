@@ -19,25 +19,25 @@ circuit test_cse :
 
 ; Only one add.
 ; OPT: %0 = firrtl.add %a1, %a2
-; OPT: firrtl.strictconnect %b, %0
-; OPT: firrtl.strictconnect %c, %0
+; OPT: firrtl.matchingconnect %b, %0
+; OPT: firrtl.matchingconnect %c, %0
 
 ; Connect with zero and one directly.
-; OPT: firrtl.strictconnect %d, %c0_ui5
-; OPT: firrtl.strictconnect %e, %c1_ui5
+; OPT: firrtl.matchingconnect %d, %c0_ui5
+; OPT: firrtl.matchingconnect %e, %c1_ui5
 
 ; Both adds persist.
 ; NOOPT: %0 = firrtl.add %a1, %a2
-; NOOPT: firrtl.strictconnect %b, %0
+; NOOPT: firrtl.matchingconnect %b, %0
 ; NOOPT: %1 = firrtl.add %a1, %a2
-; NOOPT: firrtl.strictconnect %c, %1
+; NOOPT: firrtl.matchingconnect %c, %1
 
 ; Ands persist.
 ; NOOPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %a1, %c0_ui4
-; NOOPT: firrtl.strictconnect %d,
+; NOOPT: firrtl.matchingconnect %d,
 
 ; NOOPT-DAG: %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
 ; NOOPT-DAG: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %c3_ui4, %c1_ui4
-; NOOPT: firrtl.strictconnect %e,
+; NOOPT: firrtl.matchingconnect %e,

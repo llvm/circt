@@ -10,7 +10,7 @@ firrtl.circuit "Prop" {
   }
 
   firrtl.module private @emptyVec(in %vi : !firrtl.vector<uint<4>, 0>, out %vo : !firrtl.vector<uint<4>, 0>) attributes {convention = #firrtl<convention scalarized>} {
-    firrtl.strictconnect %vo, %vi : !firrtl.vector<uint<4>, 0>
+    firrtl.matchingconnect %vo, %vi : !firrtl.vector<uint<4>, 0>
   }
 
   // CHECK-LABEL: @Annos

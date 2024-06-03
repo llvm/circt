@@ -76,9 +76,9 @@ firrtl.circuit "unprocessedAnnotations" {
     %_M_read.data = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     %c0_i1 = firrtl.constant 0 : !firrtl.uint<1>
     %c0_i4 = firrtl.constant 0 : !firrtl.uint<4>
-    firrtl.strictconnect %_M_read.clk, %clock : !firrtl.clock
-    firrtl.strictconnect %_M_read.en, %c0_i1 : !firrtl.uint<1>
-    firrtl.strictconnect %_M_read.addr, %c0_i4 : !firrtl.uint<4>
+    firrtl.matchingconnect %_M_read.clk, %clock : !firrtl.clock
+    firrtl.matchingconnect %_M_read.en, %c0_i1 : !firrtl.uint<1>
+    firrtl.matchingconnect %_M_read.addr, %c0_i4 : !firrtl.uint<4>
 
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation6'}}
     %5 = firrtl.instance fetch {annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}]} @bar(in io_cpu_flush: !firrtl.uint<1>)
@@ -162,8 +162,8 @@ firrtl.circuit "ConnectDestSubfield" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: uint<1>>
     // expected-error @below {{'hw.struct_extract' op used as connect destination}}
     %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<1>>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -174,8 +174,8 @@ firrtl.circuit "ConnectDestSubindex" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -186,8 +186,8 @@ firrtl.circuit "ConnectDestSubaccess" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subaccess %0[%index] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -201,8 +201,8 @@ firrtl.circuit "UndrivenInputPort" {
     %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
     // expected-note @below {{through driver here}}
     %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
-    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %0, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
   }
 }
 

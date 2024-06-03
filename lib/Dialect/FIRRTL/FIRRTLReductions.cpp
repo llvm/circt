@@ -97,7 +97,7 @@ private:
 static bool onlyInvalidated(Value arg) {
   return llvm::all_of(arg.getUses(), [](OpOperand &use) {
     auto *op = use.getOwner();
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::MatchingConnectOp>(op))
       return false;
     if (use.getOperandNumber() != 0)
       return false;
@@ -564,12 +564,12 @@ struct FIRRTLConstantifier : public Reduction {
 };
 
 /// A sample reduction pattern that replaces the right-hand-side of
-/// `firrtl.connect` and `firrtl.strictconnect` operations with a
+/// `firrtl.connect` and `firrtl.matchingconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
 /// connects and creates opportunities for reduction in DCE/CSE.
 struct ConnectInvalidator : public Reduction {
   uint64_t match(Operation *op) override {
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::MatchingConnectOp>(op))
       return 0;
     auto type = dyn_cast<firrtl::FIRRTLBaseType>(op->getOperand(1).getType());
     return type && type.isPassive() &&
@@ -752,7 +752,7 @@ struct ConnectForwarder : public Reduction {
 template <unsigned OpNum>
 struct ConnectSourceOperandForwarder : public Reduction {
   uint64_t match(Operation *op) override {
-    if (!isa<firrtl::ConnectOp, firrtl::StrictConnectOp>(op))
+    if (!isa<firrtl::ConnectOp, firrtl::MatchingConnectOp>(op))
       return 0;
     auto dest = op->getOperand(0);
     auto *destOp = dest.getDefiningOp();
@@ -804,7 +804,7 @@ struct ConnectSourceOperandForwarder : public Reduction {
     if (isa<firrtl::ConnectOp>(op))
       builder.create<firrtl::ConnectOp>(newDest, forwardedOperand);
     else
-      builder.create<firrtl::StrictConnectOp>(newDest, forwardedOperand);
+      builder.create<firrtl::MatchingConnectOp>(newDest, forwardedOperand);
 
     // Remove the old connection and destination. We don't have to replace them
     // because destination has only one use.
