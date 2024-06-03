@@ -10,6 +10,8 @@
 // declarations.
 //
 //===----------------------------------------------------------------------===//
+include "circt/Dialect/LTL/LTLDialect.td"
+include "circt/Dialect/LTL/LTLTypes.td"
 
 /// Immediate assertions, like `assert`.
 def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
@@ -172,7 +174,7 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> :
     $event $clock `,` `disable` $disable `,` $property
     (`label` $label^)?
     (`message` $message^ (`(` $substitutions^ `)` `:`
-    qualified(type($substitutions)))?)? attr-dict
+    qualified(type($substitutions)))?)? attr-dict `:` type($property)
   }];
 
   let builders = [
