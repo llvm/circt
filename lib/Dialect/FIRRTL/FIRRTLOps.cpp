@@ -3308,7 +3308,8 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
 
-LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult
+StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
   if (!refType)
     return success();
@@ -3318,13 +3319,9 @@ LogicalResult StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable)
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
 
-Value StrictWireOp::getResult() {
-  return getRead();
-}
+Value StrictWireOp::getResult() { return getRead(); }
 
-Value StrictRegOp::getResult() {
-  return getRead();
-}
+Value StrictRegOp::getResult() { return getRead(); }
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
