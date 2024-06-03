@@ -114,6 +114,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
           os << ", " << layer;
         os << '>';
       })
+      .Case<LHSType>([&](LHSType lhstype) {
+        os << "lhs<";
+        printNestedType(lhstype.getType(), os);
+        os << ">";
+      })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<BoolType>([&](auto boolType) { os << "bool"; })
@@ -349,6 +354,13 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type, false, layer), success();
+  }
+  if (name == "lhs") {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+    return result = LHSType::get(context, type), success();
   }
   if (name == "rwprobe") {
     FIRRTLBaseType type;
@@ -659,6 +671,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
+      .Case<LHSType>(
+          [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
