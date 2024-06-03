@@ -4390,11 +4390,22 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
+  auto actualInputType = type_dyn_cast<typename OpTy::InputType>(inputType);
+  if (!actualInputType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be bundle or lhs of bundle type, got ")
+           << inputType;
+
+  auto bundleType = isa<LHSType>(actualInputType)
+                        ? firrtl::type_dyn_cast<typename OpTy::InputBundleType>(
+                              cast<LHSType>(actualInputType).getType())
+                        : firrtl::type_dyn_cast<typename OpTy::InputBundleType>(
+                              actualInputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
-                            "input must be bundle type, got ")
+                            "input must be effectively bundle type, got ")
            << inputType;
+
   auto fieldIndex = bundleType.getElementIndex(fieldName);
   if (!fieldIndex)
     return parser.emitError(parser.getNameLoc(),
@@ -4467,7 +4478,6 @@ ParseResult LHSSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<LHSSubfieldOp>(parser, result);
 }
 
-
 template <typename OpTy>
 static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
   printer << ' ' << op.getInput() << '[';
@@ -4501,8 +4511,7 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
 template <typename OpTy, typename ITy>
 static LogicalResult verifySubfieldLike(OpTy op, ITy ty) {
   if (op.getFieldIndex() >=
-      firrtl::type_cast<typename OpTy::InputType>(ty)
-          .getNumElements())
+      firrtl::type_cast<typename OpTy::InputBundleType>(ty).getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
@@ -4514,7 +4523,8 @@ LogicalResult OpenSubfieldOp::verify() {
   return verifySubfieldLike<OpenSubfieldOp>(*this, getInput().getType());
 }
 LogicalResult LHSSubfieldOp::verify() {
-  return verifySubfieldLike<LHSSubfieldOp>(*this, stripLHS(getInput().getType()));
+  return verifySubfieldLike<LHSSubfieldOp>(*this,
+                                           stripLHS(getInput().getType()));
 }
 
 LogicalResult SubtagOp::verify() {
@@ -4609,8 +4619,8 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           std::optional<Location> loc) {
+                                          ArrayRef<NamedAttribute> attrs,
+                                          std::optional<Location> loc) {
   auto aType = cast<LHSType>(operands[0].getType()).getType();
   auto inType = type_cast<BundleType>(aType);
   auto fieldIndex =
@@ -4623,13 +4633,15 @@ FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
 
   // OpenSubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.getElementTypePreservingConst(fieldIndex);
+  return LHSType::get(inType.getContext(),
+                      inType.getElementTypePreservingConst(fieldIndex));
 }
 
 bool SubfieldOp::isFieldFlipped() {
   BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
+
 bool OpenSubfieldOp::isFieldFlipped() {
   auto bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
@@ -4670,8 +4682,8 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           std::optional<Location> loc) {
+                                          ArrayRef<NamedAttribute> attrs,
+                                          std::optional<Location> loc) {
   auto inType = cast<LHSType>(operands[0].getType()).getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();

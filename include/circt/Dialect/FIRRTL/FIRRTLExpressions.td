@@ -297,7 +297,8 @@ class BaseSubfieldOp<string name, Type btype, Type itype, Type rtype> : FIRRTLEx
   ];
 
   let firrtlExtraClassDeclaration = [{
-    using InputType = }] # btype # [{;
+    using InputType = }] # itype # [{;
+    using InputBundleType = }] # btype # [{;
 
     FIRRTLType stripLHS(FIRRTLType type) {
       if (auto t = dyn_cast<LHSType>(type))
@@ -311,14 +312,14 @@ class BaseSubfieldOp<string name, Type btype, Type itype, Type rtype> : FIRRTLEx
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
       auto innerType = stripLHS(getInput().getType());
-      return FieldRef(getInput(), firrtl::type_cast<InputType>(innerType)
+      return FieldRef(getInput(), firrtl::type_cast<InputBundleType>(innerType)
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
       auto innerType = stripLHS(getInput().getType());
-      return firrtl::type_cast<InputType>(innerType).getElementName(getFieldIndex());
+      return firrtl::type_cast<InputBundleType>(innerType).getElementName(getFieldIndex());
     }
   }];
 }
