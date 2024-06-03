@@ -98,8 +98,9 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
     while (stages--) {
       auto reg = b.create<RegOp>(pipeInput.getType(), clock, name).getResult();
       if (gate) {
-        b.create<WhenOp>(gate, /*withElseRegion*/ false,
-                         [&]() { b.create<MatchingConnectOp>(reg, pipeInput); });
+        b.create<WhenOp>(gate, /*withElseRegion*/ false, [&]() {
+          b.create<MatchingConnectOp>(reg, pipeInput);
+        });
       } else
         b.create<MatchingConnectOp>(reg, pipeInput);
 

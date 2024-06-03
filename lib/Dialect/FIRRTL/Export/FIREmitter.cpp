@@ -637,11 +637,11 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, MatchingConnectOp,
-              PropAssignOp, InstanceOp, InstanceChoiceOp, AttachOp, MemOp,
-              InvalidValueOp, SeqMemOp, CombMemOp, MemoryPortOp,
-              MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
+              AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
               LayerBlockOp, GenericIntrinsicOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
