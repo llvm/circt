@@ -2333,8 +2333,8 @@ firrtl.module @issue1116(out %z: !firrtl.uint<1>) {
 firrtl.module @issue1118(out %z0: !firrtl.uint, out %z1: !firrtl.sint) {
   // CHECK: %0 = firrtl.asUInt %c4232_si : (!firrtl.sint) -> !firrtl.uint
   // CHECK: %1 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
-  // CHECK: firrtl.connect %z0, %0 : !firrtl.uint, !firrtl.uint
-  // CHECK: firrtl.connect %z1, %1 : !firrtl.sint, !firrtl.sint
+  // CHECK: firrtl.connect %z0, %0 : !firrtl.uint
+  // CHECK: firrtl.connect %z1, %1 : !firrtl.sint
   %c4232_si = firrtl.constant 4232 : !firrtl.sint
   %c4232_ui = firrtl.constant 4232 : !firrtl.uint
   %0 = firrtl.asUInt %c4232_si : (!firrtl.sint) -> !firrtl.uint
@@ -2445,9 +2445,9 @@ firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>
 firrtl.module @regsyncreset_no(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint, out %bar: !firrtl.uint) {
   // CHECK: %[[const:.*]] = firrtl.constant 1
   // CHECK: firrtl.reg %clock
-  // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint
+  // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint
   // CHECK-NEXT:  %0 = firrtl.mux(%reset, %[[const]], %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
-  // CHECK-NEXT:  firrtl.connect %d, %0 : !firrtl.uint, !firrtl.uint
+  // CHECK-NEXT:  firrtl.connect %d, %0 : !firrtl.uint
   // CHECK-NEXT: }
   %d = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint
   firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint

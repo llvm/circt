@@ -1788,7 +1788,7 @@ void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 LogicalResult MatchingConnectOp::canonicalize(MatchingConnectOp op,
-                                            PatternRewriter &rewriter) {
+                                              PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
 
   // If there is a simple value connected to a foldable decl like a wire or reg,
@@ -2824,7 +2824,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
         }
       }
       rewriter.replaceOpWithNewOp<MatchingConnectOp>(writeOp, writeOp.getDest(),
-                                                   catOfSlices);
+                                                     catOfSlices);
     }
 
     return success();

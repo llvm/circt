@@ -158,7 +158,7 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]][b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-  // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>
   %port_b = firrtl.subfield %ramport_data[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -178,7 +178,7 @@ firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrt
   // CHECK: [[WMASK_0:%.*]] = firrtl.subindex [[WMASK]][0]
   // CHECK: firrtl.matchingconnect [[WMASK_0]], %c1_ui1 : !firrtl.uint<1>
   // CHECK: firrtl.matchingconnect [[WMODE]], %c1_ui1 : !firrtl.uint<1>
-  // CHECK: firrtl.connect [[WDATA_0]], %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect [[WDATA_0]], %in : !firrtl.uint<1>
   %port_a = firrtl.subindex %ramport_data[0] : !firrtl.vector<uint<1>, 10>
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
