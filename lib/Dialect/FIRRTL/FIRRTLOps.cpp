@@ -6205,6 +6205,40 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// Printer/Parser Helpers.
+//===----------------------------------------------------------------------===//
+
+/// Elide the lhs wrapper and the lhs if the inside is the rhs.
+static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                    Type rhs) {
+  // If operand types are the same, print a rhs type.
+  auto lhs_cast = dyn_cast<LHSType>(lhs);
+  if (!lhs_cast || lhs_cast.getType() != rhs)
+    p << lhs << ", " << rhs;
+  else
+    p << rhs;
+}
+
+static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs,
+                                           Type &rhs) {
+  if (parser.parseType(rhs))
+    return failure();
+
+  // Parse an optional rhs type.
+  if (parser.parseOptionalComma()) {
+    auto cRhs = dyn_cast<FIRRTLBaseType>(rhs);
+    if (!cRhs)
+      return failure();
+    lhs = LHSType::get(parser.getContext(), cRhs);
+  } else {
+    lhs = rhs;
+    if (parser.parseType(rhs))
+      return failure();
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 

@@ -726,7 +726,7 @@ def StrictWireOp : HardwareDeclOp<"strictwire", [
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
-    type($read) `,` type($write) (`,` qualified(type($ref))^)?
+    custom<OptionalLHSOpTypes>(type($write), type($read)) (`,` qualified(type($ref))^)?
   }];
 
   let extraClassDeclaration = [{
