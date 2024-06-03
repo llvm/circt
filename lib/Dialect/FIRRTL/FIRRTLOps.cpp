@@ -6265,7 +6265,7 @@ LogicalResult WrapSinkOp::verify() {
 
 /// Elide the lhs wrapper and the lhs if the inside is the rhs.
 static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
-                             Type rhs) {
+                                    Type rhs) {
   // If operand types are the same, print a rhs type.
   auto lhs_cast = dyn_cast<LHSType>(lhs);
   if (!lhs_cast || lhs_cast.getType() != rhs)
@@ -6274,7 +6274,8 @@ static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
     p << rhs;
 }
 
-static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs, Type &rhs) {
+static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs,
+                                           Type &rhs) {
   if (parser.parseType(rhs))
     return failure();
 
