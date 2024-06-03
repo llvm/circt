@@ -32,6 +32,7 @@ struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct LHSTypeStorage;
 struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
@@ -52,6 +53,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class LHSType;
 class PropertyType;
 class StringType;
 class FIntegerType;
@@ -182,8 +184,8 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
-               type);
+           !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
+                      OpenVectorType>(type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
