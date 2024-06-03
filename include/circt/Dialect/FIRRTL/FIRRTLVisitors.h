@@ -272,6 +272,7 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(MatchingConnectOp);
+  HANDLE(StrictConnectOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);

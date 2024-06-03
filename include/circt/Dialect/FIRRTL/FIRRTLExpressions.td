@@ -271,7 +271,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
 
-class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
+class BaseSubfieldOp<string name, Type btype, Type itype, Type rtype> : FIRRTLExprOp<name> {
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
@@ -281,14 +281,15 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
     ```
     }];
 
-  let arguments = (ins btype:$input, I32Attr:$fieldIndex);
+  let arguments = (ins itype:$input, I32Attr:$fieldIndex);
   let results = (outs rtype:$result);
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
-      auto bundleType = firrtl::type_cast<}] # btype # [{>(input.getType());
+      auto ttype = isa<LHSType>(input.getType()) ? cast<LHSType>(input.getType()).getType() : input.getType();
+      auto bundleType = firrtl::type_cast<}] # btype # [{>(ttype);
       auto fieldIndex = bundleType.getElementIndex(fieldName);
       assert(fieldIndex.has_value() && "subfield operation to unknown field");
       return build($_builder, $_state, input, *fieldIndex);
@@ -298,27 +299,36 @@ class BaseSubfieldOp<string name, Type btype, Type rtype> : FIRRTLExprOp<name> {
   let firrtlExtraClassDeclaration = [{
     using InputType = }] # btype # [{;
 
+    FIRRTLType stripLHS(FIRRTLType type) {
+      if (auto t = dyn_cast<LHSType>(type))
+        return t.getType();
+      return type;
+    }
+
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
 
     /// Return a `FieldRef` to the accessed field.
     FieldRef getAccessedField() {
-      return FieldRef(getInput(), firrtl::type_cast<InputType>(getInput().getType())
+      auto innerType = stripLHS(getInput().getType());
+      return FieldRef(getInput(), firrtl::type_cast<InputType>(innerType)
                                             .getFieldID(getFieldIndex()));
     }
 
     /// Return the name of the accessed field.
     StringRef getFieldName() {
-      return firrtl::type_cast<InputType>(getInput().getType()).getElementName(getFieldIndex());
+      auto innerType = stripLHS(getInput().getType());
+      return firrtl::type_cast<InputType>(innerType).getElementName(getFieldIndex());
     }
   }];
 }
 
-def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, FIRRTLBaseType> {
+def SubfieldOp : BaseSubfieldOp<"subfield", BundleType, BundleType, FIRRTLBaseType> {
   let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
-def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, FIRRTLType>;
+def OpenSubfieldOp : BaseSubfieldOp<"opensubfield", OpenBundleType, OpenBundleType, FIRRTLType>;
+def LHSSubfieldOp : BaseSubfieldOp<"lhssubfield", BundleType, LHSType, LHSType>;
 
 def SubindexOp : FIRRTLExprOp<"subindex"> {
   let summary = "Extract an element of a vector value";
@@ -374,6 +384,35 @@ def OpenSubindexOp : FIRRTLExprOp<"opensubindex"> {
     }
 
     using InputType = OpenVectorType;
+  }];
+}
+
+def LHSSubindexOp : FIRRTLExprOp<"lhssubindex"> {
+  let summary = "Reference an element of a vector value";
+  let description = [{
+    The subindex expression statically refers, by index, to a subelement
+    of an expression with a vector type. The index must be a non-negative
+    integer and cannot be equal to or exceed the length of the vector it
+    indexes.
+    ```
+      %result = firrtl.lhssubindex %input[index] : lhs<t1>
+    ```
+    }];
+
+  let arguments = (ins LHSType:$input, I32Attr:$index);
+  let results = (outs LHSType:$result);
+
+  let assemblyFormat =
+     "$input `[` $index `]` attr-dict `:` qualified(type($input))";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      auto btype = cast<BundleType>(getInput().getType().getType());
+      return FieldRef(getInput(), btype.getFieldID(getIndex()));
+    }
+
+    using InputType = FVectorType;
   }];
 }
 

@@ -4463,6 +4463,10 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
 ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
 }
+ParseResult LHSSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<LHSSubfieldOp>(parser, result);
+}
+
 
 template <typename OpTy>
 static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
@@ -4480,6 +4484,9 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
 void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   return printSubfieldLikeOp<OpenSubfieldOp>(*this, printer);
 }
+void LHSSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<LHSSubfieldOp>(*this, printer);
+}
 
 void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << getInput() << '[';
@@ -4491,20 +4498,23 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-template <typename OpTy>
-static LogicalResult verifySubfieldLike(OpTy op) {
+template <typename OpTy, typename ITy>
+static LogicalResult verifySubfieldLike(OpTy op, ITy ty) {
   if (op.getFieldIndex() >=
-      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
+      firrtl::type_cast<typename OpTy::InputType>(ty)
           .getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
 }
 LogicalResult SubfieldOp::verify() {
-  return verifySubfieldLike<SubfieldOp>(*this);
+  return verifySubfieldLike<SubfieldOp>(*this, getInput().getType());
 }
 LogicalResult OpenSubfieldOp::verify() {
-  return verifySubfieldLike<OpenSubfieldOp>(*this);
+  return verifySubfieldLike<OpenSubfieldOp>(*this, getInput().getType());
+}
+LogicalResult LHSSubfieldOp::verify() {
+  return verifySubfieldLike<LHSSubfieldOp>(*this, stripLHS(getInput().getType()));
 }
 
 LogicalResult SubtagOp::verify() {
@@ -4598,6 +4608,24 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
   return inType.getElementTypePreservingConst(fieldIndex);
 }
 
+FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  auto aType = cast<LHSType>(operands[0].getType()).getType();
+  auto inType = type_cast<BundleType>(aType);
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // OpenSubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElementTypePreservingConst(fieldIndex);
+}
+
 bool SubfieldOp::isFieldFlipped() {
   BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
@@ -4632,6 +4660,23 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementTypePreservingConst();
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in vector type ", inType);
+  }
+
+  return emitInferRetTypeError(loc, "subindex requires vector operand");
+}
+
+FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           std::optional<Location> loc) {
+  auto inType = cast<LHSType>(operands[0].getType()).getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
@@ -5884,6 +5929,10 @@ void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void LHSSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -5893,6 +5942,10 @@ void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void LHSSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
@@ -6201,6 +6254,39 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Printer/Parser Helpers.
+//===----------------------------------------------------------------------===//
+
+/// Elide the lhs wrapper and the lhs if the inside is the rhs.
+static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                             Type rhs) {
+  // If operand types are the same, print a rhs type.
+  auto lhs_cast = dyn_cast<LHSType>(lhs);
+  if (!lhs_cast || lhs_cast.getType() != rhs)
+    p << lhs << ", " << rhs;
+  else
+    p << rhs;
+}
+
+static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs, Type &rhs) {
+  if (parser.parseType(rhs))
+    return failure();
+
+  // Parse an optional rhs type.
+  if (parser.parseOptionalComma()) {
+    auto cRhs = dyn_cast<FIRRTLBaseType>(rhs);
+    if (!cRhs)
+      return failure();
+    lhs = LHSType::get(parser.getContext(), cRhs);
+  } else {
+    lhs = rhs;
+    if (parser.parseType(rhs))
+      return failure();
+  }
   return success();
 }
 

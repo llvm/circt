@@ -114,6 +114,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
           os << ", " << layer;
         os << '>';
       })
+      .Case<LHSType>([&](LHSType lhstype) {
+        os << "lhs<";
+        printNestedType(lhstype.getType(), os);
+        os << ">";
+      })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
       .Case<BoolType>([&](auto boolType) { os << "bool"; })
@@ -177,6 +182,8 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 ///   ::= const '.' type
 ///   ::= 'property.' firrtl-phased-type
 /// bundle-elt ::= identifier flip? ':' type
+/// enum-elt ::= identifier ':' type
+/// ```
 /// enum-elt ::= identifier ':' type
 /// ```
 static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
@@ -349,6 +356,13 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type, false, layer), success();
+  }
+  if (name == "lhs") {
+    FIRRTLBaseType type;
+    if (parser.parseLess() || parseNestedType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+    return result = LHSType::get(context, type), success();
   }
   if (name == "rwprobe") {
     FIRRTLBaseType type;
@@ -659,6 +673,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
+      .Case<LHSType>(
+          [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -1232,6 +1248,11 @@ bool firrtl::isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType) {
 bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
                                          FIRRTLBaseType rhs) {
   return lhs.getAnonymousType() == rhs.getAnonymousType();
+}
+
+bool firrtl::areAnonymousLHSandTypeEquivalent(LHSType lhs, FIRRTLBaseType rhs) {
+  auto baseLHS = lhs.getType();
+  return baseLHS.getAnonymousType() == rhs.getAnonymousType();
 }
 
 bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
