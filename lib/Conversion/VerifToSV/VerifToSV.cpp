@@ -165,6 +165,39 @@ struct ClockedAssertLikeOpConversion {
   }
 };
 
+struct ClockedAssertOpConversionPattern
+    : public OpConversionPattern<ClockedAssertOp> {
+  using OpConversionPattern<ClockedAssertOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClockedAssertOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter);
+  }
+};
+
+struct ClockedAssumeOpConversionPattern
+    : public OpConversionPattern<ClockedAssumeOp> {
+  using OpConversionPattern<ClockedAssumeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClockedAssumeOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter);
+  }
+};
+
+struct ClockedCoverOpConversionPattern
+    : public OpConversionPattern<ClockedCoverOp> {
+  using OpConversionPattern<ClockedCoverOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClockedCoverOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter, true);
+  }
+};
+
 struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
   using OpConversionPattern<PrintOp>::OpConversionPattern;
 

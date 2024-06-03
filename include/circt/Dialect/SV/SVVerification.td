@@ -171,7 +171,7 @@ class AssertPropertyLikeOp<string mnemonic, list<Trait> traits = []> :
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
 
   let assemblyFormat = [{
-    $event $clock `,` `disable` $disable `,` $property
+    $event $clock `disable` $disable `,` $property
     (`label` $label^)?
     (`message` $message^ (`(` $substitutions^ `)` `:`
     qualified(type($substitutions)))?)? attr-dict `:` type($property)
