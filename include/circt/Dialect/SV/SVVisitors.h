@@ -155,6 +155,9 @@ public:
   HANDLE(AssertConcurrentOp, Unhandled);
   HANDLE(AssumeConcurrentOp, Unhandled);
   HANDLE(CoverConcurrentOp, Unhandled);
+  HANDLE(AssertPropertyOp, Unhandled);
+  HANDLE(AssumePropertyOp, Unhandled);
+  HANDLE(CoverPropertyOp, Unhandled);
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);

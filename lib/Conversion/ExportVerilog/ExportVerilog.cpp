@@ -3984,14 +3984,6 @@ private:
   LogicalResult visitVerif(verif::AssumeOp op);
   LogicalResult visitVerif(verif::CoverOp op);
 
-  LogicalResult emitVerifClockedAssertLike(Operation *op, Value property,
-                                           Value disable, Value clock,
-                                           verif::ClockEdge edge,
-                                           PPExtString opName);
-  LogicalResult visitVerif(verif::ClockedAssertOp op);
-  LogicalResult visitVerif(verif::ClockedAssumeOp op);
-  LogicalResult visitVerif(verif::ClockedCoverOp op);
-
 public:
   ModuleEmitter &emitter;
 
@@ -4731,7 +4723,7 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
 template <typename Op>
-LogicalResult emitSVAssertPropertyLike(Op op, PPExtString opName) {
+LogicalResult StmtEmitter::emitSVAssertPropertyLike(Op op, PPExtString opName) {
   /*LogicalResult StmtEmitter::emitSVAssertPropertyLike(Operation *op,
                                                       Value property,
                                                       Value disable, Value
@@ -4749,7 +4741,7 @@ LogicalResult emitSVAssertPropertyLike(Op op, PPExtString opName) {
   // procedural code".
   Value property = op.getProperty();
   bool isTemporal = !property.getType().isSignlessInteger(1);
-  bool isProcedural = op.getParentOp()->hasTrait<ProceduralRegion>();
+  bool isProcedural = op->getParentOp().hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
   startStatement();
@@ -4765,7 +4757,7 @@ LogicalResult emitSVAssertPropertyLike(Op op, PPExtString opName) {
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
         PropertyEmitter(emitter, ops)
-            .emitClockedProperty(property, op.getClock(), op.getEdge(),
+            .emitClockedProperty(property, op.getClock(), op.getEvent(),
                                  op.getDisable());
         ps << ");";
       });

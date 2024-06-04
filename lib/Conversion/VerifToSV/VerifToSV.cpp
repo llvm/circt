@@ -14,7 +14,10 @@
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
+#include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -102,11 +105,13 @@ namespace {
 /// Convert a ClockedAssertLike op to its sva equivalent
 /// This requires identifying if the property defines a disable signal
 struct ClockedAssertLikeOpConversion {
-  template <typename Op, typename Adaptor, typename TargetOp>
+  template <typename TargetOp, typename Op, typename Adaptor>
   static LogicalResult visit(Op op, Adaptor adaptor,
                              ConversionPatternRewriter &rewriter,
                              bool isCover = false) {
-    Value disableVal, property;
+    Value disableVal, property, one;
+    sv::EventControlAttr ecattr = sv::EventControlAttr::get(
+        op.getContext(), verifToSVEventControl(adaptor.getEdge()));
     bool disablePattern = false;
 
     // CoverOps have a different disable pattern
@@ -152,15 +157,15 @@ struct ClockedAssertLikeOpConversion {
     if (!disablePattern) {
       disableVal =
           rewriter.create<hw::ConstantOp>(op.getLoc(), rewriter.getI1Type(), 0);
-      rewriter.replaceOpWithNewOp<TargetOp>(
-          op, verifToSVEventControl(adaptor.getEdge()), adaptor.getClock(),
-          disableVal, adaptor.getProperty(), adaptor.getLabelAttr());
+      rewriter.replaceOpWithNewOp<TargetOp>(op, ecattr, adaptor.getClock(),
+                                            disableVal, adaptor.getProperty(),
+                                            adaptor.getLabelAttr());
       return success();
     }
 
-    rewriter.replaceOpWithNewOp<TargetOp>(
-        op, verifToSVEventControl(adaptor.getEdge()), adaptor.getClock(),
-        disableVal, property, adaptor.getLabelAttr());
+    rewriter.replaceOpWithNewOp<TargetOp>(op, ecattr, adaptor.getClock(),
+                                          disableVal, property,
+                                          adaptor.getLabelAttr());
     return success();
   }
 };
@@ -172,7 +177,8 @@ struct ClockedAssertOpConversionPattern
   LogicalResult
   matchAndRewrite(ClockedAssertOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter);
+    return ClockedAssertLikeOpConversion::visit<sv::AssertPropertyOp>(
+        op, operands, rewriter);
   }
 };
 
@@ -183,7 +189,8 @@ struct ClockedAssumeOpConversionPattern
   LogicalResult
   matchAndRewrite(ClockedAssumeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter);
+    return ClockedAssertLikeOpConversion::visit<sv::AssumePropertyOp>(
+        op, operands, rewriter);
   }
 };
 
@@ -194,7 +201,8 @@ struct ClockedCoverOpConversionPattern
   LogicalResult
   matchAndRewrite(ClockedCoverOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return ClockedAssertLikeOpConversion::visit(op, operands, rewriter, true);
+    return ClockedAssertLikeOpConversion::visit<sv::CoverPropertyOp>(
+        op, operands, rewriter, true);
   }
 };
 
