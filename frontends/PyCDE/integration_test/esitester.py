@@ -24,7 +24,8 @@ class PrintfExample(Module):
   @generator
   def construct(ports):
     sent_signal = Wire(Bits(1))
-    sent = ControlReg(ports.clk, ports.rst, [sent_signal], [Bits(1)(0)])
+    host_ret = Wire(Bits(1))
+    sent = ControlReg(ports.clk, ports.rst, [sent_signal], [host_ret])
     arg_data = UInt(32)(7)
     arg_valid = ~sent & ~ports.rst
     arg_chan, arg_ready = Channel(UInt(32)).wrap(arg_data, arg_valid)

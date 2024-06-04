@@ -19,7 +19,10 @@
 
 #include "CosimDpi.capnp.h"
 #include "cosim/CapnpThreads.h"
+
 #include <capnp/ez-rpc.h>
+#include <kj/async-io.h>
+
 #include <cassert>
 #include <thread>
 #ifdef _WIN32
@@ -61,12 +64,14 @@ public:
 class FromSimServer final : public FromSimInterface::Server {
   /// The wrapped endpoint.
   Endpoint &endpoint;
+  kj::AsyncIoProvider &io;
+
   /// Signals that this endpoint has been opened by a client and hasn't been
   /// closed by said client.
   bool open;
 
 public:
-  FromSimServer(Endpoint &ep);
+  FromSimServer(Endpoint &ep, kj::AsyncIoProvider &io);
   /// Release the Endpoint should the client disconnect without properly closing
   /// it.
   ~FromSimServer();
@@ -117,6 +122,8 @@ class CosimServer final : public CosimInterface::Server {
   const std::vector<uint8_t> &compressedManifest;
 
 public:
+  kj::AsyncIoProvider *io;
+
   CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge,
               const signed int &esiVersion,
               const std::vector<uint8_t> &compressedManifest);
@@ -135,7 +142,7 @@ public:
 
 /// ------ EndpointServer definitions.
 
-ToSimServer::ToSimServer(Endpoint &ep) : endpoint(ep), open(true) {
+ToSimServer::ToSimServer(Endpoint &ep) : endpoint(ep), open(false) {
   assert(ep.getDirection() == esi::cosim::Direction::ToSim &&
          "endpoint direction mismatch");
 }
@@ -159,6 +166,7 @@ kj::Promise<void> ToSimServer::sendMessage(SendMessageContext context) {
 }
 
 kj::Promise<void> ToSimServer::connect(ConnectContext context) {
+  KJ_LOG(INFO, "Connecting toSim endpoint", endpoint.getId());
   KJ_REQUIRE(!open, "EndPoint connected already");
   open = true;
   return kj::READY_NOW;
@@ -171,7 +179,8 @@ kj::Promise<void> ToSimServer::disconnect(DisconnectContext context) {
   return kj::READY_NOW;
 }
 
-FromSimServer::FromSimServer(Endpoint &ep) : endpoint(ep), open(false) {
+FromSimServer::FromSimServer(Endpoint &ep, kj::AsyncIoProvider &io)
+    : endpoint(ep), io(io), open(false) {
   assert(ep.getDirection() == esi::cosim::Direction::FromSim &&
          "endpoint direction mismatch");
 }
@@ -181,11 +190,10 @@ FromSimServer::~FromSimServer() {
 }
 
 kj::Promise<void> FromSimServer::connect(ConnectContext context) {
+  KJ_LOG(INFO, "Connecting fromSim endpoint", endpoint.getId());
   KJ_REQUIRE(!open, "EndPoint already open");
   open = true;
-  return kj::evalLast([this, KJ_CPCAP(context)]() mutable {
-    return pollRecv(context.getParams().getCallback());
-  });
+  return pollRecv(context.getParams().getCallback());
 }
 
 kj::Promise<void> FromSimServer::disconnect(DisconnectContext context) {
@@ -197,26 +205,25 @@ kj::Promise<void> FromSimServer::disconnect(DisconnectContext context) {
 
 kj::Promise<void>
 FromSimServer::pollRecv(MessageReceiverInterface::Client callback) {
-  if (!open)
+  if (!open) {
+    KJ_DBG("Endpoint closed", endpoint.getId());
     return kj::READY_NOW;
+  }
 
   Endpoint::MessageDataPtr msg;
   if (endpoint.getMessage(msg)) {
+    KJ_DBG("Sending message to client", endpoint.getId());
     auto msgCall = callback.receiveMessageRequest();
     msgCall.setMsg(kj::arrayPtr(msg->getBytes(), msg->getSize()));
-    return msgCall.send().then(
-        [this, KJ_CPCAP(callback)](auto ignoreResult) mutable {
-          return pollRecv(callback);
-        });
+    return msgCall.send().ignoreResult().then(
+        [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); });
+  } else {
+    return io.getTimer()
+        .afterDelay(1 * kj::MILLISECONDS)
+        .then(
+            [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); })
+        .eagerlyEvaluate([](kj::Exception &&e) { KJ_LOG(ERROR, e); });
   }
-  kj::getCurrentThreadExecutor()
-      .executeAsync(
-          [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); })
-      .detach([](kj::Exception &&e) {
-        fprintf(stderr, "Error in from sim message sender: %s\n",
-                e.getDescription().cStr());
-      });
-  return kj::READY_NOW;
 }
 
 /// ------ LowLevelServer definitions.
@@ -298,7 +305,7 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
         EndpointInterface::Client(kj::heap<ToSimServer>(*ep)));
   else
     ctxt.getResults().setEndpoint(
-        EndpointInterface::Client(kj::heap<FromSimServer>(*ep)));
+        EndpointInterface::Client(kj::heap<FromSimServer>(*ep, *io)));
   return kj::READY_NOW;
 }
 
@@ -328,10 +335,12 @@ static void writePort(uint16_t port) {
 }
 
 void RpcServer::mainLoop(uint16_t port) {
-  capnp::EzRpcServer rpcServer(kj::heap<CosimServer>(endpoints, lowLevelBridge,
-                                                     esiVersion,
-                                                     compressedManifest),
+  auto server = kj::heap<CosimServer>(endpoints, lowLevelBridge, esiVersion,
+                                      compressedManifest);
+  auto serverPtr = server.get();
+  capnp::EzRpcServer rpcServer(std::move(server),
                                /* bindAddress */ "*", port);
+  serverPtr->io = &rpcServer.getIoProvider();
   auto &waitScope = rpcServer.getWaitScope();
   // If port is 0, ExRpcSever selects one and we have to wait to get the port.
   if (port == 0) {
@@ -346,6 +355,7 @@ void RpcServer::mainLoop(uint16_t port) {
 /// Start the server if not already started.
 void RpcServer::run(uint16_t port) {
   Lock g(m);
+  kj::_::Debug::setLogLevel(kj::LogSeverity::INFO);
   if (myThread == nullptr) {
     myThread = new std::thread(&RpcServer::mainLoop, this, port);
   } else {

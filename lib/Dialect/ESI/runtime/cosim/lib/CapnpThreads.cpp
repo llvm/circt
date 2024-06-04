@@ -19,7 +19,8 @@
 using namespace capnp;
 using namespace esi::cosim;
 
-CapnpCosimThread::CapnpCosimThread() : myThread(nullptr), stopSig(false) {}
+CapnpCosimThread::CapnpCosimThread(FILE *logFile)
+    : logFile(logFile), myThread(nullptr), stopSig(false) {}
 CapnpCosimThread::~CapnpCosimThread() { stop(); }
 
 void CapnpCosimThread::loop(kj::WaitScope &waitScope,

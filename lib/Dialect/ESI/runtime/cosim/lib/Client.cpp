@@ -33,6 +33,13 @@ public:
 
 private:
   std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback;
+
+  kj::Promise<void> receiveMessage(ReceiveMessageContext context) override {
+    auto msg = context.getParams().getMsg().asBytes();
+    messageRecvCallback(
+        std::make_unique<esi::MessageData>(msg.begin(), msg.size()));
+    return kj::READY_NOW;
+  }
 };
 } // namespace
 
@@ -66,12 +73,14 @@ struct esi::cosim::RpcClient::Impl {
   }
 
   void connectSendEndpoint(const std::string &epId, const esi::Type *sendType) {
-    std::optional<std::exception> failure;
+    if (connected[epId])
+      throw std::runtime_error("Endpoint already connected");
+    std::optional<std::runtime_error> failure;
     std::mutex m;
     std::unique_lock lk(m);
     std::condition_variable cv;
     ConnectRequest req = {epId, sendType->getID(),
-                          [&](std::optional<std::exception> e) {
+                          [&](std::optional<std::runtime_error> e) {
                             std::unique_lock lk(m);
                             failure = e;
                             cv.notify_all();
@@ -86,12 +95,12 @@ struct esi::cosim::RpcClient::Impl {
   void connectRecvEndpoint(
       const std::string &epId, const esi::Type *sendType,
       std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback) {
-    std::optional<std::exception> failure;
+    std::optional<std::runtime_error> failure;
     std::mutex m;
     std::unique_lock lk(m);
     std::condition_variable cv;
     ConnectRequest req = {epId, sendType->getID(),
-                          [&](std::optional<std::exception> e) {
+                          [&](std::optional<std::runtime_error> e) {
                             std::unique_lock lk(m);
                             failure = e;
                             cv.notify_all();
@@ -106,7 +115,8 @@ struct esi::cosim::RpcClient::Impl {
   struct ConnectRequest {
     std::string epId;
     std::string type;
-    std::function<void(std::optional<std::exception>)> connectResultCallback;
+    std::function<void(std::optional<std::runtime_error>)>
+        connectResultCallback;
     std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback;
   };
   TSQueue<ConnectRequest> connectReqQueue;
@@ -149,28 +159,40 @@ void esi::cosim::RpcClient::Impl::pollInternal() {
       connReq->connectResultCallback(
           std::make_optional<std::runtime_error>("Endpoint type mismatch"));
 
-    try {
-      auto openReq = cosim.openRequest();
-      openReq.setDesc(*desc);
-      EndpointInterface::Client capnpEpClient =
-          openReq.send().wait(waitScope).getEndpoint();
-      if (connReq->messageRecvCallback == nullptr) {
-        auto toSim = capnpEpClient.castAs<ToSimInterface>();
-        toSimEndpointMap.emplace(connReq->epId, toSim);
-        // auto capnpConnReq = toSim.connectRequest();
-        // capnpConnReq.send().wait(waitScope);
-      } else {
-        auto capnpConnReq =
-            capnpEpClient.castAs<FromSimInterface>().connectRequest();
-        capnpConnReq.setCallback(MessageReceiverInterface::Client(
-            kj::heap<MessageReceiver>(connReq->messageRecvCallback)));
-        capnpConnReq.send().wait(waitScope);
-      }
-      connReq->connectResultCallback(std::nullopt);
+    auto openReq = cosim.openRequest();
+    openReq.setDesc(*desc);
+    EndpointInterface::Client capnpEpClient =
+        openReq.send().wait(waitScope).getEndpoint();
+    std::optional<kj::Promise<void>> sendPromise;
+    if (connReq->messageRecvCallback == nullptr) {
+      auto toSim = capnpEpClient.castAs<ToSimInterface>();
+      toSimEndpointMap.emplace(connReq->epId, toSim);
+      auto capnpConnReq = toSim.connectRequest();
+      sendPromise = capnpConnReq.send().ignoreResult();
+      sendPromise
+          ->then([this, connReq]() {
+            std::lock_guard<std::mutex> l(m);
+            connected[connReq->epId] = true;
+            connReq->connectResultCallback(std::nullopt);
+          })
+          .detach([connReq](kj::Exception &&e) {
+            connReq->connectResultCallback(
+                std::make_optional<std::runtime_error>(
+                    e.getDescription().cStr()));
+          });
+    } else {
+      auto capnpConnReq =
+          capnpEpClient.castAs<FromSimInterface>().connectRequest();
+      capnpConnReq.setCallback(MessageReceiverInterface::Client(
+          kj::heap<MessageReceiver>(connReq->messageRecvCallback)));
+      capnpConnReq.send().ignoreResult().detach([connReq](
+                                                    kj::Exception &&e) -> void {
+        connReq->connectResultCallback(
+            std::make_optional<std::runtime_error>(e.getDescription().cStr()));
+      });
+      std::lock_guard<std::mutex> l(m);
       connected[connReq->epId] = true;
-    } catch (kj::Exception &e) {
-      connReq->connectResultCallback(
-          std::make_optional<std::runtime_error>(e.getDescription().cStr()));
+      connReq->connectResultCallback(std::nullopt);
     }
   }
 
@@ -231,12 +253,7 @@ void esi::cosim::RpcClient::Impl::pollInternal() {
   }
 }
 
-RpcClient::~RpcClient() {
-  if (impl) {
-    delete impl;
-    impl = nullptr;
-  }
-}
+RpcClient::~RpcClient() {}
 
 void RpcClient::mainLoop(std::string host, uint16_t port) {
   capnp::EzRpcClient rpcClient(host, port);
@@ -245,6 +262,8 @@ void RpcClient::mainLoop(std::string host, uint16_t port) {
 
   // Start the event loop. Does not return until stop() is called.
   loop(waitScope, [&]() { impl.load()->pollInternal(); });
+  delete impl;
+  impl = nullptr;
 }
 
 /// Start the client if not already started.

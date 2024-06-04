@@ -36,7 +36,7 @@ namespace cosim {
 /// threads and communicate with the outside world through thread safe channels.
 class CapnpCosimThread {
 public:
-  CapnpCosimThread();
+  CapnpCosimThread(FILE *logFile = nullptr);
   ~CapnpCosimThread();
 
   /// Stop the thread. This is a blocking call -- it will not return until the
@@ -74,6 +74,7 @@ protected:
 
   using Lock = std::lock_guard<std::mutex>;
 
+  FILE *logFile;
   LowLevel lowLevelBridge;
 
   std::thread *myThread;
@@ -90,6 +91,8 @@ protected:
 /// simulation.
 class RpcServer : public CapnpCosimThread {
 public:
+  using CapnpCosimThread::CapnpCosimThread;
+
   /// Start and stop the server thread.
   void run(uint16_t port);
 
@@ -120,6 +123,7 @@ class RpcClient : public CapnpCosimThread {
   friend struct Impl;
 
 public:
+  RpcClient() : impl(nullptr) {}
   ~RpcClient();
 
   /// Start client thread.

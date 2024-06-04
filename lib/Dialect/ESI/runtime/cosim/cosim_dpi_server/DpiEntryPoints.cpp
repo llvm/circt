@@ -268,7 +268,7 @@ DPI int sv2cCosimserverInit() {
 
     // Find the port and run.
     printf("[cosim] Starting RPC server.\n");
-    server = new RpcServer();
+    server = new RpcServer(logFile);
     server->run(findPort());
   }
   return 0;
