@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -234,12 +235,13 @@ struct PathTracker {
       PathInfoTable &pathInfoTable, const SymbolTable &symbolTable,
       const DenseMap<DistinctAttr, FModuleOp> &owningModules);
 
-  PathTracker(FModuleLike module, hw::InnerSymbolNamespace &moduleNamespace,
+  PathTracker(FModuleLike module,
+              hw::InnerSymbolNamespaceCollection &namespaces,
               InstanceGraph &instanceGraph, const SymbolTable &symbolTable,
               const DenseMap<DistinctAttr, FModuleOp> &owningModules)
-      : module(module), moduleNamespace(moduleNamespace),
-        instanceGraph(instanceGraph), symbolTable(symbolTable),
-        owningModules(owningModules) {}
+      : module(module), moduleNamespace(namespaces[module]),
+        namespaces(namespaces), instanceGraph(instanceGraph),
+        symbolTable(symbolTable), owningModules(owningModules) {}
 
 private:
   struct PathInfoTableEntry {
@@ -268,6 +270,7 @@ private:
 
   // Local data structures.
   hw::InnerSymbolNamespace &moduleNamespace;
+  hw::InnerSymbolNamespaceCollection &namespaces;
   DenseMap<std::pair<StringAttr, FModuleOp>, bool> needsAltBasePathCache;
 
   // Thread-unsafe global data structure. Don't mutate.
@@ -299,8 +302,8 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
   // Prepare workers.
   for (auto *node : instanceGraph)
     if (auto module = node->getModule<FModuleLike>())
-      trackers.emplace_back(module, namespaces[module], instanceGraph,
-                            symbolTable, owningModules);
+      trackers.emplace_back(module, namespaces, instanceGraph, symbolTable,
+                            owningModules);
 
   if (failed(failableParallelForEach(
           circuit.getContext(), trackers,
@@ -498,13 +501,32 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
       }
     }
 
-    // Copy the leading part of the hierarchical path from the owning module
-    // to the start of the annotation's NLA.
+    // Check if we need an alternative base path.
     auto needsAltBasePath =
         getOrComputeNeedsAltBasePath(op->getLoc(), moduleName, owningModule);
     if (failed(needsAltBasePath)) {
       error = true;
       return false;
+    }
+
+    // Copy the leading part of the hierarchical path from the owning module
+    // to the start of the annotation's NLA.
+    InstanceGraphNode *node = instanceGraph.lookup(moduleName);
+    while (true) {
+      // If we get to the owning module or the top, we're done.
+      if (node->getModule() == owningModule || node->noUses())
+        break;
+
+      // Append the next level of hierarchy to the path. Note that if there
+      // are multiple instances, which we warn about, this is where the
+      // ambiguity manifests. In practice, just picking usesBegin generates
+      // the same output as EmitOMIR would for now.
+      InstanceRecord *inst = *node->usesBegin();
+      path.push_back(
+          OpAnnoTarget(inst->getInstance<InstanceOp>())
+              .getNLAReference(namespaces[inst->getParent()->getModule()]));
+
+      node = inst->getParent();
     }
 
     // Create the HierPathOp.
