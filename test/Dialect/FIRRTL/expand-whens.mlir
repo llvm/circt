@@ -582,9 +582,9 @@ firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %a = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %a, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %c0_ui1 : !firrtl.uint<1>
     firrtl.when %cond : !firrtl.uint<1> {
-      firrtl.strictconnect %a, %c1_ui1 : !firrtl.uint<1>
+      firrtl.matchingconnect %a, %c1_ui1 : !firrtl.uint<1>
     }
   }
 }

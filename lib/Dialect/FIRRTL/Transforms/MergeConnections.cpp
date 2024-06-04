@@ -61,11 +61,11 @@ struct MergeConnection {
   bool changed = false;
 
   // Return true if the given connect op is merged.
-  bool peelConnect(StrictConnectOp connect);
+  bool peelConnect(MatchingConnectOp connect);
 
   // A map from a destination FieldRef to a pair of (i) the number of
   // connections seen so far and (ii) the vector to store subconnections.
-  DenseMap<FieldRef, std::pair<unsigned, SmallVector<StrictConnectOp>>>
+  DenseMap<FieldRef, std::pair<unsigned, SmallVector<MatchingConnectOp>>>
       connections;
 
   FModuleOp moduleOp;
@@ -76,7 +76,7 @@ struct MergeConnection {
   bool enableAggressiveMerging = false;
 };
 
-bool MergeConnection::peelConnect(StrictConnectOp connect) {
+bool MergeConnection::peelConnect(MatchingConnectOp connect) {
   // Ignore connections between different types because it will produce a
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
@@ -237,7 +237,7 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
   if (!parentBaseTy.hasUninferredWidth())
-    builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+    builder->create<MatchingConnectOp>(connect.getLoc(), parent, merged);
   else
     builder->create<ConnectOp>(connect.getLoc(), parent, merged);
 
@@ -250,7 +250,7 @@ bool MergeConnection::run() {
   auto *body = moduleOp.getBodyBlock();
   // Merge connections by forward iterations.
   for (auto it = body->begin(), e = body->end(); it != e;) {
-    auto connectOp = dyn_cast<StrictConnectOp>(*it);
+    auto connectOp = dyn_cast<MatchingConnectOp>(*it);
     if (!connectOp) {
       it++;
       continue;

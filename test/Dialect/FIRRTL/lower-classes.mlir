@@ -90,7 +90,7 @@ firrtl.circuit "Component" {
   firrtl.module @Component(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>, out %omir_out: !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.object @ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)
     firrtl.propassign %omir_out, %0 : !firrtl.class<@ClassEntrypoint(out obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
-    firrtl.strictconnect %output, %input : !firrtl.uint<1>
+    firrtl.matchingconnect %output, %input : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: om.class @ClassTest
@@ -268,8 +268,8 @@ firrtl.circuit "ModuleInstances" {
 
   // CHECK: firrtl.module private @Module(in %[[IN_WIRE0:.+]]: !firrtl.uint<1>, out %[[OUT_WIRE0:.+]]: !firrtl.uint<1>)
   firrtl.module private @Module(in %inputWire: !firrtl.uint<1>, in %inputProp: !firrtl.string, out %outputWire: !firrtl.uint<1>, out %outputProp: !firrtl.string) {
-    // CHECK: firrtl.strictconnect %[[OUT_WIRE0]], %[[IN_WIRE0]]
-    firrtl.strictconnect %outputWire, %inputWire : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %[[OUT_WIRE0]], %[[IN_WIRE0]]
+    firrtl.matchingconnect %outputWire, %inputWire : !firrtl.uint<1>
     // CHECK-NEXT: }
     firrtl.propassign %outputProp, %inputProp : !firrtl.string
   }
@@ -283,12 +283,12 @@ firrtl.circuit "ModuleInstances" {
     // CHECK: %[[MOD_IN_WIRE:.+]], %[[MOD_OUT_WIRE:.+]] = firrtl.instance mod sym @[[MOD_SYM]] @Module
     %mod.inputWire, %mod.inputProp, %mod.outputWire, %mod.outputProp = firrtl.instance mod @Module(in inputWire: !firrtl.uint<1>, in inputProp: !firrtl.string, out outputWire: !firrtl.uint<1>, out outputProp: !firrtl.string)
 
-    // CHECK: firrtl.strictconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
-    firrtl.strictconnect %ext.inputWire, %inputWire : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %[[MOD_IN_WIRE]], %[[EXT_OUT_WIRE]]
-    firrtl.strictconnect %mod.inputWire, %ext.outputWire : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %[[OUT_WIRE1]], %[[MOD_OUT_WIRE]]
-    firrtl.strictconnect %outputWire, %mod.outputWire : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %[[EXT_IN_WIRE]], %[[IN_WIRE1]]
+    firrtl.matchingconnect %ext.inputWire, %inputWire : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %[[MOD_IN_WIRE]], %[[EXT_OUT_WIRE]]
+    firrtl.matchingconnect %mod.inputWire, %ext.outputWire : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %[[OUT_WIRE1]], %[[MOD_OUT_WIRE]]
+    firrtl.matchingconnect %outputWire, %mod.outputWire : !firrtl.uint<1>
 
     // CHECK-NEXT: }
     firrtl.propassign %ext.inputProp, %inputProp : !firrtl.string

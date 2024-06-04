@@ -80,14 +80,14 @@ firrtl.circuit "Foo" attributes {
     // expected-error @below {{Wiring Problem source type '!firrtl.bundle<a: uint<1>, b: uint<2>>' does not match sink type '!firrtl.uint<1>'}}
     %y = firrtl.wire interesting_name : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %invalid_reset = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: uint<2>>
-    firrtl.strictconnect %y, %invalid_reset : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    firrtl.matchingconnect %y, %invalid_reset : !firrtl.bundle<a: uint<1>, b: uint<2>>
   }
   firrtl.module @Foo() {
     firrtl.instance bar interesting_name @Bar()
     // expected-note @below {{The sink is here.}}
     %x = firrtl.wire interesting_name : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.strictconnect %x, %invalid_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %invalid_ui1 : !firrtl.uint<1>
   }
 }
 
@@ -112,12 +112,12 @@ firrtl.circuit "FooBar" attributes {
   // expected-error @below {{cannot wire port through this public module}}
   firrtl.module public @Bar(out %out: !firrtl.uint<1>) {
       %foo_out = firrtl.instance foo interesting_name  @Foo(out out: !firrtl.uint<1>)
-      firrtl.strictconnect %out, %foo_out : !firrtl.uint<1>
+      firrtl.matchingconnect %out, %foo_out : !firrtl.uint<1>
   }
   // expected-note @below {{source here}}
   firrtl.module @FooBar(out %io: !firrtl.bundle<in flip: uint<1>, out: uint<1>>) {
       %0 = firrtl.subfield %io[out] : !firrtl.bundle<in flip: uint<1>, out: uint<1>>
       %bar_out = firrtl.instance bar interesting_name  @Bar(out out: !firrtl.uint<1>)
-      firrtl.strictconnect %0, %bar_out : !firrtl.uint<1>
+      firrtl.matchingconnect %0, %bar_out : !firrtl.uint<1>
   }
 }
