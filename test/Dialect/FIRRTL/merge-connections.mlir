@@ -87,7 +87,7 @@ firrtl.circuit "Test"   {
   }
 
 
-  // Check that we don't use matchingconnect when merging connections into non-passive type.
+  // No merging with non-passive type.
   // COMMON-LABEL: firrtl.module private @DUT
   // COMMON-NEXT:    %p = firrtl.wire
   // COMMON-NEXT:    %0 = firrtl.subfield
