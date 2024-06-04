@@ -6277,8 +6277,8 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
                                     Type rhs) {
   // If operand types are the same, print a rhs type.
-  auto lhs_cast = dyn_cast<LHSType>(lhs);
-  if (!lhs_cast || lhs_cast.getType() != rhs)
+  auto lhsCast = dyn_cast<LHSType>(lhs);
+  if (!lhsCast || lhsCast.getType() != rhs)
     p << lhs << ", " << rhs;
   else
     p << rhs;
