@@ -42,9 +42,11 @@ static bool hasOperandsOutsideOfBlock(Operation *op) {
 /// 'hasOperandsOutsideOfBlock' checks.
 static LogicalResult
 materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
+
+  // List of ConstantLike ops to clone and the operand's result index.
+  SmallVector<std::pair<Operation *, unsigned>> opsToClone;
   SmallVector<Value> newOperands;
   newOperands.reserve(op->getNumOperands());
-  bool doOpRewrite = false;
 
   for (auto operand : op->getOperands()) {
     auto defOp = operand.getDefiningOp();
@@ -59,28 +61,41 @@ materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
       // Optimization will remain blocked, so don't bother changing the op.
       return failure();
 
-    // Pull the constant into the op's block.
-    PatternRewriter::InsertionGuard g(rewriter);
-    rewriter.setInsertionPointToStart(op->getBlock());
-    auto cloned = rewriter.clone(*defOp);
-
     for (unsigned resultIdx = 0; resultIdx < defOp->getNumResults();
          ++resultIdx) {
       if (operand == defOp->getResult(resultIdx)) {
-        newOperands.push_back(cloned->getResult(resultIdx));
+        // Defer the copying of the constant and put a placeholder into the
+        // operands list.
+        opsToClone.emplace_back<std::pair<Operation *, unsigned>>(
+            {defOp, resultIdx});
+        newOperands.emplace_back(Value());
         break;
       }
     }
-    doOpRewrite = true;
   }
 
-  if (!doOpRewrite)
+  if (opsToClone.empty())
+    // Nothing to do.
     return failure();
 
   assert(newOperands.size() == op->getNumOperands() &&
          "Incorrect number of new operands");
-  rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
 
+  // Pull the constants we found into the block and substitute the placeholders.
+  PatternRewriter::InsertionGuard g(rewriter);
+  rewriter.setInsertionPointToStart(op->getBlock());
+  unsigned cloneIdx = 0;
+  for (unsigned argIdx = 0; argIdx < newOperands.size(); ++argIdx) {
+    if (!newOperands[argIdx]) {
+      auto clone = rewriter.clone(*opsToClone[cloneIdx].first);
+      newOperands[argIdx] = clone->getResult(opsToClone[cloneIdx].second);
+      cloneIdx++;
+    }
+  }
+  assert(cloneIdx == opsToClone.size() &&
+         "Incorrect number of operations cloned.");
+
+  rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
   return success();
 }
 
