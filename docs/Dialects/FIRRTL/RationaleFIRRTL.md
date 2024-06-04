@@ -569,7 +569,7 @@ include the following:
 - Ports on a `firrtl.module`, where the foreign types are treated as opaque values moving in and out of the module
 - Ports on a `firrtl.instance`
 - `firrtl.wire` to allow for def-after-use cases; the wire must have a single strict connect that uniquely defines the wire's value
-- `firrtl.strictconnect` to module outputs, instance inputs, and wires
+- `firrtl.matchingconnect` to module outputs, instance inputs, and wires
 
 The expected lowering for strict connects is for the connect to be eliminated
 and the right-hand-side source value of the connect being instead materialized

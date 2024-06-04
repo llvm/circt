@@ -137,14 +137,14 @@ firrtl.circuit "Foo" {
     // CHECK-NOT: _invalid
     // CHECK: invalidate someOut
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.strictconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
+    firrtl.matchingconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
 
     // CHECK: connect unknownReset, knownReset
     %knownReset = firrtl.wire : !firrtl.asyncreset
     %unknownReset = firrtl.wire : !firrtl.reset
     %resetCast = firrtl.resetCast %knownReset :
       (!firrtl.asyncreset) -> !firrtl.reset
-    firrtl.strictconnect %unknownReset, %resetCast : !firrtl.reset
+    firrtl.matchingconnect %unknownReset, %resetCast : !firrtl.reset
 
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
@@ -485,7 +485,7 @@ firrtl.circuit "Foo" {
     // Make sure literals strip the 'const' prefix
     // CHECK: connect b0, UInt<42>(1)
     %c = firrtl.constant 1 : !firrtl.const.uint<42>
-    firrtl.strictconnect %b0, %c : !firrtl.const.uint<42>
+    firrtl.matchingconnect %b0, %c : !firrtl.const.uint<42>
   }
 
   // Test that literal identifiers work.
@@ -551,7 +551,7 @@ firrtl.circuit "Foo" {
     // CHECK:      inst `0bar` of `0Bar`
     // CHECK-NEXT: connect `0bar`.`0`, `3`
     %_0bar_0 = firrtl.instance "0bar" @"0Bar"(in "0": !firrtl.uint<1>)
-    firrtl.strictconnect %_0bar_0, %_3 : !firrtl.uint<1>
+    firrtl.matchingconnect %_0bar_0, %_3 : !firrtl.uint<1>
 
     // CHECK:      mem `18` :
     // CHECK-NEXT:   data-type => UInt<8>
@@ -592,18 +592,18 @@ firrtl.circuit "Foo" {
     %10 = firrtl.subfield %_18_0[en] : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
     %11 = firrtl.subfield %_18_0[clk] : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>
 
-    firrtl.strictconnect %11, %_0 : !firrtl.clock
-    firrtl.strictconnect %10, %_3 : !firrtl.uint<1>
+    firrtl.matchingconnect %11, %_0 : !firrtl.clock
+    firrtl.matchingconnect %10, %_3 : !firrtl.uint<1>
     %12 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
-    firrtl.strictconnect %9, %12 : !firrtl.uint<5>
+    firrtl.matchingconnect %9, %12 : !firrtl.uint<5>
     firrtl.connect %_11, %8 : !firrtl.uint, !firrtl.uint<8>
-    firrtl.strictconnect %7, %_0 : !firrtl.clock
-    firrtl.strictconnect %6, %_3 : !firrtl.uint<1>
+    firrtl.matchingconnect %7, %_0 : !firrtl.clock
+    firrtl.matchingconnect %6, %_3 : !firrtl.uint<1>
     %14 = firrtl.pad %_3, 8 : (!firrtl.uint<1>) -> !firrtl.uint<8>
-    firrtl.strictconnect %5, %14 : !firrtl.uint<8>
+    firrtl.matchingconnect %5, %14 : !firrtl.uint<8>
     %15 = firrtl.pad %_3, 5 : (!firrtl.uint<1>) -> !firrtl.uint<5>
-    firrtl.strictconnect %4, %15 : !firrtl.uint<5>
-    firrtl.strictconnect %3, %_3 : !firrtl.uint<1>
+    firrtl.matchingconnect %4, %15 : !firrtl.uint<5>
+    firrtl.matchingconnect %3, %_3 : !firrtl.uint<1>
 
     // CHECK-NEXT: cmem `19` : { `0` : UInt<8> }[32]
     // CHECK-NEXT: smem `20` : { `0` : UInt<8> }[32]
@@ -618,7 +618,7 @@ firrtl.circuit "Foo" {
     chirrtl.memoryport.access %_21_port[%c8_ui5], %_0 : !chirrtl.cmemoryport, !firrtl.const.uint<5>, !firrtl.clock
     %c0_ui8 = firrtl.constant 0 : !firrtl.const.uint<8>
     %17 = firrtl.constCast %c0_ui8 : (!firrtl.const.uint<8>) -> !firrtl.uint<8>
-    firrtl.strictconnect %16, %17 : !firrtl.uint<8>
+    firrtl.matchingconnect %16, %17 : !firrtl.uint<8>
 
     // CHECK-NEXT: stop(`0`, `3`, 1) : `22`
     // CHECK-NEXT: assert(`0`, `3`, `3`, "message") : `23`
@@ -829,13 +829,13 @@ firrtl.circuit "Foo" {
     // Common case should be emitted inline.
     // CHECK: connect s, intrinsic(circt_sizeof : UInt<32>, clk)
     %0 = firrtl.int.generic "circt_sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    firrtl.strictconnect %s, %0 : !firrtl.uint<32>
+    firrtl.matchingconnect %s, %0 : !firrtl.uint<32>
     // CHECK-NEXT: connect io1, intrinsic(circt_isX : UInt<1>, clk)
     %1 = firrtl.int.generic "circt_isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    firrtl.strictconnect %io1, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %io1, %1 : !firrtl.uint<1>
     // CHECK-NEXT: connect io2, intrinsic(circt_plusargs_test<FORMAT = "foo"> : UInt<1>)
     %2 = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    firrtl.strictconnect %io2, %2 : !firrtl.uint<1>
+    firrtl.matchingconnect %io2, %2 : !firrtl.uint<1>
 
     // CHECK-NOT: =
     // CHECK-NEXT: intrinsic(circt_clock_gate : Clock, clk, c)
@@ -850,8 +850,8 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: connect io4, [[PAV]].result
     %4 = firrtl.subfield %3[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %5 = firrtl.subfield %3[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    firrtl.strictconnect %io3, %4 : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %5 : !firrtl.uint<5>
+    firrtl.matchingconnect %io3, %4 : !firrtl.uint<1>
+    firrtl.matchingconnect %io4, %5 : !firrtl.uint<5>
 
     // Nested once should be inlined.
     // CHECK-NEXT: intrinsic(circt_verif_assert, intrinsic(circt_isX : UInt<1>, c))

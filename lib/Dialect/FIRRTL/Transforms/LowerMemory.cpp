@@ -249,9 +249,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   for (auto [dst, src] : llvm::zip(wrapper.getBodyBlock()->getArguments(),
                                    memInst.getResults())) {
     if (wrapper.getPortDirection(dst.getArgNumber()) == Direction::Out)
-      b.create<StrictConnectOp>(mem->getLoc(), dst, src);
+      b.create<MatchingConnectOp>(mem->getLoc(), dst, src);
     else
-      b.create<StrictConnectOp>(mem->getLoc(), src, dst);
+      b.create<MatchingConnectOp>(mem->getLoc(), src, dst);
   }
 
   // Create an instance of the wrapper memory module, which will replace the

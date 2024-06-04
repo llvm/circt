@@ -258,9 +258,9 @@ firrtl.module @NonConstToNonConstFlipFromConstSubaccess(in %in    : !firrtl.bund
 // CHECK-LABEL: firrtl.module @ConstConditionConstAssign
 firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
   firrtl.when %cond : !firrtl.const.uint<1> {
-    firrtl.strictconnect %out, %in1 : !firrtl.const.sint<2>
+    firrtl.matchingconnect %out, %in1 : !firrtl.const.sint<2>
   } else {
-    firrtl.strictconnect %out, %in2 : !firrtl.const.sint<2>
+    firrtl.matchingconnect %out, %in2 : !firrtl.const.sint<2>
   }
 }
 
@@ -268,9 +268,9 @@ firrtl.module @ConstConditionConstAssign(in %cond: !firrtl.const.uint<1>, in %in
 // CHECK-LABEL: firrtl.module @ConstConditionNonConstAssign
 firrtl.module @ConstConditionNonConstAssign(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.sint<2>, in %in2: !firrtl.sint<2>, out %out: !firrtl.sint<2>) {
   firrtl.when %cond : !firrtl.const.uint<1> {
-    firrtl.strictconnect %out, %in1 : !firrtl.sint<2>
+    firrtl.matchingconnect %out, %in1 : !firrtl.sint<2>
   } else {
-    firrtl.strictconnect %out, %in2 : !firrtl.sint<2>
+    firrtl.matchingconnect %out, %in2 : !firrtl.sint<2>
   }
 }
 
@@ -280,7 +280,7 @@ firrtl.module @NonConstWhenLocalConstAssign(in %cond: !firrtl.uint<1>) {
   firrtl.when %cond : !firrtl.uint<1> {
     %w = firrtl.wire : !firrtl.const.uint<9>
     %c = firrtl.constant 0 : !firrtl.const.uint<9>
-    firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+    firrtl.matchingconnect %w, %c : !firrtl.const.uint<9>
   }
 }
 
@@ -292,10 +292,10 @@ firrtl.module @NonConstWhenLocalConstNestedConstWhenAssign(in %cond: !firrtl.uin
     %w = firrtl.wire : !firrtl.const.uint<9>
     firrtl.when %constCond : !firrtl.const.uint<1> {
       %c = firrtl.constant 0 : !firrtl.const.uint<9>
-      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+      firrtl.matchingconnect %w, %c : !firrtl.const.uint<9>
     } else {
       %c = firrtl.constant 1 : !firrtl.const.uint<9>
-      firrtl.strictconnect %w, %c : !firrtl.const.uint<9>
+      firrtl.matchingconnect %w, %c : !firrtl.const.uint<9>
     }
   }
 }

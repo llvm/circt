@@ -43,7 +43,7 @@ void EliminateWiresPass::runOnOperation() {
   auto module = getOperation();
   auto &dominance = getAnalysis<mlir::DominanceInfo>();
 
-  std::deque<std::pair<WireOp, StrictConnectOp>> worklist;
+  std::deque<std::pair<WireOp, MatchingConnectOp>> worklist;
 
   for (auto wire : module.getOps<WireOp>()) {
     auto type = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());

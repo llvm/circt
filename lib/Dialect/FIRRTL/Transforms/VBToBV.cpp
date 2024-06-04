@@ -60,7 +60,7 @@ public:
   void handleConnect(Op);
 
   LogicalResult visitStmt(ConnectOp);
-  LogicalResult visitStmt(StrictConnectOp);
+  LogicalResult visitStmt(MatchingConnectOp);
 
   LogicalResult visitExpr(AggregateConstantOp);
   LogicalResult visitExpr(VectorCreateOp);
@@ -689,7 +689,7 @@ LogicalResult Visitor::visitStmt(ConnectOp op) {
   return success();
 }
 
-LogicalResult Visitor::visitStmt(StrictConnectOp op) {
+LogicalResult Visitor::visitStmt(MatchingConnectOp op) {
   handleConnect(op);
   return success();
 }

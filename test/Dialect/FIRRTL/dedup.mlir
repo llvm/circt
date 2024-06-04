@@ -496,10 +496,10 @@ firrtl.circuit "Bundle" {
     // CHECK: [[A_B:%.+]] = firrtl.subfield %bundle1_a[b]
     // CHECK: [[A_F_G:%.+]] = firrtl.subfield %0[g]
     // CHECK: [[A_B_C:%.+]] = firrtl.subfield %1[c]
-    // CHECK: firrtl.strictconnect [[A_B_C]], [[A_F_G]]
+    // CHECK: firrtl.matchingconnect [[A_B_C]], [[A_F_G]]
     // CHECK: [[A_F_H:%.+]] = firrtl.subfield [[A_F]][h]
     // CHECK: [[A_B_D:%.+]] = firrtl.subfield [[A_B]][d]
-    // CHECK: firrtl.strictconnect [[A_F_H]], [[A_B_D]]
+    // CHECK: firrtl.matchingconnect [[A_F_H]], [[A_B_D]]
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
 
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a[b]
@@ -520,11 +520,11 @@ firrtl.circuit "Bundle" {
 firrtl.circuit "MuxBundle" {
   firrtl.module private @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>>
-    firrtl.strictconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
+    firrtl.matchingconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module private @Bar1(out %o: !firrtl.bundle<b: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
+    firrtl.matchingconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
   }
   firrtl.module @MuxBundle(in %p: !firrtl.uint<1>, in %l: !firrtl.bundle<b: uint<1>>, out %o: !firrtl.bundle<b: uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
     // CHECK: %bar0_o = firrtl.instance bar0 @Bar0(out o: !firrtl.bundle<a: uint<1>>)
@@ -534,13 +534,13 @@ firrtl.circuit "MuxBundle" {
     // CHECK: [[WIRE:%.+]] = firrtl.wire {name = "o"} : !firrtl.bundle<b: uint<1>>
     // CHECK: [[WIRE_B:%.+]] = firrtl.subfield [[WIRE]][b]
     // CHECK: [[PORT_A:%.+]] = firrtl.subfield %bar1_o[a]
-    // CHECK: firrtl.strictconnect [[WIRE_B]], [[PORT_A]]
+    // CHECK: firrtl.matchingconnect [[WIRE_B]], [[PORT_A]]
     %bar1_o = firrtl.instance bar1 @Bar1(out o: !firrtl.bundle<b: uint<1>>)
 
     // CHECK: %2 = firrtl.mux(%p, [[WIRE]], %l)
-    // CHECK: firrtl.strictconnect %o, %2 : !firrtl.bundle<b: uint<1>>
+    // CHECK: firrtl.matchingconnect %o, %2 : !firrtl.bundle<b: uint<1>>
     %0 = firrtl.mux(%p, %bar1_o, %l) : (!firrtl.uint<1>, !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>) -> !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %o, %0 : !firrtl.bundle<b: uint<1>>
+    firrtl.matchingconnect %o, %0 : !firrtl.bundle<b: uint<1>>
   }
 }
 
@@ -576,13 +576,13 @@ firrtl.circuit "DelayedFixup"  {
   firrtl.module private @Foo(out %a: !firrtl.bundle<a: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
-    firrtl.strictconnect %a_a, %zero : !firrtl.uint<1>
+    firrtl.matchingconnect %a_a, %zero : !firrtl.uint<1>
   }
   // CHECK-NOT: @Bar
   firrtl.module private @Bar(out %b: !firrtl.bundle<b: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %b_b, %zero : !firrtl.uint<1>
+    firrtl.matchingconnect %b_b, %zero : !firrtl.uint<1>
   }
   // CHECK: firrtl.module private @Parent0
   firrtl.module private @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
