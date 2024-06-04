@@ -49,7 +49,7 @@ materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
   newOperands.reserve(op->getNumOperands());
 
   for (auto operand : op->getOperands()) {
-    auto defOp = operand.getDefiningOp();
+    auto *defOp = operand.getDefiningOp();
 
     if (!defOp || defOp->getBlock() == op->getBlock()) {
       // Keep local operands
@@ -87,7 +87,7 @@ materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
   unsigned cloneIdx = 0;
   for (unsigned argIdx = 0; argIdx < newOperands.size(); ++argIdx) {
     if (!newOperands[argIdx]) {
-      auto clone = rewriter.clone(*opsToClone[cloneIdx].first);
+      auto *clone = rewriter.clone(*opsToClone[cloneIdx].first);
       newOperands[argIdx] = clone->getResult(opsToClone[cloneIdx].second);
       cloneIdx++;
     }
