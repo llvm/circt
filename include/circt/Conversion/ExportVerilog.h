@@ -19,6 +19,7 @@
 namespace circt {
 namespace hw {
 class HWModuleLike;
+class HWEmittableModuleLike;
 } // namespace hw
 
 std::unique_ptr<mlir::Pass>
