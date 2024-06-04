@@ -211,11 +211,11 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
 %1 = seq.shitreg n, %a, %clk, %true, powerOn %zero : i1
 ``` 
 
-> The following functions should be encoded in the front-ends directly:  
-> - **`$onehot(a)`**: `a.reduce(_+_) == 1`
-> - **`$onehot0(a)`**: `a.reduce(_+_) <= 1`
-> - **`$isunknown(a)`**: `a == X || a == Z`
-> - **`$countones(a)`**: `a.reduce(_+_)`  
+> The following functions are not yet supported by CIRCT:  
+> - **`$onehot(a)`**  
+> - **`$onehot0(a)`**  
+> - **`$isunknown(a)`**  
+> - **`$countones(a)`**     
   
   
 - **`a ##n b`**:   
