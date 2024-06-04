@@ -13,46 +13,62 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-@0x9fd65fec6e2d2779;
+@0x9fd65fec6e2d2879;
 
 # The primary interface exposed by an ESI cosim simulation.
-interface CosimDpiServer @0xe3d7f70c7065c46a {
+interface CosimInterface @0xe3d7f70c7065c86a {
   # List all the registered endpoints.
-  list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
+  list @0 () -> (ifaces :List(EndpointDesc));
+
   # Open one of them. Specify both the send and recv data types if want type
   # safety and your language supports it.
-  open @1 (iface :EsiDpiInterfaceDesc) -> (endpoint :EsiDpiEndpoint);
+  open @1 (desc :EndpointDesc) -> (endpoint :EndpointInterface);
 
   # Get the zlib-compressed JSON system manifest.
   getCompressedManifest @2 () -> (version :Int32, compressedManifest :Data);
 
   # Create a low level interface into the simulation.
-  openLowLevel @3 () -> (lowLevel :EsiLowLevel);
+  openLowLevel @3 () -> (lowLevel :LowLevelInterface);
+}
+
+enum Direction {
+  toSim @0;
+  fromSim @1;
+}
+
+struct EndpointDesc {
+  # ESI type ID.
+  type @0 :Text;
+
+  # Direction of Endpoint.
+  direction @1 :Direction;
+
+  # String-based endpoint identifier. Defined in the design.
+  id @2 :Text;
+}
+
+interface MessageReceiverInterface @0xcee31f5bce3305bf {
+  receiveMessage @0 (msg :Data);
 }
 
 # Description of a registered endpoint.
-struct EsiDpiInterfaceDesc @0xd2584d2506f01c8c {
-  # Capn'Proto ID of the struct type being sent _to_ the simulator.
-  fromHostType @0 :Text;
-  # Capn'Proto ID of the struct type being sent _from_ the simulator.
-  toHostType @1 :Text;
-  # Numerical identifier of the endpoint. Defined in the design.
-  endpointID @2 :Text;
+interface EndpointInterface @0xd2584d2506f0188c {
+  disconnect @0 ();
 }
 
-# Interactions with an open endpoint. Optionally typed.
-interface EsiDpiEndpoint @0xfb0a36bf859be47b {
-  # Send a message to the endpoint.
-  sendFromHost @0 (msg :Data);
-  # Recieve a message from the endpoint. Non-blocking.
-  recvToHost @1 () -> (hasData :Bool, resp :Data);
-  # Close the connect to this endpoint.
-  close @2 ();
+interface ToSimInterface @0x9264cbc675502f71 extends(EndpointInterface) {
+  connect @0 ();
+  sendMessage @1 (msg :Data);
+}
+
+interface FromSimInterface @0xbfbb70ef7ae3b019 extends(EndpointInterface) {
+  # Does not return until 'disconnect' is called.
+  connect @0 (callback :MessageReceiverInterface);
 }
 
 # A low level interface simply provides MMIO and host memory access. In all
 # cases, hardware errors become exceptions.
-interface EsiLowLevel @0xae716100ef82f6d6 {
+interface LowLevelInterface @0xae716100ef82f6d6 {
   # Write to an MMIO register.
   writeMMIO @0 (address :UInt32, data :UInt32) -> ();
   # Read from an MMIO register.

@@ -27,9 +27,9 @@ class TSQueue {
 public:
   /// Push onto the queue.
   template <typename... E>
-  void push(E... t) {
+  void push(E &&...t) {
     Lock l(m);
-    q.emplace(t...);
+    q.emplace(std::forward<E &&>(t)...);
   }
 
   /// Pop something off the queue but return nullopt if the queue is empty. Why
@@ -38,9 +38,9 @@ public:
     Lock l(m);
     if (q.size() == 0)
       return std::nullopt;
-    auto t = q.front();
+    auto t = std::move(q.front());
     q.pop();
-    return t;
+    return std::move(t);
   }
 };
 

@@ -103,14 +103,28 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeId,
-                                  int fromHostTypeSize, char *toHostTypeId,
+DPI int sv2cCosimserverEpRegister(char *endpointId, char *cFromHostTypeId,
+                                  int fromHostTypeSize, char *cToHostTypeId,
                                   int toHostTypeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
+
+  std::string fromHostTypeId(cFromHostTypeId), toHostTypeId(cToHostTypeId);
   // Then register with it.
-  if (server->registerEndpoint(endpointId, fromHostTypeId, toHostTypeId))
-    return 0;
+  if (!fromHostTypeId.empty()) {
+    assert(toHostTypeId.empty() && "Bidirectional EPs not supported anymore.");
+    if (server->registerEndpoint(endpointId, fromHostTypeId,
+                                 esi::cosim::Direction::ToSim))
+      return 0;
+  } else {
+    assert(!toHostTypeId.empty() &&
+           "Exactly one of fromHostTypeId or toHostTypeId must be non-null.");
+    assert(fromHostTypeId.empty() &&
+           "Bidirectional EPs not supported anymore.");
+    if (server->registerEndpoint(endpointId, toHostTypeId,
+                                 esi::cosim::Direction::FromSim))
+      return 0;
+  }
   return -1;
 }
 
@@ -135,7 +149,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
 
   Endpoint::MessageDataPtr msg;
   // Poll for a message.
-  if (!ep->getMessageToSim(msg)) {
+  if (!ep->getMessage(msg)) {
     // No message.
     *dataSize = 0;
     return 0;
@@ -163,7 +177,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   // Verify it'll fit.
   size_t msgSize = msg->getSize();
   if (msgSize > *dataSize) {
-    printf("ERROR: Message size too big to fit in HW buffer\n");
+    printf("ERROR: Message size (%lu) too big to fit in HW buffer\n", msgSize);
     return -5;
   }
 
@@ -222,7 +236,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
     return -4;
   }
   log(endpointId, true, blob);
-  ep->pushMessageToClient(std::move(blob));
+  ep->pushMessage(std::move(blob));
   return 0;
 }
 

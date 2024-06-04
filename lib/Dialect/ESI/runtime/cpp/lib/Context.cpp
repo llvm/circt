@@ -24,6 +24,7 @@ void Context::registerType(Type *type) {
 }
 
 std::unique_ptr<AcceleratorConnection>
-Context::connect(std::string backend, std::string connection) {
-  return registry::connect(*this, backend, connection);
+Context::connect(std::string backend, std::string connection,
+                 std::ostream *debugLog) {
+  return registry::connect(*this, backend, connection, debugLog);
 }

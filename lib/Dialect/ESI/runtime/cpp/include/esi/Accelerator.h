@@ -28,6 +28,7 @@
 #include "esi/Services.h"
 
 #include <functional>
+#include <iosfwd>
 #include <map>
 #include <memory>
 #include <string>
@@ -76,7 +77,7 @@ public:
 /// subclasses.
 class AcceleratorConnection {
 public:
-  AcceleratorConnection(Context &ctxt);
+  AcceleratorConnection(Context &ctxt, std::ostream *debugLog = nullptr);
   virtual ~AcceleratorConnection() = default;
   Context &getCtxt() const { return ctxt; }
 
@@ -105,6 +106,18 @@ public:
                               ServiceImplDetails details = {},
                               HWClientDetails clients = {});
 
+  inline void debugLog(const std::string &action, const std::string &id,
+                       std::function<std::string()> msgCB) const {
+    if (debugLogFile)
+      debugLogInternal(action, id, msgCB());
+  }
+  inline void errorLog(const std::string &action, const std::string &id,
+                       std::string msg) const {
+    if (debugLogFile)
+      debugLogInternal("ERROR " + action, id, msg);
+  }
+  void setDebugLog(std::ostream *debugLog) { debugLogFile = debugLog; }
+
 protected:
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
   /// this in a unique_ptr and caches it. Separate this from the
@@ -117,6 +130,12 @@ protected:
 private:
   /// ESI accelerator context.
   Context &ctxt;
+
+  /// Log a debug message. Assume debugLogFile is not null.
+  void debugLogInternal(const std::string &action, const std::string &id,
+                        std::string msg) const;
+  /// Log debug messages to this stream. If null, don't log.
+  std::ostream *debugLogFile;
 
   /// Cache services via a unique_ptr so they get free'd automatically when
   /// Accelerator objects get deconstructed.
@@ -131,7 +150,8 @@ namespace registry {
 // Connect to an ESI accelerator given a backend name and connection specifier.
 // Alternatively, instantiate the backend directly (if you're using C++).
 std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection);
+connect(Context &ctxt, std::string backend, std::string connection,
+        std::ostream *debugLog = nullptr);
 
 namespace internal {
 

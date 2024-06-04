@@ -8,9 +8,12 @@
 
 #include "CosimDpi.capnp.h"
 #include "cosim/CapnpThreads.h"
+#include "esi/Types.h"
 #include <capnp/ez-rpc.h>
 
 #include <cassert>
+#include <condition_variable>
+#include <stdexcept>
 #include <thread>
 #ifdef _WIN32
 #include <io.h>
@@ -21,14 +24,28 @@
 using namespace capnp;
 using namespace esi::cosim;
 
+namespace {
+class MessageReceiver final : public MessageReceiverInterface::Server {
+public:
+  MessageReceiver(
+      std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback)
+      : messageRecvCallback(messageRecvCallback) {}
+
+private:
+  std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback;
+};
+} // namespace
+
 /// Internal implementation to hide all the capnp details.
 struct esi::cosim::RpcClient::Impl {
 
   Impl(RpcClient &client, capnp::EzRpcClient &rpcClient)
       : client(client), waitScope(rpcClient.getWaitScope()), cosim(nullptr),
         lowLevel(nullptr) {
+    RpcClient::Lock l(client.m);
+
     // Get the main interface.
-    cosim = rpcClient.getMain<CosimDpiServer>();
+    cosim = rpcClient.getMain<CosimInterface>();
 
     // Grab a reference to the low level interface.
     auto llReq = cosim.openLowLevelRequest();
@@ -36,39 +53,77 @@ struct esi::cosim::RpcClient::Impl {
     lowLevel = llPromise.wait(waitScope).getLowLevel();
 
     // Get the ESI version and compressed manifest.
-    auto maniResp = cosim.getCompressedManifestRequest().send().wait(waitScope);
-    capnp::Data::Reader data = maniResp.getCompressedManifest();
-    client.esiVersion = maniResp.getVersion();
-    client.compressedManifest = std::vector<uint8_t>(data.begin(), data.end());
-
-    // Iterate through the endpoints and register them.
-    auto capnpEndpointsResp = cosim.listRequest().send().wait(waitScope);
-    for (const auto &capnpEndpoint : capnpEndpointsResp.getIfaces()) {
-      assert(capnpEndpoint.hasEndpointID() &&
-             "Response did not contain endpoint ID not found!");
-      std::string fromHostType, toHostType;
-      if (capnpEndpoint.hasFromHostType())
-        fromHostType = capnpEndpoint.getFromHostType();
-      if (capnpEndpoint.hasToHostType())
-        toHostType = capnpEndpoint.getToHostType();
-      bool rc = client.endpoints.registerEndpoint(capnpEndpoint.getEndpointID(),
-                                                  fromHostType, toHostType);
-      assert(rc && "Endpoint ID already exists!");
-      Endpoint *ep = client.endpoints[capnpEndpoint.getEndpointID()];
-      // TODO: delay opening until client calls connect().
-      auto openReq = cosim.openRequest();
-      openReq.setIface(capnpEndpoint);
-      EsiDpiEndpoint::Client dpiEp =
-          openReq.send().wait(waitScope).getEndpoint();
-      endpointMap.emplace(ep, dpiEp);
-    }
+    do {
+      auto maniResp =
+          cosim.getCompressedManifestRequest().send().wait(waitScope);
+      capnp::Data::Reader data = maniResp.getCompressedManifest();
+      client.esiVersion = maniResp.getVersion();
+      client.compressedManifest =
+          std::vector<uint8_t>(data.begin(), data.end());
+      // If the version is invalid, the manifest is not yet loaded. Probably
+      // means the simulation isn't quite ready to roll. Spin.
+    } while (client.esiVersion < 0);
   }
+
+  void connectSendEndpoint(const std::string &epId, const esi::Type *sendType) {
+    std::optional<std::exception> failure;
+    std::mutex m;
+    std::unique_lock lk(m);
+    std::condition_variable cv;
+    ConnectRequest req = {epId, sendType->getID(),
+                          [&](std::optional<std::exception> e) {
+                            std::unique_lock lk(m);
+                            failure = e;
+                            cv.notify_all();
+                          },
+                          nullptr};
+    connectReqQueue.push(req);
+    cv.wait(lk);
+    if (failure)
+      throw *failure;
+  }
+
+  void connectRecvEndpoint(
+      const std::string &epId, const esi::Type *sendType,
+      std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback) {
+    std::optional<std::exception> failure;
+    std::mutex m;
+    std::unique_lock lk(m);
+    std::condition_variable cv;
+    ConnectRequest req = {epId, sendType->getID(),
+                          [&](std::optional<std::exception> e) {
+                            std::unique_lock lk(m);
+                            failure = e;
+                            cv.notify_all();
+                          },
+                          messageRecvCallback};
+    connectReqQueue.push(req);
+    cv.wait(lk);
+    if (failure)
+      throw *failure;
+  }
+
+  struct ConnectRequest {
+    std::string epId;
+    std::string type;
+    std::function<void(std::optional<std::exception>)> connectResultCallback;
+    std::function<void(Endpoint::MessageDataPtr)> messageRecvCallback;
+  };
+  TSQueue<ConnectRequest> connectReqQueue;
 
   RpcClient &client;
   kj::WaitScope &waitScope;
-  CosimDpiServer::Client cosim;
-  EsiLowLevel::Client lowLevel;
-  std::map<Endpoint *, EsiDpiEndpoint::Client> endpointMap;
+  CosimInterface::Client cosim;
+  LowLevelInterface::Client lowLevel;
+
+  std::map<std::string, ToSimInterface::Client> toSimEndpointMap;
+  // std::map<std::string, MessageReceiver> fromSimMap;
+
+  // Must lock on this mutex before accessing any shared member variables.
+  std::mutex m;
+
+  /// Shared member vars.
+  std::map<std::string, bool> connected;
 
   /// Called from the event loop periodically.
   // TODO: try to reduce work in here. Ideally, eliminate polling altogether
@@ -77,30 +132,73 @@ struct esi::cosim::RpcClient::Impl {
 };
 
 void esi::cosim::RpcClient::Impl::pollInternal() {
-  // Iterate through the endpoints checking for messages.
-  for (auto &[ep, capnpEp] : endpointMap) {
-    // Process writes to the simulation.
-    Endpoint::MessageDataPtr msg;
-    if (!ep->getSendTypeId().empty() && ep->getMessageToSim(msg)) {
-      auto req = capnpEp.sendFromHostRequest();
-      req.setMsg(capnp::Data::Reader(msg->getBytes(), msg->getSize()));
-      req.send().detach([](kj::Exception &&e) -> void {
-        throw std::runtime_error("Error sending message to simulation: " +
-                                 std::string(e.getDescription().cStr()));
-      });
-    }
 
-    // Process reads from the simulation.
-    // TODO: polling for a response is horribly slow and inefficient. Rework
-    // the capnp protocol to avoid it.
-    if (!ep->getRecvTypeId().empty()) {
-      auto resp = capnpEp.recvToHostRequest().send().wait(waitScope);
-      if (resp.getHasData()) {
-        auto data = resp.getResp();
-        ep->pushMessageToClient(
-            std::make_unique<MessageData>(data.begin(), data.size()));
+  while (auto connReq = connectReqQueue.pop()) {
+    std::optional<EndpointDesc::Reader> desc;
+    auto capnpEndpointsResp = cosim.listRequest().send().wait(waitScope);
+    for (const auto &capnpEndpoint : capnpEndpointsResp.getIfaces()) {
+      if (capnpEndpoint.getId() == connReq->epId) {
+        desc = capnpEndpoint;
+        break;
       }
     }
+    if (!desc)
+      connReq->connectResultCallback(
+          std::make_optional<std::runtime_error>("Endpoint not found"));
+    if (desc->getType() != connReq->type)
+      connReq->connectResultCallback(
+          std::make_optional<std::runtime_error>("Endpoint type mismatch"));
+
+    try {
+      auto openReq = cosim.openRequest();
+      openReq.setDesc(*desc);
+      EndpointInterface::Client capnpEpClient =
+          openReq.send().wait(waitScope).getEndpoint();
+      if (connReq->messageRecvCallback == nullptr) {
+        auto toSim = capnpEpClient.castAs<ToSimInterface>();
+        toSimEndpointMap.emplace(connReq->epId, toSim);
+        // auto capnpConnReq = toSim.connectRequest();
+        // capnpConnReq.send().wait(waitScope);
+      } else {
+        auto capnpConnReq =
+            capnpEpClient.castAs<FromSimInterface>().connectRequest();
+        capnpConnReq.setCallback(MessageReceiverInterface::Client(
+            kj::heap<MessageReceiver>(connReq->messageRecvCallback)));
+        capnpConnReq.send().wait(waitScope);
+      }
+      connReq->connectResultCallback(std::nullopt);
+      connected[connReq->epId] = true;
+    } catch (kj::Exception &e) {
+      connReq->connectResultCallback(
+          std::make_optional<std::runtime_error>(e.getDescription().cStr()));
+    }
+  }
+
+  // Iterate through the endpoints checking for messages.
+  while (auto msgToSend = client.sendQueue.pop()) {
+    // Process writes to the simulation.
+    std::string epId = msgToSend->first;
+    MessageData msg = std::move(msgToSend->second);
+
+    {
+      std::lock_guard<std::mutex> l(m);
+      if (!connected[epId]) {
+        fprintf(stderr, "Endpoint %s not connected.\n", epId.c_str());
+        continue;
+      }
+    }
+
+    printf("[COSIM capnp] sending data (length %lu bytes) to simulation on "
+           "channel %s\n",
+           msg.getSize(), epId.c_str());
+    assert(toSimEndpointMap.find(epId) != toSimEndpointMap.end() &&
+           "Endpoint ID not found");
+    auto req = toSimEndpointMap.at(epId).sendMessageRequest();
+    req.setMsg(capnp::Data::Reader(msg.getBytes(), msg.getSize()));
+    req.send().detach([](kj::Exception &&e) -> void {
+      throw std::runtime_error("Error sending message to simulation: " +
+                               std::string(e.getDescription().cStr()));
+    });
   }
 
   // Process MMIO read requests.
@@ -133,28 +231,48 @@ void esi::cosim::RpcClient::Impl::pollInternal() {
   }
 }
 
+RpcClient::~RpcClient() {
+  if (impl) {
+    delete impl;
+    impl = nullptr;
+  }
+}
+
 void RpcClient::mainLoop(std::string host, uint16_t port) {
   capnp::EzRpcClient rpcClient(host, port);
   kj::WaitScope &waitScope = rpcClient.getWaitScope();
-  Impl impl(*this, rpcClient);
-
-  // Signal that we're good to go.
-  started.store(true);
+  impl = new Impl(*this, rpcClient);
 
   // Start the event loop. Does not return until stop() is called.
-  loop(waitScope, [&]() { impl.pollInternal(); });
+  loop(waitScope, [&]() { impl.load()->pollInternal(); });
 }
 
 /// Start the client if not already started.
 void RpcClient::run(std::string host, uint16_t port) {
-  Lock g(m);
-  if (myThread == nullptr) {
-    started.store(false);
+  {
+    Lock l(m);
+    if (myThread)
+      throw std::runtime_error("Cannot Run() RPC client more than once!");
     myThread = new std::thread(&RpcClient::mainLoop, this, host, port);
-    // Spin until the capnp thread is started and ready to go.
-    while (!started.load())
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-  } else {
-    fprintf(stderr, "Warning: cannot Run() RPC client more than once!");
   }
+
+  // Spin until the capnp thread is started and ready to go.
+  while (!impl.load())
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+}
+
+void RpcClient::connectSendEndpoint(const std::string &epId,
+                                    const esi::Type *sendType) {
+  // Spin until the capnp thread is started and ready to go.
+  while (!impl.load())
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+  impl.load()->connectSendEndpoint(epId, sendType);
+}
+void RpcClient::connectRecvEndpoint(
+    const std::string &epId, const esi::Type *sendType,
+    std::function<void(cosim::Endpoint::MessageDataPtr)> messageRecvCallback) {
+  // Spin until the capnp thread is started and ready to go.
+  while (!impl.load())
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+  impl.load()->connectRecvEndpoint(epId, sendType, messageRecvCallback);
 }

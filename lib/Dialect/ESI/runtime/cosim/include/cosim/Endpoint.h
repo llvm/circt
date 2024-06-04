@@ -15,6 +15,8 @@
 
 #include "esi/Common.h"
 
+#include "cosim/Utils.h"
+
 #include <functional>
 #include <map>
 #include <memory>
@@ -24,6 +26,8 @@
 
 namespace esi {
 namespace cosim {
+
+enum Direction { ToSim, FromSim };
 
 /// Implements a bi-directional, thread-safe bridge between the RPC server and
 /// DPI functions.
@@ -40,14 +44,15 @@ public:
   using MessageDataPtr = std::unique_ptr<MessageData>;
 
   /// Construct an endpoint which knows and the type IDs in both directions.
-  Endpoint(std::string fromHostTypeId, std::string toHostTypeId);
+  Endpoint(std::string id, std::string typeId, Direction dir);
   ~Endpoint();
   /// Disallow copying. There is only ONE endpoint object per logical endpoint
   /// so copying is almost always a bug.
   Endpoint(const Endpoint &) = delete;
 
-  std::string getSendTypeId() const { return fromHostTypeId; }
-  std::string getRecvTypeId() const { return toHostTypeId; }
+  std::string getId() const { return id; }
+  std::string getTypeId() const { return typeId; }
+  Direction getDirection() const { return dir; }
 
   /// These two are used to set and unset the inUse flag, to ensure that an open
   /// endpoint is not opened again.
@@ -55,54 +60,28 @@ public:
   void returnForUse();
 
   /// Queue message to the simulation.
-  void pushMessageToSim(MessageDataPtr msg) {
-    Lock g(m);
-    toCosim.push(std::move(msg));
-  }
+  void pushMessage(MessageDataPtr msg) { msgQueue.push(std::move(msg)); }
 
   /// Pop from the to-simulator queue. Return true if there was a message in the
   /// queue.
-  bool getMessageToSim(MessageDataPtr &msg) {
-    Lock g(m);
-    if (toCosim.empty())
-      return false;
-    msg = std::move(toCosim.front());
-    toCosim.pop();
-    return true;
-  }
-
-  /// Queue message to the RPC client.
-  void pushMessageToClient(MessageDataPtr msg) {
-    Lock g(m);
-    toClient.push(std::move(msg));
-  }
-
-  /// Pop from the to-RPC-client queue. Return true if there was a message in
-  /// the queue.
-  bool getMessageToClient(MessageDataPtr &msg) {
-    Lock g(m);
-    if (toClient.empty())
-      return false;
-    msg = std::move(toClient.front());
-    toClient.pop();
-    return true;
+  bool getMessage(MessageDataPtr &msgOut) {
+    if (auto msg = msgQueue.pop()) {
+      msgOut = std::move(*msg);
+      return true;
+    }
+    return false;
   }
 
 private:
-  const std::string fromHostTypeId;
-  const std::string toHostTypeId;
   bool inUse;
 
-  using Lock = std::lock_guard<std::mutex>;
-
-  /// This class needs to be thread-safe. All of the mutable member variables
-  /// are protected with this object-wide lock. This may be a performance issue
-  /// in the future.
-  std::mutex m;
   /// Message queue from RPC client to the simulation.
-  std::queue<MessageDataPtr> toCosim;
-  /// Message queue to RPC client from the simulation.
-  std::queue<MessageDataPtr> toClient;
+  TSQueue<MessageDataPtr> msgQueue;
+
+  /// Endpoint name.
+  std::string id;
+  const std::string typeId;
+  Direction dir;
 };
 
 /// The Endpoint registry is where Endpoints report their existence (register)
@@ -111,8 +90,7 @@ class EndpointRegistry {
 public:
   /// Register an Endpoint. Creates the Endpoint object and owns it. Returns
   /// false if unsuccessful.
-  bool registerEndpoint(std::string epId, std::string fromHostTypeId,
-                        std::string toHostTypeId);
+  bool registerEndpoint(std::string epId, std::string typeId, Direction dir);
 
   /// Get the specified endpoint. Return nullptr if it does not exist. This
   /// method is defined inline so it can be inlined at compile time. Performance
@@ -137,7 +115,7 @@ private:
   using Lock = std::lock_guard<std::mutex>;
 
   /// This object needs to be thread-safe. An object-wide mutex is sufficient.
-  std::mutex m;
+  mutable std::mutex m;
 
   /// Endpoint ID to object pointer mapping.
   std::map<std::string, Endpoint> endpoints;

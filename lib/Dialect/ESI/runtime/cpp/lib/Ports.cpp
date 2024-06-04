@@ -13,12 +13,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Ports.h"
+#include "esi/Accelerator.h"
 
 #include <chrono>
 #include <stdexcept>
 
 using namespace std;
 using namespace esi;
+
+void WriteChannelPort::write(const MessageData &data) {
+  aconn.debugLog("write", name, [&]() -> string {
+    auto bitwidth = getType()->getBitWidth();
+    return "hw size: " + to_string(bitwidth) + " bits (" +
+           to_string((bitwidth + 7) / 8) +
+           " bytes), msg size: " + to_string(data.getSize());
+  });
+
+  writeInternal(data);
+}
 
 BundlePort::BundlePort(AppID id, map<string, ChannelPort &> channels)
     : id(id), channels(channels) {}

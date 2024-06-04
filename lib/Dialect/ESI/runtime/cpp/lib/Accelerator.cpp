@@ -23,8 +23,17 @@ using namespace esi;
 using namespace esi::services;
 
 namespace esi {
-AcceleratorConnection::AcceleratorConnection(Context &ctxt)
-    : ctxt(ctxt), serviceThread(make_unique<AcceleratorServiceThread>()) {}
+AcceleratorConnection::AcceleratorConnection(Context &ctxt,
+                                             std::ostream *debugLog)
+    : ctxt(ctxt), debugLogFile(debugLog),
+      serviceThread(make_unique<AcceleratorServiceThread>()) {}
+
+void AcceleratorConnection::debugLogInternal(const std::string &action,
+                                             const std::string &id,
+                                             std::string msg) const {
+  *debugLogFile << '[' << action << ' ' << id << "] " << msg << "\n";
+  debugLogFile->flush();
+}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
@@ -56,11 +65,14 @@ void registerBackend(string name, BackendCreate create) {
 } // namespace internal
 
 unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
-                                          string connection) {
+                                          string connection,
+                                          std::ostream *debugLog) {
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end())
     throw runtime_error("Backend not found");
-  return f->second(ctxt, connection);
+  auto conn = f->second(ctxt, connection);
+  conn->setDebugLog(debugLog);
+  return conn;
 }
 
 } // namespace registry

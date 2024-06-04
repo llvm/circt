@@ -14,13 +14,12 @@
 
 using namespace esi::cosim;
 
-Endpoint::Endpoint(std::string fromHostTypeId, std::string toHostTypeId)
-    : fromHostTypeId(fromHostTypeId), toHostTypeId(toHostTypeId), inUse(false) {
-}
+Endpoint::Endpoint(std::string id, std::string typeId,
+                   esi::cosim::Direction dir)
+    : id(id), typeId(typeId), dir(dir), inUse(false) {}
 Endpoint::~Endpoint() {}
 
 bool Endpoint::setInUse() {
-  Lock g(m);
   if (inUse)
     return false;
   inUse = true;
@@ -28,15 +27,13 @@ bool Endpoint::setInUse() {
 }
 
 void Endpoint::returnForUse() {
-  Lock g(m);
   if (!inUse)
     fprintf(stderr, "Warning: Returning an endpoint which was not in use.\n");
   inUse = false;
 }
 
-bool EndpointRegistry::registerEndpoint(std::string epId,
-                                        std::string fromHostTypeId,
-                                        std::string toHostTypeId) {
+bool EndpointRegistry::registerEndpoint(std::string epId, std::string typeId,
+                                        esi::cosim::Direction dir) {
   Lock g(m);
   if (endpoints.find(epId) != endpoints.end()) {
     fprintf(stderr, "Endpoint ID already exists!\n");
@@ -48,7 +45,7 @@ bool EndpointRegistry::registerEndpoint(std::string epId,
                     // Map key.
                     std::forward_as_tuple(epId),
                     // Endpoint constructor args.
-                    std::forward_as_tuple(fromHostTypeId, toHostTypeId));
+                    std::forward_as_tuple(epId, typeId, dir));
   return true;
 }
 
@@ -56,7 +53,7 @@ void EndpointRegistry::iterateEndpoints(
     const std::function<void(std::string, const Endpoint &)> &f) const {
   // This function is logically const, but modification is needed to obtain a
   // lock.
-  Lock g(const_cast<EndpointRegistry *>(this)->m);
+  Lock g(this->m);
   for (const auto &ep : endpoints) {
     f(ep.first, ep.second);
   }

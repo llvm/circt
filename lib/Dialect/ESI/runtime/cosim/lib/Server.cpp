@@ -20,6 +20,7 @@
 #include "CosimDpi.capnp.h"
 #include "cosim/CapnpThreads.h"
 #include <capnp/ez-rpc.h>
+#include <cassert>
 #include <thread>
 #ifdef _WIN32
 #include <io.h>
@@ -35,7 +36,7 @@ namespace {
 /// wrapper around an `Endpoint` object. Whereas the `Endpoint`s are long-lived
 /// (associated with the HW endpoint), this class is constructed/destructed
 /// when the client open()s it.
-class EndpointServer final : public EsiDpiEndpoint::Server {
+class ToSimServer final : public ToSimInterface::Server {
   /// The wrapped endpoint.
   Endpoint &endpoint;
   /// Signals that this endpoint has been opened by a client and hasn't been
@@ -43,21 +44,46 @@ class EndpointServer final : public EsiDpiEndpoint::Server {
   bool open;
 
 public:
-  EndpointServer(Endpoint &ep);
+  ToSimServer(Endpoint &ep);
   /// Release the Endpoint should the client disconnect without properly closing
   /// it.
-  ~EndpointServer();
+  ~ToSimServer();
   /// Disallow copying as the 'open' variable needs to track the endpoint.
-  EndpointServer(const EndpointServer &) = delete;
+  ToSimServer(const ToSimServer &) = delete;
+
+  kj::Promise<void> connect(ConnectContext) override;
+  kj::Promise<void> disconnect(DisconnectContext) override;
 
   /// Implement the EsiDpiEndpoint RPC interface.
-  kj::Promise<void> sendFromHost(SendFromHostContext) override;
-  kj::Promise<void> recvToHost(RecvToHostContext) override;
-  kj::Promise<void> close(CloseContext) override;
+  kj::Promise<void> sendMessage(SendMessageContext) override;
+};
+
+class FromSimServer final : public FromSimInterface::Server {
+  /// The wrapped endpoint.
+  Endpoint &endpoint;
+  /// Signals that this endpoint has been opened by a client and hasn't been
+  /// closed by said client.
+  bool open;
+
+public:
+  FromSimServer(Endpoint &ep);
+  /// Release the Endpoint should the client disconnect without properly closing
+  /// it.
+  ~FromSimServer();
+  /// Disallow copying as the 'open' variable needs to track the endpoint.
+  FromSimServer(const FromSimServer &) = delete;
+
+  /// Implement the EsiDpiEndpoint RPC interface.
+  kj::Promise<void> connect(ConnectContext) override;
+  // kj::Promise<void> recvToHost(RecvToHostContext) override;
+  kj::Promise<void> disconnect(DisconnectContext) override;
+
+private:
+  kj::Promise<void> pollRecv(MessageReceiverInterface::Client);
 };
 
 /// Implement the low level cosim RPC protocol.
-class LowLevelServer final : public EsiLowLevel::Server {
+class LowLevelServer final : public LowLevelInterface::Server {
   // Queues to and from the simulation.
   LowLevel &bridge;
 
@@ -83,16 +109,16 @@ public:
 };
 
 /// Implements the `CosimDpiServer` interface from the RPC schema.
-class CosimServer final : public CosimDpiServer::Server {
+class CosimServer final : public CosimInterface::Server {
   /// The registry of endpoints. The RpcServer class owns this.
   EndpointRegistry &reg;
   LowLevel &lowLevelBridge;
-  const unsigned int &esiVersion;
+  const signed int &esiVersion;
   const std::vector<uint8_t> &compressedManifest;
 
 public:
   CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge,
-              const unsigned int &esiVersion,
+              const signed int &esiVersion,
               const std::vector<uint8_t> &compressedManifest);
 
   /// List all the registered interfaces.
@@ -109,46 +135,87 @@ public:
 
 /// ------ EndpointServer definitions.
 
-EndpointServer::EndpointServer(Endpoint &ep) : endpoint(ep), open(true) {}
-EndpointServer::~EndpointServer() {
+ToSimServer::ToSimServer(Endpoint &ep) : endpoint(ep), open(true) {
+  assert(ep.getDirection() == esi::cosim::Direction::ToSim &&
+         "endpoint direction mismatch");
+}
+ToSimServer::~ToSimServer() {
   if (open)
     endpoint.returnForUse();
-}
-
-/// This is the client polling for a message. If one is available, send it.
-/// TODO: implement a blocking call with a timeout.
-kj::Promise<void> EndpointServer::recvToHost(RecvToHostContext context) {
-  KJ_REQUIRE(open, "EndPoint closed already");
-
-  // Try to pop a message.
-  Endpoint::MessageDataPtr blob;
-  auto msgPresent = endpoint.getMessageToClient(blob);
-  context.getResults().setHasData(msgPresent);
-  if (msgPresent) {
-    Data::Builder data(const_cast<byte *>(blob->getBytes()), blob->getSize());
-    context.getResults().setResp(data.asReader());
-  }
-  return kj::READY_NOW;
 }
 
 /// 'Send' is from the client perspective, so this is a message we are
 /// recieving. The only way I could figure out to copy the raw message is a
 /// double copy. I was have issues getting libkj's arrays to play nice with
 /// others.
-kj::Promise<void> EndpointServer::sendFromHost(SendFromHostContext context) {
-  KJ_REQUIRE(open, "EndPoint closed already");
+kj::Promise<void> ToSimServer::sendMessage(SendMessageContext context) {
+  KJ_REQUIRE(open, "EndPoint closed");
   KJ_REQUIRE(context.getParams().hasMsg(), "Send request must have a message.");
   kj::ArrayPtr<const kj::byte> data = context.getParams().getMsg().asBytes();
   Endpoint::MessageDataPtr blob = std::make_unique<esi::MessageData>(
       (const uint8_t *)data.begin(), data.size());
-  endpoint.pushMessageToSim(std::move(blob));
+  endpoint.pushMessage(std::move(blob));
   return kj::READY_NOW;
 }
 
-kj::Promise<void> EndpointServer::close(CloseContext context) {
-  KJ_REQUIRE(open, "EndPoint closed already");
+kj::Promise<void> ToSimServer::connect(ConnectContext context) {
+  KJ_REQUIRE(!open, "EndPoint connected already");
+  open = true;
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> ToSimServer::disconnect(DisconnectContext context) {
+  KJ_REQUIRE(open, "EndPoint disconnected already");
   open = false;
   endpoint.returnForUse();
+  return kj::READY_NOW;
+}
+
+FromSimServer::FromSimServer(Endpoint &ep) : endpoint(ep), open(false) {
+  assert(ep.getDirection() == esi::cosim::Direction::FromSim &&
+         "endpoint direction mismatch");
+}
+FromSimServer::~FromSimServer() {
+  if (open)
+    endpoint.returnForUse();
+}
+
+kj::Promise<void> FromSimServer::connect(ConnectContext context) {
+  KJ_REQUIRE(!open, "EndPoint already open");
+  open = true;
+  return kj::evalLast([this, KJ_CPCAP(context)]() mutable {
+    return pollRecv(context.getParams().getCallback());
+  });
+}
+
+kj::Promise<void> FromSimServer::disconnect(DisconnectContext context) {
+  KJ_REQUIRE(open, "EndPoint disconnected already");
+  open = false;
+  endpoint.returnForUse();
+  return kj::READY_NOW;
+}
+
+kj::Promise<void>
+FromSimServer::pollRecv(MessageReceiverInterface::Client callback) {
+  if (!open)
+    return kj::READY_NOW;
+
+  Endpoint::MessageDataPtr msg;
+  if (endpoint.getMessage(msg)) {
+    auto msgCall = callback.receiveMessageRequest();
+    msgCall.setMsg(kj::arrayPtr(msg->getBytes(), msg->getSize()));
+    return msgCall.send().then(
+        [this, KJ_CPCAP(callback)](auto ignoreResult) mutable {
+          return pollRecv(callback);
+        });
+  }
+  kj::getCurrentThreadExecutor()
+      .executeAsync(
+          [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); })
+      .detach([](kj::Exception &&e) {
+        fprintf(stderr, "Error in from sim message sender: %s\n",
+                e.getDescription().cStr());
+      });
   return kj::READY_NOW;
 }
 
@@ -196,7 +263,7 @@ kj::Promise<void> LowLevelServer::writeMMIO(WriteMMIOContext context) {
 /// ----- CosimServer definitions.
 
 CosimServer::CosimServer(EndpointRegistry &reg, LowLevel &lowLevelBridge,
-                         const unsigned int &esiVersion,
+                         const signed int &esiVersion,
                          const std::vector<uint8_t> &compressedManifest)
     : reg(reg), lowLevelBridge(lowLevelBridge), esiVersion(esiVersion),
       compressedManifest(compressedManifest) {
@@ -207,23 +274,31 @@ kj::Promise<void> CosimServer::list(ListContext context) {
   auto ifaces = context.getResults().initIfaces((unsigned int)reg.size());
   unsigned int ctr = 0u;
   reg.iterateEndpoints([&](std::string id, const Endpoint &ep) {
-    ifaces[ctr].setEndpointID(id);
-    ifaces[ctr].setFromHostType(ep.getSendTypeId());
-    ifaces[ctr].setToHostType(ep.getRecvTypeId());
+    ifaces[ctr].setId(id);
+    ifaces[ctr].setType(ep.getTypeId());
+    if (ep.getDirection() == esi::cosim::Direction::ToSim)
+      ifaces[ctr].setDirection(::Direction::TO_SIM);
+    else
+      ifaces[ctr].setDirection(::Direction::FROM_SIM);
     ++ctr;
   });
   return kj::READY_NOW;
 }
 
 kj::Promise<void> CosimServer::open(OpenContext ctxt) {
-  Endpoint *ep = reg[ctxt.getParams().getIface().getEndpointID()];
+  const auto &epDesc = ctxt.getParams().getDesc();
+  Endpoint *ep = reg[epDesc.getId()];
   KJ_REQUIRE(ep != nullptr, "Could not find endpoint");
 
   auto gotLock = ep->setInUse();
   KJ_REQUIRE(gotLock, "Endpoint in use");
 
-  ctxt.getResults().setEndpoint(
-      EsiDpiEndpoint::Client(kj::heap<EndpointServer>(*ep)));
+  if (epDesc.getDirection() == ::Direction::TO_SIM)
+    ctxt.getResults().setEndpoint(
+        EndpointInterface::Client(kj::heap<ToSimServer>(*ep)));
+  else
+    ctxt.getResults().setEndpoint(
+        EndpointInterface::Client(kj::heap<FromSimServer>(*ep)));
   return kj::READY_NOW;
 }
 
@@ -277,3 +352,5 @@ void RpcServer::run(uint16_t port) {
     fprintf(stderr, "Warning: cannot Run() RPC server more than once!");
   }
 }
+
+Endpoint *RpcServer::getEndpoint(std::string epId) { return endpoints[epId]; }

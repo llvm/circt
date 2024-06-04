@@ -18,6 +18,7 @@
 
 #include "cosim/CapnpThreads.h"
 
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -149,76 +150,72 @@ private:
 namespace {
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(esi::cosim::Endpoint *ep, const Type *type, string name)
-      : WriteChannelPort(type), ep(ep), name(name) {}
+  WriteCosimChannelPort(cosim::RpcClient &rpc, const Type *type,
+                        const string &name, CosimAccelerator &conn)
+      : WriteChannelPort(type, name, conn), rpc(rpc) {}
   virtual ~WriteCosimChannelPort() = default;
 
   // TODO: Replace this with a request to connect to the capnp thread.
   virtual void connect() override {
-    if (!ep)
-      throw runtime_error("Could not find channel '" + name +
-                          "' in cosimulation");
-    if (ep->getSendTypeId() == "")
-      throw runtime_error("Channel '" + name + "' is not a read channel");
-    if (ep->getSendTypeId() != getType()->getID())
-      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + ep->getSendTypeId());
-    ep->setInUse();
+    try {
+      rpc.connectSendEndpoint(name, getType());
+    } catch (std::exception &e) {
+      aconn.errorLog("connect exception", name,
+                     "caught " + std::string(e.what()));
+      throw;
+    }
   }
-  virtual void disconnect() override {
-    if (ep)
-      ep->returnForUse();
-  }
-  virtual void write(const MessageData &) override;
+  virtual void disconnect() override {}
 
 protected:
-  esi::cosim::Endpoint *ep;
-  string name;
+  virtual void writeInternal(const MessageData &) override;
+
+  cosim::RpcClient &rpc;
 };
 } // namespace
 
-void WriteCosimChannelPort::write(const MessageData &data) {
-  ep->pushMessageToSim(make_unique<esi::MessageData>(data));
+void WriteCosimChannelPort::writeInternal(const MessageData &data) {
+  std::ptrdiff_t size = getType()->getBitWidth();
+  if (size > 1 && data.getSize() * 8 != (size_t)size) {
+    std::string err = "Trying to write " + to_string(data.getSize()) +
+                      " bytes to a " + to_string(size) + "-bit channel";
+    aconn.errorLog("write", name, err);
+    throw runtime_error(err);
+  }
+  rpc.sendMessage(name, data);
 }
 
 namespace {
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
-  ReadCosimChannelPort(esi::cosim::Endpoint *ep, const Type *type, string name)
-      : ReadChannelPort(type), ep(ep), name(name) {}
+  ReadCosimChannelPort(cosim::RpcClient &rpc, const Type *type,
+                       const string &name, CosimAccelerator &conn)
+      : ReadChannelPort(type, name, conn), rpc(rpc) {}
   virtual ~ReadCosimChannelPort() = default;
 
   // TODO: Replace this with a request to connect to the capnp thread.
   virtual void connect() override {
-    if (!ep)
-      throw runtime_error("Could not find channel '" + name +
-                          "' in cosimulation");
-    if (ep->getRecvTypeId() == "")
-      throw runtime_error("Channel '" + name + "' is not a read channel");
-    if (ep->getRecvTypeId() != getType()->getID())
-      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + ep->getRecvTypeId());
-    ep->setInUse();
+    rpc.connectRecvEndpoint(name, getType(),
+                            [this](cosim::Endpoint::MessageDataPtr msg) {
+                              msgQueue.push(std::move(msg));
+                            });
   }
-  virtual void disconnect() override {
-    if (ep)
-      ep->returnForUse();
-  }
+  virtual void disconnect() override { assert(false && "Not implemented"); }
   virtual bool read(MessageData &) override;
 
 protected:
-  esi::cosim::Endpoint *ep;
-  string name;
+  cosim::RpcClient &rpc;
+  cosim::TSQueue<cosim::Endpoint::MessageDataPtr> msgQueue;
 };
 
 } // namespace
 
 bool ReadCosimChannelPort::read(MessageData &data) {
-  esi::cosim::Endpoint::MessageDataPtr msg;
-  if (!ep->getMessageToClient(msg))
-    return false;
-  data = *msg;
-  return true;
+  if (auto msg = msgQueue.pop()) {
+    data.adopt(**msg);
+    return true;
+  }
+  return false;
 }
 
 map<string, ChannelPort &>
@@ -242,12 +239,11 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
 
     // Get the endpoint, which may or may not exist. Construct the port.
     // Everything is validated when the client calls 'connect()' on the port.
-    esi::cosim::Endpoint *ep = rpcClient->getEndpoint(channelName);
     ChannelPort *port;
     if (BundlePort::isWrite(dir))
-      port = new WriteCosimChannelPort(ep, type, channelName);
+      port = new WriteCosimChannelPort(*rpcClient, type, channelName, *this);
     else
-      port = new ReadCosimChannelPort(ep, type, channelName);
+      port = new ReadCosimChannelPort(*rpcClient, type, channelName, *this);
     channels.emplace(port);
     channelResults.emplace(name, *port);
   }

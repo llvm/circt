@@ -19,6 +19,7 @@
 #include "esi/Types.h"
 
 #include <exception>
+#include <iosfwd>
 #include <memory>
 #include <optional>
 
@@ -42,8 +43,9 @@ public:
   void registerType(Type *type);
 
   /// Connect to an accelerator backend.
-  std::unique_ptr<AcceleratorConnection> connect(std::string backend,
-                                                 std::string connection);
+  std::unique_ptr<AcceleratorConnection>
+  connect(std::string backend, std::string connection,
+          std::ostream *debugLog = nullptr);
 
 private:
   using TypeCache = std::map<Type::ID, std::unique_ptr<Type>>;

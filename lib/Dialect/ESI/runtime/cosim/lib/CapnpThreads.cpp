@@ -52,7 +52,3 @@ void CapnpCosimThread::stop() {
     myThread->join();
   }
 }
-
-Endpoint *CapnpCosimThread::getEndpoint(std::string epId) {
-  return endpoints[epId];
-}

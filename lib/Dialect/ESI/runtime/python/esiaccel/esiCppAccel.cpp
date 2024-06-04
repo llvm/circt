@@ -21,6 +21,7 @@
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
+#include <pybind11/iostream.h>
 #include <pybind11/stl.h>
 
 using namespace esi;
@@ -203,20 +204,31 @@ PYBIND11_MODULE(esiCppAccel, m) {
   hwmodule.def_property_readonly("children", &HWModule::getChildren,
                                  py::return_value_policy::reference);
 
-  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
-                     .def(py::init(&registry::connect))
-                     .def(
-                         "sysinfo",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::SysInfo>({});
-                         },
-                         py::return_value_policy::reference)
-                     .def(
-                         "get_service_mmio",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::MMIO>({});
-                         },
-                         py::return_value_policy::automatic);
+  auto accConn =
+      py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
+          .def(py::init([](Context &ctxt, std::string backend,
+                           std::string connection, py::object debugLog) {
+                 std::unique_ptr<std::ostringstream> out;
+                 if (!debugLog.is_none()) {
+                   out = std::make_unique<std::ostringstream>();
+                   py::scoped_estream_redirect{*out, debugLog};
+                 }
+                 return ctxt.connect(backend, connection, out.get());
+               }),
+               py::arg("ctxt"), py::arg("backend"), py::arg("connection_str"),
+               py::arg("debugLog") = py::none())
+          .def(
+              "sysinfo",
+              [](AcceleratorConnection &acc) {
+                return acc.getService<services::SysInfo>({});
+              },
+              py::return_value_policy::reference)
+          .def(
+              "get_service_mmio",
+              [](AcceleratorConnection &acc) {
+                return acc.getService<services::MMIO>({});
+              },
+              py::return_value_policy::automatic);
 
 // Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
 // to test both styles of manifest retrieval for cosim. Come up with a more

@@ -104,6 +104,9 @@ public:
     return *reinterpret_cast<const T *>(data.data());
   }
 
+  /// Move the data from 'other' to this object.
+  void adopt(MessageData &other) { data = std::move(other.data); }
+
 private:
   std::vector<uint8_t> data;
 };

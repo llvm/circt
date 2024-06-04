@@ -69,8 +69,8 @@ struct esi::backends::trace::TraceAccelerator::Impl {
   /// Request the host side channel ports for a particular instance (identified
   /// by the AppID path). For convenience, provide the bundle type and direction
   /// of the bundle port.
-  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
-                                                          const BundleType *);
+  std::map<std::string, ChannelPort &>
+  requestChannelsFor(AppIDPath, const BundleType *, TraceAccelerator &);
 
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
@@ -168,25 +168,27 @@ namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
   WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
-                        const AppIDPath &id, const string &portName)
-      : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
-
-  virtual void write(const MessageData &data) override {
-    impl.write(id, portName, data.getBytes(), data.getSize());
-  }
+                        const AppIDPath &id, const string &portName,
+                        TraceAccelerator &conn)
+      : WriteChannelPort(type, portName, conn), impl(impl), id(id) {}
 
 protected:
+  virtual void writeInternal(const MessageData &data) override {
+    impl.write(id, name, data.getBytes(), data.getSize());
+  }
+
   TraceAccelerator::Impl &impl;
   AppIDPath id;
-  string portName;
 };
 } // namespace
 
 namespace {
 class ReadTraceChannelPort : public ReadChannelPort {
 public:
-  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
-      : ReadChannelPort(type) {}
+  ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
+                       const AppIDPath &id, const string &portName,
+                       TraceAccelerator &conn)
+      : ReadChannelPort(type, portName, conn) {}
 
   virtual bool read(MessageData &data) override;
 
@@ -222,16 +224,15 @@ public:
 };
 } // namespace
 
-map<string, ChannelPort &>
-TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
-                                           const BundleType *bundleType) {
+map<string, ChannelPort &> TraceAccelerator::Impl::requestChannelsFor(
+    AppIDPath idPath, const BundleType *bundleType, TraceAccelerator &conn) {
   map<string, ChannelPort &> channels;
   for (auto [name, dir, type] : bundleType->getChannels()) {
     ChannelPort *port;
     if (BundlePort::isWrite(dir))
-      port = new WriteTraceChannelPort(*this, type, idPath, name);
+      port = new WriteTraceChannelPort(*this, type, idPath, name, conn);
     else
-      port = new ReadTraceChannelPort(*this, type);
+      port = new ReadTraceChannelPort(*this, type, idPath, name, conn);
     channels.emplace(name, *port);
     adoptChannelPort(port);
   }
@@ -241,7 +242,7 @@ TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
 map<string, ChannelPort &>
 TraceAccelerator::requestChannelsFor(AppIDPath idPath,
                                      const BundleType *bundleType) {
-  return impl->requestChannelsFor(idPath, bundleType);
+  return impl->requestChannelsFor(idPath, bundleType, *this);
 }
 
 Service *

@@ -22,6 +22,7 @@
 #include <future>
 
 namespace esi {
+class AcceleratorConnection;
 
 /// Unidirectional channels are the basic communication primitive between the
 /// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
@@ -30,7 +31,9 @@ namespace esi {
 /// but used by higher level APIs which add types.
 class ChannelPort {
 public:
-  ChannelPort(const Type *type) : type(type) {}
+  ChannelPort(const Type *type, const std::string &name,
+              const AcceleratorConnection &aconn)
+      : type(type), name(name), aconn(aconn) {}
   virtual ~ChannelPort() = default;
 
   virtual void connect() {}
@@ -40,6 +43,10 @@ public:
 
 private:
   const Type *type;
+
+protected:
+  std::string name;
+  const AcceleratorConnection &aconn;
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -48,7 +55,11 @@ public:
   using ChannelPort::ChannelPort;
 
   /// A very basic write API. Will likely change for performance reasons.
-  virtual void write(const MessageData &) = 0;
+  void write(const MessageData &);
+
+protected:
+  /// Implementation of write.
+  virtual void writeInternal(const MessageData &) = 0;
 };
 
 /// A ChannelPort which reads data from the accelerator.

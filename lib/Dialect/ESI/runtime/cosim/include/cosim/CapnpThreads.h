@@ -18,6 +18,7 @@
 
 #include "cosim/Endpoint.h"
 #include "cosim/LowLevel.h"
+#include "cosim/Utils.h"
 
 #include <atomic>
 #include <thread>
@@ -27,6 +28,8 @@ class WaitScope;
 } // namespace kj
 
 namespace esi {
+class Type;
+
 namespace cosim {
 
 /// Since Capnp is not thread-safe, client and server must be run in their own
@@ -40,8 +43,6 @@ public:
   /// capnp thread has stopped.
   void stop();
 
-  // Get an endpoint by its ID.
-  Endpoint *getEndpoint(std::string epId);
   // Get the low level bridge.
   LowLevel *getLowLevel() { return &lowLevelBridge; }
 
@@ -49,12 +50,23 @@ public:
   // has yet to be loaded.
   bool getCompressedManifest(unsigned int &esiVersion,
                              std::vector<uint8_t> &manifest) {
+    Lock l(m);
     esiVersion = this->esiVersion;
     manifest = compressedManifest;
     return this->esiVersion >= 0;
   }
 
+  /// Send a message to an endpoint. Assumes that the endpoint exists and is
+  /// connected! Fails silently if not!
+  // TODO: replace this.
+  void sendMessage(std::string epId, const MessageData &msg) {
+    sendQueue.push(epId, msg);
+  }
+
 protected:
+  using MessageEvent = std::pair<std::string, MessageData>;
+  TSQueue<MessageEvent> sendQueue;
+
   /// Start capnp polling loop. Does not return until stop() is called. Must be
   /// called in the same thread the RPC server/client was created. 'poll' is
   /// called on each iteration of the loop.
@@ -62,14 +74,13 @@ protected:
 
   using Lock = std::lock_guard<std::mutex>;
 
-  EndpointRegistry endpoints;
   LowLevel lowLevelBridge;
 
   std::thread *myThread;
   volatile bool stopSig;
   std::mutex m;
 
-  unsigned int esiVersion = -1;
+  signed int esiVersion = -1;
   std::vector<uint8_t> compressedManifest;
 };
 
@@ -82,20 +93,24 @@ public:
   /// Start and stop the server thread.
   void run(uint16_t port);
 
-  void setManifest(unsigned int esiVersion,
+  void setManifest(signed int esiVersion,
                    const std::vector<uint8_t> &manifest) {
     this->esiVersion = esiVersion;
     compressedManifest = manifest;
   }
 
-  bool registerEndpoint(std::string epId, std::string fromHostTypeId,
-                        std::string toHostTypeId) {
-    return endpoints.registerEndpoint(epId, fromHostTypeId, toHostTypeId);
+  bool registerEndpoint(std::string epId, std::string typeId, Direction dir) {
+    return endpoints.registerEndpoint(epId, typeId, dir);
   }
+
+  // Get an endpoint by its ID.
+  Endpoint *getEndpoint(std::string epId);
 
 private:
   /// The thread's main loop function. Exits on shutdown.
   void mainLoop(uint16_t port);
+
+  EndpointRegistry endpoints;
 };
 
 /// The Capnp RpcClient.
@@ -105,14 +120,19 @@ class RpcClient : public CapnpCosimThread {
   friend struct Impl;
 
 public:
+  ~RpcClient();
+
   /// Start client thread.
   void run(std::string host, uint16_t port);
+  void connectSendEndpoint(const std::string &epId, const esi::Type *type);
+  void
+  connectRecvEndpoint(const std::string &epId, const esi::Type *type,
+                      std::function<void(cosim::Endpoint::MessageDataPtr)> cb);
 
 private:
   void mainLoop(std::string host, uint16_t port);
 
-  /// The 'capnp' sets this to true when it is ready to go.
-  std::atomic<bool> started;
+  std::atomic<Impl *> impl = nullptr;
 };
 
 } // namespace cosim
