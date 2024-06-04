@@ -55,11 +55,9 @@ materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
       continue;
     }
 
-    if (!defOp->hasTrait<OpTrait::ConstantLike>()) {
+    if (!defOp->hasTrait<OpTrait::ConstantLike>())
       // Optimization will remain blocked, so don't bother changing the op.
-      doOpRewrite = false;
-      break;
-    }
+      return failure();
 
     // Pull the constant into the op's block.
     PatternRewriter::InsertionGuard g(rewriter);
