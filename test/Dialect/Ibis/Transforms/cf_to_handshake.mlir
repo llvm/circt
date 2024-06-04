@@ -40,7 +40,7 @@
 // CHECK:           }
 
 ibis.design @foo {
-ibis.class @ToHandshake {
+ibis.class sym @ToHandshake {
   %this = ibis.this <@foo::@ToHandshake>
   // Just a simple test demonstrating the intended mixing of `ibis.sblock`s and
   // control flow operations. The meat of cf-to-handshake conversion is tested

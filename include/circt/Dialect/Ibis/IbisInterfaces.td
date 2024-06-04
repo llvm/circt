@@ -18,7 +18,38 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def PortOpInterface : OpInterface<"PortOpInterface"> {
+def NamedInnerSymbol : OpInterface<"NamedInnerSymbolInterface", [InnerSymbol]> {
+  let cppNamespace = "circt::ibis";
+  let description = [{
+    An interface for operations which define inner symbols with an optional
+    namehint.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "Returns the namehint attribute of this op",
+      "mlir::StringAttr", "getNameHintAttr",
+      (ins),
+      "",
+      [{
+        if(auto nameHint = $_op.getNameAttr())
+          return nameHint;
+        return $_op.getInnerSymAttr().getSymName();
+      }]
+    >,
+    InterfaceMethod<
+      "Returns the namehint of this op",
+      "llvm::StringRef", "getNameHint",
+      (ins),
+      "",
+      [{
+        return getNameHintAttr().strref();
+      }]
+    >
+  ];
+}
+
+def PortOpInterface : OpInterface<"PortOpInterface", [NamedInnerSymbol]> {
   let cppNamespace = "circt::ibis";
   let description =
       "An interface for operations which describe ports.";
@@ -28,16 +59,13 @@ def PortOpInterface : OpInterface<"PortOpInterface"> {
       "Returns the data type of the port.",
       "mlir::Type", "getPortType">,
     InterfaceMethod<
-      "Returns the name of the port",
-      "mlir::StringAttr", "getPortName">,
-    InterfaceMethod<
       "Returns the `!ibis.portref` value defined by the op",
       "mlir::TypedValue<PortRefType>", "getPort"
     >
   ];
 }
 
-def ScopeOpInterface : OpInterface<"ScopeOpInterface", [InnerSymbol]> {
+def ScopeOpInterface : OpInterface<"ScopeOpInterface", [NamedInnerSymbol]> {
   let cppNamespace = "circt::ibis";
   let description = [{
     An interface for operations which define Ibis scopes, that can be referenced
