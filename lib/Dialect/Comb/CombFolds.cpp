@@ -36,6 +36,56 @@ static bool hasOperandsOutsideOfBlock(Operation *op) {
   });
 }
 
+/// If _all_ of the operation's operands, which are defined outside of the
+/// operation's own block, are ConstantLike, rematerialize them inside of the
+/// operation's block. This relaxes the conservativeness incurred by the
+/// 'hasOperandsOutsideOfBlock' checks.
+static LogicalResult
+materializeConstantOperandsLocally(Operation *op, PatternRewriter &rewriter) {
+  SmallVector<Value> newOperands;
+  newOperands.reserve(op->getNumOperands());
+  bool doOpRewrite = false;
+
+  for (auto operand : op->getOperands()) {
+    auto defOp = operand.getDefiningOp();
+
+    if (!defOp || defOp->getBlock() == op->getBlock()) {
+      // Keep local operands
+      newOperands.push_back(operand);
+      continue;
+    }
+
+    if (!defOp->hasTrait<OpTrait::ConstantLike>()) {
+      // Optimization will remain blocked, so don't bother changing the op.
+      doOpRewrite = false;
+      break;
+    }
+
+    // Pull the constant into the op's block.
+    PatternRewriter::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(op->getBlock());
+    auto cloned = rewriter.clone(*defOp);
+
+    for (unsigned resultIdx = 0; resultIdx < defOp->getNumResults();
+         ++resultIdx) {
+      if (operand == defOp->getResult(resultIdx)) {
+        newOperands.push_back(cloned->getResult(resultIdx));
+        break;
+      }
+    }
+    doOpRewrite = true;
+  }
+
+  if (!doOpRewrite)
+    return failure();
+
+  assert(newOperands.size() == op->getNumOperands() &&
+         "Incorrect number of new operands");
+  rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
+
+  return success();
+}
+
 /// Create a new instance of a generic operation that only has value operands,
 /// and has a single result value whose type matches the first operand.
 ///
@@ -365,7 +415,7 @@ OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   // ShlOp(x, cst) -> Concat(Extract(x), zeros)
   APInt value;
@@ -408,7 +458,7 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
   APInt value;
@@ -446,7 +496,7 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   // ShrSOp(x, cst) -> Concat(replicate(extract(x, topbit)),extract(x))
   APInt value;
@@ -609,7 +659,7 @@ static bool extractFromReplicate(ExtractOp op, ReplicateOp replicate,
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto *inputOp = op.getInput().getDefiningOp();
 
@@ -969,7 +1019,7 @@ static bool canonicalizeIdempotentInputs(Op op, PatternRewriter &rewriter) {
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1256,7 +1306,7 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
 
 LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1414,7 +1464,7 @@ static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
 
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1525,7 +1575,7 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   // sub(x, cst) -> add(x, -cst)
   APInt value;
@@ -1559,7 +1609,7 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1689,7 +1739,7 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -1838,7 +1888,7 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   auto inputs = op.getInputs();
   auto size = inputs.size();
@@ -2460,7 +2510,7 @@ struct MuxRewriter : public mlir::OpRewritePattern<MuxOp> {
 LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
                                            PatternRewriter &rewriter) const {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   // If the op has a SV attribute, don't optimize it.
   if (hasSVAttributes(op))
@@ -2753,7 +2803,7 @@ struct ArrayRewriter : public mlir::OpRewritePattern<hw::ArrayCreateOp> {
   LogicalResult matchAndRewrite(hw::ArrayCreateOp op,
                                 PatternRewriter &rewriter) const override {
     if (hasOperandsOutsideOfBlock(&*op))
-      return failure();
+      return materializeConstantOperandsLocally(&*op, rewriter);
 
     if (foldArrayOfMuxes(op, rewriter))
       return success();
@@ -3113,7 +3163,7 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   if (hasOperandsOutsideOfBlock(&*op))
-    return failure();
+    return materializeConstantOperandsLocally(&*op, rewriter);
 
   APInt lhs, rhs;
 
