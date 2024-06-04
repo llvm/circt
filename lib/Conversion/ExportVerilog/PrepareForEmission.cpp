@@ -1336,7 +1336,6 @@ struct PrepareForEmissionPass
   void runOnOperation() override {
     auto module = getOperation();
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
-    module.dump();
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();
   }
