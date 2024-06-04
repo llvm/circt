@@ -487,7 +487,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // point in creating deeply squiggled connections if we don't have to.
       //
       // This pattern matches the following structure.  Move the ref.resolve
-      // outside the layer block.  The strictconnect will be moved outside in
+      // outside the layer block.  The matchingconnect will be moved outside in
       // the next loop iteration:
       //     %0 = ...
       //     %1 = ...

@@ -1614,7 +1614,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
-      // StrictConnect is an identify constraint
+      // MatchingConnect is an identify constraint
       .Case<MatchingConnectOp>([&](auto op) {
         // This back-propagates width from destination to source,
         // causing source to sometimes be inferred wider than
@@ -1952,7 +1952,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
                << "Constrained " << *largerVar << " >= " << *c << "\n");
     // If we're constraining larger == smaller, add the LEQ contraint as well.
     // Solve for GEQ but check that LEQ is true.
-    // Used for strictconnect, some reference operations, and anywhere the
+    // Used for matchingconnect, some reference operations, and anywhere the
     // widths should be inferred strictly in one direction but are required to
     // also be equal for correctness.
     if (equal) {
