@@ -26,7 +26,30 @@ using namespace firrtl;
 template<typename RetTy>
 static RetTy cloneWireTo(WireOp wire);
 
-static void updateWireUses(Value toReplace, Value readSide, Value writeSide);
+static void updateWireUses(mlir::OpBuilder& builder, Value toReplace, Value readSide, Value writeSide) {
+  for (auto user : toReplace.getUsers() {
+    TypeSwitch<Operation *>(user)
+        .Case<SubfieldOp>([&](auto op) {
+          builder.setInsertionPoint(op);
+          auto newReadSide = op.getResult();
+          auto newWriteSide =
+              builder.create<LHSSubfieldOp>(toReplace, op.getFieldIndex())
+                  .getResult();
+          return updateWireUses(builder, op.getResult(), readSide, writeSide);
+        })
+        .Case<SubindexOp>([&](auto op) {
+          builder.setInsertionPoint(op);
+          auto newReadSide = op.getResult();
+          auto newWriteSide =
+              builder.create<LHSSubindexOp>(toReplace, op.getIndex())
+                  .getResult();
+          return updateWireUses(builder, op.getResult(), readSide, writeSide);
+        })
+        .Case<MatchingConnectOp>([&](auto op) {
+          
+        })
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
