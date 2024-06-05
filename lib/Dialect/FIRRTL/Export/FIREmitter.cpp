@@ -675,6 +675,7 @@ void Emitter::emitStatement(WhenOp op) {
 
 void Emitter::emitStatement(WireOp op) {
   auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
@@ -685,6 +686,7 @@ void Emitter::emitStatement(WireOp op) {
 
 void Emitter::emitStatement(RegOp op) {
   auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "reg " << PPExtString(legalName);
@@ -697,6 +699,7 @@ void Emitter::emitStatement(RegOp op) {
 
 void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -732,6 +735,7 @@ void Emitter::emitStatement(RegResetOp op) {
 
 void Emitter::emitStatement(NodeOp op) {
   auto legalName = legalize(op.getNameAttr());
+  addValueName(op.getResult(), legalName);
   startStatement();
   emitAssignLike([&]() { ps << "node " << PPExtString(legalName); },
                  [&]() { emitExpression(op.getInput()); });
