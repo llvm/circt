@@ -208,7 +208,7 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
 ```mlir
 %zero = hw.constant 0 : i1
 %true = hw.constant 1 : i1
-%1 = seq.shitreg n, %a, %clk, %true, powerOn %zero : i1
+%1 = seq.shiftreg n, %a, %clk, %true, powerOn %zero : i1
 ``` 
 
 > The following functions are not yet supported by CIRCT:  
@@ -373,8 +373,8 @@ ltl.repeat %p, 0 : !ltl.sequence
 - **`always[n:m] p`**:   
 ```mlir
 ltl.repeat %p, n, m : !ltl.sequence 
-s_always[n:m] p: not really distinguishable in CIRCT  
-```
+```  
+- **`s_always[n:m] p`**: not really distinguishable in CIRCT  
 
 - **`s_eventually p`**:   
 ```mlir
@@ -388,7 +388,7 @@ ltl.eventually %p : !ltl.property
 - **`p1 until p2`**:   
 ```mlir
 %1 = ltl.until %p1, %p2 : !ltl.sequence  
-```
+```  
 
 - **`p1 s_until p2`**: not really distinguishable from the weak version in CIRCT.
 
