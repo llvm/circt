@@ -83,8 +83,8 @@ void SFCCompatPass::runOnOperation() {
       RegOp newReg = builder.create<RegOp>(
           reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),
           reg.getNameKindAttr(), reg.getAnnotationsAttr(),
-          reg.getInnerSymAttr(), reg.getForceableAttr());
-      reg.replaceAllUsesWith(newReg);
+          reg.getInnerSymAttr());
+      reg.replaceAllUsesWith(newReg.getResult());
       reg.erase();
       madeModifications = true;
       return WalkResult::advance();

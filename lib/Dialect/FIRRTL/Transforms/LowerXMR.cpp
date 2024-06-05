@@ -223,21 +223,6 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               dataFlowClasses->unionSets(op.getInput(), op.getResult());
             return success();
           })
-          .Case<Forceable>([&](Forceable op) {
-            // Handle declarations containing refs as "data".
-            if (type_isa<RefType>(op.getDataRaw().getType())) {
-              markForRemoval(op);
-              return success();
-            }
-
-            // Otherwise, if forceable track the rwprobe result.
-            if (!op.isForceable() || op.getDataRef().use_empty() ||
-                isZeroWidth(op.getDataType()))
-              return success();
-
-            addReachingSendsEntry(op.getDataRef(), getInnerRefTo(op));
-            return success();
-          })
           .Case<RefForceOp, RefForceInitialOp, RefReleaseOp,
                 RefReleaseInitialOp>([&](auto op) {
             forceAndReleaseOps.push_back(op);

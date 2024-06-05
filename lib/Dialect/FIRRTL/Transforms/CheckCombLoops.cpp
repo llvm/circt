@@ -90,19 +90,6 @@ public:
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
-          .Case<Forceable>([&](Forceable forceableOp) {
-            // Any declaration that can be forced.
-            if (auto node = dyn_cast<NodeOp>(op))
-              recordDataflow(node.getData(), node.getInput());
-            if (!forceableOp.isForceable() ||
-                forceableOp.getDataRef().use_empty())
-              return;
-            auto data = forceableOp.getData();
-            auto ref = forceableOp.getDataRef();
-            // Record dataflow from data to the probe.
-            recordDataflow(ref, data);
-            recordProbe(data, ref);
-          })
           .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
@@ -671,6 +658,7 @@ public:
 
   void addToPortPathsIfRWProbe(unsigned srcNode,
                                DenseSet<FieldRef> &inputPortPaths) {
+#if 0
     // Check if there exists any RWProbe for the srcNode.
     auto baseFieldRef = drivenBy[srcNode].first;
     if (auto defOp = dyn_cast_or_null<Forceable>(baseFieldRef.getDefiningOp()))
@@ -692,6 +680,7 @@ public:
           }
         }
       }
+#endif
   }
 
 private:

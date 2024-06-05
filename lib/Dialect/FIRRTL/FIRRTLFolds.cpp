@@ -1843,8 +1843,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // TODO: May need to be sensitive to "don't touch" or other
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse() &&
-          !wire.isForceable()) {
+      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse()) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -1911,7 +1910,7 @@ struct FoldNodeName : public mlir::RewritePattern {
     auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !AnnotationSet(node).canBeDeleted() || node.isForceable())
+        !AnnotationSet(node).canBeDeleted())
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     // Best effort, do not rename InstanceOp
@@ -1930,7 +1929,7 @@ struct NodeBypass : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto node = cast<NodeOp>(op);
     if (node.getInnerSym() || !AnnotationSet(node).canBeDeleted() ||
-        node.use_empty() || node.isForceable())
+        node.use_empty())
       return failure();
     rewriter.replaceAllUsesWith(node.getResult(), node.getInput());
     return success();
@@ -1939,39 +1938,22 @@ struct NodeBypass : public mlir::RewritePattern {
 
 } // namespace
 
-template <typename OpTy>
-static LogicalResult demoteForceableIfUnused(OpTy op,
-                                             PatternRewriter &rewriter) {
-  if (!op.isForceable() || !op.getDataRef().use_empty())
-    return failure();
-
-  firrtl::detail::replaceWithNewForceability(op, false, &rewriter);
-  return success();
-}
-
 // Interesting names and symbols and don't touch force nodes to stick around.
-LogicalResult NodeOp::fold(FoldAdaptor adaptor,
-                           SmallVectorImpl<OpFoldResult> &results) {
+OpFoldResult NodeOp::fold(FoldAdaptor adaptor) {
   if (!hasDroppableName())
-    return failure();
+    return {};
   if (hasDontTouch(getResult())) // handles inner symbols
-    return failure();
+    return {};
   if (getAnnotationsAttr() &&
       !AnnotationSet(getAnnotationsAttr()).canBeDeleted())
-    return failure();
-  if (isForceable())
-    return failure();
-  if (!adaptor.getInput())
-    return failure();
+    return {};
 
-  results.push_back(adaptor.getInput());
-  return success();
+  return adaptor.getInput();
 }
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<FoldNodeName>(context);
-  results.add(demoteForceableIfUnused<NodeOp>);
 }
 
 namespace {
@@ -2093,7 +2075,6 @@ struct SubfieldAggOneShot : public AggOneShot {
 void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<WireAggOneShot>(context);
-  results.add(demoteForceableIfUnused<WireOp>);
 }
 
 void SubindexOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -2184,7 +2165,7 @@ struct FoldResetMux : public mlir::RewritePattern {
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
-        !AnnotationSet(reg).canBeDeleted() || reg.isForceable())
+        !AnnotationSet(reg).canBeDeleted())
       return failure();
     // Find the one true connect, or bail
     auto con = getSingleConnectUserOf(reg.getResult());
@@ -2246,7 +2227,7 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
   (void)dropWrite(rewriter, reg->getResult(0), {});
   replaceOpWithNewOpAndCopyName<NodeOp>(
       rewriter, reg, reg.getResetValue(), reg.getNameAttr(), reg.getNameKind(),
-      reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
+      reg.getAnnotationsAttr(), reg.getInnerSymAttr());
   return success();
 }
 
@@ -2254,7 +2235,6 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.add<patterns::RegResetWithZeroReset, FoldResetMux>(context);
   results.add(canonicalizeRegResetWithOneReset);
-  results.add(demoteForceableIfUnused<RegResetOp>);
 }
 
 // Returns the value connected to a port, if there is only one.
@@ -3093,8 +3073,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
         mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
-        reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
-        reg.getForceableAttr());
+        reg.getAnnotationsAttr(), reg.getInnerSymAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();
@@ -3106,11 +3085,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (!hasDontTouch(op.getOperation()) && !op.isForceable() &&
+  if (!hasDontTouch(op.getOperation()) &&
       succeeded(foldHiddenReset(op, rewriter)))
-    return success();
-
-  if (succeeded(demoteForceableIfUnused(op, rewriter)))
     return success();
 
   return failure();
@@ -3253,22 +3229,9 @@ LogicalResult ClockGateIntrinsicOp::canonicalize(ClockGateIntrinsicOp op,
 // Reference Ops.
 //===----------------------------------------------------------------------===//
 
-// refresolve(forceable.ref) -> forceable.data
-static LogicalResult
-canonicalizeRefResolveOfForceable(RefResolveOp op, PatternRewriter &rewriter) {
-  auto forceable = op.getRef().getDefiningOp<Forceable>();
-  if (!forceable || !forceable.isForceable() ||
-      op.getRef() != forceable.getDataRef() ||
-      op.getType() != forceable.getDataType())
-    return failure();
-  rewriter.replaceAllUsesWith(op, forceable.getData());
-  return success();
-}
-
 void RefResolveOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                MLIRContext *context) {
   results.insert<patterns::RefResolveOfRefSend>(context);
-  results.insert(canonicalizeRefResolveOfForceable);
 }
 
 OpFoldResult RefCastOp::fold(FoldAdaptor adaptor) {

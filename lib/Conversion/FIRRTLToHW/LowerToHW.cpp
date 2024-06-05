@@ -1432,9 +1432,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
       return true;
     if (!hasDroppableName(op))
       return true;
-    if (auto forceable = dyn_cast<Forceable>(op.getOperation()))
-      if (forceable.isForceable())
-        return true;
     return false;
   }
 

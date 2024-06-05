@@ -1707,7 +1707,7 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
-            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
+            nodeOp.getInnerSymAttr());
         emitConnect(builder, wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
@@ -1826,10 +1826,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getResult().getType(), regOp.getClockVal(), actualReset, zero,
         regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
-        regOp.getInnerSymAttr(), regOp.getForceableAttr());
+        regOp.getInnerSymAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
-    if (regOp.getForceable())
-      regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
     regOp->erase();
     return;
   }

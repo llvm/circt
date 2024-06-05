@@ -49,7 +49,7 @@ void PassiveWiresPass::runOnOperation() {
   SmallVector<Operation *> worklist;
   module.walk([&](Operation *op) -> WalkResult {
     if (auto wire = dyn_cast<WireOp>(op)) {
-      if (hasFlip(wire.getType(0)))
+      if (hasFlip(wire.getType()))
         worklist.push_back(wire);
       return WalkResult::advance();
     }

@@ -3283,8 +3283,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
 
         // Either entire instance result is forceable + bounce wire, or reject.
         // (even if rwprobe is of a portion of the port)
-        bool forceable = static_cast<bool>(
-            firrtl::detail::getForceableResultType(true, type));
+        bool forceable = static_cast<bool>(getForceableResultType(true, type));
         if (!forceable)
           return emitError(loc, "unable to force instance result of type ")
                  << type;
@@ -3299,7 +3298,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         builder.setInsertionPoint(defining);
         auto bounce = builder.create<WireOp>(
             type, name, NameKindEnum::InterestingName, annotations, sym);
-        auto bounceVal = bounce.getData();
+        auto bounceVal = bounce.getResult();
 
         // Replace instance result with reads from bounce wire.
         instResult.replaceAllUsesWith(bounceVal);
@@ -3313,7 +3312,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Set the parse result AND update `instResult` which is a reference to
         // the unbundled entry for the instance result, so that future uses also
         // find this new wire.
-        result = instResult = bounce.getDataRaw();
+        result = instResult = bounceVal;
         break;
       }
     }
@@ -3606,7 +3605,7 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
                       MemoryDebugPortOp, MemoryPortAccessOp>(definingOp))
     return emitError(startTok.getLoc(), "cannot probe memories or their ports");
 
-  auto forceableType = firrtl::detail::getForceableResultType(true, targetType);
+  auto forceableType = getForceableResultType(true, targetType);
   if (!forceableType)
     return emitError(startTok.getLoc(), "cannot force target of type ")
            << targetType;

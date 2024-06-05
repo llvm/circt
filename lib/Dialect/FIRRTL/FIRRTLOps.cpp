@@ -3213,47 +3213,14 @@ std::optional<size_t> MemOp::getTargetResultIndex() {
 // Construct name of the module which will be used for the memory definition.
 StringAttr FirMemory::getFirMemoryName() const { return modName; }
 
-/// Helper for naming forceable declarations (and their optional ref result).
-static void forceableAsmResultNames(Forceable op, StringRef name,
-                                    OpAsmSetValueNameFn setNameFn) {
-  if (name.empty())
-    return;
-  setNameFn(op.getDataRaw(), name);
-  if (op.isForceable())
-    setNameFn(op.getDataRef(), (name + "_ref").str());
-}
-
 void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  return forceableAsmResultNames(*this, getName(), setNameFn);
-}
-
-LogicalResult NodeOp::inferReturnTypes(
-    mlir::MLIRContext *context, std::optional<mlir::Location> location,
-    ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-    ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions,
-    ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
-  if (operands.empty())
-    return failure();
-  inferredReturnTypes.push_back(operands[0].getType());
-  for (auto &attr : attributes)
-    if (attr.getName() == Forceable::getForceableAttrName()) {
-      auto forceableType =
-          firrtl::detail::getForceableResultType(true, operands[0].getType());
-      if (!forceableType) {
-        if (location)
-          ::mlir::emitError(*location, "cannot force a node of type ")
-              << operands[0].getType();
-        return failure();
-      }
-      inferredReturnTypes.push_back(forceableType);
-    }
-  return success();
+  setNameFn(getResult(), getName());
 }
 
 std::optional<size_t> NodeOp::getTargetResultIndex() { return 0; }
 
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  return forceableAsmResultNames(*this, getName(), setNameFn);
+  setNameFn(getResult(), getName());
 }
 
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
@@ -3275,17 +3242,17 @@ LogicalResult RegResetOp::verify() {
 std::optional<size_t> RegResetOp::getTargetResultIndex() { return 0; }
 
 void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  return forceableAsmResultNames(*this, getName(), setNameFn);
+  setNameFn(getResult(), getName());
 }
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  return forceableAsmResultNames(*this, getName(), setNameFn);
+  setNameFn(getResult(), getName());
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto refType = type_dyn_cast<RefType>(getType(0));
+  auto refType = type_dyn_cast<RefType>(getType());
   if (!refType)
     return success();
 
@@ -5606,7 +5573,6 @@ static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                        DictionaryAttr attrs) {
   SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
-  elides.push_back(Forceable::getForceableAttrName());
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }

@@ -332,9 +332,8 @@ def MemOp : HardwareDeclOp<"mem"> {
   }];
 }
 
-def NodeOp : HardwareDeclOp<"node", [
-      AllTypesMatch<["input","result"]>,
-      DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>]> {
+def NodeOp : HardwareDeclOp<"node",
+      [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
