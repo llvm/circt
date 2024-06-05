@@ -729,6 +729,29 @@ def StrictWireOp : HardwareDeclOp<"strictwire", [
     custom<OptionalLHSOpTypes>(type($write), type($read)) (`,` qualified(type($ref))^)?
   }];
 
+  let builders = [
+    OpBuilder<(ins "::circt::firrtl::FIRRTLBaseType":$elementType,
+                   "::mlir::StringAttr":$name,
+                   "::circt::firrtl::NameKindEnumAttr":$nameKind,
+                   "::mlir::ArrayAttr":$annotations,
+                   "::circt::hw::InnerSymAttr":$innerSym,
+                   "::mlir::UnitAttr":$forceable), [{
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
+      $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      if (innerSym) {
+        $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
+      }
+      $_state.addTypes(elementType);
+      $_state.addTypes(LHSType::get(elementType.getContext(), elementType));
+      if (forceable) {
+        $_state.addAttribute(getForceableAttrName($_state.name), forceable);
+        if (auto type = detail::getForceableResultType(true, elementType))
+          $_state.addTypes(type);
+      }
+    }]>
+  ];
+
   let extraClassDeclaration = [{
     Value getResult();
   }];
