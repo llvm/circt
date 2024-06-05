@@ -49,6 +49,15 @@ def OrOp : AssocLTLOp<"or"> {
   }];
 }
 
+def IntersectOp : AssocLTLOp<"intersect"> {
+  let summary = "The intersection of booleans sequences or properties.";
+  let description = [{
+    The intersection of two properties. This checks that both properties both hold 
+    and have the same start and end times. This differs from `ltl.and` which doesn't 
+    consider the timings of each operand, only their results. 
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
@@ -151,7 +160,10 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
-def RepeatOp : LTLOp<"repeat", [Pure]> {
+def RepeatOp : LTLOp<"repeat", [
+  Pure,
+  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>
+]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
     I64Attr:$base,
@@ -175,6 +187,60 @@ def RepeatOp : LTLOp<"repeat", [Pure]> {
     - `ltl.repeat %seq, 0, 0` represents an empty sequence.
   }];
 }
+
+def GoToRepeatOp : LTLOp<"goto_repeat", [
+  Pure,
+  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>,
+  PredOpTrait<"'more' must be >= 0", CPred<"$more >= 0">>
+]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:` type($input)
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let description = [{
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
+    and `$base + $more` times in a finite number of evaluations. The final evaluation 
+    in the sequence has to match. The `$base` must be greater than or equal to zero 
+    and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents 
+    a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
+  }];
+}
+
+def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [
+  Pure,
+  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>,
+  PredOpTrait<"'more' must be >= 0", CPred<"$more >= 0">>
+]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:` type($input)
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let description = [{
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
+    and `$base + $more` times in a finite number of evaluations. The final evaluation 
+    in the sequence does not have to match. The `$base` must be greater than or equal to zero 
+    and the range `$more` can't be omitted. For example, both a !b b b !b !b b c and 
+    a !b b b !b !b b !b c represent matching observations of 
+    `ltl.non_consecutive_repeat %b, 1, 2`.
+  }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Properties

@@ -266,6 +266,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue",
   let arguments = (ins);
   let results = (outs FIRRTLBaseType:$result);
   let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
 }
@@ -957,7 +958,7 @@ class SameGroundTypeOperandConstness<string a, string b>
 
 def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
-    Cast between reset types.  This is used to enable strictconnects early in
+    Cast between reset types.  This is used to enable matchingconnects early in
     the pipeline by isolating all uninferred reset connections to a single op.
   }];
   let arguments = (ins AnyResetType:$input);
@@ -1417,6 +1418,7 @@ class BinaryLTLIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 // Generic
 def LTLAndIntrinsicOp : BinaryLTLIntrinsicOp<"and", [Commutative]>;
 def LTLOrIntrinsicOp : BinaryLTLIntrinsicOp<"or", [Commutative]>;
+def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 
 // Sequences
 def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
@@ -1435,6 +1437,26 @@ def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
                        OptionalAttr<I64Attr>:$more);
   let assemblyFormat = [{
     $input `,` $base (`,` $more^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
+def LTLNonConsecutiveRepeatIntrinsicOp : LTLIntrinsicOp<"non_consecutive_repeat"> {
+  let arguments = (ins UInt1Type:$input,
+                       I64Attr:$base,
+                       I64Attr:$more);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:`
     functional-type(operands, results)
   }];
 }

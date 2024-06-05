@@ -164,9 +164,11 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
-constexpr const char *toString(Flow flow) {
+const char *toString(Flow flow) {
   switch (flow) {
   case Flow::None:
     return "no flow";
@@ -177,6 +179,8 @@ constexpr const char *toString(Flow flow) {
   case Flow::Duplex:
     return "duplex flow";
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
@@ -2092,13 +2096,6 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    llvm::report_fatal_error("instance op not in circuit");
-  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
-}
-
 void InstanceOp::build(
     OpBuilder &builder, OperationState &result, TypeRange resultTypes,
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
@@ -3565,7 +3562,7 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult StrictConnectOp::verify() {
+LogicalResult MatchingConnectOp::verify() {
   if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = type_cast<FIRRTLBaseType>(type);
 
@@ -5853,6 +5850,7 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }

@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -198,7 +199,7 @@ private:
                              SymbolTable &symbolTable);
 
   // Predicate to check if a module-like needs a Class to be created.
-  bool shouldCreateClass(FModuleLike moduleLike);
+  bool shouldCreateClass(StringAttr modName);
 
   // Create an OM Class op from a FIRRTL Class op.
   om::ClassLike createClass(FModuleLike moduleLike,
@@ -222,7 +223,7 @@ private:
       const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
 
   // State to memoize repeated calls to shouldCreateClass.
-  DenseMap<FModuleLike, bool> shouldCreateClassMemo;
+  DenseMap<StringAttr, bool> shouldCreateClassMemo;
 };
 
 struct PathTracker {
@@ -234,12 +235,13 @@ struct PathTracker {
       PathInfoTable &pathInfoTable, const SymbolTable &symbolTable,
       const DenseMap<DistinctAttr, FModuleOp> &owningModules);
 
-  PathTracker(FModuleLike module, hw::InnerSymbolNamespace &moduleNamespace,
+  PathTracker(FModuleLike module,
+              hw::InnerSymbolNamespaceCollection &namespaces,
               InstanceGraph &instanceGraph, const SymbolTable &symbolTable,
               const DenseMap<DistinctAttr, FModuleOp> &owningModules)
-      : module(module), moduleNamespace(moduleNamespace),
-        instanceGraph(instanceGraph), symbolTable(symbolTable),
-        owningModules(owningModules) {}
+      : module(module), moduleNamespace(namespaces[module]),
+        namespaces(namespaces), instanceGraph(instanceGraph),
+        symbolTable(symbolTable), owningModules(owningModules) {}
 
 private:
   struct PathInfoTableEntry {
@@ -268,6 +270,7 @@ private:
 
   // Local data structures.
   hw::InnerSymbolNamespace &moduleNamespace;
+  hw::InnerSymbolNamespaceCollection &namespaces;
   DenseMap<std::pair<StringAttr, FModuleOp>, bool> needsAltBasePathCache;
 
   // Thread-unsafe global data structure. Don't mutate.
@@ -289,11 +292,18 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  const SymbolTable &symbolTable,
                  const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
   SmallVector<PathTracker> trackers;
+
+  // First allocate module namespaces. Don't capture a namespace reference at
+  // this point since they could be invalidated when DenseMap grows.
+  for (auto *node : instanceGraph)
+    if (auto module = node->getModule<FModuleLike>())
+      (void)namespaces.get(module);
+
   // Prepare workers.
   for (auto *node : instanceGraph)
     if (auto module = node->getModule<FModuleLike>())
-      trackers.emplace_back(module, namespaces[module], instanceGraph,
-                            symbolTable, owningModules);
+      trackers.emplace_back(module, namespaces, instanceGraph, symbolTable,
+                            owningModules);
 
   if (failed(failableParallelForEach(
           circuit.getContext(), trackers,
@@ -370,14 +380,16 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
       break;
     }
     // If there is more than one instance of this module, then the path
-    // operation is ambiguous, which is an error.
+    // operation is ambiguous, which is a warning.  This should become an error
+    // once user code is properly enforcing single instantiation, but in
+    // practice this generates the same outputs as the original flow for now.
+    // See https://github.com/llvm/circt/issues/7128.
     if (!node->hasOneUse()) {
-      auto diag = mlir::emitError(loc)
+      auto diag = mlir::emitWarning(loc)
                   << "unable to uniquely resolve target due "
                      "to multiple instantiation";
       for (auto *use : node->uses())
         diag.attachNote(use->getInstance().getLoc()) << "instance here";
-      return diag;
     }
     node = (*node->usesBegin())->getParent();
   }
@@ -489,13 +501,32 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
       }
     }
 
-    // Copy the leading part of the hierarchical path from the owning module
-    // to the start of the annotation's NLA.
+    // Check if we need an alternative base path.
     auto needsAltBasePath =
         getOrComputeNeedsAltBasePath(op->getLoc(), moduleName, owningModule);
     if (failed(needsAltBasePath)) {
       error = true;
       return false;
+    }
+
+    // Copy the leading part of the hierarchical path from the owning module
+    // to the start of the annotation's NLA.
+    InstanceGraphNode *node = instanceGraph.lookup(moduleName);
+    while (true) {
+      // If we get to the owning module or the top, we're done.
+      if (node->getModule() == owningModule || node->noUses())
+        break;
+
+      // Append the next level of hierarchy to the path. Note that if there
+      // are multiple instances, which we warn about, this is where the
+      // ambiguity manifests. In practice, just picking usesBegin generates
+      // the same output as EmitOMIR would for now.
+      InstanceRecord *inst = *node->usesBegin();
+      path.push_back(
+          OpAnnoTarget(inst->getInstance<InstanceOp>())
+              .getNLAReference(namespaces[inst->getParent()->getModule()]));
+
+      node = inst->getParent();
     }
 
     // Create the HierPathOp.
@@ -617,7 +648,8 @@ LogicalResult LowerClassesPass::processPaths(
       }
 
       // If we aren't creating a class for this child, skip this hierarchy.
-      if (!shouldCreateClass(it->getModule<FModuleLike>())) {
+      if (!shouldCreateClass(
+              it->getModule<FModuleLike>().getModuleNameAttr())) {
         it = it.skipChildren();
         continue;
       }
@@ -656,12 +688,12 @@ void LowerClassesPass::runOnOperation() {
   // Fill `shouldCreateClassMemo`.
   for (auto *node : instanceGraph)
     if (auto moduleLike = node->getModule<firrtl::FModuleLike>())
-      shouldCreateClassMemo.insert({moduleLike, false});
+      shouldCreateClassMemo.insert({moduleLike.getModuleNameAttr(), false});
 
   parallelForEach(circuit.getContext(), instanceGraph,
                   [&](igraph::InstanceGraphNode *node) {
                     if (auto moduleLike = node->getModule<FModuleLike>())
-                      shouldCreateClassMemo[moduleLike] =
+                      shouldCreateClassMemo[moduleLike.getModuleNameAttr()] =
                           shouldCreateClassImpl(node);
                   });
 
@@ -682,7 +714,7 @@ void LowerClassesPass::runOnOperation() {
     if (!moduleLike)
       continue;
 
-    if (shouldCreateClass(moduleLike)) {
+    if (shouldCreateClass(moduleLike.getModuleNameAttr())) {
       auto omClass = createClass(moduleLike, pathInfoTable);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
       classLoweringState.moduleLike = moduleLike;
@@ -698,7 +730,7 @@ void LowerClassesPass::runOnOperation() {
           continue;
         // Get the referenced module.
         auto module = instance->getTarget()->getModule<FModuleLike>();
-        if (module && shouldCreateClass(module)) {
+        if (module && shouldCreateClass(module.getModuleNameAttr())) {
           auto targetSym = getInnerRefTo(
               {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                 return namespaces[module];
@@ -765,9 +797,9 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createLowerClassesPass() {
 }
 
 // Predicate to check if a module-like needs a Class to be created.
-bool LowerClassesPass::shouldCreateClass(FModuleLike moduleLike) {
+bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
   // Return a memoized result.
-  return shouldCreateClassMemo.at(moduleLike);
+  return shouldCreateClassMemo.at(modName);
 }
 
 // Create an OM Class op from a FIRRTL Class op or Module op with properties.
@@ -882,13 +914,16 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
       return isa<PropertyType>(type);
     });
+    bool needsClone = false;
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      needsClone = shouldCreateClass(instance.getReferencedModuleNameAttr());
 
     // Check if any result is a property.
     auto propertyResults = llvm::any_of(
         op.getResultTypes(), [](Type type) { return isa<PropertyType>(type); });
 
     // If there are no properties here, move along.
-    if (!propertyOperands && !propertyResults)
+    if (!needsClone && !propertyOperands && !propertyResults)
       continue;
 
     // Actually clone the op over to the OM Class.

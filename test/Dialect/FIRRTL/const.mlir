@@ -43,7 +43,7 @@ firrtl.module @ConstBundleExplicitElements(in %a: !firrtl.const.bundle<a: const.
 // CHECK-LABEL: firrtl.module @ConstSubfield
 firrtl.module @ConstSubfield(in %a: !firrtl.const.bundle<a: uint<1>, b: sint<2>>, out %b: !firrtl.const.uint<1>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subfield %a[a] : !firrtl.const.bundle<a: uint<1>, b: sint<2>>
-  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>
   %0 = firrtl.subfield %a[a] : !firrtl.const.bundle<a: uint<1>, b: sint<2>>
   firrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
@@ -53,8 +53,8 @@ firrtl.module @ConstSubfield(in %a: !firrtl.const.bundle<a: uint<1>, b: sint<2>>
 firrtl.module @MixedConstSubfield(in %a: !firrtl.bundle<a: uint<1>, b: const.sint<2>>, out %b: !firrtl.uint<1>, out %c: !firrtl.const.sint<2>) {
   // CHECK-NEXT: [[VAL0:%.+]] = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: const.sint<2>>
   // CHECK-NEXT: [[VAL1:%.+]] = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: const.sint<2>>
-  // CHECK-NEXT: firrtl.connect %b, [[VAL0]] : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK-NEXT: firrtl.connect %c, [[VAL1]] : !firrtl.const.sint<2>, !firrtl.const.sint<2>
+  // CHECK-NEXT: firrtl.connect %b, [[VAL0]] : !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %c, [[VAL1]] : !firrtl.const.sint<2>
   %0 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: const.sint<2>>
   %1 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: const.sint<2>>
   firrtl.connect %b, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -65,7 +65,7 @@ firrtl.module @MixedConstSubfield(in %a: !firrtl.bundle<a: uint<1>, b: const.sin
 // CHECK-LABEL: firrtl.module @ConstSubindex
 firrtl.module @ConstSubindex(in %a: !firrtl.const.vector<uint<1>, 3>, out %b: !firrtl.const.uint<1>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subindex %a[1] : !firrtl.const.vector<uint<1>, 3>
-  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>
   %0 = firrtl.subindex %a[1] : !firrtl.const.vector<uint<1>, 3>
   firrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
@@ -74,7 +74,7 @@ firrtl.module @ConstSubindex(in %a: !firrtl.const.vector<uint<1>, 3>, out %b: !f
 // CHECK-LABEL: firrtl.module @ConstElementSubindex
 firrtl.module @ConstElementSubindex(in %a: !firrtl.vector<const.uint<1>, 3>, out %b: !firrtl.const.uint<1>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subindex %a[1] : !firrtl.vector<const.uint<1>, 3>
-  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.connect %b, [[VAL]] : !firrtl.const.uint<1>
   %0 = firrtl.subindex %a[1] : !firrtl.vector<const.uint<1>, 3>
   firrtl.connect %b, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
@@ -84,8 +84,8 @@ firrtl.module @ConstElementSubindex(in %a: !firrtl.vector<const.uint<1>, 3>, out
 firrtl.module @ConstSubaccess(in %a: !firrtl.const.vector<uint<1>, 3>, in %constIndex: !firrtl.const.uint<4>, in %dynamicIndex: !firrtl.uint<4>, out %constOut: !firrtl.const.uint<1>, out %dynamicOut: !firrtl.uint<1>) {
   // CHECK-NEXT: [[VAL0:%.+]] = firrtl.subaccess %a[%constIndex] : !firrtl.const.vector<uint<1>, 3>, !firrtl.const.uint<4>
   // CHECK-NEXT: [[VAL1:%.+]] = firrtl.subaccess %a[%dynamicIndex] : !firrtl.const.vector<uint<1>, 3>, !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.connect %constOut, [[VAL0]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
-  // CHECK-NEXT: firrtl.connect %dynamicOut, [[VAL1]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %constOut, [[VAL0]] : !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.connect %dynamicOut, [[VAL1]] : !firrtl.uint<1>
   %0 = firrtl.subaccess %a[%constIndex] : !firrtl.const.vector<uint<1>, 3>, !firrtl.const.uint<4>
   %1 = firrtl.subaccess %a[%dynamicIndex] : !firrtl.const.vector<uint<1>, 3>, !firrtl.uint<4>
   firrtl.connect %constOut, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
@@ -97,8 +97,8 @@ firrtl.module @ConstSubaccess(in %a: !firrtl.const.vector<uint<1>, 3>, in %const
 firrtl.module @ConstElementSubaccess(in %a: !firrtl.vector<const.uint<1>, 3>, in %constIndex: !firrtl.const.uint<4>, in %dynamicIndex: !firrtl.uint<4>, out %constOut: !firrtl.const.uint<1>, out %dynamicOut: !firrtl.uint<1>) {
   // CHECK-NEXT: [[VAL0:%.+]] = firrtl.subaccess %a[%constIndex] : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.uint<4>
   // CHECK-NEXT: [[VAL1:%.+]] = firrtl.subaccess %a[%dynamicIndex] : !firrtl.vector<const.uint<1>, 3>, !firrtl.uint<4>
-  // CHECK-NEXT: firrtl.connect %constOut, [[VAL0]] : !firrtl.const.uint<1>, !firrtl.const.uint<1>
-  // CHECK-NEXT: firrtl.connect %dynamicOut, [[VAL1]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %constOut, [[VAL0]] : !firrtl.const.uint<1>
+  // CHECK-NEXT: firrtl.connect %dynamicOut, [[VAL1]] : !firrtl.uint<1>
   %0 = firrtl.subaccess %a[%constIndex] : !firrtl.vector<const.uint<1>, 3>, !firrtl.const.uint<4>
   %1 = firrtl.subaccess %a[%dynamicIndex] : !firrtl.vector<const.uint<1>, 3>, !firrtl.uint<4>
   firrtl.connect %constOut, %0 : !firrtl.const.uint<1>, !firrtl.const.uint<1>
@@ -124,7 +124,7 @@ firrtl.module @ConstNestedElementSubaccess(in %a: !firrtl.vector<bundle<a: const
 firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
                            out %out : !firrtl.const.uint<2>) {
   // CHECK-NEXT: [[VAL:%.+]] = firrtl.subtag %in[b] : !firrtl.const.enum<a: uint<1>, b: uint<2>>
-  // CHECK-NEXT: firrtl.connect %out, [[VAL]] : !firrtl.const.uint<2>, !firrtl.const.uint<2>
+  // CHECK-NEXT: firrtl.connect %out, [[VAL]] : !firrtl.const.uint<2>
   %0 = firrtl.subtag %in[b] : !firrtl.const.enum<a: uint<1>, b: uint<2>>
   firrtl.connect %out, %0 : !firrtl.const.uint<2>, !firrtl.const.uint<2>
 }
@@ -137,19 +137,19 @@ firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.a
 // CHECK-LABEL: firrtl.module @ConstCast
 firrtl.module @ConstCast(in %in: !firrtl.const.uint<1>, out %out: !firrtl.uint<1>) {
   %0 = firrtl.constCast %in : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out, %0 : !firrtl.uint<1> 
+  firrtl.matchingconnect %out, %0 : !firrtl.uint<1> 
 }
 
 // CHECK-LABEL: firrtl.module @ConstCastToMixedConstBundle
 firrtl.module @ConstCastToMixedConstBundle(in %in: !firrtl.const.bundle<a: uint<1>>, out %out: !firrtl.bundle<a: const.uint<1>>) {
   %0 = firrtl.constCast %in : (!firrtl.const.bundle<a: uint<1>>) -> !firrtl.bundle<a: const.uint<1>>
-  firrtl.strictconnect %out, %0 : !firrtl.bundle<a: const.uint<1>>
+  firrtl.matchingconnect %out, %0 : !firrtl.bundle<a: const.uint<1>>
 }
 
 // CHECK-LABEL: firrtl.module @ConstCastToMixedConstVector
 firrtl.module @ConstCastToMixedConstVector(in %in: !firrtl.const.vector<uint<1>, 2>, out %out: !firrtl.vector<const.uint<1>, 2>) {
   %0 = firrtl.constCast %in : (!firrtl.const.vector<uint<1>, 2>) -> !firrtl.vector<const.uint<1>, 2>
-  firrtl.strictconnect %out, %0 : !firrtl.vector<const.uint<1>, 2>
+  firrtl.matchingconnect %out, %0 : !firrtl.vector<const.uint<1>, 2>
 }
 
 // Sub access of a ref to a const vector should always have a ref to a const result.

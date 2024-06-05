@@ -58,6 +58,22 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
+def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
+  let summary = "Find initial groups of vectorizable ops";
+  let constructor = "circt::arc::createFindInitialVectorsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numOfVectorizedOps", "vectorizedOps",
+      "Total number of ops that were vectorized">,
+    Statistic<"numOfSavedOps", "numOfSavedOps",
+      "Total number of ops saved after FindInitialVectors pass">,
+    Statistic<"biggestSeedVector", "biggestSeedVector",
+      "Size of the biggest seed vector">,
+    Statistic<"numOfVectorsCreated", "numOfVectorsCreated",
+      "Total number of VectorizeOps the pass inserted">,
+  ];
+}
+
 def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
                                  "mlir::ModuleOp"> {
   let summary = "Group reset and enable conditions of lowered states";

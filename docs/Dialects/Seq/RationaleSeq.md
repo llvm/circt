@@ -188,7 +188,7 @@ For example, a strict connect to a field of a structure:
 
 ```firrtl
 %field = firrtl.subfield %a[field]
-firrtl.strictconnect %field, %value
+firrtl.matchingconnect %field, %value
 ```
 Is converted into a `hw.struct_inject` operation:
 ```mlir

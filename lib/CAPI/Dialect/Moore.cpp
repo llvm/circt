@@ -61,65 +61,37 @@ MlirType mooreRealTypeGet(MlirContext ctx) {
   return wrap(RealType::get(unwrap(ctx)));
 }
 
-/// Create a packed unsized dimension type.
-MlirType moorePackedUnsizedDimTypeGet(MlirType inner) {
-  return wrap(PackedUnsizedDim::get(cast<PackedType>(unwrap(inner))));
+MlirType mooreOpenArrayTypeGet(MlirType elementType) {
+  return wrap(OpenArrayType::get(cast<PackedType>(unwrap(elementType))));
 }
 
-/// Create a packed range dimension type.
-MlirType moorePackedRangeDimTypeGet(MlirType inner, unsigned size, bool upDir,
-                                    int offset) {
-  RangeDir dir = upDir ? RangeDir::Up : RangeDir::Down;
+MlirType mooreArrayTypeGet(unsigned size, MlirType elementType) {
+  return wrap(ArrayType::get(size, cast<PackedType>(unwrap(elementType))));
+}
+
+MlirType mooreOpenUnpackedArrayTypeGet(MlirType elementType) {
   return wrap(
-      PackedRangeDim::get(cast<PackedType>(unwrap(inner)), size, dir, offset));
+      OpenUnpackedArrayType::get(cast<UnpackedType>(unwrap(elementType))));
 }
 
-/// Create a unpacked unsized dimension type.
-MlirType mooreUnpackedUnsizedDimTypeGet(MlirType inner) {
-  return wrap(UnpackedUnsizedDim::get(cast<UnpackedType>(unwrap(inner))));
+MlirType mooreUnpackedArrayTypeGet(unsigned size, MlirType elementType) {
+  return wrap(
+      UnpackedArrayType::get(size, cast<UnpackedType>(unwrap(elementType))));
 }
 
-/// Create a unpacked array dimension type.
-MlirType mooreUnpackedArrayDimTypeGet(MlirType inner, unsigned size) {
-  return wrap(UnpackedArrayDim::get(cast<UnpackedType>(unwrap(inner)), size));
+MlirType mooreAssocArrayTypeGet(MlirType elementType, MlirType indexType) {
+  return wrap(AssocArrayType::get(cast<UnpackedType>(unwrap(elementType)),
+                                  cast<UnpackedType>(unwrap(indexType))));
 }
 
-/// Create a unpacked range dimension type.
-MlirType mooreUnpackedRangeDimTypeGet(MlirType inner, unsigned size, bool upDir,
-                                      int offset) {
-  RangeDir dir = upDir ? RangeDir::Up : RangeDir::Down;
-  return wrap(UnpackedRangeDim::get(cast<UnpackedType>(unwrap(inner)), size,
-                                    dir, offset));
+MlirType mooreQueueTypeGet(MlirType elementType, unsigned bound) {
+  return wrap(QueueType::get(cast<UnpackedType>(unwrap(elementType)), bound));
 }
 
-/// Create a unpacked assoc dimension type without index.
-MlirType mooreUnpackedAssocDimTypeGet(MlirType inner) {
-  return wrap(UnpackedAssocDim::get(cast<UnpackedType>(unwrap(inner))));
-}
-
-/// Create a unpacked assoc dimension type with index.
-MlirType mooreUnpackedAssocDimTypeGetWithIndex(MlirType inner,
-                                               MlirType indexType) {
-  return wrap(UnpackedAssocDim::get(cast<UnpackedType>(unwrap(inner)),
-                                    cast<UnpackedType>(unwrap(indexType))));
-}
-
-/// Create a unpacked queue dimension type without bound.
-MlirType mooreUnpackedQueueDimTypeGet(MlirType inner) {
-  return wrap(UnpackedQueueDim::get(cast<UnpackedType>(unwrap(inner))));
-}
-
-/// Create a unpacked queue dimension type with bound.
-MlirType mooreUnpackedQueueDimTypeGetWithBound(MlirType inner, unsigned bound) {
-  return wrap(UnpackedQueueDim::get(cast<UnpackedType>(unwrap(inner)), bound));
-}
-
-/// Checks whether the passed UnpackedType is a two-valued type.
 bool mooreIsTwoValuedType(MlirType type) {
   return cast<UnpackedType>(unwrap(type)).getDomain() == Domain::TwoValued;
 }
 
-/// Checks whether the passed UnpackedType is a four-valued type.
 bool mooreIsFourValuedType(MlirType type) {
   return cast<UnpackedType>(unwrap(type)).getDomain() == Domain::FourValued;
 }

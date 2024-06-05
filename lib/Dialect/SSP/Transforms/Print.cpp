@@ -36,17 +36,17 @@ void PrintPass::runOnOperation() {
   auto moduleOp = getOperation();
   for (auto instOp : moduleOp.getOps<InstanceOp>()) {
     StringRef probName = instOp.getProblemName();
-    if (probName.equals("Problem"))
+    if (probName == "Problem")
       printInstance<Problem>(instOp, os);
-    else if (probName.equals("CyclicProblem"))
+    else if (probName == "CyclicProblem")
       printInstance<CyclicProblem>(instOp, os);
-    else if (probName.equals("ChainingProblem"))
+    else if (probName == "ChainingProblem")
       printInstance<ChainingProblem>(instOp, os);
-    else if (probName.equals("SharedOperatorsProblem"))
+    else if (probName == "SharedOperatorsProblem")
       printInstance<SharedOperatorsProblem>(instOp, os);
-    else if (probName.equals("ModuloProblem"))
+    else if (probName == "ModuloProblem")
       printInstance<ModuloProblem>(instOp, os);
-    else if (probName.equals("ChainingCyclicProblem"))
+    else if (probName == "ChainingCyclicProblem")
       printInstance<ChainingCyclicProblem>(instOp, os);
     else {
       auto instName = instOp.getSymName().value_or("unnamed");

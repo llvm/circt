@@ -70,6 +70,18 @@ using namespace pretty;
 StringRef circtHeader = "circt_header.svh";
 StringRef circtHeaderInclude = "`include \"circt_header.svh\"\n";
 
+static ltl::ClockEdge verifToltlClockEdge(verif::ClockEdge ce) {
+  switch (ce) {
+  case verif::ClockEdge::Pos:
+    return ltl::ClockEdge::Pos;
+  case verif::ClockEdge::Neg:
+    return ltl::ClockEdge::Neg;
+  case verif::ClockEdge::Both:
+    return ltl::ClockEdge::Both;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
 /// where a lower number binds tighter.
@@ -1070,7 +1082,6 @@ public:
   llvm::formatted_raw_ostream &os;
 
   bool encounteredError = false;
-  unsigned currentIndent = 0;
 
   /// Pretty printing:
 
@@ -1337,9 +1348,7 @@ void EmitterBase::emitComment(StringAttr comment) {
   // Set a line length for the comment.  Subtract off the leading comment and
   // space ("// ") as well as the current indent level to simplify later
   // arithmetic.  Ensure that this line length doesn't go below zero.
-  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
-  if (lineLength > state.options.emittedLineLength)
-    lineLength = 0;
+  auto lineLength = std::max<size_t>(state.options.emittedLineLength, 3) - 3;
 
   // Process the comment in line chunks extracted from manually specified line
   // breaks.  This is done to preserve user-specified line breaking if used.
@@ -3396,6 +3405,13 @@ public:
       Value property,
       PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
+  // Emits a property that is directly associated to a single clock and a single
+  // disable. Note that it is illegal to nest disable or clock operations in the
+  // property itself here.
+  void emitClockedProperty(
+      Value property, Value clock, ltl::ClockEdge edge, Value disable,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+
 private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
@@ -3408,9 +3424,12 @@ private:
   EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
+  EmittedProperty visitLTL(ltl::IntersectOp op);
   EmittedProperty visitLTL(ltl::DelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
   EmittedProperty visitLTL(ltl::RepeatOp op);
+  EmittedProperty visitLTL(ltl::GoToRepeatOp op);
+  EmittedProperty visitLTL(ltl::NonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::NotOp op);
   EmittedProperty visitLTL(ltl::ImplicationOp op);
   EmittedProperty visitLTL(ltl::UntilOp op);
@@ -3443,6 +3462,35 @@ void PropertyEmitter::emitProperty(
     Value property, PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
   // Wrap to this column.
+  ps.scopedBox(PP::ibox0,
+               [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
+  // If we are not using an external token buffer provided through the
+  // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
+  // flush it.
+  if (&buffer.tokens == &localTokens)
+    buffer.flush(state.pp);
+}
+
+void PropertyEmitter::emitClockedProperty(
+    Value property, Value clock, ltl::ClockEdge edge, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(localTokens.empty());
+  // Wrap to this column.
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyClockEdge(edge)) << PP::space;
+    emitNestedProperty(clock, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
+  ps << "disable iff" << PP::nbsp << "(";
+  ps.scopedBox(PP::ibox2, [&] {
+    emitNestedProperty(disable, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  ps << PP::space;
   ps.scopedBox(PP::ibox0,
                [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
   // If we are not using an external token buffer provided through the
@@ -3513,6 +3561,16 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::OrOp op) {
   return {PropertyPrecedence::Or};
 }
 
+EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
+  llvm::interleave(
+      op.getInputs(),
+      [&](auto input) {
+        emitNestedProperty(input, PropertyPrecedence::Intersect);
+      },
+      [&]() { ps << PP::space << "intersect" << PP::nbsp; });
+  return {PropertyPrecedence::Intersect};
+}
+
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
   ps << "##";
   if (auto length = op.getLength()) {
@@ -3560,19 +3618,15 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
   if (auto more = op.getMore()) {
-    if (*more == 0) {
-      ps << "[*";
-      ps.addAsString(op.getBase());
-      ps << "]";
-    } else {
-      ps << "[*";
-      ps.addAsString(op.getBase());
+    ps << "[*";
+    ps.addAsString(op.getBase());
+    if (*more != 0) {
       ps << ":";
       ps.addAsString(op.getBase() + *more);
-      ps << "]";
     }
+    ps << "]";
   } else {
     if (op.getBase() == 0) {
       ps << "[*]";
@@ -3584,7 +3638,37 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
       ps << ":$]";
     }
   }
-  return {PropertyPrecedence::Unary};
+  return {PropertyPrecedence::Repeat};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[->";
+  ps.addAsString(op.getBase());
+  if (more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + more);
+  }
+  ps << "]";
+
+  return {PropertyPrecedence::Repeat};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+  // More always exists
+  auto more = op.getMore();
+  ps << "[=";
+  ps.addAsString(op.getBase());
+  if (more != 0) {
+    ps << ":";
+    ps.addAsString(op.getBase() + more);
+  }
+  ps << "]";
+
+  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
@@ -3875,6 +3959,14 @@ private:
   LogicalResult visitVerif(verif::AssertOp op);
   LogicalResult visitVerif(verif::AssumeOp op);
   LogicalResult visitVerif(verif::CoverOp op);
+
+  LogicalResult emitVerifClockedAssertLike(Operation *op, Value property,
+                                           Value disable, Value clock,
+                                           verif::ClockEdge edge,
+                                           PPExtString opName);
+  LogicalResult visitVerif(verif::ClockedAssertOp op);
+  LogicalResult visitVerif(verif::ClockedAssumeOp op);
+  LogicalResult visitVerif(verif::ClockedCoverOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4663,6 +4755,69 @@ LogicalResult StmtEmitter::visitVerif(verif::AssumeOp op) {
 
 LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
   return emitVerifAssertLike(op, op.getProperty(), PPExtString("cover"));
+}
+
+/// Emit an assert-like operation from the `verif` dialect. This covers
+/// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
+LogicalResult StmtEmitter::emitVerifClockedAssertLike(
+    Operation *op, Value property, Value disable, Value clock,
+    verif::ClockEdge edge, PPExtString opName) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // If we are inside a procedural region we have the option of emitting either
+  // an `assert` or `assert property`. If we are in a non-procedural region,
+  // e.g., the body of a module, we have to use the concurrent form `assert
+  // property` (which also supports plain booleans).
+  //
+  // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
+  // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
+  // procedural code".
+  bool isTemporal = !property.getType().isSignlessInteger(1);
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  bool emitAsImmediate = !isTemporal && isProcedural;
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.addCallback({op, true});
+  ps.scopedBox(PP::ibox2, [&]() {
+    emitAssertionLabel(op);
+    ps.scopedBox(PP::cbox0, [&]() {
+      if (emitAsImmediate)
+        ps << opName << "(";
+      else
+        ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
+      ps.scopedBox(PP::ibox2, [&]() {
+        PropertyEmitter(emitter, ops)
+            .emitClockedProperty(property, clock, verifToltlClockEdge(edge),
+                                 disable);
+        ps << ");";
+      });
+    });
+  });
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// FIXME: emit property assertion wrapped in a clock and disabled
+LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("assert"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("assume"));
+}
+
+LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+                                    op.getClock(), op.getEdge(),
+                                    PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {

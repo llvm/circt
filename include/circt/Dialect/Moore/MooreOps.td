@@ -15,8 +15,10 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -40,8 +42,8 @@ class ResultIsSingleBitMatchingInputDomain<string result, string input> :
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
   Symbol,
-  NoTerminator,
-  SingleBlock
+  SingleBlockImplicitTerminator<"OutputOp">,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
 ]> {
   let summary = "A module definition";
   let description = [{
@@ -54,15 +56,43 @@ def SVModuleOp : MooreOp<"module", [
     See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type
+  );
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $bodyRegion
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Return the `moore.output` op terminator of this module.
+    OutputOp getOutputOp();
+    /// Return the list of values assigned to output ports.
+    OperandRange getOutputs();
   }];
 }
 
+def OutputOp : MooreOp<"output", [
+  Terminator, HasParent<"SVModuleOp">, Pure, ReturnLike
+]> {
+  let summary = "Assign module outputs";
+  let description = [{
+    The `moore.output` operation marks the end of a `moore.module` body region
+    and specifies the values to present for the module's output ports.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$outputs);
+  let builders = [
+    OpBuilder<(ins), [{ build($_builder, $_state, std::nullopt); }]>
+  ];
+  let assemblyFormat = [{
+    attr-dict ($outputs^ `:` type($outputs))?
+  }];
+  let hasVerifier = 1;
+}
+
 def InstanceOp : MooreOp<"instance", [
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -71,11 +101,15 @@ def InstanceOp : MooreOp<"instance", [
     See IEEE 1800-2017 § 23.3 "Module instances".
   }];
 
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName);
-  let assemblyFormat = [{
-    $instanceName $moduleName attr-dict
-  }];
+  let arguments = (ins
+    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$moduleName,
+    Variadic<AnyType>:$inputs,
+    StrArrayAttr:$inputNames,
+    StrArrayAttr:$outputNames
+  );
+  let results = (outs Variadic<AnyType>:$outputs);
+  let hasCustomAssemblyFormat = 1;
 }
 
 def Initial: I32EnumAttrCase<"Initial", 0, "initial">;
@@ -157,7 +191,7 @@ def VariableOp : MooreOp<"variable", [
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
   let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
 }
@@ -189,17 +223,18 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different types
-    of net connection in SV. There are twelve built-in net types defined in the official
-    standard construct of the operation:
-    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`, `uwire`,
-    `wire`, `wand`, `wor`.
-    Optional assignment argument allows net operation to be initialized with specific
-    values as soon as it is created. Only one net declaration assignment can be made for
-    a particular net. See IEEE 1800-2017 § 10.3.1 "The net declaration assignment" for
-    the differences between net declaration assignments and continuous assign statements.
-    It has some features that are not supported: declaring an interconnect net and using
-    user-defined types in the net operation.
+    The `moore.net' operation is a net declaration. Net types defines different
+    types of net connection in SV. There are twelve built-in net types defined
+    in the official standard construct of the operation:
+    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
+    `uwire`, `wire`, `wand`, `wor`.
+    Optional assignment argument allows net operation to be initialized with
+    specific values as soon as it is created. Only one net declaration
+    assignment can be made for a particular net. See IEEE 1800-2017 § 10.3.1
+    "The net declaration assignment" for the differences between net declaration
+    assignments and continuous assign statements. It has some features that are
+    not supported: declaring an interconnect net and using user-defined types in
+    the net operation.
     
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];
@@ -235,7 +270,7 @@ def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [SameTypeOperands]> {
-  let arguments = (ins AnyType:$dst, AnyType:$src);
+  let arguments = (ins UnpackedType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
     $dst `,` $src attr-dict `:` type($src)
   }];
@@ -261,7 +296,10 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
 
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
-  let arguments = (ins Arg<AnyType, "", [MemWrite]>:$dst, AnyType:$src);
+  let arguments = (ins
+    Arg<UnpackedType, "", [MemWrite]>:$dst,
+    UnpackedType:$src
+  );
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
@@ -284,13 +322,43 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
   let arguments = (ins APIntAttr:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
+}
+
+def Parameter : I32EnumAttrCase<"Parameter", 0, "parameter">;
+def LocalParameter : I32EnumAttrCase<"LocalParameter", 1, "localparam">;
+def SpecParameter : I32EnumAttrCase<"SpecParameter", 2, "specparam">;
+
+def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants", 
+       [Parameter, LocalParameter, SpecParameter]>{
+    let cppNamespace = "circt::moore";
+}
+
+def NamedConstantOp : MooreOp<"named_constant", [
+  SameOperandsAndResultType,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]>{
+  let summary = "An elaboration time constant expression";
+  let description = [{
+    Constants are named data objects that never change. SystemVerilog provides 
+    three elaboration-time constants: parameter, localparam, and specparam.
+
+    See IEEE 1800-2017 § 6.20 "Constants".
+  }];
+  let arguments = (ins StrAttr:$name, 
+                       NamedConstAttr:$kind, 
+                       UnpackedType:$value);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $kind $value attr-dict
+    `:` type($result)
+  }];
 }
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -720,10 +788,10 @@ def ConcatOp : MooreOp<"concat", [
     is the sum of the sizes of all operands. If any of the operands is
     four-valued, the result is four-valued; otherwise it is two-valued.
   }];
-  let arguments = (ins Variadic<SimpleBitVectorType>:$values);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins Variadic<IntType>:$values);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $values attr-dict `:` functional-type($values, $result)
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
 }
 
@@ -745,10 +813,10 @@ def ReplicateOp : MooreOp<"replicate", [
     ```
     See IEEE 1800-2017 §11.4.12 "Concatenation operators".
   }];
-  let arguments = (ins SimpleBitVectorType:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` functional-type($value, $result)
+    $value attr-dict `:` type($value) `->` type($result)
   }];
 }
 
@@ -783,9 +851,241 @@ def ExtractOp : MooreOp<"extract"> {
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` 
+    $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
   }];
-} 
+}
 
+def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
+  let summary = "Struct Create operation";
+  let description = [{
+    A structure represents a collection of data types
+    that can be referenced as a whole, or the individual data types
+    that make up the structure can be referenced by name.
+    By default, structures are unpacked, meaning that there is
+    an implementation-dependent packing of the data types.
+    Unpacked structures can contain any data type.
+    See IEEE 1800-2017 § 7.2 "Structures"
+
+    Example:
+    ```
+    struct { bit [7:0] opcode; bit [23:0] addr; }IR;
+    IR.opcode = 1;   // set field in IR.
+    // anonymous structure
+    // defines variable IR
+    typedef struct {
+    bit [7:0] opcode;
+    bit [23:0] addr;
+    } instruction; // named structure type
+    instruction IR; // define variable
+    ```
+    See IEEE 1800-2017 § 7.2. "Structures".
+  }];
+  let arguments = (ins UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+  $input attr-dict `:` type($input)
+  }];
+}
+
+def StructExtractOp : MooreOp<"struct_extract"> {
+  let summary = "Struct Extract operation";
+  let description = [{
+    Structures can be converted to bits preserving the bit pattern.
+    In other words, they can be converted back to the same value
+    without any loss of information. When unpacked data are converted
+    to the packed representation, the order of the data in the packed
+    representation is such that the first field in the structure
+    occupies the MSBs. The effect is the same as a concatenation of
+    the data items (struct fields or array elements) in order.
+    The type of the elements in an unpacked structure or array
+    shall be valid for a packed representation in order to be
+    cast to any other type, whether packed or unpacked.
+    See IEEE 1800-2017 § 6.24.1 "Cast operator"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->`
+  type($result)
+  }];
+}
+
+def StructInjectOp : MooreOp<"struct_inject"> {
+  let summary = "Struct Field operation";
+  let description = [{
+    A structure can be assigned as a whole and passed to
+    or from a subroutine as a whole. Members of a structure
+    data type can be assigned individual default member
+    values by using an initial assignment with the declaration
+    of each member. The assigned expression shall be
+    a constant expression.
+    See IEEE 1800-2017 § 7.2.2 "Assigning to structures"
+
+    Example:
+    ```
+    typedef struct {
+    int addr = 1 + constant;
+    int crc;
+    byte data [4] = '{4{1}};
+    } packet1;
+
+    packet1 p1; // initialization defined by the typedef.
+                // p1.crc will use the default value for an int
+    ```
+    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+  }];
+  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName,
+  UnpackedType:$RHS);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $LHS `,`   $memberName `,` $RHS
+    attr-dict `:` type($LHS) type($RHS) `->` type($result)
+  }];
+}
+
+def UnionCreateOp : MooreOp<"union_create"> {
+  let summary = "Union Create operation";
+  let description = [{
+    A union is a data type that represents a single piece
+    of storage that can be accessed using one of
+    the named member data types. Only one of the
+    data types in the union can be used at a time.
+    By default, a union is unpacked, meaning there
+    is no required representation for how members
+    of the union are stored. Dynamic types and chandle
+    types can only be used in tagged unions.
+    See IEEE 1800-2017 § 7.3 "Unions"
+
+    Example:
+    ```
+    typedef union { int i; shortreal f; } num; // named union type
+    num n;
+    n.f = 0.0; // set n in floating point format
+    typedef struct {
+    bit isfloat;
+    union { int i; shortreal f; } n;           // anonymous union type
+    } tagged_st;                               // named structure
+    ```
+    See IEEE 1800-2017 § 7.3 "Unions"
+  }];
+  let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $unionName `,` $input attr-dict `:`
+  type($input) `->` type($result)
+  }];
+}
+
+def UnionExtractOp : MooreOp<"union_extract"> {
+  let summary = "Union Extract operation";
+  let description = [{
+    With packed unions, writing one member and reading another is
+    independent of the byte ordering of the machine,
+    unlike an unpacked union of unpacked structures,
+    which are C-compatible and have members in ascending address order.
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
+
+    Example:
+    ```
+    typedef union packed { // default unsigned
+    s_atmcell acell;
+    bit [423:0] bit_slice;
+    bit [52:0][7:0] byte_slice;
+    } u_atmcell;
+    u_atmcell u1;
+    byte b; bit [3:0] nib;
+    b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
+    nib = u1.bit_slice [423:420];
+    ```
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
+  }];
+  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->` type($result)
+  }];
+}
+
+def ConditionalOp : MooreOp<"conditional",[
+  RecursiveMemoryEffects,
+  NoRegionArguments, 
+  SingleBlockImplicitTerminator<"moore::YieldOp">
+]> {
+  let summary = "Conditional operation";
+  let description = [{
+    If cond_predicate is true, the operator returns the value of the first 
+    expression without evaluating the second expression; if false, it returns 
+    the value of the second expression without evaluating the first expression.
+    If cond_predicate evaluates to an ambiguous value (x or z), then both the
+    first expression and the second expression shall be evaluated, and compared
+    for logical equivalence. If that comparison is true (1), the operator shall
+    return either the first or second expression. Otherwise the operator returns
+    a result based on the data types of the expressions.
+
+    When both the first and second expressions are of integral types, if the
+    cond_predicate evaluates to an ambiguous value and the expressions are not
+    logically equivalent, their results shall be combined bit by bit using the
+    table below to calculate the final result. The first and second expressions
+    are extended to the same width.
+
+    |?: | 0 | 1 | X | Z |
+    |---|---|---|---|---|
+    | 0 | 0 | X | X | X |
+    | 1 | X | 1 | X | X |
+    | X | X | X | X | X |
+    | Z | X | X | X | X |
+
+    See IEEE 1800-2017 § 11.4.11 "Conditional operator".
+  }];
+  let arguments = (ins AnySingleBitType:$condition);
+  let results = (outs UnpackedType:$result);
+  let regions = (region SizedRegion<1>:$trueRegion,
+                        SizedRegion<1>:$falseRegion);
+  let assemblyFormat = [{
+    $condition attr-dict `:` type($condition) `->` type($result)
+    $trueRegion $falseRegion
+  }];
+}
+
+def YieldOp : MooreOp<"yield", [
+  Pure, 
+  Terminator, 
+  HasParent<"ConditionalOp">
+]> {
+  let summary = "conditional yield and termination operation";
+  let description = [{
+    "moore.yield" yields an SSA value from the Moore dialect op region and
+    terminates the regions. The semantics of how the values are yielded is
+    defined by the parent operation.
+    If "moore.yield" has any operands, the operands must match the parent
+    operation's results.
+    If the parent operation defines no values, then the "moore.yield" may be
+    left out in the custom syntax and the builders will insert one implicitly.
+    Otherwise, it has to be present in the syntax to indicate which values are
+    yielded.
+  }];
+  let arguments = (ins UnpackedType:$result);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+  let assemblyFormat = [{
+    attr-dict $result `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

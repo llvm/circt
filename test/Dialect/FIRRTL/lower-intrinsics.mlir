@@ -6,22 +6,22 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     // CHECK: firrtl.int.sizeof %clk
     %size = firrtl.int.generic "circt.sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    firrtl.strictconnect %s, %size : !firrtl.uint<32>
+    firrtl.matchingconnect %s, %size : !firrtl.uint<32>
 
     // CHECK: firrtl.int.isX
     %isX = firrtl.int.generic "circt.isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    firrtl.strictconnect %io1, %isX : !firrtl.uint<1>
+    firrtl.matchingconnect %io1, %isX : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.test "foo"
     %foo = firrtl.int.generic "circt.plusargs.test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    firrtl.strictconnect %io2, %foo : !firrtl.uint<1>
+    firrtl.matchingconnect %io2, %foo : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     %pav = firrtl.int.generic "circt.plusargs.value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     %found = firrtl.subfield %pav[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %result = firrtl.subfield %pav[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    firrtl.strictconnect %io3, %found : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %result : !firrtl.uint<5>
+    firrtl.matchingconnect %io3, %found : !firrtl.uint<1>
+    firrtl.matchingconnect %io4, %result : !firrtl.uint<5>
   }
   // CHECK-LABEL: @ClockGate
   firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
@@ -49,26 +49,32 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_and"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.or %in0, %in1 :
     firrtl.int.generic "circt_ltl_or"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.intersect %in0, %in1 :
+    firrtl.int.generic "circt_ltl_intersect"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42 :
-    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
-    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.goto_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_goto_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.non_consecutive_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_non_consecutive_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.concat %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
-    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_concat"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
     firrtl.int.generic "circt_ltl_not"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
     firrtl.int.generic "circt_ltl_implication"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
     firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.clock %in0, %clk :

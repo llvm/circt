@@ -377,7 +377,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefResolveOp op);
   bool visitExpr(RefCastOp op);
   bool visitStmt(ConnectOp op);
-  bool visitStmt(StrictConnectOp op);
+  bool visitStmt(MatchingConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
   bool visitStmt(LayerBlockOp op);
@@ -893,7 +893,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 }
 
 // Expand connects of aggregates
-bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
+bool TypeLoweringVisitor::visitStmt(MatchingConnectOp op) {
   if (processSAPath(op))
     return true;
 
@@ -910,7 +910,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
     Value dest = getSubWhatever(op.getDest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    builder->create<StrictConnectOp>(dest, src);
+    builder->create<MatchingConnectOp>(dest, src);
   }
   return true;
 }

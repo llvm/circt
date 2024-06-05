@@ -34,6 +34,7 @@ public:
             SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
             TagExtractOp, OpenSubfieldOp, OpenSubindexOp, ObjectSubfieldOp,
+            ObjectAnyRefCastOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -50,8 +51,10 @@ public:
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
             ClockDividerIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLDelayIntrinsicOp, LTLConcatIntrinsicOp, LTLRepeatIntrinsicOp,
-            LTLNotIntrinsicOp, LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
+            LTLIntersectIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
+            LTLRepeatIntrinsicOp, LTLGoToRepeatIntrinsicOp,
+            LTLNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
+            LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
             LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
             HasBeenResetIntrinsicOp,
@@ -63,7 +66,8 @@ public:
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
-            DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp>(
+            DoubleConstantOp, ListCreateOp, UnresolvedPathOp, PathOp,
+            IntegerAddOp, IntegerMulOp, IntegerShrOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -119,6 +123,7 @@ public:
   HANDLE(OpenSubfieldOp, Unhandled);
   HANDLE(OpenSubindexOp, Unhandled);
   HANDLE(ObjectSubfieldOp, Unhandled);
+  HANDLE(ObjectAnyRefCastOp, Unhandled);
 
   // Arithmetic and Logical Binary Primitives.
   HANDLE(AddPrimOp, Binary);
@@ -170,9 +175,12 @@ public:
   HANDLE(ClockDividerIntrinsicOp, Unhandled);
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
+  HANDLE(LTLIntersectIntrinsicOp, Unhandled);
   HANDLE(LTLDelayIntrinsicOp, Unhandled);
   HANDLE(LTLConcatIntrinsicOp, Unhandled);
   HANDLE(LTLRepeatIntrinsicOp, Unhandled);
+  HANDLE(LTLGoToRepeatIntrinsicOp, Unhandled);
+  HANDLE(LTLNonConsecutiveRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLNotIntrinsicOp, Unhandled);
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
   HANDLE(LTLUntilIntrinsicOp, Unhandled);
@@ -215,6 +223,9 @@ public:
   HANDLE(ListCreateOp, Unhandled);
   HANDLE(PathOp, Unhandled);
   HANDLE(UnresolvedPathOp, Unhandled);
+  HANDLE(IntegerAddOp, Unhandled);
+  HANDLE(IntegerMulOp, Unhandled);
+  HANDLE(IntegerShrOp, Unhandled);
 #undef HANDLE
 };
 
@@ -226,13 +237,13 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, StrictConnectOp, RefDefineOp,
+        .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
                        ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
                        AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
                        VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
-                       VerifCoverIntrinsicOp, LayerBlockOp>(
+                       VerifCoverIntrinsicOp, LayerBlockOp, MatchOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -260,7 +271,7 @@ public:
 
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
-  HANDLE(StrictConnectOp);
+  HANDLE(MatchingConnectOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
@@ -281,6 +292,7 @@ public:
   HANDLE(VerifCoverIntrinsicOp);
   HANDLE(UnclockedAssumeIntrinsicOp);
   HANDLE(LayerBlockOp);
+  HANDLE(MatchOp);
 
 #undef HANDLE
 };
@@ -293,10 +305,11 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<InstanceOp, ObjectOp, MemOp, NodeOp, RegOp, RegResetOp,
-                       WireOp, VerbatimWireOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitDecl(opNode, args...);
-        })
+        .template Case<InstanceOp, InstanceChoiceOp, ObjectOp, MemOp, NodeOp,
+                       RegOp, RegResetOp, WireOp, VerbatimWireOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitDecl(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -320,6 +333,7 @@ public:
   }
 
   HANDLE(InstanceOp);
+  HANDLE(InstanceChoiceOp);
   HANDLE(ObjectOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
@@ -352,7 +366,7 @@ public:
   /// Special handling for generic intrinsic op which aren't quite expressions
   /// nor statements in the usual FIRRTL sense.
   /// Refactor into specific visitor instead of adding more here.
-  ResultType visitIntrinsicOp(GenericIntrinsicOp *op, ExtraArgs... args) {
+  ResultType visitIntrinsicOp(GenericIntrinsicOp op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 
@@ -364,7 +378,15 @@ public:
     return this->dispatchDeclVisitor(op, args...);
   }
   ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<GenericIntrinsicOp>(
+            [&](auto genIntrinsicOp) -> ResultType {
+              return thisCast->visitIntrinsicOp(genIntrinsicOp, args...);
+            })
+        .Default([&](auto expr) -> ResultType {
+          return thisCast->visitInvalidOp(op, args...);
+        });
   }
 
   // Default to chaining visitUnhandledXXX to visitUnhandledOp.

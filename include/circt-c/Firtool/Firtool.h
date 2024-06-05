@@ -128,9 +128,6 @@ circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
     CirctFirtoolFirtoolOptions options, bool value);
 
-MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetDisableHoistingHWPassthrough(
-    CirctFirtoolFirtoolOptions options, bool value);
-
 MLIR_CAPI_EXPORTED void
 circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options, bool value);
 

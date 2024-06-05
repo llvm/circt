@@ -402,30 +402,6 @@ hw.module @only_one_block_allowed(in %in0: i1, in %in1: i1, in %in2: i1, in %in3
 
 // -----
 
-hw.module @invalid_input_type(in %in0: vector<2xi1>, in %in1: vector<2xi1>, in %in2: vector<2xi1>, in %in3: vector<2xi1>, out out0: i1, out out1: i1) {
-  // expected-error @below {{input vector element type must be a signless integer}}
-  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xi1>) -> (i1, i1) {
-  ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
-    %1 = vector.extract %arg0[0] : i1 from vector<2xi1>
-    arc.vectorize.return %1 : i1
-  }
-  hw.output %0#0, %0#1 : i1, i1
-}
-
-// -----
-
-hw.module @invalid_result_type(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: vector<2xi1>, out out1: vector<2xi1>) {
-  // expected-error @below {{may only return a vector type if boundary is already vectorized}}
-  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (vector<2xi1>, vector<2xi1>) {
-  ^bb0(%arg0: i1, %arg1: i1):
-    %cst = arith.constant dense<0> : vector<2xi1>
-    arc.vectorize.return %cst : vector<2xi1>
-  }
-  hw.output %0#0, %0#1 : vector<2xi1>, vector<2xi1>
-}
-
-// -----
-
 hw.module @input_operand_list_not_empty(out out0: i1, out out1: i1) {
   // expected-error @below {{there has to be at least one input vector}}
   %0:2 = arc.vectorize : () -> (i1, i1) {

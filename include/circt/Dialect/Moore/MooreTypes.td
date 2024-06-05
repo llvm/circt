@@ -117,8 +117,220 @@ def RealType : MooreTypeDef<"Real", [], "moore::UnpackedType"> {
 
 
 //===----------------------------------------------------------------------===//
+// Arrays
+//===----------------------------------------------------------------------===//
+
+def ArrayType : MooreTypeDef<"Array", [], "moore::PackedType"> {
+  let mnemonic = "array";
+  let summary = "a packed array type";
+  let description = [{
+    A packed array with a fixed number of elements. This type represents packed
+    range dimensions (`[a:b]`) in SystemVerilog.
+
+    | Verilog   | Moore Dialect         |
+    |-----------|-----------------------|
+    | `T [3:0]` | `!moore.array<4 x T>` |
+    | `T [2:4]` | `!moore.array<3 x T>` |
+  }];
+  let parameters = (ins "unsigned":$size, "PackedType":$elementType);
+  let assemblyFormat = [{
+    `<` $size `x` $elementType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "unsigned":$size, "PackedType":$elementType), [{
+        return $_get(elementType.getContext(), size, elementType);
+      }]>
+  ];
+}
+
+def UnpackedArrayType : MooreTypeDef<"UnpackedArray", [],
+  "moore::UnpackedType"
+> {
+  let mnemonic = "uarray";
+  let summary = "an unpacked array type";
+  let description = [{
+    An unpacked array with a fixed number of elements. This type represents
+    unpacked range dimensions (`[a:b]`) and unpacked array dimensions (`[a]`) in
+    SystemVerilog.
+
+    | Verilog       | Moore Dialect          |
+    |---------------|------------------------|
+    | `T foo [3:0]` | `!moore.uarray<4 x T>` |
+    | `T foo [2:4]` | `!moore.uarray<3 x T>` |
+    | `T foo [2]`   | `!moore.uarray<2 x T>` |
+  }];
+  let parameters = (ins "unsigned":$size, "UnpackedType":$elementType);
+  let assemblyFormat = [{
+    `<` $size `x` $elementType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "unsigned":$size, "UnpackedType":$elementType), [{
+        return $_get(elementType.getContext(), size, elementType);
+      }]>
+  ];
+}
+
+def OpenArrayType : MooreTypeDef<"OpenArray", [], "moore::PackedType"> {
+  let mnemonic = "open_array";
+  let summary = "an open packed array type";
+  let description = [{
+    A packed array with an unspecified number of elements. This type represents
+    unsized/open packed arrays (`[]`) in SystemVerilog.
+
+    | Verilog | Moore Dialect          |
+    |---------|------------------------|
+    | `T []`  | `!moore.open_array<T>` |
+  }];
+  let parameters = (ins "PackedType":$elementType);
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "PackedType":$elementType), [{
+        return $_get(elementType.getContext(), elementType);
+      }]>
+  ];
+}
+
+def OpenUnpackedArrayType : MooreTypeDef<"OpenUnpackedArray", [],
+  "moore::UnpackedType"
+> {
+  let mnemonic = "open_uarray";
+  let summary = "an open unpacked array type";
+  let description = [{
+    An unpacked array with an unspecified number of elements. This type
+    represents unsized/open unpacked arrays (`[]`) in SystemVerilog.
+
+    | Verilog    | Moore Dialect           |
+    |------------|-------------------------|
+    | `T foo []` | `!moore.open_uarray<T>` |
+  }];
+  let parameters = (ins "UnpackedType":$elementType);
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "UnpackedType":$elementType), [{
+        return $_get(elementType.getContext(), elementType);
+      }]>
+  ];
+}
+
+def AssocArrayType : MooreTypeDef<"AssocArray", [], "moore::UnpackedType"> {
+  let mnemonic = "assoc_array";
+  let summary = "an associative array type";
+  let description = [{
+    An associative array. This type represents associative arrays (`[T]`) in
+    SystemVerilog.
+
+    | Verilog     | Moore Dialect              |
+    |-------------|----------------------------|
+    | `T foo [K]` | `!moore.assoc_array<T, K>` |
+  }];
+  let parameters = (ins "UnpackedType":$elementType, "UnpackedType":$indexType);
+  let assemblyFormat = [{
+    `<` $elementType `,` $indexType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "UnpackedType":$elementType, "UnpackedType":$indexType), [{
+        return $_get(elementType.getContext(), elementType, indexType);
+      }]>
+  ];
+}
+
+def QueueType : MooreTypeDef<"Queue", [], "moore::UnpackedType"> {
+  let mnemonic = "queue";
+  let summary = "a queue type";
+  let description = [{
+    A queue with an optional upper bound on the number of elements that it can
+    hold. This type represents queues (`[$]` and `[$:a]`) in SystemVerilog. A
+    `bound` of 0 indicates an unbounded queue.
+
+    | Verilog        | Moore Dialect         |
+    |----------------|-----------------------|
+    | `T foo [$]`    | `!moore.queue<T>`     |
+    | `T foo [$:42]` | `!moore.queue<T, 42>` |
+  }];
+  let parameters = (ins
+    "UnpackedType":$elementType,
+    "unsigned":$bound
+  );
+  let assemblyFormat = [{
+    `<` $elementType `,` $bound `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "UnpackedType":$elementType, "unsigned":$bound), [{
+        return $_get(elementType.getContext(), elementType, bound);
+      }]>
+  ];
+}
+
+
+//===----------------------------------------------------------------------===//
+// Structs
+//===----------------------------------------------------------------------===//
+
+// Common pieces of struct-like types.
+class StructLikeType<
+  string name, list<Trait> traits = [], string baseCppClass = "::mlir::Type"
+> : MooreTypeDef<name, traits, baseCppClass> {
+  let parameters = (ins ArrayRefParameter<"StructLikeMember">:$members);
+  let assemblyFormat = [{
+    `<` custom<Members>($members) `>`
+  }];
+}
+
+def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
+  let mnemonic = "struct";
+  let summary = "a packed struct type";
+  let description = [{
+    A packed struct. All members are guaranteed to be packed as well.
+  }];
+  let genVerifyDecl = 1;
+}
+
+def UnpackedStructType : StructLikeType<
+  "UnpackedStruct", [], "moore::UnpackedType"
+> {
+  let mnemonic = "ustruct";
+  let summary = "an unpacked struct type";
+  let description = [{
+    An unpacked struct.
+  }];
+}
+
+def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
+  let mnemonic = "union";
+  let summary = "a packed union type";
+  let description = [{
+    A packed union. All members are guaranteed to be packed as well.
+  }];
+  let genVerifyDecl = 1;
+}
+
+
+def UnpackedUnionType : StructLikeType<
+  "UnpackedUnion", [], "moore::UnpackedType"
+> {
+  let mnemonic = "uunion";
+  let summary = "an unpacked union type";
+  let description = [{
+    An unpacked union.
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
+
+def ModuleType : MooreType<CPred<"llvm::isa<hw::ModuleType>($_self)">,
+  "module type", "hw::ModuleType">;
 
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;

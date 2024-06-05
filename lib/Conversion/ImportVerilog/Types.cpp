@@ -27,6 +27,10 @@ struct TypeVisitor {
   }
 
   // NOLINTBEGIN(misc-no-recursion)
+  Type visit(const slang::ast::VoidType &type) {
+    return moore::VoidType::get(context.getContext());
+  }
+
   Type visit(const slang::ast::ScalarType &type) {
     return getSimpleBitVectorType(type);
   }
@@ -49,17 +53,16 @@ struct TypeVisitor {
     if (!innerType)
       return {};
     // The Slang frontend guarantees the inner type to be packed.
-    auto packedInnerType = cast<moore::PackedType>(innerType);
-    return moore::PackedRangeDim::get(
-        packedInnerType, moore::Range(type.range.left, type.range.right));
+    return moore::ArrayType::get(type.range.width(),
+                                 cast<moore::PackedType>(innerType));
   }
 
   Type visit(const slang::ast::QueueType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedQueueDim::get(cast<moore::UnpackedType>(innerType),
-                                        type.maxBound);
+    return moore::QueueType::get(cast<moore::UnpackedType>(innerType),
+                                 type.maxBound);
   }
 
   Type visit(const slang::ast::AssociativeArrayType &type) {
@@ -69,24 +72,24 @@ struct TypeVisitor {
     auto indexType = type.indexType->visit(*this);
     if (!indexType)
       return {};
-    return moore::UnpackedAssocDim::get(cast<moore::UnpackedType>(innerType),
-                                        cast<moore::UnpackedType>(indexType));
+    return moore::AssocArrayType::get(cast<moore::UnpackedType>(innerType),
+                                      cast<moore::UnpackedType>(indexType));
   }
 
   Type visit(const slang::ast::FixedSizeUnpackedArrayType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedRangeDim::get(
-        cast<moore::UnpackedType>(innerType),
-        moore::Range(type.range.left, type.range.right));
+    return moore::UnpackedArrayType::get(type.range.width(),
+                                         cast<moore::UnpackedType>(innerType));
   }
 
   Type visit(const slang::ast::DynamicArrayType &type) {
     auto innerType = type.elementType.visit(*this);
     if (!innerType)
       return {};
-    return moore::UnpackedUnsizedDim::get(cast<moore::UnpackedType>(innerType));
+    return moore::OpenUnpackedArrayType::get(
+        cast<moore::UnpackedType>(innerType));
   }
 
   // Handle type defs.
@@ -102,17 +105,14 @@ struct TypeVisitor {
   }
 
   // Collect the members in a struct or union.
-  LogicalResult collectMembers(const slang::ast::Scope &structType,
-                               SmallVectorImpl<moore::StructMember> &members,
-                               bool enforcePacked) {
+  LogicalResult
+  collectMembers(const slang::ast::Scope &structType,
+                 SmallVectorImpl<moore::StructLikeMember> &members) {
     for (auto &field : structType.membersOfType<slang::ast::FieldSymbol>()) {
       auto name = StringAttr::get(context.getContext(), field.name);
       auto innerType = context.convertType(*field.getDeclaredType());
       if (!innerType)
         return failure();
-      // The Slang frontend guarantees the inner type to be packed if the struct
-      // is packed.
-      assert(!enforcePacked || isa<moore::PackedType>(innerType));
       members.push_back({name, cast<moore::UnpackedType>(innerType)});
     }
     return success();
@@ -120,19 +120,31 @@ struct TypeVisitor {
 
   // Handle packed and unpacked structs.
   Type visit(const slang::ast::PackedStructType &type) {
-    SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, true)))
+    SmallVector<moore::StructLikeMember> members;
+    if (failed(collectMembers(type, members)))
       return {};
-    return moore::PackedStructType::get(context.getContext(),
-                                        moore::StructKind::Struct, members);
+    return moore::StructType::get(context.getContext(), members);
   }
 
   Type visit(const slang::ast::UnpackedStructType &type) {
-    SmallVector<moore::StructMember> members;
-    if (failed(collectMembers(type, members, false)))
+    SmallVector<moore::StructLikeMember> members;
+    if (failed(collectMembers(type, members)))
       return {};
-    return moore::UnpackedStructType::get(context.getContext(),
-                                          moore::StructKind::Struct, members);
+    return moore::UnpackedStructType::get(context.getContext(), members);
+  }
+
+  Type visit(const slang::ast::PackedUnionType &type) {
+    SmallVector<moore::StructLikeMember> members;
+    if (failed(collectMembers(type, members)))
+      return {};
+    return moore::UnionType::get(context.getContext(), members);
+  }
+
+  Type visit(const slang::ast::UnpackedUnionType &type) {
+    SmallVector<moore::StructLikeMember> members;
+    if (failed(collectMembers(type, members)))
+      return {};
+    return moore::UnpackedUnionType::get(context.getContext(), members);
   }
 
   /// Emit an error for all other types.

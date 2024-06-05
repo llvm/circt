@@ -1,63 +1,56 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: func @UnitTypes(
-func.func @UnitTypes(
-  // CHECK-SAME: %arg0: !moore.void
-  // CHECK-SAME: %arg1: !moore.string
-  // CHECK-SAME: %arg2: !moore.chandle
-  // CHECK-SAME: %arg3: !moore.event
-  %arg0: !moore.void,
-  %arg1: !moore.string,
-  %arg2: !moore.chandle,
-  %arg3: !moore.event
-) { return }
+// CHECK: !moore.void
+unrealized_conversion_cast to !moore.void
+// CHECK: !moore.string
+unrealized_conversion_cast to !moore.string
+// CHECK: !moore.chandle
+unrealized_conversion_cast to !moore.chandle
+// CHECK: !moore.event
+unrealized_conversion_cast to !moore.event
 
-// CHECK-LABEL: func @IntTypes(
-func.func @IntTypes(
-  // CHECK-SAME: %arg0: !moore.i42
-  // CHECK-SAME: %arg1: !moore.l42
-  %arg0: !moore.i42,
-  %arg1: !moore.l42
-) { return }
+// CHECK: !moore.i42
+unrealized_conversion_cast to !moore.i42
+// CHECK: !moore.l42
+unrealized_conversion_cast to !moore.l42
 
-// CHECK-LABEL: func @RealTypes(
-func.func @RealTypes(
-  // CHECK-SAME: %arg0: !moore.real
-  %arg0: !moore.real
-) { return }
+// CHECK: !moore.real
+unrealized_conversion_cast to !moore.real
 
-// CHECK-LABEL: func @DimTypes(
-func.func @DimTypes(
-  // CHECK-SAME: %arg0: !moore.packed<unsized<i1>>,
-  // CHECK-SAME: %arg1: !moore.packed<range<i1, 4:-5>>,
-  %arg0: !moore.packed<unsized<i1>>,
-  %arg1: !moore.packed<range<i1, 4:-5>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<unsized<i1>>,
-  // CHECK-SAME: %arg3: !moore.unpacked<array<i1, 42>>,
-  // CHECK-SAME: %arg4: !moore.unpacked<range<i1, 4:-5>>,
-  // CHECK-SAME: %arg5: !moore.unpacked<assoc<i1>>,
-  // CHECK-SAME: %arg6: !moore.unpacked<assoc<i1, string>>,
-  // CHECK-SAME: %arg7: !moore.unpacked<queue<i1>>,
-  // CHECK-SAME: %arg8: !moore.unpacked<queue<i1, 9001>>
-  %arg2: !moore.unpacked<unsized<i1>>,
-  %arg3: !moore.unpacked<array<i1, 42>>,
-  %arg4: !moore.unpacked<range<i1, 4:-5>>,
-  %arg5: !moore.unpacked<assoc<i1>>,
-  %arg6: !moore.unpacked<assoc<i1, string>>,
-  %arg7: !moore.unpacked<queue<i1>>,
-  %arg8: !moore.unpacked<queue<i1, 9001>>
-) {
-  return
-}
+// Packed Arrays
+// CHECK: !moore.array<4 x i42>
+unrealized_conversion_cast to !moore.array<4 x i42>
+// CHECK: !moore.open_array<i42>
+unrealized_conversion_cast to !moore.open_array<i42>
 
-// CHECK-LABEL: func @StructTypes(
-func.func @StructTypes(
-  // CHECK-SAME: %arg0: !moore.packed<struct<{}>>
-  // CHECK-SAME: %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>
-  %arg0: !moore.packed<struct<{}>>,
-  %arg1: !moore.packed<struct<{foo: i1, bar: i32}>>,
-  // CHECK-SAME: %arg2: !moore.unpacked<struct<{}>>
-  // CHECK-SAME: %arg3: !moore.unpacked<struct<{foo: string, bar: event}>>
-  %arg2: !moore.unpacked<struct<{}>>,
-  %arg3: !moore.unpacked<struct<{foo: string, bar: event}>>
-) { return }
+// Unpacked arrays
+// CHECK: !moore.uarray<4 x i42>
+unrealized_conversion_cast to !moore.uarray<4 x i42>
+// CHECK: !moore.uarray<4 x string>
+unrealized_conversion_cast to !moore.uarray<4 x string>
+// CHECK: !moore.open_uarray<string>
+unrealized_conversion_cast to !moore.open_uarray<string>
+// CHECK: !moore.assoc_array<string, chandle>
+unrealized_conversion_cast to !moore.assoc_array<string, chandle>
+// CHECK: !moore.queue<string, 42>
+unrealized_conversion_cast to !moore.queue<string, 42>
+
+// Packed structs
+// CHECK: !moore.struct<{}>
+unrealized_conversion_cast to !moore.struct<{}>
+// CHECK: !moore.struct<{foo: i42}>
+unrealized_conversion_cast to !moore.struct<{foo: i42}>
+// CHECK: !moore.struct<{foo: i42, bar: i1337}>
+unrealized_conversion_cast to !moore.struct<{foo: i42, bar: i1337}>
+// CHECK: !moore.struct<{"a b": i42}>
+unrealized_conversion_cast to !moore.struct<{"a b": i42}>
+
+// Unpacked structs
+// CHECK: !moore.ustruct<{}>
+unrealized_conversion_cast to !moore.ustruct<{}>
+// CHECK: !moore.ustruct<{foo: string}>
+unrealized_conversion_cast to !moore.ustruct<{foo: string}>
+// CHECK: !moore.ustruct<{foo: i42, bar: string}>
+unrealized_conversion_cast to !moore.ustruct<{foo: i42, bar: string}>
+// CHECK: !moore.ustruct<{"a b": string}>
+unrealized_conversion_cast to !moore.ustruct<{"a b": string}>

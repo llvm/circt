@@ -92,6 +92,7 @@ target_link_libraries(circt-opt
   CIRCTSystemCTransforms
   CIRCTTransforms
   CIRCTVerif
+  CIRCTVerifTransforms
   CIRCTVerifToSMT
   CIRCTVerifToSV
   CIRCTLTLToCore

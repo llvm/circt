@@ -355,10 +355,6 @@ LogicalResult VectorizeOp::verify() {
       return emitOpError("input vector must have at least one element");
   }
 
-  if (getInputs().front().size() > 1 &&
-      !isa<IntegerType>(getInputs().front().front().getType()))
-    return emitOpError("input vector element type must be a signless integer");
-
   if (getResults().empty())
     return emitOpError("must have at least one result");
 
@@ -367,11 +363,6 @@ LogicalResult VectorizeOp::verify() {
 
   if (getResults().size() != getInputs().front().size())
     return emitOpError("number results must match input vector size");
-
-  if (getResults().size() > 1 &&
-      !isa<IntegerType>(getResults().front().getType()))
-    return emitError(
-        "may only return a vector type if boundary is already vectorized");
 
   return success();
 }

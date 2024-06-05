@@ -757,7 +757,6 @@ def VectorizeOp : ArcOp<"vectorize", [
     vectorized each list will only contain a single SSA value of either vector
     type or an integer representing the concatenation of all original operands
     of that vector.
-    Only integer types can be vectorized, no arrays or structs are allowed.
 
     Example:
 
@@ -845,9 +844,9 @@ def VectorizeOp : ArcOp<"vectorize", [
   }];
 
   let arguments = (ins
-    VariadicOfVariadic<IntOr1DVectorOfInt, "inputOperandSegments">:$inputs,
+    VariadicOfVariadic<AnyType, "inputOperandSegments">:$inputs,
     DenseI32ArrayAttr:$inputOperandSegments);
-  let results = (outs Variadic<IntOr1DVectorOfInt>:$results);
+  let results = (outs Variadic<AnyType>:$results);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
@@ -876,7 +875,7 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   HasParent<"VectorizeOp">, Pure, ReturnLike, Terminator
 ]> {
   let summary = "arc.vectorized terminator";
-  let arguments = (ins IntOr1DVectorOfInt:$value);
+  let arguments = (ins AnyType:$value);
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
 }
 
