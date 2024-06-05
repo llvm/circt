@@ -104,6 +104,11 @@ public:
     return *reinterpret_cast<const T *>(data.data());
   }
 
+  template <typename T>
+  static MessageData from(T &t) {
+    return MessageData(reinterpret_cast<const uint8_t *>(&t), sizeof(T));
+  }
+
   /// Move the data from 'other' to this object.
   void adopt(MessageData &other) { data = std::move(other.data); }
 

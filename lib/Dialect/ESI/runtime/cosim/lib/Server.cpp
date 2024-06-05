@@ -149,6 +149,7 @@ ToSimServer::ToSimServer(Endpoint &ep) : endpoint(ep), open(false) {
 ToSimServer::~ToSimServer() {
   if (open)
     endpoint.returnForUse();
+  open = false;
 }
 
 /// 'Send' is from the client perspective, so this is a message we are
@@ -169,13 +170,15 @@ kj::Promise<void> ToSimServer::connect(ConnectContext context) {
   KJ_LOG(INFO, "Connecting toSim endpoint", endpoint.getId());
   KJ_REQUIRE(!open, "EndPoint connected already");
   open = true;
+  auto gotLock = endpoint.setInUse();
+  KJ_REQUIRE(gotLock, "Endpoint in use");
   return kj::READY_NOW;
 }
 
 kj::Promise<void> ToSimServer::disconnect(DisconnectContext context) {
+  KJ_LOG(INFO, "Disconnecting toSim endpoint", endpoint.getId());
   KJ_REQUIRE(open, "EndPoint disconnected already");
   open = false;
-  endpoint.returnForUse();
   return kj::READY_NOW;
 }
 
@@ -187,16 +190,20 @@ FromSimServer::FromSimServer(Endpoint &ep, kj::AsyncIoProvider &io)
 FromSimServer::~FromSimServer() {
   if (open)
     endpoint.returnForUse();
+  open = false;
 }
 
 kj::Promise<void> FromSimServer::connect(ConnectContext context) {
   KJ_LOG(INFO, "Connecting fromSim endpoint", endpoint.getId());
   KJ_REQUIRE(!open, "EndPoint already open");
   open = true;
+  auto gotLock = endpoint.setInUse();
+  KJ_REQUIRE(gotLock, "Endpoint in use");
   return pollRecv(context.getParams().getCallback());
 }
 
 kj::Promise<void> FromSimServer::disconnect(DisconnectContext context) {
+  KJ_LOG(INFO, "Disconnecting fromSim endpoint", endpoint.getId());
   KJ_REQUIRE(open, "EndPoint disconnected already");
   open = false;
   endpoint.returnForUse();
@@ -296,9 +303,6 @@ kj::Promise<void> CosimServer::open(OpenContext ctxt) {
   const auto &epDesc = ctxt.getParams().getDesc();
   Endpoint *ep = reg[epDesc.getId()];
   KJ_REQUIRE(ep != nullptr, "Could not find endpoint");
-
-  auto gotLock = ep->setInUse();
-  KJ_REQUIRE(gotLock, "Endpoint in use");
 
   if (epDesc.getDirection() == ::Direction::TO_SIM)
     ctxt.getResults().setEndpoint(

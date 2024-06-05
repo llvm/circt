@@ -72,6 +72,16 @@ struct esi::cosim::RpcClient::Impl {
     } while (client.esiVersion < 0);
   }
 
+  ~Impl() {}
+
+  void disconnectAll() {
+    for (auto &[epid, epIface] : endpointsConnected) {
+      auto req = epIface.disconnectRequest();
+      req.send().ignoreResult().wait(waitScope);
+    }
+    endpointsConnected.clear();
+  }
+
   void connectSendEndpoint(const std::string &epId, const esi::Type *sendType) {
     if (connected[epId])
       throw std::runtime_error("Endpoint already connected");
@@ -134,6 +144,7 @@ struct esi::cosim::RpcClient::Impl {
 
   /// Shared member vars.
   std::map<std::string, bool> connected;
+  std::map<std::string, FromSimInterface::Client> endpointsConnected;
 
   /// Called from the event loop periodically.
   // TODO: try to reduce work in here. Ideally, eliminate polling altogether
@@ -181,8 +192,9 @@ void esi::cosim::RpcClient::Impl::pollInternal() {
                     e.getDescription().cStr()));
           });
     } else {
-      auto capnpConnReq =
-          capnpEpClient.castAs<FromSimInterface>().connectRequest();
+      FromSimInterface::Client fromSimInterface =
+          capnpEpClient.castAs<FromSimInterface>();
+      auto capnpConnReq = fromSimInterface.connectRequest();
       capnpConnReq.setCallback(MessageReceiverInterface::Client(
           kj::heap<MessageReceiver>(connReq->messageRecvCallback)));
       capnpConnReq.send().ignoreResult().detach([connReq](
@@ -210,9 +222,6 @@ void esi::cosim::RpcClient::Impl::pollInternal() {
       }
     }
 
-    printf("[COSIM capnp] sending data (length %lu bytes) to simulation on "
-           "channel %s\n",
-           msg.getSize(), epId.c_str());
     assert(toSimEndpointMap.find(epId) != toSimEndpointMap.end() &&
            "Endpoint ID not found");
     auto req = toSimEndpointMap.at(epId).sendMessageRequest();
@@ -262,6 +271,7 @@ void RpcClient::mainLoop(std::string host, uint16_t port) {
 
   // Start the event loop. Does not return until stop() is called.
   loop(waitScope, [&]() { impl.load()->pollInternal(); });
+  impl.load()->disconnectAll();
   delete impl;
   impl = nullptr;
 }

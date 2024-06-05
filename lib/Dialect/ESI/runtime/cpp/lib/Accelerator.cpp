@@ -14,6 +14,7 @@
 
 #include "esi/Accelerator.h"
 
+#include <cassert>
 #include <map>
 #include <stdexcept>
 
@@ -118,7 +119,8 @@ void AcceleratorServiceThread::Impl::loop() {
     // callbacks to be called later so we can release the lock.
     {
       std::lock_guard<std::mutex> g(listenerMutex);
-      for (auto [channel, cb] : listeners) {
+      for (auto &[channel, cb] : listeners) {
+        assert(channel && "Null channel in listener list");
         if (channel->read(data))
           portUnlockWorkList.emplace_back(channel, cb, std::move(data));
       }
