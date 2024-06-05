@@ -73,6 +73,11 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
       outputs.push_back(
           hw::PortInfo({{port.name, port.type, port.dir}, resultNum++, {}}));
     } else {
+      // FIXME: Once we support net<...>, ref<...> type to represent type of
+      // special port like inout or ref port which is not a input or output
+      // port. It can change to generate corresponding types for direction of
+      // port or do specified operation to it. Now inout and ref port is treated
+      // as input port.
       inputs.push_back(
           hw::PortInfo({{port.name, port.type, port.dir}, inputNum++, {}}));
     }
