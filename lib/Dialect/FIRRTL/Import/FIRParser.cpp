@@ -3297,9 +3297,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         locationProcessor.setLoc(loc);
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPoint(defining);
-        auto bounce =
-            builder.create<WireOp>(type, name, NameKindEnum::InterestingName,
-                                   annotations, sym);
+        auto bounce = builder.create<WireOp>(
+            type, name, NameKindEnum::InterestingName, annotations, sym);
         auto bounceVal = bounce.getData();
 
         // Replace instance result with reads from bounce wire.
@@ -3330,7 +3329,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   }
 
   assert(result);
-  assert(isa<BlockArgument>(result) || result.getDefiningOp<hw::InnerSymbolOpInterface>());
+  assert(isa<BlockArgument>(result) ||
+         result.getDefiningOp<hw::InnerSymbolOpInterface>());
 
   // We have our root value, we just need to parse the field id.
   // Build up the FieldRef as processing indexing expressions, and
@@ -4382,9 +4382,8 @@ ParseResult FIRStmtParser::parseNode() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  auto result =
-      builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
-                             annotations, sym);
+  auto result = builder.create<NodeOp>(
+      initializer, id, NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4415,8 +4414,7 @@ ParseResult FIRStmtParser::parseWire() {
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
-  auto result =
-      builder.create<WireOp>(type, id, namekind, annotations, sym);
+  auto result = builder.create<WireOp>(type, id, namekind, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4510,11 +4508,11 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   StringAttr sym = {};
   if (resetSignal)
-    result = builder
-                 .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                     NameKindEnum::InterestingName, annotations,
-                                     sym)
-                 .getResult();
+    result =
+        builder
+            .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                NameKindEnum::InterestingName, annotations, sym)
+            .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
@@ -4549,12 +4547,12 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result = builder
-                    .create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, NameKindEnum::InterestingName,
-                                        getConstants().emptyArrayAttr,
-                                        StringAttr{})
-                    .getResult();
+  auto result =
+      builder
+          .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                              NameKindEnum::InterestingName,
+                              getConstants().emptyArrayAttr, StringAttr{})
+          .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
