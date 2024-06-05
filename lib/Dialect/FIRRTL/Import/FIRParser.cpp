@@ -3247,6 +3247,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   // 2. Forceable declaration.
   // 3. BlockArgument.
 
+  // We use inner symbols for all.
+
   // Figure out what we have, and parse indexing.
   Value result;
   if (auto unbundledId = dyn_cast<UnbundledID>(symtabEntry)) {
@@ -3271,8 +3273,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // If it's already forceable, use that.
         auto *defining = instResult.getDefiningOp();
         assert(defining);
-        if (isa<Forceable>(defining)) {
-          assert(cast<Forceable>(defining).isForceable());
+        if (isa<WireOp>(defining)) {
           result = instResult;
           break;
         }
@@ -3298,7 +3299,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         builder.setInsertionPoint(defining);
         auto bounce =
             builder.create<WireOp>(type, name, NameKindEnum::InterestingName,
-                                   annotations, sym, /*forceable=*/true);
+                                   annotations, sym);
         auto bounceVal = bounce.getData();
 
         // Replace instance result with reads from bounce wire.
@@ -3329,7 +3330,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   }
 
   assert(result);
-  assert(isa<BlockArgument>(result) || result.getDefiningOp<Forceable>());
+  assert(isa<BlockArgument>(result) || result.getDefiningOp<hw::InnerSymbolOpInterface>());
 
   // We have our root value, we just need to parse the field id.
   // Build up the FieldRef as processing indexing expressions, and
@@ -4381,11 +4382,9 @@ ParseResult FIRStmtParser::parseNode() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable =
-      !!firrtl::detail::getForceableResultType(true, initializer.getType());
   auto result =
       builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
-                             annotations, sym, forceable);
+                             annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4411,14 +4410,13 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   // Names of only-nonHW should be droppable.
   auto namekind = isa<PropertyType, RefType>(type)
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
   auto result =
-      builder.create<WireOp>(type, id, namekind, annotations, sym, forceable);
+      builder.create<WireOp>(type, id, namekind, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4511,17 +4509,16 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   if (resetSignal)
     result = builder
                  .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
                                      NameKindEnum::InterestingName, annotations,
-                                     sym, forceable)
+                                     sym)
                  .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym, forceable)
+                                annotations, sym)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -4552,12 +4549,11 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   auto result = builder
                     .create<RegResetOp>(type, clock, resetSignal, resetValue,
                                         id, NameKindEnum::InterestingName,
                                         getConstants().emptyArrayAttr,
-                                        StringAttr{}, forceable)
+                                        StringAttr{})
                     .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -5400,12 +5396,6 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
       return diag;
     }
   }
-
-  // Demote any forceable operations that aren't being forced.
-  deferredModule.moduleOp.walk([](Forceable fop) {
-    if (fop.isForceable() && fop.getDataRef().use_empty())
-      firrtl::detail::replaceWithNewForceability(fop, false);
-  });
 
   return success();
 }
