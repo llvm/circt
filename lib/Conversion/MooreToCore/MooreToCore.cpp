@@ -381,8 +381,8 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
     case ProcedureKind::Initial:
 
       // Insert new Op to the builtin.module
-      rewriter.setInsertionPointToEnd(
-          op->getParentOfType<mlir::ModuleOp>()->getBlock());
+      // rewriter.setInsertionPointToEnd(
+      //   op->getParentOfType<mlir::ModuleOp>()->getBlock());
       auto procOp = rewriter.create<llhd::ProcOp>(
           op->getLoc(),
           mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
