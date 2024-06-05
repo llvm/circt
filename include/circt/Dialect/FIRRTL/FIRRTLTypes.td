@@ -123,7 +123,7 @@ class OptRefTypeConstraint<string result, string input>
                    "type_cast<RefType>($_self).getType()">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
+def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers

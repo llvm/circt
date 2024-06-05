@@ -1693,7 +1693,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
 /// exactly one connect that has the value as its destination. This returns the
 /// operation if found and if all the other users are "reads" from the value.
 /// Returns null if there are no connects, or multiple connects to the value, or
-/// if the value is involved in an `AttachOp`, or if the connect isn't strict.
+/// if the value is involved in an `AttachOp`, or if the connect isn't matching.
 ///
 /// Note that this will simply return the connect, which is located *anywhere*
 /// after the definition of the value. Users of this function are likely
@@ -1708,14 +1708,14 @@ MatchingConnectOp firrtl::getSingleConnectUserOf(Value value) {
 
     if (auto aConnect = dyn_cast<FConnectLike>(user))
       if (aConnect.getDest() == value) {
-        auto strictConnect = dyn_cast<MatchingConnectOp>(*aConnect);
-        // If this is not a strict connect, a second strict connect or in a
+        auto matchingConnect = dyn_cast<MatchingConnectOp>(*aConnect);
+        // If this is not a matching connect, a second matching connect or in a
         // different block, fail.
-        if (!strictConnect || (connect && connect != strictConnect) ||
-            strictConnect->getBlock() != value.getParentBlock())
+        if (!matchingConnect || (connect && connect != matchingConnect) ||
+            matchingConnect->getBlock() != value.getParentBlock())
           return {};
         else
-          connect = strictConnect;
+          connect = matchingConnect;
       }
   }
   return connect;
@@ -2048,7 +2048,7 @@ struct AggOneShot : public mlir::RewritePattern {
     auto dest = op->getResult(0);
     auto destType = dest.getType();
 
-    // If not passive, cannot strictconnect.
+    // If not passive, cannot matchingconnect.
     if (!type_cast<FIRRTLBaseType>(destType).isPassive())
       return failure();
 
@@ -2678,7 +2678,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     };
 
     // Finds the users of write ports. This expects all the data/wdata fields
-    // of the ports to be used solely as the destination of strict connects.
+    // of the ports to be used solely as the destination of matching connects.
     // If a memory has ports with other uses, it is excluded from optimisation.
     SmallVector<MatchingConnectOp> writeOps;
     auto findWriteUsers = [&](Value port, StringRef field) -> LogicalResult {

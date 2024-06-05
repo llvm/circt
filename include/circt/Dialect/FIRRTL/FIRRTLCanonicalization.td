@@ -197,13 +197,13 @@ def NotGt : Pat <
   (MoveNameHint $old, (LEQPrimOp $x, $y)),
   []>;
 
-// connect(a:t,b:t) -> strictconnect(a,b)
+// connect(a:t,b:t) -> matchingconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
   (MatchingConnectOp $dst, $src),
   [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
 
-// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+// connect(a:t1,b:(t2<t1) -> matchingconnect(a,(pad b))
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
   (MatchingConnectOp $dst, (PadPrimOp $src,

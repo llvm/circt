@@ -60,24 +60,6 @@ static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
       diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
 }
 
-/// Get FieldRef pointing to the specified inner symbol target, which must be
-/// valid. Returns null FieldRef if target points to something with no value,
-/// such as a port of an external module.
-static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
-  if (ist.isPort()) {
-    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
-        .Case<FModuleOp>([&](auto fmod) {
-          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
-        })
-        .Default({});
-  }
-
-  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
-  assert(symOp && symOp.getTargetResultIndex() &&
-         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
-  return FieldRef(symOp.getTargetResult(), ist.getField());
-}
-
 /// Calculate the "InferWidths-fieldID" equivalent for the given fieldID + type.
 static uint64_t convertFieldIDToOurVersion(uint64_t fieldID, FIRRTLType type) {
   uint64_t convertedFieldID = 0;
@@ -1614,7 +1596,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
-      // StrictConnect is an identify constraint
+      // MatchingConnect is an identify constraint
       .Case<MatchingConnectOp>([&](auto op) {
         // This back-propagates width from destination to source,
         // causing source to sometimes be inferred wider than
@@ -1760,7 +1742,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           mappingFailed = true;
           return;
         }
-        auto ref = getRefForIST(ist);
+        auto ref = getFieldRefForTarget(ist);
         if (!ref) {
           op->emitError("target of rwprobe resolved to unsupported target");
           mappingFailed = true;
@@ -1952,7 +1934,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
                << "Constrained " << *largerVar << " >= " << *c << "\n");
     // If we're constraining larger == smaller, add the LEQ contraint as well.
     // Solve for GEQ but check that LEQ is true.
-    // Used for strictconnect, some reference operations, and anywhere the
+    // Used for matchingconnect, some reference operations, and anywhere the
     // widths should be inferred strictly in one direction but are required to
     // also be equal for correctness.
     if (equal) {

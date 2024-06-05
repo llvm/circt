@@ -45,8 +45,33 @@ static Type convertType(Type type) {
 namespace {
 class DropConstPass : public DropConstBase<DropConstPass> {
   void runOnOperation() override {
+
+    // Update signatures of all module-likes.
+    auto moduleLikes = getOperation().getOps<FModuleLike>();
+    for (auto mod : moduleLikes) {
+      //// Update the module signature with non-'const' ports
+      SmallVector<Attribute> portTypes;
+      portTypes.reserve(mod.getNumPorts());
+      bool convertedAny = false;
+      llvm::transform(mod.getPortTypes(), std::back_inserter(portTypes),
+                      [&](Attribute type) -> Attribute {
+                        if (auto convertedType =
+                                convertType(cast<TypeAttr>(type).getValue())) {
+                          convertedAny = true;
+                          return TypeAttr::get(convertedType);
+                        }
+                        return type;
+                      });
+      if (convertedAny)
+        mod->setAttr(FModuleLike::getPortTypesAttrName(),
+                     ArrayAttr::get(mod.getContext(), portTypes));
+    };
+
+    // Rewrite module bodies in parallel.
+    // Filter on FModuleOp specifically as there's no "hasBody()".
     mlir::parallelForEach(
-        &getContext(), getOperation().getOps<firrtl::FModuleLike>(),
+        &getContext(),
+        llvm::make_filter_range(moduleLikes, llvm::IsaPred<FModuleOp>),
         [](auto module) {
           // Convert the module body if present
           module->walk([](Operation *op) {
@@ -69,23 +94,6 @@ class DropConstPass : public DropConstBase<DropConstPass> {
               if (auto convertedType = convertType(result.getType()))
                 result.setType(convertedType);
           });
-
-          // Update the module signature with non-'const' ports
-          SmallVector<Attribute> portTypes;
-          portTypes.reserve(module.getNumPorts());
-          bool convertedAny = false;
-          llvm::transform(module.getPortTypes(), std::back_inserter(portTypes),
-                          [&](Attribute type) -> Attribute {
-                            if (auto convertedType = convertType(
-                                    cast<TypeAttr>(type).getValue())) {
-                              convertedAny = true;
-                              return TypeAttr::get(convertedType);
-                            }
-                            return type;
-                          });
-          if (convertedAny)
-            module->setAttr(FModuleLike::getPortTypesAttrName(),
-                            ArrayAttr::get(module.getContext(), portTypes));
         });
 
     markAnalysesPreserved<InstanceGraph>();
