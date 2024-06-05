@@ -329,6 +329,9 @@ def UnpackedUnionType : StructLikeType<
 // Constraints
 //===----------------------------------------------------------------------===//
 
+def ModuleType : MooreType<CPred<"llvm::isa<hw::ModuleType>($_self)">,
+  "module type", "hw::ModuleType">;
+
 def UnpackedType : MooreType<CPred<"llvm::isa<moore::UnpackedType>($_self)">,
   "unpacked type", "moore::UnpackedType">;
 

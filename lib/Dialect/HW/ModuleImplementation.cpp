@@ -441,7 +441,7 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Region &body,
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
     // now, use what was specified on the command line.
-    if (flags.shouldPrintDebugInfo()) {
+    if (!locAttrs.empty() && flags.shouldPrintDebugInfo()) {
       auto loc = locAttrs[i];
       if (!isa<UnknownLoc>(loc))
         p.printOptionalLocationSpecifier(cast<Location>(loc));

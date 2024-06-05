@@ -487,18 +487,18 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // point in creating deeply squiggled connections if we don't have to.
       //
       // This pattern matches the following structure.  Move the ref.resolve
-      // outside the layer block.  The strictconnect will be moved outside in
+      // outside the layer block.  The matchingconnect will be moved outside in
       // the next loop iteration:
       //     %0 = ...
       //     %1 = ...
       //     firrtl.layerblock {
       //       %2 = ref.resolve %0
-      //       firrtl.strictconnect %1, %2
+      //       firrtl.matchingconnect %1, %2
       //     }
       if (auto refResolve = dyn_cast<RefResolveOp>(op))
         if (refResolve.getResult().hasOneUse() &&
             refResolve.getRef().getParentBlock() != body)
-          if (auto connect = dyn_cast<StrictConnectOp>(
+          if (auto connect = dyn_cast<MatchingConnectOp>(
                   *refResolve.getResult().getUsers().begin()))
             if (connect.getDest().getParentBlock() != body) {
               refResolve->moveBefore(layerBlock);
@@ -584,15 +584,16 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         if (isa<RefType>(src.getType()))
           src = builder.create<RefResolveOp>(
               newModule.getPortLocationAttr(portNum), src);
-        builder.create<StrictConnectOp>(newModule.getPortLocationAttr(portNum),
-                                        instanceOp.getResult(portNum), src);
+        builder.create<MatchingConnectOp>(
+            newModule.getPortLocationAttr(portNum),
+            instanceOp.getResult(portNum), src);
       } else if (isa<RefType>(instanceOp.getResult(portNum).getType()) &&
                  connectValues[portNum].kind == ConnectKind::Ref)
         builder.create<RefDefineOp>(getPortLoc(connectValues[portNum].value),
                                     connectValues[portNum].value,
                                     instanceOp.getResult(portNum));
       else
-        builder.create<StrictConnectOp>(
+        builder.create<MatchingConnectOp>(
             getPortLoc(connectValues[portNum].value),
             connectValues[portNum].value,
             builder.create<RefResolveOp>(newModule.getPortLocationAttr(portNum),

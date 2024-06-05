@@ -17,6 +17,7 @@ include "mlir/IR/DialectBase.td"
 
 def MooreDialect : Dialect {
   let name = "moore";
+  let cppNamespace = "::circt::moore";
 
   let summary = "Types and operations for the Moore dialect";
   let description = [{
@@ -24,7 +25,7 @@ def MooreDialect : Dialect {
     SystemVerilog-specific constructs without ambiguities and all types
     resolved.
   }];
-  let cppNamespace = "::circt::moore";
+
   let extraClassDeclaration = [{
     /// Register all Moore types.
     void registerTypes();
@@ -34,6 +35,7 @@ def MooreDialect : Dialect {
     void printType(Type, DialectAsmPrinter &) const override;
   }];
   let useDefaultTypePrinterParser = 0;
+  let dependentDialects = ["hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREDIALECT
