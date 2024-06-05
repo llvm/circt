@@ -90,6 +90,9 @@ public:
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
           .Case<RegOp, RegResetOp>([&](auto) {})
+          .Case<NodeOp>([&](auto node) {
+            recordDataflow(node.getResult(), node.getInput());
+          })
           .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());

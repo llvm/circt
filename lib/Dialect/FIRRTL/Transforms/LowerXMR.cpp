@@ -223,6 +223,11 @@ class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
               dataFlowClasses->unionSets(op.getInput(), op.getResult());
             return success();
           })
+          .Case<WireOp>([&](WireOp op) {
+            if (type_isa<RefType>(op.getType()))
+              markForRemoval(op);
+            return success();
+          })
           .Case<RefForceOp, RefForceInitialOp, RefReleaseOp,
                 RefReleaseInitialOp>([&](auto op) {
             forceAndReleaseOps.push_back(op);
