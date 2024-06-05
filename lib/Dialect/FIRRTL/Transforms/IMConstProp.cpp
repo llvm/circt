@@ -773,7 +773,7 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
 
 void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
   if (hasDontTouch(node.getResult()))
-      return markOverdefined(node.getResult());
+    return markOverdefined(node.getResult());
 
   return mergeOnlyChangedLatticeValue(node.getResult(), node.getInput(),
                                       changedFieldRef);

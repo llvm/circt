@@ -135,8 +135,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
 //===----------------------------------------------------------------------===//
 
 // TODO: Move elsewhere!
-RefType circt::firrtl::getForceableResultType(bool forceable,
-                                                      Type type) {
+RefType circt::firrtl::getForceableResultType(bool forceable, Type type) {
   auto base = dyn_cast_or_null<FIRRTLBaseType>(type);
   // TODO: Find a way to not check same things RefType::get/verify does.
   if (!forceable || !base || base.containsConst())
