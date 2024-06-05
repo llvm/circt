@@ -214,3 +214,20 @@ ifdef USE_FORMAL_ONLY_CONSTRAINTS
  `endif // USE_UNR_ONLY_CONSTRAINTS
 endif // USE_FORMAL_ONLY_CONSTRAINTS
 ```
+
+### circt_dpi_call
+
+Call DPI function. TODO: Fill description.
+
+| Parameter     | Type   | Description                      |
+| ------------- | ------ | -------------------------------- |
+| isClocked     | int    | Set 1 if the dpi call is clocked |
+| functionName  | string | Specify the function name        |
+
+
+| Port              | Direction | Type     | Description                     |
+| ----------------- | --------- | -------- | ------------------------------- |
+| clock (optional)  | input     | Clock    | Optional clock operand          |
+| enable            | input     | UInt<1>  | Enable signal                   |
+| ...               | input     | Signals  | arguments to DPI function call  |
+| result (optional) | output    | Signal   | Optional result of the dpi call |
