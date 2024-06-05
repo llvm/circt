@@ -36,7 +36,7 @@ static StrictWireOp cloneWireTo(mlir::OpBuilder &builder, WireOp wire) {
 static void updateWireUses(mlir::OpBuilder &builder,
                            std::deque<Operation *> &toDelete, Value toReplace,
                            Value readSide, Value writeSide) {
-  for (auto user : toReplace.getUsers()) {
+  for (auto *user : toReplace.getUsers()) {
     TypeSwitch<Operation *>(user)
         .Case<SubfieldOp>([&](auto op) {
           builder.setInsertionPoint(op);
