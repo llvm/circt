@@ -217,4 +217,15 @@ moore.module @Expressions() {
   // CHECK: moore.extract [[VAL4]] from [[VAL5]] : i8, i32 -> i5
   %5 = moore.constant 2 : i32
   moore.extract %4 from %5 : i8, i32 -> i5
+
+  // CHECK: moore.conditional %b1 : i1 -> i32 {
+  // CHECK:   moore.yield %int : i32
+  // CHECK: } {
+  // CHECK:   moore.yield %int2 : i32
+  // CHECK: }
+  moore.conditional %b1 : i1 -> i32 {
+    moore.yield %int : i32
+  } {
+    moore.yield %int2 : i32
+  }
 }
