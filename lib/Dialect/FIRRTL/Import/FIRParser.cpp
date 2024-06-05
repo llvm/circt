@@ -3610,24 +3610,6 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "cannot force target of type ")
            << targetType;
 
-  // Use Forceable if necessary (reset).
-  if (targetType.hasUninferredReset()) {
-    if (!definingOp)
-      return emitError(startTok.getLoc(),
-                       "must have concrete reset type in type ")
-             << targetType;
-
-    auto forceable = dyn_cast<Forceable>(definingOp);
-    if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
-      return emitError(startTok.getLoc(), "rwprobe target not forceable")
-          .attachNote(definingOp->getLoc());
-
-    result = getValueByFieldID(builder, forceable.getDataRef(),
-                               staticRef.getFieldID());
-    assert(result.getType() == forceableType);
-    return success();
-  }
-
   // Get InnerRef for target field.
   auto sym = getInnerRefTo(
       getTargetFor(staticRef),
