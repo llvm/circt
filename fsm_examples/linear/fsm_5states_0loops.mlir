@@ -1,4 +1,4 @@
-fsm.machine @fsm5() -> (i1) attributes {initialState = "_0"} {
+fsm.machine @fsm5() -> i1 attributes {initialState = "_0", resNames=["count"] } {
 	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
 	%c1 = hw.constant 1 : i16
 	%c5 = hw.constant 5 : i16
