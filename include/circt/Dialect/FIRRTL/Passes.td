@@ -879,8 +879,7 @@ def Lint :
   let constructor = "circt::firrtl::createLintingPass()";
 }
 
-def SpecializeOption :
-    Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
+def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   let summary = "Specialize a configurable design for a given option.";
   let description = [{
     If the design has option groups, instead of preserving the information
@@ -899,14 +898,13 @@ def SpecializeOption :
   ];
 }
 
-def ModuleSummary :
-  Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
-    let summary = "Print a summary of modules.";
-    let description = [{
-      The pass produces a summary of modules.
-    }];
-    let constructor = "circt::firrtl::createModuleSummaryPass()";
-  }
+def ModuleSummary : Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
+  let summary = "Print a summary of modules.";
+  let description = [{
+    The pass produces a summary of modules.
+  }];
+  let constructor = "circt::firrtl::createModuleSummaryPass()";
+}
 
 def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
     let summary = "Lower DPI intrinsic into Sim DPI operations";
