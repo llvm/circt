@@ -1198,6 +1198,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredPort::@[[IN_SYM]]> : !firrtl.rwprobe<uint>
     define p = rwprobe(in[1])
 
+  ; CHECK-LABEL: @RWProbeUninferredReset(
+  module RWProbeUninferredReset:
+    ; CHECK: in %in: !firrtl.bundle<a: reset> sym [<@[[IN_SYM:.+]],1,public>],
+    input in : {a : Reset}
+    output p : RWProbe<Reset>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredReset::@[[IN_SYM]]> : !firrtl.rwprobe<reset>
+    define p = rwprobe(in.a)
+
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
   module ProbeInvalidate:
