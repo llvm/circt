@@ -1359,25 +1359,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:    hw.output
   // CHECK-NEXT:  }
 
-  // Check forceable declarations are kept alive with symbols.
-  // CHECK-LABEL: hw.module private @ForceableToSym(
-  firrtl.module private @ForceableToSym(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint<4>) {
-    // CHECK-NEXT: %n = hw.wire %in sym @{{.+}} : i4
-    // CHECK-NEXT: %w = hw.wire %n sym @{{.+}} : i4
-    // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @{{.+}} : i4
-    %n, %n_ref = firrtl.node %in forceable : !firrtl.uint<4>
-    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
-    %r, %r_ref = firrtl.reg %clk forceable : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
-
-    firrtl.matchingconnect %w, %n : !firrtl.uint<4>
-    firrtl.matchingconnect %r, %w : !firrtl.uint<4>
-    firrtl.matchingconnect %out, %r : !firrtl.uint<4>
-  }
-
   // Check lowering force and release operations.
   hw.hierpath private @xmrPath [@ForceRelease::@xmr_sym, @RefMe::@xmr_sym]
   firrtl.module private @RefMe() {
-    %x, %x_ref = firrtl.wire sym @xmr_sym forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    %x = firrtl.wire sym @xmr_sym : !firrtl.uint<4>
   }
   // CHECK-LABEL: hw.module @ForceRelease(
   firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {

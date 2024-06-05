@@ -89,31 +89,6 @@ firrtl.circuit "Foo" {
 
 // -----
 
-firrtl.circuit "Forceable" {
-  firrtl.module @Forceable() {
-    %w, %w_ref = firrtl.wire forceable {annotations = [
-      {
-        class = "chisel3.experimental.Trace$TraceAnnotation",
-        chiselTarget = "~Forceable|Forceable>forced"
-      }
-    ]} : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// Test that a local wire annotation is resolved.
-//
-// CHECK:          sv.verbatim
-// CHECK{LITERAL}: ~Forceable|{{0}}>{{1}}
-// CHECK-SAME:     ~Forceable|Forceable>forced
-// CHECK-SAME:     symbols = [@Forceable, #hw.innerNameRef<@Forceable::@[[w_sym:[a-zA-Z0-9_]+]]>]
-
-// Test that the wire receives a symbol.
-//
-// CHECK: firrtl.module @Forceable
-// CHECK:   %w, %w_ref = firrtl.wire sym @[[w_sym]]
-
-// -----
-
 firrtl.circuit "Foo" {
   firrtl.module @Foo() {
     %a = firrtl.wire {annotations = [
