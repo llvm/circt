@@ -145,12 +145,12 @@ jobs:
           # gcc   + debug   + assert   + shared
           - cc: clang
             cxx: clang++
-            mode: debug
+            mode: Debug
             assert: ON
             shared: ON
           - cc: gcc
             cxx: g++
-            mode: release
+            mode: Release
             assert: OFF
             shared: OFF
 
