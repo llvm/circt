@@ -193,3 +193,20 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: return
   return
 }
+
+// CHECK-LABEL: hw.module @InstanceNull() {
+moore.module @InstanceNull() {
+
+  // CHECK-NEXT: hw.instance "null_instance" @Null() -> ()
+  moore.instance "null_instance" @Null() -> ()
+
+  // CHECK-NEXT: hw.output
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @Null() {
+moore.module @Null() {
+
+  // CHECK-NEXT: hw.output
+  moore.output
+}

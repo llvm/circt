@@ -223,7 +223,7 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different
+    The `moore.net` operation is a net declaration. Net types defines different
     types of net connection in SV. There are twelve built-in net types defined
     in the official standard construct of the operation:
     `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
