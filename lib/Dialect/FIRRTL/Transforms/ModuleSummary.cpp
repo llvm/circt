@@ -121,8 +121,8 @@ void ModuleSummaryPass::runOnOperation() {
 
   SmallVector<MapTy::value_type> sortedData(data.begin(), data.end());
   std::sort(sortedData.begin(), sortedData.end(),
-            [](const std::tuple<KeyTy, SmallVector<FModuleOp>> &lhs,
-               const std::tuple<KeyTy, SmallVector<FModuleOp>> &rhs) {
+            [](const MapTy::value_type &lhs,
+               const MapTy::value_type &rhs) {
               return std::get<0>(lhs).opcount * std::get<1>(lhs).size() *
                          std::get<1>(lhs).size() >
                      std::get<0>(rhs).opcount * std::get<1>(rhs).size() *
