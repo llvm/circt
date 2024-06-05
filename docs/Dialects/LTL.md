@@ -247,7 +247,7 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
 
 - **`s[->n:m]`**:   
 ```mlir
-		%1 = ltl.goto_repeat %s, n, (m-n) : !ltl.sequence
+%1 = ltl.goto_repeat %s, n, (m-n) : !ltl.sequence
 ```  
 
 - **`s[=n:m]`**:   
