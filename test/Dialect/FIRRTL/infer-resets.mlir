@@ -1069,3 +1069,30 @@ firrtl.circuit "InferToRWProbe" {
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }
+
+// -----
+
+// CHECK-LABEL: "RWProbeOp"
+firrtl.circuit "RWProbeOp" {
+  // CHECK: <a: asyncreset, b: asyncreset>
+  // CHECK-NOT: firrtl.reset
+  firrtl.module @RWProbeOp(in %driver: !firrtl.asyncreset, out %out: !firrtl.bundle<a: reset, b: reset>, out %out2: !firrtl.reset) {
+    %r = firrtl.wire sym [<@r,0,public>,<@r_a,1,public>,<@r_b,2,public>] : !firrtl.bundle<a: reset, b flip: reset>
+
+    %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+    %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+    firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+
+    %r_a_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_a> : !firrtl.rwprobe<reset>
+    %r_b_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_b> : !firrtl.rwprobe<reset>
+    %r_rw = firrtl.ref.rwprobe <@RWProbeOp::@r> : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    %r_b_read = firrtl.ref.resolve %r_b_rw : !firrtl.rwprobe<reset>
+    %r_read = firrtl.ref.resolve %r_rw : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    firrtl.matchingconnect %out2, %r_b_read : !firrtl.reset
+    firrtl.matchingconnect %out, %r_read : !firrtl.bundle<a: reset, b: reset>
+  }
+}
+
