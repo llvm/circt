@@ -65,3 +65,25 @@ moore.constant -2 : !moore.i1
 
 // expected-error @below {{attribute width 9 does not match return type's width 8}}
 "moore.constant" () {value = 42 : i9} : () -> !moore.i8
+
+// -----
+
+%y = moore.variable : i8
+
+moore.module @Cond() {
+  // expected-error @below {{'moore.yield' op expects parent op 'moore.conditional'}}
+  moore.yield %y : i8
+}
+
+// -----
+
+%x = moore.variable : i1
+%t = moore.variable : i8
+%f = moore.variable : i8
+
+moore.conditional %x : i1 -> i32 {
+  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
+  moore.yield %t : i8
+} {
+  moore.yield %f : i8
+}

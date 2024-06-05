@@ -354,6 +354,30 @@ LogicalResult ConcatOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult YieldOp::verify() {
+  // Check that YieldOp's parent operation is ConditionalOp.
+  auto cond = dyn_cast<ConditionalOp>(*(*this).getParentOp());
+  if (!cond) {
+    emitOpError("must have a conditional parent");
+    return failure();
+  }
+
+  // Check that the operand matches the parent operation's result.
+  auto condType = cond.getType();
+  auto yieldType = getOperand().getType();
+  if (condType != yieldType) {
+    emitOpError("yield type must match conditional. Expected ")
+        << condType << ", but got " << yieldType << ".";
+    return failure();
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConversionOp
 //===----------------------------------------------------------------------===//
 

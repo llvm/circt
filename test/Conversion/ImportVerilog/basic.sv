@@ -350,6 +350,9 @@ module Expressions;
       int a, b;
     } c, d;
   } union1;
+  // CHECK: %r1 = moore.variable : real
+  // CHECK: %r2 = moore.variable : real
+  real r1,r2;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -599,6 +602,41 @@ module Expressions;
     // CHECK: [[TMP6:%.+]] = moore.or [[TMP2]], [[TMP5]] : i1
     // CHECK: moore.or [[TMP1]], [[TMP6]] : i1
     c = a inside { a, b, [a:b] };
+
+    //===------------------------------------------------------------------===//
+    // Conditional operator
+
+    // CHECK: moore.conditional %x : i1 -> i32 {
+    // CHECK:   moore.yield %a : i32
+    // CHECK: } {
+    // CHECK:   moore.yield %b : i32
+    // CHECK: }
+    c = x ? a : b;
+
+    // CHECK: moore.conditional %x : i1 -> real {
+    // CHECK:   moore.yield %r1 : real
+    // CHECK: } {
+    // CHECK:   moore.yield %r2 : real
+    // CHECK: }
+    r1 = x ? r1 : r2;
+
+    // CHECK: [[TMP1:%.+]] = moore.bool_cast %a : i32 -> i1
+    // CHECK: moore.conditional [[TMP1]] : i1 -> i32 {
+    // CHECK:   moore.yield %a : i32
+    // CHECK: } {
+    // CHECK:   moore.yield %b : i32
+    // CHECK: }
+    c = a ? a : b;
+
+    // CHECK: [[TMP1:%.+]] = moore.sgt %a, %b : i32 -> i1
+    // CHECK: moore.conditional [[TMP1]] : i1 -> i32 {
+    // CHECK:   [[TMP2:%.+]] = moore.add %a, %b : i32
+    // CHECK:   moore.yield [[TMP2]] : i32
+    // CHECK: } {
+    // CHECK:   [[TMP2:%.+]] = moore.sub %a, %b : i32
+    // CHECK:   moore.yield [[TMP2]] : i32
+    // CHECK: }
+    c = (a > b) ? (a + b) : (a - b);
 
     //===------------------------------------------------------------------===//
     // Assign operators
