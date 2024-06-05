@@ -9,7 +9,7 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
-#include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/Transforms/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
