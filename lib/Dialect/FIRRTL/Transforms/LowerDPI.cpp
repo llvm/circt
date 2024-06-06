@@ -41,18 +41,20 @@ void LowerDPIPass::runOnOperation() {
       FModuleOp module;
       SmallVector<DPICallIntrinsicOp> dpiOps;
     };
-    SmallVector<DpiCallCollections> results;
+
+    SmallVector<DpiCallCollections> collections;
+    collections.reserve(64);
 
     for (auto module : circuitOp.getOps<FModuleOp>())
-      results.push_back(DpiCallCollections{module, {}});
+      collections.push_back(DpiCallCollections{module, {}});
 
-    parallelForEach(&getContext(), results, [](auto &result) {
+    parallelForEach(&getContext(), collections, [](auto &result) {
       result.module.walk(
           [&](DPICallIntrinsicOp dpi) { result.dpiOps.push_back(dpi); });
     });
 
-    for (auto &result : results)
-      for (auto dpi : result.dpiOps)
+    for (auto &collection : collections)
+      for (auto dpi : collection.dpiOps)
         funcNameToCallSites[dpi.getFunctionNameAttr()].push_back(dpi);
   }
 

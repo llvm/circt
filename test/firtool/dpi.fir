@@ -8,12 +8,12 @@ circuit DPI:
 ; CHECK-NEXT:   output [1:0] out_0
 ; CHECK-NEXT: );
 
-; CHECK-LABEL: import "DPI-C" function void cloked_void(
+; CHECK-LABEL: import "DPI-C" function void clocked_void(
 ; CHECK-NEXT:   input [1:0] in_0,
 ; CHECK-NEXT:               in_1
 ; CHECK-NEXT: );
 
-; CHECK-LABEL: import "DPI-C" function void uncloked_result(
+; CHECK-LABEL: import "DPI-C" function void unclocked_result(
 ; CHECK-NEXT:   input  [1:0] in_0,
 ; CHECK-NEXT:                in_1,
 ; CHECK-NEXT:   output [1:0] out_0
@@ -26,13 +26,13 @@ circuit DPI:
 ; CHECK-NEXT:     if (enable) begin
 ; CHECK-NEXT:       clocked_result(in_0, in_1, [[TMP]]);
 ; CHECK-NEXT:       [[RESULT1]] <= [[TMP]];
-; CHECK-NEXT:       cloked_void(in_0, in_1);
+; CHECK-NEXT:       clocked_void(in_0, in_1);
 ; CHECK-NEXT:     end
 ; CHECK-NEXT:   end // always @(posedge)
 ; CHECK-NEXT:   reg   [1:0] [[RESULT2:_.+]];
 ; CHECK-NEXT:   always_comb begin
 ; CHECK-NEXT:     if (enable) begin
-; CHECK-NEXT:       uncloked_result(in_0, in_1, [[RESULT2]]);
+; CHECK-NEXT:       unclocked_result(in_0, in_1, [[RESULT2]]);
 ; CHECK-NEXT:     end
 ; CHECK-NEXT:     else
 ; CHECK-NEXT:       [[RESULT2]] = 2'bx;
@@ -47,8 +47,8 @@ circuit DPI:
     output out : UInt<2>[2]
 
     node result1 = intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_result"> : UInt<2>, clock, enable, in[0], in[1])
-    intrinsic(circt_dpi_call<isClocked = 1, functionName="cloked_void">, clock, enable, in[0], in[1])
-    node result2 = intrinsic(circt_dpi_call<isClocked = 0, functionName="uncloked_result"> : UInt<2>,  enable, in[0], in[1])
+    intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_void">, clock, enable, in[0], in[1])
+    node result2 = intrinsic(circt_dpi_call<isClocked = 0, functionName="unclocked_result"> : UInt<2>,  enable, in[0], in[1])
 
     out[0] <= result1
     out[1] <= result2
