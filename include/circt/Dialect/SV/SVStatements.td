@@ -907,7 +907,8 @@ def FuncOp : SVOp<"func",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface, ProceduralRegion,
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<PortList>,
-      FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
+      FunctionOpInterface, HasParent<"mlir::ModuleOp">, 
+      HWEmittableModuleLike]> {
   let summary = "A SystemVerilog function";
   let description = [{
     `sv.func` represents SystemVerilog function in IEEE 1800-2017 section 13.4

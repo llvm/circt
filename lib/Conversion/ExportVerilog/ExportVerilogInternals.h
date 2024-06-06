@@ -452,10 +452,10 @@ LogicalResult lowerHWInstanceChoices(mlir::ModuleOp module);
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 LogicalResult prepareHWModule(Block &block, const LoweringOptions &options);
-LogicalResult prepareHWModule(hw::HWModuleOp module,
+LogicalResult prepareHWModule(hw::HWEmittableModuleLike module,
                               const LoweringOptions &options);
 
-void pruneZeroValuedLogic(hw::HWModuleOp module);
+void pruneZeroValuedLogic(hw::HWEmittableModuleLike module);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
