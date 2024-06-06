@@ -138,7 +138,7 @@ private:
 } // namespace circt
 
 // This function legalizes local names in the given module.
-static void legalizeModuleLocalNames(HWModuleOp module,
+static void legalizeModuleLocalNames(HWEmittableModuleLike module,
                                      const LoweringOptions &options,
                                      const GlobalNameTable &globalNameTable) {
   // A resolver for a local name collison.
@@ -146,9 +146,10 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   globalNameTable.addReservedNames(nameResolver);
 
   // Register names used by parameters.
-  for (auto param : module.getParameters())
-    nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
-        module, cast<ParamDeclAttr>(param).getName()));
+  if (auto hwModule = dyn_cast<hw::HWModuleOp>(*module))
+    for (auto param : hwModule.getParameters())
+      nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
+          module, cast<ParamDeclAttr>(param).getName()));
 
   auto *ctxt = module.getContext();
 
@@ -183,7 +184,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   // Legalize the value names. We first mark existing hw.verilogName attrs as
   // being used, and then resolve names of declarations.
   module.walk([&](Operation *op) {
-    if (!isa<HWModuleOp>(op)) {
+    if (module != op) {
       // If there is a hw.verilogName attr, mark names as used.
       if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
         nameResolver.insertUsedName(
@@ -274,7 +275,8 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
 
   // Legalize names in HW modules parallelly.
   mlir::parallelForEach(
-      topLevel.getContext(), topLevel.getOps<HWModuleOp>(), [&](auto module) {
+      topLevel.getContext(), topLevel.getOps<HWEmittableModuleLike>(),
+      [&](auto module) {
         legalizeModuleLocalNames(module, options, globalNameTable);
       });
 

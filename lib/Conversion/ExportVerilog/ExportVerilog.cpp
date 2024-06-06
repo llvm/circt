@@ -1082,7 +1082,6 @@ public:
   llvm::formatted_raw_ostream &os;
 
   bool encounteredError = false;
-  unsigned currentIndent = 0;
 
   /// Pretty printing:
 
@@ -1349,9 +1348,7 @@ void EmitterBase::emitComment(StringAttr comment) {
   // Set a line length for the comment.  Subtract off the leading comment and
   // space ("// ") as well as the current indent level to simplify later
   // arithmetic.  Ensure that this line length doesn't go below zero.
-  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
-  if (lineLength > state.options.emittedLineLength)
-    lineLength = 0;
+  auto lineLength = std::max<size_t>(state.options.emittedLineLength, 3) - 3;
 
   // Process the comment in line chunks extracted from manually specified line
   // breaks.  This is done to preserve user-specified line breaking if used.
@@ -1416,7 +1413,8 @@ StringAttr ExportVerilog::inferStructuralNameForTemporary(Value expr) {
 
   // Module ports carry names!
   if (auto blockArg = dyn_cast<BlockArgument>(expr)) {
-    auto moduleOp = cast<HWModuleOp>(blockArg.getOwner()->getParentOp());
+    auto moduleOp =
+        cast<HWEmittableModuleLike>(blockArg.getOwner()->getParentOp());
     StringRef name = getPortVerilogName(moduleOp, blockArg.getArgNumber());
     result = StringAttr::get(expr.getContext(), name);
 
@@ -6314,7 +6312,7 @@ void FileEmitter::emit(emit::FileListOp op) {
 void FileEmitter::emitOp(emit::RefOp op) {
   StringAttr target = op.getTargetAttr().getAttr();
   auto *targetOp = state.symbolCache.getDefinition(target);
-  assert(targetOp->hasTrait<emit::Emittable>() && "target must be emittable");
+  assert(isa<emit::Emittable>(targetOp) && "target must be emittable");
 
   TypeSwitch<Operation *>(targetOp)
       .Case<hw::HWModuleOp>(
@@ -6785,8 +6783,9 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   LoweringOptions options(module);
   if (failed(lowerHWInstanceChoices(module)))
     return failure();
-  SmallVector<HWModuleOp> modulesToPrepare;
-  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  SmallVector<HWEmittableModuleLike> modulesToPrepare;
+  module.walk(
+      [&](HWEmittableModuleLike op) { modulesToPrepare.push_back(op); });
   if (failed(failableParallelForEach(
           module->getContext(), modulesToPrepare,
           [&](auto op) { return prepareHWModule(op, options); })))
@@ -6803,7 +6802,7 @@ struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
     mlir::OpPassManager preparePM("builtin.module");
     preparePM.addPass(createLegalizeAnonEnumsPass());
     preparePM.addPass(createHWLowerInstanceChoicesPass());
-    auto &modulePM = preparePM.nest<hw::HWModuleOp>();
+    auto &modulePM = preparePM.nestAny();
     modulePM.addPass(createPrepareForEmissionPass());
     if (failed(runPipeline(preparePM, getOperation())))
       return signalPassFailure();
@@ -6962,8 +6961,9 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   LoweringOptions options(module);
   if (failed(lowerHWInstanceChoices(module)))
     return failure();
-  SmallVector<HWModuleOp> modulesToPrepare;
-  module.walk([&](HWModuleOp op) { modulesToPrepare.push_back(op); });
+  SmallVector<HWEmittableModuleLike> modulesToPrepare;
+  module.walk(
+      [&](HWEmittableModuleLike op) { modulesToPrepare.push_back(op); });
   if (failed(failableParallelForEach(
           module->getContext(), modulesToPrepare,
           [&](auto op) { return prepareHWModule(op, options); })))

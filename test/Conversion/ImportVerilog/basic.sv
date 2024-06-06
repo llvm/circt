@@ -4,19 +4,19 @@
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
 
-// CHECK-LABEL: moore.module @Empty {
+// CHECK-LABEL: moore.module @Empty() {
 // CHECK:       }
 module Empty;
   ; // empty member
 endmodule
 
-// CHECK-LABEL: moore.module @NestedA {
+// CHECK-LABEL: moore.module @NestedA() {
 // CHECK:         moore.instance "NestedB" @NestedB
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedB {
+// CHECK-LABEL: moore.module @NestedB() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedC {
+// CHECK-LABEL: moore.module @NestedC() {
 // CHECK:       }
 module NestedA;
   module NestedB;
@@ -25,12 +25,12 @@ module NestedA;
   endmodule
 endmodule
 
-// CHECK-LABEL: moore.module @Child {
+// CHECK-LABEL: moore.module @Child() {
 // CHECK:       }
 module Child;
 endmodule
 
-// CHECK-LABEL: moore.module @Parent
+// CHECK-LABEL: moore.module @Parent() {
 // CHECK:         moore.instance "child" @Child
 // CHECK:       }
 module Parent;
@@ -305,7 +305,7 @@ module Statements;
   end
 endmodule
 
-// CHECK-LABEL: moore.module @Expressions {
+// CHECK-LABEL: moore.module @Expressions
 module Expressions;
   // CHECK: %a = moore.variable : i32
   // CHECK: %b = moore.variable : i32
@@ -350,6 +350,9 @@ module Expressions;
       int a, b;
     } c, d;
   } union1;
+  // CHECK: %r1 = moore.variable : real
+  // CHECK: %r2 = moore.variable : real
+  real r1,r2;
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -601,6 +604,41 @@ module Expressions;
     c = a inside { a, b, [a:b] };
 
     //===------------------------------------------------------------------===//
+    // Conditional operator
+
+    // CHECK: moore.conditional %x : i1 -> i32 {
+    // CHECK:   moore.yield %a : i32
+    // CHECK: } {
+    // CHECK:   moore.yield %b : i32
+    // CHECK: }
+    c = x ? a : b;
+
+    // CHECK: moore.conditional %x : i1 -> real {
+    // CHECK:   moore.yield %r1 : real
+    // CHECK: } {
+    // CHECK:   moore.yield %r2 : real
+    // CHECK: }
+    r1 = x ? r1 : r2;
+
+    // CHECK: [[TMP1:%.+]] = moore.bool_cast %a : i32 -> i1
+    // CHECK: moore.conditional [[TMP1]] : i1 -> i32 {
+    // CHECK:   moore.yield %a : i32
+    // CHECK: } {
+    // CHECK:   moore.yield %b : i32
+    // CHECK: }
+    c = a ? a : b;
+
+    // CHECK: [[TMP1:%.+]] = moore.sgt %a, %b : i32 -> i1
+    // CHECK: moore.conditional [[TMP1]] : i1 -> i32 {
+    // CHECK:   [[TMP2:%.+]] = moore.add %a, %b : i32
+    // CHECK:   moore.yield [[TMP2]] : i32
+    // CHECK: } {
+    // CHECK:   [[TMP2:%.+]] = moore.sub %a, %b : i32
+    // CHECK:   moore.yield [[TMP2]] : i32
+    // CHECK: }
+    c = (a > b) ? (a + b) : (a - b);
+
+    //===------------------------------------------------------------------===//
     // Assign operators
 
     // CHECK: [[TMP1:%.+]] = moore.read_lvalue %a
@@ -710,7 +748,7 @@ module Expressions;
   end
 endmodule
 
-// CHECK-LABEL: moore.module @Conversion {
+// CHECK-LABEL: moore.module @Conversion
 module Conversion;
   // Implicit conversion.
   // CHECK: %a = moore.variable
@@ -737,4 +775,173 @@ module Conversion;
   // CHECK: [[TMP:%.+]] = moore.conversion %b : !moore.i32 -> !moore.i19
   // CHECK: %e = moore.variable [[TMP]]
   bit signed [18:0] e = 19'(b);
+endmodule
+
+// CHECK-LABEL: moore.module @PortsTop
+module PortsTop;
+  wire x0, y0, z0;
+  logic w0;
+  // CHECK: [[B:%.+]] = moore.instance "p0" @PortsAnsi(
+  // CHECK-SAME:   a: %x0: !moore.l1
+  // CHECK-SAME:   c: %z0: !moore.l1
+  // CHECK-SAME:   d: %w0: !moore.l1
+  // CHECK-SAME: ) -> (b: !moore.l1)
+  // CHECK-NEXT: moore.assign %y0, [[B]]
+  PortsAnsi p0(x0, y0, z0, w0);
+
+  wire x1, y1, z1;
+  logic w1;
+  // CHECK: [[B:%.+]] = moore.instance "p1" @PortsNonAnsi(
+  // CHECK-SAME:   a: %x1: !moore.l1
+  // CHECK-SAME:   c: %z1: !moore.l1
+  // CHECK-SAME:   d: %w1: !moore.l1
+  // CHECK-SAME: ) -> (b: !moore.l1)
+  // CHECK-NEXT: moore.assign %y1, [[B]]
+  PortsNonAnsi p1(x1, y1, z1, w1);
+
+  wire x2;
+  wire [1:0] y2;
+  int z2;
+  wire w2, v2;
+  // CHECK: [[B0:%.+]], [[B1:%.+]], [[B2:%.+]] = moore.instance "p2" @PortsExplicit(
+  // CHECK-SAME:   a0: %x2: !moore.l1
+  // CHECK-SAME:   a1: %y2: !moore.l2
+  // CHECK-SAME: ) -> (
+  // CHECK-SAME:   b0: !moore.i32
+  // CHECK-SAME:   b1: !moore.l1
+  // CHECK-SAME:   b2: !moore.l1
+  // CHECK-SAME: )
+  // CHECK-NEXT: moore.assign %z2, [[B0]]
+  // CHECK-NEXT: moore.assign %w2, [[B1]]
+  // CHECK-NEXT: moore.assign %v2, [[B2]]
+  PortsExplicit p2(x2, y2, z2, w2, v2);
+
+  wire x3, y3;
+  wire [2:0] z3;
+  wire [1:0] w3;
+  // CHECK: [[TMP:%.+]] = moore.constant 0 :
+  // CHECK: [[V2:%.+]] = moore.extract %z3 from [[TMP]]
+  // CHECK: [[TMP:%.+]] = moore.constant 1 :
+  // CHECK: [[V1:%.+]] = moore.extract %z3 from [[TMP]]
+  // CHECK: [[TMP:%.+]] = moore.constant 2 :
+  // CHECK: [[V0:%.+]] = moore.extract %z3 from [[TMP]]
+  // CHECK: [[TMP:%.+]] = moore.constant 0 :
+  // CHECK: [[C1:%.+]] = moore.extract %w3 from [[TMP]]
+  // CHECK: [[TMP:%.+]] = moore.constant 1 :
+  // CHECK: [[C0:%.+]] = moore.extract %w3 from [[TMP]]
+  // CHECK: [[V1_VALUE:%.+]], [[C1_VALUE:%.+]] = moore.instance "p3" @MultiPorts(
+  // CHECK-SAME:   a0: %x3: !moore.l1
+  // CHECK-SAME:   a1: %y3: !moore.l1
+  // CHECK-SAME:   v0: [[V0]]: !moore.l1
+  // CHECK-SAME:   v2: [[V2]]: !moore.l1
+  // CHECK-SAME:   c0: [[C0]]: !moore.l1
+  // CHECK-SAME: ) -> (
+  // CHECK-SAME:   v1: !moore.l1
+  // CHECK-SAME:   c1: !moore.l1
+  // CHECK-SAME: )
+  // CHECK-NEXT: moore.assign [[V1]], [[V1_VALUE]]
+  // CHECK-NEXT: moore.assign [[C1]], [[C1_VALUE]]
+  MultiPorts p3(x3, y3, z3, w3);
+endmodule
+
+// CHECK-LABEL: moore.module @PortsAnsi
+module PortsAnsi(
+  // CHECK-SAME: in %a : !moore.l1
+  input a,
+  // CHECK-SAME: out b : !moore.l1
+  output b,
+  // CHECK-SAME: in %c : !moore.l1
+  inout c,
+  // CHECK-SAME: in %d : !moore.l1
+  ref d
+);
+  // Internal nets and variables created by Slang for each port.
+  // CHECK: [[A_INT:%.+]] = moore.net name "a" wire : l1
+  // CHECK: [[B_INT:%.+]] = moore.net wire : l1
+  // CHECK: [[C_INT:%.+]] = moore.net name "c" wire : l1
+  // CHECK: [[D_INT:%.+]] = moore.variable name "d" : l1
+
+  // Mapping ports to local declarations.
+  // CHECK: moore.assign [[A_INT]], %a : l1
+  // CHECK: moore.assign [[C_INT]], %c : l1
+  // CHECK: moore.assign [[D_INT]], %d : l1
+  // CHECK: moore.output [[B_INT]] : !moore.l1
+endmodule
+
+// CHECK-LABEL: moore.module @PortsNonAnsi
+// CHECK-SAME: in %a : !moore.l1
+// CHECK-SAME: out b : !moore.l1
+// CHECK-SAME: in %c : !moore.l1
+// CHECK-SAME: in %d : !moore.l1
+module PortsNonAnsi(a, b, c, d);
+  input a;
+  output b;
+  inout c;
+  ref logic d;
+endmodule
+
+// CHECK-LABEL: moore.module @PortsExplicit
+module PortsExplicit(
+  // CHECK-SAME: in %a0 : !moore.l1
+  input .a0(x),
+  // CHECK-SAME: in %a1 : !moore.l2
+  input .a1({y, z}),
+  // CHECK-SAME: out b0 : !moore.i32
+  output .b0(42),
+  // CHECK-SAME: out b1 : !moore.l1
+  output .b1(x),
+  // CHECK-SAME: out b2 : !moore.l1
+  output .b2(y ^ z)
+);
+  logic x, y, z;
+
+  // Input mappings
+  // CHECK: moore.assign %x, %a0
+  // CHECK: [[TMP:%.+]] = moore.concat %y, %z
+  // CHECK: moore.assign [[TMP]], %a1
+
+  // Output mappings
+  // CHECK: [[B0:%.+]] = moore.constant 42
+  // CHECK: [[B2:%.+]] = moore.xor %y, %z
+  // CHECK: moore.output [[B0]], %x, [[B2]]
+endmodule
+
+// CHECK-LABEL: moore.module @MultiPorts
+module MultiPorts(
+  // CHECK-SAME: in %a0 : !moore.l1
+  .a0(u[0]),
+  // CHECK-SAME: in %a1 : !moore.l1
+  .a1(u[1]),
+  // CHECK-SAME: in %v0 : !moore.l1
+  // CHECK-SAME: out v1 : !moore.l1
+  // CHECK-SAME: in %v2 : !moore.l1
+  .b({v0, v1, v2}),
+  // CHECK-SAME: in %c0 : !moore.l1
+  // CHECK-SAME: out c1 : !moore.l1
+  {c0, c1}
+);
+  // CHECK: [[V0:%.+]] = moore.net name "v0" wire
+  // CHECK: [[V1:%.+]] = moore.net wire
+  // CHECK: [[V2:%.+]] = moore.net name "v2" wire
+  // CHECK: [[C0:%.+]] = moore.net name "c0" wire
+  // CHECK: [[C1:%.+]] = moore.net wire
+  input [1:0] u;
+  input v0;
+  output v1;
+  inout v2;
+  input c0;
+  output c1;
+
+  // CHECK: [[TMP1:%.+]] = moore.constant 0 :
+  // CHECK: [[TMP2:%.+]] = moore.extract %u from [[TMP1]]
+  // CHECK: moore.assign [[TMP2]], %a0
+
+  // CHECK: [[TMP1:%.+]] = moore.constant 1 :
+  // CHECK: [[TMP2:%.+]] = moore.extract %u from [[TMP1]]
+  // CHECK: moore.assign [[TMP2]], %a1
+
+  // CHECK: moore.assign [[V0]], %v0
+  // CHECK: moore.assign [[V2]], %v2
+  // CHECK: moore.assign [[C0]], %c0
+  // CHECK: moore.output [[V1]], [[C1]]
 endmodule

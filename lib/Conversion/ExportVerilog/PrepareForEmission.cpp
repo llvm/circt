@@ -1247,7 +1247,7 @@ static LogicalResult legalizeHWModule(Block &block,
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
@@ -1267,7 +1267,7 @@ namespace {
 struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
   void runOnOperation() override {
-    HWModuleOp module = getOperation();
+    auto module = getOperation();
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();

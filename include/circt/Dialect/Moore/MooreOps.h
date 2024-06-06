@@ -13,8 +13,10 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREOPS_H
 #define CIRCT_DIALECT_MOORE_MOOREOPS_H
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES

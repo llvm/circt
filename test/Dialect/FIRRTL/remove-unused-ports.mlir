@@ -69,7 +69,7 @@ firrtl.circuit "Top"   {
 
 // -----
 
-// Strict connect version.
+// Matching connect version.
 firrtl.circuit "Top"   {
   // CHECK-LABEL: firrtl.module @Top(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>,
   // CHECK-SAME:                     out %d_unused: !firrtl.uint<1>, out %d_invalid: !firrtl.uint<1>, out %d_constant: !firrtl.uint<1>)
