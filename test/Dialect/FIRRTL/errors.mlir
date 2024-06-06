@@ -1396,65 +1396,6 @@ firrtl.circuit "AnalogDifferentWidths" {
 
 // -----
 
-firrtl.circuit "ForceableWithoutRefResult" {
-  firrtl.module @ForceableWithoutRefResult() {
-    // expected-error @below {{op must have ref result iff marked forceable}}
-    %w = firrtl.wire forceable : !firrtl.uint<2>
-  }
-}
-
-// -----
-
-firrtl.circuit "RefResultButNotForceable" {
-  firrtl.module @RefResultButNotForceable() {
-    // expected-error @below {{op must have ref result iff marked forceable}}
-    %w, %w_f = firrtl.wire : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
-  }
-}
-
-// -----
-
-firrtl.circuit "ForceableTypeMismatch" {
-  firrtl.module @ForceableTypeMismatch() {
-    // expected-error @below {{reference result of incorrect type, found}}
-    %w, %w_f = firrtl.wire forceable : !firrtl.uint, !firrtl.rwprobe<uint<2>>
-  }
-}
-
-// -----
-
-// Check rwprobe<const T> is rejected.
-firrtl.circuit "ForceableConstWire" {
-  firrtl.module @ForceableConstWire() {
-    // expected-error @below {{forceable reference base type cannot contain const}}
-    %w, %w_f = firrtl.wire forceable : !firrtl.const.uint, !firrtl.rwprobe<const.uint>
-  }
-}
-
-// -----
-
-// Check forceable declarations of const-type w/o explicit ref type are rejected.
-firrtl.circuit "ForceableConstNode" {
-  firrtl.module @ForceableConstNode() {
-    %w = firrtl.wire : !firrtl.const.uint
-    // expected-error @below {{cannot force a node of type}}
-    %n, %n_ref = firrtl.node %w forceable : !firrtl.const.uint
-  }
-}
-
-// -----
-
-// Check forceable declarations of const-type w/o explicit ref type are rejected.
-firrtl.circuit "ForceableBundleConstNode" {
-  firrtl.module @ForceableBundleConstNode() {
-    %w = firrtl.wire : !firrtl.bundle<a: const.uint>
-    // expected-error @below {{cannot force a node of type}}
-    %n, %n_ref = firrtl.node %w forceable : !firrtl.bundle<a: const.uint>
-  }
-}
-
-// -----
-
 firrtl.circuit "RefForceProbe" {
   firrtl.module @RefForceProbe() {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -2041,16 +1982,6 @@ firrtl.circuit "RWProbeTypes" {
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 

@@ -509,14 +509,6 @@ void IMDeadCodeElimPass::visitValue(Value value) {
   if (auto op = value.getDefiningOp())
     for (auto operand : op->getOperands())
       markAlive(operand);
-
-  // If either result of a forceable declaration is alive, they both are.
-  if (auto fop = value.getDefiningOp<Forceable>();
-      fop && fop.isForceable() &&
-      (fop.getData() == value || fop.getDataRef() == value)) {
-    markAlive(fop.getData());
-    markAlive(fop.getDataRef());
-  }
 }
 
 void IMDeadCodeElimPass::visitConnect(FConnectLike connect) {

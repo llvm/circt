@@ -858,8 +858,7 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
                 target.getLoc(), type,
                 StringAttr::get(context, (prefix + portInfo[i].getName())),
                 NameKindEnumAttr::get(context, NameKindEnum::DroppableName),
-                ArrayAttr::get(context, newAnnotations), newSymAttr,
-                /*forceable=*/UnitAttr{})
+                ArrayAttr::get(context, newAnnotations), newSymAttr)
             .getResult();
     il.wires.push_back(wire);
     mapper.map(arg, wire);

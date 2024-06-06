@@ -635,7 +635,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
 }
 
 LogicalResult Visitor::visitDecl(WireOp op) {
-  auto pmi = mapType(op.getResultTypes()[0], op.getLoc(), op.getInnerSymAttr());
+  auto pmi = mapType(op.getType(), op.getLoc(), op.getInnerSymAttr());
   if (failed(pmi))
     return failure();
   MappingInfo mappings = *pmi;
@@ -643,7 +643,7 @@ LogicalResult Visitor::visitDecl(WireOp op) {
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "- wire:\n";
     llvm::dbgs().indent(10) << "name: " << op.getNameAttr() << "\n";
-    llvm::dbgs().indent(10) << "type: " << op.getType(0) << "\n";
+    llvm::dbgs().indent(10) << "type: " << op.getType() << "\n";
     llvm::dbgs().indent(12) << "mapping:\n";
     mappings.print(llvm::dbgs(), 14);
     llvm::dbgs() << "\n";
@@ -666,8 +666,7 @@ LogicalResult Visitor::visitDecl(WireOp op) {
     hwOnlyAggMap[op.getResult()] =
         builder
             .create<WireOp>(mappings.hwType, op.getName(), op.getNameKind(),
-                            op.getAnnotations(), mappings.newSym,
-                            op.getForceable())
+                            op.getAnnotations(), mappings.newSym)
             .getResult();
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.

@@ -735,6 +735,9 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
   for (auto module : circuit.getOps<FModuleOp>())
     moduleToOps.push_back({module, {}});
 
+  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                            getAnalysis<hw::InnerSymbolTableCollection>()};
+
   mlir::parallelForEach(circuit.getContext(), moduleToOps, [](auto &e) {
     e.first.walk([&](Operation *op) {
       // We are only interested in operations which are related to abstract
@@ -766,11 +769,13 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                         op.getRef().getType().getType(), op.getRef(), 0,
                         op.getLoc());
           })
-          .Case<Forceable>([&](Forceable op) {
-            // Trace reset into rwprobe.  Avoid invalid IR.
-            if (op.isForceable())
-              traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
-                          op.getDataRef(), 0, op.getLoc());
+          .Case<RWProbeOp>([&](RWProbeOp op) {
+            auto ist = irn.lookup(op.getTarget());
+            assert(ist);
+            auto ref = getFieldRefForTarget(ist);
+            auto baseType = op.getType().getType();
+            traceResets(baseType, op.getResult(), 0, baseType.getPassiveType(),
+                        ref.getValue(), ref.getFieldID(), op.getLoc());
           })
           .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
             traceResets(op.getResult(), op.getInput(), op.getLoc());
@@ -1096,8 +1101,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         ConstCastOp, RefCastOp, UninferredResetCastOp>(
-            value.getDefiningOp()))
+                         ConstCastOp, RefCastOp, UninferredResetCastOp,
+                         RWProbeOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
@@ -1702,7 +1707,7 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
-            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
+            nodeOp.getInnerSymAttr());
         emitConnect(builder, wireOp.getResult(), nodeOp.getInput());
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp.erase();
@@ -1821,10 +1826,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getResult().getType(), regOp.getClockVal(), actualReset, zero,
         regOp.getNameAttr(), regOp.getNameKindAttr(), regOp.getAnnotations(),
-        regOp.getInnerSymAttr(), regOp.getForceableAttr());
+        regOp.getInnerSymAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
-    if (regOp.getForceable())
-      regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
     regOp->erase();
     return;
   }

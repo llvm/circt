@@ -350,13 +350,13 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: module RefSource
   firrtl.module @RefSource(out %a_ref: !firrtl.probe<uint<1>>,
                            out %a_rwref: !firrtl.rwprobe<uint<1>>) {
-    %a, %_a_rwref = firrtl.wire forceable : !firrtl.uint<1>,
-      !firrtl.rwprobe<uint<1>>
+    %a = firrtl.wire sym @rw : !firrtl.uint<1>
     // CHECK: define a_ref = probe(a)
     // CHECK: define a_rwref = rwprobe(a)
     %a_ref_send = firrtl.ref.send %a : !firrtl.uint<1>
     firrtl.ref.define %a_ref, %a_ref_send : !firrtl.probe<uint<1>>
-    firrtl.ref.define %a_rwref, %_a_rwref : !firrtl.rwprobe<uint<1>>
+    %a_rw = firrtl.ref.rwprobe <@RefSource::@rw> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %a_rwref, %a_rw : !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: module RefSink
@@ -535,8 +535,8 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: regreset `16` : UInt<1>, `0`, `1`, `3`
     // CHECK-NEXT: node `17` = `3`
     %_14 = firrtl.wire interesting_name {name = "14"} : !firrtl.uint<1>
-    %_15, %_15_ref = firrtl.reg %_0 forceable {name = "15"} :
-      !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    %_15 = firrtl.reg sym @regrw %_0 {name = "15"} :
+      !firrtl.clock, !firrtl.uint<1>
     %_16 = firrtl.regreset %_0, %_1, %_3 {name = "16"} :
       !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %_17 = firrtl.node %_3 {name = "17"} : !firrtl.uint<1>
@@ -629,7 +629,8 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: define `13` = rwprobe(`15`)
     %18 = firrtl.ref.send %_14 : !firrtl.uint<1>
     firrtl.ref.define %_12, %18 : !firrtl.probe<uint<1>>
-    firrtl.ref.define %_13, %_15_ref : !firrtl.rwprobe<uint<1>>
+    %reg_rwref = firrtl.ref.rwprobe <@"0Foo"::@regrw> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %_13, %reg_rwref : !firrtl.rwprobe<uint<1>>
   }
 
   // CHECK-LABEL: module Properties :
@@ -789,8 +790,9 @@ firrtl.circuit "Foo" {
     firrtl.ref.define %p, %0 : !firrtl.rwprobe<uint<1>>
 
     %read = firrtl.ref.resolve %p : !firrtl.rwprobe<uint<1>>
-    %q, %q_ref = firrtl.node interesting_name %read forceable : !firrtl.uint<1>
-    %refcast = firrtl.ref.cast %q_ref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
+    %q = firrtl.node sym @qrw interesting_name %read : !firrtl.uint<1>
+    %q_rwref = firrtl.ref.rwprobe <@RWProbe::@qrw> : !firrtl.rwprobe<uint<1>>
+    %refcast = firrtl.ref.cast %q_rwref : (!firrtl.rwprobe<uint<1>>) -> !firrtl.rwprobe<uint>
     firrtl.ref.define %p2, %refcast : !firrtl.rwprobe<uint>
   }
 

@@ -1205,13 +1205,10 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
-  if (op.isForceable())
-    return false;
-
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return builder
-        ->create<WireOp>(mapLoweredType(op.getDataRaw().getType(), field.type),
+        ->create<WireOp>(mapLoweredType(op.getResult().getType(), field.type),
                          "", NameKindEnum::DroppableName, attrs, StringAttr{})
         .getResult();
   };
@@ -1220,9 +1217,6 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
-  if (op.isForceable())
-    return false;
-
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return builder
@@ -1235,9 +1229,6 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
-  if (op.isForceable())
-    return false;
-
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
@@ -1252,9 +1243,6 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 bool TypeLoweringVisitor::visitDecl(NodeOp op) {
-  if (op.isForceable())
-    return false;
-
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto input = getSubWhatever(op.getInput(), field.index);

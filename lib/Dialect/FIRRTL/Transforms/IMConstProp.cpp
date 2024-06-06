@@ -58,7 +58,7 @@ static bool isDeletableWireOrRegOrNode(Operation *op) {
 
   // Otherwise, don't delete if has anything keeping it around or unknown.
   return AnnotationSet(op).canBeDeleted() && !hasDontTouch(op) &&
-         hasDroppableName(op) && !cast<Forceable>(op).isForceable();
+         hasDroppableName(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -529,11 +529,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
 
 void IMConstPropPass::markWireOp(WireOp wire) {
   auto type = type_dyn_cast<FIRRTLType>(wire.getResult().getType());
-  if (!type || hasDontTouch(wire.getResult()) || wire.isForceable()) {
-    for (auto result : wire.getResults())
-      markOverdefined(result);
-    return;
-  }
+  if (!type || hasDontTouch(wire.getResult()))
+    return markOverdefined(wire.getResult());
 
   // Otherwise, this starts out as unknown and is upgraded by connects.
 }
@@ -775,11 +772,8 @@ void IMConstPropPass::visitRefResolve(RefResolveOp resolve,
 }
 
 void IMConstPropPass::visitNode(NodeOp node, FieldRef changedFieldRef) {
-  if (hasDontTouch(node.getResult()) || node.isForceable()) {
-    for (auto result : node.getResults())
-      markOverdefined(result);
-    return;
-  }
+  if (hasDontTouch(node.getResult()))
+    return markOverdefined(node.getResult());
 
   return mergeOnlyChangedLatticeValue(node.getResult(), node.getInput(),
                                       changedFieldRef);
