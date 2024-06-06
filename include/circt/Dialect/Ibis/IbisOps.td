@@ -66,10 +66,6 @@ def ClassOp : IbisOp<"class", [
     static std::optional<size_t> getTargetResultIndex() {
       return std::nullopt;
     }
-
-    // Override InstanceGraphModuleOpInterface::getModuleNameAttr to return the
-    // inner_sym name of the container instead of the `name` which is the default
-    // behavior of InstanceGraphModuleOpInterface.
   }];
 }
 
