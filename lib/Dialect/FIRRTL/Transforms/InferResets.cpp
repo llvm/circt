@@ -767,6 +767,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
                         op.getLoc());
           })
           .Case<Forceable>([&](Forceable op) {
+            if (auto node = dyn_cast<NodeOp>(op.getOperation()))
+              traceResets(node.getResult(), node.getInput(), node.getLoc());
             // Trace reset into rwprobe.  Avoid invalid IR.
             if (op.isForceable())
               traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
