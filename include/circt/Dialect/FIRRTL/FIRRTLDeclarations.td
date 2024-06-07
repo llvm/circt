@@ -161,6 +161,128 @@ def InstanceOp : HardwareDeclOp<"instance", [
   let hasVerifier = true;
 }
 
+def StrictInstanceOp : HardwareDeclOp<"strictinstance", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getModuleName"
+    ]>,
+  ]> {
+  let summary = "Instantiate an instance of a module";
+  let description = [{
+    This represents an instance of a module.  The results are the modules inputs
+    and outputs.  The inputs have LHSType wrapped types, the outputs do not.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.strictinstance foo @Foo(in io: !firrtl.uint)
+    firrtl.strictconnect %0, %c0_ui
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
+                       UnitAttr:$lowerToBind,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
+                   "ArrayRef<Attribute>":$annotations,
+                   "ArrayRef<Attribute>":$portAnnotations,
+                   "::mlir::ArrayRef<Attribute>":$layers,
+                   "bool":$lowerToBind,
+                   "hw::InnerSymAttr":$innerSym)>,
+
+    /// Constructor when you have the target module in hand.
+    OpBuilder<(ins "FModuleLike":$module,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+
+    /// Constructor when you have a port info list in hand.
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "::mlir::StringRef":$moduleName,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+    StringRef getPortNameStr(size_t resultNo) {
+      return getPortName(resultNo).getValue();
+    }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Builds a new `StrictInstanceOp` with the ports listed in `portIndices` erased,
+    /// and updates any users of the remaining ports to point at the new
+    /// instance.
+    StrictInstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
+
+    /// Clone the instance op and add ports.  This is usually used in
+    /// conjuction with adding ports to the referenced module. This will emit
+    /// the new StrictInstanceOp to the same location.
+    StrictInstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    //===------------------------------------------------------------------===//
+    // Instance graph methods
+    //===------------------------------------------------------------------===//
+
+    // Quick lookup of the referenced module using the instance graph.
+    template <typename T = ::circt::igraph::ModuleOpInterface>
+    T getReferencedModule(::circt::igraph::InstanceGraph &instanceGraph) {
+      auto moduleNameAttr = getModuleNameAttr().getAttr();
+      auto *node =  instanceGraph.lookup(moduleNameAttr);
+      if (!node)
+        return nullptr;
+      Operation *moduleOp = node->getModule();
+      return dyn_cast_or_null<T>(moduleOp);
+    }
+  }];
+
+  let hasVerifier = true;
+}
+
 def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {

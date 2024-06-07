@@ -15,6 +15,7 @@
 
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Support/InstanceGraphInterface.td"
 
 def PortList : OpInterface<"PortList", []> {
@@ -400,6 +401,15 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
     "void", "appendOutputs", (ins
       "ArrayRef<std::pair<StringAttr, Value>>":$outputs)>
   ];
+}
+
+def HWEmittableModuleLike : OpInterface<"HWEmittableModuleLike", [HWModuleLike,
+                                        Emittable]> {
+  let cppNamespace = "::circt::hw";
+  let description = [{
+    This interface indicates that the module like op is emittable in SV and
+    requires SV legalization on its body.
+  }];
 }
 
 
