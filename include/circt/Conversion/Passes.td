@@ -118,8 +118,8 @@ def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
   ];
 }
 
-def PrepareForEmission : Pass<"prepare-for-emission",
-                              "hw::HWModuleOp"> {
+def PrepareForEmission : InterfacePass<"prepare-for-emission",
+                                       "hw::HWEmittableModuleLike"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
     This pass runs only PrepareForEmission.

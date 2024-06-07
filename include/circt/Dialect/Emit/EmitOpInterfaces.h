@@ -16,15 +16,6 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 
-namespace circt {
-namespace emit {
-
-template <typename ConcreteType>
-class Emittable : public OpTrait::TraitBase<ConcreteType, Emittable> {};
-
-} // namespace emit
-} // namespace circt
-
 #include "circt/Dialect/Emit/EmitOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_EMIT_EMITOPINTERFACES_H

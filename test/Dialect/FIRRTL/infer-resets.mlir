@@ -1069,3 +1069,26 @@ firrtl.circuit "InferToRWProbe" {
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }
+
+// -----
+
+// Check resets are traced through nodes
+
+// CHECK-LABEL: "TraceThroughNodes"
+// CHECK-NOT: firrtl.reset
+firrtl.circuit "TraceThroughNodes" {
+  firrtl.module @TraceThroughNodes(in %reset: !firrtl.asyncreset) {
+    // CHECK: %node = firrtl.node %localReset : !firrtl.asyncreset
+    // CHECK-NOT: firrtl.reset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.connect %localReset, %reset : !firrtl.reset, !firrtl.asyncreset
+
+    %node = firrtl.node %localReset : !firrtl.reset
+
+    %localReset2 = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset2, %node: !firrtl.reset
+
+    // CHECK: %node2 = firrtl.node %localReset2 : !firrtl.asyncreset
+    %node2 = firrtl.node %localReset2 : !firrtl.reset
+  }
+}
