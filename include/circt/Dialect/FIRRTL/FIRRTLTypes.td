@@ -111,7 +111,7 @@ def RWProbeConcreteReset : FIRRTLDialectType<
    "rwprobe type (with concrete resets only)", "::circt::firrtl::RefType">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
+def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers

@@ -57,12 +57,12 @@ firrtl.module @ConstPortModule(
     out g: !firrtl.probe<const.uint<1>>
   )
 
-  firrtl.strictconnect %a2, %a : !firrtl.const.uint<1>
-  firrtl.strictconnect %b2, %b : !firrtl.const.bundle<a: uint<1>>
-  firrtl.strictconnect %c2, %c : !firrtl.bundle<a: const.uint<1>>
-  firrtl.strictconnect %d2, %d : !firrtl.const.vector<uint<1>, 3>
-  firrtl.strictconnect %e2, %e : !firrtl.vector<const.uint<1>, 3>
-  firrtl.strictconnect %f2, %f : !firrtl.const.enum<a: uint<2>, b: uint<1>>
+  firrtl.matchingconnect %a2, %a : !firrtl.const.uint<1>
+  firrtl.matchingconnect %b2, %b : !firrtl.const.bundle<a: uint<1>>
+  firrtl.matchingconnect %c2, %c : !firrtl.bundle<a: const.uint<1>>
+  firrtl.matchingconnect %d2, %d : !firrtl.const.vector<uint<1>, 3>
+  firrtl.matchingconnect %e2, %e : !firrtl.vector<const.uint<1>, 3>
+  firrtl.matchingconnect %f2, %f : !firrtl.const.enum<a: uint<2>, b: uint<1>>
   firrtl.ref.define %g, %g2 : !firrtl.probe<const.uint<1>>
 }
 
@@ -70,9 +70,9 @@ firrtl.module @ConstPortModule(
 // CHECK-LABEL: firrtl.module @ConstCastErase
 firrtl.module @ConstCastErase(in %in: !firrtl.const.uint<1>, out %out: !firrtl.uint<1>) {
   // CHECK-NOT: firrtl.constCast
-  // CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.matchingconnect %out, %in : !firrtl.uint<1>
   %0 = firrtl.constCast %in : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
-  firrtl.strictconnect %out, %0 : !firrtl.uint<1> 
+  firrtl.matchingconnect %out, %0 : !firrtl.uint<1> 
 }
 
 // Const is dropped within when blocks
@@ -80,11 +80,11 @@ firrtl.module @ConstCastErase(in %in: !firrtl.const.uint<1>, out %out: !firrtl.u
 firrtl.module @ConstDropInWhenBlock(in %cond: !firrtl.const.uint<1>, in %in1: !firrtl.const.sint<2>, in %in2: !firrtl.const.sint<2>, out %out: !firrtl.const.sint<2>) {
   // CHECK: firrtl.when %cond : !firrtl.uint<1>
   firrtl.when %cond : !firrtl.const.uint<1> {
-    // CHECK: firrtl.strictconnect %out, %in1 : !firrtl.sint<2>
-    firrtl.strictconnect %out, %in1 : !firrtl.const.sint<2>
+    // CHECK: firrtl.matchingconnect %out, %in1 : !firrtl.sint<2>
+    firrtl.matchingconnect %out, %in1 : !firrtl.const.sint<2>
   } else {
-    // CHECK: firrtl.strictconnect %out, %in2 : !firrtl.sint<2>
-    firrtl.strictconnect %out, %in2 : !firrtl.const.sint<2>
+    // CHECK: firrtl.matchingconnect %out, %in2 : !firrtl.sint<2>
+    firrtl.matchingconnect %out, %in2 : !firrtl.const.sint<2>
   }
 }
 }

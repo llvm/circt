@@ -18,7 +18,7 @@ firrtl.circuit "Foo" {
     %1 = firrtl.and %0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // expected-error @below {{verification operation used in a non-verification context}}
     %2 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.strictconnect %0, %2 : !firrtl.uint<1>
+    firrtl.matchingconnect %0, %2 : !firrtl.uint<1>
   }
 }
 
@@ -30,6 +30,6 @@ firrtl.circuit "Foo" {
     // expected-note @below {{reset is of type '!firrtl.reset', should be '!firrtl.uint<1>' or '!firrtl.asyncreset'}}
     // expected-error @below {{couldn't handle this operation}}
     %0 = firrtl.int.has_been_reset %clock, %reset : !firrtl.reset
-    firrtl.strictconnect %hbr, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %hbr, %0 : !firrtl.uint<1>
   }
 }

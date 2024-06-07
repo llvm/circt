@@ -371,17 +371,17 @@ firrtl.circuit "Top"  attributes {annotations = [{
     %0 = firrtl.subfield %a_in1[io] : !firrtl.bundle<io: bundle<f0: uint<4>, f1: uint<4>>>
     %1 = firrtl.subfield %a_in0[io]: !firrtl.bundle<io: vector<uint<4>, 2>>
     %2 = firrtl.subindex %a_out0[0] : !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %out0_0, %2 : !firrtl.uint<4>
+    firrtl.matchingconnect %out0_0, %2 : !firrtl.uint<4>
     %3 = firrtl.subindex %a_out0[1] : !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %out0_1, %3 : !firrtl.uint<4>
+    firrtl.matchingconnect %out0_1, %3 : !firrtl.uint<4>
     %4 = firrtl.subfield %a_out1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %out1_f0, %4 : !firrtl.uint<4>
+    firrtl.matchingconnect %out1_f0, %4 : !firrtl.uint<4>
     %5 = firrtl.subfield %a_out1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %out1_f1, %5 : !firrtl.uint<4>
+    firrtl.matchingconnect %out1_f1, %5 : !firrtl.uint<4>
     %6 = firrtl.bundlecreate %in1_f0, %in1_f1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %0, %6 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    firrtl.matchingconnect %0, %6 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %7 = firrtl.vectorcreate %in0_0, %in0_1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %1, %7 : !firrtl.vector<uint<4>, 2>
+    firrtl.matchingconnect %1, %7 : !firrtl.vector<uint<4>, 2>
   }
   // CHECK-LABEL: firrtl.module private @A
   // CHECK-SAME:    %in0: !firrtl.bundle<io: vector<uint<4>, 2>> sym @[[in0_sym:[^ ]+]],
@@ -406,28 +406,28 @@ firrtl.circuit "Top"  attributes {annotations = [{
     %5 = firrtl.subfield %0[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %6 = firrtl.subindex %w0[0] : !firrtl.vector<uint<4>, 2>
     %7 = firrtl.subindex %out0[0] : !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %7, %6 : !firrtl.uint<4>
+    firrtl.matchingconnect %7, %6 : !firrtl.uint<4>
     %8 = firrtl.subindex %w0[1] : !firrtl.vector<uint<4>, 2>
     %9 = firrtl.subindex %out0[1] : !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %9, %8 : !firrtl.uint<4>
+    firrtl.matchingconnect %9, %8 : !firrtl.uint<4>
     %10 = firrtl.subfield %w1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %11 = firrtl.subfield %out1[f0] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %11, %10 : !firrtl.uint<4>
+    firrtl.matchingconnect %11, %10 : !firrtl.uint<4>
     %12 = firrtl.subfield %w1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
     %13 = firrtl.subfield %out1[f1] : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %13, %12 : !firrtl.uint<4>
+    firrtl.matchingconnect %13, %12 : !firrtl.uint<4>
     %14 = firrtl.vectorcreate %2, %3 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %w0, %14 : !firrtl.vector<uint<4>, 2>
+    firrtl.matchingconnect %w0, %14 : !firrtl.vector<uint<4>, 2>
     %15 = firrtl.bundlecreate %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.bundle<f0: uint<4>, f1: uint<4>>
-    firrtl.strictconnect %w1, %15 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
+    firrtl.matchingconnect %w1, %15 : !firrtl.bundle<f0: uint<4>, f1: uint<4>>
 
     // CHECK: %wf, %wf_ref = firrtl.wire sym @[[wf_sym:[^ ]+]] forceable
     %wf, %wf_ref = firrtl.wire forceable {annotations = [{circt.fieldID = 2 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 9 : i64},
                                         {circt.fieldID = 1 : i32, circt.nonlocal = @nla, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 8 : i64}]} : !firrtl.vector<uint<4>, 2>, !firrtl.rwprobe<vector<uint<4>, 2>>
     %wf_0 = firrtl.subindex %wf[0] : !firrtl.vector<uint<4>, 2>
     %wf_1 = firrtl.subindex %wf[1] : !firrtl.vector<uint<4>, 2>
-    firrtl.strictconnect %wf_0, %2 : !firrtl.uint<4>
-    firrtl.strictconnect %wf_1, %3 : !firrtl.uint<4>
+    firrtl.matchingconnect %wf_0, %2 : !firrtl.uint<4>
+    firrtl.matchingconnect %wf_1, %3 : !firrtl.uint<4>
   }
 }
 

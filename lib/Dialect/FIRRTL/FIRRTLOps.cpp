@@ -3562,7 +3562,7 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult StrictConnectOp::verify() {
+LogicalResult MatchingConnectOp::verify() {
   if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = type_cast<FIRRTLBaseType>(type);
 
