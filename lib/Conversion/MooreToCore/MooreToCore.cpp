@@ -74,6 +74,20 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NamedConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<hw::ParamValueOp>(op, resultType,
+                                                  op.getValueAttr());
+    return success();
+  }
+};
+
 struct ConcatOpConversion : public OpConversionPattern<ConcatOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -427,6 +441,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, ConversionOpConversion,
+    NamedConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,

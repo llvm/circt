@@ -335,13 +335,36 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 static ParseResult parseParamValue(OpAsmParser &p, IntegerAttr &value,
                                    Type &resultType) {
   APInt valueInt;
+  IntType typeInt;
+  auto valueLoc = p.getCurrentLocation();
+
   if (p.parseInteger(valueInt))
     return failure();
-  if (p.parseColon() || p.parseType(resultType))
+
+  if (p.parseColon() || p.parseCustomTypeWithFallback(typeInt))
     return failure();
-  auto attrType = IntegerType::get(p.getContext(),
-                                   cast<IntegerType>(resultType).getWidth());
+
+  // Extend or truncate the constant value to match the size of the type.
+  if (typeInt.getWidth() > valueInt.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the
+    // top bits if it is a positive number.
+    valueInt = valueInt.sext(typeInt.getWidth());
+  } else if (typeInt.getWidth() < valueInt.getBitWidth()) {
+    // The parser can return an unnecessarily wide result with leading
+    // zeros. This isn't a problem, but truncating off bits is bad.
+    unsigned neededBits = valueInt.isNegative() ? valueInt.getSignificantBits()
+                                                : valueInt.getActiveBits();
+    if (typeInt.getWidth() < neededBits)
+      return p.emitError(valueLoc, "constant out of range for result type ")
+             << typeInt;
+
+    valueInt = valueInt.trunc(typeInt.getWidth());
+  }
+
+  auto attrType = IntegerType::get(p.getContext(), typeInt.getWidth());
   value = IntegerAttr::get(attrType, valueInt);
+  resultType = typeInt;
   return success();
 }
 
