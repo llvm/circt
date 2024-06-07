@@ -354,6 +354,26 @@ LogicalResult ConcatOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ConcatRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatRefOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Domain domain = Domain::TwoValued;
+  unsigned width = 0;
+  for (auto operand : operands) {
+    auto type = cast<IntType>(cast<RefType>(operand.getType()).getNestedType());
+    if (type.getDomain() == Domain::FourValued)
+      domain = Domain::FourValued;
+    width += type.getWidth();
+  }
+  results.push_back(RefType::get(IntType::get(context, width, domain)));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // YieldOp
 //===----------------------------------------------------------------------===//
 
