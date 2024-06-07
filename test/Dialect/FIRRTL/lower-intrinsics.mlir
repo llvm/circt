@@ -157,13 +157,13 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_fpga_probe"  %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
   }
 
-  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in1: !firrtl.uint<2>, in %in2: !firrtl.uint<2>)
-  firrtl.module private @DPIIntrinsicTest(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in1: !firrtl.uint<2>, in %in2: !firrtl.uint<2>) {
-    // CHECK-NEXT: %0 = firrtl.int.dpi.call "clocked_result"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    %0 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_result"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.int.dpi.call "clocked_void"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<2>, !firrtl.uint<2>) -> ()
-    firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_void"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> ()
-    // CHECK-NEXT:  %1 = firrtl.int.dpi.call "unclocked_result"(%in1, %in2) enable %enable : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    %1 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 0, functionName: none = "unclocked_result"> %enable, %in1, %in2 : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>)
+  firrtl.module private @DPIIntrinsicTest(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>) {
+    // CHECK-NEXT: %0 = firrtl.int.dpi.call "clocked_result"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_result"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    // CHECK-NEXT: firrtl.int.dpi.call "clocked_void"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_void"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    // CHECK-NEXT:  %1 = firrtl.int.dpi.call "unclocked_result"(%in1, %in2) enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %1 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 0, functionName: none = "unclocked_result"> %enable, %in1, %in2 : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   }
 }

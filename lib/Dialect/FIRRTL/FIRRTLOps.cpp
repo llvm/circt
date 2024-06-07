@@ -5442,6 +5442,40 @@ void VerbatimWireOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// DPICallIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeAllowedForDPI(Operation *op, Type type) {
+  return !type.walk([&](firrtl::IntType intType) -> mlir::WalkResult {
+                auto width = intType.getWidth();
+                if (width < 0) {
+                  op->emitError() << "unknown width is not allowed for DPI";
+                  return WalkResult::interrupt();
+                }
+                if (width == 1 || width == 8 || width == 16 || width == 32 ||
+                    width >= 64)
+                  return WalkResult::advance();
+                op->emitError()
+                    << "integer types used by DPI functions must have a "
+                       "specific bit width; "
+                       "it must be equal to 1(bit), 8(byte), 16(shortint), "
+                       "32(int), 64(longint) "
+                       "or greater than 64, but got "
+                    << intType;
+                return WalkResult::interrupt();
+              })
+              .wasInterrupted();
+}
+
+LogicalResult DPICallIntrinsicOp::verify() {
+  auto checkType = [this](Type type) {
+    return isTypeAllowedForDPI(*this, type);
+  };
+  return success(llvm::all_of(this->getResultTypes(), checkType) &&
+                 llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 

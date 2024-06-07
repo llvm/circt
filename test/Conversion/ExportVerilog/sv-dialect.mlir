@@ -1674,6 +1674,7 @@ hw.module @IndexPartSelect(out a : i3) {
 sv.func private @function_declare1(in %in_0 : i2, out out_0: i2, in %in_1 : i2, out out_1 : i1)
 sv.func private @function_declare2(in %in_0 : i2, in %in_1 : i2, out out_0 : i1 {sv.func.explicitly_returned})
 sv.func private @function_declare3(in %in_0 : i2, out out_0 : i2, out out_1 : i1 {sv.func.explicitly_returned})
+sv.func private @function_declare4(in %in: i1, in %in_0 : i8, in %in_1 : i16, in %in_2: i32, in %in_3: i64, in %in_4: i128)
 
 // CHECK-LABEL: func_call
 hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
@@ -1700,9 +1701,9 @@ hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
 }
 
 // CHECK-LABEL: function automatic logic func_def(
-// CHECK-NEXT:    input  [1:0] in_0,
-// CHECK-NEXT:    output       out_0,
-// CHECK-NEXT:    input  [1:0] in_1
+// CHECK-NEXT:    input  bit [1:0] in_0,
+// CHECK-NEXT:    output bit out_0,
+// CHECK-NEXT:    input  bit [1:0] in_1
 // CHECK-NEXT:  );
 // CHECK-EMPTY:
 // CHECK-NEXT:    logic [1:0] _GEN = 2'(in_0 + in_1);
@@ -1717,7 +1718,7 @@ sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv
 }
 
 // CHECK-LABEL: function automatic logic [31:0] recurse_add(
-// CHECK-NEXT:   input [31:0] n
+// CHECK-NEXT:   input int n
 // CHECK-NEXT: );
 // CHECK-EMPTY:
 // CHECK-NEXT:   logic           [31:0] _recurse_add_0;
@@ -1749,18 +1750,28 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 // Emit DPI import.
 
 // CHECK-LABEL: import "DPI-C" linkage_name = function void function_declare1(
-// CHECK-NEXT:    input [1:0] in_0,
-// CHECK-NEXT:                out_0,
-// CHECK-NEXT:                in_1,
-// CHECK-NEXT:    output out_1
+// CHECK-NEXT:    input bit [1:0] in_0,
+// CHECK-NEXT:                    out_0,
+// CHECK-NEXT:                    in_1,
+// CHECK-NEXT:    output bit      out_1
 // CHECK-NEXT: );
 sv.func.dpi.import linkage "linkage_name" @function_declare1
 
-// CHECK-LABEL: import "DPI-C" function logic function_declare2(
-// CHECK-NEXT:    input [1:0] in_0,
-// CHECK-NEXT:                in_1
+// CHECK-LABEL: import "DPI-C" function bit function_declare2(
+// CHECK-NEXT:    input bit [1:0] in_0,
+// CHECK-NEXT:                    in_1
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare2
+
+// CHECK-LABEL: import "DPI-C" function void function_declare4(
+// CHECK-NEXT:   input bit         in,
+// CHECK-NEXT:   input byte        in_0,
+// CHECK-NEXT:   input shortint    in_1,
+// CHECK-NEXT:   input int         in_2,
+// CHECK-NEXT:   input longint     in_3,
+// CHECK-NEXT:   input bit [127:0] in_4
+// CHECK-NEXT: );
+sv.func.dpi.import @function_declare4
 
 sv.macro.decl @FOO
 sv.macro.decl @BAR

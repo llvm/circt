@@ -222,6 +222,7 @@ def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
     $functionName `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
     attr-dict `:` functional-type($inputs, results)
   }];
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
