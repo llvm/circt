@@ -2455,7 +2455,7 @@ void StrictInstanceOp::build(
     ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
   SmallVector<Type> actualTypes;
   for (auto [t, d] : llvm::zip(resultTypes, portDirections))
-    if (d == Direction::In && isa<FIRRTLBaseType>(t))
+    if (d == Direction::In && isa<FIRRTLBaseType>(t) && !isa<LHSType>(t))
       actualTypes.push_back(
           LHSType::get(t.getContext(), cast<FIRRTLBaseType>(t)));
     else
@@ -2483,6 +2483,7 @@ void StrictInstanceOp::build(
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotationsVec));
   } else {
+    auto x = resultTypes.size();
     assert(portAnnotations.size() == resultTypes.size());
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));

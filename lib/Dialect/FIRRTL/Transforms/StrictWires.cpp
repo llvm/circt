@@ -33,24 +33,39 @@ static StrictWireOp cloneWireTo(mlir::OpBuilder &builder, WireOp wire) {
       wire.getInnerSymAttr(), wire.getForceableAttr());
 }
 
-static void updateWireUses(mlir::OpBuilder &builder,
-                           std::deque<Operation *> &toDelete, Value toReplace,
-                           Value readSide, Value writeSide) {
+static StrictInstanceOp cloneInstTo(mlir::OpBuilder &builder, InstanceOp inst) {
+  builder.setInsertionPoint(inst);
+
+  SmallVector<Direction> fixedDirections;
+  for (auto d : inst.getPortDirections())
+    fixedDirections.push_back(direction::get(d));
+
+  // This uses the builtin and needs types fixed
+  return builder.create<StrictInstanceOp>(
+      inst.getLoc(), inst.getResultTypes(), inst.getModuleName(),
+      inst.getName(), inst.getNameKind(), fixedDirections,
+      inst.getPortNames().getValue(), inst.getAnnotations().getValue(),
+      inst.getPortAnnotations().getValue(), inst.getLayers(),
+      inst.getLowerToBind(), inst.getInnerSymAttr());
+}
+
+// This is recursive, but effectively recursive on a type.
+static void updateUses(mlir::OpBuilder &builder,
+                       std::deque<Operation *> &toDelete, Value toReplace,
+                       Value readSide, Value writeSide) {
   for (auto *user : toReplace.getUsers()) {
     TypeSwitch<Operation *>(user)
         .Case<SubfieldOp>([&](auto op) {
           builder.setInsertionPoint(op);
           auto newWrite = builder.create<LHSSubfieldOp>(op.getLoc(), writeSide,
                                                         op.getFieldIndex());
-          return updateWireUses(builder, toDelete, op, op.getResult(),
-                                newWrite);
+          return updateUses(builder, toDelete, op, op.getResult(), newWrite);
         })
         .Case<SubindexOp>([&](auto op) {
           builder.setInsertionPoint(op);
           auto newWrite = builder.create<LHSSubindexOp>(op.getLoc(), writeSide,
                                                         op.getIndex());
-          return updateWireUses(builder, toDelete, op, op.getResult(),
-                                newWrite);
+          return updateUses(builder, toDelete, op, op.getResult(), newWrite);
         })
         .Case<MatchingConnectOp>([&](auto op) {
           if (op.getDest() == toReplace) {
@@ -90,9 +105,19 @@ void StrictWiresPass::runOnOperation() {
                .isPassive)
         return WalkResult::advance();
       auto newWire = cloneWireTo(builder, wire);
-      updateWireUses(builder, toDelete, wire.getResult(), newWire.getRead(),
-                     newWire.getWrite());
+      updateUses(builder, toDelete, wire.getResult(), newWire.getRead(),
+                 newWire.getWrite());
       toDelete.push_back(wire);
+    } else if (auto inst = dyn_cast<InstanceOp>(op)) {
+      for (auto type : inst.getResultTypes()) {
+        auto rtype = type_dyn_cast<FIRRTLBaseType>(type);
+        if (rtype && !rtype.isPassive())
+          return WalkResult::advance();
+      }
+      auto newInst = cloneInstTo(builder, inst);
+      for (auto [result, newResult] :
+           llvm::zip(inst.getResults(), newInst.getResults()))
+        updateUses(builder, toDelete, result, newResult, newResult);
     }
     return WalkResult::advance();
   });
