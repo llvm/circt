@@ -78,6 +78,9 @@ static void updateUses(mlir::OpBuilder &builder,
         });
   }
 
+  // Let RAUW fail if readers exist and we didn't make a read value.  If This
+  // happens (for port or instance), then the solutions is to have made a wire
+  // prior to calling this.
   if (toReplace != readSide && readSide)
     toReplace.replaceAllUsesWith(readSide);
 }

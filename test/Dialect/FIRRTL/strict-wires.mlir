@@ -29,6 +29,22 @@ firrtl.circuit "TopLevel" {
 // CHECK: firrtl.matchingconnect %sink, %1 : !firrtl.uint<1>
   }
 
+  // CHECK-LABEL: @Subindex
+  firrtl.module @Subindex(in %source: !firrtl.uint<1>,
+                             out %sink: !firrtl.uint<1>) {
+    %w = firrtl.wire : !firrtl.vector<uint<1>,1>
+    %w_valid = firrtl.subindex %w[0] : !firrtl.vector<uint<1>,1>
+    firrtl.matchingconnect %w_valid, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %sink, %w_valid : !firrtl.uint<1>
+
+// CHECK: %w, %w_write = firrtl.strictwire : !firrtl.vector<uint<1>, 1> 
+// CHECK: %0 = firrtl.lhssubindex %w_write[0] : !firrtl.lhs<vector<uint<1>, 1>> 
+// CHECK: %1 = firrtl.subindex %w[0] : !firrtl.vector<uint<1>, 1> 
+// CHECK: firrtl.strictconnect %0, %source : !firrtl.uint<1>
+// CHECK: firrtl.matchingconnect %sink, %1 : !firrtl.uint<1>
+  }
+
+
     // CHECK-LABEL: @Inst
   firrtl.module @Inst(in %source: !firrtl.uint<1>,
                              out %sink: !firrtl.uint<1>) {
@@ -40,7 +56,6 @@ firrtl.circuit "TopLevel" {
 // CHECK: firrtl.strictconnect %s_source, %source : !firrtl.uint<1> 
 // CHECK: firrtl.matchingconnect %sink, %s_sink : !firrtl.uint<1> 
   }
-
 
 
 }

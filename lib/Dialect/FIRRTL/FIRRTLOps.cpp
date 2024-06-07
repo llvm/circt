@@ -5018,7 +5018,8 @@ FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
 
   if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
-      return vectorType.getElementTypePreservingConst();
+      return LHSType::get(vectorType.getContext(),
+                          vectorType.getElementTypePreservingConst());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
   }
