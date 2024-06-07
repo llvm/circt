@@ -493,7 +493,7 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
 LogicalResult ParamValueOp::verify() {
   // Check that the attribute expression is valid in this module.
   return checkParameterInContext(
-      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+      getValue(), (*this)->getParentOfType<mlir::ModuleOp>(), *this);
 }
 
 OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {

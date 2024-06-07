@@ -62,6 +62,13 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.constant 12 : !moore.i32
   moore.constant 3 : !moore.i6
 
+  // CHECK-NEXT: [[Pa:%.+]] = hw.param.value i32 = 1
+  // CHECK-NEXT: [[LPa:%.+]] = hw.param.value i32 = 2
+  // CHECK-NEXT: [[SPa:%.+]] = hw.param.value i32 = 3
+  %p1 = moore.named_constant parameter 1 : !moore.l32
+  %lp1 = moore.named_constant localparam 2 : !moore.l32
+  %sp1 = moore.named_constant specparam 3 : !moore.l32
+
   // CHECK-NEXT: hw.bitcast %arg0 : (i1) -> i1
   moore.conversion %arg0 : !moore.i1 -> !moore.l1
 
