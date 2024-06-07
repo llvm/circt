@@ -45,9 +45,10 @@ public:
   void runOnOperation() override;
 
 private:
-  void verify(Operation *clockedAssertLikeOp) {
+  template <typename Op>
+  void verify(Op clockedAssertLikeOp) {
 
-    Operation *property = clockedAssertLikeOp->getOperand(0).getDefiningOp();
+    Operation *property = clockedAssertLikeOp.getProperty().getDefiningOp();
 
     // Fill in our worklist
     worklist.insert({property, property->operand_begin()});
@@ -58,7 +59,7 @@ private:
 
       if (operandIt == op->operand_end()) {
         // Check that our property doesn't contain any illegal ops
-        if (isa<ltl::ClockOp, ltl::DisableOp>(op)) {
+        if (isa<ltl::ClockOp>(op)) {
           op->emitError("Nested clock or disable operations are not "
                         "allowed for clock_assertlike operations.");
           return;

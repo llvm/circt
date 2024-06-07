@@ -53,3 +53,19 @@ hw.module @HasBeenResetSync(in %clock: i1, in %reset: i1, out out: i1) {
 
   // CHECK-NEXT: hw.output %hasBeenReset
 }
+
+// CHECK-LABEL: hw.module @ClockedAsserts
+hw.module @ClockedAsserts(in %clock: i1, in %reset: i1, %a : i1, %b : i1, out out: i1) {
+  %0 = ltl.not %a : i1
+  %1 = ltl.or %0, %b : !ltl.property, i1
+  %one = hw.constant 1 : i1
+  %not_b = comb.xor %b, %one : i1
+  %2 = ltl.and %0, %not_b : !ltl.property, i1 
+
+  // CHECK: sv.sva.assert_property posedge %clock disable %b, %0 : !ltl.property
+  verif.clocked_assert %1 clock posedge %clock : !ltl.property
+  // CHECK: sv.sva.assume_property posedge %clock disable %b, %0 : !ltl.property
+  verif.clocked_assume %1 clock posedge %clock : !ltl.property
+  // CHECK: sv.sva.cover_property posedge %clock disable %b, %0 : !ltl.property
+  verif.clocked_cover %2 clock posedge %clock : !ltl.property
+}

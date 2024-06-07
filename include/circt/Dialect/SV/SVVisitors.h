@@ -48,7 +48,8 @@ public:
             FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
-            CoverConcurrentOp,
+            CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
+            CoverPropertyOp,
             // Bind Statements
             BindOp,
             // Simulator control tasks
@@ -154,6 +155,9 @@ public:
   HANDLE(AssertConcurrentOp, Unhandled);
   HANDLE(AssumeConcurrentOp, Unhandled);
   HANDLE(CoverConcurrentOp, Unhandled);
+  HANDLE(AssertPropertyOp, Unhandled);
+  HANDLE(AssumePropertyOp, Unhandled);
+  HANDLE(CoverPropertyOp, Unhandled);
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);
