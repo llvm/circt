@@ -479,7 +479,7 @@ void populateST(Operation &mod, context &c, vector<string> &stateInv, vector<tra
                               vector<expr> output_expr = getOutputExpr(tmp_out, r2, c);
                               // todo: update output val in vec2
                               for (int j=0; j<output_expr.size(); j++){
-                                vec[vec.size()-output_expr.size()+j]=output_expr[j];
+                                vec[vec.size()-1-output_expr.size()+j]=output_expr[j];
                               }
                               return vec;
                             };
@@ -908,8 +908,8 @@ void parse_fsm(string input, string property, int time, string arg1, string arg2
   // p4
 
 
-  body = (solverVars[0]!=0);
-  s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time-1), body)));
+  body = (stateInvFun[insertState("_5", stateInv)](solverVars.size(), solverVars.data()))==(!solverVars[1]);
+  s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time-1), nestedForall(solverVars, body, numArgs, numOutputs))));
 
   // parseLTL(property);
 
