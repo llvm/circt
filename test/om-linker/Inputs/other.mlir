@@ -6,6 +6,7 @@ module {
     %x = sv.constantX : i1
     %0 = comb.xor %a, %x : i1
     ltl.and %0 : i1
+    verif.assume %0 : i1
     hw.output %0 : i1
   }
   emit.file "foo.sv" sym @Emit {}
