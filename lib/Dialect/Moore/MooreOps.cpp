@@ -13,11 +13,8 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
-#include "circt/Dialect/Moore/MooreTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
-#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace circt;
