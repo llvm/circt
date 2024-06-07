@@ -345,7 +345,7 @@ def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants",
 }
 
 def NamedConstantOp : MooreOp<"named_constant", [
-  SameOperandsAndResultType,
+  FirstAttrDerivedResultType,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]>{
   let summary = "An elaboration time constant expression";
@@ -355,13 +355,15 @@ def NamedConstantOp : MooreOp<"named_constant", [
 
     See IEEE 1800-2017 § 6.20 "Constants".
   }];
-  let arguments = (ins StrAttr:$name, 
-                       NamedConstAttr:$kind, 
-                       UnpackedType:$value);
+  let arguments = (ins StrAttr:$name,
+                       NamedConstAttr:$kind,
+                       AnyAttr:$value);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $kind $value attr-dict
-    `:` type($result)
+    $kind
+    ``custom<ImplicitSSAName>($name)
+    custom<ParamValue>($value, qualified(type($result)))
+    attr-dict
   }];
 }
 

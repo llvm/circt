@@ -329,6 +329,21 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 // NamedConstantOp
 //===----------------------------------------------------------------------===//
 
+static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
+                                   Type &resultType) {
+  if (p.parseType(resultType) || p.parseEqual() ||
+      p.parseAttribute(value, resultType))
+    return failure();
+  return success();
+}
+
+static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
+                            Type resultType) {
+  p.printStrippedAttrOrType(resultType);
+  p << " = ";
+  p.printAttributeWithoutType(value);
+}
+
 void NamedConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }

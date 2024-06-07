@@ -291,13 +291,15 @@ struct MemberVisitor {
     if (!type)
       return failure();
 
-    const auto *init = paramNode.getInitializer();
-    // skip parameters without value.
-    if (!init)
-      return success();
-    Value initial = context.convertRvalueExpression(*init);
-    if (!initial)
-      return failure();
+    Attribute attribute;
+    auto value = paramNode.getValue();
+    if (value.isInteger()) {
+      attribute = builder.getIntegerAttr(
+          builder.getIntegerType(cast<moore::IntType>(type).getWidth()),
+          value.integer().as<uint64_t>().value());
+    } else {
+      mlir::emitError(loc, "unsupported attribute type: ");
+    }
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
@@ -306,7 +308,7 @@ struct MemberVisitor {
                                          moore::NamedConst::LocalParameter)
             : moore::NamedConstAttr::get(context.getContext(),
                                          moore::NamedConst::Parameter),
-        initial);
+        attribute);
     context.valueSymbols.insert(&paramNode, namedConstantOp);
     return success();
   }
