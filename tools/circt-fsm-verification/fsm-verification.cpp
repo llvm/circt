@@ -908,7 +908,7 @@ void parse_fsm(string input, string property, int time, string arg1, string arg2
   // p4
 
 
-  body = (solverVars[0]>=10);
+  body = (solverVars[0]!=0);
   s.add(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time-1), body)));
 
   // parseLTL(property);
