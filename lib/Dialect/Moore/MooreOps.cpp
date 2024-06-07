@@ -13,8 +13,11 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace circt;
@@ -329,19 +332,24 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 // NamedConstantOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
+static ParseResult parseParamValue(OpAsmParser &p, IntegerAttr &value,
                                    Type &resultType) {
-  if (p.parseType(resultType) || p.parseEqual() ||
-      p.parseAttribute(value, resultType))
+  APInt valueInt;
+  if (p.parseInteger(valueInt))
     return failure();
+  if (p.parseColon() || p.parseType(resultType))
+    return failure();
+  auto attrType = IntegerType::get(p.getContext(),
+                                   cast<IntegerType>(resultType).getWidth());
+  value = IntegerAttr::get(attrType, valueInt);
   return success();
 }
 
-static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
+static void printParamValue(OpAsmPrinter &p, Operation *, IntegerAttr value,
                             Type resultType) {
-  p.printStrippedAttrOrType(resultType);
-  p << " = ";
   p.printAttributeWithoutType(value);
+  p << " : ";
+  p.printStrippedAttrOrType(resultType);
 }
 
 void NamedConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
