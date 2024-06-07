@@ -362,7 +362,7 @@ def NamedConstantOp : MooreOp<"named_constant", [
   let assemblyFormat = [{
     $kind
     ``custom<ImplicitSSAName>($name)
-    ``custom<ParamValue>($value, qualified(type($result)))
+    custom<ParamValue>($value, qualified(type($result)))
     attr-dict
   }];
 }

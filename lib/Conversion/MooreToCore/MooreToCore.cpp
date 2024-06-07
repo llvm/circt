@@ -82,8 +82,11 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    rewriter.replaceOpWithNewOp<hw::ParamValueOp>(op, resultType,
-                                                  op.getValueAttr());
+    Attribute value;
+    auto attrType =
+        IntegerType::get(op.getContext(), op.getResult().getType().getWidth());
+    value = IntegerAttr::get(attrType, op.getValue());
+    rewriter.replaceOpWithNewOp<hw::ParamValueOp>(op, resultType, value);
     return success();
   }
 };

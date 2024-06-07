@@ -22,6 +22,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
@@ -493,7 +494,7 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
 LogicalResult ParamValueOp::verify() {
   // Check that the attribute expression is valid in this module.
   return checkParameterInContext(
-      getValue(), (*this)->getParentOfType<hw::HWModuleOp>(), *this);
+      getValue(), (*this)->getParentOfType<mlir::ModuleOp>(), *this);
 }
 
 OpFoldResult ParamValueOp::fold(FoldAdaptor adaptor) {
