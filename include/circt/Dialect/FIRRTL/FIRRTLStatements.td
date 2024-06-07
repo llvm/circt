@@ -77,6 +77,27 @@ def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
       custom<OptionalBinaryOpTypes>(type($dest), type($src))}];
 }
 
+def SameAnonLHSTypeOperands: PredOpTrait<
+        "operands must be structurally equivalent with LHS wrapper",
+        CPred<"areAnonymousLHSandTypeEquivalent(getDest().getType(), getSrc().getType())">>;
+def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+                      SameAnonLHSTypeOperands]> {
+  let summary = "Connect two signals";
+  let description =  [{
+    Connect two values with strict constraints:
+    ```
+      firrtl.strictconnect %dest, %src : t1
+      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
+    ```
+    }];
+
+  let arguments = (ins LHSType:$dest,
+                       SizedPassiveType:$src);
+  let results = (outs);
+
+  let assemblyFormat = [{$dest `,` $src  attr-dict `:` custom<OptionalLHSOpTypes>(type($dest), type($src))}];
+}
+
 def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   let summary = "FIRRTL Define References";
   let description = [{

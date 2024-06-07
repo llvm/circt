@@ -3606,7 +3606,14 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -3632,7 +3639,14 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictWireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
@@ -3643,6 +3657,21 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+LogicalResult
+StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+Value StrictWireOp::getResult() { return getRead(); }
+
+Value StrictRegOp::getResult() { return getRead(); }
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
@@ -4711,11 +4740,22 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  auto bundleType = type_dyn_cast<typename OpTy::InputType>(inputType);
+  auto actualInputType = type_dyn_cast<typename OpTy::InputType>(inputType);
+  if (!actualInputType)
+    return parser.emitError(parser.getNameLoc(),
+                            "input must be bundle or lhs of bundle type, got ")
+           << inputType;
+
+  auto bundleType = isa<LHSType>(actualInputType)
+                        ? firrtl::type_dyn_cast<typename OpTy::InputBundleType>(
+                              cast<LHSType>(actualInputType).getType())
+                        : firrtl::type_dyn_cast<typename OpTy::InputBundleType>(
+                              actualInputType);
   if (!bundleType)
     return parser.emitError(parser.getNameLoc(),
-                            "input must be bundle type, got ")
+                            "input must be effectively bundle type, got ")
            << inputType;
+
   auto fieldIndex = bundleType.getElementIndex(fieldName);
   if (!fieldIndex)
     return parser.emitError(parser.getNameLoc(),
@@ -4784,6 +4824,9 @@ ParseResult SubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
 ParseResult OpenSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
   return parseSubfieldLikeOp<OpenSubfieldOp>(parser, result);
 }
+ParseResult LHSSubfieldOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubfieldLikeOp<LHSSubfieldOp>(parser, result);
+}
 
 template <typename OpTy>
 static void printSubfieldLikeOp(OpTy op, ::mlir::OpAsmPrinter &printer) {
@@ -4801,6 +4844,9 @@ void SubfieldOp::print(::mlir::OpAsmPrinter &printer) {
 void OpenSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
   return printSubfieldLikeOp<OpenSubfieldOp>(*this, printer);
 }
+void LHSSubfieldOp::print(::mlir::OpAsmPrinter &printer) {
+  return printSubfieldLikeOp<LHSSubfieldOp>(*this, printer);
+}
 
 void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << ' ' << getInput() << '[';
@@ -4812,20 +4858,23 @@ void SubtagOp::print(::mlir::OpAsmPrinter &printer) {
   printer << " : " << getInput().getType();
 }
 
-template <typename OpTy>
-static LogicalResult verifySubfieldLike(OpTy op) {
+template <typename OpTy, typename ITy>
+static LogicalResult verifySubfieldLike(OpTy op, ITy ty) {
   if (op.getFieldIndex() >=
-      firrtl::type_cast<typename OpTy::InputType>(op.getInput().getType())
-          .getNumElements())
+      firrtl::type_cast<typename OpTy::InputBundleType>(ty).getNumElements())
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
 }
 LogicalResult SubfieldOp::verify() {
-  return verifySubfieldLike<SubfieldOp>(*this);
+  return verifySubfieldLike<SubfieldOp>(*this, getInput().getType());
 }
 LogicalResult OpenSubfieldOp::verify() {
-  return verifySubfieldLike<OpenSubfieldOp>(*this);
+  return verifySubfieldLike<OpenSubfieldOp>(*this, getInput().getType());
+}
+LogicalResult LHSSubfieldOp::verify() {
+  return verifySubfieldLike<LHSSubfieldOp>(*this,
+                                           stripLHS(getInput().getType()));
 }
 
 LogicalResult SubtagOp::verify() {
@@ -4919,10 +4968,30 @@ FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
   return inType.getElementTypePreservingConst(fieldIndex);
 }
 
+FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
+                                          ArrayRef<NamedAttribute> attrs,
+                                          std::optional<Location> loc) {
+  auto aType = cast<LHSType>(operands[0].getType()).getType();
+  auto inType = type_cast<BundleType>(aType);
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+
+  if (fieldIndex >= inType.getNumElements())
+    return emitInferRetTypeError(loc,
+                                 "subfield element index is greater than the "
+                                 "number of fields in the bundle type");
+
+  // OpenSubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return LHSType::get(inType.getContext(),
+                      inType.getElementTypePreservingConst(fieldIndex));
+}
+
 bool SubfieldOp::isFieldFlipped() {
   BundleType bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
 }
+
 bool OpenSubfieldOp::isFieldFlipped() {
   auto bundle = getInput().getType();
   return bundle.getElement(getFieldIndex()).isFlip;
@@ -4953,6 +5022,23 @@ FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
+    if (fieldIdx < vectorType.getNumElements())
+      return vectorType.getElementTypePreservingConst();
+    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+                                 "' in vector type ", inType);
+  }
+
+  return emitInferRetTypeError(loc, "subindex requires vector operand");
+}
+
+FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
+                                          ArrayRef<NamedAttribute> attrs,
+                                          std::optional<Location> loc) {
+  auto inType = cast<LHSType>(operands[0].getType()).getType();
+  auto fieldIdx =
+      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
+
+  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
@@ -6205,6 +6291,10 @@ void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
+void LHSSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
 void SubtagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -6214,6 +6304,10 @@ void SubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void OpenSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+void LHSSubindexOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 
@@ -6522,6 +6616,40 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Printer/Parser Helpers.
+//===----------------------------------------------------------------------===//
+
+/// Elide the lhs wrapper and the lhs if the inside is the rhs.
+static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                    Type rhs) {
+  // If operand types are the same, print a rhs type.
+  auto lhsCast = dyn_cast<LHSType>(lhs);
+  if (!lhsCast || lhsCast.getType() != rhs)
+    p << lhs << ", " << rhs;
+  else
+    p << rhs;
+}
+
+static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs,
+                                           Type &rhs) {
+  if (parser.parseType(rhs))
+    return failure();
+
+  // Parse an optional rhs type.
+  if (parser.parseOptionalComma()) {
+    auto cRhs = dyn_cast<FIRRTLBaseType>(rhs);
+    if (!cRhs)
+      return failure();
+    lhs = LHSType::get(parser.getContext(), cRhs);
+  } else {
+    lhs = rhs;
+    if (parser.parseType(rhs))
+      return failure();
+  }
   return success();
 }
 

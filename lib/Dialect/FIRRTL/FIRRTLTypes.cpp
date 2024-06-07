@@ -1248,6 +1248,11 @@ bool firrtl::areAnonymousTypesEquivalent(FIRRTLBaseType lhs,
   return lhs.getAnonymousType() == rhs.getAnonymousType();
 }
 
+bool firrtl::areAnonymousLHSandTypeEquivalent(LHSType lhs, FIRRTLBaseType rhs) {
+  auto baseLHS = lhs.getType();
+  return baseLHS.getAnonymousType() == rhs.getAnonymousType();
+}
+
 bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
   if (auto destBaseType = type_dyn_cast<FIRRTLBaseType>(lhs))
     if (auto srcBaseType = type_dyn_cast<FIRRTLBaseType>(rhs))
