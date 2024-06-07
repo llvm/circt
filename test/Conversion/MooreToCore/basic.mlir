@@ -210,3 +210,28 @@ moore.module @Null() {
   // CHECK-NEXT: hw.output
   moore.output
 }
+
+// CHECK-LABEL: hw.module @Top(in
+// CHECK-SAME: %[[V0:.*]] : i1, in
+// CHECK-SAME: %[[V1:.*]] : i1, out out0 : i1) {
+moore.module @Top(in %arg0 : !moore.l1, in %arg1 : !moore.l1, out out0 : !moore.l1) {
+// CHECK-NEXT: %[[V2:.*]] = hw.instance "inst_0" @SubModule_0(a: %[[V0]]: i1, b: %[[V1]]: i1) -> (c: i1)
+  %inst_0.c = moore.instance "inst_0" @SubModule_0(a: %arg0 : !moore.l1, b: %arg1 : !moore.l1) -> (c: !moore.l1)
+
+// CHECK-NEXT: %[[V3:.*]] = hw.instance "inst_1" @SubModule_0(a: %[[V2]]: i1, b: %[[V1]]: i1) -> (c: i1)
+  %inst_1.c = moore.instance "inst_1" @SubModule_0(a: %inst_0.c : !moore.l1, b: %arg1 : !moore.l1) -> (c: !moore.l1)
+
+// CHECK-NEXT: hw.output %[[V3]] : i1
+  moore.output %inst_1.c : !moore.l1
+}
+
+// CHECK-LABEL: hw.module @SubModule_0(in
+// CHECK-SAME: %[[V0:.*]] : i1, in
+// CHECK-SAME: %[[V1:.*]] : i1, out c : i1) {
+moore.module @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1) {
+  // CHECK-NEXT: %[[V2:.*]] = comb.and %[[V0]], %[[V1]] : i1
+  %0 = moore.and %a, %b : !moore.l1
+
+  // CHECK-NEXT: hw.output %[[V2]] : i1
+  moore.output %0 : !moore.l1
+}
