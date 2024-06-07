@@ -22,7 +22,6 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
