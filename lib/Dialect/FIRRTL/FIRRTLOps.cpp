@@ -2442,6 +2442,7 @@ std::optional<size_t> InstanceOp::getTargetResultIndex() {
   // Inner symbols on instance operations target the op not any result.
   return std::nullopt;
 }
+
 //===----------------------------------------------------------------------===//
 // StrictInstanceOp
 //===----------------------------------------------------------------------===//
@@ -2451,20 +2452,15 @@ void StrictInstanceOp::build(
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
     ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
-  build(builder, result, resultTypes, moduleName, name, nameKind,
-        portDirections, portNames, annotations, portAnnotations, layers,
-        lowerToBind,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
-}
-
-void StrictInstanceOp::build(
-    OpBuilder &builder, OperationState &result, TypeRange resultTypes,
-    StringRef moduleName, StringRef name, NameKindEnum nameKind,
-    ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
     ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
-  result.addTypes(resultTypes);
+  SmallVector<Type> actualTypes;
+  for (auto [t, d] : llvm::zip(resultTypes, portDirections))
+    if (d == Direction::In && isa<FIRRTLBaseType>(t))
+      actualTypes.push_back(
+          LHSType::get(t.getContext(), cast<FIRRTLBaseType>(t)));
+    else
+      actualTypes.push_back(t);
+  result.addTypes(actualTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
@@ -2493,45 +2489,12 @@ void StrictInstanceOp::build(
   }
 }
 
-void StrictInstanceOp::build(OpBuilder &builder, OperationState &result,
-                       FModuleLike module, StringRef name,
-                       NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
-
-  // Gather the result types.
-  SmallVector<Type> resultTypes;
-  resultTypes.reserve(module.getNumPorts());
-  llvm::transform(
-      module.getPortTypes(), std::back_inserter(resultTypes),
-      [](Attribute typeAttr) { return cast<TypeAttr>(typeAttr).getValue(); });
-
-  // Create the port annotations.
-  ArrayAttr portAnnotationsAttr;
-  if (portAnnotations.empty()) {
-    portAnnotationsAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
-        resultTypes.size(), builder.getArrayAttr({})));
-  } else {
-    portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
-  }
-
-  return build(
-      builder, result, resultTypes,
-      SymbolRefAttr::get(builder.getContext(), module.getModuleNameAttr()),
-      builder.getStringAttr(name),
-      NameKindEnumAttr::get(builder.getContext(), nameKind),
-      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
-      builder.getArrayAttr(annotations), portAnnotationsAttr,
-      module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym);
-}
-
 void StrictInstanceOp::build(OpBuilder &builder, OperationState &odsState,
-                       ArrayRef<PortInfo> ports, StringRef moduleName,
-                       StringRef name, NameKindEnum nameKind,
-                       ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> layers, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                             ArrayRef<PortInfo> ports, StringRef moduleName,
+                             StringRef name, NameKindEnum nameKind,
+                             ArrayRef<Attribute> annotations,
+                             ArrayRef<Attribute> layers, bool lowerToBind,
+                             hw::InnerSymAttr innerSym) {
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2568,10 +2531,12 @@ LogicalResult StrictInstanceOp::verify() {
   return failure();
 }
 
-/// Builds a new `StrictInstanceOp` with the ports listed in `portIndices` erased, and
-/// updates any users of the remaining ports to point at the new instance.
-StrictInstanceOp StrictInstanceOp::erasePorts(OpBuilder &builder,
-                                  const llvm::BitVector &portIndices) {
+/// Builds a new `StrictInstanceOp` with the ports listed in `portIndices`
+/// erased, and updates any users of the remaining ports to point at the new
+/// instance.
+StrictInstanceOp
+StrictInstanceOp::erasePorts(OpBuilder &builder,
+                             const llvm::BitVector &portIndices) {
   assert(portIndices.size() >= getNumResults() &&
          "portIndices is not at least as large as getNumResults()");
 
@@ -2625,8 +2590,8 @@ void StrictInstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-StrictInstanceOp
-StrictInstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+StrictInstanceOp StrictInstanceOp::cloneAndInsertPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   auto portSize = ports.size();
   auto newPortCount = getNumResults() + portSize;
   SmallVector<Direction> newPortDirections;
@@ -2666,7 +2631,8 @@ StrictInstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> po
       newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
 }
 
-LogicalResult StrictInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+LogicalResult
+StrictInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return instance_like_impl::verifyReferencedModule(*this, symbolTable,
                                                     getModuleNameAttr());
 }
@@ -2704,14 +2670,19 @@ void StrictInstanceOp::print(OpAsmPrinter &p) {
   // Collect all the result types as TypeAttrs for printing.
   SmallVector<Attribute> portTypes;
   portTypes.reserve(getNumResults());
-  llvm::transform(getResultTypes(), std::back_inserter(portTypes),
-                  &TypeAttr::get);
+  for (auto p : getResultTypes())
+    if (auto t = dyn_cast<LHSType>(p))
+      portTypes.push_back(TypeAttr::get(t.getType()));
+    else
+      portTypes.push_back(TypeAttr::get(p));
+
   printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
                    getPortAnnotations().getValue(), {}, {});
 }
 
-ParseResult StrictInstanceOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult StrictInstanceOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
   auto *context = parser.getContext();
   auto &resultAttrs = result.attributes;
 
@@ -2770,6 +2741,12 @@ ParseResult StrictInstanceOp::parse(OpAsmParser &parser, OperationState &result)
     resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
+  for (auto tup : llvm::zip_equal(portTypes, portDirections)) {
+    auto pType = cast<TypeAttr>(std::get<0>(tup)).getValue();
+    if (std::get<1>(tup) == Direction::In && isa<FIRRTLBaseType>(pType))
+      std::get<0>(tup) = TypeAttr::get(
+          LHSType::get(pType.getContext(), cast<FIRRTLBaseType>(pType)));
+  }
   result.types.reserve(portTypes.size());
   llvm::transform(
       portTypes, std::back_inserter(result.types),
