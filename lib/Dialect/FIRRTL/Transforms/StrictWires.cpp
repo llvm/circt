@@ -77,7 +77,8 @@ static void updateUses(mlir::OpBuilder &builder,
           return;
         });
   }
-  if (toReplace != readSide)
+
+  if (toReplace != readSide && readSide)
     toReplace.replaceAllUsesWith(readSide);
 }
 
@@ -115,9 +116,15 @@ void StrictWiresPass::runOnOperation() {
           return WalkResult::advance();
       }
       auto newInst = cloneInstTo(builder, inst);
+      // For now, assume outputs are not duplex.  If this isn't true, make a
+      // bounce wire.
       for (auto [result, newResult] :
            llvm::zip(inst.getResults(), newInst.getResults()))
-        updateUses(builder, toDelete, result, newResult, newResult);
+        if (isa<LHSType>(newResult.getType()))
+          updateUses(builder, toDelete, result, {}, newResult);
+        else
+          updateUses(builder, toDelete, result, newResult, {});
+      toDelete.push_back(inst);
     }
     return WalkResult::advance();
   });

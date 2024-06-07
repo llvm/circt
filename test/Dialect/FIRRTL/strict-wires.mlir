@@ -36,11 +36,9 @@ firrtl.circuit "TopLevel" {
     firrtl.matchingconnect %s_source, %source : !firrtl.uint<1>
     firrtl.matchingconnect %sink, %s_sink : !firrtl.uint<1>
 
-// CHECK: %w, %w_write = firrtl.strictwire : !firrtl.bundle<valid: uint<1>> 
-// CHECK: %0 = firrtl.lhssubfield %w_write[valid] : !firrtl.lhs<bundle<valid: uint<1>>> 
-// CHECK: %1 = firrtl.subfield %w[valid] : !firrtl.bundle<valid: uint<1>> 
-// CHECK: firrtl.strictconnect %0, %source : !firrtl.uint<1>
-// CHECK: firrtl.matchingconnect %sink, %1 : !firrtl.uint<1>
+// CHECK: %s_source, %s_sink = firrtl.strictinstance s @Subfield(in source: !firrtl.uint<1>, out sink: !firrtl.uint<1>) 
+// CHECK: firrtl.strictconnect %s_source, %source : !firrtl.uint<1> 
+// CHECK: firrtl.matchingconnect %sink, %s_sink : !firrtl.uint<1> 
   }
 
 
