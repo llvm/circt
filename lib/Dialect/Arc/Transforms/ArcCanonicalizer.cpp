@@ -17,6 +17,7 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -256,6 +257,12 @@ struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
 struct SinkArcInputsPattern : public SymOpRewritePattern<DefineOp> {
   using SymOpRewritePattern::SymOpRewritePattern;
   LogicalResult matchAndRewrite(DefineOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct MergeVectorizeOps : public OpRewritePattern<VectorizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(VectorizeOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -577,6 +584,79 @@ CompRegCanonicalizer::matchAndRewrite(seq::CompRegOp op,
   return success();
 }
 
+LogicalResult
+MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
+                                   PatternRewriter &rewriter) const {
+  auto &currentBlock = vecOp.getBody().front();
+  IRMapping argMapping;
+  SmallVector<Value> newOperands;
+  SmallVector<VectorizeOp> vecOpsToRemove;
+  bool canBeMerged = false;
+  // Used to calculate the new positions of args after insertions and removals
+  unsigned paddedBy = 0;
+
+  for (unsigned argIdx = 0, numArgs = vecOp.getInputs().size();
+       argIdx < numArgs; ++argIdx) {
+    auto inputVec = vecOp.getInputs()[argIdx];
+    // Make sure that the input comes from a `VectorizeOp`
+    // Ensure that the input vector matches the output of the `otherVecOp`
+    // Make sure that the results of the otherVecOp have only one use
+    auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
+    if (!otherVecOp || inputVec != otherVecOp.getResults() ||
+        otherVecOp == vecOp ||
+        !llvm::all_of(otherVecOp.getResults(),
+                      [](auto result) { return result.hasOneUse(); })) {
+      newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+      continue;
+    }
+    // If this flag is set that means we changed the IR so we cannot return
+    // failure
+    canBeMerged = true;
+    newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
+                       otherVecOp.getOperands().end());
+
+    auto &otherBlock = otherVecOp.getBody().front();
+    for (auto &otherArg : otherBlock.getArguments()) {
+      auto newArg = currentBlock.insertArgument(
+          argIdx + paddedBy, otherArg.getType(), otherArg.getLoc());
+      argMapping.map(otherArg, newArg);
+      ++paddedBy;
+    }
+
+    rewriter.setInsertionPointToStart(&currentBlock);
+    for (auto &op : otherBlock.without_terminator())
+      rewriter.clone(op, argMapping);
+
+    unsigned argNewPos = paddedBy + argIdx;
+    // Get the result of the return value and use it in all places the
+    // the `otherVecOp` results were used
+    auto retOp = cast<VectorizeReturnOp>(otherBlock.getTerminator());
+    rewriter.replaceAllUsesWith(currentBlock.getArgument(argNewPos),
+                                argMapping.lookupOrDefault(retOp.getValue()));
+    currentBlock.eraseArgument(argNewPos);
+    vecOpsToRemove.push_back(otherVecOp);
+    // We erased an arg so the padding decreased by 1
+    paddedBy--;
+  }
+
+  // We didn't change the IR as there were no vectors to merge
+  if (!canBeMerged)
+    return failure();
+
+  // Set the new inputOperandSegments value
+  unsigned groupSize = vecOp.getResults().size();
+  unsigned numOfGroups = newOperands.size() / groupSize;
+  SmallVector<int32_t> newAttr(numOfGroups, groupSize);
+  vecOp.setInputOperandSegments(newAttr);
+  vecOp.getOperation()->setOperands(ValueRange(newOperands));
+
+  // Erase dead VectorizeOps
+  for (auto deadOp : vecOpsToRemove)
+    rewriter.eraseOp(deadOp);
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -624,7 +704,8 @@ void ArcCanonicalizerPass::runOnOperation() {
     dialect->getCanonicalizationPatterns(patterns);
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
-  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer>(&getContext());
+  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer, MergeVectorizeOps>(
+      &getContext());
 
   // Don't test for convergence since it is often not reached.
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
