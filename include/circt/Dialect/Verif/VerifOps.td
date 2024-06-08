@@ -212,4 +212,85 @@ def YieldOp : VerifOp<"yield", [
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// Verification intent ops
+//===----------------------------------------------------------------------===//
+
+/// BMC -- short for bounded model check.
+def BMC : I32EnumAttrCase<"BMC", 0, "bmc">;
+/// KIP -- short for k-Inductive-Proof.
+def KIP : I32EnumAttrCase<"KIP", 0, "induction">;
+
+def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
+                                [BMC, KIP]> {
+  let cppNamespace = "circt::verif";
+}
+
+def FormalOp : VerifOp<"formal"> {
+  let summary = "defines a formal verification test";
+  let description = [{
+    This operation defines a formal verification test with potentially additional
+    assertions and assumptions. This should be written by declaring symbolic 
+    values that are then connected to a hardware instance. These symbols can then
+    be reasoned about in additional assertions. The region will then be converted 
+    into btor2, SMTLib, or SystemVerilog and ignored during regular SystemVerilog 
+    emission.   
+      
+    Additional information about how the test should be conducted can be passed 
+    using the two supported attributes. These attributes are `k`, which defines 
+    the bounds of the test, and `type` which defines the type of formal test 
+    being done, i.e. Bounded Model Checking (BMC) or k-Induction.
+  }];
+
+  let arguments = (ins OptionalAttr<APIntAttr>:$k,
+                       OptionalAttr<FormalTestTypeAttr>:$test_type,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+
+  let regions = (region SizedRegion<1>:$test_region);
+
+  let assemblyFormat = [{
+    attr-dict  (`sym` $inner_sym^)? `(` (`k` `:` $k^)? (`type` `:` $test_type^)? `)` 
+    $test_region
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Formal Verification Ops
+//===----------------------------------------------------------------------===//
+
+def SymbolicValOp : VerifOp<"symbolic_val", [Pure]> {
+  let summary = "declare a sybolic value for formal verification";
+  let description = [{
+    This operation declares a symbolic value that can then be used to reason 
+    about hw.instance inputs in a symbolic manner in future assertions and 
+    assumptions. The type result must be explicitly marked.  
+  }];
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+
+  let hasVerifier = 1;
+}
+
+def ConcreteValOp : VerifOp<"concrete_val", [
+  Pure, AllTypesMatch<["init", "update", "result"]>
+]> {
+  let summary = "declare a concrete value for formatl verification";
+  let description = [{
+    This opertaion declares a concrete value that can then be used in the 
+    reasoning surrounding symbolic values, allowing for a form of concolic 
+    reasoning to take place in a verif.formal block. Concrete values are 
+    defined by an initial value and an update function.
+  }];
+
+  let arguments = (ins AnyType:$init, AnyType:$update);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $init `,` $update attr-dict `:` type($result)
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
