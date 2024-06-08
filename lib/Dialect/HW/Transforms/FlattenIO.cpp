@@ -9,24 +9,20 @@
 #include "PassDetails.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
 
-static bool isStructType(Type type) {
-  return isa<hw::StructType>(hw::getCanonicalType(type));
-}
-
-static hw::StructType getStructType(Type type) {
-  return dyn_cast<hw::StructType>(hw::getCanonicalType(type));
-}
-
-// Legal if no in- or output type is a struct.
+// Legal if no in- or output type is a struct or array.
 static bool isLegalModLikeOp(hw::HWModuleLike moduleLikeOp) {
   return llvm::none_of(moduleLikeOp.getHWModuleType().getPortTypes(),
-                       isStructType);
+                       [](auto op) {
+                         return hw::type_isa<hw::StructType>(op) ||
+                                hw::type_isa<hw::ArrayType>(op);
+                       });
 }
 
 static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
@@ -35,6 +31,35 @@ static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
   for (auto [index, innerType] : llvm::enumerate(inner))
     inner[index] = hw::getCanonicalType(innerType);
   return inner;
+}
+
+template <typename T>
+static llvm::SmallVector<Value>
+flattenOperands(T op, typename T::Adaptor adaptor,
+                ConversionPatternRewriter &rewriter) {
+  llvm::SmallVector<Value> convOperands;
+  for (auto operand : adaptor.getOperands()) {
+    llvm::TypeSwitch<Type>(hw::getCanonicalType(operand.getType()))
+        .template Case<hw::StructType>([&](auto st) {
+          auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
+              op.getLoc(), getInnerTypes(st), operand);
+          llvm::copy(explodedStruct.getResults(),
+                     std::back_inserter(convOperands));
+        })
+        .template Case<hw::ArrayType>([&](auto arr) {
+          for (auto idx : llvm::seq(arr.getNumElements())) {
+            IntegerType idxType = rewriter.getIntegerType(
+                llvm::Log2_64_Ceil(arr.getNumElements()));
+            Value idxVal =
+                rewriter.create<hw::ConstantOp>(op.getLoc(), idxType, idx);
+            auto element =
+                rewriter.create<hw::ArrayGetOp>(op.getLoc(), operand, idxVal);
+            convOperands.push_back(element);
+          }
+        })
+        .Default([&](auto type) { convOperands.push_back(operand); });
+  }
+  return convOperands;
 }
 
 namespace {
@@ -48,19 +73,8 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
   LogicalResult
   matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    llvm::SmallVector<Value> convOperands;
-
-    // Flatten the operands.
-    for (auto operand : adaptor.getOperands()) {
-      if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            op.getLoc(), getInnerTypes(structType), operand);
-        llvm::copy(explodedStruct.getResults(),
-                   std::back_inserter(convOperands));
-      } else {
-        convOperands.push_back(operand);
-      }
-    }
+    llvm::SmallVector<Value> convOperands =
+        flattenOperands(op, adaptor, rewriter);
 
     // And replace.
     opVisited->insert(op->getParentOp());
@@ -86,55 +100,57 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     if (externModules->contains(referencedMod.getValue()))
       return success();
 
-    auto loc = op.getLoc();
-    // Flatten the operands.
-    llvm::SmallVector<Value> convOperands;
-    for (auto operand : adaptor.getOperands()) {
-      if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            loc, getInnerTypes(structType), operand);
-        llvm::copy(explodedStruct.getResults(),
-                   std::back_inserter(convOperands));
-      } else {
-        convOperands.push_back(operand);
-      }
-    }
+    llvm::SmallVector<Value> convOperands =
+        flattenOperands(op, adaptor, rewriter);
 
     // Get the new module return type.
     llvm::SmallVector<Type> newResultTypes;
     for (auto oldResultType : op.getResultTypes()) {
-      if (auto structType = getStructType(oldResultType))
-        for (auto t : structType.getElements())
-          newResultTypes.push_back(t.type);
-      else
-        newResultTypes.push_back(oldResultType);
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
+          .Case<hw::StructType>([&](auto st) {
+            llvm::transform(st.getElements(),
+                            std::back_inserter(newResultTypes),
+                            [](auto s) { return s.type; });
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            newResultTypes.append(arr.getNumElements(), arr.getElementType());
+          })
+          .Default([&](auto type) { newResultTypes.push_back(oldResultType); });
     }
 
     // Create the new instance with the flattened module, attributes will be
     // adjusted later.
     auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, newResultTypes, op.getInstanceNameAttr(),
+        op.getLoc(), newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
         op.getInnerSymAttr());
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;
-    size_t oldResultCntr = 0;
-    for (size_t resIndex = 0; resIndex < newInstance.getNumResults();
-         ++resIndex) {
-      Type oldResultType = op.getResultTypes()[oldResultCntr];
-      if (auto structType = getStructType(oldResultType)) {
-        size_t nElements = structType.getElements().size();
-        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            loc, structType,
-            newInstance.getResults().slice(resIndex, nElements));
-        convResults.push_back(implodedStruct.getResult());
-        resIndex += nElements - 1;
-      } else
-        convResults.push_back(newInstance.getResult(resIndex));
-
-      ++oldResultCntr;
+    size_t resIndex = 0;
+    for (auto oldResultType : op.getResultTypes()) {
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(oldResultType))
+          .Case<hw::StructType>([&](auto st) {
+            size_t nElements = st.getElements().size();
+            auto implodedStruct = rewriter.create<hw::StructCreateOp>(
+                op.getLoc(), st,
+                newInstance.getResults().slice(resIndex, nElements));
+            convResults.push_back(implodedStruct.getResult());
+            resIndex += nElements;
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            size_t nElements = arr.getNumElements();
+            auto implodedArray = rewriter.create<hw::ArrayCreateOp>(
+                op.getLoc(), arr,
+                newInstance.getResults().slice(resIndex, nElements));
+            convResults.push_back(implodedArray.getResult());
+            resIndex += nElements;
+          })
+          .Default([&](auto type) {
+            convResults.push_back(newInstance.getResult(resIndex));
+            resIndex += 1;
+          });
     }
     rewriter.replaceOp(op, convResults);
     convertedOps->insert(newInstance);
@@ -145,29 +161,34 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
   const StringSet<> *externModules;
 };
 
-using IOTypes = std::pair<TypeRange, TypeRange>;
-
 struct IOInfo {
-  // A mapping between an arg/res index and the struct type of the given field.
-  DenseMap<unsigned, hw::StructType> argStructs, resStructs;
-
-  // Records of the original arg/res types.
   SmallVector<Type> argTypes, resTypes;
+  ArrayAttr argNames, resNames;
+  SmallVector<Location> argLocs, resLocs;
+  hw::ModuleType modType;
 };
 
 class FlattenIOTypeConverter : public TypeConverter {
 public:
   FlattenIOTypeConverter() {
     addConversion([](Type type, SmallVectorImpl<Type> &results) {
-      auto structType = getStructType(type);
-      if (!structType)
-        results.push_back(type);
-      else {
-        for (auto field : structType.getElements())
+      llvm::TypeSwitch<Type>(hw::getCanonicalType(type))
+          .Case<hw::StructType>([&](auto st) {
+            llvm::transform(st.getElements(), std::back_inserter(results),
+                            [](auto s) { return s.type; });
+          })
+          .Case<hw::ArrayType>([&](auto arr) {
+            results.append(arr.getNumElements(), arr.getElementType());
+          })
+          .Default([&](auto type) { results.push_back(type); });
 
-          results.push_back(field.type);
-      }
       return success();
+    });
+
+    addTargetMaterialization([](OpBuilder &builder, hw::ArrayType type,
+                                ValueRange inputs, Location loc) {
+      auto result = builder.create<hw::ArrayCreateOp>(loc, type, inputs);
+      return result.getResult();
     });
 
     addTargetMaterialization([](OpBuilder &builder, hw::StructType type,
@@ -178,7 +199,7 @@ public:
 
     addTargetMaterialization([](OpBuilder &builder, hw::TypeAliasType type,
                                 ValueRange inputs, Location loc) {
-      auto structType = getStructType(type);
+      auto structType = hw::type_dyn_cast<hw::StructType>(type);
       assert(structType && "expected struct type");
       auto result = builder.create<hw::StructCreateOp>(loc, structType, inputs);
       return result.getResult();
@@ -220,16 +241,9 @@ static void addSignatureConversion(DenseMap<Operation *, IOInfo> &ioMap,
     }
     auto ioInfo = ioInfoIt->second;
 
-    auto compareTypes = [&](TypeRange oldTypes, TypeRange newTypes) {
-      return llvm::any_of(llvm::zip(oldTypes, newTypes), [&](auto typePair) {
-        auto oldType = std::get<0>(typePair);
-        auto newType = std::get<1>(typePair);
-        return oldType != newType;
-      });
-    };
     auto mtype = moduleLikeOp.getHWModuleType();
-    if (compareTypes(mtype.getOutputTypes(), ioInfo.resTypes) ||
-        compareTypes(mtype.getInputTypes(), ioInfo.argTypes))
+    if (mtype.getOutputTypes() != ioInfo.resTypes ||
+        mtype.getInputTypes() != ioInfo.argTypes)
       return true;
 
     // We're pre-conversion for an op that was primed in the map - it will
@@ -244,35 +258,29 @@ static bool hasUnconvertedOps(mlir::ModuleOp module) {
                       [](T op) { return !isLegalModLikeOp(op); });
 }
 
-template <typename T>
-static DenseMap<Operation *, IOTypes> populateIOMap(mlir::ModuleOp module) {
-  DenseMap<Operation *, IOTypes> ioMap;
-  for (auto op : module.getOps<T>())
-    ioMap[op] = {op.getArgumentTypes(), op.getResultTypes()};
-  return ioMap;
-}
-
 template <typename ModTy, typename T>
 static llvm::SmallVector<Attribute>
-updateNameAttribute(ModTy op, StringRef attrName,
-                    DenseMap<unsigned, hw::StructType> &structMap, T oldNames,
+updateNameAttribute(ModTy op, llvm::SmallVectorImpl<Type> &oldTypes, T oldNames,
                     char joinChar) {
   llvm::SmallVector<Attribute> newNames;
-  for (auto [i, oldName] : llvm::enumerate(oldNames)) {
-    // Was this arg/res index a struct?
-    auto it = structMap.find(i);
-    if (it == structMap.end()) {
-      // No, keep old name.
-      newNames.push_back(StringAttr::get(op->getContext(), oldName));
-      continue;
-    }
 
-    // Yes - create new names from the struct fields and the old name at the
-    // index.
-    auto structType = it->second;
-    for (auto field : structType.getElements())
-      newNames.push_back(StringAttr::get(
-          op->getContext(), oldName + Twine(joinChar) + field.name.str()));
+  for (auto [oldType, oldName] : llvm::zip(oldTypes, oldNames)) {
+    TypeSwitch<Type>(hw::getCanonicalType(oldType))
+        .template Case<hw::StructType>([&](auto st) {
+          for (auto field : st.getElements())
+            newNames.push_back(
+                StringAttr::get(op->getContext(),
+                                oldName + Twine(joinChar) + field.name.str()));
+        })
+        .template Case<hw::ArrayType>([&](auto arr) {
+          for (auto idx : llvm::seq(arr.getNumElements()))
+            newNames.push_back(
+                StringAttr::get(op->getContext(), oldName + Twine(joinChar) +
+                                                      std::to_string(idx)));
+        })
+        .Default([&](auto type) {
+          newNames.push_back(StringAttr::get(op->getContext(), oldName));
+        });
   }
   return newNames;
 }
@@ -282,78 +290,30 @@ static void updateModulePortNames(ModTy op, hw::ModuleType oldModType,
                                   char joinChar) {
   // Module arg and result port names may not be ordered. So we cannot reuse
   // updateNameAttribute. The arg and result order must be preserved.
-  SmallVector<Attribute> newNames;
-  SmallVector<hw::ModulePort> oldPorts(oldModType.getPorts().begin(),
-                                       oldModType.getPorts().end());
-  for (auto oldPort : oldPorts) {
-    auto oldName = oldPort.name;
-    if (auto structType = getStructType(oldPort.type)) {
-      for (auto field : structType.getElements()) {
-        newNames.push_back(StringAttr::get(
-            op->getContext(),
-            oldName.getValue() + Twine(joinChar) + field.name.str()));
-      }
-    } else
-      newNames.push_back(oldName);
+  SmallVector<StringRef> oldNames;
+  SmallVector<Type> oldTypes;
+  for (auto port : oldModType.getPorts()) {
+    oldNames.push_back(port.name);
+    oldTypes.push_back(port.type);
   }
+  SmallVector<Attribute> newNames =
+      updateNameAttribute(op, oldTypes, oldNames, joinChar);
   op.setAllPortNames(newNames);
 }
 
 static llvm::SmallVector<Location>
-updateLocAttribute(DenseMap<unsigned, hw::StructType> &structMap,
+updateLocAttribute(SmallVectorImpl<Type> &oldTypes,
                    SmallVectorImpl<Location> &oldLocs) {
   llvm::SmallVector<Location> newLocs;
-  for (auto [i, oldLoc] : llvm::enumerate(oldLocs)) {
-    // Was this arg/res index a struct?
-    auto it = structMap.find(i);
-    if (it == structMap.end()) {
-      // No, keep old name.
-      newLocs.push_back(oldLoc);
-      continue;
-    }
-
-    auto structType = it->second;
-    for (size_t i = 0, e = structType.getElements().size(); i < e; ++i)
-      newLocs.push_back(oldLoc);
+  for (auto [oldType, oldLoc] : llvm::zip(oldTypes, oldLocs)) {
+    llvm::TypeSwitch<Type>(hw::getCanonicalType(oldType))
+        .Case<hw::StructType>(
+            [&](auto st) { newLocs.append(st.getElements().size(), oldLoc); })
+        .Case<hw::ArrayType>(
+            [&](auto arr) { newLocs.append(arr.getNumElements(), oldLoc); })
+        .Default([&](auto type) { newLocs.push_back(oldLoc); });
   }
   return newLocs;
-}
-
-/// The conversion framework seems to throw away block argument locations.  We
-/// use this function to copy the location from the original argument to the
-/// set of flattened arguments.
-static void
-updateBlockLocations(hw::HWModuleLike op,
-                     DenseMap<unsigned, hw::StructType> &structMap) {
-  auto locs = op.getInputLocs();
-  if (locs.empty() || op.getModuleBody().empty())
-    return;
-  for (auto [arg, loc] : llvm::zip(op.getBodyBlock()->getArguments(), locs))
-    arg.setLoc(loc);
-}
-
-static void setIOInfo(hw::HWModuleLike op, IOInfo &ioInfo) {
-  ioInfo.argTypes = op.getInputTypes();
-  ioInfo.resTypes = op.getOutputTypes();
-  for (auto [i, arg] : llvm::enumerate(ioInfo.argTypes)) {
-    if (auto structType = getStructType(arg))
-      ioInfo.argStructs[i] = structType;
-  }
-  for (auto [i, res] : llvm::enumerate(ioInfo.resTypes)) {
-    if (auto structType = getStructType(res))
-      ioInfo.resStructs[i] = structType;
-  }
-}
-
-template <typename T>
-static DenseMap<Operation *, IOInfo> populateIOInfoMap(mlir::ModuleOp module) {
-  DenseMap<Operation *, IOInfo> ioInfoMap;
-  for (auto op : module.getOps<T>()) {
-    IOInfo ioInfo;
-    setIOInfo(op, ioInfo);
-    ioInfoMap[op] = ioInfo;
-  }
-  return ioInfoMap;
 }
 
 template <typename T>
@@ -371,61 +331,59 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     RewritePatternSet patterns(ctx);
     target.addLegalDialect<hw::HWDialect>();
 
-    // Record any struct types at the module signature. This will be used
-    // post-conversion to update the argument and result names.
-    auto ioInfoMap = populateIOInfoMap<T>(module);
-
-    // Record the instances that were converted. We keep these around since we
-    // need to update their arg/res attribute names after the modules themselves
-    // have been updated.
-    llvm::DenseSet<hw::InstanceOp> convertedInstances;
-
     // Argument conversion for output ops. Similarly to the signature
-    // conversion, legality is based on the op having been visited once, due to
-    // the possibility of nested structs.
+    // conversion, legality is based on the op having been visited once, due
+    // to the possibility of nested structs.
     DenseSet<Operation *> opVisited;
     patterns.add<OutputOpConversion>(typeConverter, ctx, &opVisited);
 
+    // Record the instances that were converted. We keep these around since we
+    // need to update their arg/res attribute names after the modules
+    // themselves have been updated.
+    llvm::DenseSet<hw::InstanceOp> convertedInstances;
     patterns.add<InstanceOpConversion>(typeConverter, ctx, &convertedInstances,
                                        &externModules);
+
     target.addDynamicallyLegalOp<hw::OutputOp>(
         [&](auto op) { return opVisited.contains(op->getParentOp()); });
     target.addDynamicallyLegalOp<hw::InstanceOp>([&](hw::InstanceOp op) {
       auto refName = op.getReferencedModuleName();
       return externModules.contains(refName) ||
              llvm::none_of(op->getOperands(), [](auto operand) {
-               return isStructType(operand.getType());
+               return hw::type_isa<hw::StructType>(operand.getType()) ||
+                      hw::type_isa<hw::ArrayType>(operand.getType());
              });
     });
 
-    DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames;
-    DenseMap<Operation *, SmallVector<Location>> oldArgLocs, oldResLocs;
-    DenseMap<Operation *, hw::ModuleType> oldModTypes;
-
-    for (auto op : module.getOps<T>()) {
-      oldModTypes[op] = op.getHWModuleType();
-      oldArgNames[op] = ArrayAttr::get(module.getContext(), op.getInputNames());
-      oldResNames[op] =
-          ArrayAttr::get(module.getContext(), op.getOutputNames());
-      oldArgLocs[op] = op.getInputLocs();
-      oldResLocs[op] = op.getOutputLocs();
-    }
-
+    DenseMap<Operation *, IOInfo> ioMap;
     // Signature conversion and legalization patterns.
-    addSignatureConversion<T>(ioInfoMap, target, patterns, typeConverter);
+    addSignatureConversion<T>(ioMap, target, patterns, typeConverter);
+
+    // Record any struct types at the module signature. This will be used
+    // post-conversion to update the argument and result names.
+    for (auto op : module.getOps<T>())
+      ioMap[op] = IOInfo{
+          op.getInputTypes(),
+          op.getOutputTypes(),
+          ArrayAttr::get(module.getContext(), op.getInputNames()),
+          ArrayAttr::get(module.getContext(), op.getOutputNames()),
+          op.getInputLocs(),
+          op.getOutputLocs(),
+          op.getHWModuleType(),
+      };
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))
       return failure();
 
     // Update the arg/res names of the module.
     for (auto op : module.getOps<T>()) {
-      auto ioInfo = ioInfoMap[op];
-      updateModulePortNames(op, oldModTypes[op], joinChar);
-      auto newArgLocs = updateLocAttribute(ioInfo.argStructs, oldArgLocs[op]);
-      auto newResLocs = updateLocAttribute(ioInfo.resStructs, oldResLocs[op]);
+      updateModulePortNames(op, ioMap[op].modType, joinChar);
+      auto newArgLocs =
+          updateLocAttribute(ioMap[op].argTypes, ioMap[op].argLocs);
+      auto newResLocs =
+          updateLocAttribute(ioMap[op].resTypes, ioMap[op].resLocs);
       newArgLocs.append(newResLocs.begin(), newResLocs.end());
       op.setAllPortLocs(newArgLocs);
-      updateBlockLocations(op, ioInfo.argStructs);
     }
 
     // And likewise with the converted instance ops.
@@ -434,31 +392,30 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
           cast<hw::HWModuleLike>(SymbolTable::lookupNearestSymbolFrom(
               instanceOp, instanceOp.getReferencedModuleNameAttr()));
 
-      IOInfo ioInfo;
-      if (!ioInfoMap.contains(targetModule)) {
+      if (!ioMap.contains(targetModule)) {
         // If an extern module, then not yet processed, populate the maps.
-        setIOInfo(targetModule, ioInfo);
-        ioInfoMap[targetModule] = ioInfo;
-        oldArgNames[targetModule] =
-            ArrayAttr::get(module.getContext(), targetModule.getInputNames());
-        oldResNames[targetModule] =
-            ArrayAttr::get(module.getContext(), targetModule.getOutputNames());
-        oldArgLocs[targetModule] = targetModule.getInputLocs();
-        oldResLocs[targetModule] = targetModule.getOutputLocs();
-      } else
-        ioInfo = ioInfoMap[targetModule];
+        ioMap[targetModule] = IOInfo{
+            targetModule.getInputTypes(),
+            targetModule.getOutputTypes(),
+            ArrayAttr::get(module.getContext(), targetModule.getInputNames()),
+            ArrayAttr::get(module.getContext(), targetModule.getOutputNames()),
+            targetModule.getInputLocs(),
+            targetModule.getOutputLocs(),
+            targetModule.getHWModuleType(),
+        };
+      }
 
       instanceOp.setInputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, "argNames", ioInfo.argStructs,
-              oldArgNames[targetModule].template getAsValueRange<StringAttr>(),
+              instanceOp, ioMap[targetModule].argTypes,
+              ioMap[targetModule].argNames.getAsValueRange<StringAttr>(),
               joinChar)));
       instanceOp.setOutputNames(ArrayAttr::get(
           instanceOp.getContext(),
           updateNameAttribute(
-              instanceOp, "resultNames", ioInfo.resStructs,
-              oldResNames[targetModule].template getAsValueRange<StringAttr>(),
+              instanceOp, ioMap[targetModule].resTypes,
+              ioMap[targetModule].resNames.getAsValueRange<StringAttr>(),
               joinChar)));
     }
 
