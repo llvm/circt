@@ -1874,7 +1874,8 @@ public:
         return failure();
       }
     }
-    return success();
+
+    return createOptNewTopLevelFcn(moduleOp, topLevelFunction);
   }
 
   struct LoweringPattern {
@@ -1971,6 +1972,94 @@ public:
 private:
   LogicalResult partialPatternRes;
   std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
+
+  FuncOp createNewTopLevelFcn(ModuleOp moduleOp, std::string &baseName) {
+    std::string newName = baseName;
+    unsigned counter = 0;
+    while (SymbolTable::lookupSymbolIn(moduleOp, newName)) {
+      newName = baseName + "_" + std::to_string(++counter);
+    }
+
+    OpBuilder builder(moduleOp.getContext());
+    builder.setInsertionPointToStart(moduleOp.getBody());
+
+    FunctionType funcType = builder.getFunctionType({}, {});
+
+    if (auto newFunc =
+            builder.create<FuncOp>(moduleOp.getLoc(), newName, funcType)) {
+      baseName = newName;
+      return newFunc;
+    }
+
+    moduleOp.emitError("Cannot create new top-level function.");
+
+    return nullptr;
+  }
+
+  void insertCallFromNewTopLevel(OpBuilder &builder, FuncOp caller,
+                                 FuncOp callee) {
+    if (caller.getBody().empty()) {
+      caller.addEntryBlock();
+    }
+
+    Block *entryBlock = &caller.getBody().front();
+    builder.setInsertionPointToStart(entryBlock);
+
+    SmallVector<Value, 4> memRefArgs;
+    for (auto arg : callee.getArguments()) {
+      assert(isa<MemRefType>(arg.getType()) &&
+             "Currently only support callee's arguments are all memrefs.");
+      auto memrefType = cast<MemRefType>(arg.getType());
+      auto allocOp =
+          builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
+      memRefArgs.push_back(allocOp);
+    }
+
+    auto calleeName =
+        SymbolRefAttr::get(builder.getContext(), callee.getSymName());
+    auto resultTypes = callee.getResultTypes();
+
+    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
+                           memRefArgs);
+  }
+
+  LogicalResult createOptNewTopLevelFcn(ModuleOp moduleOp,
+                                        std::string &topLevelFunction) {
+    auto hasMemrefArguments = [](FuncOp func) {
+      return std::any_of(
+          func.getArguments().begin(), func.getArguments().end(),
+          [](BlockArgument arg) { return isa<MemRefType>(arg.getType()); });
+    };
+
+    /// We only create a new top-level function and call the original top-level
+    /// function from the new one if the original top-level has `memref` in its
+    /// argument
+    bool hasMemrefArgsInTopLevel = false;
+    for (auto funcOp : moduleOp.getOps<FuncOp>()) {
+      if (funcOp.getName() == topLevelFunction) {
+        if (hasMemrefArguments(funcOp)) {
+          hasMemrefArgsInTopLevel = true;
+        }
+      }
+    }
+
+    std::string oldName = topLevelFunction;
+    if (hasMemrefArgsInTopLevel) {
+      auto newTopLevelFunc = createNewTopLevelFcn(moduleOp, topLevelFunction);
+
+      OpBuilder builder(moduleOp.getContext());
+      Operation *oldTopLevelFuncOp =
+          SymbolTable::lookupSymbolIn(moduleOp, oldName);
+      auto oldTopLevelFunc = dyn_cast_or_null<FuncOp>(oldTopLevelFuncOp);
+
+      if (!oldTopLevelFunc)
+        oldTopLevelFunc.emitOpError("Original top-level function not found!");
+
+      insertCallFromNewTopLevel(builder, newTopLevelFunc, oldTopLevelFunc);
+    }
+
+    return success();
+  }
 };
 
 void SCFToCalyxPass::runOnOperation() {
