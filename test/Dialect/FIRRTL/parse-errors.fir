@@ -1191,7 +1191,7 @@ circuit RWProbeExprOOB :
     define p = rwprobe(x[100])
 
    input out_0 : SInt<8>[5]
-   out_0[4] <- out_0[5]
+   out_0[4] <= out_0[5]
 
 ;// -----
 
