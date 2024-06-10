@@ -89,10 +89,12 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
   p.printSymbolName(funcName);
   hw::module_like_impl::printModuleSignatureNew(
       p, op->getRegion(0), op.getModuleType(),
-      op.getPerArgumentAttrsAttr()
-          ? ArrayRef<Attribute>(op.getPerArgumentAttrsAttr().getValue())
+      getPerArgumentAttrsAttr()
+          ? ArrayRef<Attribute>(getPerArgumentAttrsAttr().getValue())
           : ArrayRef<Attribute>{},
-      SmallVector<Location>(getArgumentLocs().value().getAsRange<Location>()));
+      getArgumentLocs() ? SmallVector<Location>(
+                              getArgumentLocs().value().getAsRange<Location>())
+                        : ArrayRef<Location>{});
 
   mlir::function_interface_impl::printFunctionAttributes(
       p, op,
