@@ -1069,3 +1069,62 @@ firrtl.circuit "InferToRWProbe" {
    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
   }
 }
+
+// -----
+
+// Check resets are traced through nodes
+
+// CHECK-LABEL: "TraceThroughNodes"
+// CHECK-NOT: firrtl.reset
+firrtl.circuit "TraceThroughNodes" {
+  firrtl.module @TraceThroughNodes(in %reset: !firrtl.asyncreset) {
+    // CHECK: %node = firrtl.node %localReset : !firrtl.asyncreset
+    // CHECK-NOT: firrtl.reset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.connect %localReset, %reset : !firrtl.reset, !firrtl.asyncreset
+
+    %node = firrtl.node %localReset : !firrtl.reset
+
+    %localReset2 = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset2, %node: !firrtl.reset
+
+    // CHECK: %node2 = firrtl.node %localReset2 : !firrtl.asyncreset
+    %node2 = firrtl.node %localReset2 : !firrtl.reset
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "RWProbeOp"
+firrtl.circuit "RWProbeOp" {
+  // CHECK: %out: !firrtl.bundle<a: asyncreset, b: asyncreset>
+  // CHECK-SAME: %out2: !firrtl.asyncreset
+  firrtl.module @RWProbeOp(in %driver: !firrtl.asyncreset, out %out: !firrtl.bundle<a: reset, b: reset>, out %out2: !firrtl.reset) {
+    %r = firrtl.wire sym [<@r,0,public>,<@r_a,1,public>,<@r_b,2,public>] : !firrtl.bundle<a: reset, b flip: reset>
+
+    // CHECK-COUNT-2: <a: asyncreset, b flip: asyncreset>
+    %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+    %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+    // CHECK-COUNT-2: %driver : !firrtl.asyncreset
+    firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_a_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_a> : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_b_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_b> : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<bundle<a: asyncreset, b: asyncreset>>
+    %r_rw = firrtl.ref.rwprobe <@RWProbeOp::@r> : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_b_read = firrtl.ref.resolve %r_b_rw : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<bundle<a: asyncreset, b: asyncreset>>
+    %r_read = firrtl.ref.resolve %r_rw : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    // CHECK-NEXT: firrtl.asyncreset
+    firrtl.matchingconnect %out2, %r_b_read : !firrtl.reset
+    // CHECK-NEXT: bundle<a: asyncreset, b: asyncreset>
+    firrtl.matchingconnect %out, %r_read : !firrtl.bundle<a: reset, b: reset>
+  }
+}
+

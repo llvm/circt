@@ -241,9 +241,9 @@ static void addNoI0ResultPruningPattern(ConversionTarget &target,
 
 } // namespace
 
-void ExportVerilog::pruneZeroValuedLogic(hw::HWModuleOp module) {
-  ConversionTarget target(*module.getContext());
-  RewritePatternSet patterns(module.getContext());
+void ExportVerilog::pruneZeroValuedLogic(HWEmittableModuleLike module) {
+  ConversionTarget target(*module->getContext());
+  RewritePatternSet patterns(module->getContext());
   PruneTypeConverter typeConverter;
 
   target.addLegalDialect<sv::SVDialect, comb::CombDialect, hw::HWDialect>();

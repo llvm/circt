@@ -2,13 +2,13 @@
 // RUN: circt-opt %s --ibis-call-prep | circt-opt | FileCheck %s --check-prefix=PREP
 
 
-// CHECK-LABEL: ibis.class @C {
+// CHECK-LABEL: ibis.class sym @C {
 // CHECK:         ibis.method @getAndSet(%x: ui32) -> ui32 {
 // CHECK:           ibis.return %x : ui32
 // CHECK:         ibis.method @returnNothingWithRet() -> () {
 // CHECK:           ibis.return
 
-// PREP-LABEL: ibis.class @C {
+// PREP-LABEL: ibis.class sym @C {
 // PREP:         ibis.method @getAndSet(%arg: !hw.struct<x: ui32>) -> ui32 {
 // PREP:           %x = hw.struct_explode %arg : !hw.struct<x: ui32>
 // PREP:           ibis.return %x : ui32
@@ -17,7 +17,7 @@
 // PREP:           ibis.return
 
 ibis.design @foo {
-ibis.class @C {
+ibis.class sym @C {
   %this = ibis.this <@foo::@C>
   ibis.method @getAndSet(%x: ui32) -> ui32 {
     ibis.return %x : ui32
@@ -27,7 +27,7 @@ ibis.class @C {
   }
 }
 
-// CHECK-LABEL: ibis.class @User {
+// CHECK-LABEL: ibis.class sym @User {
 // CHECK:         [[c:%.+]] = ibis.instance @c, <@foo::@C>
 // CHECK:         ibis.method @getAndSetWrapper(%new_value: ui32) -> ui32 {
 // CHECK:           [[x:%.+]] = ibis.call <@foo::@getAndSet>(%new_value) : (ui32) -> ui32
@@ -37,7 +37,7 @@ ibis.class @C {
 // CHECK:           ibis.return [[x]] : ui32
 
 
-// PREP-LABEL: ibis.class @User {
+// PREP-LABEL: ibis.class sym @User {
 // PREP:         [[c:%.+]] = ibis.instance @c, <@foo::@C>
 // PREP:         ibis.method @getAndSetWrapper(%arg: !hw.struct<new_value: ui32>) -> ui32 {
 // PREP:           %new_value = hw.struct_explode %arg : !hw.struct<new_value: ui32>
@@ -48,7 +48,7 @@ ibis.class @C {
 // PREP:           [[STRUCT2:%.+]] = hw.struct_create (%new_value) {sv.namehint = "getAndSet_args_called_from_getAndSetDup"} : !hw.struct<x: ui32>
 // PREP:           [[CALLRES2:%.+]] = ibis.call <@foo::@getAndSet>([[STRUCT2]]) : (!hw.struct<x: ui32>) -> ui32
 // PREP:           ibis.return [[CALLRES2]] : ui32
-ibis.class @User {
+ibis.class sym @User {
   %this = ibis.this <@foo::@User>
   ibis.instance @c, <@foo::@C>
   ibis.method @getAndSetWrapper(%new_value: ui32) -> ui32 {
