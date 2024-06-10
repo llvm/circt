@@ -63,7 +63,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+    builder.create<MatchingConnectOp>(dst, src);
     return;
   }
 
@@ -159,7 +159,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   // connecting uint<1> to abstract reset types.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+    builder.create<MatchingConnectOp>(dst, src);
   } else
     builder.create<ConnectOp>(dst, src);
 }
@@ -756,6 +756,24 @@ hw::InnerSymTarget circt::firrtl::getTargetFor(FieldRef ref) {
     return hw::InnerSymTarget(arg.getArgNumber(), mod, ref.getFieldID());
   }
   return hw::InnerSymTarget(root.getDefiningOp(), ref.getFieldID());
+}
+
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+FieldRef circt::firrtl::getFieldRefForTarget(const hw::InnerSymTarget &ist) {
+  if (ist.isPort()) {
+    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+        .Case<FModuleOp>([&](auto fmod) {
+          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+        })
+        .Default({});
+  }
+
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+  assert(symOp && symOp.getTargetResultIndex() &&
+         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+  return FieldRef(symOp.getTargetResult(), ist.getField());
 }
 
 // Return InnerSymAttr with sym on specified fieldID.

@@ -407,8 +407,8 @@ def HWEmittableModuleLike : OpInterface<"HWEmittableModuleLike", [HWModuleLike,
                                         Emittable]> {
   let cppNamespace = "::circt::hw";
   let description = [{
-    This interface indicates that the module like op is emitatble in SV and
-    requires to be ran SV legalization on its body.
+    This interface indicates that the module like op is emittable in SV and
+    requires SV legalization on its body.
   }];
 }
 

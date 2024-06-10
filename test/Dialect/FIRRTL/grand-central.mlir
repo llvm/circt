@@ -1018,13 +1018,13 @@ firrtl.circuit "Top" attributes {
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %a_w1 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    firrtl.strictconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a_w1, %c0_ui1 : !firrtl.uint<1>
     %a_w2 = firrtl.wire   {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
-    firrtl.strictconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
+    firrtl.matchingconnect %a_w2, %c0_ui2 : !firrtl.uint<2>
     %companion_w1__gen_uint = firrtl.instance companion_w1  @Companion_w1(in _gen_uint: !firrtl.uint<1>)
     %companion_w2__gen_uint = firrtl.instance companion_w2  @Companion_w2(in _gen_uint: !firrtl.uint<2>)
-    firrtl.strictconnect %companion_w1__gen_uint, %a_w1 : !firrtl.uint<1>
-    firrtl.strictconnect %companion_w2__gen_uint, %a_w2 : !firrtl.uint<2>
+    firrtl.matchingconnect %companion_w1__gen_uint, %a_w1 : !firrtl.uint<1>
+    firrtl.matchingconnect %companion_w2__gen_uint, %a_w2 : !firrtl.uint<2>
   }
   firrtl.module @Top() {
     firrtl.instance dut  @DUT()

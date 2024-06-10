@@ -20,7 +20,7 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
     %bb_in, %bb_out = firrtl.instance bb @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
-    firrtl.strictconnect %bb_in, %invalid_ui8 : !firrtl.uint<8>
+    firrtl.matchingconnect %bb_in, %invalid_ui8 : !firrtl.uint<8>
     // CHECK: firrtl.connect %out, %bb_0_out
     // CHECK: firrtl.connect %bb_0_in, %in
     firrtl.connect %out, %bb_out : !firrtl.uint<8>, !firrtl.uint<8>
@@ -32,8 +32,8 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     // CHECK-NOT: firrtl.instance bb @MyBlackBox
     // CHECK: %mod_in, %mod_out, %mod_bb_0_in, %mod_bb_0_out = firrtl.instance mod sym [[WRAPPER_SYM:@.+]] @BBWrapper
-    // CHECK-NEXT: firrtl.strictconnect %bb_0_in, %mod_bb_0_in
-    // CHECK-NEXT: firrtl.strictconnect %mod_bb_0_out, %bb_0_out
+    // CHECK-NEXT: firrtl.matchingconnect %bb_0_in, %mod_bb_0_in
+    // CHECK-NEXT: firrtl.matchingconnect %mod_bb_0_out, %bb_0_out
     %mod_in, %mod_out = firrtl.instance mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %mod_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -42,8 +42,8 @@ firrtl.circuit "ExtractBlackBoxesSimple" attributes {annotations = [{class = "fi
   firrtl.module @ExtractBlackBoxesSimple(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
     // CHECK: %dut_in, %dut_out, %dut_bb_0_in, %dut_bb_0_out = firrtl.instance dut sym {{@.+}} @DUTModule
     // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb @MyBlackBox
-    // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_bb_0_in
-    // CHECK-NEXT: firrtl.strictconnect %dut_bb_0_out, %bb_out
+    // CHECK-NEXT: firrtl.matchingconnect %bb_in, %dut_bb_0_in
+    // CHECK-NEXT: firrtl.matchingconnect %dut_bb_0_out, %bb_out
     %dut_in, %dut_out = firrtl.instance dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -123,10 +123,10 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK: %mod_in, %mod_out, %mod_prefix_0_in, %mod_prefix_0_out, %mod_prefix_1_in, %mod_prefix_1_out = firrtl.instance mod
     // CHECK-SAME: sym [[WRAPPER_SYM:@.+]] @BBWrapper
     // CHECK-NOT: annotations =
-    // CHECK-NEXT: firrtl.strictconnect %prefix_1_in, %mod_prefix_1_in
-    // CHECK-NEXT: firrtl.strictconnect %mod_prefix_1_out, %prefix_1_out
-    // CHECK-NEXT: firrtl.strictconnect %prefix_0_in, %mod_prefix_0_in
-    // CHECK-NEXT: firrtl.strictconnect %mod_prefix_0_out, %prefix_0_out
+    // CHECK-NEXT: firrtl.matchingconnect %prefix_1_in, %mod_prefix_1_in
+    // CHECK-NEXT: firrtl.matchingconnect %mod_prefix_1_out, %prefix_1_out
+    // CHECK-NEXT: firrtl.matchingconnect %prefix_0_in, %mod_prefix_0_in
+    // CHECK-NEXT: firrtl.matchingconnect %mod_prefix_0_out, %prefix_0_out
     %mod_in, %mod_out = firrtl.instance mod sym @mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %mod_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -137,11 +137,11 @@ firrtl.circuit "ExtractBlackBoxesSimple2" attributes {annotations = [{class = "f
     // CHECK-NOT: annotations =
     // CHECK-SAME: sym {{@.+}} @DUTModule
     // CHECK-NEXT: %bb_in, %bb_out = firrtl.instance bb sym [[BB_SYM:@.+]] {annotations = [{class = "Old1"}, {class = "On1"}, {class = "Old2"}, {class = "On2"}]} @MyBlackBox
-    // CHECK-NEXT: firrtl.strictconnect %bb_in, %dut_prefix_1_in
-    // CHECK-NEXT: firrtl.strictconnect %dut_prefix_1_out, %bb_out
+    // CHECK-NEXT: firrtl.matchingconnect %bb_in, %dut_prefix_1_in
+    // CHECK-NEXT: firrtl.matchingconnect %dut_prefix_1_out, %bb_out
     // CHECK-NEXT: %bb2_in, %bb2_out = firrtl.instance bb2 @MyBlackBox2
-    // CHECK-NEXT: firrtl.strictconnect %bb2_in, %dut_prefix_0_in
-    // CHECK-NEXT: firrtl.strictconnect %dut_prefix_0_out, %bb2_out
+    // CHECK-NEXT: firrtl.matchingconnect %bb2_in, %dut_prefix_0_in
+    // CHECK-NEXT: firrtl.matchingconnect %dut_prefix_0_out, %bb2_out
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %dut_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %dut_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -219,11 +219,11 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
   // CHECK-SAME:    out %bb_1_out: !firrtl.uint<8>
   // CHECK-SAME:  ) {
   // CHECK-NEXT:    %bb2_in, %bb2_out = firrtl.instance bb2 sym [[BB2_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_new_0, class = "Dummy4"}, {circt.nonlocal = @nla_old2, class = "Dummy2"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-  // CHECK-NEXT:    firrtl.strictconnect %bb2_in, %bb_0_in : !firrtl.uint<8>
-  // CHECK-NEXT:    firrtl.strictconnect %bb_0_out, %bb2_out : !firrtl.uint<8>
+  // CHECK-NEXT:    firrtl.matchingconnect %bb2_in, %bb_0_in : !firrtl.uint<8>
+  // CHECK-NEXT:    firrtl.matchingconnect %bb_0_out, %bb2_out : !firrtl.uint<8>
   // CHECK-NEXT:    %bb1_in, %bb1_out = firrtl.instance bb1 sym [[BB1_SYM:@.+]] {annotations = [{circt.nonlocal = @nla_new_1, class = "Dummy3"}, {circt.nonlocal = @nla_old1, class = "Dummy1"}]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-  // CHECK-NEXT:    firrtl.strictconnect %bb1_in, %bb_1_in : !firrtl.uint<8>
-  // CHECK-NEXT:    firrtl.strictconnect %bb_1_out, %bb1_out : !firrtl.uint<8>
+  // CHECK-NEXT:    firrtl.matchingconnect %bb1_in, %bb_1_in : !firrtl.uint<8>
+  // CHECK-NEXT:    firrtl.matchingconnect %bb_1_out, %bb1_out : !firrtl.uint<8>
   // CHECK-NEXT:  }
   // CHECK-LABEL: firrtl.module private @DUTModule
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
@@ -232,10 +232,10 @@ firrtl.circuit "ExtractBlackBoxesIntoDUTSubmodule"  {
     // CHECK-NEXT: %mod_in, %mod_out, %mod_bb_0_in, %mod_bb_0_out, %mod_bb_1_in, %mod_bb_1_out = firrtl.instance mod
     // CHECK-NOT: annotations =
     // CHECK-SAME: sym [[WRAPPER_SYM:@.+]] @BBWrapper
-    // CHECK-NEXT: firrtl.strictconnect %BlackBoxes_bb_1_in, %mod_bb_1_in
-    // CHECK-NEXT: firrtl.strictconnect %mod_bb_1_out, %BlackBoxes_bb_1_out
-    // CHECK-NEXT: firrtl.strictconnect %BlackBoxes_bb_0_in, %mod_bb_0_in
-    // CHECK-NEXT: firrtl.strictconnect %mod_bb_0_out, %BlackBoxes_bb_0_out
+    // CHECK-NEXT: firrtl.matchingconnect %BlackBoxes_bb_1_in, %mod_bb_1_in
+    // CHECK-NEXT: firrtl.matchingconnect %mod_bb_1_out, %BlackBoxes_bb_1_out
+    // CHECK-NEXT: firrtl.matchingconnect %BlackBoxes_bb_0_in, %mod_bb_0_in
+    // CHECK-NEXT: firrtl.matchingconnect %mod_bb_0_out, %BlackBoxes_bb_0_out
     %mod_in, %mod_out = firrtl.instance mod sym @mod @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %out, %mod_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %mod_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
@@ -490,15 +490,15 @@ firrtl.circuit "InstSymConflict" {
         {circt.nonlocal = @nla_1, class = "DummyA"},
         {circt.nonlocal = @nla_2, class = "DummyB"}
       ]} @MyBlackBox(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.strictconnect %bb_in, %in : !firrtl.uint<8>
-    firrtl.strictconnect %out, %bb_out : !firrtl.uint<8>
+    firrtl.matchingconnect %bb_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %bb_out : !firrtl.uint<8>
   }
   firrtl.module private @DUTModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
     %mod1_in, %mod1_out = firrtl.instance mod1 sym @mod1 @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     %mod2_in, %mod2_out = firrtl.instance mod2 sym @mod2 @BBWrapper(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.strictconnect %mod1_in, %in : !firrtl.uint<8>
-    firrtl.strictconnect %mod2_in, %mod1_out : !firrtl.uint<8>
-    firrtl.strictconnect %out, %mod2_out : !firrtl.uint<8>
+    firrtl.matchingconnect %mod1_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %mod2_in, %mod1_out : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %mod2_out : !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @InstSymConflict
   firrtl.module @InstSymConflict(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -506,8 +506,8 @@ firrtl.circuit "InstSymConflict" {
     // CHECK: firrtl.instance bb sym @bb {annotations = [{class = "DummyB"}]} @MyBlackBox
     // CHECK: firrtl.instance bb sym @bb_0 {annotations = [{class = "DummyA"}]} @MyBlackBox
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUTModule(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.strictconnect %dut_in, %in : !firrtl.uint<8>
-    firrtl.strictconnect %out, %dut_out : !firrtl.uint<8>
+    firrtl.matchingconnect %dut_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %dut_out : !firrtl.uint<8>
   }
   // CHECK:               emit.file "BlackBoxes.txt" {
   // CHECK-NEXT:            sv.verbatim "

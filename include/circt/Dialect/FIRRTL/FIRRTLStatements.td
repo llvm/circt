@@ -46,7 +46,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let results = (outs);
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+    "$dest `,` $src  attr-dict `:` custom<OptionalBinaryOpTypes>(type($dest), type($src))";
 
   let hasVerifier = 1;
   let hasCanonicalizer = true;
@@ -55,19 +55,20 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",
         CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
-def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
-    Connect two values with strict constraints:
+    Connect two values with matching type constraints.  The types of the lhs and
+    rhs must match:
     ```
-      firrtl.strictconnect %dest, %src : t1
-      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
+      firrtl.matchingconnect %dest, %src : t1
+      firrtl.matchingconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
-  let arguments = (ins StrictConnectableType:$dest,
-                       StrictConnectableType:$src);
+  let arguments = (ins MatchingConnectableType:$dest,
+                       MatchingConnectableType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -246,10 +247,10 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
     ```mlir
       firrtl.match %in : !firrtl.enum<Some: uint<1>, None: uint<0>> {
         case Some(%arg0) {
-          !firrtl.strictconnect %w, %arg0 : !firrtl.uint<1>
+          !firrtl.matchingconnect %w, %arg0 : !firrtl.uint<1>
         }
         case None(%arg0) {
-          !firrt.strictconnect %w, %c1 : !firrtl.uint<1>
+          !firrt.matchingconnect %w, %c1 : !firrtl.uint<1>
         }
       }
     ```

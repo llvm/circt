@@ -10,14 +10,14 @@ CIRCT provides a `setup.py` script that take care of configuring and building LL
 
 ```
 $ cd circt
-$ pip install lib/Bindings/Python --use-feature=in-tree-build
+$ pip install lib/Bindings/Python
 ```
 
 If you just want to build the wheel, use the `pip wheel` command:
 
 ```
 $ cd circt
-$ pip wheel lib/Bindings/Python --use-feature=in-tree-build
+$ pip wheel lib/Bindings/Python
 ```
 
 This will create a `circt_core-<version>-<python version>-<platform>.whl` file in the root of the repo.

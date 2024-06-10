@@ -1019,7 +1019,6 @@ public:
   llvm::formatted_raw_ostream &os;
 
   bool encounteredError = false;
-  unsigned currentIndent = 0;
 
   /// Pretty printing:
 
@@ -1286,9 +1285,7 @@ void EmitterBase::emitComment(StringAttr comment) {
   // Set a line length for the comment.  Subtract off the leading comment and
   // space ("// ") as well as the current indent level to simplify later
   // arithmetic.  Ensure that this line length doesn't go below zero.
-  auto lineLength = state.options.emittedLineLength - state.currentIndent - 3;
-  if (lineLength > state.options.emittedLineLength)
-    lineLength = 0;
+  auto lineLength = std::max<size_t>(state.options.emittedLineLength, 3) - 3;
 
   // Process the comment in line chunks extracted from manually specified line
   // breaks.  This is done to preserve user-specified line breaking if used.
@@ -4310,6 +4307,7 @@ LogicalResult StmtEmitter::emitFunctionCall(CallOpTy op) {
       emitExpression(bpassignOp.getDest(), ops);
     } else {
       auto assignOp = cast<sv::AssignOp>(*explicitReturn.user_begin());
+      ps << "assign" << PP::nbsp;
       emitExpression(assignOp.getDest(), ops);
     }
     ps << PP::nbsp << "=" << PP::nbsp;

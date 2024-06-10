@@ -6,22 +6,22 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     // CHECK: firrtl.int.sizeof %clk
     %size = firrtl.int.generic "circt.sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    firrtl.strictconnect %s, %size : !firrtl.uint<32>
+    firrtl.matchingconnect %s, %size : !firrtl.uint<32>
 
     // CHECK: firrtl.int.isX
     %isX = firrtl.int.generic "circt.isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    firrtl.strictconnect %io1, %isX : !firrtl.uint<1>
+    firrtl.matchingconnect %io1, %isX : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.test "foo"
     %foo = firrtl.int.generic "circt.plusargs.test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    firrtl.strictconnect %io2, %foo : !firrtl.uint<1>
+    firrtl.matchingconnect %io2, %foo : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     %pav = firrtl.int.generic "circt.plusargs.value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     %found = firrtl.subfield %pav[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %result = firrtl.subfield %pav[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    firrtl.strictconnect %io3, %found : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %result : !firrtl.uint<5>
+    firrtl.matchingconnect %io3, %found : !firrtl.uint<1>
+    firrtl.matchingconnect %io4, %result : !firrtl.uint<5>
   }
   // CHECK-LABEL: @ClockGate
   firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
