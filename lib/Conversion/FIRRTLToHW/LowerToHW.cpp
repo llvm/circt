@@ -69,7 +69,8 @@ static Value getSingleNonInstanceOperand(AttachOp op) {
   Value singleSource;
   for (auto operand : op.getAttached()) {
     if (isZeroBitFIRRTLType(operand.getType()) ||
-        operand.getDefiningOp<InstanceOp>())
+        operand.getDefiningOp<InstanceOp>() ||
+        operand.getDefiningOp<StrictInstanceOp>())
       continue;
     // If it is used by other than attach op or there is already a source
     // value, bail out.
@@ -253,6 +254,8 @@ struct CircuitLoweringState {
       auto isBind = [](igraph::InstanceRecord *instRec) {
         auto inst = instRec->getInstance();
         if (auto *finst = dyn_cast<InstanceOp>(&inst))
+          return finst->getLowerToBind();
+        if (auto *finst = dyn_cast<StrictInstanceOp>(&inst))
           return finst->getLowerToBind();
         return false;
       };
@@ -1494,8 +1497,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
   LogicalResult visitExpr(SubindexOp op);
+  LogicalResult visitExpr(LHSSubindexOp op);
   LogicalResult visitExpr(SubaccessOp op);
   LogicalResult visitExpr(SubfieldOp op);
+  LogicalResult visitExpr(LHSSubfieldOp op);
   LogicalResult visitExpr(VectorCreateOp op);
   LogicalResult visitExpr(BundleCreateOp op);
   LogicalResult visitExpr(FEnumCreateOp op);
@@ -1684,9 +1689,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(RefReleaseOp op);
   LogicalResult visitStmt(RefReleaseInitialOp op);
 
-  FailureOr<Value> lowerSubindex(SubindexOp op, Value input);
+  template<typename SIOP>
+  FailureOr<Value> lowerSubindex(SIOP op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
-  FailureOr<Value> lowerSubfield(SubfieldOp op, Value input);
+  template<typename SFOP>
+  FailureOr<Value> lowerSubfield(SFOP op, Value input);
 
   LogicalResult fixupLTLOps();
 
@@ -2711,17 +2718,21 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   return setLowering(op, cst);
 }
 
-FailureOr<Value> FIRRTLLowering::lowerSubindex(SubindexOp op, Value input) {
+template<typename SIOP>
+FailureOr<Value> FIRRTLLowering::lowerSubindex(SIOP op, Value input) {
+  Type inputType = op.getInput().getType();
+  if (auto lhs = dyn_cast<LHSType>(inputType))
+    inputType = lhs.getType();
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
-          firrtl::type_cast<FVectorType>(op.getInput().getType())
+          firrtl::type_cast<FVectorType>(inputType)
               .getNumElements()),
       op.getIndex());
 
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
   // otherwise hw::ArrayGetOp.
   Value result;
-  if (isa<sv::InOutType>(input.getType()))
+  if (isa<sv::InOutType>(inputType))
     result = builder.createOrFold<sv::ArrayIndexInOutOp>(input, iIdx);
   else
     result = builder.createOrFold<hw::ArrayGetOp>(input, iIdx);
@@ -2752,16 +2763,24 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   return result;
 }
 
-FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
-  auto resultType = lowerType(op->getResult(0).getType());
-  if (!resultType || !input) {
+template<typename SFOP>
+FailureOr<Value> FIRRTLLowering::lowerSubfield(SFOP op, Value input) {
+  Type inputType = op.getInput().getType();
+  if (auto lhs = dyn_cast<LHSType>(inputType))
+    inputType = lhs.getType();
+
+  Type resultType = op.getResult().getType();
+  if (auto lhs = dyn_cast<LHSType>(resultType))
+    resultType = lhs.getType();
+
+  if (!lowerType(resultType) || !input) {
     op->emitError() << "subfield type lowering failed";
     return failure();
   }
 
   // If the input has an inout type, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.
-  auto field = firrtl::type_cast<BundleType>(op.getInput().getType())
+  auto field = firrtl::type_cast<BundleType>(inputType)
                    .getElementName(op.getFieldIndex());
   Value result;
   if (isa<sv::InOutType>(input.getType()))
@@ -2774,6 +2793,20 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SubfieldOp op, Value input) {
 
 LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
   if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubindex(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LHSSubindexOp op) {
+  if (isZeroBitFIRRTLType(op.getType().getType()))
     return setLowering(op, Value());
 
   auto input = getPossiblyInoutLoweredValue(op.getInput());
@@ -2807,6 +2840,25 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
     return success();
 
   if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
+
+  auto input = getPossiblyInoutLoweredValue(op.getInput());
+  if (!input)
+    return op.emitError() << "input lowering failed";
+
+  auto result = lowerSubfield(op, input);
+  if (failed(result))
+    return failure();
+  return setLowering(op, *result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LHSSubfieldOp op) {
+  // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave
+  // invalid subfield accesses
+  if (getLoweredValue(op) || !op.getInput())
+    return success();
+
+  if (isZeroBitFIRRTLType(op.getType().getType()))
     return setLowering(op, Value());
 
   auto input = getPossiblyInoutLoweredValue(op.getInput());
@@ -2913,8 +2965,25 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return success();
   }
 
-  op.emitError("All plain wires should have been removed prior");
-  return failure();
+  auto resultType = lowerType(origResultType);
+  if (!resultType)
+    return failure();
+
+  if (resultType.isInteger(0))
+    return setLowering(op.getResult(), Value());
+
+  // Name attr is required on hw.wire but optional on firrtl.wire.
+  auto innerSym = lowerInnerSymbol(op);
+  auto name = op.getNameAttr();
+  // This is not a temporary wire created by the compiler, so attach a symbol
+  // name.
+  auto wire = builder.create<hw::WireOp>(
+      op.getLoc(), getOrCreateZConstant(resultType), name, innerSym);
+
+  if (auto svAttrs = sv::getSVAttributes(op))
+    sv::setSVAttributes(wire, svAttrs);
+
+  return setLowering(op.getResult(), wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(StrictWireOp op) {
@@ -2938,7 +3007,7 @@ LogicalResult FIRRTLLowering::visitDecl(StrictWireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
-  setLowering(op.getRead(), wire);
+  (void)setLowering(op.getRead(), wire);
   return setLowering(op.getWrite(), wire);
 }
 

@@ -31,7 +31,7 @@ public:
         // Basic Expressions
         .template Case<
             ConstantOp, SpecialConstantOp, AggregateConstantOp, InvalidValueOp,
-            SubfieldOp, SubindexOp, SubaccessOp, IsTagOp, SubtagOp,
+            SubfieldOp, LHSSubfieldOp, SubindexOp, LHSSubindexOp, SubaccessOp, IsTagOp, SubtagOp,
             BundleCreateOp, VectorCreateOp, FEnumCreateOp, MultibitMuxOp,
             TagExtractOp, OpenSubfieldOp, OpenSubindexOp, ObjectSubfieldOp,
             ObjectAnyRefCastOp,
@@ -114,7 +114,9 @@ public:
   HANDLE(VectorCreateOp, Unhandled);
   HANDLE(FEnumCreateOp, Unhandled);
   HANDLE(SubfieldOp, Unhandled);
+  HANDLE(LHSSubfieldOp, Unhandled);
   HANDLE(SubindexOp, Unhandled);
+  HANDLE(LHSSubindexOp, Unhandled);
   HANDLE(SubaccessOp, Unhandled);
   HANDLE(IsTagOp, Unhandled);
   HANDLE(SubtagOp, Unhandled);

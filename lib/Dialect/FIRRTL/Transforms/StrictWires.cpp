@@ -27,10 +27,12 @@ using namespace firrtl;
 
 static StrictWireOp cloneWireTo(mlir::OpBuilder &builder, WireOp wire) {
   builder.setInsertionPoint(wire);
-  return builder.create<StrictWireOp>(
+  auto sw = builder.create<StrictWireOp>(
       wire.getLoc(), cast<FIRRTLBaseType>(wire.getResult().getType()),
       wire.getNameAttr(), wire.getNameKindAttr(), wire.getAnnotations(),
       wire.getInnerSymAttr(), wire.getForceableAttr());
+      sw->setAttrs(wire->getAttrs());
+      return sw;
 }
 
 static StrictInstanceOp cloneInstTo(mlir::OpBuilder &builder, InstanceOp inst) {
@@ -41,12 +43,14 @@ static StrictInstanceOp cloneInstTo(mlir::OpBuilder &builder, InstanceOp inst) {
     fixedDirections.push_back(direction::get(d));
 
   // This uses the builtin and needs types fixed
-  return builder.create<StrictInstanceOp>(
+  auto si = builder.create<StrictInstanceOp>(
       inst.getLoc(), inst.getResultTypes(), inst.getModuleName(),
       inst.getName(), inst.getNameKind(), fixedDirections,
       inst.getPortNames().getValue(), inst.getAnnotations().getValue(),
       inst.getPortAnnotations().getValue(), inst.getLayers(),
       inst.getLowerToBind(), inst.getInnerSymAttr());
+      si->setAttrs(inst->getAttrs());
+      return si;
 }
 
 // This is recursive, but effectively recursive on a type.
@@ -67,7 +71,7 @@ static void updateUses(mlir::OpBuilder &builder,
                                                         op.getIndex());
           return updateUses(builder, toDelete, op, op.getResult(), newWrite);
         })
-        .Case<MatchingConnectOp>([&](auto op) {
+        .Case<ConnectOp, MatchingConnectOp>([&](auto op) {
           if (op.getDest() == toReplace) {
             builder.setInsertionPoint(op);
             builder.create<StrictConnectOp>(op.getLoc(), writeSide,
