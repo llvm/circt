@@ -3,7 +3,7 @@
 
 ibis.design @foo {
 
-// CHECK-LABEL:   ibis.class @Inline1 {
+// CHECK-LABEL:   ibis.class sym @Inline1 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@Inline1>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             ibis.sblock.inline.begin {maxThreads = 1 : i64}
@@ -12,7 +12,7 @@ ibis.design @foo {
 // CHECK:             ibis.return
 // CHECK:           }
 // CHECK:         }
-ibis.class @Inline1 {
+ibis.class sym @Inline1 {
   %this = ibis.this <@foo::@Inline1>
 
   ibis.method @foo(%a : i32, %b : i32) {
@@ -24,7 +24,7 @@ ibis.class @Inline1 {
   }
 }
 
-// CHECK-LABEL:   ibis.class @Inline2 {
+// CHECK-LABEL:   ibis.class sym @Inline2 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@Inline2>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> () {
 // CHECK:             "foo.unused1"() : () -> ()
@@ -40,7 +40,7 @@ ibis.class @Inline1 {
 // CHECK:             ibis.return
 // CHECK:           }
 // CHECK:         }
-ibis.class @Inline2 {
+ibis.class sym @Inline2 {
   %this = ibis.this <@foo::@Inline2>
   ibis.method @foo(%a : i32, %b : i32) {
     "foo.unused1"() : () -> ()

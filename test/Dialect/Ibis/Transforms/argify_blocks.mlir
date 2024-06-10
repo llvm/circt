@@ -1,6 +1,6 @@
 // RUN: circt-opt --ibis-argify-blocks %s | FileCheck %s
 
-// CHECK-LABEL: ibis.class @Argify {
+// CHECK-LABEL: ibis.class sym @Argify {
 // CHECK-NEXT:   %this = ibis.this <@foo::@Argify> 
 // CHECK-NEXT:   ibis.method @foo() -> () {
 // CHECK-NEXT:     %c32_i32 = hw.constant 32 : i32
@@ -14,7 +14,7 @@
 // CHECK-NEXT: }
 
 ibis.design @foo {
-ibis.class @Argify {
+ibis.class sym @Argify {
   %this = ibis.this <@foo::@Argify>
 
   ibis.method @foo()  {

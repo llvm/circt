@@ -157,15 +157,16 @@ struct InputPortOpConversionPattern : public OpConversionPattern<InputPortOp> {
       bool anyOutsideReads = llvm::any_of(node->uses(), [&](auto use) {
         Block *userBlock = use->getInstance()->getBlock();
         for (auto getPortOp : userBlock->getOps<GetPortOp>()) {
-          if (getPortOp.getPortSymbol() == op.getPortName())
+          if (getPortOp.getPortSymbol() == *op.getInnerName()) {
             return true;
+          }
         }
         return false;
       });
 
       if (anyOutsideReads) {
         auto outputPort = rewriter.create<OutputPortOp>(
-            op.getLoc(), op.getNameAttr(), op.getInnerSym(), op.getType());
+            op.getLoc(), op.getInnerSym(), op.getType(), op.getNameAttr());
         rewriter.create<PortWriteOp>(op.getLoc(), outputPort, wire);
       }
     }
