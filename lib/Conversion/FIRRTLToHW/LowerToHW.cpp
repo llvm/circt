@@ -1511,11 +1511,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Declarations.
   LogicalResult visitDecl(WireOp op);
+  LogicalResult visitDecl(StrictWireOp op);
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp op);
+  LogicalResult visitDecl(StrictInstanceOp op);
   LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
@@ -1669,6 +1671,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FailureOr<bool> lowerConnect(Value dest, Value srcVal);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
+  LogicalResult visitStmt(StrictConnectOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -2898,6 +2901,8 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
+// FIXME: This shouldn't be here.  Foriegn types should require that the foriegn 
+// dialect provide a base variable storage op and not use wire.
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto origResultType = op.getResult().getType();
 
@@ -2908,6 +2913,13 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return success();
   }
 
+  op.emitError("All plain wires should have been removed prior");
+  return failure();
+}
+
+LogicalResult FIRRTLLowering::visitDecl(StrictWireOp op) {
+  auto origResultType = op.getRead().getType();
+
   auto resultType = lowerType(origResultType);
   if (!resultType)
     return failure();
@@ -2915,7 +2927,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op.getResult(), Value());
 
-  // Name attr is required on sv.wire but optional on firrtl.wire.
+  // Name attr is required on hw.wire but optional on firrtl.wire.
   auto innerSym = lowerInnerSymbol(op);
   auto name = op.getNameAttr();
   // This is not a temporary wire created by the compiler, so attach a symbol
@@ -2926,7 +2938,8 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
-  return setLowering(op.getResult(), wire);
+  setLowering(op.getRead(), wire);
+  return setLowering(op.getWrite(), wire);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -3312,6 +3325,143 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   }
   return success();
 }
+
+LogicalResult FIRRTLLowering::visitDecl(StrictInstanceOp oldInstance) {
+  Operation *oldModule =
+      oldInstance.getReferencedModule(circuitState.getInstanceGraph());
+
+  auto newModule = circuitState.getNewModule(oldModule);
+  if (!newModule) {
+    oldInstance->emitOpError("could not find module [")
+        << oldInstance.getModuleName() << "] referenced by instance";
+    return failure();
+  }
+
+  // If this is a referenced to a parameterized extmodule, then bring the
+  // parameters over to this instance.
+  ArrayAttr parameters;
+  if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldModule))
+    parameters = getHWParameters(oldExtModule, /*ignoreValues=*/false);
+
+  // Decode information about the input and output ports on the referenced
+  // module.
+  SmallVector<PortInfo, 8> portInfo = cast<FModuleLike>(oldModule).getPorts();
+
+  // Build an index from the name attribute to an index into portInfo, so we
+  // can do efficient lookups.
+  llvm::SmallDenseMap<Attribute, unsigned> portIndicesByName;
+  for (unsigned portIdx = 0, e = portInfo.size(); portIdx != e; ++portIdx)
+    portIndicesByName[portInfo[portIdx].name] = portIdx;
+
+  // Ok, get ready to create the new instance operation.  We need to prepare
+  // input operands.
+  SmallVector<Value, 8> operands;
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    auto portType = port.type;
+    if (auto lhs = dyn_cast<LHSType>(portType))
+      portType = lhs.getType();
+    portType = lowerType(port.type);
+    if (!portType) {
+      oldInstance->emitOpError("could not lower type of port ") << port.name;
+      return failure();
+    }
+
+    // Drop zero bit input/inout ports.
+    if (portType.isInteger(0))
+      continue;
+
+    // We wire outputs up after creating the instance.
+    if (port.isOutput())
+      continue;
+
+    auto portResult = oldInstance.getResult(portIndex);
+    assert(portResult && "invalid IR, couldn't find port");
+
+    // Replace the input port with a backedge.  If it turns out that this port
+    // is never driven, an uninitialized wire will be materialized at the end.
+    if (port.isInput()) {
+      operands.push_back(createBackedge(portResult, portType));
+      continue;
+    }
+
+    // If the result has an analog type and is used only by attach op, try
+    // eliminating a temporary wire by directly using an attached value.
+    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
+        if (auto source = getSingleNonInstanceOperand(attach)) {
+          auto loweredResult = getPossiblyInoutLoweredValue(source);
+          operands.push_back(loweredResult);
+          (void)setLowering(portResult, loweredResult);
+          continue;
+        }
+      }
+    }
+
+    // Create a wire for each inout operand, so there is something to connect
+    // to. The instance becomes the sole driver of this wire.
+    auto wire = builder.create<sv::WireOp>(
+        portType, "." + port.getName().str() + ".wire");
+
+    // Know that the argument FIRRTL value is equal to this wire, allowing
+    // connects to it to be lowered.
+    (void)setLowering(portResult, wire);
+
+    operands.push_back(wire);
+  }
+
+  // If this instance is destined to be lowered to a bind, generate a symbol
+  // for it and generate a bind op.  Enter the bind into global
+  // CircuitLoweringState so that this can be moved outside of module once
+  // we're guaranteed to not be a parallel context.
+  auto innerSym = oldInstance.getInnerSymAttr();
+  if (oldInstance.getLowerToBind()) {
+    if (!innerSym)
+      std::tie(innerSym, std::ignore) = getOrAddInnerSym(
+          oldInstance.getContext(), oldInstance.getInnerSymAttr(), 0,
+          [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+
+    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(),
+                                             innerSym.getSymName());
+    // If the lowered op already had output file information, then use that.
+    // Otherwise, generate some default bind information.
+    if (auto outputFile = oldInstance->getAttr("output_file"))
+      bindOp->setAttr("output_file", outputFile);
+    // Add the bind to the circuit state.  This will be moved outside of the
+    // encapsulating module after all modules have been processed in parallel.
+    circuitState.addBind(bindOp);
+  }
+
+  // Create the new hw.instance operation.
+  auto newInstance = builder.create<hw::InstanceOp>(
+      newModule, oldInstance.getNameAttr(), operands, parameters, innerSym);
+
+  if (oldInstance.getLowerToBind())
+    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
+
+  if (newInstance.getInnerSymAttr())
+    if (auto forceName = circuitState.instanceForceNames.lookup(
+            {cast<hw::HWModuleOp>(newInstance->getParentOp()).getNameAttr(),
+             newInstance.getInnerNameAttr()}))
+      newInstance->setAttr("hw.verilogName", forceName);
+
+  // Now that we have the new hw.instance, we need to remap all of the users
+  // of the outputs/results to the values returned by the instance.
+  unsigned resultNo = 0;
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    if (!port.isOutput() || isZeroBitFIRRTLType(port.type))
+      continue;
+
+    Value resultVal = newInstance.getResult(resultNo);
+
+    auto oldPortResult = oldInstance.getResult(portIndex);
+    (void)setLowering(oldPortResult, resultVal);
+    ++resultNo;
+  }
+  return success();
+}
+
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -4201,6 +4351,35 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
   builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
+
+LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
+  auto dest = op.getDest();
+  auto srcVal = getLoweredValue(op.getSrc());
+  if (!srcVal)
+    return handleZeroBit(op.getSrc(), []() { return success(); });
+
+  auto destVal = getPossiblyInoutLoweredValue(dest);
+  if (!destVal)
+    return failure();
+
+  auto result = lowerConnect(destVal, srcVal);
+  if (failed(result))
+    return failure();
+  if (*result)
+    return success();
+
+  // If this connect is driving a value that is currently a backedge, record
+  // that the source is the value of the backedge.
+  if (updateIfBackedge(destVal, srcVal))
+    return success();
+
+  if (!isa<hw::InOutType>(destVal.getType()))
+    return op.emitError("destination isn't an inout type");
+
+  builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
+
 
 LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   auto dest = op.getDest();

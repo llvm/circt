@@ -241,6 +241,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       circt::firrtl::createLintingPass());
 
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+    circt::firrtl::createStrictWiresPass());
+
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
                                        opt.getVerificationFlavor()));
 
