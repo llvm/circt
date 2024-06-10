@@ -547,6 +547,14 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
+  // Or a 1-bit value with the current condition.  If we are in the outer
+  /// scope, i.e. not in a WhenOp region, then there is no condition.
+  Value orWithCondition(OpBuilder &builder, Value value) {
+    // 'or' the value with the current condition.
+    return builder.createOrFold<OrPrimOp>(
+        condition.getLoc(), condition.getType(), condition, value);
+  }
+
   template <typename Op>
   void visitVerifIntrinsic(Op op) {
     OpBuilder builder(op);
@@ -559,7 +567,7 @@ private:
       if ((disable = dyn_cast<LTLDisableIntrinsicOp>(
                clockOp.getInput().getDefiningOp()))) {
 
-        Value newDisable = andWithCondition(builder, disable.getRhs());
+        Value newDisable = orWithCondition(builder, disable.getRhs());
         foldedWhen = builder.create<LTLDisableIntrinsicOp>(
             op.getLoc(), newDisable.getType(), disable.getLhs(), newDisable);
       }
