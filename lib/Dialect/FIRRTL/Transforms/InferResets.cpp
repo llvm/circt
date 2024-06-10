@@ -735,6 +735,9 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
   for (auto module : circuit.getOps<FModuleOp>())
     moduleToOps.push_back({module, {}});
 
+  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                            getAnalysis<hw::InnerSymbolTableCollection>()};
+
   mlir::parallelForEach(circuit.getContext(), moduleToOps, [](auto &e) {
     e.first.walk([&](Operation *op) {
       // We are only interested in operations which are related to abstract
@@ -773,6 +776,14 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             if (op.isForceable())
               traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
                           op.getDataRef(), 0, op.getLoc());
+          })
+          .Case<RWProbeOp>([&](RWProbeOp op) {
+            auto ist = irn.lookup(op.getTarget());
+            assert(ist);
+            auto ref = getFieldRefForTarget(ist);
+            auto baseType = op.getType().getType();
+            traceResets(baseType, op.getResult(), 0, baseType.getPassiveType(),
+                        ref.getValue(), ref.getFieldID(), op.getLoc());
           })
           .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
             traceResets(op.getResult(), op.getInput(), op.getLoc());
@@ -1098,8 +1109,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         ConstCastOp, RefCastOp, UninferredResetCastOp>(
-            value.getDefiningOp()))
+                         ConstCastOp, RefCastOp, UninferredResetCastOp,
+                         RWProbeOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())

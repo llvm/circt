@@ -2046,16 +2046,6 @@ firrtl.circuit "RWProbeTypes" {
 
 // -----
 
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
-  }
-}
-
-// -----
-
 firrtl.circuit "RWProbeInstance" {
   firrtl.extmodule @Ext()
   firrtl.module @RWProbeInstance() {
