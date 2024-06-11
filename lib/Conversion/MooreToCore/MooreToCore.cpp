@@ -58,6 +58,87 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   return builder.create<comb::MuxOp>(loc, isZero, lo, max, false);
 }
 
+/// Get the ModulePortInfo from a SVModuleOp.
+static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
+                                            SVModuleOp op) {
+  size_t inputNum = 0;
+  size_t resultNum = 0;
+  auto moduleTy = op.getModuleType();
+  SmallVector<hw::PortInfo> inputs, outputs;
+  inputs.reserve(moduleTy.getNumInputs());
+  outputs.reserve(moduleTy.getNumOutputs());
+
+  for (auto port : moduleTy.getPorts())
+    if (port.dir == hw::ModulePort::Direction::Output) {
+      outputs.push_back(
+          hw::PortInfo({{port.name, port.type, port.dir}, resultNum++, {}}));
+    } else {
+      // FIXME: Once we support net<...>, ref<...> type to represent type of
+      // special port like inout or ref port which is not a input or output
+      // port. It can change to generate corresponding types for direction of
+      // port or do specified operation to it. Now inout and ref port is treated
+      // as input port.
+      inputs.push_back(
+          hw::PortInfo({{port.name, port.type, port.dir}, inputNum++, {}}));
+    }
+
+  return hw::ModulePortInfo(inputs, outputs);
+}
+
+//===----------------------------------------------------------------------===//
+// Structural Conversion
+//===----------------------------------------------------------------------===//
+
+struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SVModuleOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto outputOp = op.getOutputOp();
+    rewriter.setInsertionPoint(op);
+
+    // Create the hw.module to replace svmoduleOp
+    auto hwModuleOp =
+        rewriter.create<hw::HWModuleOp>(op.getLoc(), op.getSymNameAttr(),
+                                        getModulePortInfo(*typeConverter, op));
+    rewriter.eraseBlock(hwModuleOp.getBodyBlock());
+    rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
+                                hwModuleOp.getBodyRegion().end());
+
+    // Rewrite the hw.output op
+    rewriter.setInsertionPointToEnd(hwModuleOp.getBodyBlock());
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(outputOp, outputOp.getOperands());
+
+    // Erase the original op
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(InstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto instName = op.getInstanceNameAttr();
+    auto moduleName = op.getModuleNameAttr();
+
+    // Create the new hw instanceOp to replace the original one.
+    rewriter.setInsertionPoint(op);
+    auto instOp = rewriter.create<hw::InstanceOp>(
+        op.getLoc(), op.getResultTypes(), instName, moduleName, op.getInputs(),
+        op.getInputNamesAttr(), op.getOutputNamesAttr(),
+        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+
+    // Replace uses chain and erase the original op.
+    op.replaceAllUsesWith(instOp.getResults());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
@@ -236,6 +317,37 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
 // Statement Conversion
 //===----------------------------------------------------------------------===//
 
+struct HWOutputOpConversion : public OpConversionPattern<hw::OutputOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::OutputOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, adaptor.getOperands());
+    return success();
+  }
+};
+
+struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::InstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> convResTypes;
+    if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
+      return failure();
+
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(
+        op, convResTypes, op.getInstanceName(), op.getModuleName(),
+        adaptor.getOperands(), op.getArgNames(),
+        op.getResultNames(), /*Parameter*/
+        rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+
+    return success();
+  }
+};
+
 struct ReturnOpConversion : public OpConversionPattern<func::ReturnOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -408,6 +520,19 @@ static void populateLegality(ConversionTarget &target) {
     auto resultsConverted = !hasMooreType(op.getResultTypes());
     return argsConverted && resultsConverted;
   });
+
+  target.addDynamicallyLegalOp<hw::HWModuleOp>([](hw::HWModuleOp op) {
+    return !hasMooreType(op.getInputTypes()) &&
+           !hasMooreType(op.getOutputTypes()) &&
+           !hasMooreType(op.getBody().getArgumentTypes());
+  });
+
+  target.addDynamicallyLegalOp<hw::InstanceOp>([](hw::InstanceOp op) {
+    return !hasMooreType(op.getInputs()) && !hasMooreType(op.getResults());
+  });
+
+  target.addDynamicallyLegalOp<hw::OutputOp>(
+      [](hw::OutputOp op) { return !hasMooreType(op.getOutputs()); });
 }
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
@@ -417,6 +542,23 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   // Valid target types.
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
+  typeConverter.addTargetMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
+
+  typeConverter.addSourceMaterialization(
+      [&](mlir::OpBuilder &builder, mlir::Type resultType,
+          mlir::ValueRange inputs,
+          mlir::Location loc) -> std::optional<mlir::Value> {
+        if (inputs.size() != 1)
+          return std::nullopt;
+        return inputs[0];
+      });
 }
 
 static void populateOpConversion(RewritePatternSet &patterns,
@@ -459,6 +601,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    
+    // Patterns of structural operations.
+    SVModuleOpConversion, InstanceOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,
@@ -467,11 +612,15 @@ static void populateOpConversion(RewritePatternSet &patterns,
     CondBranchOpConversion, BranchOpConversion,
 
     // Patterns of other operations outside Moore dialect.
-    ReturnOpConversion, CallOpConversion, UnrealizedConversionCastConversion
+    HWOutputOpConversion, HWInstanceOpConversion, ReturnOpConversion,
+    CallOpConversion, UnrealizedConversionCastConversion
   >(typeConverter, context);
   // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
       patterns, typeConverter);
+
+  hw::populateHWModuleLikeTypeConversionPattern(
+      hw::HWModuleOp::getOperationName(), patterns, typeConverter);
 }
 
 //===----------------------------------------------------------------------===//
