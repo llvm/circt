@@ -1,5 +1,6 @@
 ; RUN: firtool -parse-only %s --verify-diagnostics
 
+FIRRTL version 4.0.0
 ; expected-error @below {{Unable to resolve target of annotation: {class = "circt.test", target = "~OpenAgg|OpenAgg>out.p"}}
 circuit OpenAgg : %[[
  { "class": "circt.test",
@@ -7,7 +8,7 @@ circuit OpenAgg : %[[
  }
 ]]
   ; expected-error @below {{cannot resolve field 'p'}}
-  module OpenAgg:
+  public module OpenAgg:
     output out : {a : UInt<1>,
                   p : Probe<UInt<1>>
                   b : UInt<1>}

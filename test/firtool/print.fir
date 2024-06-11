@@ -1,8 +1,9 @@
 ; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit PrintTest:
   ; CHECK-LABEL: @PrintTest
-  module PrintTest :
+  public module PrintTest :
     input clock : Clock
     input cond : UInt<1>
     input var : UInt<32>

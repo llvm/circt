@@ -1,5 +1,6 @@
 ; RUN: firtool --verilog %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit ConstantSinking : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -16,7 +17,7 @@ circuit ConstantSinking : %[[
     "target":"~ConstantSinking|ConstantSinking>t"
   }
 ]]
-  module ConstantSinking:
+  public module ConstantSinking:
     output out : UInt<1>
     wire t : UInt<1>
     out <= t
