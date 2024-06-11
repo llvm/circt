@@ -133,6 +133,9 @@ if(ESI_COSIM)
       ${ESIRuntimeIncludeDirs}
       ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
     )
+    set(ESIRuntimeDependencies
+      esi-cosim
+    )
   else()
     message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
                         Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
@@ -186,6 +189,7 @@ target_include_directories(ESIRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
 target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
+add_dependencies(ESIRuntime ${ESIRuntimeDependencies})
 target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
 target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
 target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
