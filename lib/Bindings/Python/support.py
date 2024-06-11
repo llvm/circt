@@ -246,7 +246,7 @@ class BackedgeBuilder(AbstractContextManager):
         self.creator.edges.remove(self)
         self.dummy_op.operation.erase()
 
-  def __init__(self, circuit_name: Optional[str] = None):
+  def __init__(self, circuit_name: str = ""):
     self.circuit_name = circuit_name
     self.edges = set()
 
@@ -291,11 +291,8 @@ class BackedgeBuilder(AbstractContextManager):
       errors.append(msg)
 
     if errors:
-      if self.circuit_name is not None:
-        errors.insert(
-            0, f"Uninitialized backedges remain in circuit {self.circuit_name}")
-      else:
-        errors.insert(0, "Uninitialized backedges remain in circuit!")
+      errors.insert(
+          0, f"Uninitialized backedges remain in module '{self.circuit_name}'")
       raise RuntimeError("\n".join(errors))
 
 
