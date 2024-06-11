@@ -68,26 +68,32 @@ moore.constant -2 : !moore.i1
 
 // -----
 
-%y = moore.variable : <i8>
+%0 = moore.constant 0 : i8
+// expected-error @below {{'moore.yield' op expects parent op 'moore.conditional'}}
+moore.yield %0 : i8
 
-moore.module @Cond() {
-  %0 = moore.read %y : i8
-  // expected-error @below {{'moore.yield' op expects parent op 'moore.conditional'}}
-  moore.yield %0 : i8
+// -----
+
+%0 = moore.constant true : i1
+%1 = moore.constant 42 : i8
+%2 = moore.constant 42 : i32
+
+moore.conditional %0 : i1 -> i32 {
+  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
+  moore.yield %1 : i8
+} {
+  moore.yield %2 : i32
 }
 
 // -----
 
-%x = moore.variable : <i1>
-%t = moore.variable : <i8>
-%f = moore.variable : <i8>
+%0 = moore.constant true : i1
+%1 = moore.constant 42 : i32
+%2 = moore.constant 42 : i8
 
-%1 = moore.read %x : i1
-moore.conditional %1 : i1 -> i32 {
-  %2 = moore.read %t : i8
-  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
-  moore.yield %2 : i8
+moore.conditional %0 : i1 -> i32 {
+  moore.yield %1 : i32
 } {
-  %2 = moore.read %f : i8
+  // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
   moore.yield %2 : i8
 }
