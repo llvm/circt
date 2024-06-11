@@ -122,31 +122,18 @@ circuit Top: %[[
 ; // -----
 FIRRTL version 4.0.0
 
+; CA (child of A) and CB (child of B) should dedup, and be placed in the
+; output directory lca(dir(A), dir(B)).
 circuit Top: %[[
   {
     "class": "circt.OutputDirAnnotation",
-    "dirname": "XXX",
+    "dirname": "ZZZ/XXX",
     "target": "~Top|A"
   },
   {
     "class": "circt.OutputDirAnnotation",
-    "dirname": "YYY",
+    "dirname": "ZZZ/YYY",
     "target": "~Top|B"
-  },
-  {
-    "class": "circt.OutputDirPrecedenceAnnotation",
-    "name": "XXX",
-    "parent": "ZZZ"
-  },
-  {
-    "class": "circt.OutputDirPrecedenceAnnotation",
-    "name": "YYY",
-    "parent": "ZZZ"
-  },
-  {
-    "class": "circt.OutputDirPrecedenceAnnotation",
-    "name": "ZZZ",
-    "parent": ""
   }
 ]]
   ; CHECK: FILE "ZZZ/CA.sv"
@@ -162,7 +149,7 @@ circuit Top: %[[
     output o : UInt<8>
     connect o, i
   
-  ; CHECK: FILE "XXX/A.sv"
+  ; CHECK: FILE "ZZZ/XXX/A.sv"
   ; CHECK: module A
   module A:
     input i : UInt<8>
@@ -172,7 +159,7 @@ circuit Top: %[[
     connect c.i, i
     connect o, c.o
 
-  ; CHECK: FILE "YYY/B.sv"
+  ; CHECK: FILE "ZZZ/YYY/B.sv"
   ; CHECK: module B
   module B:
     input i : UInt<8>

@@ -792,7 +792,7 @@ void LowerLayersPass::runOnOperation() {
     hw::OutputFileAttr bindFile;
     if (auto outputFile =
             layerOp->getAttrOfType<hw::OutputFileAttr>("output_file")) {
-      auto dir = outputFile.getDirectoryAttr().getValue();
+      auto dir = outputFile.getDirectory();
       bindFile = hw::OutputFileAttr::getFromDirectoryAndFilename(
           &getContext(), dir, prefix + ".sv",
           /*excludeFromFileList=*/true);

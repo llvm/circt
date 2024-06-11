@@ -89,7 +89,7 @@ def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
     bool isDirectory();
 
     /// Get the directory of this output file, or null if there is none.
-    ::mlir::StringAttr getDirectoryAttr();
+    ::mlir::StringRef getDirectory();
   }];
 }
 

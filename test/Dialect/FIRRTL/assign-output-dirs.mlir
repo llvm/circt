@@ -1,17 +1,11 @@
 // RUN: circt-opt -firrtl-assign-output-dirs %s
 
-firrtl.circuit "AssignOutputDirs"
-  attributes {
-      // Directory Precedence Tree
-      //        R
-      //    A       B
-      //  C   D
-      annotations = [
-        {class = "circt.OutputDirPrecedenceAnnotation", name = "B", parent = ""},
-        {class = "circt.OutputDirPrecedenceAnnotation", name = "C", parent = "A"},
-        {class = "circt.OutputDirPrecedenceAnnotation", name = "D", parent = "A"}
-      ]
-  } {
+firrtl.circuit "AssignOutputDirs" {
+
+  // Directory Tree
+  //        R
+  //    A       B
+  //  C   D
 
   firrtl.module public @AssignOutputDirs() {}
 
@@ -65,12 +59,19 @@ firrtl.circuit "AssignOutputDirs"
     firrtl.instance bc @ByBC()
   }
 
-  firrtl.module @InC() attributes {output_file = #hw.output_file<"C/">} {
+  firrtl.module @InC() attributes {output_file = #hw.output_file<"A/C/">} {
     firrtl.instance cd @ByCD()
     firrtl.instance bc @ByBC()
   }
 
-  firrtl.module @InD() attributes {output_file = #hw.output_file<"D/">} {
+  firrtl.module @InD() attributes {output_file = #hw.output_file<"A/D/">} {
     firrtl.instance byCD @ByCD()
+  }
+
+  // CHECK: firrtl.module @ByDotDot() {}
+  firrtl.module @ByDotDot() {}
+
+  firrtl.module @InDotDot() attributes {output_file = #hw.output_file<"A../../">} {
+    firrtl.instance byDotDot @ByDotDot()
   }
 }
