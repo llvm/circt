@@ -15,9 +15,9 @@
 ; NOREF-LABEL: module private @Child(
 ; NOREF-SAME: out %[[OUT_PORT:.+]]: !firrtl.bundle<a: uint<2>, b: uint<2>>
 ; NOREF-DAG: %[[A:.+]] = firrtl.subfield %[[OUT_PORT]][a]
-; NOREF-DAG: firrtl.strictconnect %[[A]],
+; NOREF-DAG: firrtl.matchingconnect %[[A]],
 ; NOREF-DAG: %[[B:.+]] = firrtl.subfield %[[OUT_PORT]][b]
-; NOREF-DAG: firrtl.strictconnect %[[B]],
+; NOREF-DAG: firrtl.matchingconnect %[[B]],
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
