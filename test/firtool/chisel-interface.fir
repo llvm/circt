@@ -19,8 +19,9 @@
 ; CHECK-NEXT:    val out = IO(Output(UInt(4.W)))
 ; CHECK-NEXT:  }
 
+FIRRTL version 4.0.0
 circuit Foo:
-  module Foo:
+  public module Foo:
     input in: UInt<4>
     output out: UInt<4>
     out <= in

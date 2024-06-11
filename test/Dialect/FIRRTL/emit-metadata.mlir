@@ -39,8 +39,10 @@ firrtl.circuit "retime0" attributes { annotations = [{
   }]} { }
 }
 // CHECK-LABEL: firrtl.circuit "retime0"   {
-// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.class<@SiFive_Metadata
-// CHECK:           %sifive_metadata = firrtl.object @SiFive_Metadata
+// CHECK:         firrtl.module @retime0(out %metadataObj: !firrtl.any
+// CHECK:           [[SIFIVE_METADATA:%.+]] = firrtl.object @SiFive_Metadata
+// CHECK:           [[METADATA_OBJ:%.+]] = firrtl.object.anyref_cast [[SIFIVE_METADATA]]
+// CHECK:           propassign %metadataObj, [[METADATA_OBJ]]
 // CHECK:         firrtl.module @retime1() {
 // CHECK:         firrtl.module @retime2()
 
@@ -269,8 +271,9 @@ firrtl.circuit "ReadOnlyMemory" {
 
 // CHECK-LABEL: firrtl.circuit "top"
 firrtl.circuit "top" {
+    // CHECK: hw.hierpath @[[DUTNLA:.+]] [@top::@sym]
     firrtl.module @top()  {
-      // CHECK: firrtl.instance dut sym @[[DUT_SYM:.+]] @DUT
+      // CHECK: firrtl.instance dut sym @[[DUT_SYM:.+]] {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @DUT() 
       firrtl.instance dut @DUT()
       firrtl.instance mem1 @Mem1()
       firrtl.instance mem2 @Mem2()
@@ -304,4 +307,9 @@ firrtl.circuit "top" {
   // CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 20 width 5 ports write\0Aname {{1}} depth 20 width 5 ports write\0Aname {{2}} depth 16 width 8 ports read,rw\0Aname {{3}} depth 20 width 5 ports write,read\0A"
   // CHECK-SAME:              {symbols = [@head_ext, @head_0_ext, @memory_ext, @dumm_ext]}
   // CHECK-NEXT:          }
+
+  // CHECK:  firrtl.class @SiFive_Metadata
+  // CHECK:    %[[V0:.+]] = firrtl.path instance distinct[0]<>
+  // CHECK-NEXT:    %[[V1:.+]] = firrtl.list.create %[[V0]] : !firrtl.list<path>
+  // CHECK-NEXT:    firrtl.propassign %dutModulePath_field_1, %[[V1]] : !firrtl.list<path>
 }

@@ -1,6 +1,7 @@
 ; RUN: firtool %s --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="dutModule.conf" |  FileCheck %s
 
 
+FIRRTL version 4.0.0
 circuit test:
   module tbMemModule1:
     input clock: Clock
@@ -111,7 +112,7 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-  module test:
+  public module test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
