@@ -1,12 +1,12 @@
 // RUN: circt-opt --split-input-file --allow-unregistered-dialect --ibis-tunneling --verify-diagnostics %s
 
 ibis.design @foo {
-ibis.container @Parent {
+ibis.container sym @Parent {
   %this = ibis.this <@foo::@Parent>
   %in = ibis.port.input "in" sym @in : i1
 }
 
-ibis.container @Orphan {
+ibis.container sym @Orphan {
   %this = ibis.this <@foo::@Orphan>
   // expected-error @+2 {{'ibis.path' op cannot tunnel up from "Orphan" because it has no uses}}
   // expected-error @+1 {{failed to legalize operation 'ibis.path' that was explicitly marked illegal}}
@@ -20,17 +20,17 @@ ibis.container @Orphan {
 // -----
 
 ibis.design @foo {
-ibis.container @Parent {
+ibis.container sym @Parent {
   %this = ibis.this <@foo::@Parent>
   %mc = ibis.container.instance @mc, <@foo::@MissingChild>
 }
 
-ibis.container @Child {
+ibis.container sym @Child {
   %this = ibis.this <@foo::@Child>
   %in = ibis.port.input "in" sym @in : i1
 }
 
-ibis.container @MissingChild {
+ibis.container sym @MissingChild {
   %this = ibis.this <@foo::@MissingChild>
   // expected-error @+2 {{'ibis.path' op expected an instance named @c in @Parent but found none}}
   // expected-error @+1 {{failed to legalize operation 'ibis.path' that was explicitly marked illegal}}
