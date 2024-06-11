@@ -2,41 +2,6 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-# Compile Capnp file.
-add_definitions(${CAPNP_DEFINITIONS})
-set(CAPNPC_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/../cpp/include/backends)
-include_directories(${CAPNPC_OUTPUT_DIR})
-file(MAKE_DIRECTORY ${CAPNPC_OUTPUT_DIR})
-capnp_generate_cpp(
-  COSIM_CAPNP_SRCS COSIM_CANPN_HDRS
-  "CosimDpi.capnp"
-)
-
-# Compile a library for ESI cosim capnp for both the API runtime backend and the
-# cosim DPI server to use.
-add_library(EsiCosimCapnp SHARED
-  ${COSIM_CAPNP_HDRS}
-  ${COSIM_CAPNP_SRCS}
-  ${COSIM_SCHEMA_HDR}
-
-  lib/CapnpThreads.cpp
-  lib/Client.cpp
-  lib/Endpoint.cpp
-  lib/Server.cpp
-)
-target_include_directories(EsiCosimCapnp PUBLIC ${CAPNPC_OUTPUT_DIR})
-target_include_directories(EsiCosimCapnp PUBLIC ${CAPNP_INCLUDE_DIRS})
-target_include_directories(EsiCosimCapnp PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/../cpp/include)
-target_link_libraries(EsiCosimCapnp PUBLIC
-  CapnProto::kj CapnProto::kj-async CapnProto::kj-gzip
-  CapnProto::capnp CapnProto::capnp-rpc 
-)
-install(TARGETS EsiCosimCapnp
-  DESTINATION lib
-  COMPONENT ESIRuntime
-)
-
 set(cosim_collateral
   Cosim_DpiPkg.sv
   Cosim_Endpoint.sv

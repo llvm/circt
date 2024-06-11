@@ -98,45 +98,6 @@ if(ESI_COSIM)
   # backends should only need to be linked in.
   # TODO: Once the hack in the python bindings is remidied, remove this.
   add_compile_definitions(ESI_COSIM)
-
-  # Try to find Cap'nProto. If the user has set CAPNP_PATH, use that.
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
-  else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
-  endif()
-
-  # If Cap'nProto has been found, generate the headers and definitions.
-  if(CapnProto_FOUND)
-    message("-- ESI cosim enabled")
-
-    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-    add_subdirectory(cosim)
-
-    set(ESIRuntimeSources
-      ${ESIRuntimeSources}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
-    )
-    set(ESIRuntimeBackendHeaders
-      ${ESIRuntimeBackendHeaders}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
-    )
-    set(ESIRuntimeLinkLibraries
-      ${ESIRuntimeLinkLibraries}
-      EsiCosimCapnp
-    )
-    set(ESIRuntimeIncludeDirs
-      ${ESIRuntimeIncludeDirs}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
-    )
-  else()
-    message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
-                        Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
-  endif()
 else()
   message("-- ESI cosim disabled")
 endif()
@@ -198,12 +159,11 @@ install(IMPORTED_RUNTIME_ARTIFACTS ESIRuntime
   DESTINATION lib
   COMPONENT ESIRuntime
 )
-install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES capnp kj
-  COMPONENT ESIRuntime
-)
+# install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
+#   DESTINATION lib
+#   PRE_EXCLUDE_REGEXES .*
+#   COMPONENT ESIRuntime
+# )
 install(FILES ${ESIRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
