@@ -148,7 +148,7 @@ def ControlReg(clk: Signal,
                rst: Signal,
                asserts: List[Signal],
                resets: List[Signal],
-               name: Optional[str] = None) -> Bits:
+               name: Optional[str] = None) -> BitsSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the

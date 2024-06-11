@@ -5,12 +5,11 @@
 # RUN: esi-cosim.py -- esitester cosim env | FileCheck %s
 
 import pycde
-from pycde import (AppID, Clock, Input, Module, Reset, generator)
+from pycde import AppID, Clock, Module, Reset, generator
 from pycde.bsp import cosim
-from pycde.constructs import ControlReg, Wire
+from pycde.constructs import Wire
 from pycde.esi import CallService
-from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, UInt)
+from pycde.types import Bits, Channel, UInt
 
 import sys
 
@@ -23,19 +22,18 @@ class PrintfExample(Module):
 
   @generator
   def construct(ports):
-    sent_signal = Wire(Bits(1), "sent_signal")
-    host_ret = Wire(Bits(1), "host_ret")
-    sent = ControlReg(ports.clk, ports.rst, [sent_signal], [host_ret])
-
     # CHECK: PrintfExample: 7
     arg_data = UInt(32)(7)
 
+    sent_signal = Wire(Bits(1), "sent_signal")
+    sent = Bits(1)(1).reg(ports.clk,
+                          ports.rst,
+                          ce=sent_signal,
+                          rst_value=Bits(1)(0))
     arg_valid = ~sent & ~ports.rst
     arg_chan, arg_ready = Channel(UInt(32)).wrap(arg_data, arg_valid)
     sent_signal.assign(arg_ready & arg_valid)
-    void_result = CallService.call(AppID("PrintfExample"), arg_chan, Bits(0))
-    # _, host_ret_valid = void_result.unwrap(Bits(1)(0))
-    host_ret.assign(Bits(1)(0))
+    CallService.call(AppID("PrintfExample"), arg_chan, Bits(0))
 
 
 class EsiTesterTop(Module):
@@ -51,5 +49,7 @@ if __name__ == "__main__":
   s = pycde.System(cosim.CosimBSP(EsiTesterTop),
                    name="EsiTester",
                    output_directory=sys.argv[1])
+  s.generate()
+  print(s.body)
   s.compile()
   s.package()

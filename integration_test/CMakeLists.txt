@@ -32,6 +32,7 @@ if (ESI_RUNTIME)
     ESIRuntime
     ESIPythonRuntime
     esiquery
+    esitester
   )
 
   # If ESI Cosim is available to build then enable its tests.

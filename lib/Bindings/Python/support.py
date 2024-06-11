@@ -291,8 +291,11 @@ class BackedgeBuilder(AbstractContextManager):
       errors.append(msg)
 
     if errors:
-      errors.insert(
-          0, f"Uninitialized backedges remain in circuit {self.circuit_name}")
+      if self.circuit_name is not None:
+        errors.insert(
+            0, f"Uninitialized backedges remain in circuit {self.circuit_name}")
+      else:
+        errors.insert(0, "Uninitialized backedges remain in circuit!")
       raise RuntimeError("\n".join(errors))
 
 
