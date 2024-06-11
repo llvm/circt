@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
@@ -33,14 +34,14 @@ using namespace mlir;
 using namespace circt;
 using namespace hw;
 
-static sv::EventControl ltlToSVEventControl(ltl::ClockEdge ce) {
+static verif::ClockEdge ltlToVerifClockEdge(ltl::ClockEdge ce) {
   switch (ce) {
   case ltl::ClockEdge::Pos:
-    return sv::EventControl::AtPosEdge;
+    return verif::ClockEdge::Pos;
   case ltl::ClockEdge::Neg:
-    return sv::EventControl::AtNegEdge;
+    return verif::ClockEdge::Neg;
   case ltl::ClockEdge::Both:
-    return sv::EventControl::AtEdge;
+    return verif::ClockEdge::Both;
   }
   llvm_unreachable("Unknown event control kind");
 }
@@ -142,28 +143,35 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
-struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
-  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
-
-  Value visit(ltl::DisableOp op, ConversionPatternRewriter &rewriter,
-              Value operand = nullptr) const {
+struct AssertLikeOp {
+  // Assert and assume are disable by creating a disjunction between the
+  // disable condition and the assertion condition.
+  // Coverops are disabled instead visa a negative conjunction.
+  static Value visit(Value input, Value disable, Location loc,
+                     ConversionPatternRewriter &rewriter,
+                     bool isCover = false) {
     // Replace the ltl::DisableOp with an OR op as it represents a disabling
     // implication: (implies (not condition) input) is equivalent to
     // (or (not (not condition)) input) which becomes (or condition input)
-    return rewriter.replaceOpWithNewOp<comb::OrOp>(
-        op, op.getCondition(), operand ? operand : op.getInput());
-  }
+    // for assertions and assumptions, otherwised with an NOT cond AND pred
+    if (isCover) {
+      Value constOne =
+          rewriter.create<hw::ConstantOp>(loc, rewriter.getI1Type(), 1);
+      Value notDisable = rewriter.create<comb::XorOp>(loc, disable, constOne);
+      return rewriter.createOrFold<comb::AndOp>(loc, notDisable, input);
+    }
 
-  // Special case : we want to detect the Non-overlapping implication,
-  // Overlapping Implication or simply AssertProperty patterns and reject
-  // everything else for now: antecedent : ltl::concatOp || immediate predicate
-  // consequent : any other non-sequence op
-  // We want to support a ##n true |-> b and a |-> b
+    return rewriter.createOrFold<comb::OrOp>(loc, disable, input);
+  }
+};
+
+struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
+  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Value ltlClock, disableCond, disableInput, disableVal;
+    Value ltlClock, disableCond, disableInput, disabledProperty;
     ltl::ClockOp clockOp;
     ltl::DisableOp disableOp;
 
@@ -177,31 +185,166 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
             mBool(&ltlClock)));
 
     if (!matchedProperty)
-      return rewriter.notifyMatchFailure(
-          op, " verif.assert used outside of an assert property!");
+      return rewriter.notifyMatchFailure(op,
+                                         " unsupported assert-like pattern!");
 
     // Then visit the disable op
-    disableVal = visit(disableOp, rewriter, disableInput);
+    disabledProperty = AssertLikeOp::visit(disableInput, disableCond,
+                                           disableOp.getLoc(), rewriter);
+    Value emptyDisable;
 
-    // Generate the parenting sv.always posedge clock from the ltl
-    // clock, containing the generated sv.assert
-    rewriter.create<sv::AlwaysOp>(
-        clockOp.getLoc(), ltlToSVEventControl(clockOp.getEdge()), ltlClock,
-        [&] {
-          // Generate the sv assertion using the input to the
-          // parenting clock
-          rewriter.replaceOpWithNewOp<sv::AssertOp>(
-              op, disableVal,
-              sv::DeferAssertAttr::get(getContext(),
-                                       sv::DeferAssert::Immediate),
-              op.getLabelAttr());
-        });
+    // If the clock op matches this pattern, fold it into a clocked_assert
+    rewriter.replaceOpWithNewOp<verif::ClockedAssertOp>(
+        op, disabledProperty, ltlToVerifClockEdge(clockOp.getEdge()), ltlClock,
+        emptyDisable, op.getLabelAttr());
 
     // Erase Converted Ops
     rewriter.eraseOp(clockOp);
 
     return success();
   }
+};
+
+struct AssumeOpConversionPattern : OpConversionPattern<verif::AssumeOp> {
+  using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(verif::AssumeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Value ltlClock, disableCond, disableInput, disabledProperty;
+    ltl::ClockOp clockOp;
+    ltl::DisableOp disableOp;
+
+    // Look for the Assert Property pattern
+    bool matchedProperty = matchPattern(
+        op.getProperty(),
+        mOpWithBind<ltl::ClockOp>(
+            &clockOp,
+            mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
+                                        mBool(&disableCond)),
+            mBool(&ltlClock)));
+
+    if (!matchedProperty)
+      return rewriter.notifyMatchFailure(op,
+                                         " unsupported assert-like pattern!");
+
+    // Then visit the disable op
+    disabledProperty = AssertLikeOp::visit(disableInput, disableCond,
+                                           disableOp.getLoc(), rewriter);
+
+    Value emptyDisable;
+
+    // If the clock op matches this pattern, fold it into a clocked_assert
+    rewriter.replaceOpWithNewOp<verif::ClockedAssumeOp>(
+        op, disabledProperty, ltlToVerifClockEdge(clockOp.getEdge()), ltlClock,
+        emptyDisable, op.getLabelAttr());
+
+    // Erase Converted Ops
+    rewriter.eraseOp(clockOp);
+
+    return success();
+  }
+};
+
+struct CoverOpConversionPattern : OpConversionPattern<verif::CoverOp> {
+  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(verif::CoverOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Value ltlClock, disableCond, disableInput, disabledProperty;
+    ltl::ClockOp clockOp;
+    ltl::DisableOp disableOp;
+
+    // Look for the Assert Property pattern
+    bool matchedProperty = matchPattern(
+        op.getProperty(),
+        mOpWithBind<ltl::ClockOp>(
+            &clockOp,
+            mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
+                                        mBool(&disableCond)),
+            mBool(&ltlClock)));
+
+    if (!matchedProperty)
+      return rewriter.notifyMatchFailure(op,
+                                         " unsupported assert-like pattern!");
+
+    // Then visit the disable op
+    disabledProperty = AssertLikeOp::visit(disableInput, disableCond,
+                                           disableOp.getLoc(), rewriter, true);
+    Value emptyDisable;
+
+    // If the clock op matches this pattern, fold it into a clocked_assert
+    rewriter.replaceOpWithNewOp<verif::ClockedCoverOp>(
+        op, disabledProperty, ltlToVerifClockEdge(clockOp.getEdge()), ltlClock,
+        emptyDisable, op.getLabelAttr());
+
+    // Erase Converted Ops
+    rewriter.eraseOp(clockOp);
+
+    return success();
+  }
+
+  struct ClockedAssertOpConversionPattern
+      : OpConversionPattern<verif::ClockedAssertOp> {
+    using OpConversionPattern<verif::ClockedAssertOp>::OpConversionPattern;
+    LogicalResult
+    matchAndRewrite(verif::ClockedAssertOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      // Then visit the disable op
+      Value disabledProperty = AssertLikeOp::visit(
+          adaptor.getProperty(), adaptor.getDisable(), op.getLoc(), rewriter);
+      Value emptyDisable;
+
+      // If the clock op matches this pattern, fold it into a clocked_assert
+      rewriter.replaceOpWithNewOp<verif::ClockedAssertOp>(
+          op, disabledProperty, adaptor.getEdge(), adaptor.getClock(),
+          emptyDisable, adaptor.getLabelAttr());
+
+      return success();
+    }
+  };
+
+  struct ClockedAssumeOpConversionPattern
+      : OpConversionPattern<verif::ClockedAssumeOp> {
+    using OpConversionPattern<verif::ClockedAssumeOp>::OpConversionPattern;
+    LogicalResult
+    matchAndRewrite(verif::ClockedAssumeOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      // Then visit the disable op
+      Value disabledProperty = AssertLikeOp::visit(
+          adaptor.getProperty(), adaptor.getDisable(), op.getLoc(), rewriter);
+      Value emptyDisable;
+
+      // If the clock op matches this pattern, fold it into a clocked_assert
+      rewriter.replaceOpWithNewOp<verif::ClockedAssumeOp>(
+          op, disabledProperty, adaptor.getEdge(), adaptor.getClock(),
+          emptyDisable, adaptor.getLabelAttr());
+
+      return success();
+    }
+  };
+
+  struct ClockedCoverOpConversionPattern
+      : OpConversionPattern<verif::ClockedCoverOp> {
+    using OpConversionPattern<verif::ClockedCoverOp>::OpConversionPattern;
+    LogicalResult
+    matchAndRewrite(verif::ClockedCoverOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      // Then visit the disable op
+      Value disabledProperty =
+          AssertLikeOp::visit(adaptor.getProperty(), adaptor.getDisable(),
+                              op.getLoc(), rewriter, true);
+      Value emptyDisable;
+
+      // If the clock op matches this pattern, fold it into a clocked_assert
+      rewriter.replaceOpWithNewOp<verif::ClockedCoverOp>(
+          op, disabledProperty, adaptor.getEdge(), adaptor.getClock(),
+          emptyDisable, adaptor.getLabelAttr());
+
+      return success();
+    }
+  };
 };
 
 } // namespace
@@ -263,7 +406,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<AssertOpConversionPattern, HasBeenResetOpConversion>(
+  patterns.add<AssertOpConversionPattern, AssumeOpConversionPattern,
+               CoverOpConversionPattern, HasBeenResetOpConversion>(
       converter, patterns.getContext());
 
   // Apply the conversions

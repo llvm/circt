@@ -64,11 +64,11 @@ def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
 class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
   let arguments = (ins LTLAnyPropertyType:$property,
-                      I1:$disable,
                       ClockEdgeAttr:$edge, I1:$clock,
+                      Optional<I1>:$disable,
                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property `disable` $disable `clock` $edge $clock 
+    $property `clock` $edge $clock (`disable` $disable^)?
     (`label` $label^)? attr-dict `:` type($property)
   }];
 }
