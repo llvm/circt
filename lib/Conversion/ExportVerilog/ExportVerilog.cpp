@@ -3484,7 +3484,7 @@ void PropertyEmitter::emitProperty(
 }
 
 void PropertyEmitter::emitClockedProperty(
-    Value property, Value clock, ltl::ClockEdge edge, Value disable,
+    Value property, Value clock, ltl::ClockEdge edge, Value enable,
     PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
   // Wrap to this column.
@@ -3496,10 +3496,10 @@ void PropertyEmitter::emitClockedProperty(
   });
 
   ps << PP::space;
-  ps << "disable iff" << PP::nbsp << "(";
+  ps << "disable iff" << PP::nbsp << "(~(";
   ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(disable, PropertyPrecedence::Lowest);
-    ps << ")";
+    emitNestedProperty(enable, PropertyPrecedence::Lowest);
+    ps << "))";
   });
 
   ps << PP::space;
@@ -4893,9 +4893,11 @@ LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
 
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
-LogicalResult StmtEmitter::emitVerifClockedAssertLike(
-    Operation *op, Value property, Value disable, Value clock,
-    verif::ClockEdge edge, PPExtString opName) {
+LogicalResult StmtEmitter::emitVerifClockedAssertLike(Operation *op,
+                                                      Value property,
+                                                      Value enable, Value clock,
+                                                      verif::ClockEdge edge,
+                                                      PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4925,7 +4927,7 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
       ps.scopedBox(PP::ibox2, [&]() {
         PropertyEmitter(emitter, ops)
             .emitClockedProperty(property, clock, verifToltlClockEdge(edge),
-                                 disable);
+                                 enable);
         ps << ");";
       });
     });
@@ -4937,19 +4939,19 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
 
 // FIXME: emit property assertion wrapped in a clock and disabled
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getEnable(),
                                     op.getClock(), op.getEdge(),
                                     PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getEnable(),
                                     op.getClock(), op.getEdge(),
                                     PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getEnable(),
                                     op.getClock(), op.getEdge(),
                                     PPExtString("cover"));
 }

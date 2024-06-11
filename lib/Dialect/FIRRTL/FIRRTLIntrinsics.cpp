@@ -447,7 +447,7 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
            gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
            gi.hasNoOutput();
   }
@@ -455,8 +455,8 @@ public:
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
     auto label = gi.getParamValue<StringAttr>("label");
-
-    rewriter.replaceOpWithNewOp<Op>(gi.op, adaptor.getOperands()[0], label);
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], operands[1], label);
   }
 };
 
@@ -669,8 +669,6 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
       "circt.ltl.implication", "circt_ltl_implication");
   lowering.add<CirctLTLBinaryConverter<LTLUntilIntrinsicOp>>("circt.ltl.until",
                                                              "circt_ltl_until");
-  lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
-      "circt.ltl.disable", "circt_ltl_disable");
   lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not",
                                                           "circt_ltl_not");
   lowering.add<CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>>(

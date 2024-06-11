@@ -3311,15 +3311,6 @@ void RefReleaseInitialOp::getCanonicalizationPatterns(
 }
 
 //===----------------------------------------------------------------------===//
-// LTLDisableIntrinsicOp
-//===----------------------------------------------------------------------===//
-
-void LTLDisableIntrinsicOp::getCanonicalizationPatterns(
-    mlir::RewritePatternSet &results, mlir::MLIRContext *context) {
-  results.insert<patterns::ClockedDisabledProperty>(context);
-}
-
-//===----------------------------------------------------------------------===//
 // HasBeenResetIntrinsicOp
 //===----------------------------------------------------------------------===//
 

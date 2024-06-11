@@ -1627,7 +1627,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
-  LogicalResult visitExpr(LTLDisableIntrinsicOp op);
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
@@ -3786,26 +3785,23 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
                                         getLoweredNonClockValue(op.getClock()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLDisableIntrinsicOp op) {
-  return setLoweringToLTL<ltl::DisableOp>(
-      op, ValueRange{getLoweredValue(op.getInput()),
-                     getLoweredValue(op.getDisable())});
-}
-
 LogicalResult FIRRTLLowering::visitStmt(VerifAssertIntrinsicOp op) {
   builder.create<verif::AssertOp>(getLoweredValue(op.getProperty()),
+                                  getLoweredValue(op.getEnable()),
                                   op.getLabelAttr());
   return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssumeIntrinsicOp op) {
   builder.create<verif::AssumeOp>(getLoweredValue(op.getProperty()),
+                                  getLoweredValue(op.getEnable()),
                                   op.getLabelAttr());
   return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
   builder.create<verif::CoverOp>(getLoweredValue(op.getProperty()),
+                                 getLoweredValue(op.getEnable()),
                                  op.getLabelAttr());
   return success();
 }

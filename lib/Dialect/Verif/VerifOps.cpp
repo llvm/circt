@@ -23,6 +23,18 @@ using namespace circt;
 using namespace verif;
 using namespace mlir;
 
+static ClockEdge ltlToVerifClockEdge(ltl::ClockEdge ce) {
+  switch (ce) {
+  case ltl::ClockEdge::Pos:
+    return ClockEdge::Pos;
+  case ltl::ClockEdge::Neg:
+    return ClockEdge::Neg;
+  case ltl::ClockEdge::Both:
+    return ClockEdge::Both;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
 //===----------------------------------------------------------------------===//
 // HasBeenResetOp
 //===----------------------------------------------------------------------===//
@@ -40,6 +52,42 @@ OpFoldResult HasBeenResetOp::fold(FoldAdaptor adaptor) {
     return BoolAttr::get(getContext(), false);
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// AssertLikeOps Canonicalizations
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct AssertLikeOp {
+public:
+  // Pattern:
+  // assertlike(ltl.clock(prop, clk), en) -> clocked_assertlike(prop, en, clk)
+  template <typename TargetOp, typename Op>
+  static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
+    // Check for clock operand
+    if (auto clockOp = dyn_cast<ltl::ClockOp>(op.getProperty().getDefiningOp()))
+      // If it exists, fold it into a clocked assertlike
+      rewriter.replaceOpWithNewOp<TargetOp>(
+          op, clockOp.getInput(), op.getEnable(),
+          ltlToVerifClockEdge(clockOp.getEdge()), clockOp.getClock(),
+          op.getLabelAttr());
+
+    return success();
+  }
+};
+} // namespace
+
+LogicalResult AssertOp::canonicalize(AssertOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedAssertOp>(op, rewriter);
+}
+
+LogicalResult AssumeOp::canonicalize(AssumeOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedAssumeOp>(op, rewriter);
+}
+
+LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//

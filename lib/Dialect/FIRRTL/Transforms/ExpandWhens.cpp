@@ -535,54 +535,8 @@ private:
   /// scope, i.e. not in a WhenOp region, then there is no condition.
   Value andWithCondition(Operation *op, Value value) {
     // 'and' the value with the current condition.
-    OpBuilder builder(op);
-    return andWithCondition(builder, value);
-  }
-
-  /// And a 1-bit value with the current condition.  If we are in the outer
-  /// scope, i.e. not in a WhenOp region, then there is no condition.
-  Value andWithCondition(OpBuilder &builder, Value value) {
-    // 'and' the value with the current condition.
-    return builder.createOrFold<AndPrimOp>(
+    return OpBuilder(op).createOrFold<AndPrimOp>(
         condition.getLoc(), condition.getType(), condition, value);
-  }
-
-  // Or a 1-bit value with the current condition.  If we are in the outer
-  /// scope, i.e. not in a WhenOp region, then there is no condition.
-  Value orWithCondition(OpBuilder &builder, Value value) {
-    // 'or' the value with the current condition.
-    return builder.createOrFold<OrPrimOp>(
-        condition.getLoc(), condition.getType(), condition, value);
-  }
-
-  template <typename Op>
-  void visitVerifIntrinsic(Op op) {
-    OpBuilder builder(op);
-    Value foldedWhen;
-    LTLClockIntrinsicOp clockOp;
-    LTLDisableIntrinsicOp disable;
-    // Extract the clock and disable from the UInt<1>
-    if ((clockOp =
-             dyn_cast<LTLClockIntrinsicOp>(op.getProperty().getDefiningOp()))) {
-      if ((disable = dyn_cast<LTLDisableIntrinsicOp>(
-               clockOp.getInput().getDefiningOp()))) {
-
-        Value newDisable = orWithCondition(builder, disable.getDisable());
-        foldedWhen = builder.create<LTLDisableIntrinsicOp>(
-            op.getLoc(), newDisable.getType(), disable.getInput(), newDisable);
-      }
-      foldedWhen = builder.create<LTLClockIntrinsicOp>(
-          op.getLoc(), foldedWhen.getType(), foldedWhen, clockOp.getClock());
-    }
-    if (foldedWhen) {
-      op.getPropertyMutable().assign(foldedWhen);
-
-      // destroy the old clock and disable ops
-      if (clockOp && isOpTriviallyDead(clockOp))
-        clockOp.erase();
-      if (disable && isOpTriviallyDead(disable))
-        disable.erase();
-    }
   }
 
 private:
@@ -606,15 +560,15 @@ void WhenOpVisitor::visitStmt(StopOp op) {
 }
 
 void WhenOpVisitor::visitStmt(VerifAssertIntrinsicOp op) {
-  visitVerifIntrinsic(op);
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(VerifAssumeIntrinsicOp op) {
-  visitVerifIntrinsic(op);
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(VerifCoverIntrinsicOp op) {
-  visitVerifIntrinsic(op);
+  op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {

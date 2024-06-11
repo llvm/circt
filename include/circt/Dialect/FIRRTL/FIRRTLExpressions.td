@@ -1474,12 +1474,5 @@ def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
     $input `,` $clock attr-dict `:` functional-type(operands, results)
   }];
 }
-def LTLDisableIntrinsicOp : LTLIntrinsicOp<"disable"> {
-  let arguments = (ins UInt1Type:$input, UInt1Type:$disable);
-  let assemblyFormat = [{
-    $input `,` $disable attr-dict `:` functional-type(operands, results)
-  }];
-  let hasCanonicalizer = true;
-}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
