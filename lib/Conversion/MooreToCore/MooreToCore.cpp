@@ -18,8 +18,11 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -164,13 +167,28 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
 
     Type resultType = typeConverter->convertType(op.getResult().getType());
     auto value = op.getValue();
+    std::string symStr;
+    switch (op.getKind()) {
+    case NamedConst::Parameter:
+      symStr = "parameter";
+      break;
+    case NamedConst::LocalParameter:
+      symStr = "localparameter";
+      break;
+    case NamedConst::SpecParameter:
+      symStr = "specparameter";
+      break;
+    }
+    symStr += ":";
+    symStr += op.getNameAttr().str();
+    auto symAttr = rewriter.getStringAttr(symStr);
     if (isa<IntegerAttr>(value)) {
       auto valueInt = cast<IntegerAttr>(value);
       auto paramOp =
           rewriter.create<hw::ParamValueOp>(op->getLoc(), resultType, valueInt);
       rewriter.create<hw::WireOp>(paramOp->getLoc(), resultType,
                                   paramOp->getResult(0), op.getNameAttr(),
-                                  hw::InnerSymAttr{});
+                                  hw::InnerSymAttr::get(symAttr));
       rewriter.eraseOp(op);
       return success();
     }

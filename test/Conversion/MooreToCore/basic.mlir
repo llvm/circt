@@ -240,15 +240,14 @@ moore.module @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l
 moore.module @ParamTest(){
 
   // CHECK-NEXT: [[Pa:%.+]] = hw.param.value i32 = 1
-  // CHECK-NEXT: %p1 = hw.wire [[Pa]] : i32
+  // CHECK-NEXT: %p1 = hw.wire [[Pa]] sym @parameter:p1 : i32
   %p1 = moore.named_constant parameter 1 : !moore.l32
 
   // CHECK-NEXT: [[LPa:%.+]] = hw.param.value i32 = 2
-  // CHECK-NEXT: %lp1 = hw.wire [[LPa]] : i32
+  // CHECK-NEXT: %lp1 = hw.wire [[LPa]] sym @localparameter:lp1 : i32
   %lp1 = moore.named_constant localparam 2 : !moore.l32
 
   // CHECK-NEXT: [[SPa:%.+]] = hw.param.value i32 = 3
-  // CHECK-NEXT: %sp1 = hw.wire [[SPa]] : i32
+  // CHECK-NEXT: %sp1 = hw.wire [[SPa]] sym @specparameter:sp1 : i32
   %sp1 = moore.named_constant specparam 3 : !moore.l32
 }
-
