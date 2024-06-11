@@ -373,6 +373,42 @@ struct ObjectModelIR {
                   builder.getStringAttr("retime_modules_metadata")),
               "retime");
 
+    if (dutMod) {
+      // This can handle multiple DUTs or multiple paths to a DUT.
+      // Create a list of paths to the DUTs.
+      SmallVector<Value, 2> pathOpsToDut;
+
+      auto dutPaths = instancePathCache.getAbsolutePaths(dutMod);
+      // For each path to the DUT.
+      for (auto dutPath : dutPaths) {
+        SmallVector<Attribute> namepath;
+        // Construct the list of inner refs to the instances in the path.
+        for (auto inst : dutPath)
+          namepath.emplace_back(firrtl::getInnerRefTo(
+              inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
+                return getModuleNamespace(mod);
+              }));
+        if (namepath.empty())
+          continue;
+        // The path op will refer to the leaf instance in the path (and not the
+        // actual DUT module!!).
+        auto leafInst = dutPath.leaf();
+        auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
+        auto nla = nlaBuilder.create<hw::HierPathOp>(
+            dutMod->getLoc(),
+            nlaBuilder.getStringAttr(circtNamespace.newName("dutNLA")),
+            nlaBuilder.getArrayAttr(namepath));
+        // Create the path ref op and record it.
+        pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
+      }
+      auto *context = builder.getContext();
+      // Create the list of paths op and add it as a field of the class.
+      auto pathList = builder.create<ListCreateOp>(
+          ListType::get(context, cast<PropertyType>(PathType::get(context))),
+          pathOpsToDut);
+      addPort(pathList, "dutModulePath");
+    }
+
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
     return builder.create<ObjectOp>(sifiveMetadataClass,
                                     builder.getStringAttr("sifive_metadata"));
