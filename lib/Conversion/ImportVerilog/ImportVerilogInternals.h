@@ -76,7 +76,8 @@ struct Context {
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
   // Convert an expression AST node to MLIR ops.
-  Value convertExpression(const slang::ast::Expression &expr);
+  Value convertRvalueExpression(const slang::ast::Expression &expr);
+  Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;

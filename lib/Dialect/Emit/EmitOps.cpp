@@ -74,7 +74,7 @@ LogicalResult RefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *op = symbolTable.lookupNearestSymbolFrom(getOperation(), target);
   if (!op)
     return emitError("invalid symbol reference: ") << target;
-  if (!op->hasTrait<emit::Emittable>())
+  if (!isa<emit::Emittable>(op))
     return emitError("does not target an emittable op: ") << target;
   return success();
 }

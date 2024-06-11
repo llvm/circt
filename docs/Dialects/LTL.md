@@ -143,6 +143,13 @@ The definition of `ltl.repeat` is similar to that of `ltl.delay`. The mapping fr
 - `seq[*N:$]`. **Unbounded range repeat.** Repeats `N` to an indefinite finite number of times. Equivalent to `ltl.repeat %seq, N`.
 - `seq[*]`. Shorthand for `seq[*0:$]`. Equivalent to `ltl.repeat %seq, 0`.
 - `seq[+]`. Shorthand for `seq[*1:$]`. Equivalent to `ltl.repeat %seq, 1`.
+  
+#### Non-Consecutive Repetition  
+
+Non-consecutive repetition checks that a sequence holds a certain number of times within an arbitrary repitition of the sequence. There are two ways of expressing non-consecutive repetition, either by including the last iteration in the count or not. If the last iteration is included, then this is called a "go-to" style non-consecutive repetition and can be defined using the `ltl.goto_repeat <input>, <N>, <window>` operation, e.g. `a !b b b !b !b b c` is a valid observation of `ltl.goto_repeat %b, 1, 2`, but `a !b b b !b !b b !b !b c` is not. If we omit the constraint of having the last iteration hold, then this is simply called a non-consecutive repetition, and can be defined using the `ltl.non_consecutive_repeat <input, <N>, <window>` operation, e.g. both `a !b b b !b !b b c` and `a !b b b !b !b b !b !b c` are valid observations of `ltl.non_consecutive_repeat %b, 1, 2`. The SVA mapping of these operations is as follows:  
+
+- `seq[->n:m]`: **Go-To Style Repetition**, equivalent to `ltl.goto_repeat %seq, n, (m-n)`.  
+- `seq[=n:m]` : **Non-Consecutive Repetition** equivalent to `ltl.non_consecutive_repeat %seq, n, (m-n)`.  
 
 
 ### Clocking
@@ -167,8 +174,240 @@ property p1; eventually p0; endproperty
 ```
 In this example, `p1` refers to property `p0`, which is illegal in SVA since `p0` itself defines a disable condition.
 
-In contrast, the LTL dialect explicitly allows for properties to be disabled at arbitrary points, and disabled properties to be used in other properties. Since a disabled nested property also disables the parent property, the IR can always be rewritten into a form where there is only one `disable iff` condition at the root of a property expression.
+In contrast, the LTL dialect explicitly allows for properties to be disabled at arbitrary points, and disabled properties to be used in other properties. Since a disabled nested property also disables the parent property, the IR can always be rewritten into a form where there is only one `disable iff` condition at the root of a property expression.  
+  
+## Mapping SVA to CIRCT dialects  
+  
+Knowing how to map SVA constructs to CIRCT is important to allow these to expressed correctly in any front-end. Here you will find a non-exhaustive list of conversions from SVA to CIRCT dialects.  
 
+- **properties**: `!ltl.property`.    
+- **sequences**: `!ltl.sequence`.  
+  
+- **`disable iff (cond)`**:  `ltl.disable %prop if %cond`
+- **local variables**: Not currently possible to encode.  
+
+- **`$rose(a)`**: 
+```mlir
+%1 = ltl.compreg %a, %clock : i1
+%rose = comb.icmp bin ult %1, %a : i1  
+```  
+
+- **`$fell(a)`**: 
+```mlir
+%1 = ltl.compreg %a, %clock : i1
+%fell = comb.icmp bin ugt %a, %1 : i1
+```    
+
+- **`$stable(a)`**:
+```mlir
+%1 = ltl.compreg %a, %clock : i1
+%rose = comb.icmp bin eq %a, %1 : i1
+``` 
+
+- **`$past(a, n)`**: 
+```mlir
+%zero = hw.constant 0 : i1
+%true = hw.constant 1 : i1
+%1 = seq.shiftreg n, %a, %clk, %true, powerOn %zero : i1
+``` 
+
+> The following functions are not yet supported by CIRCT:  
+> - **`$onehot(a)`**  
+> - **`$onehot0(a)`**  
+> - **`$isunknown(a)`**  
+> - **`$countones(a)`**     
+  
+  
+- **`a ##n b`**:   
+```mlir
+%a_n = ltl.delay %a, n, 0 : i1
+%anb = ltl.concat %a_n, %b : !ltl.sequence 
+```
+
+- **`a ##[n:m] b`**:
+```mlir
+%a_n = ltl.delay %a, n, (m-n) : i1
+%anb = ltl.concat %a_n, %b : !ltl.sequence   
+```
+
+- **`s [*n]`**:  
+```mlir
+%repsn = ltl.repeat %s, n, 0 : !ltl.sequence  
+```
+
+- **`s [*n:m]`**: 
+```mlir
+%repsnm = ltl.repeat %s, n, (m-n) : !ltl.sequence  
+```
+
+- **`s[*n:$]`**:   
+```mlir
+%repsninf = ltl.repeat %s, n : !ltl.sequence  
+```
+
+- **`s[->n:m]`**:   
+```mlir
+%1 = ltl.goto_repeat %s, n, (m-n) : !ltl.sequence
+```  
+
+- **`s[=n:m]`**:   
+```mlir
+%1 = ltl.non_consecutive_repeat %s, n, (m-n) : !ltl.sequence  
+```  
+
+- **`s1 ##[+] s2`**:   
+```mlir
+%ds1 = ltl.delay %s1, 1
+%s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
+```  
+
+- **`s1 ##[*] s2`**:   
+```mlir
+%ds1 = ltl.delay %s1, 0
+%s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
+```  
+
+- **`s1 and s2`**:   
+```mlir
+ltl.and %s1, %s2 : !ltl.sequence  
+```
+
+- **`s1 intersect s2`**:   
+```mlir
+ltl.intersect %s1, %s2 : !ltl.sequence  
+```
+
+- **`s1 or s2`**:   
+```mlir
+ltl.or %s1, %s2 : !ltl.sequence  
+```
+
+- **`not s`**:   
+```mlir
+ltl.not %s1 : !ltl.sequence   
+```
+
+- **`first_match(s)`**: Not possible to encode yet.
+
+- **`expr throughout s`**:   
+```mlir
+%repexpr = ltl.repeat %expr, 0 : !ltl.sequence
+%res = ltl.intersect %repexpr, %s : !ltl.sequence  
+```
+
+- **`s1 within s2`**:     
+```mlir
+%c1 = hw.constant 1 : i1
+%rep1 = ltl.repeat %c1, 0 : !ltl.sequence
+%drep1 = ltl.delay %rep1, 1, 0 : !ltl.sequence
+%ds1 = ltl.delay %s, 1, 0 : !ltl.sequence
+%evs1 = ltl.concat %drep1, %ds1, %c1 : !ltl.sequence
+%res = ltl.intersect %evs1, %s2 : !ltl.sequence  
+```
+
+- **`s |-> p`**:   
+```mlir
+%1 = ltl.implication %s, %p : !ltl.property
+```  
+
+- **`s |=> p`**:  
+```mlir
+%c1 = hw.constant 1 : i1
+%ds = ltl.delay %s, 1, 0 : i1
+%antecedent = ltl.concat %ds, %c1 : !ltl.sequence
+%impl = ltl.implication %antecedent, %p : !ltl.property  
+```
+
+- **`p1 implies p2`**:   
+```mlir
+%np1 = ltl.not %p1 : !ltl:property
+%impl = ltl.or %np1, %p2 : !ltl.property  
+```
+
+- **`p1 iff p2`**: equivalent to `(not (p1 or p2)) or (p1 and p2)`  
+```mlir
+%p1orp2 = ltl.or %p1, %p2 : !ltl.property
+%lhs = ltl.not %p1orp2 : !ltl.property
+%rhs = ltl.and %p1, %p2 : !ltl.property
+%iff = ltl.or %lhs, %rhs : !ltl.property  
+```
+
+- **`s #-# p`**:   
+```mlir
+%np = ltl.not %p : !ltl.property
+%impl = ltl.implication %s, %np : !ltl.property
+%res = ltl.not %impl : !ltl.property  
+```
+
+- **`s #=# p`**:  
+```mlir
+%np = ltl.not %p : !ltl.property	
+%ds = ltl.delay %s, 1, 0 : !ltl.sequence
+%c1 = hw.constant 1 : i1
+%ant = ltl.concat %ds, c1 : !ltl.sequence 
+%impl = ltl.implication %ant, %np : !ltl.property
+%res = ltl.not %impl : !ltl.property  
+```
+
+- **`strong(s)`**: default for coverpoints, not supported in other cases.
+- **`weak(s)`**: default for assert and assume, not supported for cover.  
+
+- **`nexttime p`**:   
+```mlir
+ltl.delay %p, 1, 0 : !ltl.sequence   
+```  
+
+- **`nexttime[n] p`**:  
+```mlir
+ltl.delay %p, n, 0 : !ltl.sequence   
+```  
+
+- **`s_nexttime p`**: not really distinguishable from the weak version in CIRCT.
+- **`s_nexttime[n] p`**: not really distinguishable from the weak version in CIRCT.
+
+- **`always p`**:   
+```mlir
+ltl.repeat %p, 0 : !ltl.sequence   
+```  
+
+- **`always[n:m] p`**:   
+```mlir
+ltl.repeat %p, n, m : !ltl.sequence 
+```  
+- **`s_always[n:m] p`**: not really distinguishable in CIRCT  
+
+- **`s_eventually p`**:   
+```mlir
+ltl.eventually %p : !ltl.property  
+```
+
+- **`eventually[n:m] p`**: not yet encodable in CIRCT.
+
+- **`s_eventually[n:m] p`**: not yet encodable in CIRCT.
+
+- **`p1 until p2`**:   
+```mlir
+%1 = ltl.until %p1, %p2 : !ltl.sequence  
+```  
+
+- **`p1 s_until p2`**: not really distinguishable from the weak version in CIRCT.
+
+- **`p1 until_with p2`**: Equivalent to `(p1 until p2) implies (p1 and p2)`  
+```mlir
+%1 = ltl.until %p1, %p2 : !ltl.sequence
+%2 = ltl.and %p1, %p2 : !ltl:property
+%n1 = ltl.not %p : !ltl.property
+%res = ltl.or %n1, %2 : !ltl.property  
+```  
+
+- **`p1 s_until_with p2`**: not really distinguishable from the weak version in CIRCT.
+
+> We don't yet support abort constructs but might in the future.  
+> - **`accept_on ( expr ) p`**   
+> - **`reject_on ( expr ) p`**  
+> - **`sync_accept_on ( expr ) p`**   
+> - **`sync_reject_on ( expr ) p`**   
+  
 
 ## Representing the LTL Formalism
 

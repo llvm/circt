@@ -2,7 +2,7 @@
 
 ibis.design @foo {
 
-// CHECK-LABEL:  ibis.class @HighLevel {
+// CHECK-LABEL:  ibis.class sym @HighLevel {
 // CHECK-NEXT:    %this = ibis.this <@foo::@HighLevel> 
 // CHECK-NEXT:    ibis.var @single : memref<i32>
 // CHECK-NEXT:    ibis.var @array : memref<10xi32>
@@ -26,7 +26,7 @@ ibis.design @foo {
 // CHECK-NEXT:  }
 
 
-ibis.class @HighLevel {
+ibis.class sym @HighLevel {
   %this = ibis.this <@foo::@HighLevel>
   ibis.var @single : memref<i32>
   ibis.var @array : memref<10xi32>
@@ -54,14 +54,14 @@ ibis.class @HighLevel {
 }
 
 
-// CHECK-LABEL:  ibis.class @A {
+// CHECK-LABEL:  ibis.class sym @A {
 // CHECK-NEXT:    %this = ibis.this <@foo::@A> 
 // CHECK-NEXT:    %in = ibis.port.input "in" sym @in : i1
 // CHECK-NEXT:    %out = ibis.port.output "out" sym @out : i1
 // CHECK-NEXT:    %AnonymousPort = ibis.port.input sym @AnonymousPort : i1
 // CHECK-NEXT:  }
 
-// CHECK-LABEL:  ibis.class @LowLevel {
+// CHECK-LABEL:  ibis.class sym @LowLevel {
 // CHECK-NEXT:    %this = ibis.this <@foo::@LowLevel> 
 // CHECK-NEXT:    %LowLevel_in = ibis.port.input "LowLevel_in" sym @LowLevel_in : i1
 // CHECK-NEXT:    %LowLevel_out = ibis.port.output "LowLevel_out" sym @LowLevel_out : i1
@@ -69,7 +69,7 @@ ibis.class @HighLevel {
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %out_wire = ibis.wire.output @out_wire, %true : i1
 // CHECK-NEXT:    %a = ibis.instance @a, <@foo::@A> 
-// CHECK-NEXT:    ibis.container @D {
+// CHECK-NEXT:    ibis.container sym @D {
 // CHECK-NEXT:      %this_0 = ibis.this <@foo::@D> 
 // CHECK-NEXT:      %parent = ibis.path [#ibis.step<parent : !ibis.scoperef<@foo::@LowLevel>> : !ibis.scoperef<@foo::@LowLevel>]
 // CHECK-NEXT:      %parent.LowLevel_in.ref = ibis.get_port %parent, @LowLevel_in : !ibis.scoperef<@foo::@LowLevel> -> !ibis.portref<in i1>
@@ -84,16 +84,20 @@ ibis.class @HighLevel {
 // CHECK-NEXT:      %parent.a.out.ref.val = ibis.port.read %parent.a.out.ref : !ibis.portref<out i1>
 // CHECK-NEXT:      hw.instance "foo" @externModule() -> ()
 // CHECK-NEXT:    }
+
+// CHECK-NEXT:      ibis.container "ThisName" sym @ThisSymbol {
+// CHECK-NEXT:        %this_0 = ibis.this <@foo::@ThisSymbol> 
+// CHECK-NEXT:      }
 // CHECK-NEXT:  }
 
-ibis.class @A {
+ibis.class sym @A {
   %this = ibis.this <@foo::@A>
   ibis.port.input "in" sym @in : i1
   ibis.port.output "out" sym @out : i1
   ibis.port.input sym @AnonymousPort : i1
 }
 
-ibis.class @LowLevel {
+ibis.class sym @LowLevel {
   %this = ibis.this <@foo::@LowLevel>
   ibis.port.input "LowLevel_in" sym @LowLevel_in : i1
   ibis.port.output "LowLevel_out" sym @LowLevel_out : i1
@@ -105,7 +109,7 @@ ibis.class @LowLevel {
   // Instantiation
   %a = ibis.instance @a, <@foo::@A>
 
-  ibis.container @D {
+  ibis.container sym @D {
     %this_d = ibis.this <@foo::@D>
     %parent_C = ibis.path [
       #ibis.step<parent : !ibis.scoperef<@foo::@LowLevel>>
@@ -129,6 +133,10 @@ ibis.class @LowLevel {
 
     // Test hw.instance ops inside a container (symbol table usage)
     hw.instance "foo" @externModule() -> ()
+  }
+
+  ibis.container "ThisName" sym @ThisSymbol {
+    %this2 = ibis.this <@foo::@ThisSymbol>
   }
 }
 

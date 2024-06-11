@@ -40,7 +40,7 @@ tools/llhd-sim @fabianschuiki @maerhart
 **/Dialect/Pipeline @mortbopet
 
 # Handshake
-**/Handshake* @Dinistro @mortbopet @RamirezLucas
+**/Handshake* @Dinistro @mortbopet
 
 # HW
 **/Dialect/HW @darthscsi
