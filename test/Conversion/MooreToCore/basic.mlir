@@ -62,13 +62,6 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.constant 12 : !moore.i32
   moore.constant 3 : !moore.i6
 
-  // CHECK-NEXT: [[Pa:%.+]] = hw.param.value i32 = 1
-  // CHECK-NEXT: [[LPa:%.+]] = hw.param.value i32 = 2
-  // CHECK-NEXT: [[SPa:%.+]] = hw.param.value i32 = 3
-  %p1 = moore.named_constant parameter 1 : !moore.l32
-  %lp1 = moore.named_constant localparam 2 : !moore.l32
-  %sp1 = moore.named_constant specparam 3 : !moore.l32
-
   // CHECK-NEXT: hw.bitcast %arg0 : (i1) -> i1
   moore.conversion %arg0 : !moore.i1 -> !moore.l1
 
@@ -242,3 +235,20 @@ moore.module @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l
   // CHECK-NEXT: hw.output %[[V2]] : i1
   moore.output %0 : !moore.l1
 }
+
+// CHECK-LABEL: hw.module @ParamTest() {
+moore.module @ParamTest(){
+
+  // CHECK-NEXT: [[Pa:%.+]] = hw.param.value i32 = 1
+  // CHECK-NEXT: %p1 = hw.wire [[Pa]] : i32
+  %p1 = moore.named_constant parameter 1 : !moore.l32
+
+  // CHECK-NEXT: [[LPa:%.+]] = hw.param.value i32 = 2
+  // CHECK-NEXT: %lp1 = hw.wire [[LPa]] : i32
+  %lp1 = moore.named_constant localparam 2 : !moore.l32
+
+  // CHECK-NEXT: [[SPa:%.+]] = hw.param.value i32 = 3
+  // CHECK-NEXT: %sp1 = hw.wire [[SPa]] : i32
+  %sp1 = moore.named_constant specparam 3 : !moore.l32
+}
+
