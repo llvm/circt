@@ -329,7 +329,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 // NamedConstantOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseParamValue(OpAsmParser &p, IntegerAttr &value,
+static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
                                    Type &resultType) {
   APInt valueInt;
   IntType typeInt;
@@ -365,7 +365,7 @@ static ParseResult parseParamValue(OpAsmParser &p, IntegerAttr &value,
   return success();
 }
 
-static void printParamValue(OpAsmPrinter &p, Operation *, IntegerAttr value,
+static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
                             Type resultType) {
   p.printAttributeWithoutType(value);
   p << " : ";
