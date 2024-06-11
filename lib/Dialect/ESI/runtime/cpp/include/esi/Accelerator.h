@@ -28,7 +28,6 @@
 #include "esi/Services.h"
 
 #include <functional>
-#include <iosfwd>
 #include <map>
 #include <memory>
 #include <string>
@@ -81,6 +80,7 @@ public:
   virtual ~AcceleratorConnection() = default;
   Context &getCtxt() const { return ctxt; }
 
+  /// Disconnect from the accelerator cleanly.
   void disconnect();
 
   /// Request the host side channel ports for a particular instance (identified
@@ -158,15 +158,21 @@ struct RegisterAccelerator {
 } // namespace internal
 } // namespace registry
 
+/// Background thread which services various requests. Currently, it listens on
+/// ports and calls callbacks for incoming messages on said ports.
 class AcceleratorServiceThread {
 public:
   AcceleratorServiceThread();
   ~AcceleratorServiceThread();
 
-  /// When there's data on any of the listenPorts, call the callback.
+  /// When there's data on any of the listenPorts, call the callback. Callable
+  /// from any thread.
   void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
               std::function<void(ReadChannelPort *, MessageData)> callback);
+
+  /// Instruct the service thread to stop running.
+  void stop();
 
 private:
   struct Impl;

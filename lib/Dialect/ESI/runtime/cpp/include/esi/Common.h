@@ -95,6 +95,8 @@ public:
   /// Get the size of the data in bytes.
   size_t getSize() const { return data.size(); }
 
+  /// Cast to a type. Throws if the size of the data does not match the size of
+  /// the message.
   template <typename T>
   T getAs() const {
     if (data.size() != sizeof(T))
@@ -104,6 +106,7 @@ public:
     return *reinterpret_cast<const T *>(data.data());
   }
 
+  /// Cast from a type to its raw bytes.
   template <typename T>
   static MessageData from(T &t) {
     return MessageData(reinterpret_cast<const uint8_t *>(&t), sizeof(T));

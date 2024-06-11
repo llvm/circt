@@ -61,8 +61,7 @@ unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end())
     throw runtime_error("Backend not found");
-  auto conn = f->second(ctxt, connection);
-  return conn;
+  return f->second(ctxt, connection);
 }
 
 } // namespace registry
@@ -74,8 +73,8 @@ struct AcceleratorServiceThread::Impl {
     shutdown = true;
     me.join();
   }
-  /// When there's data on any of the listenPorts, call the callback. This can
-  /// be called from a separate thread.
+  /// When there's data on any of the listenPorts, call the callback. This
+  /// method can be called from any thread.
   void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
               std::function<void(ReadChannelPort *, MessageData)> callback);
@@ -84,15 +83,18 @@ private:
   void loop();
   volatile bool shutdown = false;
   std::thread me;
+
+  // Protect the listerners map.
   std::mutex listenerMutex;
+  // Map of read ports to callbacks.
   std::map<ReadChannelPort *,
            std::function<void(ReadChannelPort *, MessageData)>>
       listeners;
 };
 
 void AcceleratorServiceThread::Impl::loop() {
-  // These two logically should be in the loop, but this avoids reconstructing
-  // on each iteration.
+  // These two variables should logically be in the loop, but this avoids
+  // reconstructing them on each iteration.
   std::vector<std::tuple<ReadChannelPort *,
                          std::function<void(ReadChannelPort *, MessageData)>,
                          MessageData>>
@@ -102,6 +104,7 @@ void AcceleratorServiceThread::Impl::loop() {
   while (!shutdown) {
     // Ideally we'd have some wake notification here, but this sufficies for
     // now.
+    // TODO: investigate better ways to do this.
     std::this_thread::sleep_for(std::chrono::microseconds(100));
 
     // Check and gather data from all the read ports we are monitoring. Put the
@@ -141,16 +144,26 @@ AcceleratorServiceThread::AcceleratorServiceThread()
     : impl(std::make_unique<Impl>()) {
   impl->start();
 }
-AcceleratorServiceThread::~AcceleratorServiceThread() { impl->stop(); }
+AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
+
+void AcceleratorServiceThread::stop() {
+  if (impl) {
+    impl->stop();
+    impl.reset();
+  }
+}
 
 /// When there's data on any of the listenPorts, call the callback.
 void AcceleratorServiceThread::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
     std::function<void(ReadChannelPort *, MessageData)> callback) {
+  assert(impl && "Service thread not running");
   impl->addListener(listenPorts, callback);
 }
 
 void AcceleratorConnection::disconnect() {
-  if (serviceThread)
+  if (serviceThread) {
+    serviceThread->stop();
     serviceThread.reset();
+  }
 }

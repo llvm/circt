@@ -70,7 +70,7 @@ def FuncServiceDeclOp : ESI_Op<"service.std.func",
 def CallServiceDeclOp : ESI_Op<"service.std.call",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
            Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
-  let summary = "Service against which hardware can call";
+  let summary = "Service against which hardware can call into software";
 
   let arguments = (ins SymbolNameAttr:$sym_name);
 
@@ -82,9 +82,6 @@ def CallServiceDeclOp : ESI_Op<"service.std.call",
     std::optional<StringRef> getTypeName() { return "esi.service.std.call"; }
   }];
 }
-
-
-
 
 def MMIOServiceDeclOp: ESI_Op<"service.std.mmio",
           [HasParent<"::mlir::ModuleOp">, Symbol,

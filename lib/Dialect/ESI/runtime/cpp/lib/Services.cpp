@@ -104,8 +104,7 @@ FuncService::Function::Function(
     : ServicePort(id, channels),
       arg(dynamic_cast<WriteChannelPort &>(channels.at("arg"))),
       result(dynamic_cast<ReadChannelPort &>(channels.at("result"))) {
-  if (channels.size() != 2)
-    throw runtime_error("FuncService must have exactly two channels");
+  assert(channels.size() == 2 && "FuncService must have exactly two channels");
 }
 
 void FuncService::Function::connect() {

@@ -49,7 +49,5 @@ if __name__ == "__main__":
   s = pycde.System(cosim.CosimBSP(EsiTesterTop),
                    name="EsiTester",
                    output_directory=sys.argv[1])
-  s.generate()
-  print(s.body)
   s.compile()
   s.package()
