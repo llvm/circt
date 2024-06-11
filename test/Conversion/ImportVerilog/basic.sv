@@ -1161,3 +1161,50 @@ module MultiPorts(
   // CHECK: [[C1_READ:%.+]] = moore.read %c1
   // CHECK: moore.output [[V1_READ]], [[C1_READ]]
 endmodule
+
+// CHECK-LABEL: moore.module @EventControl(in %clk : !moore.l1)
+module EventControl(input clk);
+  // CHECK: %clk_0 = moore.net name "clk" wire : <l1>
+
+  int a1, a2, b, c;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event posedge [[CLK_READ]] : l1
+  always @(posedge clk) begin end;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event negedge [[CLK_READ]] : l1
+  always @(negedge clk) begin end;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event edge [[CLK_READ]] : l1
+  always @(edge clk) begin end;
+
+  // CHECK: moore.procedure always {
+  // CHECK:   [[B_READ:%.+]] = moore.read %b : i32
+  // CHECK:   moore.wait_event none [[B_READ]] : i32
+  // CHECK:   [[C_READ:%.+]] = moore.read %c : i32
+  // CHECK:   moore.wait_event none [[C_READ]] : i32
+  always @(b, c) begin
+    // CHECK: [[B_READ:%.+]] = moore.read %b : i32
+    // CHECK: [[C_READ:%.+]] = moore.read %c : i32
+    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
+    // CHECK: moore.blocking_assign %a1, [[ADD]] : i32
+    a1 = b + c;
+  end;
+
+  // CHECK: moore.procedure always
+  always @(*) begin
+    // CHECK: [[B_READ:%.+]] = moore.read %b : i32
+    // CHECK: [[C_READ:%.+]] = moore.read %c : i32
+    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
+    // CHECK: moore.blocking_assign %a2, [[ADD]] : i32
+    a2 = b + c;
+  end
+
+  // CHECK: moore.assign %clk_0, %clk : l1
+  // CHECK: moore.output
+endmodule
