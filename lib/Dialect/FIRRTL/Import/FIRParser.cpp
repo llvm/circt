@@ -5318,17 +5318,17 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
-  if (consumeIf(FIRToken::kw_FIRRTL)) {
-    if (!indent.has_value())
-      return emitError("'FIRRTL' must be first token on its line"), failure();
-    if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit("expected version literal"))
-      return failure();
-    indent = getIndentation();
-  }
+  if (parseToken(FIRToken::kw_FIRRTL, "expected 'FIRRTL'"))
+    return failure();
+  if (!indent.has_value())
+    return emitError("'FIRRTL' must be first token on its line");
+  if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
+      parseVersionLit("expected version literal"))
+    return failure();
+  indent = getIndentation();
 
   if (!indent.has_value())
-    return emitError("'circuit' must be first token on its line"), failure();
+    return emitError("'circuit' must be first token on its line");
   unsigned circuitIndent = *indent;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -5507,8 +5507,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  FIRVersion version = defaultFIRVersion;
-  if (FIRCircuitParser(state, lexer, *module, version)
+  if (FIRCircuitParser(state, lexer, *module, minimumFIRVersion)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
 
