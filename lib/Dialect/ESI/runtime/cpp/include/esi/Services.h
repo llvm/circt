@@ -142,6 +142,36 @@ private:
   std::string symbol;
 };
 
+/// Service for servicing function calls from the accelerator.
+class CallService : public Service {
+public:
+  CallService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
+              ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const override;
+
+  /// A function call which gets attached to a service port.
+  class Callback : public ServicePort {
+    friend class CallService;
+    Callback(AcceleratorConnection &acc, AppID id,
+             const std::map<std::string, ChannelPort &> &channels);
+
+  public:
+    void connect(std::function<MessageData(const MessageData &)> callback);
+
+  private:
+    ReadChannelPort &arg;
+    WriteChannelPort &result;
+    AcceleratorConnection &acc;
+  };
+
+private:
+  std::string symbol;
+};
+
 /// Registry of services which can be instantiated directly by the Accelerator
 /// class if the backend doesn't do anything special with a service.
 class ServiceRegistry {

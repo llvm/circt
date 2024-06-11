@@ -148,11 +148,14 @@ def ControlReg(clk: Signal,
                rst: Signal,
                asserts: List[Signal],
                resets: List[Signal],
-               name: Optional[str] = None) -> BitVectorSignal:
+               name: Optional[str] = None) -> Bits:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
   assert takes priority."""
+
+  assert len(asserts) > 0
+  assert len(resets) > 0
 
   @modparams
   def ControlReg(num_asserts: int, num_resets: int):
