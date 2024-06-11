@@ -1,7 +1,8 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
+FIRRTL version 4.0.0
 circuit Foo:
-  module Foo:
+  public module Foo:
     output a: { flip a: UInt<1> }
     output b: { a: UInt<1> }
 
@@ -10,8 +11,9 @@ circuit Foo:
 
 ;// -----
 
+FIRRTL version 4.0.0
 circuit Bar:
-  module Bar:
+  public module Bar:
 ; expected-note @+1 {{destination}}
     output a: { flip a: UInt<1> }
     input b: { flip a: UInt<1> }

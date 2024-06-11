@@ -1411,6 +1411,7 @@ circuit RadixEncodedIntegerLiterals:
 
 ;// -----
 ; Tests for type alias
+FIRRTL version 4.0.0
 circuit Top:
   type WordType = const UInt<32>
   type ValidType = UInt<1>
@@ -1429,7 +1430,7 @@ circuit Top:
   ; CHECK-NEXT: %[[RESULT:.+]] = firrtl.subfield %in_data[valid] : !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
   ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
   ; CHECK-NEXT: firrtl.matchingconnect %out_valid, %[[RESULT]] : !firrtl.alias<ValidType, uint<1>>
-  module Top:
+  public module Top:
     input in_data: Data
     input in_complex: Complex
     output out: ProbeComplex
@@ -1688,8 +1689,9 @@ circuit VecOfProps:
 ;// -----
 ; Test parsing of wires of probes, wires of agg of probes, and namekinds.
 ; CHECK-LABEL: circuit "WireOfProbesAndNames"
+FIRRTL version 4.0.0
 circuit WireOfProbesAndNames:
-  module WireOfProbesAndNames:
+  public module WireOfProbesAndNames:
     ; CHECK: %mixed = firrtl.wire interesting_name : !firrtl.openbundle
     wire mixed : { a : UInt<3>, b : Probe<UInt<3>> }
     ; CHECK: %probe = firrtl.wire : !firrtl.probe

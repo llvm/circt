@@ -2,6 +2,7 @@
 ; RUN: firtool %s --grand-central-companion-mode=drop | FileCheck %s --check-prefixes=DROP
 ; RUN: firtool %s --grand-central-companion-mode=bind | FileCheck %s --check-prefixes=BIND
 
+FIRRTL version 4.0.0
 circuit Foo : %[[
   {
     "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
@@ -48,7 +49,7 @@ circuit Foo : %[[
 
     assert(clock, a, UInt<1>(1), "hello")
 
-  module Foo :
+  public module Foo :
     input clock: Clock
     input a_in: UInt<1>
 
