@@ -275,6 +275,19 @@ def moveConstXor : Pat <
   [(AnyConstantOp $x), (NonConstantOp $y)]>;
 
 ////////////////////////////////////////////////////////////////////////////////
+// LTL Intrinsics
+////////////////////////////////////////////////////////////////////////////////
+
+// ltl.disable(ltl.clock(prop, clk), cond) -> ltl.clock(ltl.disable(prop, cond), clk)
+def ClockedDisabledProperty : Pat <
+  (LTLDisableIntrinsicOp:$old (LTLClockIntrinsicOp UInt1Type:$property, ClockType:$clk), UInt1Type:$cond),
+  (LTLClockIntrinsicOp 
+    (NativeCodeCall<"$_builder.create<LTLDisableIntrinsicOp>($0.getLoc(), $0.getType(), $1, $2)">
+      $old, $property, $cond), 
+    $clk),
+  []>;
+
+////////////////////////////////////////////////////////////////////////////////
 // Binary ops
 ////////////////////////////////////////////////////////////////////////////////
 

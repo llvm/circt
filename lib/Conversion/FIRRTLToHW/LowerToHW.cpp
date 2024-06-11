@@ -3788,8 +3788,8 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(LTLDisableIntrinsicOp op) {
   return setLoweringToLTL<ltl::DisableOp>(
-      op,
-      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+      op, ValueRange{getLoweredValue(op.getInput()),
+                     getLoweredValue(op.getDisable())});
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssertIntrinsicOp op) {

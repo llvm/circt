@@ -567,9 +567,9 @@ private:
       if ((disable = dyn_cast<LTLDisableIntrinsicOp>(
                clockOp.getInput().getDefiningOp()))) {
 
-        Value newDisable = orWithCondition(builder, disable.getRhs());
+        Value newDisable = orWithCondition(builder, disable.getDisable());
         foldedWhen = builder.create<LTLDisableIntrinsicOp>(
-            op.getLoc(), newDisable.getType(), disable.getLhs(), newDisable);
+            op.getLoc(), newDisable.getType(), disable.getInput(), newDisable);
       }
       foldedWhen = builder.create<LTLClockIntrinsicOp>(
           op.getLoc(), foldedWhen.getType(), foldedWhen, clockOp.getClock());
@@ -578,8 +578,10 @@ private:
       op.getPropertyMutable().assign(foldedWhen);
 
       // destroy the old clock and disable ops
-      clockOp.erase();
-      disable.erase();
+      if (clockOp && isOpTriviallyDead(clockOp))
+        clockOp.erase();
+      if (disable && isOpTriviallyDead(disable))
+        disable.erase();
     }
   }
 

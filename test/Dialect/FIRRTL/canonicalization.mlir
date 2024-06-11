@@ -196,6 +196,20 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   firrtl.matchingconnect %out5, %11 : !firrtl.uint<5>
 }
 
+// CHECK-LABEL: firrtl.module @clockeddisable
+firrtl.module @clockeddisable(
+  in %clock : !firrtl.clock, in %cond : !firrtl.uint<1>, in %prop : !firrtl.uint<1>, 
+  in %disable : !firrtl.uint<1>, in %reset : !firrtl.uint<1>
+) {
+    // CHECK:   [[TMP:%.+]] = firrtl.int.ltl.disable %prop, %disable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   [[TMP1:%.+]] = firrtl.int.ltl.clock [[TMP]], %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert [[TMP1]] : !firrtl.uint<1>
+    %clk_prop = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    %dis_prop = firrtl.int.ltl.disable %clk_prop, %disable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+    firrtl.int.verif.assert %dis_prop : !firrtl.uint<1>
+  }
+
 // CHECK-LABEL: firrtl.module @Or
 firrtl.module @Or(in %in: !firrtl.uint<4>,
                   in %in6: !firrtl.uint<6>,
