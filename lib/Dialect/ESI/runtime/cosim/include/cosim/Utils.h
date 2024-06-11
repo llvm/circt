@@ -9,9 +9,9 @@
 #ifndef COSIM_UTILS_H
 #define COSIM_UTILS_H
 
+#include <list>
 #include <mutex>
 #include <optional>
-#include <queue>
 
 namespace esi {
 namespace cosim {
@@ -22,14 +22,14 @@ class TSQueue {
   using Lock = std::lock_guard<std::mutex>;
 
   std::mutex m;
-  std::queue<T> q;
+  std::list<T> q;
 
 public:
   /// Push onto the queue.
   template <typename... E>
   void push(E &&...t) {
     Lock l(m);
-    q.emplace(std::forward<E &&>(t)...);
+    q.emplace_back(std::forward<E &&>(t)...);
   }
 
   /// Pop something off the queue but return nullopt if the queue is empty. Why
@@ -39,8 +39,13 @@ public:
     if (q.size() == 0)
       return std::nullopt;
     auto t = std::move(q.front());
-    q.pop();
+    q.erase(q.begin());
     return std::move(t);
+  }
+
+  void push_front(T &&t) {
+    Lock l(m);
+    q.push_front(std::move(t));
   }
 };
 

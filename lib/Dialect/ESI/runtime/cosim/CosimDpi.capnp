@@ -22,13 +22,17 @@ interface CosimInterface @0xe3d7f70c7065c86a {
 
   # Open one of them. Specify both the send and recv data types if want type
   # safety and your language supports it.
-  open @1 (desc :EndpointDesc) -> (endpoint :EndpointInterface);
+  connectToSimInterface @1 (desc :EndpointDesc) -> (endpoint :ToSimInterface);
+  connectFromSimInterface @2 (
+    desc :EndpointDesc,
+    callback :MessageReceiverInterface)
+      -> (endpoint :FromSimInterface);
 
   # Get the zlib-compressed JSON system manifest.
-  getCompressedManifest @2 () -> (version :Int32, compressedManifest :Data);
+  getCompressedManifest @3 () -> (version :Int32, compressedManifest :Data);
 
   # Create a low level interface into the simulation.
-  openLowLevel @3 () -> (lowLevel :LowLevelInterface);
+  openLowLevel @4 () -> (lowLevel :LowLevelInterface);
 }
 
 enum Direction {
@@ -51,19 +55,13 @@ interface MessageReceiverInterface @0xcee31f5bce3305bf {
   receiveMessage @0 (msg :Data);
 }
 
-# Description of a registered endpoint.
-interface EndpointInterface @0xd2584d2506f0188c {
+interface ToSimInterface @0x9264cbc675502f71 extends() {
   disconnect @0 ();
-}
-
-interface ToSimInterface @0x9264cbc675502f71 extends(EndpointInterface) {
-  connect @0 ();
   sendMessage @1 (msg :Data);
 }
 
-interface FromSimInterface @0xbfbb70ef7ae3b019 extends(EndpointInterface) {
-  # Does not return until 'disconnect' is called.
-  connect @0 (callback :MessageReceiverInterface);
+interface FromSimInterface @0xbfbb70ef7ae3b019 extends() {
+  disconnect @0 ();
 }
 
 # A low level interface simply provides MMIO and host memory access. In all

@@ -65,6 +65,9 @@ public:
   /// Pop from the to-simulator queue. Return true if there was a message in the
   /// queue.
   bool getMessage(MessageDataPtr &msgOut) {
+    if (messageCurrentlyBeingSent)
+      return false;
+
     if (auto msg = msgQueue.pop()) {
       msgOut = std::move(*msg);
       return true;
@@ -72,11 +75,25 @@ public:
     return false;
   }
 
+  /// Used in the rare case where an error is encountered while trying to send
+  /// the message.
+  void giveBackMessage(MessageDataPtr msg) {
+    msgQueue.push_front(std::move(msg));
+  }
+
+  void confirmMessageSent() { messageCurrentlyBeingSent.reset(); }
+  void failedToSendMessage() {
+    if (messageCurrentlyBeingSent)
+      // If the message was not sent, put it back in the queue.
+      giveBackMessage(std::move(messageCurrentlyBeingSent));
+  }
+
 private:
   bool inUse;
 
   /// Message queue from RPC client to the simulation.
   TSQueue<MessageDataPtr> msgQueue;
+  MessageDataPtr messageCurrentlyBeingSent;
 
   /// Endpoint name.
   std::string id;

@@ -54,7 +54,6 @@ public:
   /// Disallow copying as the 'open' variable needs to track the endpoint.
   ToSimServer(const ToSimServer &) = delete;
 
-  kj::Promise<void> connect(ConnectContext) override;
   kj::Promise<void> disconnect(DisconnectContext) override;
 
   /// Implement the EsiDpiEndpoint RPC interface.
@@ -66,25 +65,24 @@ class FromSimServer final : public FromSimInterface::Server {
   Endpoint &endpoint;
   kj::AsyncIoProvider &io;
 
-  /// Signals that this endpoint has been opened by a client and hasn't been
-  /// closed by said client.
-  bool open;
+  std::optional<MessageReceiverInterface::Client> callback;
+  std::optional<kj::Promise<void>> polling;
 
 public:
-  FromSimServer(Endpoint &ep, kj::AsyncIoProvider &io);
+  FromSimServer(Endpoint &ep, MessageReceiverInterface::Client callback,
+                kj::AsyncIoProvider &io);
   /// Release the Endpoint should the client disconnect without properly closing
   /// it.
   ~FromSimServer();
   /// Disallow copying as the 'open' variable needs to track the endpoint.
   FromSimServer(const FromSimServer &) = delete;
 
-  /// Implement the EsiDpiEndpoint RPC interface.
-  kj::Promise<void> connect(ConnectContext) override;
   // kj::Promise<void> recvToHost(RecvToHostContext) override;
   kj::Promise<void> disconnect(DisconnectContext) override;
 
 private:
-  kj::Promise<void> pollRecv(MessageReceiverInterface::Client);
+  void pollRecv();
+  void disconnect();
 };
 
 /// Implement the low level cosim RPC protocol.
@@ -131,7 +129,10 @@ public:
   /// List all the registered interfaces.
   kj::Promise<void> list(ListContext ctxt) override;
   /// Open a specific interface, locking it in the process.
-  kj::Promise<void> open(OpenContext ctxt) override;
+  kj::Promise<void>
+  connectToSimInterface(ConnectToSimInterfaceContext ctxt) override;
+  kj::Promise<void>
+  connectFromSimInterface(ConnectFromSimInterfaceContext ctxt) override;
 
   kj::Promise<void>
       getCompressedManifest(GetCompressedManifestContext) override;
@@ -145,6 +146,11 @@ public:
 ToSimServer::ToSimServer(Endpoint &ep) : endpoint(ep), open(false) {
   assert(ep.getDirection() == esi::cosim::Direction::ToSim &&
          "endpoint direction mismatch");
+  KJ_LOG(INFO, "Connecting toSim endpoint", endpoint.getId());
+  KJ_REQUIRE(!open, "EndPoint connected already");
+  open = true;
+  auto gotLock = endpoint.setInUse();
+  KJ_REQUIRE(gotLock, "Endpoint in use");
 }
 ToSimServer::~ToSimServer() {
   if (open)
@@ -166,15 +172,6 @@ kj::Promise<void> ToSimServer::sendMessage(SendMessageContext context) {
   return kj::READY_NOW;
 }
 
-kj::Promise<void> ToSimServer::connect(ConnectContext context) {
-  KJ_LOG(INFO, "Connecting toSim endpoint", endpoint.getId());
-  KJ_REQUIRE(!open, "EndPoint connected already");
-  open = true;
-  auto gotLock = endpoint.setInUse();
-  KJ_REQUIRE(gotLock, "Endpoint in use");
-  return kj::READY_NOW;
-}
-
 kj::Promise<void> ToSimServer::disconnect(DisconnectContext context) {
   KJ_LOG(INFO, "Disconnecting toSim endpoint", endpoint.getId());
   KJ_REQUIRE(open, "EndPoint disconnected already");
@@ -182,54 +179,55 @@ kj::Promise<void> ToSimServer::disconnect(DisconnectContext context) {
   return kj::READY_NOW;
 }
 
-FromSimServer::FromSimServer(Endpoint &ep, kj::AsyncIoProvider &io)
-    : endpoint(ep), io(io), open(false) {
+FromSimServer::FromSimServer(Endpoint &ep,
+                             MessageReceiverInterface::Client callback,
+                             kj::AsyncIoProvider &io)
+    : endpoint(ep), io(io), callback(KJ_CPCAP(callback)) {
   assert(ep.getDirection() == esi::cosim::Direction::FromSim &&
          "endpoint direction mismatch");
+  pollRecv();
 }
-FromSimServer::~FromSimServer() {
-  if (open)
-    endpoint.returnForUse();
-  open = false;
-}
-
-kj::Promise<void> FromSimServer::connect(ConnectContext context) {
-  KJ_LOG(INFO, "Connecting fromSim endpoint", endpoint.getId());
-  KJ_REQUIRE(!open, "EndPoint already open");
-  open = true;
-  auto gotLock = endpoint.setInUse();
-  KJ_REQUIRE(gotLock, "Endpoint in use");
-  return pollRecv(context.getParams().getCallback());
-}
+FromSimServer::~FromSimServer() { disconnect(); }
 
 kj::Promise<void> FromSimServer::disconnect(DisconnectContext context) {
   KJ_LOG(INFO, "Disconnecting fromSim endpoint", endpoint.getId());
-  KJ_REQUIRE(open, "EndPoint disconnected already");
-  open = false;
-  endpoint.returnForUse();
+  disconnect();
   return kj::READY_NOW;
 }
 
-kj::Promise<void>
-FromSimServer::pollRecv(MessageReceiverInterface::Client callback) {
-  if (!open) {
+void FromSimServer::disconnect() {
+  KJ_LOG(INFO, "Disconnecting fromSim endpoint", endpoint.getId());
+  callback.reset();
+  polling.reset();
+  endpoint.failedToSendMessage();
+}
+
+void FromSimServer::pollRecv() {
+  if (!callback.has_value())
     KJ_DBG("Endpoint closed", endpoint.getId());
-    return kj::READY_NOW;
-  }
 
   Endpoint::MessageDataPtr msg;
   if (endpoint.getMessage(msg)) {
     KJ_DBG("Sending message to client", endpoint.getId());
-    auto msgCall = callback.receiveMessageRequest();
+    auto msgCall = callback->receiveMessageRequest();
     msgCall.setMsg(kj::arrayPtr(msg->getBytes(), msg->getSize()));
-    return msgCall.send().ignoreResult().then(
-        [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); });
+    polling = msgCall.send().then(
+        [this](auto) mutable {
+          endpoint.confirmMessageSent();
+          pollRecv();
+        },
+        [this](kj::Exception &&e) {
+          endpoint.failedToSendMessage();
+          KJ_LOG(ERROR, e);
+          disconnect();
+        });
   } else {
-    return io.getTimer()
-        .afterDelay(1 * kj::MILLISECONDS)
-        .then(
-            [this, KJ_CPCAP(callback)]() mutable { return pollRecv(callback); })
-        .eagerlyEvaluate([](kj::Exception &&e) { KJ_LOG(ERROR, e); });
+    polling = io.getTimer()
+                  .afterDelay(1 * kj::MILLISECONDS)
+                  .eagerlyEvaluate([this](kj::Exception &&e) {
+                    disconnect();
+                    KJ_LOG(ERROR, e);
+                  });
   }
 }
 
