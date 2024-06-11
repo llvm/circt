@@ -131,11 +131,11 @@ class Simulator:
           return cp.returncode
     return 0
 
-  def run_command(self) -> List[str]:
+  def run_command(self, gui: bool) -> List[str]:
     """Return the command to run the simulation."""
     assert False, "Must be implemented by subclass"
 
-  def run(self, inner_command: str) -> int:
+  def run(self, inner_command: str, gui: bool = False) -> int:
     """Start the simulation then run the command specified. Kill the simulation
     when the command exits."""
 
@@ -158,7 +158,7 @@ class Simulator:
       simEnv = Simulator.get_env()
       if self.debug:
         simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
-      simProc = subprocess.Popen(self.run_command(),
+      simProc = subprocess.Popen(self.run_command(gui),
                                  stdout=simStdout,
                                  stderr=simStderr,
                                  env=simEnv,
@@ -173,7 +173,7 @@ class Simulator:
               simProc.poll() is None:
         time.sleep(0.1)
         checkCount += 1
-        if checkCount > 200:
+        if checkCount > 200 and not gui:
           raise Exception(f"Cosim never wrote cfg file: {portFileName}")
       port = -1
       while port < 0:
@@ -250,7 +250,9 @@ class Verilator(Simulator):
     cmd += [str(p) for p in self.sources.rtl_sources]
     return [cmd]
 
-  def run_command(self):
+  def run_command(self, gui: bool):
+    if gui:
+      raise RuntimeError("Verilator does not support GUI mode.")
     exe = Path.cwd() / "obj_dir" / ("V" + self.sources.top)
     return [str(exe)]
 
@@ -270,9 +272,9 @@ class Questa(Simulator):
     sources = self.sources.rtl_sources
     sources.append(Questa.DefaultDriver)
     for src in sources:
-      cmds.append(f"vlog -incr -sv +define+TOP_MODULE={self.sources.top}"
+      cmds.append(f"vlog -incr +acc -sv +define+TOP_MODULE={self.sources.top}"
                   f" +define+SIMULATION {str(src)}")
-    cmds.append(f"vopt -incr driver -o driver_opt")
+    cmds.append(f"vopt -incr driver -o driver_opt +acc")
     return cmds
 
   def compile_commands(self) -> List[List[str]]:
@@ -285,17 +287,23 @@ class Questa(Simulator):
         ["vsim", "-batch", "-do", "compile.do"],
     ]
 
-  def run_command(self) -> List[str]:
+  def run_command(self, gui: bool) -> List[str]:
     vsim = "vsim"
     # Note: vsim exit codes say nothing about the test run's pass/fail even
     # if $fatal is encountered in the simulation.
-    cmd = [
-        vsim,
-        "driver_opt",
-        "-batch",
-        "-do",
-        "run -all",
-    ]
+    if gui:
+      cmd = [
+          vsim,
+          "driver_opt",
+      ]
+    else:
+      cmd = [
+          vsim,
+          "driver_opt",
+          "-batch",
+          "-do",
+          "run -all",
+      ]
     for lib in self.sources.dpi_so_paths():
       svLib = os.path.splitext(lib)[0]
       cmd.append("-sv_lib")
@@ -305,7 +313,7 @@ class Questa(Simulator):
       cmd.append("/usr/bin/clang++")
     return cmd
 
-  def run(self, inner_command: str) -> int:
+  def run(self, inner_command: str, gui: bool = False) -> int:
     """Override the Simulator.run() to add a soft link in the run directory (to
     the work directory) before running vsim the usual way."""
 
@@ -315,7 +323,7 @@ class Questa(Simulator):
       os.symlink(Path(os.getcwd()) / "work", workDir)
 
     # Run the simulation.
-    return super().run(inner_command)
+    return super().run(inner_command, gui)
 
 
 def __main__(args):
@@ -352,6 +360,9 @@ def __main__(args):
   argparser.add_argument("--debug",
                          action="store_true",
                          help="Enable debug output.")
+  argparser.add_argument("--gui",
+                         action="store_true",
+                         help="Run the simulator in GUI mode (if supported).")
   argparser.add_argument("--source",
                          help="Directories containing the source files.",
                          default="hw")
@@ -383,7 +394,7 @@ def __main__(args):
     rc = sim.compile()
     if rc != 0:
       return rc
-  return sim.run(args.inner_cmd[1:])
+  return sim.run(args.inner_cmd[1:], gui=args.gui)
 
 
 if __name__ == '__main__':
