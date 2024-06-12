@@ -1233,8 +1233,9 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     std::string funcName = "func_" + funcOp.getSymName().str();
     rewriter.modifyOpInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
 
-    /// Mark this component as the toplevel.
-    compOp->setAttr("toplevel", rewriter.getUnitAttr());
+    /// Mark this component as the toplevel if it's the top-level function of the module.
+    if (compOp.getName() == loweringState().getTopLevelFunction())
+      compOp->setAttr("toplevel", rewriter.getUnitAttr());
 
     /// Store the function-to-component mapping.
     functionMapping[funcOp] = compOp;
