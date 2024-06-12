@@ -15,8 +15,8 @@ module {
 
     //CHECK:  [[TMP1:%.+]] = comb.xor %reset, %true : i1
     //CHECK:  [[TMP2:%.+]] = comb.and %hbr, [[TMP1]] : i1
-    //CHECK:  verif.clocked_assert %a enable [[TMP2]] clock posedge [[CLK]] : i1
-    verif.clocked_assert %a enable %1 clock posedge %0 : i1
+    //CHECK:  verif.clocked_assert %a if [[TMP2]], posedge [[CLK]] : i1
+    verif.clocked_assert %a if %1, posedge %0 : i1
 
     //CHECK:  hw.output
     hw.output 

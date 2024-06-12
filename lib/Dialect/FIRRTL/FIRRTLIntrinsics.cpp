@@ -447,16 +447,22 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
-           gi.hasNoOutput();
+    return gi.hasNInputs(1) || gi.hasNInputs(2) ||
+           gi.sizedInput<UIntType>(0, 1) || gi.namedParam("label", true) ||
+           gi.hasNParam(0, 1) || gi.hasNoOutput();
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
     auto label = gi.getParamValue<StringAttr>("label");
     auto operands = adaptor.getOperands();
-    rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], operands[1], label);
+
+    // Check if an enable was provided
+    Value enable;
+    if (gi.hasNInputs(2))
+      enable = operands[1];
+
+    rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], enable, label);
   }
 };
 

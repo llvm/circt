@@ -28,10 +28,10 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
 
 class AssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property, I1:$enable,
+  let arguments = (ins LTLAnyPropertyType:$property, Optional<I1>:$enable,
                        OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property `enable` $enable (`label` $label^)? attr-dict `:` type($property)
+    $property (`if` $enable^)? (`label` $label^)? attr-dict `:` type($property)
   }];
 
   let hasCanonicalizeMethod = true;
@@ -66,11 +66,11 @@ def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
 class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
   let arguments = (ins LTLAnyPropertyType:$property,
-                      I1:$enable,
                       ClockEdgeAttr:$edge, I1:$clock,
+                      Optional<I1>:$enable,
                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property `enable` $enable `clock` $edge $clock 
+    $property (`if` $enable^)? `,` $edge $clock 
     (`label` $label^)? attr-dict `:` type($property)
   }];
 }

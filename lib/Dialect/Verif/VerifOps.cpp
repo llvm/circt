@@ -69,9 +69,8 @@ public:
     if (auto clockOp = dyn_cast<ltl::ClockOp>(op.getProperty().getDefiningOp()))
       // If it exists, fold it into a clocked assertlike
       rewriter.replaceOpWithNewOp<TargetOp>(
-          op, clockOp.getInput(), op.getEnable(),
-          ltlToVerifClockEdge(clockOp.getEdge()), clockOp.getClock(),
-          op.getLabelAttr());
+          op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
+          clockOp.getClock(), op.getEnable(), op.getLabelAttr());
 
     return success();
   }

@@ -2027,6 +2027,10 @@ Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
 Value FIRRTLLowering::getLoweredValue(Value value) {
+  // Allow for optional parameters
+  if (!value)
+    return value;
+
   auto result = getPossiblyInoutLoweredValue(value);
   if (!result)
     return result;

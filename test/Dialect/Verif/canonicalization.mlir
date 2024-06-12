@@ -38,21 +38,21 @@ hw.module @HasBeenReset(in %clock: i1, in %reset: i1) {
 
 // CHECK-LABEL: @clockedAssert
 hw.module @clockedAssert(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_assert %a enable %en clock posedge %clock : i1
+  // CHECK: verif.clocked_assert %a if %en, posedge %clock : i1
   %clk = ltl.clock %a, posedge %clock : i1
-  verif.assert %clk enable %en : !ltl.sequence
+  verif.assert %clk if %en : !ltl.sequence
 }
 
 // CHECK-LABEL: @clockedAssume
 hw.module @clockedAssume(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_assume %a enable %en clock posedge %clock : i1
+  // CHECK: verif.clocked_assume %a if %en, posedge %clock : i1
   %clk = ltl.clock %a, posedge %clock : i1
-  verif.assume %clk enable %en : !ltl.sequence
+  verif.assume %clk if %en : !ltl.sequence
 }
 
 // CHECK-LABEL: @clockedCover
 hw.module @clockedCover(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_cover %a enable %en clock posedge %clock : i1
+  // CHECK: verif.clocked_cover %a if %en,  posedge %clock : i1
   %clk = ltl.clock %a, posedge %clock : i1
-  verif.cover %clk enable %en : !ltl.sequence
+  verif.cover %clk if %en : !ltl.sequence
 }

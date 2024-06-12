@@ -161,8 +161,7 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
     %i0 = ltl.implication %a, %b : i1, i1
     %k0 = ltl.clock %i0, posedge %clk_xor_b : !ltl.property
 
-    %true = hw.constant 1 : i1
-    verif.assert %k0 enable %true: !ltl.property
+    verif.assert %k0 : !ltl.property
   }
 }
 
@@ -260,8 +259,7 @@ module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
 // inline, so no need to restructure the IR.
 // CHECK-LABEL: hw.module @Issue5613
 hw.module @Issue5613(in %a: i1, in %b: i1) {
-  %true = hw.constant 1 : i1
-  verif.assert %2 enable %true : !ltl.sequence
+  verif.assert %2 : !ltl.sequence
   %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
   %1 = ltl.or %b, %3 : i1, !ltl.property
   %2 = ltl.and %b, %4 : i1, !ltl.sequence
