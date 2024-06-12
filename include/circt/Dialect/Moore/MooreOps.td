@@ -881,7 +881,11 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
+def StructCreateOp : MooreOp<"struct_create", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  OptionalTypesMatchWith<"initial value and variable types match",
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
+]> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
@@ -906,11 +910,11 @@ def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins UnpackedType:$input);
-  let results = (outs UnpackedType:$result);
-  let hasCustomAssemblyFormat = 1;
+  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-  $input attr-dict `:` type($input)
+    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `:` type($result)
   }];
 }
 
@@ -946,8 +950,17 @@ def StructExtractOp : MooreOp<"struct_extract"> {
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
   $input `,`   $memberName  attr-dict `:`
-  type($input) `->`
-  type($result)
+  type($input) `->` type($result)
+  }];
+}
+
+def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
+  let summary = "Struct Extract operation";
+  let arguments = (ins StrAttr:$memberName, RefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->` type($result)
   }];
 }
 
