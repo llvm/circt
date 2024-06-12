@@ -1069,7 +1069,13 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                                     state.symTbl, state.targetCaches)
                             ->ref.getOp());
     builder.setInsertionPointToEnd(companionMod.getBodyBlock());
-    auto sink = builder.create<WireOp>(source->getType(), name);
+    // Sink type must be passive.  It's required to be converted to a NodeOp by
+    // the wiring problem solving, and later checked to be a Node.
+    // This also ensures passive sink so works equally well w/ or w/o probes.
+    auto sinkType = source->getType();
+    if (auto baseSinkType = type_dyn_cast<FIRRTLBaseType>(sinkType))
+      sinkType = baseSinkType.getPassiveType();
+    auto sink = builder.create<WireOp>(sinkType, name);
     state.targetCaches.insertOp(sink);
     AnnotationSet annotations(context);
     annotations.addAnnotations(

@@ -5,6 +5,7 @@
 ; RUN: firtool --no-dedup --lowering-options=emitBindComments --annotation-file %s.anno.json --annotation-file %s.Prefix.anno.json %s | FileCheck %s --check-prefixes PREFIX
 ; RUN: firtool --no-dedup --annotation-file %s.anno.json %s --disable-opt
 
+FIRRTL version 4.0.0
 circuit Top :
   extmodule BlackBox_DUT :
     input a : UInt<1>
@@ -36,7 +37,7 @@ circuit Top :
     w.multivec[1][0] <= in.multivec[1][0]
     w.multivec[1][1] <= in.multivec[1][1]
     w.multivec[1][2] <= in.multivec[1][2]
-    w.uint <= UInt<1>("h1")
+    w.uint <= UInt<1>(0h1)
     out.otherOther.other.sint <= w.otherOther.other.sint
     out.otherOther.other.uint <= w.otherOther.other.uint
     out.vecOfBundle[0].sint <= w.vecOfBundle[0].sint
@@ -82,7 +83,7 @@ circuit Top :
     tap.b <= r
 
     wire _WIRE : UInt<1>
-    _WIRE <= UInt<1>("h0")
+    _WIRE <= UInt<1>(0h0)
 
   module DUT :
     input clock : Clock
@@ -148,7 +149,7 @@ circuit Top :
 
     inst ext of ExtModuleWithPort
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     input in : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
