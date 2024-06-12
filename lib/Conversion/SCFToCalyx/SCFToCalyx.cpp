@@ -1233,7 +1233,8 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     std::string funcName = "func_" + funcOp.getSymName().str();
     rewriter.modifyOpInPlace(funcOp, [&]() { funcOp.setSymName(funcName); });
 
-    /// Mark this component as the toplevel if it's the top-level function of the module.
+    /// Mark this component as the toplevel if it's the top-level function of
+    /// the module.
     if (compOp.getName() == loweringState().getTopLevelFunction())
       compOp->setAttr("toplevel", rewriter.getUnitAttr());
 
@@ -1245,7 +1246,8 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     unsigned extMemCounter = 0;
     for (auto arg : enumerate(funcOp.getArguments())) {
       if (isa<MemRefType>(arg.value().getType())) {
-        std::string memName = "arg_mem" + std::to_string(extMemCounter++);
+        std::string memName =
+            llvm::join_items("_", "arg_mem", std::to_string(extMemCounter++));
 
         rewriter.setInsertionPointToStart(compOp.getBodyBlock());
         MemRefType memtype = cast<MemRefType>(arg.value().getType());
@@ -1919,7 +1921,7 @@ public:
       }
     }
 
-    return createOptNewTopLevelFcn(moduleOp, topLevelFunction);
+    return createOptNewTopLevelFn(moduleOp, topLevelFunction);
   }
 
   struct LoweringPattern {
@@ -2017,11 +2019,12 @@ private:
   LogicalResult partialPatternRes;
   std::shared_ptr<calyx::CalyxLoweringState> loweringState = nullptr;
 
-  FuncOp createNewTopLevelFcn(ModuleOp moduleOp, std::string &baseName) {
+  /// Creates a new new top-level function based on `baseName`.
+  FuncOp createNewTopLevelFn(ModuleOp moduleOp, std::string &baseName) {
     std::string newName = baseName;
     unsigned counter = 0;
     while (SymbolTable::lookupSymbolIn(moduleOp, newName)) {
-      newName = baseName + "_" + std::to_string(++counter);
+      newName = llvm::join_items("_", baseName, std::to_string(++counter));
     }
 
     OpBuilder builder(moduleOp.getContext());
@@ -2040,6 +2043,9 @@ private:
     return nullptr;
   }
 
+  /// Insert a call from the newly created top-level function/`caller` to the
+  /// old top-level function/`callee`; and create `memref.alloc`s inside the new
+  /// top-level function for arguments with `memref` types.
   void insertCallFromNewTopLevel(OpBuilder &builder, FuncOp caller,
                                  FuncOp callee) {
     if (caller.getBody().empty()) {
@@ -2067,8 +2073,11 @@ private:
                            memRefArgs);
   }
 
-  LogicalResult createOptNewTopLevelFcn(ModuleOp moduleOp,
-                                        std::string &topLevelFunction) {
+  /// Conditionally creates an optional new top-level function; and inserts a
+  /// call from the new top-level function to the old top-level function if we
+  /// did create one
+  LogicalResult createOptNewTopLevelFn(ModuleOp moduleOp,
+                                       std::string &topLevelFunction) {
     auto hasMemrefArguments = [](FuncOp func) {
       return std::any_of(
           func.getArguments().begin(), func.getArguments().end(),
@@ -2089,7 +2098,7 @@ private:
 
     std::string oldName = topLevelFunction;
     if (hasMemrefArgsInTopLevel) {
-      auto newTopLevelFunc = createNewTopLevelFcn(moduleOp, topLevelFunction);
+      auto newTopLevelFunc = createNewTopLevelFn(moduleOp, topLevelFunction);
 
       OpBuilder builder(moduleOp.getContext());
       Operation *oldTopLevelFuncOp =
