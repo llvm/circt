@@ -60,6 +60,8 @@ int main(int argc, const char *argv[]) {
       while (true) {
         this_thread::sleep_for(chrono::milliseconds(100));
       }
+    } else if (cmd == "wait") {
+      this_thread::sleep_for(chrono::seconds(1));
     }
 
     acc->disconnect();

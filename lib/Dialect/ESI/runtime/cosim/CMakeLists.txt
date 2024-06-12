@@ -38,13 +38,31 @@ install(FILES
   COMPONENT ESIRuntime
 )
 
-# Cap'nProto MUST be built with exceptions enabled.
-if (MSVC)
-  target_compile_options(EsiCosimCapnp PRIVATE /EHsc)
-else()
-  target_compile_options(EsiCosimCapnp PRIVATE -fexceptions)
-endif()
+add_library(EsiCosimGRPC OBJECT "${CMAKE_CURRENT_LIST_DIR}/cosim.proto")
+target_link_libraries(EsiCosimGRPC PUBLIC protobuf::libprotobuf gRPC::grpc++)
+set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_include_directories(EsiCosimGRPC PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+
+protobuf_generate(
+    TARGET EsiCosimGRPC
+    PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+protobuf_generate(
+    TARGET EsiCosimGRPC
+    LANGUAGE grpc
+    GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+    PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+    PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
+
+add_library(CosimRpcServer
+  lib/RpcServer.cpp
+)
+target_link_libraries(CosimRpcServer
+  PUBLIC
+  EsiCosimGRPC
+  ESIRuntime
+)
+
 add_subdirectory(cosim_dpi_server)
 add_subdirectory(MtiPliStub)

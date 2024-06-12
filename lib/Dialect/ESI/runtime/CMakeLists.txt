@@ -94,10 +94,37 @@ ENDIF(MSVC)
 
 option(ESI_COSIM "Enable ESI cosimulation." ON)
 if(ESI_COSIM)
+  # gRPC for cosimulation. Local install required.
+  option(GRPC_PATH "Location of gRPC install.")
+  if (${GRPC_PATH})
+    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
+    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
+  else()
+    find_package(Protobuf REQUIRED CONFIG)
+    find_package(gRPC REQUIRED CONFIG)
+  endif()
+
+  add_subdirectory(cosim)
   # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
   # backends should only need to be linked in.
   # TODO: Once the hack in the python bindings is remidied, remove this.
   add_compile_definitions(ESI_COSIM)
+  set(ESIRuntimeSources
+    ${ESIRuntimeSources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+  )
+  set(ESIRuntimeBackendHeaders
+    ${ESIRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
+  )
+  set(ESIRuntimeLinkLibraries
+    ${ESIRuntimeLinkLibraries}
+    EsiCosimGRPC
+  )
+  set(ESIRuntimeIncludeDirs
+    ${ESIRuntimeIncludeDirs}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
+  )
 else()
   message("-- ESI cosim disabled")
 endif()
