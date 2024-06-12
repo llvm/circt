@@ -1,6 +1,6 @@
-//  RUN: circt-bmc %s -b 10 --module OrEqAnd --verify-diagnostics --shared-libs=%libz3
+//  RUN: circt-bmc %s -b 10 --module OrEqAnd --shared-libs=%libz3 | FileCheck %s --check-prefix=OREQAND
+//  OREQAND: Assertion can be violated!
 
-// expected-error @+1 {{Properties do not hold on module.}}
 module {
   hw.module @OrEqAnd(in %i0: i1, in %i1: i1) {
     %or = comb.or bin %i0, %i1 : i1

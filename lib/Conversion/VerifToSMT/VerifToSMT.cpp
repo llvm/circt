@@ -34,7 +34,8 @@ using namespace hw;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp.
+/// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp,
+/// negated to check for unsatisfiability.
 struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
   using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
 
@@ -44,7 +45,8 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
-    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, cond);
+    Value not_cond = rewriter.create<smt::NotOp>(op.getLoc(), cond);
+    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, not_cond);
     return success();
   }
 };
