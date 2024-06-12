@@ -2621,7 +2621,14 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void InvokeOp::print(OpAsmPrinter &p) {
-  p << " @" << getCallee() << "(";
+  p << " @" << getCallee() << "[";
+  auto refCellNamesMap = getRefCellsMap();
+  llvm::interleaveComma(refCellNamesMap, p, [&](auto arg) {
+    auto refCellName = arg.getName().str();
+    auto externalMem = cast<FlatSymbolRefAttr>(arg.getValue()).getValue();
+    p << refCellName << " = " << externalMem;
+  });
+  p << "](";
   auto ports = getPorts();
   auto inputs = getInputs();
   llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
@@ -2747,10 +2754,12 @@ LogicalResult InvokeOp::verify() {
     return emitOpError() << "with instance '@" << callee
                          << "', which does not exist.";
   // The argument list of invoke is empty.
-  if (getInputs().empty())
+  if (getInputs().empty() && getRefCellsMap().empty()) {
     return emitOpError() << "'@" << callee
                          << "' has zero input and output port connections; "
+                            " and has not passing-by-reference cells; "
                             "expected at least one.";
+  }
   size_t goPortNum = 0, donePortNum = 0;
   // They both have a go port and a done port, but the "go" port for
   // registers and memrey should be "write_en" port.
