@@ -9,6 +9,7 @@
 ; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
 ; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
 ; CHECK:       firrtl.matchingconnect %[[memory_0]], %[[v22:.+]]
+FIRRTL version 4.0.0
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Issue794|Issue794"
@@ -16,7 +17,7 @@ circuit Issue794: %[[{
   {
     "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
-  module Issue794:
+  public module Issue794:
     input clock: Clock
     input rAddr: UInt<2>
     input rEn: UInt<1>

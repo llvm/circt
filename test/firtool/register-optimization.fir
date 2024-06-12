@@ -5,6 +5,7 @@
 ; CHECK-LABEL: module Example
 ; CHECK:       assign out = 1'h0;
 
+FIRRTL version 4.0.0
 circuit Example :
   module Passthrough:
     input en: UInt<1>
@@ -24,7 +25,7 @@ circuit Example :
     p.en <= b
     out <= p.out
 
-  module Example:
+  public module Example:
     input clock: Clock
     input unknown: UInt<1>
     output out: UInt<1>

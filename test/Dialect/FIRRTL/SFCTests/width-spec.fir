@@ -3,6 +3,7 @@
 ; - test/scala/firrtlTests/WidthSpec.scala
 
 ; Literal width checks
+FIRRTL version 3.0.0
 circuit Foo :
   ; CHECK-LABEL: firrtl.module @Foo(
   ; CHECK-SAME: out %si0: !firrtl.sint<3>

@@ -2,6 +2,7 @@
 
 ; Test tapping a bundle with flips, sink also has flips.
 ; Tap sink must be passive.
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -18,7 +19,7 @@ circuit Top : %[[
     input x: {a : UInt<2>, flip b: UInt<2>}
     x.b <= UInt<2>(2)
 
-  module Top :
+  public module Top :
     input x: {a : UInt<2>, flip b: UInt<2>}
     output tap : {a : UInt<2>, flip b: UInt<2>}
 
