@@ -85,9 +85,6 @@ verif.lec {verif.some_attr} first {
 }
 
 verif.bmc bound 10 attributes {verif.some_attr} {
-^bb0(%cycle: i64, %clk: !seq.clock, %arg0: i32):
-  verif.yield
-} circuit {
 ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
   %c-1_i32 = hw.constant -1 : i32
   %0 = comb.add %arg0, %state0 : i32

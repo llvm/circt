@@ -6,7 +6,8 @@ func.func @test(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
   %0 = builtin.unrealized_conversion_cast %arg0 : !smt.bv<1> to i1
   // CHECK: [[C0:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
   // CHECK: [[V0:%.+]] = smt.eq %arg0, [[C0]] : !smt.bv<1>
-  // CHECK: smt.assert [[V0]]
+  // CHECK: [[V1:%.+]] = smt.not [[V0]]
+  // CHECK: smt.assert [[V1]]
   verif.assert %0 : i1
 
   // CHECK: [[EQ:%.+]] = smt.solver() : () -> i1
