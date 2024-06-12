@@ -296,7 +296,7 @@ module Statements;
     // CHECK:   scf.yield
     // CHECK: }
     for (y = x; x; x = z) x = y;
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %i : i32
     // CHECK: scf.while (%arg0 = [[TMP1]]) : (!moore.i32) -> !moore.i32 {
     // CHECK:   [[TMP2:%.+]] = moore.bool_cast %arg0 : i32 -> i1
@@ -355,7 +355,7 @@ module Statements;
     // CHECK: moore.blocking_assign %y, [[TMP1]] : i1
     // CHECK: moore.blocking_assign %x, [[TMP1]] : i1
     x = (y = z);
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %y : i1
     // CHECK: moore.nonblocking_assign %x, [[TMP1]] : i1
     x <= y;
@@ -938,7 +938,50 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
- 
+
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %a : i32
+    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32
+    struct0.a = a;
+
+    // CHECK: [[TMP1:%.+]] = moore.read %struct0 : struct<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]]  = moore.struct_extract [[TMP1]], "b" : struct<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
+    b = struct0.b;
+
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct1, "c" : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> <struct<{a: i32, b: i32}>>
+    // CHECK: [[TMP2:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP3:%.+]] = moore.read %a : i32
+    // CHECK: moore.blocking_assign [[TMP2]], [[TMP3]] : i32
+    struct1.c.a = a;
+
+    // CHECK: [[TMP1:%.+]] = moore.read %struct1 : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
+    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "d" : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}> -> struct<{a: i32, b: i32}>
+    // CHECK: [[TMP3:%.+]] = moore.struct_extract [[TMP2]], "b" : struct<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
+    b = struct1.d.b;
+
+    // CHECK: [[TMP1:%.+]] = moore.union_extract_ref %union0, "a" : <union<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %a : i32
+    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32
+    union0.a = a;
+
+    // CHECK: [[TMP1:%.+]]  = moore.read %union0 : union<{a: i32, b: i32}>
+    // CHECK: [[TMP2:%.+]]  = moore.union_extract [[TMP1]], "b" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
+    b = union0.b;
+
+    // CHECK: [[TMP1:%.+]] = moore.union_extract_ref %union1, "c" : <union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}>> -> <union<{a: i32, b: i32}>>
+    // CHECK: [[TMP2:%.+]] = moore.union_extract_ref [[TMP1]], "a" : <union<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP3:%.+]] = moore.read %a : i32
+    // CHECK: moore.blocking_assign [[TMP2]], [[TMP3]] : i32
+    union1.c.a = a;
+
+    // CHECK: [[TMP1:%.+]] = moore.read %union1 : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}>
+    // CHECK: [[TMP2:%.+]] = moore.union_extract [[TMP1]], "d" : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}> -> union<{a: i32, b: i32}>
+    // CHECK: [[TMP3:%.+]] = moore.union_extract [[TMP2]], "b" : union<{a: i32, b: i32}> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
+    b = union1.d.b;
   end
 endmodule
 

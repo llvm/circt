@@ -988,16 +988,20 @@ def StructInjectOp : MooreOp<"struct_inject"> {
     ```
     See IEEE 1800-2017 § 7.2. "Assigning to structures".
   }];
-  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName,
-  UnpackedType:$RHS);
+  let arguments = (ins UnpackedType:$input, StrAttr:$memberName,
+  UnpackedType:$newValue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $LHS `,`   $memberName `,` $RHS
-    attr-dict `:` type($LHS) type($RHS) `->` type($result)
+    $input `,`   $memberName `,` $newValue
+    attr-dict `:` type($input) type($newValue) `->` type($result)
   }];
 }
 
-def UnionCreateOp : MooreOp<"union_create"> {
+def UnionCreateOp : MooreOp<"union_create", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  OptionalTypesMatchWith<"initial value and variable types match",
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
+]> {
   let summary = "Union Create operation";
   let description = [{
     A union is a data type that represents a single piece
@@ -1022,11 +1026,11 @@ def UnionCreateOp : MooreOp<"union_create"> {
     ```
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
-  let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
-  let results = (outs UnpackedType:$result);
+  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-  $unionName `,` $input attr-dict `:`
-  type($input) `->` type($result)
+  `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `:` type($result)
   }];
 }
 
@@ -1061,9 +1065,19 @@ def UnionExtractOp : MooreOp<"union_extract"> {
   }];
 }
 
+def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
+  let summary = "Union Extract operation";
+  let arguments = (ins StrAttr:$memberName, RefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+  $input `,`   $memberName  attr-dict `:`
+  type($input) `->` type($result)
+  }];
+}
+
 def ConditionalOp : MooreOp<"conditional",[
   RecursiveMemoryEffects,
-  NoRegionArguments, 
+  NoRegionArguments,
   SingleBlockImplicitTerminator<"moore::YieldOp">
 ]> {
   let summary = "Conditional operation";
@@ -1103,8 +1117,8 @@ def ConditionalOp : MooreOp<"conditional",[
 }
 
 def YieldOp : MooreOp<"yield", [
-  Pure, 
-  Terminator, 
+  Pure,
+  Terminator,
   HasParent<"ConditionalOp">
 ]> {
   let summary = "conditional yield and termination operation";
