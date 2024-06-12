@@ -2605,6 +2605,27 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
   SMLoc loc = parser.getCurrentLocation();
+
+  SmallVector<NamedAttribute, 4> refCellSymbols;
+  if (parser.parseLSquare() ||
+      parser.parseCommaSeparatedList([&]() -> ParseResult {
+        std::string refCellName;
+        std::string externalMem;
+        if (parser.parseKeywordOrString(&refCellName) || parser.parseEqual() ||
+            parser.parseKeywordOrString(&externalMem))
+          return failure();
+        auto externalMemAttr =
+            SymbolRefAttr::get(parser.getContext(), externalMem);
+        refCellSymbols.push_back(
+            NamedAttribute(StringAttr::get(parser.getContext(), refCellName),
+                           externalMemAttr));
+        return success();
+      }) ||
+      parser.parseRSquare())
+    return failure();
+  result.addAttribute("refCellsMap",
+                      DictionaryAttr::get(parser.getContext(), refCellSymbols));
+
   result.addAttribute("callee", callee);
   if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
                          types))

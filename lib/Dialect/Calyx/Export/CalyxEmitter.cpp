@@ -850,6 +850,14 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
 void Emitter::emitInvoke(InvokeOp invoke) {
   StringRef callee = invoke.getCallee();
   indent() << "invoke " << callee;
+  auto refCellsMap = invoke.getRefCellsMap();
+  os << "[";
+  llvm::interleaveComma(refCellsMap, os, [&](auto refCell) {
+    auto refCellName = refCell.getName().str();
+    auto externalMem = cast<FlatSymbolRefAttr>(refCell.getValue()).getValue();
+    os << refCellName << " = " << externalMem;
+  });
+  os << "]";
   ArrayAttr portNames = invoke.getPortNames();
   ArrayAttr inputNames = invoke.getInputNames();
   /// Because the ports of all components of calyx.invoke are inside a (),
