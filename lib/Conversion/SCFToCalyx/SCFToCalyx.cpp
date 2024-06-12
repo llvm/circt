@@ -1493,6 +1493,34 @@ class BuildControl : public calyx::FuncOpPartialLoweringPattern {
   }
 
 private:
+  /// Given a CallScheduleable, returns a list of Calyx MemoryOp's names in the
+  /// "callee" component
+  SmallVector<StringRef, 4>
+  getMemNamesInCalleeComp(PatternRewriter &rewriter,
+                          CallScheduleable *callSchedPtr) const {
+    auto callee = callSchedPtr->callOp.getCallee();
+    auto *calleeOp = SymbolTable::lookupNearestSymbolFrom(
+        callSchedPtr->callOp.getOperation()->getParentOp(),
+        StringAttr::get(rewriter.getContext(), "func_" + callee.str()));
+    FuncOp calleeFunc = dyn_cast_or_null<FuncOp>(calleeOp);
+
+    auto instanceOp = callSchedPtr->instanceOp;
+    auto instanceOpComp =
+        llvm::cast<calyx::ComponentOp>(instanceOp.getReferencedComponent());
+    auto *instanceOpLoweringState = loweringState().getState(instanceOpComp);
+
+    SmallVector<StringRef, 4> res;
+    for (auto operand : calleeFunc.getArguments()) {
+      if (isa<MemRefType>(operand.getType())) {
+        auto instanceOpMemOpName =
+            instanceOpLoweringState->getMemoryInterface(operand).memName();
+        res.push_back(instanceOpMemOpName);
+      }
+    }
+
+    return res;
+  }
+
   /// Sequentially schedules the groups that registered themselves with
   /// 'block'.
   LogicalResult scheduleBasicBlock(PatternRewriter &rewriter,
@@ -1626,13 +1654,35 @@ private:
         rewriter.setInsertionPointToStart(callBody.getBodyBlock());
         std::string initGroupName = "init_" + instanceOp.getSymName().str();
         rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
+
+        auto refMemNames = getMemNamesInCalleeComp(rewriter, callSchedPtr);
         SmallVector<Value, 4> instancePorts;
-        auto inputPorts = callSchedPtr->callOp.getOperands();
+        SmallVector<Value, 4> inputPorts;
+        NamedAttrList refCells;
+        for (auto operandEnum : enumerate(callSchedPtr->callOp.getOperands())) {
+          auto operand = operandEnum.value();
+          auto index = operandEnum.index();
+          if (isa<MemRefType>(operand.getType())) {
+            auto memOpName = getState<ComponentLoweringState>()
+                                 .getMemoryInterface(operand)
+                                 .memName();
+            auto memOpNameAttr =
+                SymbolRefAttr::get(rewriter.getContext(), memOpName);
+            refCells.append(NamedAttribute(
+                rewriter.getStringAttr(refMemNames[index]), memOpNameAttr));
+          } else {
+            inputPorts.push_back(operand);
+          }
+        }
         llvm::copy(instanceOp.getResults().take_front(inputPorts.size()),
                    std::back_inserter(instancePorts));
+
+        DictionaryAttr refCellsAttr =
+            refCells.getDictionary(rewriter.getContext());
+
         rewriter.create<calyx::InvokeOp>(
             instanceOp.getLoc(), instanceOp.getSymName(), instancePorts,
-            inputPorts, ArrayAttr::get(rewriter.getContext(), {}),
+            inputPorts, refCellsAttr, ArrayAttr::get(rewriter.getContext(), {}),
             ArrayAttr::get(rewriter.getContext(), {}));
       } else
         llvm_unreachable("Unknown scheduleable");
