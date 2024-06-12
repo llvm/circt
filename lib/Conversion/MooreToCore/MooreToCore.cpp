@@ -313,6 +313,43 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
   }
 };
 
+struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConditionalOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    auto trueValue =
+        adaptor.getTrueRegion().front().getTerminator()->getOperand(0);
+    trueValue = rewriter.getRemappedValue(trueValue);
+
+    auto falseValue =
+        adaptor.getFalseRegion().front().getTerminator()->getOperand(0);
+    falseValue = rewriter.getRemappedValue(falseValue);
+
+    rewriter.inlineBlockBefore(&op.getTrueRegion().front(), op);
+    rewriter.inlineBlockBefore(&op.getFalseRegion().front(), op);
+
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, adaptor.getCondition(),
+                                             trueValue, falseValue);
+
+    return success();
+  }
+};
+
+struct YieldOpConversion : public OpConversionPattern<YieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(YieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -585,6 +622,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
     BinaryOpConversion<AndOp, comb::AndOp>,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
+
+    // Patterns of conditional operation.
+    ConditionalOpConversion,YieldOpConversion,
 
     // Patterns of relational operations.
     ICmpOpConversion<UltOp, ICmpPredicate::ult>,

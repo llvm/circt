@@ -190,6 +190,17 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.wildcard_eq %arg0, %arg0 : !moore.i1 -> !moore.i1
   moore.wildcard_ne %arg0, %arg0 : !moore.i1 -> !moore.i1
 
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.add %arg2, %arg2 : i6
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.sub %arg2, %arg2 : i6
+  // CHECK-NEXT: comb.mux %arg0, [[TMP1]], [[TMP2]] : i6
+  moore.conditional %arg0 : !moore.i1 -> !moore.i6 {
+    %3 = moore.add %arg2, %arg2 : !moore.i6
+    moore.yield %3 : !moore.i6
+  } { 
+    %3 = moore.sub %arg2, %arg2 : !moore.i6
+    moore.yield %3 : !moore.i6
+  }
+
   // CHECK-NEXT: return
   return
 }
