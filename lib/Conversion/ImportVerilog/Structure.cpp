@@ -293,9 +293,9 @@ struct MemberVisitor {
 
     IntegerAttr attribute;
     auto value = paramNode.getValue();
-      attribute = builder.getIntegerAttr(
-          builder.getIntegerType(cast<moore::IntType>(type).getWidth()),
-          value.integer().as<uint64_t>().value());
+    attribute = builder.getIntegerAttr(
+        builder.getIntegerType(cast<moore::IntType>(type).getWidth()),
+        value.integer().as<uint64_t>().value());
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
