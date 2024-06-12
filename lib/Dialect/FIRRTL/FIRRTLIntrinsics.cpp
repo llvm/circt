@@ -25,6 +25,20 @@ ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
   return success();
 }
 
+// Checks for a number of operands between n and m (allows for (n-m) optional
+// parameters)
+ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned m) {
+  auto numOps = op.getNumOperands();
+  if (!(n <= numOps && numOps <= m))
+    return emitError() << " has " << op.getNumOperands()
+                       << " inputs, which is not within [" << n << ", " << m
+                       << "]";
+  return success();
+}
+
+// Accessor method for the number of inputs
+unsigned GenericIntrinsic::getNumInputs() { return op.getNumOperands(); }
+
 ParseResult GenericIntrinsic::hasNOutputElements(unsigned n) {
   auto b = getOutputBundle();
   if (!b)
@@ -447,9 +461,9 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(1) || gi.hasNInputs(2) ||
-           gi.sizedInput<UIntType>(0, 1) || gi.namedParam("label", true) ||
-           gi.hasNParam(0, 1) || gi.hasNoOutput();
+    return gi.hasNInputs(1, 2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
+           gi.hasNoOutput();
   }
 
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
@@ -459,7 +473,7 @@ public:
 
     // Check if an enable was provided
     Value enable;
-    if (gi.hasNInputs(2))
+    if (gi.getNumInputs() == 2)
       enable = operands[1];
 
     rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], enable, label);

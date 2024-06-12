@@ -775,9 +775,6 @@ static bool isExpressionUnableToInline(Operation *op,
       // Helper to determine if the use will be part of "event control",
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
-        // "disable iff" condition must be a name.
-        if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
-          return disableOp.getCondition() == use.get();
         // LTL Clock up's clock operand must be a name.
         if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
           return clockOp.getClock() == use.get();
@@ -3447,7 +3444,6 @@ private:
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
-  EmittedProperty visitLTL(ltl::DisableOp op);
 
   void emitLTLConcat(ValueRange inputs);
 
@@ -3736,17 +3732,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
   ps.scopedBox(PP::ibox2, [&] {
     ps << PPExtString(stringifyClockEdge(op.getEdge())) << PP::space;
     emitNestedProperty(op.getClock(), PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
-  ps << "disable iff" << PP::nbsp << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(op.getCondition(), PropertyPrecedence::Lowest);
     ps << ")";
   });
   ps << PP::space;

@@ -121,15 +121,3 @@ OpFoldResult GoToRepeatOp::fold(FoldAdaptor adaptor) {
 OpFoldResult NonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
   return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
 }
-
-//===----------------------------------------------------------------------===//
-// DisableOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult DisableOp::fold(FoldAdaptor adaptor) {
-  // disable(p, false) -> p
-  if (isConstantZero(adaptor.getCondition()))
-    return getInput();
-
-  return {};
-}
