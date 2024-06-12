@@ -9,8 +9,9 @@
 
 ;--- test_mod.fir
 
+FIRRTL version 4.0.0
 circuit test_mod :
-  module test_mod :
+  public module test_mod :
     input a: UInt<1>
     output b: UInt<1>
     b <= a
@@ -26,8 +27,9 @@ endmodule
 
 ;--- test_unary.fir
 
+FIRRTL version 4.0.0
 circuit test_unary :
-  module test_unary :
+  public module test_unary :
     input uin4: UInt<4>
     input sin4: SInt<4>
     output out_xorr_u: UInt<1>
@@ -137,8 +139,9 @@ endmodule
 
 ;--- test_prim.fir
 
+FIRRTL version 4.0.0
 circuit test_prim :
-  module test_prim :
+  public module test_prim :
     input uina4: UInt<4>
     input uinb4: UInt<4>
     input sina4: SInt<4>

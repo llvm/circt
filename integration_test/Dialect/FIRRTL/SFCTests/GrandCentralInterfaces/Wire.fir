@@ -2,6 +2,7 @@
 ; RUN: firtool --verilog --annotation-file %s.anno.json %s > %t.one-file.sv && verilator --sv --lint-only %t.one-file.sv
 ; REQUIRES: verilator
 
+FIRRTL version 4.0.0
 circuit Top :
   module Submodule :
     input clock : Clock
@@ -33,7 +34,7 @@ circuit Top :
     output io : { }
 
     wire _WIRE : UInt<1>
-    _WIRE <= UInt<1>("h0")
+    _WIRE <= UInt<1>(0h0)
 
   module DUT :
     input clock : Clock
@@ -74,7 +75,7 @@ circuit Top :
     out.uint <= submodule.out.uint
     inst MyView_companion of MyView_companion
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     input in : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
