@@ -491,3 +491,25 @@ firrtl.circuit "Top" attributes {
   // expected-error @below {{circt.OutputDirAnnotation target already has an output file}}
   firrtl.module @Top() {}
 }
+
+// -----
+// OutputDirAnnotation targeting a non-public module should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|Top"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|Top"
+    },
+        {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|Top"
+    }
+  ]
+} {
+  // expected-error @below {{circt.OutputDirAnnotation must target a public module}}
+  firrtl.module private @Top() {}
+}

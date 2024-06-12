@@ -1466,8 +1466,8 @@ Example:
 | dirname    | string | The output directory                    |
 | target     | string | Reference target                        |
 
-Specify the output directory for a module. The target must be a module, and must
-be local.
+Specify the output directory for a module. The target must be a public module,
+and must be local.
 
 Example:
 ```json

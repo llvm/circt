@@ -407,6 +407,8 @@ static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
   auto moduleOp = dyn_cast<FModuleOp>(op);
   if (!moduleOp)
     return error() << "must target a module";
+  if (!moduleOp.isPublic())
+    return error() << "must target a public module";
   if (moduleOp->hasAttr("output_file"))
     return error() << "target already has an output file";
 
