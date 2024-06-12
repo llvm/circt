@@ -119,20 +119,24 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 //===----------------------------------------------------------------------===//
 
 class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
+  hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
+    auto layer = dyn_cast<LayerOp>(
+        symbolTable->lookupSymbolIn(getOperation(), layerName));
+    if (!layer)
+      return nullptr;
+    return layer->getAttrOfType<hw::OutputFileAttr>("output_file");
+  }
+
   hw::OutputFileAttr outputFileForLayer(StringRef circuitName,
                                         SymbolRefAttr layerName) {
-    if (auto dir = layerOutputDirTable[layerName])
+    if (auto file = getOutputFile(layerName))
       return hw::OutputFileAttr::getFromDirectoryAndFilename(
-          &getContext(), dir.getFilename().getValue(),
+          &getContext(), file.getDirectory(),
           fileNameForLayer(circuitName, layerName));
-
     return hw::OutputFileAttr::getFromFilename(
         &getContext(), fileNameForLayer(circuitName, layerName),
         /*excludeFromFileList=*/true);
   }
-
-  /// For each layer declared in the design, determine it's output directory.
-  void recordLayerOutputDirs();
 
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
@@ -170,9 +174,6 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
 
   /// A map of layer blocks to module name that should be created for it.
   DenseMap<LayerBlockOp, StringRef> moduleNames;
-
-  /// A map from layer name to its output directory attribute.
-  DenseMap<SymbolRefAttr, hw::OutputFileAttr> layerOutputDirTable;
 };
 
 static Operation *setOutputFile(Operation *op, hw::OutputFileAttr file);
@@ -191,7 +192,8 @@ FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder,
       location, builder.getStringAttr(namehint),
       ConventionAttr::get(builder.getContext(), Convention::Internal), ports,
       ArrayAttr{});
-  if (auto dir = layerOutputDirTable[layerBlock.getLayerNameAttr()]) {
+  if (auto dir = getOutputFile(layerBlock.getLayerNameAttr())) {
+    assert(dir.isDirectory());
     ::setOutputFile(newModule, dir);
   }
   SymbolTable::setSymbolVisibility(newModule, SymbolTable::Visibility::Private);
@@ -628,51 +630,6 @@ void LowerLayersPass::setOutputFile(Operation *op, const Twine &filename) {
                                               /*excludeFromFileList=*/true));
 }
 
-void LowerLayersPass::recordLayerOutputDirs() {
-  // For each layer declaration in the circuit, if the layer has an output
-  // file attribute, record it. We'll use the output file of layer declarations
-  // to choose the output directories of any modules created from a layerblock.
-  using LayerOpIter = Block::op_iterator<LayerOp>;
-  using LayerOpRange = std::pair<LayerOpIter, LayerOpIter>;
-
-  auto idx = [](LayerOpRange &range) -> LayerOpIter & { return range.first; };
-  auto end = [](LayerOpRange &range) -> LayerOpIter & { return range.second; };
-
-  SmallVector<FlatSymbolRefAttr> path;
-  SmallVector<LayerOpRange> stack;
-
-  auto circuit = getOperation();
-  for (auto layer : circuit.getBodyBlock()->getOps<LayerOp>()) {
-    while (true) {
-      auto outputDir = layer->getAttrOfType<hw::OutputFileAttr>("output_file");
-      if (outputDir) {
-        auto name = SymbolRefAttr::get(&getContext(), layer.getSymName(), path);
-        layerOutputDirTable[name] = outputDir;
-      }
-
-      auto &body = layer.getBody().getBlocks().front();
-      if (!body.empty()) {
-        auto begin = body.op_begin<LayerOp>();
-        auto end = body.op_end<LayerOp>();
-        path.emplace_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
-        stack.emplace_back(begin, end);
-      }
-
-      while (!stack.empty() && idx(stack.back()) == end(stack.back())) {
-        stack.pop_back();
-        path.pop_back();
-      }
-
-      if (stack.empty())
-        break;
-
-      assert(idx(stack.back()) != end(stack.back()));
-      layer = *idx(stack.back());
-      ++idx(stack.back());
-    }
-  }
-}
-
 /// Process a circuit to remove all layer blocks in each module and top-level
 /// layer definition.
 void LowerLayersPass::runOnOperation() {
@@ -685,9 +642,6 @@ void LowerLayersPass::runOnOperation() {
   llvm::sys::SmartMutex<true> mutex;
   circuitMutex = &mutex;
   symbolTable = &getAnalysis<SymbolTable>();
-
-  // Build a map from layer name to output directory.
-  recordLayerOutputDirs();
 
   // Determine names for all modules that will be created.  Do this serially to
   // avoid non-determinism from creating these in the parallel region.
@@ -824,8 +778,6 @@ void LowerLayersPass::runOnOperation() {
   for (auto layerOp :
        llvm::make_early_inc_range(circuitOp.getBodyBlock()->getOps<LayerOp>()))
     layerOp.erase();
-
-  layerOutputDirTable.clear();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerLayersPass() {
