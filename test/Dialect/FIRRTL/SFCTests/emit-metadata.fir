@@ -1,5 +1,6 @@
 ; RUN: firtool --verify-diagnostics --verilog %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit Foo : %[[{
   "class": "firrtl.transforms.BlackBoxInlineAnno",
   "name": "hello.v",

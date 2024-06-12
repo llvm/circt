@@ -4,6 +4,7 @@
 ; HWExportModuleHierarchy pass and any renaming which may happen in the circuit.
 ;
 ; See: https://github.com/llvm/circt/issues/5478
+FIRRTL version 4.0.0
 circuit Foo: %[[
   {
     "class": "sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
@@ -37,7 +38,7 @@ circuit Foo: %[[
     a is invalid
   module Bar:
     inst baz of Baz
-  module Foo:
+  public module Foo:
     inst bar of Bar
 
 ; CHECK-LABEL: module Baz()
