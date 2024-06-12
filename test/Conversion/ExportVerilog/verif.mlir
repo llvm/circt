@@ -195,20 +195,16 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
   // CHECK: assert property (@(posedge clk) a |-> b);
   // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
-  // CHECK: assert property (disable iff (b) not a);
-  // CHECK: assert property (disable iff (b) @(posedge clk) a |-> b);
+  // CHECK: assert property (disable iff (~(b)) not a);
   // CHECK: assert property (@(posedge clk) disable iff (b) not a);
   %k0 = ltl.clock %i0, posedge %clk : !ltl.property
   %k1 = ltl.clock %n0, negedge %b : !ltl.property
   %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
   %k3 = ltl.clock %k2, posedge %clk : !ltl.property
-  %k4 = ltl.disable %n0 if %b : !ltl.property
-  %k5 = ltl.disable %k0 if %b : !ltl.property
   %k6 = ltl.clock %k4, posedge %clk : !ltl.property
   verif.assert %k0 : !ltl.property
   verif.assert %k3 : !ltl.property
-  verif.assert %k4 : !ltl.property
-  verif.assert %k5 : !ltl.property
+  verif.assert %n0 if %b : !ltl.property
   verif.assert %k6 : !ltl.property
 }
 

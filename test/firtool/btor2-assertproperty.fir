@@ -18,8 +18,7 @@ circuit Counter :
     node _T_2 = neq(count, UInt<4>(0ha))
     node hbr = intrinsic(circt_has_been_reset : UInt<1>, clock, reset)
     node disable = eq(hbr, UInt<1>(0h0))
-    node ltl_disable = intrinsic(circt_ltl_disable : UInt<1>, _T_2, disable)
-    node ltl_clock = intrinsic(circt_ltl_clock : UInt<1>, ltl_disable, clock)
+    node ltl_clock = intrinsic(circt_ltl_clock : UInt<1>, _T_2, clock)
     intrinsic(circt_verif_assert, ltl_clock)
 
 ; CHECK:  1 sort bitvec 1
