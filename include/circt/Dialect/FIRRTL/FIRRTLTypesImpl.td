@@ -428,6 +428,15 @@ def LHSTypeImpl : FIRRTLImplType<"LHS", [], "::circt::firrtl::FIRRTLBaseType"> {
   let genStorageClass = true;
 
   let typeName = "firrtl.lhs";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "FIRRTLBaseType":$typeParam), [{
+      // This builder states that it can infer an MLIRContext instance from
+      // its arguments.
+      return Base::get(typeParam.getContext(), typeParam);
+    }]>,
+  ];
+
 }
 
 def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],

@@ -37,7 +37,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+      "firrtl::FModuleOp", "firrtl::FStrictModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
@@ -884,7 +884,7 @@ def StrictWireOp : HardwareDeclOp<"strictwire", [
 //===----------------------------------------------------------------------===//
 
 def ObjectOp :  FIRRTLOp<"object", [
-    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    ParentOneOf<["firrtl::FModuleOp, firrtl::FStrictModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<FInstanceLike, [
       "getReferencedOperation",
