@@ -132,9 +132,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
-    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
-    /// and updates any users of the remaining ports to point at the new
-    /// instance.
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
     InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
 
     /// Clone the instance op and add ports.  This is usually used in
@@ -204,6 +203,11 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     StringAttr getPortName(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
+
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
+    InstanceChoiceOp erasePorts(OpBuilder &builder,
+                                const llvm::BitVector &portIndices);
 
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
