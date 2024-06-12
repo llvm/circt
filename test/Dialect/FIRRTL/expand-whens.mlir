@@ -644,16 +644,16 @@ firrtl.module @verifassert(
 ) {
   firrtl.when %cond : !firrtl.uint<1> {
     // CHECK:   [[TMP2A:%.+]] = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP0A:%.+]] = firrtl.and %cond, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.assert [[TMP2A]], [[TMP0A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP0A:%.+]] = firrtl.int.ltl.implication %cond, %[[TMP2A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert [[TMP0A]], %enable : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     firrtl.int.verif.assert %clk_prop, %enable  : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
     // CHECK:   [[TMP3A:%.+]] = firrtl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK:   [[TMP6A:%.+]] = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP4A:%.+]] = firrtl.and [[TMP3A]], %enable1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.assert [[TMP6A]], [[TMP4A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP4A:%.+]] = firrtl.int.ltl.implication [[TMP3A]], [[TMP6A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assert [[TMP4A]], %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     firrtl.int.verif.assert %clk_prop, %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -666,16 +666,16 @@ firrtl.module @verifassume(
 ) {
   firrtl.when %cond : !firrtl.uint<1> {
     // CHECK:   [[TMP2A:%.+]] = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP0A:%.+]] = firrtl.and %cond, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.assume [[TMP2A]], [[TMP0A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP0A:%.+]] = firrtl.int.ltl.implication %cond, %[[TMP2A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assume [[TMP0A]], %enable : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     firrtl.int.verif.assume %clk_prop, %enable  : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
     // CHECK:   [[TMP3A:%.+]] = firrtl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK:   [[TMP6A:%.+]] = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP4A:%.+]] = firrtl.and [[TMP3A]], %enable1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.assume [[TMP6A]], [[TMP4A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP4A:%.+]] = firrtl.int.ltl.implication [[TMP3A]], [[TMP6A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.assume [[TMP4A]], %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     firrtl.int.verif.assume %clk_prop, %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -688,16 +688,16 @@ firrtl.module @verifcover(
 ) {
   firrtl.when %cond : !firrtl.uint<1> {
     // CHECK:   [[TMP2A:%.+]] = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP0A:%.+]] = firrtl.and %cond, %enable : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.cover [[TMP2A]], [[TMP0A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP0A:%.+]] = firrtl.int.ltl.and %cond, [[TMP2A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.cover [[TMP0A]], %enable : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     firrtl.int.verif.cover %clk_prop, %enable  : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
     // CHECK:   [[TMP3A:%.+]] = firrtl.not %cond : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK:   [[TMP6A:%.+]] = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK:   [[TMP4A:%.+]] = firrtl.and [[TMP3A]], %enable1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK:   firrtl.int.verif.cover [[TMP6A]], [[TMP4A]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:   [[TMP4A:%.+]] = firrtl.int.ltl.and [[TMP3A]], [[TMP6A]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK:   firrtl.int.verif.cover [[TMP4A]], %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
     %clk_prop = firrtl.int.ltl.clock %prop1, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     firrtl.int.verif.cover %clk_prop, %enable1 : !firrtl.uint<1>, !firrtl.uint<1>
   }

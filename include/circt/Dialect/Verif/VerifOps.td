@@ -31,7 +31,7 @@ class AssertLikeOp<string mnemonic, list<Trait> traits = []> :
   let arguments = (ins LTLAnyPropertyType:$property, Optional<I1>:$enable,
                        OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property (`if` $enable^)? (`label` $label^)? attr-dict `:` type($property)
+    $property `if` $enable (`label` $label^)? attr-dict `:` type($property)
   }];
 
   let hasCanonicalizeMethod = true;

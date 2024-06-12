@@ -160,10 +160,7 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
-def RepeatOp : LTLOp<"repeat", [
-  Pure,
-  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>
-]> {
+def RepeatOp : LTLOp<"repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
     I64Attr:$base,
@@ -188,11 +185,7 @@ def RepeatOp : LTLOp<"repeat", [
   }];
 }
 
-def GoToRepeatOp : LTLOp<"goto_repeat", [
-  Pure,
-  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>,
-  PredOpTrait<"'more' must be >= 0", CPred<"$more >= 0">>
-]> {
+def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
     I64Attr:$base,
@@ -214,11 +207,7 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [
   }];
 }
 
-def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [
-  Pure,
-  PredOpTrait<"'base' must be >= 0", CPred<"$base >= 0">>,
-  PredOpTrait<"'more' must be >= 0", CPred<"$more >= 0">>
-]> {
+def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
     I64Attr:$base,

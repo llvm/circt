@@ -27,6 +27,9 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/Verif/VerifVisitors.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
@@ -41,7 +44,8 @@ struct ConvertHWToBTOR2Pass
     : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
-      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
+      public hw::TypeOpVisitor<ConvertHWToBTOR2Pass>,
+      public verif::Visitor<ConvertHWToBTOR2Pass> {
 public:
   ConvertHWToBTOR2Pass(raw_ostream &os) : os(os) {}
   // Executes the pass
@@ -52,7 +56,7 @@ private:
   raw_ostream &os;
 
   // Create a counter that attributes a unique id to each generated btor2 line
-  size_t lid = 1;          // btor2 line identifiers usually start at 1
+  size_t lid = 1; // btor2 line identifiers usually start at 1
   size_t nclocks = 0;
 
   // Create maps to keep track of lid associations
@@ -78,6 +82,9 @@ private:
   // the same LID as the original op.
   // key: alias, value: original op
   DenseMap<Operation *, Operation *> opAliasMap;
+  // Keeps track of input alias, i.e. wires that lead to block arguments.
+  // This maps a wire operation to a block argument index.
+  DenseMap<Operation *, size_t> inputAliasMap;
   // Stores the LID of the associated input.
   // This holds a similar function as the opLIDMap but keeps
   // track of block argument index -> LID mappings
@@ -108,13 +115,48 @@ public:
   size_t getOpLID(Operation *op) {
     // Look for the original operation declaration
     // Make sure that wires are considered when looking for an lid
-    Operation *defOp = getOpAlias(op);
-    auto &f = opLIDMap[defOp];
+    // Check for an operation alias
+    size_t bargIdx = -1;
+    Operation *defOp = getOpAlias(op, bargIdx);
 
-    // If the op isn't associated to an lid, assign it a new one
-    if (!f)
-      f = lid++;
-    return f;
+    // Check that a regular op was found as the alias
+    if (defOp) {
+      if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
+        return it->second;
+
+      // Give the op an id if nothing was found
+      return setOpLID(defOp);
+    }
+
+    // Otherwise check for an input alias
+    if (auto it = inputLIDs.find(bargIdx); it != inputLIDs.end())
+      return it->second;
+
+    // if no LID was found, give it one
+    return setOpLID(bargIdx);
+  }
+
+  // Checks if an operation was declared
+  // If so, its lid will be returned
+  // Otherwise -1 will be returned
+  size_t getOpLID(Value value) {
+    // Check for potential block arguments
+    Operation *op = value.getDefiningOp();
+    if (!op) {
+      // Special case where op is actually a port
+      // To do so, we start by checking if our operation is a block argument
+      if (BlockArgument barg = dyn_cast<BlockArgument>(value)) {
+        // Extract the block argument index and use that to get the line number
+        size_t argIdx = barg.getArgNumber();
+
+        // Check that the extracted argument is in range before using it
+        if (auto it = inputLIDs.find(argIdx); it != inputLIDs.end())
+          return it->second;
+      }
+      return noLID;
+    }
+
+    return getOpLID(op);
   }
 
   // Associates the current lid to an operation
@@ -125,45 +167,48 @@ public:
     return oplid;
   }
 
-  // Checks if an operation was declared
-  // If so, its lid will be returned
-  // Otherwise -1 will be returned
-  size_t getOpLID(Value value) {
-    // Check for an operation alias
-    Operation *defOp = getOpAlias(value.getDefiningOp());
-
-    if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
-      return it->second;
-
-    // Check for special case where op is actually a port
-    // To do so, we start by checking if our operation is a block argument
-    if (BlockArgument barg = dyn_cast<BlockArgument>(value)) {
-      // Extract the block argument index and use that to get the line number
-      size_t argIdx = barg.getArgNumber();
-
-      // Check that the extracted argument is in range before using it
-      if (auto it = inputLIDs.find(argIdx); it != inputLIDs.end())
-        return it->second;
+  // Associates the current lid to a value's operation or block argument index
+  // if it's an input. The LID is then incremented to maintain uniqueness
+  size_t setOpLID(Value value) {
+    size_t oplid = lid++;
+    // Check for potential block arguments
+    Operation *op = value.getDefiningOp();
+    if (!op) {
+      // Special case where op is actually a port
+      // To do so, we start by checking if our operation is a block argument
+      if (BlockArgument barg = dyn_cast<BlockArgument>(value))
+        return setOpLID(barg.getArgNumber());
     }
+    lid = oplid;
+    return setOpLID(op);
+  }
 
-    // Return -1 if no LID was found
-    return noLID;
+  // Associates the current lid to an operation
+  // The LID is then incremented to maintain uniqueness
+  size_t setOpLID(size_t argIdx) {
+    size_t oplid = lid++;
+    inputLIDs[argIdx] = oplid;
+    return oplid;
   }
 
 private:
   // Checks if an operation has an alias. This is the case for wires
   // If so, the original operation is returned
   // Otherwise the argument is returned as it is the original op
-  Operation *getOpAlias(Operation *op) {
+  Operation *getOpAlias(Operation *op, size_t &argIdx) {
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
-      // check for aliases of inputs
-      if (!it->second) {
-        op->emitError("BTOR2 emission does not support for wires of inputs!");
-        return op;
-      }
+    auto it = opAliasMap.find(op);
+    if (it != opAliasMap.end() && it->second)
       return it->second;
+
+    // Check in the input alias map for results if none where found previously
+    auto it0 = inputAliasMap.find(op);
+    if (it0 != inputAliasMap.end() && it0->second) {
+      // Update the argIdx parameter and notify the user by returning a
+      // nullptr
+      argIdx = it0->second;
+      return nullptr;
     }
 
     // If the op isn't an alias then simply return it
@@ -171,9 +216,26 @@ private:
   }
 
   // Updates or creates an entry for the given operation
-  // associating it with the current lid
+  // associating it with a dealiased operation
   void setOpAlias(Operation *alias, Operation *op) {
-    opAliasMap[alias] = getOpAlias(op);
+    size_t argIdx = -1;
+    Operation *dealiased = getOpAlias(op, argIdx);
+
+    if (dealiased) {
+      opAliasMap[alias] = dealiased;
+    } else {
+      if (argIdx == -1UL) {
+        op->emitError("Incorrectly constructed wire found!");
+        return;
+      }
+      inputAliasMap[alias] = argIdx;
+    }
+  }
+
+  // Updates or creates an entry for the given operation
+  // associating it with the current lid
+  void setOpAlias(Operation *alias, size_t argIdx) {
+    inputAliasMap[alias] = argIdx;
   }
 
   // Checks if a sort was declared with the given width
@@ -245,8 +307,8 @@ private:
 
   // Generates a constant declaration given a value, a width and a name.
   void genConst(int64_t value, size_t width, Operation *op) {
-    // For now we're going to assume that the name isn't taken, given that hw is
-    // already in SSA form
+    // For now we're going to assume that the name isn't taken, given that hw
+    // is already in SSA form
     size_t opLID = getOpLID(op);
 
     // Retrieve the lid associated with the sort (sid)
@@ -285,15 +347,15 @@ private:
     size_t sid = sortToLIDMap.at(width);
     size_t initValLID = getOpLID(initVal);
 
-    // Build and emit the string (the lid here doesn't need to be associated to
-    // an op as it won't be used)
+    // Build and emit the string (the lid here doesn't need to be associated
+    // to an op as it won't be used)
     os << lid++ << " "
        << "init"
        << " " << sid << " " << regLID << " " << initValLID << "\n";
   }
 
-  // Generates a binary operation instruction given an op name, two operands and
-  // a result width.
+  // Generates a binary operation instruction given an op name, two operands
+  // and a result width.
   void genBinOp(StringRef inst, Operation *binop, Value op1, Value op2,
                 size_t width) {
     // Set the LID for this operation
@@ -347,9 +409,33 @@ private:
     os << opLID << " " << inst << " " << sid << " " << op0LID << "\n";
   }
 
-  // Generates a constant declaration given a value, a width and a name
+  // Generates a constant declaration given a value, a width and a name and
+  // returns the LID associated to it
   void genUnaryOp(Operation *srcop, Value op0, StringRef inst, size_t width) {
     genUnaryOp(srcop, op0.getDefiningOp(), inst, width);
+  }
+
+  // Generates a constant declaration given a operand lid, a width and a name
+  size_t genUnaryOp(size_t op0LID, StringRef inst, size_t width) {
+    // Register the source operation with the current line id
+    size_t curLid = lid++;
+
+    // Retrieve the lid associated with the sort (sid)
+    size_t sid = sortToLIDMap.at(width);
+
+    os << curLid << " " << inst << " " << sid << " " << op0LID << "\n";
+    return curLid;
+  }
+
+  // Generates a constant declaration given a value, a width and a name
+  size_t genUnaryOp(Operation *op0, StringRef inst, size_t width) {
+    return genUnaryOp(getOpLID(op0), inst, width);
+  }
+
+  // Generates a constant declaration given a value, a width and a name and
+  // returns the LID associated to it
+  size_t genUnaryOp(Value op0, StringRef inst, size_t width) {
+    return genUnaryOp(getOpLID(op0), inst, width);
   }
 
   // Generate a btor2 assertion given an assertion operation
@@ -358,7 +444,13 @@ private:
   void genBad(Operation *assertop) {
     // Start by finding the expression lid
     size_t assertLID = getOpLID(assertop);
+    genBad(assertLID);
+  }
 
+  // Generate a btor2 assertion given an assertion operation's LID
+  // Note that a predicate inversion must have already been generated at this
+  // point
+  void genBad(size_t assertLID) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << " "
@@ -413,26 +505,29 @@ private:
   }
 
   // Generate a logical implication given a lhs and a rhs
-  void genImplies(Operation *srcop, Value lhs, Value rhs) {
+  size_t genImplies(Operation *srcop, Value lhs, Value rhs) {
     // Retrieve LIDs for the lhs and rhs
     size_t lhsLID = getOpLID(lhs);
     size_t rhsLID = getOpLID(rhs);
 
-    genImplies(srcop, lhsLID, rhsLID);
+    return genImplies(srcop, lhsLID, rhsLID);
   }
 
   // Generate a logical implication given a lhs and a rhs
-  void genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
+  size_t genImplies(Operation *srcop, size_t lhsLID, size_t rhsLID) {
     // Register the source operation with the current line id
     size_t opLID = getOpLID(srcop);
+    return genImplies(opLID, lhsLID, rhsLID);
+  }
 
+  size_t genImplies(size_t opLID, size_t lhsLID, size_t rhsLID) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(1);
-
     // Build and emit the implies operation
     os << opLID << " "
        << "implies"
        << " " << sid << " " << lhsLID << " " << rhsLID << "\n";
+    return opLID;
   }
 
   // Generates a state instruction given a width and a name
@@ -449,8 +544,8 @@ private:
        << " " << sid << " " << name << "\n";
   }
 
-  // Generates a next instruction, given a width, a state LID, and a next value
-  // LID
+  // Generates a next instruction, given a width, a state LID, and a next
+  // value LID
   void genNext(Value next, Operation *reg, int64_t width) {
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
@@ -472,13 +567,13 @@ private:
     // Start by figuring out what sort needs to be generated
     int64_t width = hw::getBitWidth(type);
 
-    // Sanity check: getBitWidth can technically return -1 it is a type with no
-    // width (like a clock). This shouldn't be allowed as width is required to
-    // generate a sort
+    // Sanity check: getBitWidth can technically return -1 it is a type with
+    // no width (like a clock). This shouldn't be allowed as width is required
+    // to generate a sort
     assert(width != noWidth);
 
-    // Generate the sort regardles of resulting width (nothing will be added if
-    // the sort already exists)
+    // Generate the sort regardles of resulting width (nothing will be added
+    // if the sort already exists)
     genSort("bitvec", width);
     return width;
   }
@@ -533,7 +628,8 @@ private:
       // with next)
       size_t resetLID = noLID;
       if (BlockArgument barg = dyn_cast<BlockArgument>(reset)) {
-        // Extract the block argument index and use that to get the line number
+        // Extract the block argument index and use that to get the line
+        // number
         size_t argIdx = barg.getArgNumber();
 
         // Check that the extracted argument is in range before using it
@@ -592,8 +688,8 @@ public:
       // Save lid for later
       size_t inlid = lid;
 
-      // Record the defining operation's line ID (the module itself in the case
-      // of ports)
+      // Record the defining operation's line ID (the module itself in the
+      // case of ports)
       inputLIDs[port.argNum] = lid;
 
       // Increment the lid to keep it unique
@@ -621,6 +717,21 @@ public:
   void visit(hw::WireOp op) {
     // Retrieve the aliased operation
     Operation *defOp = op.getOperand().getDefiningOp();
+    if (!defOp) {
+      // If the value doesn't have a defining operand then it might be a block
+      // argument, this should be checked for.
+      if (BlockArgument barg = dyn_cast<BlockArgument>(op.getOperand())) {
+        // Extract the block argument index and use that to get the line
+        // number
+        size_t argIdx = barg.getArgNumber();
+
+        // Set the new alias
+        setOpAlias(op, argIdx);
+      } else {
+        op->emitError("Invalid wire operand!");
+        return;
+      }
+    }
     // Wires don't output anything so just record alias
     setOpAlias(op, defOp);
   }
@@ -635,58 +746,36 @@ public:
 
   // Binary operations are all emitted the same way, so we can group them into
   // a single method.
-  void visitBinOp(Operation *op, StringRef inst, int64_t w) {
+  template <typename Op>
+  void visitBinOp(Op op, StringRef inst) {
+    // Generete the sort
+    int64_t w = requireSort(op.getType());
 
     // Start by extracting the operands
-    Value op1 = op->getOperand(0);
-    Value op2 = op->getOperand(1);
+    Value op1 = op.getOperand(0);
+    Value op2 = op.getOperand(1);
 
     // Generate the line
     genBinOp(inst, op, op1, op2, w);
   }
 
   // Visitors for the binary ops
-  void visitComb(comb::AddOp op) {
-    visitBinOp(op, "add", requireSort(op.getType()));
-  }
-  void visitComb(comb::SubOp op) {
-    visitBinOp(op, "sub", requireSort(op.getType()));
-  }
-  void visitComb(comb::MulOp op) {
-    visitBinOp(op, "mul", requireSort(op.getType()));
-  }
-  void visitComb(comb::DivSOp op) {
-    visitBinOp(op, "sdiv", requireSort(op.getType()));
-  }
-  void visitComb(comb::DivUOp op) {
-    visitBinOp(op, "udiv", requireSort(op.getType()));
-  }
-  void visitComb(comb::ModSOp op) {
-    visitBinOp(op, "smod", requireSort(op.getType()));
-  }
-  void visitComb(comb::ShlOp op) {
-    visitBinOp(op, "sll", requireSort(op.getType()));
-  }
-  void visitComb(comb::ShrUOp op) {
-    visitBinOp(op, "srl", requireSort(op.getType()));
-  }
-  void visitComb(comb::ShrSOp op) {
-    visitBinOp(op, "sra", requireSort(op.getType()));
-  }
-  void visitComb(comb::AndOp op) {
-    visitBinOp(op, "and", requireSort(op.getType()));
-  }
-  void visitComb(comb::OrOp op) {
-    visitBinOp(op, "or", requireSort(op.getType()));
-  }
-  void visitComb(comb::XorOp op) {
-    visitBinOp(op, "xor", requireSort(op.getType()));
-  }
-  void visitComb(comb::ConcatOp op) {
-    visitBinOp(op, "concat", requireSort(op.getType()));
-  }
+  void visitComb(comb::AddOp op) { visitBinOp(op, "add"); }
+  void visitComb(comb::SubOp op) { visitBinOp(op, "sub"); }
+  void visitComb(comb::MulOp op) { visitBinOp(op, "mul"); }
+  void visitComb(comb::DivSOp op) { visitBinOp(op, "sdiv"); }
+  void visitComb(comb::DivUOp op) { visitBinOp(op, "udiv"); }
+  void visitComb(comb::ModSOp op) { visitBinOp(op, "smod"); }
+  void visitComb(comb::ShlOp op) { visitBinOp(op, "sll"); }
+  void visitComb(comb::ShrUOp op) { visitBinOp(op, "srl"); }
+  void visitComb(comb::ShrSOp op) { visitBinOp(op, "sra"); }
+  void visitComb(comb::AndOp op) { visitBinOp(op, "and"); }
+  void visitComb(comb::OrOp op) { visitBinOp(op, "or"); }
+  void visitComb(comb::XorOp op) { visitBinOp(op, "xor"); }
+  void visitComb(comb::ConcatOp op) { visitBinOp(op, "concat"); }
 
-  // Extract ops translate to a slice operation in btor2 in a one-to-one manner
+  // Extract ops translate to a slice operation in btor2 in a one-to-one
+  // manner
   void visitComb(comb::ExtractOp op) {
     int64_t w = requireSort(op.getType());
 
@@ -780,8 +869,75 @@ public:
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
   // Once SV Ops are visited, we need to check for seq ops
-  void visitInvalidSV(Operation *op) { visit(op); }
+  void visitInvalidSV(Operation *op) { dispatchVerifVisitor(op); }
 
+  template <typename Op>
+  void visitAssertLike(Op op) {
+    // Expression is what we will try to invert for our assertion
+    Value prop = op.getProperty();
+    Value en = op.getEnable();
+
+    // This sort is for assertion inversion and potential implies
+    genSort("bitvec", 1);
+
+    size_t assertLID = noLID;
+    // Check for a related enable signal
+    if (en) {
+      // Generate the implication
+      genImplies(op, en, prop);
+
+      // Generate the implies inversion
+      assertLID = genUnaryOp(op, "not", 1);
+    } else {
+      // Generate the expression inversion
+      assertLID = genUnaryOp(prop.getDefiningOp(), "not", 1);
+    }
+
+    // Genrate the bad btor2 intruction
+    genBad(assertLID);
+  }
+
+  template <typename Op>
+  void visitAssumeLike(Op op) {
+    // Expression is what we will try to invert for our assertion
+    Value prop = op.getProperty();
+    Value en = op.getEnable();
+
+    size_t assumeLID = getOpLID(prop);
+    // Check for a related enable signal
+    if (en) {
+      // This sort is for assertion inversion and potential implies
+      genSort("bitvec", 1);
+      // Generate the implication
+      assumeLID = genImplies(op, en, prop);
+    }
+
+    // Genrate the bad btor2 intruction
+    genConstraint(assumeLID);
+  }
+
+  // Folds the enable signal into the property and converts the result into a
+  // bad instruction.
+  void visitVerif(verif::AssertOp op) { visitAssertLike(op); }
+  void visitVerif(verif::ClockedAssertOp op) { visitAssertLike(op); }
+
+  // Fold the enable into the property and convert the assumption into a
+  // constraint instruction.
+  void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
+  void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
+
+  // Cover is not supported in btor2
+  void visitVerif(verif::CoverOp op) {
+    op->emitError("Cover is not supprted in btor2!");
+    return signalPassFailure();
+  }
+
+  void visitVerif(verif::ClockedCoverOp op) {
+    op->emitError("Cover is not supprted in btor2!");
+    return signalPassFailure();
+  }
+
+  void visitInvalidVerif(Operation *op) {}
   // Seq operation visitor, that dispatches to other seq ops
   // Also handles all remaining operations that should be explicitly ignored
   void visit(Operation *op) {
@@ -815,7 +971,8 @@ public:
     StringRef regName = reg.getName().value();
     int64_t w = requireSort(reg.getType());
 
-    // Check for initial values which must be emitted before the state in btor2
+    // Check for initial values which must be emitted before the state in
+    // btor2
     Value pov = reg.getPowerOnValue();
     if (pov) {
       // Check that the powerOn value is a non-null constant
@@ -956,6 +1113,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   constToLIDMap.clear();
   opLIDMap.clear();
   opAliasMap.clear();
+  inputAliasMap.clear();
   inputLIDs.clear();
   regOps.clear();
   handledOps.clear();
