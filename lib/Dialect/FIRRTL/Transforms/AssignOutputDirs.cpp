@@ -100,6 +100,10 @@ void AssignOutputDirsPass::runOnOperation() {
       if (!module || module->getAttrOfType<hw::OutputFileAttr>("output_file") ||
           module.isPublic())
         continue;
+
+      // Get the output directory of the first parent, and then fold the current
+      // output directory with the LCA of all other discovered output
+      // directories.
       SmallString<64> moduleOutputDir;
       auto i = node->usesBegin();
       auto e = node->usesEnd();
@@ -121,6 +125,7 @@ void AssignOutputDirsPass::runOnOperation() {
                 dyn_cast<FModuleOp>((*i)->getParent()->getModule<FModuleOp>()))
           makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
       }
+
       makeRelative(outputDir, moduleOutputDir);
       if (!moduleOutputDir.empty()) {
         auto f =
