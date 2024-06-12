@@ -826,10 +826,13 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
-           << space() << equals() << space() << "seq_mem_d"
-           << std::to_string(dimension) << LParen() << memory.getWidth()
-           << comma();
+  bool isRef = !memory->hasAttr("external");
+  indent();
+  if (isRef)
+    os << "ref ";
+  os << getAttributes(memory, /*atFormat=*/true) << memory.instanceName()
+     << space() << equals() << space() << "seq_mem_d"
+     << std::to_string(dimension) << LParen() << memory.getWidth() << comma();
   for (Attribute size : memory.getSizes()) {
     APInt memSize = cast<IntegerAttr>(size).getValue();
     memSize.print(os, /*isSigned=*/false);
