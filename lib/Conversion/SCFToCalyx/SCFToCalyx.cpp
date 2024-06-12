@@ -1189,17 +1189,8 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     /// which port index each function argument will eventually map to.
     SmallVector<calyx::PortInfo> inPorts, outPorts;
     FunctionType funcType = funcOp.getFunctionType();
-    unsigned extMemCounter = 0;
     for (auto arg : enumerate(funcOp.getArguments())) {
-      if (isa<MemRefType>(arg.value().getType())) {
-        /// External memories
-        auto memName =
-            "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
-        extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
-                                                 outPorts.size()};
-        calyx::appendPortsForExternalMemref(rewriter, memName, arg.value(),
-                                            extMemCounter++, inPorts, outPorts);
-      } else {
+      if (!isa<MemRefType>(arg.value().getType())) {
         /// Single-port arguments
         std::string inName;
         if (auto portNameAttr = funcOp.getArgAttrOfType<StringAttr>(
@@ -1250,35 +1241,37 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
     auto *compState = loweringState().getState<ComponentLoweringState>(compOp);
     compState->setFuncOpResultMapping(funcOpResultMapping);
 
+    unsigned extMemCounter = 0;
+    for (auto arg : enumerate(funcOp.getArguments())) {
+      if (isa<MemRefType>(arg.value().getType())) {
+        std::string memName = "arg_mem" + std::to_string(extMemCounter++);
+
+        rewriter.setInsertionPointToStart(compOp.getBodyBlock());
+        MemRefType memtype = cast<MemRefType>(arg.value().getType());
+        SmallVector<int64_t> addrSizes;
+        SmallVector<int64_t> sizes;
+        for (int64_t dim : memtype.getShape()) {
+          sizes.push_back(dim);
+          addrSizes.push_back(calyx::handleZeroWidth(dim));
+        }
+        if (sizes.empty() && addrSizes.empty()) {
+          sizes.push_back(1);
+          addrSizes.push_back(1);
+        }
+        auto memOp = rewriter.create<calyx::SeqMemoryOp>(
+            funcOp.getLoc(), memName,
+            memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
+        // we don't set the memory to "external", which implies it's a reference
+
+        compState->registerMemoryInterface(arg.value(),
+                                           calyx::MemoryInterface(memOp));
+      }
+    }
+
     /// Rewrite funcOp SSA argument values to the CompOp arguments.
     for (auto &mapping : funcOpArgRewrites)
       mapping.getFirst().replaceAllUsesWith(
           compOp.getArgument(mapping.getSecond()));
-
-    /// Register external memories
-    for (auto extMemPortIndices : extMemoryCompPortIndices) {
-      /// Create a mapping for the in- and output ports using the Calyx memory
-      /// port structure.
-      calyx::MemoryPortsImpl extMemPorts;
-      unsigned inPortsIt = extMemPortIndices.getSecond().first;
-      unsigned outPortsIt = extMemPortIndices.getSecond().second +
-                            compOp.getInputPortInfo().size();
-      extMemPorts.readData = compOp.getArgument(inPortsIt++);
-      extMemPorts.done = compOp.getArgument(inPortsIt);
-      extMemPorts.writeData = compOp.getArgument(outPortsIt++);
-      unsigned nAddresses =
-          cast<MemRefType>(extMemPortIndices.getFirst().getType())
-              .getShape()
-              .size();
-      for (unsigned j = 0; j < nAddresses; ++j)
-        extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
-      extMemPorts.writeEn = compOp.getArgument(outPortsIt);
-
-      /// Register the external memory ports as a memory interface within the
-      /// component.
-      compState->registerMemoryInterface(extMemPortIndices.getFirst(),
-                                         calyx::MemoryInterface(extMemPorts));
-    }
 
     return success();
   }
