@@ -1,7 +1,6 @@
-// RUN: circt-opt -firrtl-assign-output-dirs %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-assign-output-dirs{output-dir=/path/to/output}))' %s | FileCheck %s
 
 firrtl.circuit "AssignOutputDirs" {
-
   // Directory Tree
   //        R
   //    A       B
@@ -38,7 +37,7 @@ firrtl.circuit "AssignOutputDirs" {
   firrtl.module private @ByAC() {}
 
   // B & C -> R
-  // CHECK: firrtl.module private @ByBC() attributes {
+  // CHECK: firrtl.module private @ByBC() {
   firrtl.module private @ByBC() {}
 
   firrtl.module @InR() {
@@ -68,10 +67,29 @@ firrtl.circuit "AssignOutputDirs" {
     firrtl.instance byCD @ByCD()
   }
 
-  // CHECK: firrtl.module @ByDotDot() {}
-  firrtl.module @ByDotDot() {}
+  // CHECK: firrtl.module private @ByDotDot() attributes {output_file = #hw.output_file<"/path/to/">} {
+  firrtl.module private @ByDotDot() {}
 
-  firrtl.module @InDotDot() attributes {output_file = #hw.output_file<"A../../">} {
+  firrtl.module @InDotDot() attributes {output_file = #hw.output_file<"../">} {
     firrtl.instance byDotDot @ByDotDot()
+  }
+
+  // Absolute output directory tests
+
+  // CHECK firrtl.module private @ByOutputA() {output_file = #hw.output_file<"A/">} {}
+  firrtl.module private @ByOutputA() {}
+
+  firrtl.module @InOutputA() attributes {output_file = #hw.output_file<"/path/to/output/A/foo">} {
+    firrtl.instance byOutputA @ByOutputA()
+  }
+
+  // CHECK: firrtl.module private @ByYZ() attributes {output_file = #hw.output_file<"/X/">} {
+  firrtl.module private @ByYZ() {}
+
+  firrtl.module @InY() attributes {output_file = #hw.output_file<"/X/Y/">} {
+    firrtl.instance byYZ @ByYZ()
+  }
+  firrtl.module @InZ() attributes {output_file = #hw.output_file<"/X/Z/">} {
+    firrtl.instance byYZ @ByYZ()
   }
 }

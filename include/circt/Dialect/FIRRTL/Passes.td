@@ -923,6 +923,10 @@ def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
     possible.
   }];
   let constructor = "circt::firrtl::createAssignOutputDirsPass()";
+  let options = [
+    Option<"outputDirOption", "output-dir", "std::string", "",
+      "The default output directory.">
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

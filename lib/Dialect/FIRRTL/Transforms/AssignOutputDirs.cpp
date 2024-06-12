@@ -15,6 +15,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "firrtl-assign-output-dirs"
@@ -22,32 +23,51 @@
 using namespace circt;
 using namespace firrtl;
 namespace path = llvm::sys::path;
+namespace fs = llvm::sys::fs;
 
 using hw::OutputFileAttr;
 
-static StringRef lca(StringRef a, OutputFileAttr file) {
-  if (!file)
-    return StringRef();
+// if moduleOutputDir is a relative path, convert it to an absolute path, by
+// interpreting moduleOutputDir as relative to the outputDir.
+static void makeAbsolute(StringRef outputDir,
+                         SmallString<64> &moduleOutputDir) {
+  fs::make_absolute(outputDir, moduleOutputDir);
+  path::remove_dots(moduleOutputDir, true);
+}
 
-  auto b = file.getDirectory();
-  if (llvm::sys::path::is_absolute(b))
-    return StringRef();
+// if outputDir is a prefix of moduleOutputDir, then make moduleOutputDir
+// relative to outputDir. Otherwise, leave moduleOutputDir as absolute.
+static void makeRelative(StringRef outputDir,
+                         SmallString<64> &moduleOutputDir) {
+  if (moduleOutputDir.starts_with(outputDir))
+    moduleOutputDir.erase(moduleOutputDir.begin(),
+                          moduleOutputDir.begin() + outputDir.size());
+}
 
-  for (auto i = path::begin(b), e = path::end(b); i != e; ++i)
-    if (*i == "..")
-      return StringRef();
-
+static void makeCommonPrefix(SmallString<64> &a, StringRef b) {
+  // truncate 'a' to the common prefix of 'a' and 'b'.
   size_t i = 0;
   size_t e = std::min(a.size(), b.size());
   for (; i < e; ++i)
     if (a[i] != b[i])
       break;
+  a.resize(i);
 
-  auto dir = a.substr(0, i);
-  if (dir.ends_with(llvm::sys::path::get_separator()))
-    return dir;
+  // truncate 'a' so it ends on a directory seperator.
+  auto sep = path::get_separator();
+  while (!a.empty() && !a.ends_with(sep))
+    a.pop_back();
+}
 
-  return llvm::sys::path::parent_path(dir);
+static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
+                             OutputFileAttr attr) {
+  if (attr) {
+    SmallString<64> b(attr.getFilename());
+    makeAbsolute(outputDir, b);
+    makeCommonPrefix(a, b);
+  } else {
+    makeCommonPrefix(a, outputDir);
+  }
 }
 
 static OutputFileAttr getOutputFile(Operation *op) {
@@ -61,7 +81,16 @@ class AssignOutputDirsPass : public AssignOutputDirsBase<AssignOutputDirsPass> {
 } // namespace
 
 void AssignOutputDirsPass::runOnOperation() {
-  auto falseAttr = BoolAttr::get(&getContext(), false);
+  SmallString<64> outputDir(outputDirOption);
+  if (fs::make_absolute(outputDir)) {
+    signalPassFailure();
+    return;
+  }
+
+  auto sep = path::get_separator();
+  if (!outputDir.ends_with(sep))
+    outputDir.append(sep);
+
   bool changed = false;
 
   DenseSet<InstanceGraphNode *> visited;
@@ -71,28 +100,31 @@ void AssignOutputDirsPass::runOnOperation() {
       if (!module || module->getAttrOfType<hw::OutputFileAttr>("output_file") ||
           module.isPublic())
         continue;
-      StringRef outputDir;
+      SmallString<64> moduleOutputDir;
       auto i = node->usesBegin();
       auto e = node->usesEnd();
       for (; i != e; ++i) {
         if (auto parent = dyn_cast<FModuleOp>((*i)->getParent()->getModule())) {
           auto file = getOutputFile(parent);
-          if (file)
-            outputDir = file.getDirectory();
+          if (file) {
+            moduleOutputDir = file.getDirectory();
+            makeAbsolute(outputDir, moduleOutputDir);
+          } else {
+            moduleOutputDir = outputDir;
+          }
           ++i;
           break;
         }
       }
       for (; i != e; ++i) {
-        if (outputDir.empty())
-          break;
         if (auto parent =
                 dyn_cast<FModuleOp>((*i)->getParent()->getModule<FModuleOp>()))
-          outputDir = lca(outputDir, getOutputFile(parent));
+          makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
       }
-      if (!outputDir.empty()) {
-        auto s = StringAttr::get(&getContext(), outputDir);
-        auto f = hw::OutputFileAttr::get(s, falseAttr, falseAttr);
+      makeRelative(outputDir, moduleOutputDir);
+      if (!moduleOutputDir.empty()) {
+        auto f =
+            hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);
         module->setAttr("output_file", f);
         changed = true;
       }
