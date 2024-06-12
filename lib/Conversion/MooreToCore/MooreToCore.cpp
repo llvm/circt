@@ -313,6 +313,53 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
   }
 };
 
+struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConditionalOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value condValue, trueValue, falseValue;
+
+    condValue = op.getCondition();
+    condValue = rewriter.getRemappedValue(condValue);
+    for (auto &trueOp : op.getTrueRegion().getOps()) {
+      if (isa<YieldOp>(trueOp)) {
+        trueValue = trueOp.getOperand(0);
+      }
+    }
+    for (auto &falseOp : op.getFalseRegion().getOps()) {
+      if (isa<YieldOp>(falseOp)) {
+        falseValue = falseOp.getOperand(0);
+      }
+    }
+
+    rewriter.inlineBlockBefore(&op.getTrueRegion().front(), op);
+
+    rewriter.inlineBlockBefore(&op.getFalseRegion().front(), op);
+
+    trueValue = rewriter.getRemappedValue(trueValue);
+    falseValue = rewriter.getRemappedValue(falseValue);
+
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, condValue, trueValue,
+                                             falseValue);
+
+    return success();
+  }
+};
+
+struct YieldOpConversion : public OpConversionPattern<YieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(YieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -585,6 +632,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
     BinaryOpConversion<AndOp, comb::AndOp>,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
+
+    // Patterns of conditional operation.
+    ConditionalOpConversion,YieldOpConversion,
 
     // Patterns of relational operations.
     ICmpOpConversion<UltOp, ICmpPredicate::ult>,
