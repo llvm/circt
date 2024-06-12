@@ -346,7 +346,8 @@ def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants",
 
 def NamedConstantOp : MooreOp<"named_constant", [
   FirstAttrDerivedResultType,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  HasParent<"SVModuleOp">
 ]>{
   let summary = "An elaboration time constant expression";
   let description = [{

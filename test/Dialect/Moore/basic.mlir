@@ -26,7 +26,7 @@ moore.module @Module() {
   moore.instance "empty" @Empty() -> ()
 
   // CHECK: %[[I1_READ:.+]] = moore.read %i1
-  // CHECK: %[[I2_READ:.+]] = moore.read %i2 
+  // CHECK: %[[I2_READ:.+]] = moore.read %i2
   // CHECK: moore.instance "ports" @Ports(a: %[[I1_READ]]: !moore.string, c: %[[I2_READ]]: !moore.event) -> (b: !moore.string, d: !moore.event)
   %i1 = moore.variable : <!moore.string>
   %i2 = moore.variable : <!moore.event>
@@ -101,6 +101,13 @@ moore.module @Module() {
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
   }
+
+  // CHECK: %p1 = moore.named_constant parameter 1 : !moore.l32
+  %p1 = moore.named_constant parameter 1 : !moore.l32
+  // CHECK: %lp1 = moore.named_constant localparam 2 : !moore.l32
+  %lp1 = moore.named_constant localparam 2 : !moore.l32
+  // CHECK: %sp1 = moore.named_constant specparam 3 : !moore.l32
+  %sp1 = moore.named_constant specparam 3 : !moore.l32
 }
 
 // CHECK-LABEL: func.func @Expressions

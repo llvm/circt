@@ -293,13 +293,9 @@ struct MemberVisitor {
 
     IntegerAttr attribute;
     auto value = paramNode.getValue();
-    if (value.isInteger()) {
       attribute = builder.getIntegerAttr(
           builder.getIntegerType(cast<moore::IntType>(type).getWidth()),
           value.integer().as<uint64_t>().value());
-    } else {
-      mlir::emitError(loc, "unsupported attribute type: ");
-    }
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
