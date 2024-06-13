@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM.h"
-#include "../PassDetail.h"
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
@@ -31,6 +30,11 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTLLHDTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -1812,7 +1816,7 @@ using LoadOpConversion =
 
 namespace {
 struct LLHDToLLVMLoweringPass
-    : public ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
+    : public circt::impl::ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
   void runOnOperation() override;
 };
 } // namespace

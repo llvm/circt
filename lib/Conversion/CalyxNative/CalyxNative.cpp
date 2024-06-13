@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Conversion/CalyxNative.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
@@ -23,6 +23,11 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+namespace circt {
+#define GEN_PASS_DEF_CALYXNATIVE
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
+
 using namespace mlir;
 using namespace circt;
 
@@ -31,7 +36,7 @@ using namespace circt;
 /// Pass entrypoint.
 
 namespace {
-class CalyxNativePass : public CalyxNativeBase<CalyxNativePass> {
+class CalyxNativePass : public circt::impl::CalyxNativeBase<CalyxNativePass> {
 public:
   void runOnOperation() override;
 

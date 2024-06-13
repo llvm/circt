@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/FSMToSV.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -15,11 +14,17 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
 #include <variant>
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTFSMTOSV
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -671,7 +676,7 @@ MachineOpConverter::convertState(StateOp state) {
   return res;
 }
 
-struct FSMToSVPass : public ConvertFSMToSVBase<FSMToSVPass> {
+struct FSMToSVPass : public circt::impl::ConvertFSMToSVBase<FSMToSVPass> {
   void runOnOperation() override;
 };
 

@@ -11,18 +11,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
+
+namespace circt {
+#define GEN_PASS_DEF_LEGALIZEANONENUMS
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
 using namespace sv;
 
 namespace {
-struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
+struct LegalizeAnonEnums
+    : public circt::impl::LegalizeAnonEnumsBase<LegalizeAnonEnums> {
   /// Creates a TypeScope on demand for anonymous enumerations.
   TypeScopeOp getTypeScope() {
     auto topLevel = getOperation();
