@@ -76,15 +76,6 @@ private:
   // with their most recent expression. Btor uses unique identifiers for each
   // instruction, so we need to have an association between those and MLIR Ops.
   DenseMap<Operation *, size_t> opLIDMap;
-  // Keeps track of operation aliases. This is used for wire inlining, as
-  // btor2 does not have the concept of a wire. This means that wires in
-  // hw will simply create an alias for the operation that will point to
-  // the same LID as the original op.
-  // key: alias, value: original op
-  DenseMap<Operation *, Operation *> opAliasMap;
-  // Keeps track of input alias, i.e. wires that lead to block arguments.
-  // This maps a wire operation to a block argument index.
-  DenseMap<Operation *, size_t> inputAliasMap;
   // Stores the LID of the associated input.
   // This holds a similar function as the opLIDMap but keeps
   // track of block argument index -> LID mappings
@@ -113,27 +104,16 @@ public:
   // If so, its lid will be returned
   // Otherwise a new lid will be assigned to the op
   size_t getOpLID(Operation *op) {
-    // Look for the original operation declaration
-    // Make sure that wires are considered when looking for an lid
-    // Check for an operation alias
-    size_t bargIdx = -1;
-    Operation *defOp = getOpAlias(op, bargIdx);
-
-    // Check that a regular op was found as the alias
-    if (defOp) {
-      if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
-        return it->second;
-
-      // Give the op an id if nothing was found
-      return setOpLID(defOp);
+    if (!op) {
+      op->emitError("Null operation was found!");
+      return noLID;
     }
 
-    // Otherwise check for an input alias
-    if (auto it = inputLIDs.find(bargIdx); it != inputLIDs.end())
+    if (auto it = opLIDMap.find(op); it != opLIDMap.end())
       return it->second;
 
-    // if no LID was found, give it one
-    return setOpLID(bargIdx);
+    // Give the op an id if nothing was found
+    return setOpLID(op);
   }
 
   // Checks if an operation was declared
@@ -192,51 +172,6 @@ public:
   }
 
 private:
-  // Checks if an operation has an alias. This is the case for wires
-  // If so, the original operation is returned
-  // Otherwise the argument is returned as it is the original op
-  Operation *getOpAlias(Operation *op, size_t &argIdx) {
-
-    // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
-      return it->second;
-
-    // Check in the input alias map for results if none where found previously
-    auto it0 = inputAliasMap.find(op);
-    if (it0 != inputAliasMap.end()) {
-      // Update the argIdx parameter and notify the user by returning a
-      // nullptr
-      argIdx = it0->second;
-      return nullptr;
-    }
-
-    // If the op isn't an alias then simply return it
-    return op;
-  }
-
-  // Updates or creates an entry for the given operation
-  // associating it with a dealiased operation
-  void setOpAlias(Operation *alias, Operation *op) {
-    size_t argIdx = -1;
-    Operation *dealiased = getOpAlias(op, argIdx);
-
-    if (dealiased) {
-      opAliasMap[alias] = dealiased;
-    } else {
-      if (argIdx == -1UL) {
-        op->emitError("Incorrectly constructed wire found!");
-        return;
-      }
-      inputAliasMap[alias] = argIdx;
-    }
-  }
-
-  // Updates or creates an entry for the given operation
-  // associating it with the current lid
-  void setOpAlias(Operation *alias, size_t argIdx) {
-    inputAliasMap[alias] = argIdx;
-  }
-
   // Checks if a sort was declared with the given width
   // If so, its lid will be returned
   // Otherwise -1 will be returned
@@ -711,28 +646,10 @@ public:
     genConst(value, w, op);
   }
 
-  // Wires can generally be ignored in bto2, however we do need
-  // to keep track of the new alias it creates
+  // Wires should have been removed in PrepareForFormal
   void visit(hw::WireOp op) {
-    // Retrieve the aliased operation
-    Operation *defOp = op.getOperand().getDefiningOp();
-    if (!defOp) {
-      // If the value doesn't have a defining operand then it might be a block
-      // argument, this should be checked for.
-      if (BlockArgument barg = dyn_cast<BlockArgument>(op.getOperand())) {
-        // Extract the block argument index and use that to get the line
-        // number
-        size_t argIdx = barg.getArgNumber();
-
-        // Set the new alias
-        setOpAlias(op, argIdx);
-      } else {
-        op->emitError("Invalid wire operand!");
-        return;
-      }
-    }
-    // Wires don't output anything so just record alias
-    setOpAlias(op, defOp);
+    op->emitError("Wires are not supported in btor!");
+    return signalPassFailure();
   }
 
   void visitTypeOp(Operation *op) { visitInvalidTypeOp(op); }
@@ -1111,8 +1028,6 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   sortToLIDMap.clear();
   constToLIDMap.clear();
   opLIDMap.clear();
-  opAliasMap.clear();
-  inputAliasMap.clear();
   inputLIDs.clear();
   regOps.clear();
   handledOps.clear();
