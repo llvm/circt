@@ -879,4 +879,26 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
 }
 
+def AssertOp : ArcOp<"assert"> {
+  let summary = "assert that a property holds";
+  let description = [{
+    Asserts that an operation holds at runtime. It takes a single boolean
+    indicating the assertion condition, a clock, and an error message as input.
+    If the property holds (= `true`) the operation has no effect. Otherwise, the
+    execution aborts and provides an error message to the user. The `%clock` parameter
+    is optional as `verif.assert` doesn't have a clock operand.
+    ```mlir
+    assert %property
+    assert %property, %clock
+    assert %property, %clock, "Some error message in case of failure!"
+    ```
+  }];
+  let arguments = (ins I1:$property, Optional<ClockType>:$clock,
+                   OptionalAttr<StrAttr>:$msg);
+  let assemblyFormat = [{
+    $property (`,` $clock^)? (`,` $msg^)? attr-dict
+  }];
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD
