@@ -350,7 +350,7 @@ def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants",
 
 def NamedConstantOp : MooreOp<"named_constant", [
   SameOperandsAndResultType,
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]>{
   let summary = "An elaboration time constant expression";
   let description = [{

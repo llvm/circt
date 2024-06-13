@@ -163,7 +163,7 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    std::string symStr;
+    SmallString<32> symStr;
     switch (op.getKind()) {
     case NamedConst::Parameter:
       symStr = "parameter";
@@ -175,9 +175,8 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
       symStr = "specparameter";
       break;
     }
-    symStr += ":";
-    symStr += op.getNameAttr().str();
-    auto symAttr = rewriter.getStringAttr(symStr);
+    auto symAttr =
+        rewriter.getStringAttr(symStr + Twine(":") + adaptor.getName());
     rewriter.replaceOpWithNewOp<hw::WireOp>(op, resultType, adaptor.getValue(),
                                             op.getNameAttr(),
                                             hw::InnerSymAttr::get(symAttr));
