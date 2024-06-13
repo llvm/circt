@@ -59,6 +59,7 @@ void PrepareForFormalPass::runOnOperation() {
   // Set target: We don't want any wires left in our output
   ConversionTarget target(getContext());
   target.addLegalDialect<hw::HWDialect>();
+  target.addIllegalOp<hw::WireOp>();
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
