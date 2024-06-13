@@ -921,7 +921,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
     // expected-error @+1 {{op operand #0 must be a sized passive base type}}
-    firrtl.strictconnect %a, %in : !firrtl.uint
+    firrtl.matchingconnect %a, %in : !firrtl.uint
   }
 }
 
@@ -1161,7 +1161,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
     %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
+    firrtl.matchingconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1323,7 +1323,7 @@ firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %0 : !firrtl.string
+    firrtl.matchingconnect %out, %0 : !firrtl.string
   }
 }
 
@@ -1805,12 +1805,12 @@ firrtl.circuit "ConstOpenBundle" {
 }
 
 // -----
-// Strict connect between non-equivalent anonymous type operands.
+// Matching connect between non-equivalent anonymous type operands.
 
-firrtl.circuit "NonEquivalenctStrictConnect" {
-  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+firrtl.circuit "NonEquivalenctMatchingConnect" {
+  firrtl.module @NonEquivalenctMatchingConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
-    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+    firrtl.matchingconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
 
@@ -1922,8 +1922,8 @@ firrtl.circuit "LayerBlockDrivesSinksOutside" {
     firrtl.layerblock @A {
       firrtl.when %cond : !firrtl.uint<1> {
         %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
-        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing layer block}}
-        firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
+        // expected-error @below {{'firrtl.matchingconnect' op connects to a destination which is defined outside its enclosing layer block}}
+        firrtl.matchingconnect %b_c, %a : !firrtl.uint<1>
       }
     }
   }
@@ -2041,16 +2041,6 @@ firrtl.circuit "RWProbeTypes" {
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 

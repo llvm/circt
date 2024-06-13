@@ -78,7 +78,8 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(), false);
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(),
+                                     /*topLevel*/ false, op.getNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();

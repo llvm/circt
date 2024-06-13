@@ -630,7 +630,7 @@ void ExtractInstancesPass::extractInstances() {
         auto src = newParentInst.getResult(numParentPorts + portIdx);
         if (newPorts[portIdx].second.direction == Direction::In)
           std::swap(src, dst);
-        builder.create<StrictConnectOp>(dst, src);
+        builder.create<MatchingConnectOp>(dst, src);
       }
 
       // Move the wiring prefix from the old to the new instance. We just look
@@ -981,7 +981,7 @@ void ExtractInstancesPass::groupInstances() {
         Value src = wrapper.getArgument(portIdx);
         if (ports[portIdx].direction == Direction::Out)
           std::swap(dst, src);
-        builder.create<StrictConnectOp>(result.getLoc(), dst, src);
+        builder.create<MatchingConnectOp>(result.getLoc(), dst, src);
         ++portIdx;
       }
     }

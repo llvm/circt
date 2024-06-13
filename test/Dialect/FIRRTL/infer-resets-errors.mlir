@@ -179,7 +179,7 @@ firrtl.circuit "top" {
    // expected-error @below {{'FullAsyncResetAnnotation' must target async reset, but targets '!firrtl.uint<1>'}}
     %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.reset
     %invalid = firrtl.invalidvalue : !firrtl.reset
-    firrtl.strictconnect %innerReset, %invalid : !firrtl.reset
+    firrtl.matchingconnect %innerReset, %invalid : !firrtl.reset
   }
 }
 

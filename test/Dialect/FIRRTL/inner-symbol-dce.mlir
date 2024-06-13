@@ -43,13 +43,13 @@ firrtl.circuit "Simple" attributes {
     %w5 = firrtl.wire sym @w5 : !firrtl.uint<1>
 
     %c0_ui1 = firrtl.constant 0: !firrtl.uint<1>
-    firrtl.strictconnect %out, %c0_ui1 : !firrtl.uint<1>
-    firrtl.strictconnect %out2, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %out, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %out2, %c0_ui1 : !firrtl.uint<1>
 
     // CHECK: @x
     // CHECK-NOT: @y
     %wire = firrtl.wire sym [<@x,1,public>,<@y,2,public>] : !firrtl.vector<uint<1>,2>
-    firrtl.strictconnect %out3, %wire : !firrtl.vector<uint<1>,2>
+    firrtl.matchingconnect %out3, %wire : !firrtl.vector<uint<1>,2>
   }
 
   // CHECK-LABEL: firrtl.extmodule @ExtChild

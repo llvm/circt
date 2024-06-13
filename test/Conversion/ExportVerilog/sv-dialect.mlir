@@ -1683,7 +1683,7 @@ hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
   // CHECK-NEXT: logic       _function_declare3_1;
   // CHECK-NEXT: logic [1:0] _function_declare1_0;
   // CHECK-NEXT: logic       _function_declare1_1;
-  // CHECK-NEXT: _function_declare2_0 = function_declare2(in_0, in_1);
+  // CHECK-NEXT: assign _function_declare2_0 = function_declare2(in_0, in_1);
   %u1 = sv.func.call @function_declare2 (%in_0, %in_1) : (i2, i2) -> i1
   // CHECK:      initial begin
   // CHECK-NEXT:  function_declare1(in_0, _function_declare1_0, in_1, _function_declare1_1);

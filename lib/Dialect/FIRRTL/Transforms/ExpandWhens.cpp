@@ -355,7 +355,7 @@ public:
     recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
-  void visitStmt(StrictConnectOp op) {
+  void visitStmt(MatchingConnectOp op) {
     recordConnect(getFieldRefFromValue(op.getDest()), op);
   }
 
@@ -687,7 +687,7 @@ public:
   using LastConnectResolver<ModuleVisitor>::visitStmt;
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
-  void visitStmt(StrictConnectOp connectOp);
+  void visitStmt(MatchingConnectOp connectOp);
   void visitStmt(LayerBlockOp layerBlockOp);
 
   bool run(FModuleLike op);
@@ -732,7 +732,7 @@ void ModuleVisitor::visitStmt(ConnectOp op) {
   anythingChanged |= recordConnect(getFieldRefFromValue(op.getDest()), op);
 }
 
-void ModuleVisitor::visitStmt(StrictConnectOp op) {
+void ModuleVisitor::visitStmt(MatchingConnectOp op) {
   anythingChanged |= recordConnect(getFieldRefFromValue(op.getDest()), op);
 }
 

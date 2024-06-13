@@ -1313,7 +1313,11 @@ static LogicalResult legalizeHWModule(Block &block,
 LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
   // If the module body is empty, just skip it.
+<<<<<<< HEAD
   if(!module.getBodyBlock())
+=======
+  if (!module.getBodyBlock())
+>>>>>>> ee7d59be99cca7060ea30b95d9a71a82c04a37bc
     return success();
 
   // Zero-valued logic pruning.

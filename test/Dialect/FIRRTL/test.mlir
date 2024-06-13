@@ -45,7 +45,7 @@ firrtl.module @MyModule(in %in : !firrtl.uint<8>,
 }
 
 // CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 
@@ -92,7 +92,7 @@ firrtl.module @Mod2(in %in : !firrtl.uint<8>,
 
 // CHECK-LABEL: firrtl.module @Mod2(in %some_name: !firrtl.uint<8>,
 // CHECK:                           out %out: !firrtl.uint<8>)
-// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 // Check that quotes port names are paresable and printed with quote only if needed.
@@ -197,8 +197,8 @@ firrtl.module @EnumTest(in %in : !firrtl.enum<a: uint<1>, b: uint<2>>,
   %t = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
   // CHECK: = firrtl.tagextract %in : !firrtl.enum<a: uint<1>, b: uint<2>>
 
-  firrtl.strictconnect %out, %v : !firrtl.uint<2>
-  firrtl.strictconnect %tag, %t : !firrtl.uint<1>
+  firrtl.matchingconnect %out, %v : !firrtl.uint<2>
+  firrtl.matchingconnect %tag, %t : !firrtl.uint<1>
 
   %p = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
   // CHECK: = firrtl.istag %in a : !firrtl.enum<a: uint<1>, b: uint<2>>
@@ -357,13 +357,13 @@ firrtl.module @AnyRefTest(in %in: !firrtl.anyref, out %out: !firrtl.anyref, in %
 // CHECK-SAME: %const: !firrtl.const.alias<baz, const.uint<1>>
 // CHECK-SAME: %r: !firrtl.openbundle<a: alias<baz, uint<1>>>
 // CHECK-SAME: %out: !firrtl.alias<foo, uint<1>>
-// CHECK-NEXT: firrtl.strictconnect %out, %in : !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
+// CHECK-NEXT: firrtl.matchingconnect %out, %in : !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
 
 firrtl.module @TypeAlias(in %in: !firrtl.alias<bar, uint<1>>,
                          in %const: !firrtl.const.alias<baz, const.uint<1>>,
                          out %r : !firrtl.openbundle<a: alias<baz, uint<1>>>,
                          out %out: !firrtl.alias<foo, uint<1>>) {
-  firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
+  firrtl.matchingconnect %out, %in: !firrtl.alias<foo, uint<1>>, !firrtl.alias<bar, uint<1>>
 }
 
 }

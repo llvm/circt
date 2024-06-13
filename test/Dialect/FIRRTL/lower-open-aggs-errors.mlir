@@ -41,7 +41,7 @@ firrtl.circuit "MixedAnnotation" {
     %r_p = firrtl.opensubfield %r[p] : !firrtl.openbundle<a: uint<1>, p: probe<uint<1>>>
     firrtl.ref.define %r_p, %ref : !firrtl.probe<uint<1>>
     %r_a = firrtl.opensubfield %r[a] : !firrtl.openbundle<a: uint<1>, p: probe<uint<1>>>
-    firrtl.strictconnect %r_a, %zero : !firrtl.uint<1>
+    firrtl.matchingconnect %r_a, %zero : !firrtl.uint<1>
   }
 }
 

@@ -9,8 +9,8 @@ firrtl.circuit "Foo"  {
   firrtl.module @Foo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     %x1_x = firrtl.wire   : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    // CHECK-NOT: firrtl.strictconnect %y
-    firrtl.strictconnect %y, %invalid_ui1 : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.matchingconnect %y
+    firrtl.matchingconnect %y, %invalid_ui1 : !firrtl.uint<1>
   }
   // CHECK: }
 }

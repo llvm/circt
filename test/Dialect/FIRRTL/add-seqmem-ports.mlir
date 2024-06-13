@@ -92,8 +92,8 @@ firrtl.circuit "Two" attributes {annotations = [
   // CHECK: firrtl.module @Child(out %sram_0_user_output: !firrtl.uint<4>, in %sram_0_user_input: !firrtl.uint<3>)
   firrtl.module @Child() {
     %0:4 = firrtl.instance MWrite_ext  @MWrite_ext(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.uint<42>)
-    // CHECK: firrtl.strictconnect %sram_0_user_output, %MWrite_ext_user_output : !firrtl.uint<4>
-    // CHECK: firrtl.strictconnect %MWrite_ext_user_input, %sram_0_user_input : !firrtl.uint<3>
+    // CHECK: firrtl.matchingconnect %sram_0_user_output, %MWrite_ext_user_output : !firrtl.uint<4>
+    // CHECK: firrtl.matchingconnect %MWrite_ext_user_input, %sram_0_user_input : !firrtl.uint<3>
   }
   // CHECK: firrtl.module @Two(out %sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}], out %sram_1_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in %sram_1_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
   firrtl.module @Two() {
@@ -101,10 +101,10 @@ firrtl.circuit "Two" attributes {annotations = [
     firrtl.instance child1 @Child()
     // CHECK: %child0_sram_0_user_output, %child0_sram_0_user_input = firrtl.instance child0  @Child
     // CHECK: %child1_sram_0_user_output, %child1_sram_0_user_input = firrtl.instance child1  @Child
-    // CHECK: firrtl.strictconnect %sram_0_user_output, %child0_sram_0_user_output : !firrtl.uint<4>
-    // CHECK: firrtl.strictconnect %child0_sram_0_user_input, %sram_0_user_input : !firrtl.uint<3>
-    // CHECK: firrtl.strictconnect %sram_1_user_output, %child1_sram_0_user_output : !firrtl.uint<4>
-    // CHECK: firrtl.strictconnect %child1_sram_0_user_input, %sram_1_user_input : !firrtl.uint<3>
+    // CHECK: firrtl.matchingconnect %sram_0_user_output, %child0_sram_0_user_output : !firrtl.uint<4>
+    // CHECK: firrtl.matchingconnect %child0_sram_0_user_input, %sram_0_user_input : !firrtl.uint<3>
+    // CHECK: firrtl.matchingconnect %sram_1_user_output, %child1_sram_0_user_output : !firrtl.uint<4>
+    // CHECK: firrtl.matchingconnect %child1_sram_0_user_input, %sram_1_user_input : !firrtl.uint<3>
 
   }
 }
@@ -134,7 +134,7 @@ firrtl.circuit "TestHarness" attributes {annotations = [
     firrtl.instance dut @DUT()
     // CHECK: %dut_sram_0_user_output, %dut_sram_0_user_input = firrtl.instance dut @DUT(out sram_0_user_output: !firrtl.uint<4> [{class = "firrtl.transforms.DontTouchAnnotation"}], in sram_0_user_input: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}])
     // CHECK: %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    // CHECK: firrtl.strictconnect %dut_sram_0_user_input, %c0_ui3 : !firrtl.uint<3>
+    // CHECK: firrtl.matchingconnect %dut_sram_0_user_input, %c0_ui3 : !firrtl.uint<3>
   }
 }
 

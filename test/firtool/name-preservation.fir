@@ -1,8 +1,9 @@
 ; RUN: firtool --preserve-values=named %s | FileCheck %s 
 
+FIRRTL version 4.0.0
 circuit Foo:
   ; CHECK-LABEL: module Foo
-  module Foo:
+  public module Foo:
     input a: {a: UInt<1>, flip b: UInt<1>}
     output b: {a: UInt<1>, flip b: UInt<1>}
 
@@ -14,8 +15,9 @@ circuit Foo:
     _x <= a
 
     ; Default behavior is to preserve named wires.
-    ; CHECK:        wire x_a
     ; CHECK:        wire x_b
+    ; CHECK:        wire y
+    ; CHECK:        wire x_a
     wire x: {a: UInt<1>, flip b: UInt<1>}
     x <= _x
 
@@ -24,7 +26,6 @@ circuit Foo:
     node _y_b = x.b
 
     ; Default behavior is to preserve named nodes.
-    ; CHECK:        wire y
     node y = _y_b
 
     b.a <= y

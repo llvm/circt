@@ -26,19 +26,19 @@ firrtl.module @UnusedMemPort(in %clock: !firrtl.clock, in %addr : !firrtl.uint<1
 firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, out %out : !firrtl.uint<1>, in %vec : !firrtl.vector<uint<1>, 2>) {
   // CHECK: %ram_ramport = firrtl.mem sym @s1 Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data flip: uint<1>>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
-  // CHECK: firrtl.strictconnect [[ADDR]], %invalid_ui8
+  // CHECK: firrtl.matchingconnect [[ADDR]], %invalid_ui8
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
-  // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[EN]], %c0_ui1
   // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
-  // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
+  // CHECK: firrtl.matchingconnect [[CLOCK]], %invalid_clock
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport[data]
   %ram = chirrtl.combmem  sym @s1 : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   // CHECK: firrtl.when %cond : !firrtl.uint<1> {
-  // CHECK:   firrtl.strictconnect [[ADDR]], %addr
-  // CHECK:   firrtl.strictconnect [[EN]], %c1_ui1
-  // CHECK:   firrtl.strictconnect [[CLOCK]], %clock
+  // CHECK:   firrtl.matchingconnect [[ADDR]], %addr
+  // CHECK:   firrtl.matchingconnect [[EN]], %c1_ui1
+  // CHECK:   firrtl.matchingconnect [[CLOCK]], %clock
   // CHECK: }
   firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
@@ -58,33 +58,33 @@ firrtl.module @InferRead(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in
 firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in : !firrtl.uint<1>) {
   // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
-  // CHECK: firrtl.strictconnect [[ADDR]], %invalid_ui8
+  // CHECK: firrtl.matchingconnect [[ADDR]], %invalid_ui8
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
-  // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[EN]], %c0_ui1
   // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
-  // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
+  // CHECK: firrtl.matchingconnect [[CLOCK]], %invalid_clock
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport[data]
-  // CHECK: firrtl.strictconnect [[DATA]], %invalid_ui1
+  // CHECK: firrtl.matchingconnect [[DATA]], %invalid_ui1
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport[mask]
-  // CHECK: firrtl.strictconnect [[MASK]], %invalid_ui1
+  // CHECK: firrtl.matchingconnect [[MASK]], %invalid_ui1
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
   %ramport_data, %ramport_port = chirrtl.memoryport Infer %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
 
   // CHECK: firrtl.when %cond : !firrtl.uint<1> {
-  // CHECK:   firrtl.strictconnect [[ADDR]], %addr
-  // CHECK:   firrtl.strictconnect [[EN]], %c1_ui1
-  // CHECK:   firrtl.strictconnect [[CLOCK]], %clock
-  // CHECK:   firrtl.strictconnect [[MASK]], %c0_ui1
+  // CHECK:   firrtl.matchingconnect [[ADDR]], %addr
+  // CHECK:   firrtl.matchingconnect [[EN]], %c1_ui1
+  // CHECK:   firrtl.matchingconnect [[CLOCK]], %clock
+  // CHECK:   firrtl.matchingconnect [[MASK]], %c0_ui1
   // CHECK: }
   firrtl.when %cond : !firrtl.uint<1> {
     chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   }
 
-  // CHECK: firrtl.strictconnect [[MASK]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[MASK]], %c1_ui1
   // CHECK: firrtl.connect [[DATA]], %in
   firrtl.connect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
-  // CHECK: firrtl.strictconnect [[MASK]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[MASK]], %c1_ui1
   // CHECK: firrtl.connect [[DATA]], %in
   firrtl.connect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -92,29 +92,29 @@ firrtl.module @InferWrite(in %cond: !firrtl.uint<1>, in %clock: !firrtl.clock, i
 firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
   // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
   // CHECK: [[ADDR:%.*]] = firrtl.subfield %ram_ramport[addr]
-  // CHECK: firrtl.strictconnect [[ADDR]], %invalid
+  // CHECK: firrtl.matchingconnect [[ADDR]], %invalid
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
-  // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[EN]], %c0_ui1
   // CHECK: [[CLOCK:%.*]] = firrtl.subfield %ram_ramport[clk]
-  // CHECK: firrtl.strictconnect [[CLOCK]], %invalid_clock
+  // CHECK: firrtl.matchingconnect [[CLOCK]], %invalid_clock
   // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport[rdata]
   // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport[wmode]
-  // CHECK: firrtl.strictconnect [[WMODE]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[WMODE]], %c0_ui1
   // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport[wdata]
-  // CHECK: firrtl.strictconnect [[WDATA]], %invalid_ui1
+  // CHECK: firrtl.matchingconnect [[WDATA]], %invalid_ui1
   // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
-  // CHECK: firrtl.strictconnect [[WMASK]], %invalid
+  // CHECK: firrtl.matchingconnect [[WMASK]], %invalid
   %ram = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 256>
 
-  // CHECK: firrtl.strictconnect [[ADDR]], %addr : !firrtl.uint<8>
-  // CHECK: firrtl.strictconnect [[EN]], %c1_ui1
-  // CHECK: firrtl.strictconnect [[CLOCK]], %clock
-  // CHECK: firrtl.strictconnect [[WMASK]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[ADDR]], %addr : !firrtl.uint<8>
+  // CHECK: firrtl.matchingconnect [[EN]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[CLOCK]], %clock
+  // CHECK: firrtl.matchingconnect [[WMASK]], %c0_ui1
   %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<1>, 256>) -> (!firrtl.uint<1>, !chirrtl.cmemoryport)
   chirrtl.memoryport.access %ramport_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-  // CHECK: firrtl.strictconnect [[WMASK]], %c1_ui1
-  // CHECK: firrtl.strictconnect [[WMODE]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[WMASK]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[WMODE]], %c1_ui1
   // CHECK: firrtl.connect [[WDATA]], %in
   firrtl.connect %ramport_data, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -133,7 +133,7 @@ firrtl.module @WriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrtl.uint<
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport[mask]
   // CHECK: [[DATA_B:%.*]] = firrtl.subfield [[DATA]][b]
   // CHECK: [[MASK_B:%.*]] = firrtl.subfield [[MASK]][b]
-  // CHECK: firrtl.strictconnect [[MASK_B]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[MASK_B]], %c1_ui1
   // CHECK: firrtl.connect [[DATA_B]], %value
   firrtl.connect %ramport_b, %value : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -151,14 +151,14 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
   // CHECK: [[WDATA_A:%.*]] = firrtl.subfield [[WDATA]][a]
   // CHECK: [[WMASK_A:%.*]] = firrtl.subfield [[WMASK]][a]
-  // CHECK: firrtl.strictconnect [[WMASK_A]], %c1_ui1
-  // CHECK: firrtl.strictconnect [[WMODE]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[WMASK_A]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[WMODE]], %c1_ui1
   // CHECK: firrtl.connect [[WDATA_A]], %in
   %port_a = firrtl.subfield %ramport_data[a] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]][b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
-  // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>
   %port_b = firrtl.subfield %ramport_data[b] : !firrtl.bundle<a: uint<1>, b: uint<1>>
   firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -176,9 +176,9 @@ firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrt
   // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport[wmask]
   // CHECK: [[WDATA_0:%.*]] = firrtl.subindex [[WDATA]][0]
   // CHECK: [[WMASK_0:%.*]] = firrtl.subindex [[WMASK]][0]
-  // CHECK: firrtl.strictconnect [[WMASK_0]], %c1_ui1 : !firrtl.uint<1>
-  // CHECK: firrtl.strictconnect [[WMODE]], %c1_ui1 : !firrtl.uint<1>
-  // CHECK: firrtl.connect [[WDATA_0]], %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect [[WMASK_0]], %c1_ui1 : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect [[WMODE]], %c1_ui1 : !firrtl.uint<1>
+  // CHECK: firrtl.connect [[WDATA_0]], %in : !firrtl.uint<1>
   %port_a = firrtl.subindex %ramport_data[0] : !firrtl.vector<uint<1>, 10>
   firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -234,7 +234,7 @@ firrtl.module @EnableInference0(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
 
   // CHECK: firrtl.when %p : !firrtl.uint<1> {
   firrtl.when %p : !firrtl.uint<1> {
-    // CHECK-NEXT: firrtl.strictconnect [[EN]], %c1_ui1
+    // CHECK-NEXT: firrtl.matchingconnect [[EN]], %c1_ui1
     // CHECK-NEXT: firrtl.connect %w, %addr
     firrtl.connect %w, %addr : !firrtl.uint<4>, !firrtl.uint<4>
   }
@@ -250,10 +250,10 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
   // CHECK: [[EN:%.*]] = firrtl.subfield %ram_ramport[en]
   // CHECK: firrtl.when %p : !firrtl.uint<1>
   firrtl.when %p : !firrtl.uint<1> {
-   // CHECK-NEXT: firrtl.strictconnect [[EN]], %c1_ui1
+   // CHECK-NEXT: firrtl.matchingconnect [[EN]], %c1_ui1
    // CHECK-NEXT: %n = firrtl.node %addr
-   // CHECK-NEXT: firrtl.strictconnect [[ADDR]], %n
-   // CHECK-NEXT: firrtl.strictconnect %2, %clock
+   // CHECK-NEXT: firrtl.matchingconnect [[ADDR]], %n
+   // CHECK-NEXT: firrtl.matchingconnect %2, %clock
    // CHECK-NEXT: firrtl.connect %v, %3
     %n = firrtl.node %addr : !firrtl.uint<4>
     %ramport_data, %ramport_port = chirrtl.memoryport Read %ram {name = "ramport"} : (!chirrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !chirrtl.cmemoryport)
@@ -272,8 +272,8 @@ firrtl.module @EnableInference2(in %clock: !firrtl.clock, in %io: !firrtl.bundle
   chirrtl.memoryport.access %read_port[%0], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   firrtl.connect %out, %read_data : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK: [[EN:%.*]] = firrtl.subfield %mem_read[en]
-  // CHECK: firrtl.strictconnect [[EN]], %c0_ui1
-  // CHECK: firrtl.strictconnect [[EN]], %c1_ui1
+  // CHECK: firrtl.matchingconnect [[EN]], %c0_ui1
+  // CHECK: firrtl.matchingconnect [[EN]], %c1_ui1
 }
 
 // When the address line is larger than the size of the address port, the port
@@ -285,7 +285,7 @@ firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl
   // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r[addr]
   %addr_node = firrtl.node %addr  : !firrtl.uint<3>
   // CHECK: [[TRUNC:%.+]] = firrtl.tail %addr_node, 1
-  // CHECK: firrtl.strictconnect [[ADDR]], [[TRUNC]]
+  // CHECK: firrtl.matchingconnect [[ADDR]], [[TRUNC]]
   chirrtl.memoryport.access %r_port[%addr_node], %clock : !chirrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
   // CHECK: firrtl.connect
   firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>

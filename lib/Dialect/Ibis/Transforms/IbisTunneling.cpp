@@ -212,8 +212,7 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   // output port.
   if (requestedDir == Direction::Input) {
     auto wireOp = rewriter.create<InputWireOp>(
-        op.getLoc(),
-        rewriter.getStringAttr(actualPort.getPortName().strref() + ".wr"),
+        op.getLoc(), rewriter.getStringAttr(*actualPort.getInnerName() + ".wr"),
         portInfo.getInnerType());
 
     rewriter.create<PortWriteOp>(op.getLoc(), actualPort.getPort(),
@@ -230,8 +229,8 @@ Value Tunneler::portForwardIfNeeded(PortOpInterface actualPort,
   auto wireOp = rewriter.create<OutputWireOp>(
       op.getLoc(),
       hw::InnerSymAttr::get(
-          rewriter.getStringAttr(actualPort.getPortName().strref() + ".rd")),
-      inputValue);
+          rewriter.getStringAttr(*actualPort.getInnerName() + ".rd")),
+      inputValue, rewriter.getStringAttr(actualPort.getNameHint() + ".rd"));
   return wireOp.getPort();
 }
 
@@ -296,8 +295,8 @@ LogicalResult Tunneler::tunnelDown(InstanceGraphNode *currentContainer,
   llvm::DenseMap<StringAttr, OutputPortOp> outputPortOps;
   for (PortInfo &pi : portInfos) {
     outputPortOps[pi.portName] = rewriter.create<OutputPortOp>(
-        op.getLoc(), pi.portName, circt::hw::InnerSymAttr::get(pi.portName),
-        pi.getType());
+        op.getLoc(), circt::hw::InnerSymAttr::get(pi.portName), pi.getType(),
+        pi.portName);
   }
 
   // Recurse into the tunnel instance container.
@@ -376,8 +375,8 @@ LogicalResult Tunneler::tunnelUp(InstanceGraphNode *currentContainer,
   rewriter.setInsertionPointToEnd(scopeOp.getBodyBlock());
   for (PortInfo &pi : portInfos) {
     auto inputPort = rewriter.create<InputPortOp>(
-        op.getLoc(), pi.portName, hw::InnerSymAttr::get(pi.portName),
-        pi.getType());
+        op.getLoc(), hw::InnerSymAttr::get(pi.portName), pi.getType(),
+        pi.portName);
     // Read the input port of the current container to forward the portref.
 
     portMapping[&pi] =

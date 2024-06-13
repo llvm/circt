@@ -1,8 +1,8 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis.class(ibis-convert-methods-to-containers)))' %s | FileCheck %s
 
-// CHECK-LABEL:   ibis.class @ToContainers {
+// CHECK-LABEL:   ibis.class sym @ToContainers {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToContainers>
-// CHECK:           ibis.container @foo {
+// CHECK:           ibis.container sym @foo {
 // CHECK:             %[[VAL_1:.*]] = ibis.this <@foo::@foo>
 // CHECK:             %[[VAL_2:.*]] = ibis.port.input "arg0" sym @arg0 : !dc.value<i32>
 // CHECK:             %[[VAL_3:.*]] = ibis.port.read %[[VAL_2]] : !ibis.portref<in !dc.value<i32>>
@@ -20,7 +20,7 @@
 // CHECK:         }
 
 ibis.design @foo {
-ibis.class @ToContainers {
+ibis.class sym @ToContainers {
   %this = ibis.this <@foo::@ToContainers> 
   ibis.method.df @foo(%arg0: !dc.value<i32>) -> !dc.value<i32> {
     %token, %output = dc.unpack %arg0 : !dc.value<i32>

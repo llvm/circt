@@ -9,8 +9,9 @@
 ; Confirm annotation file is found.
 ; RUN: firtool %s --parse-only --annotation-file test.anno.json -I %t | grep circt.test
 
+FIRRTL version 4.0.0
 circuit Test:
-  module Test:
+  public module Test:
     output o : UInt<1>
     o <= UInt<1>(0)
     
