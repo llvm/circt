@@ -18,11 +18,8 @@ circuit Foo: %[[
   ; Since VerificationHelper is only used under the Verification layer, it
   ; should be output in the testbench directory too.
   module VerificationHelper:
-    input i : UInt<1>
-    output o : UInt<1>
     wire w : UInt<1>
-    connect w, i
-    connect o, w
+    w is invalid
 
   ; Although the Component Bar is only instantiated by testbench Foo, since Bar
   ; is public, it remains in the default build directory.
@@ -36,7 +33,6 @@ circuit Foo: %[[
       node c = UInt<1>(0)
       define b = probe(c)
       inst helper of VerificationHelper
-      connect helper.i, c
 
   ; The TestBench module is explicitly annotated to be placed in the testbench
   ; output directory.
@@ -57,10 +53,8 @@ circuit Foo: %[[
   ; CHECK: `endif // layers_Foo_Verification
 
   ; CHECK: FILE "testbench/VerificationHelper.sv"
-  ; CHECK: module VerificationHelper(
-  ; CHECK:   input i
-  ; CHECK: );
-  ; CHECK:   wire w = i;
+  ; CHECK: module VerificationHelper();
+  ; CHECK:   wire w = 1'h0;
   ; CHECK: endmodule
 
   ; CHECK: FILE "testbench/Bar_Verification.sv"

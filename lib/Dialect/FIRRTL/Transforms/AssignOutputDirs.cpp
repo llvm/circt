@@ -27,7 +27,7 @@ namespace fs = llvm::sys::fs;
 
 using hw::OutputFileAttr;
 
-// if moduleOutputDir is a relative path, convert it to an absolute path, by
+// If moduleOutputDir is a relative path, convert it to an absolute path, by
 // interpreting moduleOutputDir as relative to the outputDir.
 static void makeAbsolute(StringRef outputDir,
                          SmallString<64> &moduleOutputDir) {
@@ -35,10 +35,10 @@ static void makeAbsolute(StringRef outputDir,
   path::remove_dots(moduleOutputDir, true);
 }
 
-// if outputDir is a prefix of moduleOutputDir, then make moduleOutputDir
+// If outputDir is a prefix of moduleOutputDir, then make moduleOutputDir
 // relative to outputDir. Otherwise, leave moduleOutputDir as absolute.
-static void makeRelative(StringRef outputDir,
-                         SmallString<64> &moduleOutputDir) {
+static void tryMakeRelative(StringRef outputDir,
+                            SmallString<64> &moduleOutputDir) {
   if (moduleOutputDir.starts_with(outputDir))
     moduleOutputDir.erase(moduleOutputDir.begin(),
                           moduleOutputDir.begin() + outputDir.size());
@@ -75,7 +75,8 @@ static OutputFileAttr getOutputFile(Operation *op) {
 }
 
 namespace {
-struct AssignOutputDirsPass : public AssignOutputDirsBase<AssignOutputDirsPass> {
+struct AssignOutputDirsPass
+    : public AssignOutputDirsBase<AssignOutputDirsPass> {
   AssignOutputDirsPass() = default;
   AssignOutputDirsPass(StringRef outputDir) : AssignOutputDirsPass() {
     outputDirOption = std::string(outputDir);
@@ -88,13 +89,12 @@ struct AssignOutputDirsPass : public AssignOutputDirsBase<AssignOutputDirsPass> 
 void AssignOutputDirsPass::runOnOperation() {
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
+    llvm::errs()
+        << "error: failed to convert the outputDir to an absolute path\n";
     signalPassFailure();
     return;
   }
   path::remove_dots(outputDir, true);
-
-  llvm::errs() << "****** "  << outputDir << "\n";
-
   auto sep = path::get_separator();
   if (!outputDir.ends_with(sep))
     outputDir.append(sep);
@@ -134,7 +134,7 @@ void AssignOutputDirsPass::runOnOperation() {
           makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
       }
 
-      makeRelative(outputDir, moduleOutputDir);
+      tryMakeRelative(outputDir, moduleOutputDir);
       if (!moduleOutputDir.empty()) {
         auto f =
             hw::OutputFileAttr::getAsDirectory(&getContext(), moduleOutputDir);

@@ -132,7 +132,8 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
     if (auto file = getOutputFile(layerName))
       return hw::OutputFileAttr::getFromDirectoryAndFilename(
           &getContext(), file.getDirectory(),
-          fileNameForLayer(circuitName, layerName));
+          fileNameForLayer(circuitName, layerName),
+          /*excludeFromFileList=*/true);
     return hw::OutputFileAttr::getFromFilename(
         &getContext(), fileNameForLayer(circuitName, layerName),
         /*excludeFromFileList=*/true);
@@ -160,10 +161,6 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// remove the cast itself from the IR.
   void removeLayersFromRefCast(RefCastOp cast);
 
-  /// Set an output file attribute pointing at the provided filename.  Prepend
-  /// the testbench directory if one is known to the pass.
-  void setOutputFile(Operation *op, const Twine &filename);
-
   /// Entry point for the function.
   void runOnOperation() override;
 
@@ -175,8 +172,6 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// A map of layer blocks to module name that should be created for it.
   DenseMap<LayerBlockOp, StringRef> moduleNames;
 };
-
-static Operation *setOutputFile(Operation *op, hw::OutputFileAttr file);
 
 /// Multi-process safe function to build a module in the circuit and return it.
 /// The name provided is only a namehint for the module---a unique name will be
@@ -194,7 +189,7 @@ FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder,
       ArrayAttr{});
   if (auto dir = getOutputFile(layerBlock.getLayerNameAttr())) {
     assert(dir.isDirectory());
-    ::setOutputFile(newModule, dir);
+    newModule->setAttr("output_file", dir);
   }
   SymbolTable::setSymbolVisibility(newModule, SymbolTable::Visibility::Private);
   return newModule;
@@ -569,7 +564,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     auto outputFile =
         outputFileForLayer(circuitName, layerBlock.getLayerName());
-    ::setOutputFile(instanceOp, outputFile);
+    instanceOp->setAttr("output_file", outputFile);
 
     createdInstances.try_emplace(instanceOp, newModule);
 
@@ -617,17 +612,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     return WalkResult::advance();
   });
-}
-
-static Operation *setOutputFile(Operation *op, hw::OutputFileAttr file) {
-  op->setAttr("output_file", file);
-  return op;
-}
-
-void LowerLayersPass::setOutputFile(Operation *op, const Twine &filename) {
-  ::setOutputFile(
-      op, hw::OutputFileAttr::getFromFilename(op->getContext(), filename,
-                                              /*excludeFromFileList=*/true));
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
@@ -719,12 +703,10 @@ void LowerLayersPass::runOnOperation() {
   OpBuilder builder(circuitOp);
   SmallVector<std::pair<LayerOp, StringAttr>> layers;
   StringRef circuitName = circuitOp.getName();
-
   circuitOp.walk<mlir::WalkOrder::PreOrder>([&](LayerOp layerOp) {
     auto parentOp = layerOp->getParentOfType<LayerOp>();
     while (parentOp && parentOp != layers.back().first)
       layers.pop_back();
-
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
@@ -759,13 +741,13 @@ void LowerLayersPass::runOnOperation() {
     auto header = builder.create<sv::VerbatimOp>(
         layerOp.getLoc(),
         includes + "`ifndef " + prefix + "\n" + "`define " + prefix);
-    ::setOutputFile(header, bindFile);
+    header->setAttr("output_file", bindFile);
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
     auto footer =
         builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix);
-    ::setOutputFile(footer, bindFile);
+    footer->setAttr("output_file", bindFile);
 
     if (!layerOp.getBody().getOps<LayerOp>().empty())
       layers.emplace_back(
