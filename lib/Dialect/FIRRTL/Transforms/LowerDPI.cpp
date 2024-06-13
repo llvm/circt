@@ -138,16 +138,14 @@ void LowerDPIPass::runOnOperation() {
         auto diag = firstDPICallop.emitOpError()
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " input types don't match ";
-        diag.attachNote(dpiOp.getLoc())
-            << " mismatched caller is here";
+        diag.attachNote(dpiOp.getLoc()) << " mismatched caller is here";
         return signalPassFailure();
       }
       if (dpiOp.getResultTypes() != outputTypes) {
         auto diag = firstDPICallop.emitOpError()
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " output types don't match";
-        diag.attachNote(dpiOp.getLoc())
-            << " mismatched caller is here";
+        diag.attachNote(dpiOp.getLoc()) << " mismatched caller is here";
         return signalPassFailure();
       }
       lowerCall(dpiOp);
