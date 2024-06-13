@@ -13,6 +13,7 @@
 #include "circt/Conversion/VerifToSV.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
