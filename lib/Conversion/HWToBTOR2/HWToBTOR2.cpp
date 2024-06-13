@@ -198,13 +198,12 @@ private:
   Operation *getOpAlias(Operation *op, size_t &argIdx) {
 
     // Remove the alias until none are left (for wires of wires of wires ...)
-    auto it = opAliasMap.find(op);
-    if (it != opAliasMap.end() && it->second)
+    if (auto it = opAliasMap.find(op); it != opAliasMap.end())
       return it->second;
 
     // Check in the input alias map for results if none where found previously
     auto it0 = inputAliasMap.find(op);
-    if (it0 != inputAliasMap.end() && it0->second) {
+    if (it0 != inputAliasMap.end()) {
       // Update the argIdx parameter and notify the user by returning a
       // nullptr
       argIdx = it0->second;
