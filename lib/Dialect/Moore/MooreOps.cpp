@@ -19,6 +19,7 @@
 
 using namespace circt;
 using namespace circt::moore;
+using namespace mlir;
 
 //===----------------------------------------------------------------------===//
 // SVModuleOp
@@ -237,6 +238,33 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
+llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
+  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+    return {};
+  return {MemorySlot{getResult(), getType()}};
+}
+
+Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
+  if (auto value = getInitial())
+    return value;
+  return builder.create<ConstantOp>(
+      getLoc(),
+      cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()), 0);
+}
+
+void VariableOp::handleBlockArgument(const MemorySlot &slot,
+                                     BlockArgument argument,
+                                     OpBuilder &builder) {}
+
+::std::optional<::mlir::PromotableAllocationOpInterface>
+VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
+                                    OpBuilder &builder) {
+  if (defaultValue.use_empty())
+    defaultValue.getDefiningOp()->erase();
+  this->erase();
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // NetOp
 //===----------------------------------------------------------------------===//
@@ -417,6 +445,78 @@ OpFoldResult BoolCastOp::fold(FoldAdaptor adaptor) {
   if (getInput().getType() == getResult().getType())
     return getInput();
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// BlockingAssignOp
+//===----------------------------------------------------------------------===//
+
+bool BlockingAssignOp::loadsFrom(const MemorySlot &slot) { return false; }
+
+bool BlockingAssignOp::storesTo(const MemorySlot &slot) {
+  return getDst() == slot.ptr;
+}
+
+Value BlockingAssignOp::getStored(const MemorySlot &slot, OpBuilder &builder,
+                                  Value reachingDef,
+                                  const DataLayout &dataLayout) {
+  return getSrc();
+}
+
+bool BlockingAssignOp::canUsesBeRemoved(
+    const MemorySlot &slot, const SmallPtrSetImpl<OpOperand *> &blockingUses,
+    SmallVectorImpl<OpOperand *> &newBlockingUses,
+    const DataLayout &dataLayout) {
+
+  if (blockingUses.size() != 1)
+    return false;
+  Value blockingUse = (*blockingUses.begin())->get();
+  return blockingUse == slot.ptr && getDst() == slot.ptr &&
+         getSrc() != slot.ptr &&
+         getSrc().getType() == cast<RefType>(slot.elemType).getNestedType();
+}
+
+DeletionKind BlockingAssignOp::removeBlockingUses(
+    const MemorySlot &slot, const SmallPtrSetImpl<OpOperand *> &blockingUses,
+    OpBuilder &builder, Value reachingDefinition,
+    const DataLayout &dataLayout) {
+  return DeletionKind::Delete;
+}
+
+//===----------------------------------------------------------------------===//
+// ReadOp
+//===----------------------------------------------------------------------===//
+
+bool ReadOp::loadsFrom(const MemorySlot &slot) {
+  return getOperand() == slot.ptr;
+}
+
+bool ReadOp::storesTo(const MemorySlot &slot) { return false; }
+
+Value ReadOp::getStored(const MemorySlot &slot, OpBuilder &builder,
+                        Value reachingDef, const DataLayout &dataLayout) {
+  llvm_unreachable("getStored should not be called on ReadOp");
+}
+
+bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
+                              const SmallPtrSetImpl<OpOperand *> &blockingUses,
+                              SmallVectorImpl<OpOperand *> &newBlockingUses,
+                              const DataLayout &dataLayout) {
+
+  if (blockingUses.size() != 1)
+    return false;
+  Value blockingUse = (*blockingUses.begin())->get();
+  return blockingUse == slot.ptr && getOperand() == slot.ptr &&
+         getResult().getType() == cast<RefType>(slot.elemType).getNestedType();
+}
+
+DeletionKind
+ReadOp::removeBlockingUses(const MemorySlot &slot,
+                           const SmallPtrSetImpl<OpOperand *> &blockingUses,
+                           OpBuilder &builder, Value reachingDefinition,
+                           const DataLayout &dataLayout) {
+  getResult().replaceAllUsesWith(reachingDefinition);
+  return DeletionKind::Delete;
 }
 
 //===----------------------------------------------------------------------===//

@@ -30,6 +30,14 @@ namespace emit {
 class EmitDialect;
 } // namespace emit
 
+namespace seq {
+class SeqDialect;
+} // namespace seq
+
+namespace sim {
+class SimDialect;
+} // namespace sim
+
 namespace sv {
 class SVDialect;
 } // namespace sv

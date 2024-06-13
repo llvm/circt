@@ -25,11 +25,11 @@ struct TestApplyLoweringOptionPass
     : public TestApplyLoweringOptionBase<TestApplyLoweringOptionPass> {
   TestApplyLoweringOptionPass() = default;
   void runOnOperation() override {
-    if (!options.hasValue()) {
+    if (!optionsString.hasValue()) {
       markAllAnalysesPreserved();
       return;
     }
-    LoweringOptions opts(options, [this](llvm::Twine tw) {
+    LoweringOptions opts(optionsString, [this](llvm::Twine tw) {
       getOperation().emitError(tw);
       signalPassFailure();
     });
