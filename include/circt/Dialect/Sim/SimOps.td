@@ -104,7 +104,7 @@ def DPICallOp : SimOp<"func.dpi.call",
     optional operands `clock` and `enable`.
 
     If `clock` is not provided, the callee is invoked when input values are changed.
-    If provided, the dpi function is called at clock's posedge. The result values behave
+    If provided, the DPI function is called at clock's posedge. The result values behave
     like registers and the DPI function is used as a state transfer function of them.
 
     `enable` operand is used to conditionally call the DPI since DPI call could be quite
