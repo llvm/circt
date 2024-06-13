@@ -2607,22 +2607,23 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
   SMLoc loc = parser.getCurrentLocation();
 
   SmallVector<NamedAttribute, 4> refCellSymbols;
-  if (parser.parseLSquare() ||
-      parser.parseCommaSeparatedList([&]() -> ParseResult {
-        std::string refCellName;
-        std::string externalMem;
-        if (parser.parseKeywordOrString(&refCellName) || parser.parseEqual() ||
-            parser.parseKeywordOrString(&externalMem))
-          return failure();
-        auto externalMemAttr =
-            SymbolRefAttr::get(parser.getContext(), externalMem);
-        refCellSymbols.push_back(
-            NamedAttribute(StringAttr::get(parser.getContext(), refCellName),
-                           externalMemAttr));
-        return success();
-      }) ||
-      parser.parseRSquare())
-    return failure();
+  if (succeeded(parser.parseOptionalLSquare())) {
+    if (parser.parseCommaSeparatedList([&]() -> ParseResult {
+          std::string refCellName;
+          std::string externalMem;
+          if (parser.parseKeywordOrString(&refCellName) ||
+              parser.parseEqual() || parser.parseKeywordOrString(&externalMem))
+            return failure();
+          auto externalMemAttr =
+              SymbolRefAttr::get(parser.getContext(), externalMem);
+          refCellSymbols.push_back(
+              NamedAttribute(StringAttr::get(parser.getContext(), refCellName),
+                             externalMemAttr));
+          return success();
+        }) ||
+        parser.parseRSquare())
+      return failure();
+  }
   result.addAttribute("refCellsMap",
                       DictionaryAttr::get(parser.getContext(), refCellSymbols));
 
@@ -2650,6 +2651,7 @@ void InvokeOp::print(OpAsmPrinter &p) {
     p << refCellName << " = " << externalMem;
   });
   p << "](";
+
   auto ports = getPorts();
   auto inputs = getInputs();
   llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
