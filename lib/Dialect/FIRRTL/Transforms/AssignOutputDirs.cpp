@@ -91,6 +91,9 @@ void AssignOutputDirsPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+  path::remove_dots(outputDir, true);
+
+  llvm::errs() << "****** "  << outputDir << "\n";
 
   auto sep = path::get_separator();
   if (!outputDir.ends_with(sep))

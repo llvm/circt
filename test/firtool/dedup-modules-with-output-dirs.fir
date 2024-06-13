@@ -11,33 +11,26 @@ circuit Top: %[[
     "class": "circt.OutputDirAnnotation",
     "dirname": "YYY",
     "target": "~Top|B"
-  }
+  },
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|A>w"},
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|B>w"}
 ]]
   ; CHECK: FILE "XXX/A.sv"
   ; CHECK: module A
   public module A:
-    input i : UInt<8>
-    output o : UInt<8>
-    connect o, i
+    wire w : UInt<1>
+    w is invalid
 
   ; CHECK: FILE "YYY/B.sv"
   ; CHECK: module B
   public module B:
-    input i : UInt<8>
-    output o : UInt<8>
-    connect o, i
+    wire w : UInt<1>
+    w is invalid
+
 
   public module Top:
-    input a_i : UInt<8>
-    input b_i : UInt<8>
-    output a_o : UInt<8>
-    output b_o : UInt<8>
     inst a of A
     inst b of B
-    connect a.i, a_i
-    connect a_o, a.o
-    connect b.i, b_i
-    connect b_o, b.o
 
 ; // -----
 FIRRTL version 4.0.0
