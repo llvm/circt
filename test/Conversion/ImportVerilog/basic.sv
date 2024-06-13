@@ -90,17 +90,28 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: %p1 = moore.named_constant parameter 1 : !moore.l32
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: %p1 = moore.named_constant parameter [[TMP]] : l32
   parameter p1 = 1;
-  // CHECK: %p2 = moore.named_constant parameter 1 : !moore.l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: %p2 = moore.named_constant parameter [[TMP]] : l32
   parameter p2 = p1;
-  // CHECK: %lp1 = moore.named_constant localparam 2 : !moore.l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: %lp1 = moore.named_constant localparam [[TMP]] : l32
   localparam lp1 = 2;
-  // CHECK: %lp2 = moore.named_constant localparam 2 : !moore.l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: %lp2 = moore.named_constant localparam [[TMP]] : l32
   localparam lp2 = lp1;
-  // CHECK: %sp1 = moore.named_constant specparam 3 : !moore.l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: %sp1 = moore.named_constant specparam [[TMP]] : l32
   specparam sp1 = 3;
-  // CHECK: %sp2 = moore.named_constant specparam 3 : !moore.l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: %sp2 = moore.named_constant specparam [[TMP]] : l32
   specparam sp2 = sp1;
 
   // CHECK: moore.procedure initial {

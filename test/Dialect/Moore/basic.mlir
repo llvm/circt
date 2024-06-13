@@ -101,13 +101,6 @@ moore.module @Module() {
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
   }
-
-  // CHECK: %p1 = moore.named_constant parameter 1 : !moore.l32
-  %p1 = moore.named_constant parameter 1 : !moore.l32
-  // CHECK: %lp1 = moore.named_constant localparam 2 : !moore.l32
-  %lp1 = moore.named_constant localparam 2 : !moore.l32
-  // CHECK: %sp1 = moore.named_constant specparam 3 : !moore.l32
-  %sp1 = moore.named_constant specparam 3 : !moore.l32
 }
 
 // CHECK-LABEL: func.func @Expressions

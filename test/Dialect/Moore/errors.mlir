@@ -98,13 +98,3 @@ moore.conditional %0 : i1 -> i32 {
   moore.yield %2 : i8
 }
 
-// -----
-
-// expected-error @below {{'moore.named_constant' op expects parent op 'moore.module'}}
-%p1 = moore.named_constant parameter 1 : !moore.l32
-
-// -----
-moore.module @Foo(){
-  // expected-error @below {{custom op 'moore.named_constant' constant out of range for result type '!moore.i1'}}
-  %p = moore.named_constant parameter 42 : !moore.i1
-}
