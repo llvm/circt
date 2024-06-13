@@ -330,8 +330,7 @@ def MemOp : HardwareDeclOp<"mem", [CombDataflow]> {
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
 
-    SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
-      computeDataFlow ();
+    SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> computeDataFlow();
   }];
 }
 

@@ -129,8 +129,8 @@ MemOp::computeDataFlow() {
       auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
       deps.push_back({FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
                       FieldRef(memPort, static_cast<unsigned>(enableFieldId))});
-      deps.push_back({{memPort, static_cast<unsigned int>(dataFieldId)},
-                      {memPort, static_cast<unsigned int>(addressFieldId)}});
+      deps.push_back({{memPort, static_cast<unsigned>(dataFieldId)},
+                      {memPort, static_cast<unsigned>(addressFieldId)}});
     }
   return deps;
 }
