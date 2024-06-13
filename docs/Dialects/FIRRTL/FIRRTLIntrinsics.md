@@ -242,3 +242,46 @@ not called. Hence their values will not be modify in that clock.
 | enable            | input     | UInt<1>  | Enable signal                   |
 | ...               | input     | Signals  | Arguments to DPI function call  |
 | result (optional) | output    | Signal   | Optional result of the dpi call |
+
+##### DPI Intrinsic ABI
+Function Declaration:
+* Imported DPI function must be a void function that has input arguments which correspond to operand types, and an output argument which correspond to a result type.
+* Output argument must be a last argument.
+
+Types:
+* Operand and result types must be passive.
+* Aggregate types are lowered into corresponding verilog aggregate.
+* Integer types are lowered into into 2-state types.
+* Small integer types (< 64 bit) must be compatible to C-types and arguments are passed by values. Users are required to use specific integer types for small integers shown in the table below. Large integers are lowered to `bit` and passed by a reference.
+
+| Width | Verilog Type | Argument Passing Modes |
+| ----- | ------------ | ---------------------- |
+| 1     | bit          | value                  |
+| 8     | byte         | value                  |
+| 16    | shortint     | value                  |
+| 32    | int          | value                  |
+| 64    | longint      | value                  |
+| > 64  | bit [w-1:0]  | reference              |
+
+Example SV output:
+```firrtl
+node result = intrinsic(circt_dpi_call<isClocked = 1, functionName="dpi_func"> : UInt<64>, clock, enable, uint_8_value, uint_32_value)
+```
+```verilog
+import "DPI-C" function void dpi_func(
+  input  byte    in_0,
+         int     in_1,
+  output longint out_0
+);
+
+...
+
+logic [63:0] _dpi_func_0;
+reg   [63:0] _GEN;
+always @(posedge clock) begin
+  if (enable) begin
+    dpi_func(in1, in2, _dpi_func_0);
+    _GEN <= _dpi_func_0;
+  end
+end
+```
