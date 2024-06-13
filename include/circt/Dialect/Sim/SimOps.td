@@ -59,11 +59,7 @@ def FatalOp : SimOp<"fatal"> {
 
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-<<<<<<< HEAD
       FunctionOpInterface]> {
-=======
-      FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
->>>>>>> ee7d59be99cca7060ea30b95d9a71a82c04a37bc
   let summary = "A System Verilog function";
   let description = [{
     `sim.func.dpi` models an external function in a core dialect.
@@ -108,11 +104,7 @@ def DPICallOp : SimOp<"func.dpi.call",
     optional operands `clock` and `enable`.
 
     If `clock` is not provided, the callee is invoked when input values are changed.
-<<<<<<< HEAD
-    If provided, the dpi function is called at clock's posedge. The result values behave
-=======
     If provided, the DPI function is called at clock's posedge. The result values behave
->>>>>>> ee7d59be99cca7060ea30b95d9a71a82c04a37bc
     like registers and the DPI function is used as a state transfer function of them.
 
     `enable` operand is used to conditionally call the DPI since DPI call could be quite

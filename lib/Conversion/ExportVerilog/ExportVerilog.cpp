@@ -4307,10 +4307,7 @@ LogicalResult StmtEmitter::emitFunctionCall(CallOpTy op) {
       emitExpression(bpassignOp.getDest(), ops);
     } else {
       auto assignOp = cast<sv::AssignOp>(*explicitReturn.user_begin());
-<<<<<<< HEAD
-=======
       ps << "assign" << PP::nbsp;
->>>>>>> ee7d59be99cca7060ea30b95d9a71a82c04a37bc
       emitExpression(assignOp.getDest(), ops);
     }
     ps << PP::nbsp << "=" << PP::nbsp;
