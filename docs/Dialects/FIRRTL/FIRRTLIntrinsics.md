@@ -214,3 +214,31 @@ ifdef USE_FORMAL_ONLY_CONSTRAINTS
  `endif // USE_UNR_ONLY_CONSTRAINTS
 endif // USE_FORMAL_ONLY_CONSTRAINTS
 ```
+
+### circt_dpi_call
+
+Call a DPI function. `clock` is optional and if `clock` is not provided,
+the callee is invoked when input values are changed.
+If provided, the dpi function is called at clock's posedge. The result values behave
+like registers and the DPI function is used as a state transfer function of them.
+
+`enable` operand is used to conditionally call the DPI since DPI call could be quite
+more expensive than native constructs. When `enable` is low, results of unclocked
+calls are undefined and evaluated into `X`. Users are expected to gate result values
+by another `enable` to model a default value of results.
+
+For clocked calls, a low enable means that its register state transfer function is
+not called. Hence their values will not be modify in that clock.
+
+| Parameter     | Type   | Description                      |
+| ------------- | ------ | -------------------------------- |
+| isClocked     | int    | Set 1 if the dpi call is clocked |
+| functionName  | string | Specify the function name        |
+
+
+| Port              | Direction | Type     | Description                     |
+| ----------------- | --------- | -------- | ------------------------------- |
+| clock (optional)  | input     | Clock    | Optional clock operand          |
+| enable            | input     | UInt<1>  | Enable signal                   |
+| ...               | input     | Signals  | Arguments to DPI function call  |
+| result (optional) | output    | Signal   | Optional result of the dpi call |

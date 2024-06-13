@@ -59,7 +59,7 @@ def FatalOp : SimOp<"fatal"> {
 
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-      FunctionOpInterface, HasParent<"mlir::ModuleOp">]> {
+      FunctionOpInterface]> {
   let summary = "A System Verilog function";
   let description = [{
     `sim.func.dpi` models an external function in a core dialect.
