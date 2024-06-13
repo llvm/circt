@@ -27,7 +27,6 @@ circuit Top: %[[
     wire w : UInt<1>
     w is invalid
 
-
   public module Top:
     inst a of A
     inst b of B
@@ -43,20 +42,20 @@ circuit Top: %[[
     "dirname": "YYY",
     "target": "~Top|B"
   }
+    {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|A>w"},
+  {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|B>w"}
 ]]
   ; CHECK-NOT: FILE "YYY/B.sv"
   ; CHECK: module A
   public module A:
-    input i : UInt<8>
-    output o : UInt<8>
-    connect o, i
+    wire w : UInt<1>
+    w is invalid
 
   ; CHECK: FILE "YYY/B.sv"
   ; CHECK: module B
   public module B:
-    input i : UInt<8>
-    output o : UInt<8>
-    connect o, i
+    wire w : UInt<1>
+    w is invalid
 
   public module Top:
     input a_i : UInt<8>
