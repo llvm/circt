@@ -75,7 +75,12 @@ static OutputFileAttr getOutputFile(Operation *op) {
 }
 
 namespace {
-class AssignOutputDirsPass : public AssignOutputDirsBase<AssignOutputDirsPass> {
+struct AssignOutputDirsPass : public AssignOutputDirsBase<AssignOutputDirsPass> {
+  AssignOutputDirsPass() = default;
+  AssignOutputDirsPass(StringRef outputDir) : AssignOutputDirsPass() {
+    outputDirOption = std::string(outputDir);
+  }
+
   void runOnOperation() override;
 };
 } // namespace
@@ -142,4 +147,9 @@ void AssignOutputDirsPass::runOnOperation() {
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createAssignOutputDirsPass() {
   return std::make_unique<AssignOutputDirsPass>();
+}
+
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createAssignOutputDirsPass(StringRef outputDir) {
+  return std::make_unique<AssignOutputDirsPass>(outputDir);
 }
