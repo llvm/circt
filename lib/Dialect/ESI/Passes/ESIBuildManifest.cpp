@@ -8,7 +8,6 @@
 
 #include "../PassDetails.h"
 
-#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/AppID.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIPasses.h"

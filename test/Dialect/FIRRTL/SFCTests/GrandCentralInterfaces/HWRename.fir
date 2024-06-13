@@ -1,11 +1,12 @@
 ; RUN: firtool --annotation-file %S/HWRename.anno.json %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit Top:
   module Companion :
     output io : { }
 
     wire _WIRE : UInt<1>
-    _WIRE <= UInt<1>("h0")
+    _WIRE <= UInt<1>(0h0)
 
   module DUT:
     input a: UInt<1>
@@ -18,7 +19,7 @@ circuit Top:
 
     inst companion of Companion
 
-  module Top:
+  public module Top:
     input a: UInt<1>
     output b: UInt<1>
 

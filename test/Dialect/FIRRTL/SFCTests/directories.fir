@@ -6,6 +6,7 @@
 ; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_DUT
 ; RUN: firtool %s -disable-all-randomization -disable-opt -repl-seq-mem -repl-seq-mem-file=mems.conf -annotation-file %s.sitestblackboxes.anno.json --ir-verilog | FileCheck %s -check-prefix=MLIR_OUT
 
+FIRRTL version 4.0.0
 circuit TestHarness:
   ; Foo* are instantiated only by the TestHarness
   module Foo:
@@ -98,7 +99,7 @@ circuit TestHarness:
     inst baz_bbox of Baz_BlackBox
 
   ; This is the Test Harness, i.e., the top of the design.
-  module TestHarness:
+  public module TestHarness:
 
     inst foo of Foo
     inst foo_bbox of Foo_BlackBox
