@@ -179,17 +179,14 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
     symStr += ":";
     symStr += op.getNameAttr().str();
     auto symAttr = rewriter.getStringAttr(symStr);
-    if (isa<IntegerAttr>(value)) {
-      auto valueInt = cast<IntegerAttr>(value);
-      auto paramOp =
-          rewriter.create<hw::ParamValueOp>(op->getLoc(), resultType, valueInt);
-      rewriter.create<hw::WireOp>(paramOp->getLoc(), resultType,
-                                  paramOp->getResult(0), op.getNameAttr(),
-                                  hw::InnerSymAttr::get(symAttr));
-      rewriter.eraseOp(op);
-      return success();
-    }
-    return failure();
+    auto valueInt = IntegerAttr::get(resultType, value);
+    auto paramOp =
+        rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, valueInt);
+    rewriter.create<hw::WireOp>(paramOp->getLoc(), resultType,
+                                paramOp->getResult(0), op.getNameAttr(),
+                                hw::InnerSymAttr::get(symAttr));
+    rewriter.eraseOp(op);
+    return success();
   }
 };
 

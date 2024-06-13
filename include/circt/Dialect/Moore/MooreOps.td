@@ -358,7 +358,7 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
   let arguments = (ins StrAttr:$name,
                        NamedConstAttr:$kind,
-                       AnyAttr:$value);
+                       APIntAttr:$value);
   let results = (outs IntType:$result);
   let assemblyFormat = [{
     $kind
