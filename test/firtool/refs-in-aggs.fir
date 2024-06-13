@@ -6,6 +6,7 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
 ; CHECK-LABEL: circuit "Bundle"
+FIRRTL version 4.0.0
 circuit Bundle :
 ; CHECK-LABEL: module private @Child
 ; CHECK-SAME: in %in: !firrtl.bundle
@@ -54,7 +55,7 @@ circuit Bundle :
 ; CHECK-LABEL: module @Bundle
 ; CHECK: opensubfield
 ; CHECK: opensubindex
-  module Bundle:
+  public module Bundle:
     input in : {a : UInt<1>, b : UInt<1>[2]}
     output out1 : {a : UInt<1>, b : UInt<1>[2]}
     output out2 : {a : UInt<1>, b : UInt<1>[2]}

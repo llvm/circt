@@ -51,6 +51,7 @@ target_link_libraries(circt-opt
   CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
+  CIRCTMooreTransforms
   CIRCTMooreToCore
   CIRCTMSFT
   CIRCTMSFTTransforms

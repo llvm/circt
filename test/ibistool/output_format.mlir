@@ -56,7 +56,7 @@
 // CHECK-VERILOG: endmodule
 
 ibis.design @foo {
-ibis.class @A {
+ibis.class sym @A {
   %this = ibis.this @A
   ibis.port.input "in" sym @in : i1
   ibis.port.output "out" sym @out : i1

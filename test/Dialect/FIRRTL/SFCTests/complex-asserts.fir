@@ -3,10 +3,11 @@
 ; Tests extracted from:
 ; - test/scala/firrtl/extractverif/ExtractAssertsSpec.scala
 
+FIRRTL version 4.0.0
 circuit Foo:
   ; expected-error @below {{module contains 10 printf-encoded verification operation(s), which are no longer supported.}}
   ; expected-note @below {{For more information, see https://github.com/llvm/circt/issues/6970}}
-  module Foo:
+  public module Foo:
     input clock : Clock
     input reset : AsyncReset
     input predicate1 : UInt<1>

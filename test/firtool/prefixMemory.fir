@@ -3,6 +3,7 @@
 ; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-fir | FileCheck %s --check-prefix=REPL-FIR --check-prefix=CHECK-FIR
 ; RUN: firtool --no-dedup %s --repl-seq-mem --repl-seq-mem-file=test.txt --ir-sv | FileCheck %s --check-prefix=REPL-HW --check-prefix=CHECK-HW
 
+FIRRTL version 4.0.0
 circuit Foo : %[[
   {
     "class":"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
@@ -51,10 +52,10 @@ circuit Foo : %[[
       writer => MPORT
     mem.readData_MPORT.addr is invalid
     mem.readData_MPORT.clk is invalid
-    mem.readData_MPORT.en <= UInt<1>("h0")
+    mem.readData_MPORT.en <= UInt<1>(0h0)
     mem.MPORT.addr is invalid
     mem.MPORT.clk is invalid
-    mem.MPORT.en <= UInt<1>("h0")
+    mem.MPORT.en <= UInt<1>(0h0)
     mem.MPORT.data is invalid
     mem.MPORT.mask is invalid
     mem.readData_MPORT.addr <= readAddr
@@ -63,10 +64,10 @@ circuit Foo : %[[
     when writeEn :
       mem.MPORT.addr <= writeAddr
       mem.MPORT.clk <= clock
-      mem.MPORT.en <= UInt<1>("h1")
-      mem.MPORT.mask <= UInt<1>("h0")
+      mem.MPORT.en <= UInt<1>(0h1)
+      mem.MPORT.mask <= UInt<1>(0h0)
       mem.MPORT.data <= writeData
-      mem.MPORT.mask <= UInt<1>("h1")
+      mem.MPORT.mask <= UInt<1>(0h1)
 
   ; CHECK-FIR-LABEL: firrtl.module private @prefix2_Baz
   ; CHECK-HW-LABEL: hw.module private @prefix2_Baz
@@ -94,10 +95,10 @@ circuit Foo : %[[
       writer => MPORT
     mem.readData_MPORT.addr is invalid
     mem.readData_MPORT.clk is invalid
-    mem.readData_MPORT.en <= UInt<1>("h0")
+    mem.readData_MPORT.en <= UInt<1>(0h0)
     mem.MPORT.addr is invalid
     mem.MPORT.clk is invalid
-    mem.MPORT.en <= UInt<1>("h0")
+    mem.MPORT.en <= UInt<1>(0h0)
     mem.MPORT.data is invalid
     mem.MPORT.mask is invalid
     mem.readData_MPORT.addr <= readAddr
@@ -106,12 +107,12 @@ circuit Foo : %[[
     when writeEn :
       mem.MPORT.addr <= writeAddr
       mem.MPORT.clk <= clock
-      mem.MPORT.en <= UInt<1>("h1")
-      mem.MPORT.mask <= UInt<1>("h0")
+      mem.MPORT.en <= UInt<1>(0h1)
+      mem.MPORT.mask <= UInt<1>(0h0)
       mem.MPORT.data <= writeData
-      mem.MPORT.mask <= UInt<1>("h1")
+      mem.MPORT.mask <= UInt<1>(0h1)
 
-  module Foo :
+  public module Foo :
     input clock : Clock
     input reset : UInt<1>
     input readAddr : UInt<3>

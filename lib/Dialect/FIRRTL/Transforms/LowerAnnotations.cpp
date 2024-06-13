@@ -704,12 +704,20 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
 
     // If the sink is a wire with no users, then convert this to a node.
-    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
-    if (destOp && dest.getUses().empty()) {
-      builder.create<NodeOp>(src, destOp.getName())
-          .setAnnotationsAttr(destOp.getAnnotations());
-      opsToErase.push_back(destOp);
-      return success();
+    // This is done to convert the undriven wires created for GCView's
+    // into the NodeOp's they're required to be in GrandCentral.cpp.
+    if (auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+        destOp && dest.getUses().empty()) {
+      // Only perform this if the type is suitable (passive).
+      if (auto baseType = dyn_cast<FIRRTLBaseType>(src.getType());
+          baseType && baseType.isPassive()) {
+        // Note that the wire is replaced with the source type
+        // regardless, continue this behavior.
+        builder.create<NodeOp>(src, destOp.getName())
+            .setAnnotationsAttr(destOp.getAnnotations());
+        opsToErase.push_back(destOp);
+        return success();
+      }
     }
 
     // Otherwise, just connect to the source.
@@ -857,11 +865,23 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // (connectable).
       if (sourceFType != sinkFType &&
           !areTypesEquivalent(sinkFType, sourceFType)) {
-        auto diag = mlir::emitError(source.getLoc())
-                    << "Wiring Problem source type " << sourceType
-                    << " does not match sink type " << sinkType;
-        diag.attachNote(sink.getLoc()) << "The sink is here.";
-        return failure();
+        // Support tapping mixed alignment -> passive , emulate probe behavior.
+        if (auto sourceBaseType = dyn_cast<FIRRTLBaseType>(sourceFType);
+            problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer &&
+            sourceBaseType &&
+            areTypesEquivalent(sinkFType, sourceBaseType.getPassiveType())) {
+          // Change "sourceType" to the passive version that's type-equivalent,
+          // this will be used for wiring on the "up" side.
+          // This relies on `emitConnect` supporting connecting to the passive
+          // version from the original source.
+          sourceType = sourceBaseType.getPassiveType();
+        } else {
+          auto diag = mlir::emitError(source.getLoc())
+                      << "Wiring Problem source type " << sourceType
+                      << " does not match sink type " << sinkType;
+          diag.attachNote(sink.getLoc()) << "The sink is here.";
+          return failure();
+        }
       }
     }
     // If wiring using references, check that the sink value we connect to is
