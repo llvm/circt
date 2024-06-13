@@ -113,6 +113,28 @@ bool firrtl::isDuplexValue(Value val) {
   return false;
 }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+MemOp::computeDataFlow() {
+  // If read result has non-zero latency, then no combinational dependency
+  // exists.
+  if (getReadLatency() > 0)
+    return {};
+
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+  // Add a dependency from the enable and address fields to the data field.
+  for (auto memPort : getResults())
+    if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
+      auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+      auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
+      auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+      deps.push_back({FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+                      FieldRef(memPort, static_cast<unsigned>(enableFieldId))});
+      deps.push_back({{memPort, static_cast<unsigned>(dataFieldId)},
+                      {memPort, static_cast<unsigned>(addressFieldId)}});
+    }
+  return deps;
+}
+
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;
