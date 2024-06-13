@@ -97,4 +97,3 @@ moore.conditional %0 : i1 -> i32 {
   // expected-error @below {{yield type must match conditional. Expected '!moore.i32', but got '!moore.i8'}}
   moore.yield %2 : i8
 }
-

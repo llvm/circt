@@ -26,7 +26,7 @@ moore.module @Module() {
   moore.instance "empty" @Empty() -> ()
 
   // CHECK: %[[I1_READ:.+]] = moore.read %i1
-  // CHECK: %[[I2_READ:.+]] = moore.read %i2
+  // CHECK: %[[I2_READ:.+]] = moore.read %i2 
   // CHECK: moore.instance "ports" @Ports(a: %[[I1_READ]]: !moore.string, c: %[[I2_READ]]: !moore.event) -> (b: !moore.string, d: !moore.event)
   %i1 = moore.variable : <!moore.string>
   %i2 = moore.variable : <!moore.event>
