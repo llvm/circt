@@ -24,6 +24,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
+#include <bitset>
 
 using namespace circt;
 using namespace calyx;
@@ -446,7 +447,7 @@ private:
       return;
     }
 
-    auto definingOp = value.getDefiningOp();
+    auto *definingOp = value.getDefiningOp();
     assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
@@ -485,10 +486,12 @@ private:
           if (auto fltAttr = dyn_cast<FloatAttr>(attr)) {
             APFloat value = fltAttr.getValue();
             auto type = cast<FloatType>(fltAttr.getType());
-            double doubleValue = value.convertToDouble();
+            double floatValue = value.convertToFloat();
+            uint32_t bitPattern = floatToIEEE754(floatValue);
+            std::bitset<sizeof(float) * CHAR_BIT> bits(bitPattern);
             (isIndented ? indent() : os)
                 << std::to_string(value.getSizeInBits(type.getFloatSemantics()))
-                << apostrophe() << "d" << std::to_string(doubleValue);
+                << apostrophe() << "d" << bits.to_string();
           }
         })
         .Default(
@@ -606,6 +609,15 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
+
+  uint32_t floatToIEEE754(float f) {
+    union {
+      float input;
+      uint32_t output;
+    } data;
+    data.input = f;
+    return data.output;
+  }
 };
 
 } // end anonymous namespace

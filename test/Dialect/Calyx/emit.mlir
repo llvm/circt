@@ -258,7 +258,7 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK-LABEL: group ret_assign_0 {
       // CHECK-NEXT:   ret_arg0_reg.in = 32'd42;
       // CHECK-NEXT:   ret_arg0_reg.write_en = 1'd1;
-      // CHECK-NEXT:   ret_arg1_reg.in = 32'd4.200000;
+      // CHECK-NEXT:   ret_arg1_reg.in = 32'd01000000100001100110011001100110;
       // CHECK-NEXT:   ret_arg1_reg.write_en = 1'd1;
       // CHECK-NEXT:   ret_assign_0[done] = (ret_arg1_reg.done & ret_arg0_reg.done) ? 1'd1;
       // CHECK-NEXT: }
