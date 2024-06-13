@@ -37,13 +37,6 @@ struct WireOpConversionPattern : OpConversionPattern<hw::WireOp> {
   LogicalResult
   matchAndRewrite(hw::WireOp wire, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // If the wire has a name or an `sv.namehint` attribute, propagate it as an
-    // `sv.namehint` to the expression.
-    if (auto *inputOp = adaptor.getInput().getDefiningOp())
-      if (auto name = chooseName(wire, inputOp))
-        rewriter.modifyOpInPlace(
-            inputOp, [&] { inputOp->setAttr("sv.namehint", name); });
-
     rewriter.replaceOp(wire, adaptor.getInput());
     return success();
   }
