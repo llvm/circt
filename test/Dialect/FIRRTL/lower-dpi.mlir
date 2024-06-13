@@ -23,12 +23,12 @@ firrtl.circuit "DPI" {
     // CHECK-NEXT: %12 = builtin.unrealized_conversion_cast %in_1 : !firrtl.uint<2> to i2
     // CHECK-NEXT: %13 = sim.func.dpi.call @unclocked_result(%11, %12) enable %10 : (i2, i2) -> i2
     // CHECK-NEXT: %14 = builtin.unrealized_conversion_cast %13 : i2 to !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.strictconnect %out_0, %5 : !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.strictconnect %out_1, %14 : !firrtl.uint<2>
+    // CHECK-NEXT:firrtl.matchingconnect %out_0, %5 : !firrtl.uint<2>
+    // CHECK-NEXT:firrtl.matchingconnect %out_1, %14 : !firrtl.uint<2>
     %0 = firrtl.int.dpi.call "clocked_result"(%in_0, %in_1) clock %clock enable %enable {name = "result1"} : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     firrtl.int.dpi.call "clocked_void"(%in_0, %in_1) clock %clock enable %enable : (!firrtl.uint<2>, !firrtl.uint<2>) -> ()
     %1 = firrtl.int.dpi.call "unclocked_result"(%in_0, %in_1) enable %enable {name = "result2"} : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    firrtl.strictconnect %out_0, %0 : !firrtl.uint<2>
-    firrtl.strictconnect %out_1, %1 : !firrtl.uint<2>
+   firrtl.matchingconnect %out_0, %0 : !firrtl.uint<2>
+   firrtl.matchingconnect %out_1, %1 : !firrtl.uint<2>
   }
 }
