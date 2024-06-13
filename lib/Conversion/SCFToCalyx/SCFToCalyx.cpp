@@ -2055,22 +2055,46 @@ private:
     Block *entryBlock = &caller.getBody().front();
     builder.setInsertionPointToStart(entryBlock);
 
-    SmallVector<Value, 4> memRefArgs;
+    SmallVector<Type, 4> nonMemRefCalleeArgTypes;
     for (auto arg : callee.getArguments()) {
-      assert(isa<MemRefType>(arg.getType()) &&
-             "Currently only support callee's arguments are all memrefs.");
-      auto memrefType = cast<MemRefType>(arg.getType());
-      auto allocOp =
-          builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
-      memRefArgs.push_back(allocOp);
+      if (!isa<MemRefType>(arg.getType())) {
+        nonMemRefCalleeArgTypes.push_back(arg.getType());
+      }
+    }
+
+    FunctionType callerFnType = caller.getFunctionType();
+    SmallVector<Type, 4> updatedCallerArgTypes(callerFnType.getInputs());
+    updatedCallerArgTypes.append(nonMemRefCalleeArgTypes.begin(),
+                                 nonMemRefCalleeArgTypes.end());
+    caller.setType(FunctionType::get(caller.getContext(), updatedCallerArgTypes,
+                                     callerFnType.getResults()));
+
+    for (Type type : nonMemRefCalleeArgTypes) {
+      entryBlock->addArgument(type, caller.getLoc());
+    }
+
+    SmallVector<Value, 4> memRefArgs;
+    SmallVector<Value, 4> otherArgs;
+    for (auto arg : callee.getArguments()) {
+      if (isa<MemRefType>(arg.getType())) {
+        auto memrefType = cast<MemRefType>(arg.getType());
+        auto allocOp =
+            builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
+        memRefArgs.push_back(allocOp);
+      } else {
+        auto callerArg = entryBlock->getArgument(otherArgs.size());
+        otherArgs.push_back(callerArg);
+      }
     }
 
     auto calleeName =
         SymbolRefAttr::get(builder.getContext(), callee.getSymName());
     auto resultTypes = callee.getResultTypes();
 
-    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
-                           memRefArgs);
+    SmallVector<Value, 4> allArgs;
+    allArgs.append(memRefArgs.begin(), memRefArgs.end());
+    allArgs.append(otherArgs.begin(), otherArgs.end());
+    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes, allArgs);
   }
 
   /// Conditionally creates an optional new top-level function; and inserts a
