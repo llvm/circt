@@ -43,6 +43,7 @@ void LowerDPIPass::runOnOperation() {
     };
 
     SmallVector<DpiCallCollections, 0> collections;
+    collections.reserve(64);
 
     for (auto module : circuitOp.getOps<FModuleOp>())
       collections.push_back(DpiCallCollections{module, {}});
