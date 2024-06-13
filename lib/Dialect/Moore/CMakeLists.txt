@@ -19,6 +19,7 @@ add_circt_dialect_library(CIRCTMoore
   CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
+  MLIRMemorySlotInterfaces
 )
 
 add_dependencies(circt-headers MLIRMooreIncGen)
