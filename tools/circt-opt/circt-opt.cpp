@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
+  mlir::registerMem2RegPass();
 
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));
