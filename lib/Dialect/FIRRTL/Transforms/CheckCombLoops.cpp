@@ -88,7 +88,12 @@ public:
 
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
-          .Case<Sequential>([&](auto) {})
+          .Case<CombDataFlow>([&](CombDataFlow df) {
+            // computeDataFlow returns a pair of FieldRefs, first element is the
+            // destination and the second is the source.
+            for (auto &dep : df.computeDataFlow())
+              addDrivenBy(dep.first, dep.second);
+          })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
             if (auto node = dyn_cast<NodeOp>(op))
@@ -102,7 +107,6 @@ public:
             recordDataflow(ref, data);
             recordProbe(data, ref);
           })
-          .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
           })
@@ -444,23 +448,6 @@ public:
         return;
     }
     valToFieldRefs[result].emplace_back(base, fieldID);
-  }
-
-  void handleMemory(MemOp mem) {
-    if (mem.getReadLatency() > 0)
-      return;
-    // Add the enable and address fields as the drivers of the data field.
-    for (auto memPort : mem.getResults())
-      // TODO: Can reftype ports create cycle ?
-      if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
-        auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
-        auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
-        auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(enableFieldId)});
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(addressFieldId)});
-      }
   }
 
   // Perform an iterative DFS traversal of the given graph. Record paths between
