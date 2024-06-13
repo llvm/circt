@@ -138,7 +138,7 @@ void LowerDPIPass::runOnOperation() {
         auto diag = firstDPICallop.emitOpError()
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " input types don't match ";
-        diag.attachNote(firstDPICallop.getLoc())
+        diag.attachNote(dpiOp.getLoc())
             << " mismatched caller is here";
         return signalPassFailure();
       }
@@ -146,7 +146,7 @@ void LowerDPIPass::runOnOperation() {
         auto diag = firstDPICallop.emitOpError()
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " output types don't match";
-        diag.attachNote(firstDPICallop.getLoc())
+        diag.attachNote(dpiOp.getLoc())
             << " mismatched caller is here";
         return signalPassFailure();
       }
