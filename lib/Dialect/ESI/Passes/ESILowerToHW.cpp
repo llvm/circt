@@ -13,7 +13,6 @@
 #include "../PassDetails.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
