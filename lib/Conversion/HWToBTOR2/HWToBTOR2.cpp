@@ -33,7 +33,6 @@
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTHWTOBTOR2
-#define GEN_PASS_DEF_CONVERTHWTOBTOR2
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
