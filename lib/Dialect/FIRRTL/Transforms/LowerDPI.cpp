@@ -126,7 +126,6 @@ void LowerDPIPass::runOnOperation() {
                           ->getResult(0);
         dpiOp.getResult().replaceAllUsesWith(result);
       }
-      dpiOp.erase();
     };
 
     lowerCall(firstDPICallop);
@@ -150,6 +149,9 @@ void LowerDPIPass::runOnOperation() {
       }
       lowerCall(dpiOp);
     }
+
+    for (auto callOp : calls)
+      callOp.erase();
   }
 }
 
