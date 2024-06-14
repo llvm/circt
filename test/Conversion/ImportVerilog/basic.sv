@@ -90,23 +90,28 @@ module Basic;
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: [[TMP1:%.+]] = moore.constant 1 : i32
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
-  // CHECK: %p1 = moore.named_constant parameter [[TMP2]] : l32
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: %p1 = moore.named_constant parameter [[TMP]] : l32
   parameter p1 = 1;
-  // CHECK: %p2 = moore.named_constant parameter %p1 : l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
+  // CHECK: %p2 = moore.named_constant parameter [[TMP]] : l32
   parameter p2 = p1;
-  // CHECK: [[TMP1:%.+]] = moore.constant 2 : i32
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
-  // CHECK: %lp1 = moore.named_constant localparam [[TMP2]] : l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: %lp1 = moore.named_constant localparam [[TMP]] : l32
   localparam lp1 = 2;
-  // CHECK: %lp2 = moore.named_constant localparam %lp1 : l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
+  // CHECK: %lp2 = moore.named_constant localparam [[TMP]] : l32
   localparam lp2 = lp1;
-  // CHECK: [[TMP1:%.+]] = moore.constant 3 : i32
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
-  // CHECK: %sp1 = moore.named_constant specparam [[TMP2]] : l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: %sp1 = moore.named_constant specparam [[TMP]] : l32
   specparam sp1 = 3;
-  // CHECK: %sp2 = moore.named_constant specparam %sp1 : l32
+
+  // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
+  // CHECK: %sp2 = moore.named_constant specparam [[TMP]] : l32
   specparam sp2 = sp1;
 
   // CHECK: moore.procedure initial {
@@ -1203,4 +1208,51 @@ module MultiPorts(
   // CHECK: moore.assign [[C0]], %c0
   // CHECK: [[C1_READ:%.+]] = moore.read %c1
   // CHECK: moore.output [[V1_READ]], [[C1_READ]]
+endmodule
+
+// CHECK-LABEL: moore.module @EventControl(in %clk : !moore.l1)
+module EventControl(input clk);
+  // CHECK: %clk_0 = moore.net name "clk" wire : <l1>
+
+  int a1, a2, b, c;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event posedge [[CLK_READ]] : l1
+  always @(posedge clk) begin end;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event negedge [[CLK_READ]] : l1
+  always @(negedge clk) begin end;
+
+  // CHECK: moore.procedure always
+  // CHECK:   [[CLK_READ:%.+]] = moore.read %clk_0 : l1
+  // CHECK:   moore.wait_event edge [[CLK_READ]] : l1
+  always @(edge clk) begin end;
+
+  // CHECK: moore.procedure always {
+  // CHECK:   [[B_READ:%.+]] = moore.read %b : i32
+  // CHECK:   moore.wait_event none [[B_READ]] : i32
+  // CHECK:   [[C_READ:%.+]] = moore.read %c : i32
+  // CHECK:   moore.wait_event none [[C_READ]] : i32
+  always @(b, c) begin
+    // CHECK: [[B_READ:%.+]] = moore.read %b : i32
+    // CHECK: [[C_READ:%.+]] = moore.read %c : i32
+    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
+    // CHECK: moore.blocking_assign %a1, [[ADD]] : i32
+    a1 = b + c;
+  end;
+
+  // CHECK: moore.procedure always
+  always @(*) begin
+    // CHECK: [[B_READ:%.+]] = moore.read %b : i32
+    // CHECK: [[C_READ:%.+]] = moore.read %c : i32
+    // CHECK: [[ADD:%.+]] = moore.add [[B_READ]], [[C_READ]] : i32
+    // CHECK: moore.blocking_assign %a2, [[ADD]] : i32
+    a2 = b + c;
+  end
+
+  // CHECK: moore.assign %clk_0, %clk : l1
+  // CHECK: moore.output
 endmodule

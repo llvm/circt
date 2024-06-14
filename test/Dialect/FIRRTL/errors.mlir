@@ -2462,3 +2462,21 @@ firrtl.circuit "Top" {
   }
 }
 
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{unknown width is not allowed for DPI}}
+    %1 = firrtl.int.dpi.call "clocked_result"(%in_1) clock %clock enable %enable : (!firrtl.uint) -> !firrtl.uint<8>
+  }
+}
+
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{integer types used by DPI functions must have a specific bit width; it must be equal to 1(bit), 8(byte), 16(shortint), 32(int), 64(longint) or greater than 64, but got '!firrtl.uint<4>'}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
+  }
+}

@@ -28,6 +28,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerClasses.cpp
+  LowerDPI.cpp
   LowerIntmodules.cpp
   LowerIntrinsics.cpp
   LowerLayers.cpp
@@ -69,6 +70,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTEmit
   CIRCTHW
   CIRCTOM
+  CIRCTSeq
+  CIRCTSim
   CIRCTSV
   CIRCTSupport
   MLIRIR

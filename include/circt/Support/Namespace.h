@@ -16,6 +16,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "circt/Support/SymCache.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Twine.h"
@@ -40,6 +41,14 @@ public:
   Namespace &operator=(Namespace &&other) {
     nextIndex = std::move(other.nextIndex);
     return *this;
+  }
+
+  void add(mlir::ModuleOp module) {
+    assert(module->getNumRegions() == 1);
+    for (auto &op : module.getBody(0)->getOperations())
+      if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
+              SymbolTable::getSymbolAttrName()))
+        nextIndex.insert({symbol.getValue(), 0});
   }
 
   /// SymbolCache initializer; initialize from every key that is convertible to
