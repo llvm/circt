@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
@@ -19,6 +18,13 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_COMPILECONTROL
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -179,7 +185,8 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
 
 namespace {
 
-struct CompileControlPass : public CompileControlBase<CompileControlPass> {
+struct CompileControlPass
+    : public circt::calyx::impl::CompileControlBase<CompileControlPass> {
   void runOnOperation() override;
 };
 

@@ -8,7 +8,6 @@
 
 #include "PassDetails.h"
 
-#include "circt/Conversion/HandshakeToDC.h"
 #include "circt/Dialect/DC/DCTypes.h"
 #include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"

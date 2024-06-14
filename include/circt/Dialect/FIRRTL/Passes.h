@@ -204,6 +204,9 @@ std::unique_ptr<mlir::Pass> createModuleSummaryPass();
 
 std::unique_ptr<mlir::Pass> createLowerDPIPass();
 
+std::unique_ptr<mlir::Pass>
+createAssignOutputDirsPass(mlir::StringRef outputDir = "");
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

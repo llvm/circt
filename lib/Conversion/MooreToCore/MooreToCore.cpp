@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/MooreToCore.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
@@ -19,8 +18,14 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTMOORETOCORE
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -151,6 +156,35 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getValueAttr());
+    return success();
+  }
+};
+
+struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NamedConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    SmallString<32> symStr;
+    switch (op.getKind()) {
+    case NamedConst::Parameter:
+      symStr = "parameter";
+      break;
+    case NamedConst::LocalParameter:
+      symStr = "localparameter";
+      break;
+    case NamedConst::SpecParameter:
+      symStr = "specparameter";
+      break;
+    }
+    auto symAttr =
+        rewriter.getStringAttr(symStr + Twine(":") + adaptor.getName());
+    rewriter.replaceOpWithNewOp<hw::WireOp>(op, resultType, adaptor.getValue(),
+                                            op.getNameAttr(),
+                                            hw::InnerSymAttr::get(symAttr));
     return success();
   }
 };
@@ -569,6 +603,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, ConversionOpConversion,
+    NamedConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
@@ -628,7 +663,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct MooreToCorePass : public ConvertMooreToCoreBase<MooreToCorePass> {
+struct MooreToCorePass
+    : public circt::impl::ConvertMooreToCoreBase<MooreToCorePass> {
   void runOnOperation() override;
 };
 } // namespace

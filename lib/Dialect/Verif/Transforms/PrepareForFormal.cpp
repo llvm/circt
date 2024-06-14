@@ -1,11 +1,11 @@
-//===- FlattenWires.cpp - Flattens all wires ------*- C++ -*-===//
+//===- PrepareForFormal.cpp - Formal Preparations --------------*- C++ -*--===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //===----------------------------------------------------------------------===//
 //
-// Replace all wires with their inputs.
+// Prepare a circuit for the formal verification back-ends.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,9 +26,9 @@ using namespace mlir;
 using namespace verif;
 
 namespace {
-/// Flatten wires by unconditionally replacing them with their inputs
+/// Inline wires by unconditionally replacing them with their inputs
 /// Wires create an alias for a set of operations, they are usually removed
-/// through canonicalization at some point.Some wires are however
+/// through canonicalization at some point. Some wires are however
 /// maintained.This pass unconditionally replaces all wires with their inputs,
 /// making it easier to reason about in contexts where wires don't exist.
 struct WireOpConversionPattern : OpConversionPattern<hw::WireOp> {

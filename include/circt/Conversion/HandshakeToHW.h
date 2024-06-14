@@ -24,6 +24,9 @@ class Pass;
 
 namespace circt {
 
+#define GEN_PASS_DECL_HANDSHAKETOHW
+#include "circt/Conversion/Passes.h.inc"
+
 namespace esi {
 class ChannelType;
 } // namespace esi

@@ -287,17 +287,12 @@ struct MemberVisitor {
 
   // Handle parameters.
   LogicalResult visit(const slang::ast::ParameterSymbol &paramNode) {
-    auto type = context.convertType(*paramNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(paramNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = paramNode.getInitializer();
-    // skip parameters without value.
-    if (!init)
-      return success();
-    Value initial = context.convertRvalueExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = paramNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
@@ -306,30 +301,25 @@ struct MemberVisitor {
                                          moore::NamedConst::LocalParameter)
             : moore::NamedConstAttr::get(context.getContext(),
                                          moore::NamedConst::Parameter),
-        initial);
+        value);
     context.valueSymbols.insert(&paramNode, namedConstantOp);
     return success();
   }
 
   // Handle specparam.
   LogicalResult visit(const slang::ast::SpecparamSymbol &spNode) {
-    auto type = context.convertType(*spNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(spNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = spNode.getInitializer();
-    // skip specparam without value.
-    if (!init)
-      return success();
-    Value initial = context.convertRvalueExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = spNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(spNode.name),
         moore::NamedConstAttr::get(context.getContext(),
                                    moore::NamedConst::SpecParameter),
-        initial);
+        value);
     context.valueSymbols.insert(&spNode, namedConstantOp);
     return success();
   }
