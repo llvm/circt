@@ -47,6 +47,17 @@ struct FunctionRewrite {
   FunctionType type;
 };
 
+static MemRefType getFlattenedMemRefType(MemRefType type) {
+  return MemRefType::get(SmallVector<int64_t>{type.getNumElements()},
+                         type.getElementType());
+}
+
+static std::string getFlattenedMemRefName(StringAttr baseName,
+                                          MemRefType type) {
+  return llvm::formatv("{0}_{1}x{2}", baseName, type.getNumElements(),
+                       type.getElementType());
+}
+
 // Flatten indices by generating the product of the i'th index and the [0:i-1]
 // shapes, for each index, and then summing these.
 static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
@@ -154,8 +165,7 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
     MemRefType type = op.getType();
     if (isUniDimensional(type) || !type.hasStaticShape())
       return failure();
-    MemRefType newType = MemRefType::get(
-        SmallVector<int64_t>{type.getNumElements()}, type.getElementType());
+    MemRefType newType = getFlattenedMemRefType(type);
     rewriter.replaceOpWithNewOp<memref::AllocOp>(op, newType);
     return success();
   }
@@ -170,27 +180,24 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
     MemRefType type = op.getType();
     if (isUniDimensional(type) || !type.hasStaticShape())
       return failure();
-    MemRefType newType = MemRefType::get(
-        SmallVector<int64_t>{type.getNumElements()}, type.getElementType());
+    MemRefType newType = getFlattenedMemRefType(type);
+
     auto cstAttr =
         llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
 
     SmallVector<Attribute> flattenedVals;
-    for (auto attr : cstAttr.getValues<Attribute>()) {
+    for (auto attr : cstAttr.getValues<Attribute>())
       flattenedVals.push_back(attr);
-    }
 
     auto newTypeAttr = TypeAttr::get(newType);
-    std::string constName = op.getConstantAttrName().str();
-    auto newNameAttr = rewriter.getStringAttr(llvm::formatv(
-        "{0}_{1}x{2}", constName, flattenedVals.size(), type.getElementType()));
+    auto newName = getFlattenedMemRefName(op.getConstantAttrName(), type);
     RankedTensorType tensorType = RankedTensorType::get(
         {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
     auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
-        op, newNameAttr, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
-        op.getConstantAttr(), op.getAlignmentAttr());
+        op, rewriter.getStringAttr(newName), op.getSymVisibilityAttr(),
+        newTypeAttr, newInitValue, op.getConstantAttr(), op.getAlignmentAttr());
 
     return success();
   }
@@ -209,10 +216,10 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
     MemRefType type = globalOp.getType();
     if (isUniDimensional(type) || !type.hasStaticShape())
       return failure();
-    MemRefType newType = MemRefType::get(
-        SmallVector<int64_t>{type.getNumElements()}, type.getElementType());
-    auto newName = llvm::formatv("{0}_{1}x{2}", globalOp.getConstantAttrName(), type.getNumElements(),
-                                 type.getElementType());
+
+    MemRefType newType = getFlattenedMemRefType(type);
+    auto newName = getFlattenedMemRefName(globalOp.getConstantAttrName(), type);
+
     rewriter.replaceOpWithNewOp<memref::GetGlobalOp>(
         op, newType, rewriter.getStringAttr(newName));
 
