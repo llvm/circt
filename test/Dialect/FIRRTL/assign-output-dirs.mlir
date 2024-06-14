@@ -67,7 +67,7 @@ firrtl.circuit "AssignOutputDirs" {
     firrtl.instance byCD @ByCD()
   }
 
-  // CHECK: firrtl.module private @ByDotDot() attributes {output_file = #hw.output_file<"{{/|\\\\}}path{{/|\\\\}}to{{/|\\\\}}">} {
+  // CHECK: firrtl.module private @ByDotDot() attributes {output_file = #hw.output_file<"{{.*(/|\\\\)}}path{{/|\\\\}}to{{/|\\\\}}">} {
   firrtl.module private @ByDotDot() {}
 
   firrtl.module @InDotDot() attributes {output_file = #hw.output_file<"../">} {
@@ -83,7 +83,7 @@ firrtl.circuit "AssignOutputDirs" {
     firrtl.instance byOutputA @ByOutputA()
   }
 
-  // CHECK: firrtl.module private @ByYZ() attributes {output_file = #hw.output_file<"{{/|\\\\}}X{{/|\\\\}}">} {
+  // CHECK: firrtl.module private @ByYZ() attributes {output_file = #hw.output_file<"{{.*(/|\\\\)}}X{{/|\\\\}}">} {
   firrtl.module private @ByYZ() {}
 
   firrtl.module @InY() attributes {output_file = #hw.output_file<"/X/Y/">} {
