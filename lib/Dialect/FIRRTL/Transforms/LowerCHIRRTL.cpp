@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -20,18 +19,27 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERCHIRRTLPASS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
 namespace {
-struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
-                          public CHIRRTLVisitor<LowerCHIRRTLPass>,
-                          public FIRRTLVisitor<LowerCHIRRTLPass> {
+struct LowerCHIRRTLPass
+    : public circt::firrtl::impl::LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
+      public CHIRRTLVisitor<LowerCHIRRTLPass>,
+      public FIRRTLVisitor<LowerCHIRRTLPass> {
 
   using FIRRTLVisitor<LowerCHIRRTLPass>::visitDecl;
   using FIRRTLVisitor<LowerCHIRRTLPass>::visitExpr;

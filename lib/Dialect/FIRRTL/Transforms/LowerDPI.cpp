@@ -10,23 +10,32 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/MapVector.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERDPI
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace llvm;
 using namespace circt;
 using namespace circt::firrtl;
 
-struct LowerDPIPass : public LowerDPIBase<LowerDPIPass> {
+struct LowerDPIPass : public circt::firrtl::impl::LowerDPIBase<LowerDPIPass> {
   void runOnOperation() override;
 };
 
