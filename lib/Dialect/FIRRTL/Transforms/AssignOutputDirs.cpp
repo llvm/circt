@@ -70,16 +70,16 @@ static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
   }
 }
 
-static OutputFileAttr getOutputFile(Operation *op) {
+static OutputFileAttr getOutputFile(igraph::ModuleOpInterface op) {
   return op->getAttrOfType<hw::OutputFileAttr>("output_file");
 }
 
 namespace {
 struct AssignOutputDirsPass
     : public AssignOutputDirsBase<AssignOutputDirsPass> {
-  AssignOutputDirsPass() = default;
-  AssignOutputDirsPass(StringRef outputDir) : AssignOutputDirsPass() {
-    outputDirOption = std::string(outputDir);
+  AssignOutputDirsPass(StringRef outputDir) {
+    if (!outputDir.empty())
+      outputDirOption = std::string(outputDir);
   }
 
   void runOnOperation() override;
@@ -89,8 +89,8 @@ struct AssignOutputDirsPass
 void AssignOutputDirsPass::runOnOperation() {
   SmallString<64> outputDir(outputDirOption);
   if (fs::make_absolute(outputDir)) {
-    llvm::errs()
-        << "error: failed to convert the outputDir to an absolute path\n";
+    emitError(mlir::UnknownLoc::get(&getContext()),
+              "failed to convert the output directory to an absolute path");
     signalPassFailure();
     return;
   }
@@ -116,22 +116,20 @@ void AssignOutputDirsPass::runOnOperation() {
       auto i = node->usesBegin();
       auto e = node->usesEnd();
       for (; i != e; ++i) {
-        if (auto parent = dyn_cast<FModuleOp>((*i)->getParent()->getModule())) {
-          auto file = getOutputFile(parent);
-          if (file) {
-            moduleOutputDir = file.getDirectory();
-            makeAbsolute(outputDir, moduleOutputDir);
-          } else {
-            moduleOutputDir = outputDir;
-          }
-          ++i;
-          break;
+        auto parent = (*i)->getParent()->getModule();
+        auto file = getOutputFile(parent);
+        if (file) {
+          moduleOutputDir = file.getDirectory();
+          makeAbsolute(outputDir, moduleOutputDir);
+        } else {
+          moduleOutputDir = outputDir;
         }
+        ++i;
+        break;
       }
       for (; i != e; ++i) {
-        if (auto parent =
-                dyn_cast<FModuleOp>((*i)->getParent()->getModule<FModuleOp>()))
-          makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
+        auto parent = (*i)->getParent()->getModule();
+        makeCommonPrefix(outputDir, moduleOutputDir, getOutputFile(parent));
       }
 
       tryMakeRelative(outputDir, moduleOutputDir);
@@ -146,10 +144,6 @@ void AssignOutputDirsPass::runOnOperation() {
 
   if (!changed)
     markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createAssignOutputDirsPass() {
-  return std::make_unique<AssignOutputDirsPass>();
 }
 
 std::unique_ptr<mlir::Pass>
