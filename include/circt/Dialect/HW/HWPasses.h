@@ -21,6 +21,9 @@
 namespace circt {
 namespace hw {
 
+#define GEN_PASS_DECL
+#include "circt/Dialect/HW/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 std::unique_ptr<mlir::Pass> createHWSpecializePass();
 std::unique_ptr<mlir::Pass> createPrintHWModuleGraphPass();

@@ -11,12 +11,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace seq {
+#define GEN_PASS_DEF_LOWERSEQHLMEM
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+} // namespace seq
+} // namespace circt
 
 using namespace circt;
 using namespace seq;
@@ -148,11 +155,8 @@ public:
     return success();
   }
 };
-
-#define GEN_PASS_DEF_LOWERSEQHLMEM
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-
-struct LowerSeqHLMemPass : public impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
+struct LowerSeqHLMemPass
+    : public circt::seq::impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
   void runOnOperation() override;
 };
 
