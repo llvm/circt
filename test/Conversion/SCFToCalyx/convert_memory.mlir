@@ -810,3 +810,103 @@ module {
   }
 }
 
+// -----
+
+// Original top-level function's alloc-memories should be passed by reference
+module {
+// CHECK-LABEL:   calyx.component @main_1(
+// CHECK-SAME:                            %[[VAL_0:.*]]: i1 {clk},
+// CHECK-SAME:                            %[[VAL_1:.*]]: i1 {reset},
+// CHECK-SAME:                            %[[VAL_2:.*]]: i1 {go}) -> (
+// CHECK-SAME:                            %[[VAL_3:.*]]: i1 {done}) {
+// CHECK:           %[[VAL_4:.*]] = hw.constant true
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]], %[[VAL_7:.*]], %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]], %[[VAL_11:.*]], %[[VAL_12:.*]] = calyx.seq_mem @mem_1 <[1] x 32> [1] {external = true} : i1, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]] = calyx.seq_mem @mem_0 <[1] x 32> [1] {external = true} : i1, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.instance @main_instance of @main : i1, i1, i1, i32, i1
+// CHECK:           calyx.wires {
+// CHECK:             calyx.group @init_main_instance {
+// CHECK:               calyx.assign %[[VAL_22]] = %[[VAL_4]] : i1
+// CHECK:               calyx.assign %[[VAL_23]] = %[[VAL_4]] : i1
+// CHECK:               calyx.group_done %[[VAL_25]] : i1
+// CHECK:             }
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.enable @init_main_instance
+// CHECK:               calyx.invoke @main_instance[arg_mem_0 = mem_0, mem_0 = mem_1]() -> ()
+// CHECK:             }
+// CHECK:           }
+// CHECK:         } {toplevel}
+
+// CHECK-LABEL:   calyx.component @main(
+// CHECK-SAME:                          %[[VAL_0:.*]]: i1 {clk},
+// CHECK-SAME:                          %[[VAL_1:.*]]: i1 {reset},
+// CHECK-SAME:                          %[[VAL_2:.*]]: i1 {go}) -> (
+// CHECK-SAME:                          %[[VAL_3:.*]]: i32,
+// CHECK-SAME:                          %[[VAL_4:.*]]: i1 {done}) {
+// CHECK:           %[[VAL_5:.*]] = hw.constant true
+// CHECK:           %[[VAL_6:.*]] = hw.constant false
+// CHECK:           %[[VAL_7:.*]] = hw.constant 1 : i32
+// CHECK:           %[[VAL_8:.*]] = hw.constant 0 : i32
+// CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = calyx.std_slice @std_slice_2 : i32, i1
+// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]] = calyx.std_slice @std_slice_1 : i32, i1
+// CHECK:           %[[VAL_13:.*]], %[[VAL_14:.*]] = calyx.std_slice @std_slice_0 : i32, i1
+// CHECK:           %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]] = calyx.std_add @std_add_0 : i32, i32, i32
+// CHECK:           %[[VAL_18:.*]], %[[VAL_19:.*]], %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]] = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           %[[VAL_24:.*]], %[[VAL_25:.*]], %[[VAL_26:.*]], %[[VAL_27:.*]], %[[VAL_28:.*]], %[[VAL_29:.*]], %[[VAL_30:.*]], %[[VAL_31:.*]] = calyx.seq_mem @mem_0 <[1] x 32> [1] : i1, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]], %[[VAL_37:.*]] = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           %[[VAL_38:.*]], %[[VAL_39:.*]], %[[VAL_40:.*]], %[[VAL_41:.*]], %[[VAL_42:.*]], %[[VAL_43:.*]], %[[VAL_44:.*]], %[[VAL_45:.*]] = calyx.seq_mem @arg_mem_0 <[1] x 32> [1] : i1, i1, i1, i1, i1, i32, i32, i1
+// CHECK:           calyx.wires {
+// CHECK:             calyx.assign %[[VAL_3]] = %[[VAL_36]] : i32
+// CHECK:             calyx.group @bb0_0 {
+// CHECK:               calyx.assign %[[VAL_9]] = %[[VAL_8]] : i32
+// CHECK:               calyx.assign %[[VAL_38]] = %[[VAL_10]] : i1
+// CHECK:               calyx.assign %[[VAL_41]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_42]] = %[[VAL_6]] : i1
+// CHECK:               calyx.group_done %[[VAL_45]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @bb0_1 {
+// CHECK:               calyx.assign %[[VAL_11]] = %[[VAL_8]] : i32
+// CHECK:               calyx.assign %[[VAL_24]] = %[[VAL_12]] : i1
+// CHECK:               calyx.assign %[[VAL_29]] = %[[VAL_7]] : i32
+// CHECK:               calyx.assign %[[VAL_28]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_27]] = %[[VAL_5]] : i1
+// CHECK:               calyx.group_done %[[VAL_31]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @bb0_2 {
+// CHECK:               calyx.assign %[[VAL_13]] = %[[VAL_8]] : i32
+// CHECK:               calyx.assign %[[VAL_24]] = %[[VAL_14]] : i1
+// CHECK:               calyx.assign %[[VAL_27]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_28]] = %[[VAL_6]] : i1
+// CHECK:               calyx.assign %[[VAL_18]] = %[[VAL_30]] : i32
+// CHECK:               calyx.assign %[[VAL_19]] = %[[VAL_31]] : i1
+// CHECK:               calyx.group_done %[[VAL_23]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @ret_assign_0 {
+// CHECK:               calyx.assign %[[VAL_32]] = %[[VAL_17]] : i32
+// CHECK:               calyx.assign %[[VAL_33]] = %[[VAL_5]] : i1
+// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_44]] : i32
+// CHECK:               calyx.assign %[[VAL_16]] = %[[VAL_22]] : i32
+// CHECK:               calyx.group_done %[[VAL_37]] : i1
+// CHECK:             }
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.enable @bb0_0
+// CHECK:               calyx.enable @bb0_1
+// CHECK:               calyx.enable @bb0_2
+// CHECK:               calyx.enable @ret_assign_0
+// CHECK:             }
+// CHECK:           }
+// CHECK:         }
+  func.func @main(%arg0 : memref<1xi32>) -> (i32) {
+    %0 = arith.constant 0 : index
+    %one = arith.constant 1 : i32
+    %1 = memref.load %arg0[%0] : memref<1xi32>
+    %2 = memref.alloc() : memref<1xi32>
+    memref.store %one, %2[%0] : memref<1xi32>
+    %3 = memref.load %2[%0] : memref<1xi32>
+    %4 = arith.addi %1, %3 : i32
+    return %4 : i32
+  }
+}
