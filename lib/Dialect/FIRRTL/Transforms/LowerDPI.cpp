@@ -26,76 +26,74 @@ using namespace llvm;
 using namespace circt;
 using namespace circt::firrtl;
 
+namespace {
 struct LowerDPIPass : public LowerDPIBase<LowerDPIPass> {
   void runOnOperation() override;
 };
 
-void LowerDPIPass::runOnOperation() {
-  auto circuitOp = getOperation();
+// A helper struct to lower DPI intrinsics in the circuit.
+struct LowerDPI {
+  LowerDPI(CircuitOp circuitOp) : circuitOp(circuitOp), nameSpace(circuitOp) {}
+  // Tte main logic.
+  LogicalResult run();
+  bool changed() const { return !funcNameToCallSites.empty(); }
 
-  CircuitNamespace nameSpace(circuitOp);
+private:
+  // Walk all modules and peel `funcNameToCallSites`.
+  void collectIntrinsics();
+
+  // Lower intrinsics recorded in `funcNameToCallSites`.
+  LogicalResult lower();
+
+  sim::DPIFuncOp getOrCreateDPIFuncDecl(DPICallIntrinsicOp op);
+  LogicalResult lowerDPIIntrinsic(DPICallIntrinsicOp op);
+
   MapVector<StringAttr, SmallVector<DPICallIntrinsicOp>> funcNameToCallSites;
-  {
-    // A helper struct to collect DPI calls in the circuit.
-    struct DpiCallCollections {
-      FModuleOp module;
-      SmallVector<DPICallIntrinsicOp> dpiOps;
-    };
 
-    SmallVector<DpiCallCollections, 0> collections;
-    collections.reserve(64);
+  // A map stores DPI func op for its function name and type.
+  llvm::DenseMap<std::pair<StringAttr, Type>, sim::DPIFuncOp>
+      functionSignatureToDPIFuncOp;
 
-    for (auto module : circuitOp.getOps<FModuleOp>())
-      collections.push_back(DpiCallCollections{module, {}});
+  firrtl::CircuitOp circuitOp;
+  CircuitNamespace nameSpace;
+};
+} // namespace
 
-    parallelForEach(&getContext(), collections, [](auto &result) {
-      result.module.walk(
-          [&](DPICallIntrinsicOp dpi) { result.dpiOps.push_back(dpi); });
-    });
+void LowerDPI::collectIntrinsics() {
+  // A helper struct to collect DPI calls in the circuit.
+  struct DpiCallCollections {
+    FModuleOp module;
+    SmallVector<DPICallIntrinsicOp> dpiOps;
+  };
 
-    for (auto &collection : collections)
-      for (auto dpi : collection.dpiOps)
-        funcNameToCallSites[dpi.getFunctionNameAttr()].push_back(dpi);
-  }
+  SmallVector<DpiCallCollections, 0> collections;
+  collections.reserve(64);
 
+  for (auto module : circuitOp.getOps<FModuleOp>())
+    collections.push_back(DpiCallCollections{module, {}});
+
+  parallelForEach(circuitOp.getContext(), collections, [](auto &result) {
+    result.module.walk(
+        [&](DPICallIntrinsicOp dpi) { result.dpiOps.push_back(dpi); });
+  });
+
+  for (auto &collection : collections)
+    for (auto dpi : collection.dpiOps)
+      funcNameToCallSites[dpi.getFunctionNameAttr()].push_back(dpi);
+}
+
+LogicalResult LowerDPI::lower() {
   for (auto [name, calls] : funcNameToCallSites) {
     auto firstDPICallop = calls.front();
     // Construct DPI func op.
-    auto inputTypes = firstDPICallop.getInputs().getTypes();
+    auto firstDPIDecl = getOrCreateDPIFuncDecl(firstDPICallop);
+
+    auto inputTypes = firstDPICallop.getOperandTypes();
     auto outputTypes = firstDPICallop.getResultTypes();
-    SmallVector<hw::ModulePort> ports;
+
     ImplicitLocOpBuilder builder(firstDPICallop.getLoc(),
                                  circuitOp.getOperation());
-    ports.reserve(inputTypes.size() + outputTypes.size());
-
-    // Add input arguments.
-    for (auto [idx, inType] : llvm::enumerate(inputTypes)) {
-      hw::ModulePort port;
-      port.dir = hw::ModulePort::Direction::Input;
-      port.name = builder.getStringAttr(Twine("in_") + Twine(idx));
-      port.type = lowerType(inType);
-      ports.push_back(port);
-    }
-
-    // Add output arguments.
-    for (auto [idx, outType] : llvm::enumerate(outputTypes)) {
-      hw::ModulePort port;
-      port.dir = hw::ModulePort::Direction::Output;
-      port.name = builder.getStringAttr(Twine("out_") + Twine(idx));
-      port.type = lowerType(outType);
-      ports.push_back(port);
-    }
-
-    auto modType = hw::ModuleType::get(&getContext(), ports);
-    auto funcSymbol =
-        nameSpace.newName(firstDPICallop.getFunctionNameAttr().getValue());
-    builder.setInsertionPointToStart(circuitOp.getBodyBlock());
-    auto sim = builder.create<sim::DPIFuncOp>(
-        funcSymbol, modType, ArrayAttr(), ArrayAttr(),
-        firstDPICallop.getFunctionNameAttr());
-    sim.setPrivate();
-
-    auto lowerCall = [&builder, funcSymbol](DPICallIntrinsicOp dpiOp) {
+    auto lowerCall = [&](DPICallIntrinsicOp dpiOp) {
       auto getLowered = [&](Value value) -> Value {
         // Insert an unrealized conversion to cast FIRRTL type to HW type.
         if (!value)
@@ -116,8 +114,8 @@ void LowerDPIPass::runOnOperation() {
       if (dpiOp.getResult())
         outputTypes.push_back(lowerType(dpiOp.getResult().getType()));
 
-      auto call = builder.create<sim::DPICallOp>(outputTypes, funcSymbol, clock,
-                                                 enable, inputs);
+      auto call = builder.create<sim::DPICallOp>(
+          outputTypes, firstDPIDecl.getSymNameAttr(), clock, enable, inputs);
       if (!call.getResults().empty()) {
         // Insert unrealized conversion cast HW type to FIRRTL type.
         auto result = builder
@@ -126,9 +124,12 @@ void LowerDPIPass::runOnOperation() {
                           ->getResult(0);
         dpiOp.getResult().replaceAllUsesWith(result);
       }
+      return success();
     };
 
-    lowerCall(firstDPICallop);
+    if (failed(lowerCall(firstDPICallop)))
+      return failure();
+
     for (auto dpiOp : llvm::ArrayRef(calls).drop_front()) {
       // Check that all DPI declaration match.
       // TODO: This should be implemented as a verifier once function is added
@@ -138,21 +139,82 @@ void LowerDPIPass::runOnOperation() {
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " input types don't match ";
         diag.attachNote(dpiOp.getLoc()) << " mismatched caller is here";
-        return signalPassFailure();
+        return failure();
       }
+
       if (dpiOp.getResultTypes() != outputTypes) {
         auto diag = firstDPICallop.emitOpError()
                     << "DPI function " << firstDPICallop.getFunctionNameAttr()
                     << " output types don't match";
         diag.attachNote(dpiOp.getLoc()) << " mismatched caller is here";
-        return signalPassFailure();
+        return failure();
       }
-      lowerCall(dpiOp);
+
+      if (failed(lowerCall(dpiOp)))
+        return failure();
     }
 
     for (auto callOp : calls)
       callOp.erase();
   }
+
+  return success();
+}
+
+sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
+  ImplicitLocOpBuilder builder(op.getLoc(), circuitOp.getOperation());
+  builder.setInsertionPointToStart(circuitOp.getBodyBlock());
+  auto inputTypes = op.getInputs().getTypes();
+  auto outputTypes = op.getResultTypes();
+
+  SmallVector<hw::ModulePort> ports;
+  ports.reserve(inputTypes.size() + outputTypes.size());
+
+  // Add input arguments.
+  for (auto [idx, inType] : llvm::enumerate(inputTypes)) {
+    hw::ModulePort port;
+    port.dir = hw::ModulePort::Direction::Input;
+    port.name = builder.getStringAttr(Twine("in_") + Twine(idx));
+    port.type = lowerType(inType);
+    ports.push_back(port);
+  }
+
+  // Add output arguments.
+  for (auto [idx, outType] : llvm::enumerate(outputTypes)) {
+    hw::ModulePort port;
+    port.dir = hw::ModulePort::Direction::Output;
+    port.name = builder.getStringAttr(Twine("out_") + Twine(idx));
+    port.type = lowerType(outType);
+    ports.push_back(port);
+  }
+
+  auto modType = hw::ModuleType::get(builder.getContext(), ports);
+  auto it =
+      functionSignatureToDPIFuncOp.find({op.getFunctionNameAttr(), modType});
+  if (it != functionSignatureToDPIFuncOp.end())
+    return it->second;
+
+  auto funcSymbol = nameSpace.newName(op.getFunctionNameAttr().getValue());
+  auto funcOp = builder.create<sim::DPIFuncOp>(
+      funcSymbol, modType, ArrayAttr(), ArrayAttr(), op.getFunctionNameAttr());
+  // External function must have a private linkage.
+  funcOp.setPrivate();
+  functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), modType}] = funcOp;
+  return funcOp;
+}
+
+LogicalResult LowerDPI::run() {
+  collectIntrinsics();
+  return lower();
+}
+
+void LowerDPIPass::runOnOperation() {
+  auto circuitOp = getOperation();
+  LowerDPI lowerDPI(circuitOp);
+  if (failed(lowerDPI.run()))
+    return signalPassFailure();
+  if (!lowerDPI.changed())
+    return markAllAnalysesPreserved();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerDPIPass() {
