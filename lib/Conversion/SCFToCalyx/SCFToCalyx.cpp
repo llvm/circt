@@ -701,7 +701,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 template <typename TAllocOp>
 static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
-                                  PatternRewriter &rewriter, TAllocOp allocOp) {
+                                  PatternRewriter &rewriter, TAllocOp allocOp,
+                                  bool isExternal) {
   rewriter.setInsertionPointToStart(
       componentState.getComponentOp().getBodyBlock());
   MemRefType memtype = allocOp.getType();
@@ -720,10 +721,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   auto memoryOp = rewriter.create<calyx::SeqMemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
-  // Externalize memories by default. This makes it easier for the native
-  // compiler to provide initialized memories.
-  memoryOp->setAttr("external",
-                    IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
+
+  // Externalize memories conditionally (only in the top-level component because
+  // Calyx compiler requires it as a well-formness check).
+  if (isExternal)
+    memoryOp->setAttr(
+        "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
   return success();
@@ -731,12 +734,22 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocOp allocOp) const {
-  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
+  if (getState<ComponentLoweringState>().getComponentOp().getName() ==
+      loweringState().getTopLevelFunction())
+    return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
+                        true);
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
+                      false);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocaOp allocOp) const {
-  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
+  if (getState<ComponentLoweringState>().getComponentOp().getName() ==
+      loweringState().getTopLevelFunction())
+    return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
+                        true);
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
+                      false);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1521,6 +1534,15 @@ private:
       }
     }
 
+    for (auto &op : calleeFunc.getBody().getOps()) {
+      if (auto allocOp = dyn_cast<memref::AllocOp>(op)) {
+        auto allocRes = allocOp.getResult();
+        auto allocMemName =
+            instanceOpLoweringState->getMemoryInterface(allocRes).memName();
+        res.push_back(allocMemName);
+      }
+    }
+
     return res;
   }
 
@@ -2045,7 +2067,8 @@ private:
 
   /// Insert a call from the newly created top-level function/`caller` to the
   /// old top-level function/`callee`; and create `memref.alloc`s inside the new
-  /// top-level function for arguments with `memref` types.
+  /// top-level function for arguments with `memref` types and for the
+  /// `memref.alloc`s inside `callee`.
   void insertCallFromNewTopLevel(OpBuilder &builder, FuncOp caller,
                                  FuncOp callee) {
     if (caller.getBody().empty()) {
@@ -2085,6 +2108,19 @@ private:
         auto callerArg = entryBlock->getArgument(otherArgs.size());
         otherArgs.push_back(callerArg);
       }
+    }
+
+    SmallVector<memref::AllocOp, 4> calleeAllocOps;
+    for (auto &op : callee.getBody().getOps()) {
+      if (auto allocOp = dyn_cast<memref::AllocOp>(&op)) {
+        calleeAllocOps.push_back(allocOp);
+      }
+    }
+
+    for (auto allocOp : calleeAllocOps) {
+      auto allocType = cast<MemRefType>(allocOp.getType());
+      auto alloc = builder.create<memref::AllocOp>(caller.getLoc(), allocType);
+      memRefArgs.push_back(alloc);
     }
 
     auto calleeName =
