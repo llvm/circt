@@ -72,7 +72,6 @@
 /// }
 /// ```
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
@@ -80,6 +79,13 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_REMOVECOMBGROUPS
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -203,7 +209,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
 };
 
 struct RemoveCombGroupsPass
-    : public RemoveCombGroupsBase<RemoveCombGroupsPass> {
+    : public circt::calyx::impl::RemoveCombGroupsBase<RemoveCombGroupsPass> {
   void runOnOperation() override;
 
   /// Removes 'with' groups from an operation and instead schedules the group
