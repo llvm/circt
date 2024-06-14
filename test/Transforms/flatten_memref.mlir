@@ -185,3 +185,28 @@ func.func @dealloc_copy(%arg : memref<4x4xi32>) -> memref<4x4xi32> {
   memref.dealloc %0 : memref<4x4xi32>
   return %0 : memref<4x4xi32>
 }
+
+// -----
+
+module {
+// CHECK-LABEL:   memref.global "private" constant @constant_10xf32 : memref<10xf32> = dense<[0.433561265, 0.0884729773, -0.39487046, -0.190938368, 0.705071926, -0.648731529, -0.00710275536, -0.278010637, -0.573243499, 5.029220e-01]> {alignment = 64 : i64}
+  memref.global "private" constant @__constant_5x2xf32 : memref<5x2xf32> = dense<[[0.433561265, 0.0884729773], [-0.39487046, -0.190938368], [0.705071926, -0.648731529], [-0.00710275536, -0.278010637], [-0.573243499, 5.029220e-01]]> {alignment = 64 : i64}
+
+// CHECK-LABEL:   func.func @forward() -> f32 {
+// CHECK:           %[[VAL_0:.*]] = arith.constant 2 : index
+// CHECK:           %[[VAL_1:.*]] = arith.constant 1 : index
+// CHECK:           %[[VAL_2:.*]] = memref.get_global @constant_10xf32 : memref<10xf32>
+// CHECK:           %[[VAL_3:.*]] = arith.constant 5 : index
+// CHECK:           %[[VAL_4:.*]] = arith.muli %[[VAL_1]], %[[VAL_3]] : index
+// CHECK:           %[[VAL_5:.*]] = arith.addi %[[VAL_0]], %[[VAL_4]] : index
+// CHECK:           %[[VAL_6:.*]] = memref.load %[[VAL_2]]{{\[}}%[[VAL_5]]] : memref<10xf32>
+// CHECK:           return %[[VAL_6]] : f32
+// CHECK:         }
+  func.func @forward() -> f32 {
+    %c2 = arith.constant 2 : index
+    %c1 = arith.constant 1 : index
+    %0 = memref.get_global @__constant_5x2xf32 : memref<5x2xf32>
+    %1 = memref.load %0[%c2, %c1] : memref<5x2xf32>
+    return %1 :f32
+  }
+}
