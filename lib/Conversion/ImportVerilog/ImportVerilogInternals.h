@@ -79,6 +79,10 @@ struct Context {
   Value convertRvalueExpression(const slang::ast::Expression &expr);
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
+  // Convert a slang timing control into an MLIR timing control.
+  LogicalResult
+  convertTimingControl(const slang::ast::TimingControl &timingControl);
+
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
   SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;

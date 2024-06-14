@@ -1333,8 +1333,13 @@ namespace {
 
 struct PrepareForEmissionPass
     : public PrepareForEmissionBase<PrepareForEmissionPass> {
+
+  bool canScheduleOn(mlir::RegisteredOperationName opName) const final {
+    return opName.hasInterface<hw::HWEmittableModuleLike>();
+  }
+
   void runOnOperation() override {
-    auto module = getOperation();
+    auto module = cast<hw::HWEmittableModuleLike>(getOperation());
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();

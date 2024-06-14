@@ -908,4 +908,10 @@ def ModuleSummary :
     let constructor = "circt::firrtl::createModuleSummaryPass()";
   }
 
+def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
+    let summary = "Lower DPI intrinsic into Sim DPI operations";
+    let constructor = "circt::firrtl::createLowerDPIPass()";
+    let dependentDialects = ["hw::HWDialect", "seq::SeqDialect", "sim::SimDialect"];
+  }
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

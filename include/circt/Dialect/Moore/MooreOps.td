@@ -324,6 +324,65 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def None: I32EnumAttrCase<"None", 0, "none">;
+/// Transit from 0 to x/z/1, and from x/z to 1.
+def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
+/// Transit from 1 to x/z/0, and from x/z to 0.
+def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
+/// Include the negedge and posedge.
+def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
+
+def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
+                          [None, PosEdge, NegEdge, BothEdges]>{
+  let cppNamespace = "circt::moore";
+}
+
+def EventOp : MooreOp<"wait_event", [
+  HasParent<"ProcedureOp">
+]> {
+  let summary = "Detecting posedge and negedge";
+  let description = [{
+    It is introduced by the symbol `@`, and it allows statement execution to
+    be delayed until the occurrence of some simulation event occurring in a
+    procedure executing concurrently with this procedure.
+
+    For the implicit event control(`@(*)`), there are two situations that are
+    not automatically added to event expression:
+      1. Identifiers that only appear in wait or event expressions.
+         ```
+          always @(*) begin    // equivalent to @(b)
+            @(n) kid = b;      // n is not added to @(*)
+          end
+         ```
+      2. Identifiers that only appear as a hierarchical_variable_identifier
+         in the variable_lvalue of the left-hand side of assignments.
+         ```
+          always @(*) begin
+            a = b + c;         // a is not added to @(*)
+          end
+         ```
+
+    Example:
+    ```
+      @(a, b, c)        // none
+      @(posedge clk)    // positive edge
+      @(negedge clk)    // negative edge
+      @(edge clk)       // both edge
+      @(*)              // implicit event control
+    ```
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
+  let results = (outs);
+  let assemblyFormat = [{
+    $edge $input attr-dict `:` type($input)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//
 
