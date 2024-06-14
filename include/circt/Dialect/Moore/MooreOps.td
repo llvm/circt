@@ -413,18 +413,19 @@ def NamedConstantOp : MooreOp<"named_constant", [
 ]>{
   let summary = "An elaboration time constant expression";
   let description = [{
-    Constants are named data objects that never change. SystemVerilog provides 
+    Constants are named data objects that never change. SystemVerilog provides
     three elaboration-time constants: parameter, localparam, and specparam.
 
     See IEEE 1800-2017 § 6.20 "Constants".
   }];
-  let arguments = (ins StrAttr:$name, 
-                       NamedConstAttr:$kind, 
-                       UnpackedType:$value);
-  let results = (outs UnpackedType:$result);
+  let arguments = (ins StrAttr:$name,
+                       NamedConstAttr:$kind,
+                       IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $kind $value attr-dict
-    `:` type($result)
+    $kind
+    ``custom<ImplicitSSAName>($name)
+    $value `:` type($result) attr-dict
   }];
 }
 
