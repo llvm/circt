@@ -16,18 +16,6 @@
 include "mlir/Pass/PassBase.td"
 
 /**
- * Checks the validity of clocked assertions, assumptions, and cover ops.
- */
-def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp"> {
-  let summary = "Check that clocked-assert-like are valid.";
-  let description = [{
-    Checks that every `clocked_assert`, `clocked_assume` or `clocked_cover` op does not contain 
-    a nested `ltl.clock` or `ltl.disable` operation in its operand tree.
-  }];
-  let constructor = "circt::verif::createVerifyClockedAssertLikePass()";
-}
-
-/**
  * Performs preparation transformations for formal verification.
  * This includes things like flattening wires, removing unnecessary information
  * such as OM Classes, handles formal contracts and transforms module instances.
@@ -41,5 +29,17 @@ def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp
   }];
   let constructor = "circt::verif::createPrepareForFormalPass()";
  }
+
+/**
+ * Checks the validity of clocked assertions, assumptions, and cover ops.
+ */
+def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp"> {
+  let summary = "Check that clocked-assert-like are valid.";
+  let description = [{
+    Checks that every `clocked_assert`, `clocked_assume` or `clocked_cover` op does not contain 
+    a nested `ltl.clock` or `ltl.disable` operation in its operand tree.
+  }];
+  let constructor = "circt::verif::createVerifyClockedAssertLikePass()";
+}
 
 #endif // CIRCT_DIALECT_VERIF_PASSES_TD
