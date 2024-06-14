@@ -305,6 +305,8 @@ def UnpackedStructType : StructLikeType<
   }];
 }
 
+def AnyStructType : AnyTypeOf<[StructType, UnpackedStructType]>;
+
 def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
   let mnemonic = "union";
   let summary = "a packed union type";
@@ -324,6 +326,7 @@ def UnpackedUnionType : StructLikeType<
     An unpacked union.
   }];
 }
+def AnyUnionType : AnyTypeOf<[UnionType, UnpackedUnionType]>;
 
 //===----------------------------------------------------------------------===//
 // Reference type wrapper

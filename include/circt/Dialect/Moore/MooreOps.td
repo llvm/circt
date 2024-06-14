@@ -947,8 +947,6 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
 
 def StructCreateOp : MooreOp<"struct_create", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  OptionalTypesMatchWith<"initial value and variable types match",
-    "result", "initial", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "Struct Create operation";
   let description = [{
@@ -974,11 +972,11 @@ def StructCreateOp : MooreOp<"struct_create", [
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let arguments = (ins StrAttr:$name,  Variadic<UnpackedType>:$input);
+  let results = (outs AnyStructType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
-    `:` type($result)
+    `` custom<ImplicitSSAName>($name) $input attr-dict
+    `:` type($input) `->` type($result)
   }];
 }
 
@@ -1010,20 +1008,20 @@ def StructExtractOp : MooreOp<"struct_extract"> {
     ```
     See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
   }];
-  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
+  $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
 }
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
   let summary = "Struct Extract operation";
-  let arguments = (ins StrAttr:$memberName, RefType:$input);
+  let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
+  $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
 }
@@ -1052,19 +1050,17 @@ def StructInjectOp : MooreOp<"struct_inject"> {
     ```
     See IEEE 1800-2017 § 7.2. "Assigning to structures".
   }];
-  let arguments = (ins UnpackedType:$input, StrAttr:$memberName,
+  let arguments = (ins UnpackedType:$input, StrAttr:$fieldName,
   UnpackedType:$newValue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `,`   $memberName `,` $newValue
+    $input `,`   $fieldName `,` $newValue
     attr-dict `:` type($input) type($newValue) `->` type($result)
   }];
 }
 
 def UnionCreateOp : MooreOp<"union_create", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  OptionalTypesMatchWith<"initial value and variable types match",
-    "result", "initial", "cast<RefType>($_self).getNestedType()">
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]> {
   let summary = "Union Create operation";
   let description = [{
@@ -1090,11 +1086,11 @@ def UnionCreateOp : MooreOp<"union_create", [
     ```
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
-  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let arguments = (ins StrAttr:$name, UnpackedType:$input);
+  let results = (outs AnyUnionType:$result);
   let assemblyFormat = [{
-  `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
-    `:` type($result)
+    `` custom<ImplicitSSAName>($name) $input attr-dict
+    `:` type($input) `->` type($result)
   }];
 }
 
@@ -1121,20 +1117,20 @@ def UnionExtractOp : MooreOp<"union_extract"> {
     ```
     See IEEE 1800-2017 § 7.3.1 "Packed unions"
   }];
-  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
+  $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
 }
 
 def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
   let summary = "Union Extract operation";
-  let arguments = (ins StrAttr:$memberName, RefType:$input);
+  let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
+  $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
 }
