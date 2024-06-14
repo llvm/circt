@@ -59,7 +59,7 @@ enum PreserveMode {
   // away by the compiler.
   All,
 };
-}
+} // namespace PreserveValues
 
 enum class CompanionMode {
   // Lower companions to SystemVerilog binds.
