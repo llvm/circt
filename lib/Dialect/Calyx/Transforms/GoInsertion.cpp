@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
@@ -18,13 +17,21 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_GOINSERTION
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
+
 using namespace circt;
 using namespace calyx;
 using namespace mlir;
 
 namespace {
 
-struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
+struct GoInsertionPass
+    : public circt::calyx::impl::GoInsertionBase<GoInsertionPass> {
   void runOnOperation() override;
 };
 

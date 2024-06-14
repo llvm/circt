@@ -884,6 +884,15 @@ circuit LayerAndCircuitShareName:
 
 ;// -----
 
+FIRRTL version 4.0.0
+circuit LayerEmptyOutputDir:
+  ; expected-error @below {{output directory must not be blank}}
+  layer MyLayer, bind, "":
+
+  public module LayerEmptyOutputDir:
+
+;// -----
+
 FIRRTL version 3.3.0
 circuit Top:
   ; expected-error @below {{class cannot be the top of a circuit}}

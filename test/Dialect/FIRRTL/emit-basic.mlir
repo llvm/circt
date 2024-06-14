@@ -676,6 +676,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:      layer GroupD, bind :
   // CHECK-NEXT:        layer GroupE, inline :
   // CHECK-NEXT:    layer GroupF, bind :
+  // CHECK-NEXT:  layer GroupWithOutputDir, bind, "foo/" :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
@@ -688,6 +689,8 @@ firrtl.circuit "Foo" {
     firrtl.layer @GroupF bind {
     }
   }
+  firrtl.layer @GroupWithOutputDir bind attributes {output_file = #hw.output_file<"foo/">} {}
+
   // CHECK:      module ModuleWithGroups :
   // CHECK-NEXT:   output a : Probe<UInt<1>, GroupA>
   // CHECK-NEXT:   output b : RWProbe<UInt<1>, GroupA.GroupB>

@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
@@ -20,6 +19,13 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_GROUPINVARIANTCODEMOTION
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
+
 using namespace circt;
 using namespace calyx;
 using namespace mlir;
@@ -27,7 +33,8 @@ using namespace mlir;
 namespace {
 
 struct GroupInvariantCodeMotionPass
-    : public GroupInvariantCodeMotionBase<GroupInvariantCodeMotionPass> {
+    : public circt::calyx::impl::GroupInvariantCodeMotionBase<
+          GroupInvariantCodeMotionPass> {
   void runOnOperation() override {
     auto wires = getOperation().getWiresOp();
     for (auto groupOp : wires.getOps<GroupOp>()) {

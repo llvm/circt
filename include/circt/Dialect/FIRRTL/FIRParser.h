@@ -49,6 +49,8 @@ struct FIRParserOptions {
   bool scalarizePublicModules = false;
   bool scalarizeInternalModules = false;
   bool scalarizeExtModules = false;
+  std::vector<std::string> enableLayers;
+  std::vector<std::string> disableLayers;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,

@@ -256,6 +256,15 @@ static cl::opt<bool>
 
 static LoweringOptionsOption loweringOptions(mainCategory);
 
+static cl::list<std::string>
+    enableLayers("enable-layers", cl::desc("enable these layers permanently"),
+                 cl::value_desc("layer-list"), cl::cat(mainCategory));
+
+static cl::list<std::string>
+    disableLayers("disable-layers",
+                  cl::desc("disable these layers permanently"),
+                  cl::value_desc("layer-list"), cl::cat(mainCategory));
+
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
@@ -358,6 +367,8 @@ static LogicalResult processBuffer(
     options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
+    options.enableLayers = enableLayers;
+    options.disableLayers = disableLayers;
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
