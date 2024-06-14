@@ -24,6 +24,7 @@ def SimDialect : Dialect {
 
   let useDefaultTypePrinterParser = 0;
   let useDefaultAttributePrinterParser = 0;
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMDIALECT

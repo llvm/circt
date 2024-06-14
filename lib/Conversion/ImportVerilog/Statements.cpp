@@ -302,8 +302,12 @@ struct StmtVisitor {
     return success();
   }
 
-  // Ignore timing control for now.
+  // Handle timing control.
   LogicalResult visit(const slang::ast::TimedStatement &stmt) {
+    if (failed(context.convertTimingControl(stmt.timing)))
+      return failure();
+    if (failed(context.convertStatement(stmt.stmt)))
+      return failure();
     return success();
   }
 
