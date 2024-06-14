@@ -26,6 +26,10 @@ class GlobalOp;
 } // namespace mlir
 
 namespace circt {
+
+#define GEN_PASS_DECL_CONVERTHWTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+
 class Namespace;
 
 struct HWToLLVMEndianessConverter {

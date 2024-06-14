@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HWToBTOR2.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -27,9 +26,15 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTHWTOBTOR2
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
@@ -38,7 +43,7 @@ namespace {
 // The goal here is to traverse the operations in order and convert them one by
 // one into btor2
 struct ConvertHWToBTOR2Pass
-    : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
+    : public circt::impl::ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
       public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {

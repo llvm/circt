@@ -36,6 +36,9 @@ enum class VerificationFlavor {
 };
 } // namespace firrtl
 
+#define GEN_PASS_DECL_LOWERFIRRTLTOHW
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
                           firrtl::VerificationFlavor assertionFlavor =
