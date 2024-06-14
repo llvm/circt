@@ -33,13 +33,6 @@
 
 namespace circt {
 namespace esi {
-
-
-} // namespace esi
-} // namespace circt
-
-namespace circt {
-namespace esi {
 namespace detail {
 
 /// Generic pattern for removing an op during pattern conversion.
