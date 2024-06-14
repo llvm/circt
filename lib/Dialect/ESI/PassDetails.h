@@ -34,8 +34,6 @@
 namespace circt {
 namespace esi {
 
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/ESI/ESIPasses.h.inc"
 
 } // namespace esi
 } // namespace circt
