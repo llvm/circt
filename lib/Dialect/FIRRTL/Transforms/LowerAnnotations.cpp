@@ -387,6 +387,45 @@ static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
   return success();
 }
 
+static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto *context = op->getContext();
+  auto loc = op->getLoc();
+
+  auto error = [&]() {
+    return mlir::emitError(loc) << outputDirAnnoClass << " ";
+  };
+
+  auto opTarget = dyn_cast<OpAnnoTarget>(target.ref);
+  if (!opTarget)
+    return error() << "must target a module";
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto moduleOp = dyn_cast<FModuleOp>(op);
+  if (!moduleOp)
+    return error() << "must target a module";
+  if (!moduleOp.isPublic())
+    return error() << "must target a public module";
+  if (moduleOp->hasAttr("output_file"))
+    return error() << "target already has an output file";
+
+  auto dirname =
+      tryGetAs<StringAttr>(anno, anno, "dirname", loc, outputDirAnnoClass);
+  if (!dirname)
+    return failure();
+  if (dirname.empty())
+    return error() << "dirname must not be empty";
+
+  auto outputFile =
+      hw::OutputFileAttr::getAsDirectory(context, dirname.getValue());
+
+  moduleOp->setAttr("output_file", outputFile);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -480,6 +519,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {metadataDirectoryAttrName, NoTargetAnnotation},
     {moduleHierAnnoClass, NoTargetAnnotation},
+    {outputDirAnnoClass, {stdResolve, applyOutputDirAnno}},
     {sitestTestHarnessBlackBoxAnnoClass, NoTargetAnnotation},
     {testBenchDirAnnoClass, NoTargetAnnotation},
     {testHarnessHierAnnoClass, NoTargetAnnotation},

@@ -914,4 +914,19 @@ def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
     let dependentDialects = ["hw::HWDialect", "seq::SeqDialect", "sim::SimDialect"];
   }
 
+def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
+  let summary = "Assign output directories to modules.";
+  let description = [{
+    While some modules are assigned output directories by the user, many modules
+    "don't care" what output directory they are placed into. This pass uses the
+    instance graph to assign these modules to the "deepest" output directory
+    possible.
+  }];
+  let constructor = "circt::firrtl::createAssignOutputDirsPass()";
+  let options = [
+    Option<"outputDirOption", "output-dir", "std::string", "",
+      "The default output directory.">
+  ];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

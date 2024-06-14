@@ -587,7 +587,10 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
   ps << "layer " << PPExtString(op.getSymName()) << ", "
-     << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
+     << PPExtString(stringifyLayerConvention(op.getConvention()));
+  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file"))
+    ps << ", \"" << PPExtString(outputFile.getFilename().getValue()) << "\"";
+  ps << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : op.getBody().getOps()) {
