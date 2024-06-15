@@ -108,15 +108,11 @@ class RpcServerReadPort : public ReadChannelPort {
 public:
   RpcServerReadPort(Type *type) : ReadChannelPort(type) {}
 
-  bool read(MessageData &data) override {
-    std::optional<MessageData> msg = readQueue.pop();
-    if (!msg)
-      return false;
-    data = std::move(*msg);
-    return true;
+  /// Internal call. Push a message FROM the RPC client to the read port.
+  void push(MessageData &data) {
+    while (!callback(data))
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-
-  utils::TSQueue<MessageData> readQueue;
 };
 
 /// Implements a simple write queue. The RPC server will pull messages from this
@@ -154,7 +150,13 @@ Impl::Impl(int port) : esiVersion(-1) {
 }
 
 void Impl::stop() {
-  /// Shutdown the server and wait for it to finish.
+  // Disconnect all the ports.
+  for (auto &[name, port] : readPorts)
+    port->disconnect();
+  for (auto &[name, port] : writePorts)
+    port->disconnect();
+
+  // Shutdown the server and wait for it to finish.
   server->Shutdown();
   server->Wait();
   server = nullptr;
@@ -169,12 +171,14 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
   auto port = new RpcServerReadPort(new Type(type));
   readPorts.emplace(name, port);
+  port->connect();
   return *port;
 }
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   auto port = new RpcServerWritePort(new Type(type));
   writePorts.emplace(name, port);
+  port->connect();
   return *port;
 }
 
@@ -301,6 +305,7 @@ void RpcServerWriteReactor::threadLoop() {
       return ret;
     });
   }
+  Finish(Status::OK);
 }
 
 /// When a client sends a message to a read port (write port on this end), start
@@ -334,7 +339,7 @@ Impl::SendToServer(CallbackServerContext *context,
   std::string msgDataString = request->message().data();
   MessageData data(reinterpret_cast<const uint8_t *>(msgDataString.data()),
                    msgDataString.size());
-  it->second->readQueue.push(std::move(data));
+  it->second->push(data);
   reactor->Finish(Status::OK);
   return reactor;
 }

@@ -38,7 +38,7 @@ install(FILES
   COMPONENT ESIRuntime
 )
 
-add_library(EsiCosimGRPC OBJECT "${CMAKE_CURRENT_LIST_DIR}/cosim.proto")
+add_library(EsiCosimGRPC SHARED "${CMAKE_CURRENT_LIST_DIR}/cosim.proto")
 target_link_libraries(EsiCosimGRPC PUBLIC protobuf::libprotobuf gRPC::grpc++)
 set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_include_directories(EsiCosimGRPC PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")

@@ -135,6 +135,7 @@ public:
     std::future<MessageData> call(const MessageData &arg);
 
   private:
+    std::mutex callMutex;
     WriteChannelPort &arg;
     ReadChannelPort &result;
   };
@@ -161,7 +162,12 @@ public:
              const std::map<std::string, ChannelPort &> &channels);
 
   public:
-    void connect(std::function<MessageData(const MessageData &)> callback);
+    /// Connect a callback to code which will be executed when the accelerator
+    /// invokes the callback. The 'quick' flag indicates that the callback is
+    /// sufficiently fast that it could be called in the same thread as the
+    /// port callback.
+    void connect(std::function<MessageData(const MessageData &)> callback,
+                 bool quick = false);
 
   private:
     ReadChannelPort &arg;

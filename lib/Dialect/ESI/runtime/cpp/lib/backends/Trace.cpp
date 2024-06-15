@@ -187,30 +187,52 @@ class ReadTraceChannelPort : public ReadChannelPort {
 public:
   ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
       : ReadChannelPort(type) {}
+  ~ReadTraceChannelPort() { disconnect(); }
 
-  virtual bool read(MessageData &data) override;
+  void disconnect() override {
+    ReadChannelPort::disconnect();
+    if (!dataPushThread.joinable())
+      return;
+    shutdown = true;
+    shutdownCV.notify_all();
+    dataPushThread.join();
+  }
 
 private:
-  size_t numReads = 0;
+  void connectImpl() override {
+    assert(!dataPushThread.joinable() && "already connected");
+    shutdown = false;
+    dataPushThread = std::thread(&ReadTraceChannelPort::dataPushLoop, this);
+  }
+
+  MessageData genMessage() {
+    std::ptrdiff_t numBits = getType()->getBitWidth();
+    if (numBits < 0)
+      // TODO: support other types.
+      throw runtime_error("unsupported type for read: " + getType()->getID());
+
+    std::ptrdiff_t size = (numBits + 7) / 8;
+    std::vector<uint8_t> bytes(size);
+    for (std::ptrdiff_t i = 0; i < size; ++i)
+      bytes[i] = rand() % 256;
+    return MessageData(bytes);
+  }
+
+  void dataPushLoop() {
+    std::mutex m;
+    std::unique_lock<std::mutex> lock(m);
+    while (!shutdown) {
+      shutdownCV.wait_for(lock, std::chrono::milliseconds(100));
+      while (this->callback(genMessage()))
+        shutdownCV.wait_for(lock, std::chrono::milliseconds(10));
+    }
+  }
+
+  std::thread dataPushThread;
+  std::condition_variable shutdownCV;
+  std::atomic<bool> shutdown;
 };
 } // namespace
-
-bool ReadTraceChannelPort::read(MessageData &data) {
-  if ((++numReads & 0x1) == 1)
-    return false;
-
-  std::ptrdiff_t numBits = getType()->getBitWidth();
-  if (numBits < 0)
-    // TODO: support other types.
-    throw runtime_error("unsupported type for read: " + getType()->getID());
-
-  std::ptrdiff_t size = (numBits + 7) / 8;
-  std::vector<uint8_t> bytes(size);
-  for (std::ptrdiff_t i = 0; i < size; ++i)
-    bytes[i] = rand() % 256;
-  data = MessageData(bytes);
-  return true;
-}
 
 namespace {
 class TraceCustomService : public CustomService {
