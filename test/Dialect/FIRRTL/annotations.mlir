@@ -1918,7 +1918,7 @@ firrtl.circuit "Top" attributes {
     }]
   } {
   // CHECK-LABEL: firrtl.module @Top
-  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz/">}
+  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}">}
   firrtl.module @Top() {}
 }
 
@@ -1934,7 +1934,7 @@ firrtl.circuit "Top" attributes {
     }]
   } {
   // CHECK-LABEL: firrtl.module @Top
-  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz/">}
+  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}">}
   firrtl.module @Top() {}
 }
 
@@ -1950,6 +1950,6 @@ firrtl.circuit "Top" attributes {
     }]
   } {
   // CHECK-LABEL: firrtl.module @Top
-  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz/qux/">}
+  // CHECK-SAME:  attributes {output_file = #hw.output_file<"foobarbaz{{/|\\\\}}qux{{/|\\\\}}">}
   firrtl.module @Top() {}
 }

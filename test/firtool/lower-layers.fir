@@ -46,24 +46,24 @@ circuit Foo: %[[
   ; CHECK: );
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench/layers_Foo_Verification.sv"
+  ; CHECK: FILE "testbench{{[/\]}}layers_Foo_Verification.sv"
   ; CHECK: `ifndef layers_Foo_Verification
   ; CHECK: `define layers_Foo_Verification
   ; CHECK: bind Bar Bar_Verification verification ();
   ; CHECK: `endif // layers_Foo_Verification
 
-  ; CHECK: FILE "testbench/VerificationHelper.sv"
+  ; CHECK: FILE "testbench{{[/\]}}VerificationHelper.sv"
   ; CHECK: module VerificationHelper();
   ; CHECK:   wire w = 1'h0;
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench/Bar_Verification.sv"
+  ; CHECK: FILE "testbench{{[/\]}}Bar_Verification.sv"
   ; CHECK: module Bar_Verification();
   ; CHECK:   wire c = 1'h0;
   ; CHECK:   wire c_probe = c;
   ; CHECK: endmodule
 
-  ; CHECK: FILE "testbench/Foo.sv"
+  ; CHECK: FILE "testbench{{[/\]}}Foo.sv"
   ; CHECK: module Foo();
   ; CHECK:  wire d = Foo.bar.verification.c_probe;
   ; CHECK:   Bar bar (

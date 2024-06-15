@@ -21,7 +21,7 @@ firrtl.circuit "AssignOutputDirs" {
   firrtl.module private @ByRC() {}
 
   // A -> A
-  // CHECK: firrtl.module private @ByA() attributes {output_file = #hw.output_file<"A/">} {
+  // CHECK: firrtl.module private @ByA() attributes {output_file = #hw.output_file<"A{{/|\\\\}}">} {
   firrtl.module private @ByA() {}
   
   // A & B -> R
@@ -29,11 +29,11 @@ firrtl.circuit "AssignOutputDirs" {
   firrtl.module private @ByAB() {}
 
   // C & D -> A
-  // CHECK: firrtl.module private @ByCD() attributes {output_file = #hw.output_file<"A/">} {
+  // CHECK: firrtl.module private @ByCD() attributes {output_file = #hw.output_file<"A{{/|\\\\}}">} {
   firrtl.module private @ByCD() {}
 
   // A & C -> A
-  // CHECK: firrtl.module private @ByAC() attributes {output_file = #hw.output_file<"A/">} {
+  // CHECK: firrtl.module private @ByAC() attributes {output_file = #hw.output_file<"A{{/|\\\\}}">} {
   firrtl.module private @ByAC() {}
 
   // B & C -> R
@@ -67,7 +67,7 @@ firrtl.circuit "AssignOutputDirs" {
     firrtl.instance byCD @ByCD()
   }
 
-  // CHECK: firrtl.module private @ByDotDot() attributes {output_file = #hw.output_file<"/path/to/">} {
+  // CHECK: firrtl.module private @ByDotDot() attributes {output_file = #hw.output_file<"{{.*(/|\\\\)}}path{{/|\\\\}}to{{/|\\\\}}">} {
   firrtl.module private @ByDotDot() {}
 
   firrtl.module @InDotDot() attributes {output_file = #hw.output_file<"../">} {
@@ -76,14 +76,14 @@ firrtl.circuit "AssignOutputDirs" {
 
   // Absolute output directory tests
 
-  // CHECK firrtl.module private @ByOutputA() {output_file = #hw.output_file<"A/">} {}
+  // CHECK firrtl.module private @ByOutputA() {output_file = #hw.output_file<"A{{/|\\\\}}">} {}
   firrtl.module private @ByOutputA() {}
 
   firrtl.module @InOutputA() attributes {output_file = #hw.output_file<"/path/to/output/A/foo">} {
     firrtl.instance byOutputA @ByOutputA()
   }
 
-  // CHECK: firrtl.module private @ByYZ() attributes {output_file = #hw.output_file<"/X/">} {
+  // CHECK: firrtl.module private @ByYZ() attributes {output_file = #hw.output_file<"{{.*(/|\\\\)}}X{{/|\\\\}}">} {
   firrtl.module private @ByYZ() {}
 
   firrtl.module @InY() attributes {output_file = #hw.output_file<"/X/Y/">} {

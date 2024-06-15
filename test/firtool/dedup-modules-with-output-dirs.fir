@@ -15,13 +15,13 @@ circuit Top: %[[
   {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|A>w"},
   {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|B>w"}
 ]]
-  ; CHECK: FILE "XXX/A.sv"
+  ; CHECK: FILE "XXX{{/|\\}}A.sv"
   ; CHECK: module A
   public module A:
     wire w : UInt<1>
     w is invalid
 
-  ; CHECK: FILE "YYY/B.sv"
+  ; CHECK: FILE "YYY{{/|\\}}B.sv"
   ; CHECK: module B
   public module B:
     wire w : UInt<1>
@@ -45,13 +45,13 @@ circuit Top: %[[
   {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|A>w"},
   {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|B>w"}
 ]]
-  ; CHECK-NOT: FILE "YYY/B.sv"
+  ; CHECK-NOT: FILE "YYY{{/|\\}}B.sv"
   ; CHECK: module A
   public module A:
     wire w : UInt<1>
     w is invalid
 
-  ; CHECK: FILE "YYY/B.sv"
+  ; CHECK: FILE "YYY{{/|\\}}B.sv"
   ; CHECK: module B
   public module B:
     wire w : UInt<1>
@@ -81,7 +81,7 @@ circuit Top: %[[
   {"class": "firrtl.transforms.DontTouchAnnotation", "target": "~Top|CB>w"}
 
 ]]
-  ; CHECK: FILE "ZZZ/CA.sv"
+  ; CHECK: FILE "ZZZ{{/|\\}}CA.sv"
   ; CHECK: module CA
   module CA:
     wire w : UInt<1>
@@ -92,13 +92,13 @@ circuit Top: %[[
     wire w : UInt<1>
     w is invalid
   
-  ; CHECK: FILE "ZZZ/XXX/A.sv"
+  ; CHECK: FILE "ZZZ{{/|\\}}XXX{{/|\\}}A.sv"
   ; CHECK: module A
   public module A:
     ; CHECK: CA c
     inst c of CA
 
-  ; CHECK: FILE "ZZZ/YYY/B.sv"
+  ; CHECK: FILE "ZZZ{{/|\\}}YYY{{/|\\}}B.sv"
   ; CHECK: module B
   public module B:
     ; CHECK: CA c
