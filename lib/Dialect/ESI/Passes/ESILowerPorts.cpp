@@ -18,6 +18,13 @@
 
 #include "mlir/Transforms/DialectConversion.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_LOWERESIPORTS
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace circt::esi;
 using namespace circt::esi::detail;
@@ -297,7 +304,7 @@ namespace {
 /// interfaces for now on external modules, ready/valid to modules defined
 /// internally. In the future, it may be possible to select a different
 /// format.
-struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
+struct ESIPortsPass : public circt::esi::impl::LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:

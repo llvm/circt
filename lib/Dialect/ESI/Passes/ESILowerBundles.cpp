@@ -17,6 +17,13 @@
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_LOWERESIBUNDLES
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace circt::esi;
 using namespace circt::esi::detail;
@@ -188,7 +195,8 @@ void BundlePort::buildOutputSignals() {
 
 namespace {
 /// Convert all the ESI bundle ports on modules to channel ports.
-struct ESIBundlesPass : public LowerESIBundlesBase<ESIBundlesPass> {
+struct ESIBundlesPass
+    : public circt::esi::impl::LowerESIBundlesBase<ESIBundlesPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace

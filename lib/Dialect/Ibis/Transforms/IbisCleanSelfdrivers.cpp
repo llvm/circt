@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
@@ -20,6 +22,13 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 #define DEBUG_TYPE "ibis-clean-selfdrivers"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISCLEANSELFDRIVERS
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace circt;
 using namespace ibis;
@@ -182,7 +191,7 @@ protected:
 };
 
 struct CleanSelfdriversPass
-    : public IbisCleanSelfdriversBase<CleanSelfdriversPass> {
+    : public circt::ibis::impl::IbisCleanSelfdriversBase<CleanSelfdriversPass> {
   void runOnOperation() override;
 
   LogicalResult cleanInstanceSide();
