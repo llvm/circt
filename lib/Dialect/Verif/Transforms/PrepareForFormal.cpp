@@ -9,7 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
@@ -22,6 +21,14 @@
 #include "mlir/Pass/Pass.h"
 
 using namespace circt;
+
+namespace circt {
+namespace verif {
+#define GEN_PASS_DEF_PREPAREFORFORMAL
+#include "circt/Dialect/Verif/Passes.h.inc"
+} // namespace verif
+} // namespace circt
+
 using namespace mlir;
 using namespace verif;
 
@@ -43,7 +50,8 @@ struct WireOpConversionPattern : OpConversionPattern<hw::WireOp> {
 };
 
 // Eagerly replace all wires with their inputs
-struct PrepareForFormalPass : PrepareForFormalBase<PrepareForFormalPass> {
+struct PrepareForFormalPass
+    : circt::verif::impl::PrepareForFormalBase<PrepareForFormalPass> {
   void runOnOperation() override;
 };
 } // namespace

@@ -10,20 +10,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_HWSTUBEXTERNALMODULES
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
 using namespace circt;
-
 //===----------------------------------------------------------------------===//
 // HWStubExternalModules Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
 struct HWStubExternalModulesPass
-    : public sv::HWStubExternalModulesBase<HWStubExternalModulesPass> {
+    : public circt::sv::impl::HWStubExternalModulesBase<
+          HWStubExternalModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
