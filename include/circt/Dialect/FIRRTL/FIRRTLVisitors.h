@@ -406,13 +406,6 @@ public:
     return this->dispatchExprVisitor(op, args...);
   }
 
-  /// Special handling for generic intrinsic op which aren't quite expressions
-  /// nor statements in the usual FIRRTL sense.
-  /// Refactor into specific visitor instead of adding more here.
-  ResultType visitIntrinsicOp(GenericIntrinsicOp op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
-  }
-
   // Chain from each visitor onto the next one.
   ResultType visitInvalidExpr(Operation *op, ExtraArgs... args) {
     return this->dispatchStmtVisitor(op, args...);
@@ -424,11 +417,7 @@ public:
     return this->dispatchStmtExprVisitor(op, args...);
   }
   ResultType visitInvalidStmtExpr(Operation *op, ExtraArgs... args) {
-    auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op).Default(
-        [&](auto expr) -> ResultType {
-          return thisCast->visitInvalidOp(op, args...);
-        });
+    return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
   }
 
   // Default to chaining visitUnhandledXXX to visitUnhandledOp.
