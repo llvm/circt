@@ -6,11 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 
 namespace circt {
 namespace seq {
@@ -25,7 +26,8 @@ using namespace hw;
 
 namespace {
 struct ExternalizeClockGatePass
-    : public impl::ExternalizeClockGateBase<ExternalizeClockGatePass> {
+    : public circt::seq::impl::ExternalizeClockGateBase<
+          ExternalizeClockGatePass> {
   using ExternalizeClockGateBase<
       ExternalizeClockGatePass>::ExternalizeClockGateBase;
   void runOnOperation() override;
