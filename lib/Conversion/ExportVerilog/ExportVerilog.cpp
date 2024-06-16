@@ -1686,7 +1686,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
-        if (emitAsTwoStateType) {
+        if (emitAsTwoStateType && dims.empty()) {
           auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
           if (!typeName.empty()) {
             os << typeName;
@@ -1719,12 +1719,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         dims.push_back(arrayType.getSizeAttr());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, {}, emitAsTwoStateType);
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, {}, emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum ";
@@ -1754,10 +1754,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             continue;
           }
           SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims,
-                              /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+          printPackedTypeImpl(
+              stripUnpackedTypes(element.type), os, loc, structDims,
+              /*implicitIntType=*/false,
+              /*singleBitDefaultType=*/true, emitter, {}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
@@ -1792,10 +1792,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           }
 
           SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims,
-                              /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+          printPackedTypeImpl(
+              stripUnpackedTypes(element.type), os, loc, structDims,
+              /*implicitIntType=*/false,
+              /*singleBitDefaultType=*/true, emitter, {}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << ";";
