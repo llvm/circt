@@ -672,4 +672,24 @@ firrtl.module @verif(
   }
 }
 
+// CHECK-LABEL:   firrtl.module @dpi(in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %in: !firrtl.uint<8>)
+firrtl.module @dpi(
+  in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %in: !firrtl.uint<8>
+) {
+  firrtl.when %cond : !firrtl.uint<1> {
+    // CHECK-NEXT: firrtl.int.dpi.call "foo"(%in) enable %cond
+    firrtl.int.dpi.call "foo"(%in) : (!firrtl.uint<8>) -> ()
+    // CHECK-NEXT: %[[TMP:.+]] = firrtl.and %cond, %enable
+    // CHECK-NEXT: firrtl.int.dpi.call "foo"(%in) enable %[[TMP]]
+    firrtl.int.dpi.call "foo"(%in) enable %enable : (!firrtl.uint<8>) -> ()
+  } else {
+    // CHECK-NEXT: %[[TMP:.+]] = firrtl.not %cond
+    // CHECK-NEXT: firrtl.int.dpi.call "foo"(%in) enable %[[TMP]]
+    firrtl.int.dpi.call "foo"(%in) : (!firrtl.uint<8>) -> ()
+    // CHECK-NEXT: %[[AND:.+]] = firrtl.and %[[TMP]], %enable
+    // CHECK-NEXT: firrtl.int.dpi.call "foo"(%in) enable %[[AND]]
+    firrtl.int.dpi.call "foo"(%in) enable %enable : (!firrtl.uint<8>) -> ()
+  }
+}
+
 }
