@@ -15,6 +15,8 @@
 #define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
 #include "circt/Support/LLVM.h"
+#include <string>
+#include <vector>
 
 namespace llvm {
 class SourceMgr;
