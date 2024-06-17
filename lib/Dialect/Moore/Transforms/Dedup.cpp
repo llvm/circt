@@ -13,10 +13,13 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
+#include "llvm/ADT/ScopedHashTable.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 namespace moore {
@@ -28,11 +31,11 @@ namespace moore {
 using namespace circt;
 using namespace moore;
 
-//===----------------------------------------------------------------------===//
-// DedupPass
-//===----------------------------------------------------------------------===//
 namespace {
-struct DedupPass : public circt::moore::impl::DedupBase<DedupPass> {
+class DedupPass : public circt::moore::impl::DedupBase<DedupPass> {
+  using SymbolTable = DenseSet<mlir::StringAttr>;
+  using Symbol2Symbol = DenseMap<mlir::StringAttr, SymbolTable>;
+  Symbol2Symbol replacTable;
   void runOnOperation() override;
 };
 } // namespace
@@ -41,4 +44,24 @@ std::unique_ptr<mlir::Pass> circt::moore::createDedupPass() {
   return std::make_unique<DedupPass>();
 }
 
-void DedupPass::runOnOperation() {}
+void DedupPass::runOnOperation() {
+  getOperation()->walk([&](SVModuleOp Ops) {
+    mlir::OpBuilder builder(&getContext());
+
+    // Do equiplance and record in replacTable
+    // Dedup already exist module op
+    for (auto &Op : Ops) {
+      if (isa<SVModuleOp>(Op)) {
+        ;
+      }
+    }
+
+    // replace instanceop symbol to new symbol
+    for (auto &Op : Ops) {
+      if (isa<InstanceOp>(Op)) {
+        ;
+      }
+    }
+    return WalkResult::advance();
+  });
+}
