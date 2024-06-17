@@ -701,8 +701,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 template <typename TAllocOp>
 static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
-                                  PatternRewriter &rewriter, TAllocOp allocOp,
-                                  bool isExternal) {
+                                  PatternRewriter &rewriter, TAllocOp allocOp) {
   rewriter.setInsertionPointToStart(
       componentState.getComponentOp().getBodyBlock());
   MemRefType memtype = allocOp.getType();
@@ -724,9 +723,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
 
   // Externalize memories conditionally (only in the top-level component because
   // Calyx compiler requires it as a well-formness check).
-  if (isExternal)
-    memoryOp->setAttr(
-        "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
+  memoryOp->setAttr("external",
+                    IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
   return success();
@@ -734,22 +732,12 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocOp allocOp) const {
-  if (getState<ComponentLoweringState>().getComponentOp().getName() ==
-      loweringState().getTopLevelFunction())
-    return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
-                        true);
-  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
-                      false);
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::AllocaOp allocOp) const {
-  if (getState<ComponentLoweringState>().getComponentOp().getName() ==
-      loweringState().getTopLevelFunction())
-    return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
-                        true);
-  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp,
-                      false);
+  return buildAllocOp(getState<ComponentLoweringState>(), rewriter, allocOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1509,43 +1497,6 @@ class BuildControl : public calyx::FuncOpPartialLoweringPattern {
   }
 
 private:
-  /// Given a CallScheduleable, returns a list of Calyx MemoryOp's names in the
-  /// "callee" component
-  SmallVector<StringRef, 4>
-  getMemNamesInCalleeComp(PatternRewriter &rewriter,
-                          CallScheduleable *callSchedPtr) const {
-    auto callee = callSchedPtr->callOp.getCallee();
-    auto *calleeOp = SymbolTable::lookupNearestSymbolFrom(
-        callSchedPtr->callOp.getOperation()->getParentOp(),
-        StringAttr::get(rewriter.getContext(), "func_" + callee.str()));
-    FuncOp calleeFunc = dyn_cast_or_null<FuncOp>(calleeOp);
-
-    auto instanceOp = callSchedPtr->instanceOp;
-    auto instanceOpComp =
-        llvm::cast<calyx::ComponentOp>(instanceOp.getReferencedComponent());
-    auto *instanceOpLoweringState = loweringState().getState(instanceOpComp);
-
-    SmallVector<StringRef, 4> res;
-    for (auto operand : calleeFunc.getArguments()) {
-      if (isa<MemRefType>(operand.getType())) {
-        auto instanceOpMemOpName =
-            instanceOpLoweringState->getMemoryInterface(operand).memName();
-        res.push_back(instanceOpMemOpName);
-      }
-    }
-
-    for (auto &op : calleeFunc.getBody().getOps()) {
-      if (auto allocOp = dyn_cast<memref::AllocOp>(op)) {
-        auto allocRes = allocOp.getResult();
-        auto allocMemName =
-            instanceOpLoweringState->getMemoryInterface(allocRes).memName();
-        res.push_back(allocMemName);
-      }
-    }
-
-    return res;
-  }
-
   /// Sequentially schedules the groups that registered themselves with
   /// 'block'.
   LogicalResult scheduleBasicBlock(PatternRewriter &rewriter,
@@ -1680,7 +1631,17 @@ private:
         std::string initGroupName = "init_" + instanceOp.getSymName().str();
         rewriter.create<calyx::EnableOp>(instanceOp.getLoc(), initGroupName);
 
-        auto refMemNames = getMemNamesInCalleeComp(rewriter, callSchedPtr);
+        auto callee = callSchedPtr->callOp.getCallee();
+        auto *calleeOp = SymbolTable::lookupNearestSymbolFrom(
+            callSchedPtr->callOp.getOperation()->getParentOp(),
+            StringAttr::get(rewriter.getContext(), "func_" + callee.str()));
+        FuncOp calleeFunc = dyn_cast_or_null<FuncOp>(calleeOp);
+
+        auto instanceOpComp =
+            llvm::cast<calyx::ComponentOp>(instanceOp.getReferencedComponent());
+        auto *instanceOpLoweringState =
+            loweringState().getState(instanceOpComp);
+
         SmallVector<Value, 4> instancePorts;
         SmallVector<Value, 4> inputPorts;
         NamedAttrList refCells;
@@ -1693,8 +1654,13 @@ private:
                                  .memName();
             auto memOpNameAttr =
                 SymbolRefAttr::get(rewriter.getContext(), memOpName);
-            refCells.append(NamedAttribute(
-                rewriter.getStringAttr(refMemNames[index]), memOpNameAttr));
+            Value argI = calleeFunc.getArgument(index);
+            if (isa<MemRefType>(argI.getType()))
+              refCells.append(NamedAttribute(
+                  rewriter.getStringAttr(
+                      instanceOpLoweringState->getMemoryInterface(argI)
+                          .memName()),
+                  memOpNameAttr));
           } else {
             inputPorts.push_back(operand);
           }
@@ -2075,14 +2041,20 @@ private:
       caller.addEntryBlock();
     }
 
-    Block *entryBlock = &caller.getBody().front();
-    builder.setInsertionPointToStart(entryBlock);
+    Block *callerEntryBlock = &caller.getBody().front();
+    builder.setInsertionPointToStart(callerEntryBlock);
 
+    // For those non-memref arguments passing to the original top-level
+    // function, we need to copy them to the new top-level function.
     SmallVector<Type, 4> nonMemRefCalleeArgTypes;
     for (auto arg : callee.getArguments()) {
       if (!isa<MemRefType>(arg.getType())) {
         nonMemRefCalleeArgTypes.push_back(arg.getType());
       }
+    }
+
+    for (Type type : nonMemRefCalleeArgTypes) {
+      callerEntryBlock->addArgument(type, caller.getLoc());
     }
 
     FunctionType callerFnType = caller.getFunctionType();
@@ -2092,55 +2064,76 @@ private:
     caller.setType(FunctionType::get(caller.getContext(), updatedCallerArgTypes,
                                      callerFnType.getResults()));
 
-    for (Type type : nonMemRefCalleeArgTypes) {
-      entryBlock->addArgument(type, caller.getLoc());
+    Block *calleeFnBody = &callee.getBody().front();
+    unsigned originalCalleeArgNum = callee.getArguments().size();
+
+    SmallVector<Value, 4> extraMemRefArgs;
+    SmallVector<Type, 4> extraMemRefArgTypes;
+    SmallVector<Value, 4> extraMemRefOperands;
+    SmallVector<Operation *, 4> opsToModify;
+    for (auto &block : callee.getBody()) {
+      for (auto &op : block) {
+        if (isa<memref::AllocaOp>(op) || isa<memref::AllocOp>(op) ||
+            isa<memref::GetGlobalOp>(op))
+          opsToModify.push_back(&op);
+      }
     }
 
-    SmallVector<Value, 4> memRefArgs;
-    SmallVector<Value, 4> otherArgs;
-    for (auto arg : callee.getArguments()) {
+    // Replace `alloc`/`getGlobal` in the original top-level with new
+    // corresponding operations in the new top-level.
+    builder.setInsertionPointToEnd(callerEntryBlock);
+    for (auto *op : opsToModify) {
+      Value newOpRes;
+      if (auto allocaOp = dyn_cast<memref::AllocaOp>(op)) {
+        newOpRes = builder.create<memref::AllocaOp>(callee.getLoc(),
+                                                    allocaOp.getType());
+      } else if (auto allocOp = dyn_cast<memref::AllocOp>(op)) {
+        newOpRes =
+            builder.create<memref::AllocOp>(callee.getLoc(), allocOp.getType());
+      } else if (auto getGlobalOp = dyn_cast<memref::GetGlobalOp>(op)) {
+        newOpRes = builder.create<memref::GetGlobalOp>(
+            caller.getLoc(), getGlobalOp.getType(), getGlobalOp.getName());
+      }
+      extraMemRefOperands.push_back(newOpRes);
+
+      calleeFnBody->addArgument(newOpRes.getType(), callee.getLoc());
+      BlockArgument newBodyArg = calleeFnBody->getArguments().back();
+      op->getResult(0).replaceAllUsesWith(newBodyArg);
+      op->erase();
+      extraMemRefArgs.push_back(newBodyArg);
+      extraMemRefArgTypes.push_back(newBodyArg.getType());
+    }
+
+    SmallVector<Type, 4> updatedCalleeArgTypes(
+        callee.getFunctionType().getInputs());
+    updatedCalleeArgTypes.append(extraMemRefArgTypes.begin(),
+                                 extraMemRefArgTypes.end());
+    callee.setType(FunctionType::get(callee.getContext(), updatedCalleeArgTypes,
+                                     callee.getFunctionType().getResults()));
+
+    unsigned otherArgsCount = 0;
+    SmallVector<Value, 4> calleeArgFnOperands;
+    for (auto arg : callee.getArguments().take_front(originalCalleeArgNum)) {
       if (isa<MemRefType>(arg.getType())) {
         auto memrefType = cast<MemRefType>(arg.getType());
         auto allocOp =
             builder.create<memref::AllocOp>(callee.getLoc(), memrefType);
-        memRefArgs.push_back(allocOp);
+        calleeArgFnOperands.push_back(allocOp);
       } else {
-        auto callerArg = entryBlock->getArgument(otherArgs.size());
-        otherArgs.push_back(callerArg);
+        auto callerArg = callerEntryBlock->getArgument(otherArgsCount++);
+        calleeArgFnOperands.push_back(callerArg);
       }
     }
 
-    SmallVector<memref::AllocOp, 4> calleeAllocOps;
-    SmallVector<memref::GetGlobalOp, 4> calleeGetGlobalOps;
-    for (auto &op : callee.getBody().getOps()) {
-      if (auto allocOp = dyn_cast<memref::AllocOp>(&op)) {
-        calleeAllocOps.push_back(allocOp);
-      } else if (auto getGlobalOp = dyn_cast<memref::GetGlobalOp>(op)) {
-        calleeGetGlobalOps.push_back(getGlobalOp);
-      }
-    }
-
-    for (auto allocOp : calleeAllocOps) {
-      auto allocType = cast<MemRefType>(allocOp.getType());
-      auto alloc = builder.create<memref::AllocOp>(caller.getLoc(), allocType);
-      memRefArgs.push_back(alloc);
-    }
-
-    for (auto getGlobalOp : calleeGetGlobalOps) {
-      auto globalType = getGlobalOp.getType();
-      auto newGetGlobal = builder.create<memref::GetGlobalOp>(
-          caller.getLoc(), globalType, getGlobalOp.getName());
-      memRefArgs.push_back(newGetGlobal);
-    }
-
+    SmallVector<Value, 4> fnOperands;
+    fnOperands.append(calleeArgFnOperands.begin(), calleeArgFnOperands.end());
+    fnOperands.append(extraMemRefOperands.begin(), extraMemRefOperands.end());
     auto calleeName =
         SymbolRefAttr::get(builder.getContext(), callee.getSymName());
     auto resultTypes = callee.getResultTypes();
 
-    SmallVector<Value, 4> allArgs;
-    allArgs.append(memRefArgs.begin(), memRefArgs.end());
-    allArgs.append(otherArgs.begin(), otherArgs.end());
-    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes, allArgs);
+    builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
+                           fnOperands);
   }
 
   /// Conditionally creates an optional new top-level function; and inserts a
