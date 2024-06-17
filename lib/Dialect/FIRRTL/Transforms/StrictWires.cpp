@@ -49,6 +49,32 @@ static StrictInstanceOp cloneInstTo(mlir::OpBuilder &builder, InstanceOp inst) {
       inst.getLowerToBind(), inst.getInnerSymAttr());
 }
 
+static FStrictModuleOp cloneModuleTo(mlir::OpBuilder &builder, FModuleOp mod) {
+  builder.setInsertionPoint(mod);
+
+  // This uses the builtin and needs types fixed
+  auto newMod = builder.create<FStrictModuleOp>(
+      mod.getLoc(), mod.getNameAttr(), mod.getConventionAttr(), mod.getPorts(),
+
+      mod.getAnnotationsAttr(), mod.getLayersAttr());
+
+  // Move the body of the module.
+  newMod.getRegion().takeBody(mod.getRegion());
+  // Update the types in the body.
+  builder.setInsertionPointToStart(newMod.getBodyBlock());
+  for (auto &arg : newMod.getArguments()) {
+    if (mod.getPortDirection(arg.getArgNumber()) == Direction::Out &&
+        type_isa<FIRRTLBaseType>(arg.getType())) {
+      auto wire = builder.create<WireOp>(arg.getLoc(), arg.getType());
+      arg.replaceAllUsesWith(wire.getResult());
+      arg.setType(LHSType::get(type_cast<FIRRTLBaseType>(arg.getType())));
+      builder.create<StrictConnectOp>(arg.getLoc(), arg, wire.getResult());
+    }
+  }
+
+  return newMod;
+}
+
 // This is recursive, but effectively recursive on a type.
 static void updateUses(mlir::OpBuilder &builder,
                        std::deque<Operation *> &toDelete, Value toReplace,
@@ -91,6 +117,9 @@ static void updateUses(mlir::OpBuilder &builder,
 
 namespace {
 struct StrictWiresPass : public StrictWiresBase<StrictWiresPass> {
+  void runOnOperation() override;
+};
+struct StrictModulesPass : public StrictModulesBase<StrictModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -136,7 +165,35 @@ void StrictWiresPass::runOnOperation() {
     w->erase();
 }
 
+// This is the main entrypoint for the lowering pass.
+void StrictModulesPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  auto circuit = getOperation();
+  mlir::OpBuilder builder(circuit);
+  std::deque<Operation *> toDelete;
+
+  circuit.walk([&](Operation *op) -> WalkResult {
+    if (auto module = dyn_cast<FModuleOp>(op)) {
+      for (auto port : module.getPorts())
+        if (auto type = type_dyn_cast<FIRRTLBaseType>(port.type))
+          if (!type.isPassive())
+            return WalkResult::advance();
+
+      auto newMod = cloneModuleTo(builder, module);
+      toDelete.push_back(module);
+    }
+    return WalkResult::advance();
+  });
+
+  for (auto w : toDelete)
+    w->erase();
+}
+
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createStrictWiresPass() {
   return std::make_unique<StrictWiresPass>();
+}
+
+std::unique_ptr<mlir::Pass> circt::firrtl::createStrictModulesPass() {
+  return std::make_unique<StrictModulesPass>();
 }

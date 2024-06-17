@@ -98,6 +98,8 @@ std::unique_ptr<mlir::Pass> createPassiveWiresPass();
 
 std::unique_ptr<mlir::Pass> createStrictWiresPass();
 
+std::unique_ptr<mlir::Pass> createStrictModulesPass();
+
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
 std::unique_ptr<mlir::Pass> createFlattenMemoryPass();

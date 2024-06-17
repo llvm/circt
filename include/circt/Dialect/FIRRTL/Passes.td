@@ -122,6 +122,13 @@ def StrictWires : Pass<"firrtl-strict-wires", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createStrictWiresPass()";
 }
 
+def StrictModules : Pass<"firrtl-strict-modules", "firrtl::CircuitOp"> {
+  let summary = "Make FIRRTL ports have typed read and write ports.";
+  let description = [{
+    Make multi-ported modules.
+  }];
+  let constructor = "circt::firrtl::createStrictModulesPass()";
+}
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
