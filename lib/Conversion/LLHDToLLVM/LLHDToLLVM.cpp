@@ -718,7 +718,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&procOp.getBody().front(), intermediate,
+    rewriter.applySignatureConversion(&procOp.getBlocks().front(), intermediate,
                                       typeConverter);
 
     // Get the final signature conversion.
