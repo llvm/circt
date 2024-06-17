@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/SimToSV.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -28,6 +27,11 @@
 #include "mlir/Transforms/DialectConversion.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERSIMTOSV
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace sim;
@@ -176,12 +180,12 @@ public:
     bool hasEnable = !!op.getEnable();
 
     SmallVector<sv::RegOp> temporaries;
+    SmallVector<Value> reads;
     for (auto [type, result] :
          llvm::zip(op.getResultTypes(), op.getResults())) {
       temporaries.push_back(rewriter.create<sv::RegOp>(op.getLoc(), type));
-      auto read =
-          rewriter.create<sv::ReadInOutOp>(op.getLoc(), temporaries.back());
-      rewriter.replaceAllUsesWith(result, read);
+      reads.push_back(
+          rewriter.create<sv::ReadInOutOp>(op.getLoc(), temporaries.back()));
     }
 
     auto emitCall = [&]() {
@@ -225,7 +229,7 @@ public:
       });
     }
 
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, reads);
     return success();
   }
 };
@@ -291,7 +295,7 @@ void LowerDPIFunc::addFragments(hw::HWModuleOp module,
 }
 
 namespace {
-struct SimToSVPass : public LowerSimToSVBase<SimToSVPass> {
+struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
     auto circuit = getOperation();
     MLIRContext *context = &getContext();

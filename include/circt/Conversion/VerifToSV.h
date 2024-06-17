@@ -18,6 +18,10 @@
 #include <memory>
 
 namespace circt {
+
+#define GEN_PASS_DECL_LOWERVERIFTOSV
+#include "circt/Conversion/Passes.h.inc"
+
 namespace hw {
 class HWModuleOp;
 } // namespace hw

@@ -27,6 +27,13 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_LOWERESITOHW
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace circt::esi;
 using namespace circt::esi::detail;
@@ -214,7 +221,7 @@ public:
 } // anonymous namespace
 
 namespace {
-struct ESItoHWPass : public LowerESItoHWBase<ESItoHWPass> {
+struct ESItoHWPass : public circt::esi::impl::LowerESItoHWBase<ESItoHWPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace

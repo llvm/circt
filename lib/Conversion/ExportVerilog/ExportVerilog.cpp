@@ -16,7 +16,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -56,8 +55,13 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace circt;
+namespace circt {
+#define GEN_PASS_DEF_EXPORTSPLITVERILOG
+#define GEN_PASS_DEF_EXPORTVERILOG
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
+using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
@@ -6999,7 +7003,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 namespace {
 
-struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+struct ExportVerilogPass
+    : public circt::impl::ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
@@ -7179,7 +7184,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 namespace {
 
 struct ExportSplitVerilogPass
-    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
+    : public circt::impl::ExportSplitVerilogBase<ExportSplitVerilogPass> {
   ExportSplitVerilogPass(StringRef directory) {
     directoryName = directory.str();
   }
