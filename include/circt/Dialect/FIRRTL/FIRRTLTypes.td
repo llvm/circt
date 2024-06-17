@@ -88,7 +88,7 @@ def PassiveType : FIRRTLDialectType<
 def SizedType : FIRRTLDialectType<CPred<"type_isa<FIRRTLBaseType>($_self) && "
     "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
     "a sized type (contains no uninferred widths)", 
-    "::circt::firrtl::FIRRTLType">;
+    "::circt::firrtl::FIRRTLBaseType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
     "a sized passive base type (contains no uninferred widths, or flips)", 
