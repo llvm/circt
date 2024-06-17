@@ -623,7 +623,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         std::array<Type, 3>({voidPtrTy, voidPtrTy, voidPtrTy}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate,
+    rewriter.applySignatureConversion(entityOp.getBodyBlock(), intermediate,
                                       typeConverter);
 
     OpBuilder bodyBuilder =
@@ -646,7 +646,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&entityOp.getBody(), final,
+    rewriter.applySignatureConversion(entityOp.getBodyBlock(), final,
                                       typeConverter);
 
     // Get the converted entity signature.
@@ -718,7 +718,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&procOp.getBody(), intermediate,
+    rewriter.applySignatureConversion(&procOp.getBody().front(), intermediate,
                                       typeConverter);
 
     // Get the final signature conversion.

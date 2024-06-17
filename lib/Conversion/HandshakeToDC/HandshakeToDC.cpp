@@ -605,7 +605,7 @@ public:
       TypeConverter::SignatureConversion result(moduleRegion.getNumArguments());
       (void)getTypeConverter()->convertSignatureArgs(
           TypeRange(moduleRegion.getArgumentTypes()), result);
-      rewriter.applySignatureConversion(&hwModule.getBody(), result);
+      rewriter.applySignatureConversion(hwModule.getBodyBlock(), result);
     }
 
     rewriter.eraseOp(op);
