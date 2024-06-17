@@ -109,34 +109,15 @@ public:
   // If so, its lid will be returned
   // Otherwise a new lid will be assigned to the op
   size_t getOpLID(Operation *op) {
-    if (auto it = opLIDMap.find(op); it != opLIDMap.end())
-      return it->second;
+    // Look for the original operation declaration
+    // Make sure that wires are considered when looking for an lid
+    Operation *defOp = op;
+    auto &f = opLIDMap[defOp];
 
-    // Give the op an id if nothing was found
-    return setOpLID(op);
-  }
-
-  // Checks if an operation was declared
-  // If so, its lid will be returned
-  // Otherwise -1 will be returned
-  size_t getOpLID(Value value) {
-    // Check for potential block arguments
-    Operation *op = value.getDefiningOp();
-    if (!op) {
-      // Special case where op is actually a port
-      // To do so, we start by checking if our operation is a block argument
-      if (BlockArgument barg = dyn_cast<BlockArgument>(value)) {
-        // Extract the block argument index and use that to get the line number
-        size_t argIdx = barg.getArgNumber();
-
-        // Check that the extracted argument is in range before using it
-        if (auto it = inputLIDs.find(argIdx); it != inputLIDs.end())
-          return it->second;
-      }
-      return noLID;
-    }
-
-    return getOpLID(op);
+    // If the op isn't associated to an lid, assign it a new one
+    if (!f)
+      f = lid++;
+    return f;
   }
 
   // Associates the current lid to an operation
@@ -147,28 +128,28 @@ public:
     return oplid;
   }
 
-  // Associates the current lid to a value's operation or block argument index
-  // if it's an input. The LID is then incremented to maintain uniqueness
-  size_t setOpLID(Value value) {
-    size_t oplid = lid++;
-    // Check for potential block arguments
-    Operation *op = value.getDefiningOp();
-    if (!op) {
-      // Special case where op is actually a port
-      // To do so, we start by checking if our operation is a block argument
-      if (BlockArgument barg = dyn_cast<BlockArgument>(value))
-        return setOpLID(barg.getArgNumber());
-    }
-    lid = oplid;
-    return setOpLID(op);
-  }
+  // Checks if an operation was declared
+  // If so, its lid will be returned
+  // Otherwise -1 will be returned
+  size_t getOpLID(Value value) {
+    Operation *defOp = value.getDefiningOp();
 
-  // Associates the current lid to an operation
-  // The LID is then incremented to maintain uniqueness
-  size_t setOpLID(size_t argIdx) {
-    size_t oplid = lid++;
-    inputLIDs[argIdx] = oplid;
-    return oplid;
+    if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
+      return it->second;
+
+    // Check for special case where op is actually a port
+    // To do so, we start by checking if our operation is a block argument
+    if (BlockArgument barg = dyn_cast<BlockArgument>(value)) {
+      // Extract the block argument index and use that to get the line number
+      size_t argIdx = barg.getArgNumber();
+
+      // Check that the extracted argument is in range before using it
+      if (auto it = inputLIDs.find(argIdx); it != inputLIDs.end())
+        return it->second;
+    }
+
+    // Return -1 if no LID was found
+    return noLID;
   }
 
 private:
@@ -853,14 +834,15 @@ public:
     return signalPassFailure();
   }
 
-  void visitInvalidVerif(Operation *op) {}
+  void visitInvalidVerif(Operation *op) { visit(op); }
+
   // Seq operation visitor, that dispatches to other seq ops
   // Also handles all remaining operations that should be explicitly ignored
   void visit(Operation *op) {
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, hw::WireOp>([&](auto expr) { visit(expr); })
+        .Case<seq::FirRegOp, seq::CompRegOp>([&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -963,7 +945,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       visit(port);
     }
 
-    // Previsit all registers in the module in order to avoid dependency cylcles
+    // Previsit all registers in the module in order to avoid dependency cycles
     module.walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
           .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
@@ -1013,7 +995,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
         // This is triggered if our operand is already in the worklist and
         // wasn't handled
         if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
-          op->emitError("dependency cycle");
+          defOp->emitError("dependency cycle");
           return;
         }
       }
