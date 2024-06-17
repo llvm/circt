@@ -127,7 +127,7 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 //===----------------------------------------------------------------------===//
 
 class LowerLayersPass
-     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
+    : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
     auto layer = dyn_cast<LayerOp>(
         symbolTable->lookupSymbolIn(getOperation(), layerName));
@@ -148,7 +148,6 @@ class LowerLayersPass
         /*excludeFromFileList=*/true);
   }
 
-  
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
   FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock,
