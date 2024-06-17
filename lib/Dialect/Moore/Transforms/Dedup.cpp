@@ -20,7 +20,7 @@
 
 namespace circt {
 namespace moore {
-#define GEN_PASS_DEF_SIMPLIFYPROCEDURES
+#define GEN_PASS_DEF_DEDUP
 #include "circt/Dialect/Moore/MoorePasses.h.inc"
 } // namespace moore
 } // namespace circt
@@ -33,12 +33,12 @@ using namespace moore;
 //===----------------------------------------------------------------------===//
 namespace {
 struct DedupPass : public circt::moore::impl::DedupBase<DedupPass> {
-  void runOnOperation() override {}
+  void runOnOperation() override;
 };
-} // end anonymous namespace
+} // namespace
 
 std::unique_ptr<mlir::Pass> circt::moore::createDedupPass() {
   return std::make_unique<DedupPass>();
 }
 
-// void DedupPass::runOnOperation() {}
+void DedupPass::runOnOperation() {}
