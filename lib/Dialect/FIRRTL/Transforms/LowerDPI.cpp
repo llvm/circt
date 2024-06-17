@@ -97,7 +97,7 @@ LogicalResult LowerDPI::lower() {
     // Construct DPI func op.
     auto firstDPIDecl = getOrCreateDPIFuncDecl(firstDPICallop);
 
-    auto inputTypes = firstDPICallop.getOperandTypes();
+    auto inputTypes = firstDPICallop.getInputs().getTypes();
     auto outputTypes = firstDPICallop.getResultTypes();
 
     ImplicitLocOpBuilder builder(firstDPICallop.getLoc(),

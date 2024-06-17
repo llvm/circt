@@ -31,4 +31,12 @@ firrtl.circuit "DPI" {
     firrtl.matchingconnect %out_0, %0 : !firrtl.uint<8>
     firrtl.matchingconnect %out_1, %1 : !firrtl.uint<8>
   }
+
+  // CHECK-LABEL: firrtl.module @DPISignature
+  firrtl.module @DPISignature(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: call @clocked_void
+    // CHECK: call @clocked_void
+    firrtl.int.dpi.call "clocked_void"(%in_0, %in_1) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    firrtl.int.dpi.call "clocked_void"(%in_0, %in_1) clock %clock : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
+  }
 }
