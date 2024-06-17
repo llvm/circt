@@ -6,9 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_SPECIALIZEOPTION
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -16,7 +25,7 @@ using namespace firrtl;
 
 namespace {
 struct SpecializeOptionPass
-    : public SpecializeOptionBase<SpecializeOptionPass> {
+    : public circt::firrtl::impl::SpecializeOptionBase<SpecializeOptionPass> {
   using SpecializeOptionBase::numInstances;
   using SpecializeOptionBase::select;
 

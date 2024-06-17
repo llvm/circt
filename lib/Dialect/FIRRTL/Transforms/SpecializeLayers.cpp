@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -17,6 +18,13 @@
 #include "llvm/ADT/STLExtras.h"
 #include <optional>
 #include <type_traits>
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_SPECIALIZELAYERS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -679,7 +687,7 @@ struct SpecializeLayers {
 };
 
 struct SpecializeLayersPass
-    : public SpecializeLayersBase<SpecializeLayersPass> {
+    : public circt::firrtl::impl::SpecializeLayersBase<SpecializeLayersPass> {
 
   void runOnOperation() override {
     auto circuit = getOperation();
