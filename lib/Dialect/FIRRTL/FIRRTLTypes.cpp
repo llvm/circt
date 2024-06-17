@@ -43,9 +43,8 @@ using mlir::TypeStorageAllocator;
 /// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
-  if (isConst(type)) {
+  if (isConst(type))
     os << "const.";
-  }
 
   auto printWidthQualifier = [&](std::optional<int32_t> width) {
     if (width)
@@ -356,11 +355,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = RefType::get(type, false, layer), success();
   }
   if (name == "lhs") {
-    FIRRTLBaseType type;
+    FIRRTLType type;
     if (parser.parseLess() || parseNestedType(type, parser) ||
         parser.parseGreater())
       return failure();
-    return result = LHSType::get(context, type), success();
+    if (!isa<FIRRTLBaseType>(type))
+      return parser.emitError(parser.getNameLoc(), "expected base type");
+    result = parser.getChecked<LHSType>(context, cast<FIRRTLBaseType>(type));
+    return failure(!result);
   }
   if (name == "rwprobe") {
     FIRRTLBaseType type;
@@ -2397,10 +2399,12 @@ LogicalResult LHSType::verify(function_ref<InFlightDiagnostic()> emitError,
                               FIRRTLBaseType type) {
   if (type.containsAnalog())
     return emitError() << "lhs type cannot contain an AnalogType";
-  if (type.getPassiveType() != type)
+  if (!type.isPassive())
     return emitError() << "lhs type cannot contain a non-passive type";
   if (type.containsReference())
     return emitError() << "lhs type cannot contain a reference";
+  if (type_isa<LHSType>(type))
+    return emitError() << "lhs type cannot contain a lhs type";
 
   return success();
 }

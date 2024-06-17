@@ -2480,3 +2480,58 @@ firrtl.circuit "DPI" {
     %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
   }
 }
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.bundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.vector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{bundle element "a" cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openbundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{vector cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openvector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{lhs type cannot contain an AnalogType}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<analog<1>>
+}
+}
+
