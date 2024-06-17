@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
 #include "circt/Dialect/Ibis/IbisPasses.h"
@@ -15,8 +13,16 @@
 
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISTUNNELING
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -24,9 +30,6 @@ using namespace circt::ibis;
 using namespace circt::igraph;
 
 namespace {
-
-#define GEN_PASS_DEF_IBISTUNNELING
-#include "circt/Dialect/Ibis/IbisPasses.h.inc"
 
 // The PortInfo struct is used to keep track of the get_port ops that
 // specify which ports needs to be tunneled through the hierarchy.
@@ -405,7 +408,8 @@ protected:
   IbisTunnelingOptions options;
 };
 
-struct TunnelingPass : public impl::IbisTunnelingBase<TunnelingPass> {
+struct TunnelingPass
+    : public circt::ibis::impl::IbisTunnelingBase<TunnelingPass> {
   using IbisTunnelingBase<TunnelingPass>::IbisTunnelingBase;
   void runOnOperation() override;
 };

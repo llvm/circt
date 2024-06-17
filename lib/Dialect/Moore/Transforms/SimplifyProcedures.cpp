@@ -12,19 +12,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace moore {
+#define GEN_PASS_DEF_SIMPLIFYPROCEDURES
+#include "circt/Dialect/Moore/MoorePasses.h.inc"
+} // namespace moore
+} // namespace circt
 
 using namespace circt;
 using namespace moore;
 
 namespace {
 struct SimplifyProceduresPass
-    : public SimplifyProceduresBase<SimplifyProceduresPass> {
+    : public circt::moore::impl::SimplifyProceduresBase<
+          SimplifyProceduresPass> {
   void runOnOperation() override;
 };
 } // namespace

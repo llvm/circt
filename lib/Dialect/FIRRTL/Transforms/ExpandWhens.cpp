@@ -509,6 +509,7 @@ public:
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
   using LastConnectResolver<WhenOpVisitor>::visitStmt;
+  using LastConnectResolver<WhenOpVisitor>::visitStmtExpr;
 
   /// Process a block, recording each declaration, and expanding all whens.
   void process(Block &block);
@@ -529,6 +530,7 @@ public:
   void visitStmt(RefForceInitialOp op);
   void visitStmt(RefReleaseOp op);
   void visitStmt(RefReleaseInitialOp op);
+  void visitStmtExpr(DPICallIntrinsicOp op);
 
 private:
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -616,6 +618,13 @@ void WhenOpVisitor::visitStmt(RefReleaseOp op) {
 
 void WhenOpVisitor::visitStmt(RefReleaseInitialOp op) {
   op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmtExpr(DPICallIntrinsicOp op) {
+  if (op.getEnable())
+    op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
+  else
+    op.getEnableMutable().assign(condition);
 }
 
 /// This is a common helper that is dispatched to by the concrete visitors.

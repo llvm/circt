@@ -5199,6 +5199,15 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     }
     consumeToken();
+
+    hw::OutputFileAttr outputDir;
+    if (getToken().getKind() == FIRToken::string) {
+      auto text = getToken().getStringValue();
+      if (text.empty())
+        return emitError() << "output directory must not be blank";
+      outputDir = hw::OutputFileAttr::getAsDirectory(getContext(), text);
+      consumeToken(FIRToken::string);
+    }
     if (parseToken(FIRToken::colon, "expected ':' after layer definition") ||
         info.parseOptionalInfo())
       return failure();
@@ -5206,6 +5215,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
     // Create the layer definition and give it an empty block.
     auto layerOp = builder.create<LayerOp>(info.getLoc(), id, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
+    if (outputDir)
+      layerOp->setAttr("output_file", outputDir);
     layerStack.push_back({indent, layerOp});
     return success();
   };
@@ -5473,6 +5484,34 @@ DoneParsing:
       });
   if (failed(anyFailed))
     return failure();
+
+  // Helper to transform a layer name specification of the form `A::B::C` into
+  // a SymbolRefAttr.
+  auto parseLayerName = [&](StringRef name) {
+    // Parse the layer name into a SymbolRefAttr.
+    auto [head, rest] = name.split("::");
+    SmallVector<FlatSymbolRefAttr> nestedRefs;
+    while (!rest.empty()) {
+      StringRef next;
+      std::tie(next, rest) = rest.split("::");
+      nestedRefs.push_back(FlatSymbolRefAttr::get(getContext(), next));
+    }
+    return SymbolRefAttr::get(getContext(), head, nestedRefs);
+  };
+
+  auto parseLayers = [&](const auto &layers) {
+    SmallVector<Attribute> layersAttr;
+    for (const auto &layer : layers)
+      layersAttr.push_back(parseLayerName(layer));
+    if (layersAttr.empty())
+      return ArrayAttr();
+    return ArrayAttr::get(getContext(), layersAttr);
+  };
+
+  if (auto enableLayers = parseLayers(getConstants().options.enableLayers))
+    circuit.setEnableLayersAttr(enableLayers);
+  if (auto disableLayers = parseLayers(getConstants().options.disableLayers))
+    circuit.setDisableLayersAttr(disableLayers);
 
   return success();
 }
