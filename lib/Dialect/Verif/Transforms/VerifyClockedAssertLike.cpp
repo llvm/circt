@@ -86,12 +86,7 @@ private:
       if (!defOp || handledOps.contains(defOp))
         continue;
 
-      // This is triggered if our operand is already in the worklist and
-      // wasn't handled
-      if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
-        op->emitError("dependency cycle");
-        return;
-      }
+      worklist.insert({defOp, defOp->operand_begin()});
     }
 
     // Clear worklist and such

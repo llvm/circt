@@ -572,9 +572,12 @@ private:
       // i.e. reg <= reset ? 0 : next
       genIte(next.getDefiningOp(), resetLID, resetValLID, nextLID, width);
     } else {
-      // Assign a new LID to next and perform a sanity check
-      setOpLID(next.getDefiningOp());
-      assert(nextLID != noLID);
+      // Sanity check: next should have been assigned
+      if (nextLID == noLID) {
+        next.getDefiningOp()->emitError(
+            "Register input does not point to a valid op!");
+        return;
+      }
     }
 
     // Finally generate the next statement
@@ -872,6 +875,10 @@ public:
     // Check for initial values which must be emitted before the state in
     // btor2
     Value pov = reg.getPowerOnValue();
+
+    // Generate state instruction (represents the register declaration)
+    genState(reg, w, regName);
+
     if (pov) {
       // Check that the powerOn value is a non-null constant
       if (!isa_and_nonnull<hw::ConstantOp>(pov.getDefiningOp()))
@@ -883,15 +890,8 @@ public:
       // Add it to the list of visited operations
       handledOps.insert(pov.getDefiningOp());
 
-      // Generate state instruction (represents the register declaration)
-      genState(reg, w, regName);
-
       // Finally generate the init statement
       genInit(reg, pov, w);
-
-    } else {
-      // Only generate the state instruction and nothing else
-      genState(reg, w, regName);
     }
 
     // Record the operation for future `next` instruction generation
