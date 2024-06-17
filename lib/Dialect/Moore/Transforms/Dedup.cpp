@@ -32,8 +32,7 @@ using namespace moore;
 // DedupPass
 //===----------------------------------------------------------------------===//
 namespace {
-struct DedupPass
-    : public circt::moore::impl::SimplifyProceduresBase<DedupPass> {
+struct DedupPass : public circt::moore::impl::DedupBase<DedupPass> {
   void runOnOperation() override {}
 };
 } // end anonymous namespace
