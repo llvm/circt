@@ -1322,9 +1322,8 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false} {
+        elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1579,9 +1578,8 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false},
+      : elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
@@ -1780,6 +1778,9 @@ OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
       return emitErrorFn()
              << "'const' bundle cannot have references, but element "
              << element.name << " has type " << element.type;
+    if (type_isa<LHSType>(element.type))
+      return emitErrorFn() << "bundle element " << element.name
+                           << " cannot have a left-hand side type";
   }
 
   return success();
@@ -2045,6 +2046,8 @@ OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                        bool isConst) {
   if (elementType.containsReference() && isConst)
     return emitErrorFn() << "vector cannot be const with references";
+  if (type_isa<LHSType>(elementType))
+    return emitErrorFn() << "vector cannot have a left-hand side type";
   return success();
 }
 
@@ -2380,6 +2383,26 @@ uint64_t BaseTypeAliasType::getFieldID(uint64_t index) const {
 std::pair<uint64_t, uint64_t>
 BaseTypeAliasType::getIndexAndSubfieldID(uint64_t fieldID) const {
   return hw::FieldIdImpl::getIndexAndSubfieldID(getInnerType(), fieldID);
+}
+
+//===----------------------------------------------------------------------===//
+// LHSType
+//===----------------------------------------------------------------------===//
+
+LHSType LHSType::get(FIRRTLBaseType type) {
+  return LHSType::get(type.getContext(), type);
+}
+
+LogicalResult LHSType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              FIRRTLBaseType type) {
+  if (type.containsAnalog())
+    return emitError() << "lhs type cannot contain an AnalogType";
+  if (type.getPassiveType() != type)
+    return emitError() << "lhs type cannot contain a non-passive type";
+  if (type.containsReference())
+    return emitError() << "lhs type cannot contain a reference";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
