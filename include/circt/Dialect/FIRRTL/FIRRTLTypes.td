@@ -106,11 +106,6 @@ def RWProbe : FIRRTLDialectType<
 def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
                                       "writable type", "::circt::firrtl::LHSType">;
 
-class LHSTypeConstraint<string result, string input>
-  : TypesMatchWith<"Result must be lhs of input type",
-                   input, result,
-                   "type_cast<LHSType>($_self).getType()">;
-
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
