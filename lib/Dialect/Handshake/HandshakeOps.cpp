@@ -207,12 +207,10 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     auto operand = op.getOperand();
     auto newFork = rewriter.create<ForkOp>(
         op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
-    rewriter.modifyOpInPlace(op, [&] {
-      unsigned i = 0;
-      for (auto oldRes : llvm::enumerate(op.getResults()))
-        if (unusedIndexes.count(oldRes.index()) == 0)
-          oldRes.value().replaceAllUsesWith(newFork.getResults()[i++]);
-    });
+    unsigned i = 0;
+    for (auto oldRes : llvm::enumerate(op.getResults()))
+      if (unusedIndexes.count(oldRes.index()) == 0)
+        rewriter.replaceAllUsesWith(oldRes.value(), newFork.getResults()[i++]);
     rewriter.eraseOp(op);
     return success();
   }
@@ -232,21 +230,19 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     /// on if op is the single user of the value), but we'll let
     /// EliminateUnusedForkResultsPattern apply in that case.
     unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
-    rewriter.modifyOpInPlace(parentForkOp, [&] {
-      /// Create a new parent fork op which produces all of the fork outputs and
-      /// replace all of the uses of the old results.
-      auto newParentForkOp = rewriter.create<ForkOp>(
-          parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
+    /// Create a new parent fork op which produces all of the fork outputs and
+    /// replace all of the uses of the old results.
+    auto newParentForkOp = rewriter.create<ForkOp>(
+        parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
 
-      for (auto it :
-           llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
-        std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
+    for (auto it :
+         llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
+      rewriter.replaceAllUsesWith(std::get<0>(it), std::get<1>(it));
 
-      /// Replace the results of the matches fork op with the corresponding
-      /// results of the new parent fork op.
-      rewriter.replaceOp(op,
-                         newParentForkOp.getResults().take_back(op.getSize()));
-    });
+    /// Replace the results of the matches fork op with the corresponding
+    /// results of the new parent fork op.
+    rewriter.replaceOp(op,
+                       newParentForkOp.getResults().take_back(op.getSize()));
     rewriter.eraseOp(parentForkOp);
     return success();
   }

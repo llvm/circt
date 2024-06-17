@@ -326,6 +326,29 @@ def UnpackedUnionType : StructLikeType<
 }
 
 //===----------------------------------------------------------------------===//
+// Reference type wrapper
+//===----------------------------------------------------------------------===//
+
+def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
+  let mnemonic = "ref";
+  let description = [{
+    A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
+    'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
+    related to memory, like alloca/write/read.
+  }];
+  let parameters = (ins "UnpackedType":$nestedType);
+  let assemblyFormat = [{
+    `<` $nestedType `>`
+  }];
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "UnpackedType":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
 

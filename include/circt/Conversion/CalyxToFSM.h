@@ -25,6 +25,11 @@ class Pass;
 
 namespace circt {
 
+#define GEN_PASS_DECL_CALYXTOFSM
+#define GEN_PASS_DECL_MATERIALIZECALYXTOFSM
+#define GEN_PASS_DECL_CALYXREMOVEGROUPSFROMFSM
+#include "circt/Conversion/Passes.h.inc"
+
 namespace calyxToFSM {
 // Entry and exit state names of the Calyx control program in the FSM.
 static constexpr std::string_view sEntryStateName = "fsm_entry";

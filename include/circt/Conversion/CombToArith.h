@@ -13,6 +13,10 @@
 #include <memory>
 
 namespace circt {
+
+#define GEN_PASS_DECL_CONVERTCOMBTOARITH
+#include "circt/Conversion/Passes.h.inc"
+
 void populateCombToArithConversionPatterns(TypeConverter &converter,
                                            RewritePatternSet &patterns);
 

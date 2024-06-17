@@ -140,6 +140,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
+  // Must run this pass after all diagnostic passes have run, otherwise it can
+  // hide errors.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
+
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -219,6 +223,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createVectorizationPass());
 
+  auto outputFilename = opt.getOutputFilename();
+  if (outputFilename == "-")
+    outputFilename = "";
+
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createAssignOutputDirsPass(outputFilename));
   return success();
 }
 
@@ -234,6 +244,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // RefType ports and ops.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMRPass());
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPIPass());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClassesPass());
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
@@ -264,8 +275,6 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
-  if (opt.getVerificationFlavor() == firrtl::VerificationFlavor::Immediate)
-    pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
 
   if (opt.shouldExtractTestCode())
     pm.addPass(sv::createSVExtractTestCodePass(
@@ -397,6 +406,7 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
                                          llvm::raw_ostream &os) {
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
+  pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModulesPass());
   pm.addNestedPass<hw::HWModuleOp>(circt::createConvertHWToBTOR2Pass(os));
   return success();

@@ -24,6 +24,7 @@ namespace circt {
 namespace verif {
 
 std::unique_ptr<mlir::Pass> createVerifyClockedAssertLikePass();
+std::unique_ptr<mlir::Pass> createPrepareForFormalPass();
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Verif/Passes.h.inc"

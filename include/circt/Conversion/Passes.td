@@ -88,7 +88,7 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
   let options = [
-    Option<"options", "options", "std::string", "", "Lowering Options">
+    Option<"optionsString", "options", "std::string", "", "Lowering Options">
   ];
 }
 
@@ -118,8 +118,7 @@ def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
   ];
 }
 
-def PrepareForEmission : InterfacePass<"prepare-for-emission",
-                                       "hw::HWEmittableModuleLike"> {
+def PrepareForEmission : Pass<"prepare-for-emission"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
     This pass runs only PrepareForEmission.
@@ -808,6 +807,8 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   let constructor = "circt::createLowerSimToSVPass()";
   let dependentDialects = [
     "circt::comb::CombDialect",
+    "circt::emit::EmitDialect",
+    "circt::seq::SeqDialect",
     "circt::sv::SVDialect",
     "circt::hw::HWDialect"
   ];

@@ -180,16 +180,17 @@ def ProcedureOp : MooreOp<"procedure", [
 //===----------------------------------------------------------------------===//
 
 def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<PromotableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
-    "result", "initial", "$_self">,
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "A variable declaration";
   let description = [{
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
   let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
-  let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
@@ -219,11 +220,11 @@ def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
 def NetOp : MooreOp<"net", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"assigned value and variable types match",
-    "result", "assignment", "$_self">,
+    "result", "assignment", "cast<RefType>($_self).getNestedType()">,
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different
+    The `moore.net` operation is a net declaration. Net types defines different
     types of net connection in SV. There are twelve built-in net types defined
     in the official standard construct of the operation:
     `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
@@ -243,21 +244,25 @@ def NetOp : MooreOp<"net", [
     NetKindAttr:$kind,
     Optional<UnpackedType>:$assignment
   );
-  let results = (outs UnpackedType:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     ``custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
 }
 
-def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
+def ReadOp : MooreOp<"read", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>,
+  TypesMatchWith<"input and result types match",
+    "result", "input", "RefType::get(cast<UnpackedType>($_self))">
+]> {
   let summary = "Read the current value of a declaration";
   let description = [{
     Samples the current value of a declaration. This is a helper to capture the
-    exact point at which declarations that can be targeted by assignments are
-    read.
+    exact point at which declarations that can be targeted by all possible 
+    expressions are read. It's similar to llvm.load.
   }];
-  let arguments = (ins Arg<UnpackedType, "", [MemRead]>:$input);
+  let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($result)
@@ -269,8 +274,9 @@ def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
 //===----------------------------------------------------------------------===//
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
-    MooreOp<mnemonic, traits # [SameTypeOperands]> {
-  let arguments = (ins UnpackedType:$dst, UnpackedType:$src);
+    MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
+    "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
+  let arguments = (ins RefType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
     $dst `,` $src attr-dict `:` type($src)
   }];
@@ -287,7 +293,9 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   }];
 }
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
+def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>
+]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A blocking procedural assignment in a sequential block, such as `x = y`. The
@@ -297,7 +305,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
   let arguments = (ins
-    Arg<UnpackedType, "", [MemWrite]>:$dst,
+    Arg<RefType, "", [MemWrite]>:$dst,
     UnpackedType:$src
   );
 }
@@ -312,6 +320,65 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
     in a subsequent time step as dictated by the delay or event control.
 
     See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def None: I32EnumAttrCase<"None", 0, "none">;
+/// Transit from 0 to x/z/1, and from x/z to 1.
+def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
+/// Transit from 1 to x/z/0, and from x/z to 0.
+def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
+/// Include the negedge and posedge.
+def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
+
+def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
+                          [None, PosEdge, NegEdge, BothEdges]>{
+  let cppNamespace = "circt::moore";
+}
+
+def EventOp : MooreOp<"wait_event", [
+  HasParent<"ProcedureOp">
+]> {
+  let summary = "Detecting posedge and negedge";
+  let description = [{
+    It is introduced by the symbol `@`, and it allows statement execution to
+    be delayed until the occurrence of some simulation event occurring in a
+    procedure executing concurrently with this procedure.
+
+    For the implicit event control(`@(*)`), there are two situations that are
+    not automatically added to event expression:
+      1. Identifiers that only appear in wait or event expressions.
+         ```
+          always @(*) begin    // equivalent to @(b)
+            @(n) kid = b;      // n is not added to @(*)
+          end
+         ```
+      2. Identifiers that only appear as a hierarchical_variable_identifier
+         in the variable_lvalue of the left-hand side of assignments.
+         ```
+          always @(*) begin
+            a = b + c;         // a is not added to @(*)
+          end
+         ```
+
+    Example:
+    ```
+      @(a, b, c)        // none
+      @(posedge clk)    // positive edge
+      @(negedge clk)    // negative edge
+      @(edge clk)       // both edge
+      @(*)              // implicit event control
+    ```
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
+  let results = (outs);
+  let assemblyFormat = [{
+    $edge $input attr-dict `:` type($input)
   }];
 }
 
@@ -346,18 +413,19 @@ def NamedConstantOp : MooreOp<"named_constant", [
 ]>{
   let summary = "An elaboration time constant expression";
   let description = [{
-    Constants are named data objects that never change. SystemVerilog provides 
+    Constants are named data objects that never change. SystemVerilog provides
     three elaboration-time constants: parameter, localparam, and specparam.
 
     See IEEE 1800-2017 § 6.20 "Constants".
   }];
-  let arguments = (ins StrAttr:$name, 
-                       NamedConstAttr:$kind, 
-                       UnpackedType:$value);
-  let results = (outs UnpackedType:$result);
+  let arguments = (ins StrAttr:$name,
+                       NamedConstAttr:$kind,
+                       IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $kind $value attr-dict
-    `:` type($result)
+    $kind
+    ``custom<ImplicitSSAName>($name)
+    $value `:` type($result) attr-dict
   }];
 }
 
@@ -795,6 +863,17 @@ def ConcatOp : MooreOp<"concat", [
   }];
 }
 
+def ConcatRefOp : MooreOp<"concat_ref", [
+    Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "The copy of concat that explicitly works on the ref type.";
+  let arguments = (ins Variadic<RefType>:$values);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
+  }];
+}
+
 def ReplicateOp : MooreOp<"replicate", [
   Pure
 ]> {
@@ -850,6 +929,16 @@ def ExtractOp : MooreOp<"extract"> {
   }];
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:`
+    type($input) `,` type($lowBit) `->` type($result)
+  }];
+}
+
+def ExtractRefOp : MooreOp<"extract_ref"> {
+  let summary = "The copy of extract that explicitly works on the ref type.";
+  let arguments = (ins RefType:$input, UnpackedType:$lowBit);
+  let results = (outs RefType:$result);
   let assemblyFormat = [{
     $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)

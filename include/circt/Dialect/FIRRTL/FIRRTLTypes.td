@@ -103,12 +103,6 @@ def RWProbe : FIRRTLDialectType<
   CPred<"type_isa<RefType>($_self) && type_cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
-def RWProbeConcreteReset : FIRRTLDialectType<
-  CPred<[{type_isa<RefType>($_self) &&
-         type_cast<RefType>($_self).getForceable() &&
-         !type_cast<RefType>($_self).hasUninferredReset()}]>,
-   "rwprobe type (with concrete resets only)", "::circt::firrtl::RefType">;
-
 def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
                                       "writable type", "::circt::firrtl::LHSType">;
 

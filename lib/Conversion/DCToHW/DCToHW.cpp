@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/DCToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
@@ -25,12 +24,18 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_DCTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -845,7 +850,7 @@ static bool isLegalOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class DCToHWPass : public DCToHWBase<DCToHWPass> {
+class DCToHWPass : public circt::impl::DCToHWBase<DCToHWPass> {
 public:
   void runOnOperation() override {
     Operation *parent = getOperation();
