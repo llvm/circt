@@ -808,6 +808,7 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   let dependentDialects = [
     "circt::comb::CombDialect",
     "circt::emit::EmitDialect",
+    "circt::seq::SeqDialect",
     "circt::sv::SVDialect",
     "circt::hw::HWDialect"
   ];
