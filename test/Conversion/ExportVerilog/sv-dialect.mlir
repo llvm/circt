@@ -1674,7 +1674,9 @@ hw.module @IndexPartSelect(out a : i3) {
 sv.func private @function_declare1(in %in_0 : i2, out out_0: i2, in %in_1 : i2, out out_1 : i1)
 sv.func private @function_declare2(in %in_0 : i2, in %in_1 : i2, out out_0 : i1 {sv.func.explicitly_returned})
 sv.func private @function_declare3(in %in_0 : i2, out out_0 : i2, out out_1 : i1 {sv.func.explicitly_returned})
-sv.func private @function_declare4(in %in: i1, in %in_0 : i8, in %in_1 : i16, in %in_2: i32, in %in_3: i64, in %in_4: i128)
+sv.func private @function_declare4(in %in: i1, in %in_0 : i8, in %in_1 : i16, in %in_2: i32, in %in_3: i64, in %in_4: i128,
+                                   in %in_5: !hw.struct<a: !hw.array<2x!hw.array<2xi32>>, b: i64>,
+                                   in %in_6: !hw.uarray<2xi64>)
 
 // CHECK-LABEL: func_call
 hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
@@ -1770,6 +1772,8 @@ sv.func.dpi.import @function_declare2
 // CHECK-NEXT:   input int         in_2,
 // CHECK-NEXT:   input longint     in_3,
 // CHECK-NEXT:   input bit [127:0] in_4
+// CHECK-NEXT:   input struct packed {bit [1:0][1:0][31:0] a; longint b; } in_5
+// CHECK-NEXT:   input longint in_6[0:1]
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare4
 
