@@ -109,11 +109,6 @@ public:
   // If so, its lid will be returned
   // Otherwise a new lid will be assigned to the op
   size_t getOpLID(Operation *op) {
-    if (!op) {
-      op->emitError("Null operation was found!");
-      return noLID;
-    }
-
     if (auto it = opLIDMap.find(op); it != opLIDMap.end())
       return it->second;
 
