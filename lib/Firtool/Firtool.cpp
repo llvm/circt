@@ -140,6 +140,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
 
+  // Must run this pass after all diagnostic passes have run, otherwise it can
+  // hide errors.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
+
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(

@@ -879,8 +879,24 @@ def Lint :
   let constructor = "circt::firrtl::createLintingPass()";
 }
 
-def SpecializeOption :
-    Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
+def SpecializeLayers : Pass<"firrtl-specialize-layers", "firrtl::CircuitOp"> {
+  let summary = "Specialize a configurable design for a given layer";
+  let description = [{
+    This pass performs specialization of layers, layerblocks, and probe
+    operations by permanantly enabling or disabling layers.  The layers are
+    specified by attributes on the `firrtl.circuit` operation in the
+    `firrtl.enable_layers` and `firrtl.disable_layers` attributes which are both
+    lists of SymbolRefAttrs.  When a layer is specialized, it will be removed
+    from the circuit and all references to it should be cleaned up.  If a layer
+    is disabled, all layerblock are referencing that layer will be deleted, and
+    all probe colored by that layer will be removed.  When a layer is enabled,
+    all contents of the layer will be inlined in to the outer context, and
+    probes colored by that layer will no longer be colored.
+  }];
+  let constructor = "circt::firrtl::createSpecializeLayersPass()";
+}
+
+def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   let summary = "Specialize a configurable design for a given option.";
   let description = [{
     If the design has option groups, instead of preserving the information
@@ -899,14 +915,13 @@ def SpecializeOption :
   ];
 }
 
-def ModuleSummary :
-  Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
-    let summary = "Print a summary of modules.";
-    let description = [{
-      The pass produces a summary of modules.
-    }];
-    let constructor = "circt::firrtl::createModuleSummaryPass()";
-  }
+def ModuleSummary : Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
+  let summary = "Print a summary of modules.";
+  let description = [{
+    The pass produces a summary of modules.
+  }];
+  let constructor = "circt::firrtl::createModuleSummaryPass()";
+}
 
 def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
     let summary = "Lower DPI intrinsic into Sim DPI operations";

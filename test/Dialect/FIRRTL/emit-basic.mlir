@@ -676,7 +676,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:      layer GroupD, bind :
   // CHECK-NEXT:        layer GroupE, inline :
   // CHECK-NEXT:    layer GroupF, bind :
-  // CHECK-NEXT:  layer GroupWithOutputDir, bind, "foo/" :
+  // CHECK-NEXT:  layer GroupWithOutputDir, bind, "foo{{/|\\\\}}" :
   firrtl.layer @GroupA bind {
     firrtl.layer @GroupB bind {
       firrtl.layer @GroupC bind {
