@@ -474,7 +474,7 @@ FIRToken FIRLexer::lexString(const char *tokStart, bool isVerbatim) {
       return formToken(FIRToken::verbatim_string, tokStart);
     case '\\':
       // Ignore escaped '\'' or '"'
-      if (*curPtr == '\'' || *curPtr == '"')
+      if (*curPtr == '\'' || *curPtr == '"' || *curPtr == '\\')
         ++curPtr;
       else if (*curPtr == 'u' || *curPtr == 'U')
         return emitError(tokStart, "unicode escape not supported in string");

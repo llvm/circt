@@ -2752,6 +2752,51 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
+InstanceChoiceOp
+InstanceChoiceOp::erasePorts(OpBuilder &builder,
+                             const llvm::BitVector &portIndices) {
+  assert(portIndices.size() >= getNumResults() &&
+         "portIndices is not at least as large as getNumResults()");
+
+  if (portIndices.none())
+    return *this;
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(getPortNames().getValue(), portIndices);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+
+  auto newOp = builder.create<InstanceChoiceOp>(
+      getLoc(), newResultTypes, getModuleNames(), getCaseNames(), getName(),
+      getNameKind(), direction::packAttribute(getContext(), newPortDirections),
+      ArrayAttr::get(getContext(), newPortNames), getAnnotationsAttr(),
+      ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
+      getInnerSymAttr());
+
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (portIndices.test(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  // Copy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
+  return newOp;
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//

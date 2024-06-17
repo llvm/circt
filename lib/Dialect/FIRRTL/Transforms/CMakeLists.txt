@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  AssignOutputDirs.cpp
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
   CheckCombLoops.cpp
@@ -54,6 +55,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ResolvePaths.cpp
   ResolveTraces.cpp
   SFCCompat.cpp
+  SpecializeLayers.cpp
   SpecializeOption.cpp
   VBToBV.cpp
   Vectorization.cpp

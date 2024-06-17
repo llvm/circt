@@ -13,13 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -27,9 +27,17 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 
 #include <set>
+
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_SVEXTRACTTESTCODE
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -627,7 +635,7 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
 namespace {
 
 struct SVExtractTestCodeImplPass
-    : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+    : public circt::sv::impl::SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   SVExtractTestCodeImplPass(bool disableInstanceExtraction,
                             bool disableRegisterExtraction,
                             bool disableModuleInlining) {

@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_IBIS_IBISPASSES_H
 #define CIRCT_DIALECT_IBIS_IBISPASSES_H
 
+#include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/Pipeline/PipelineDialect.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
