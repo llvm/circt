@@ -10,13 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKESPLITMERGES
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -118,7 +125,8 @@ struct DeconstructCMergePattern
 };
 
 struct HandshakeSplitMerges
-    : public HandshakeSplitMergesBase<HandshakeSplitMerges> {
+    : public circt::handshake::impl::HandshakeSplitMergesBase<
+          HandshakeSplitMerges> {
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     patterns.insert<DeconstructCMergePattern, DeconstructMergePattern>(
