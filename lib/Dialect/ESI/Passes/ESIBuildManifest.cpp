@@ -8,7 +8,6 @@
 
 #include "../PassDetails.h"
 
-#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/AppID.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
@@ -20,12 +19,19 @@
 #include "llvm/Support/Compression.h"
 #include "llvm/Support/JSON.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_ESIBUILDMANIFEST
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace esi;
 
 namespace {
 struct ESIBuildManifestPass
-    : public ESIBuildManifestBase<ESIBuildManifestPass> {
+    : public circt::esi::impl::ESIBuildManifestBase<ESIBuildManifestPass> {
   void runOnOperation() override;
 
 private:

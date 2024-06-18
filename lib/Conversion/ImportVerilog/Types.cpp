@@ -27,6 +27,10 @@ struct TypeVisitor {
   }
 
   // NOLINTBEGIN(misc-no-recursion)
+  Type visit(const slang::ast::VoidType &type) {
+    return moore::VoidType::get(context.getContext());
+  }
+
   Type visit(const slang::ast::ScalarType &type) {
     return getSimpleBitVectorType(type);
   }

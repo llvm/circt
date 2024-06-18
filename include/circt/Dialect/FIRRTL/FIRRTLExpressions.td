@@ -958,7 +958,7 @@ class SameGroundTypeOperandConstness<string a, string b>
 
 def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
   let description = [{
-    Cast between reset types.  This is used to enable strictconnects early in
+    Cast between reset types.  This is used to enable matchingconnects early in
     the pipeline by isolating all uninferred reset connections to a single op.
   }];
   let arguments = (ins AnyResetType:$input);
@@ -1372,7 +1372,7 @@ def RWProbeOp : FIRRTLOp<"ref.rwprobe",
   }];
 
   let arguments = (ins InnerRefAttr:$target);
-  let results = (outs RWProbeConcreteReset:$result);
+  let results = (outs RWProbe:$result);
   let assemblyFormat = "$target attr-dict `:` type($result)";
 }
 

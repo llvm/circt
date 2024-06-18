@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
@@ -16,6 +18,13 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISCONTAINERIZE
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace circt;
 using namespace ibis;
@@ -78,7 +87,8 @@ struct ClassToContainerPattern : public OpConversionPattern<ClassOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the class by a container of the same name.
     auto newContainer =
-        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(), false);
+        rewriter.create<ContainerOp>(op.getLoc(), op.getInnerSymAttr(),
+                                     /*topLevel*/ false, op.getNameAttr());
     rewriter.mergeBlocks(op.getBodyBlock(), newContainer.getBodyBlock(), {});
     rewriter.eraseOp(op);
     return success();
@@ -100,7 +110,8 @@ struct InstanceToContainerInstancePattern
 };
 
 /// Run all the physical lowerings.
-struct ContainerizePass : public IbisContainerizeBase<ContainerizePass> {
+struct ContainerizePass
+    : public circt::ibis::impl::IbisContainerizeBase<ContainerizePass> {
   void runOnOperation() override;
 
 private:

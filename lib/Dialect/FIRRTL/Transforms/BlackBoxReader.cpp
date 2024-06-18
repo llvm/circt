@@ -13,11 +13,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -25,6 +25,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
@@ -34,6 +35,13 @@
 #include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "firrtl-blackbox-reader"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_BLACKBOXREADER
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -89,7 +97,8 @@ struct OutputFileInfo {
   bool excludeFromFileList;
 };
 
-struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
+struct BlackBoxReaderPass
+    : public circt::firrtl::impl::BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder,
                        bool isCover, AnnotationInfo &annotationInfo);

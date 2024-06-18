@@ -638,6 +638,45 @@ public:
   }
 };
 
+class CirctDPICallConverter : public IntrinsicConverter {
+  static bool getIsClocked(GenericIntrinsic gi) {
+    return !gi.getParamValue<IntegerAttr>("isClocked").getValue().isZero();
+  }
+
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    if (gi.hasNParam(2) || gi.namedIntParam("isClocked") ||
+        gi.namedParam("functionName"))
+      return true;
+    auto isClocked = getIsClocked(gi);
+    // If clocked, the first operand must be a clock.
+    if (isClocked && gi.typedInput<ClockType>(0))
+      return true;
+    // Enable must be UInt<1>.
+    if (gi.sizedInput<UIntType>(isClocked, 1))
+      return true;
+
+    return false;
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto isClocked = getIsClocked(gi);
+    auto functionName = gi.getParamValue<StringAttr>("functionName");
+    // Clock and enable are optional.
+    Value clock = isClocked ? adaptor.getOperands()[0] : Value();
+    Value enable = adaptor.getOperands()[static_cast<size_t>(isClocked)];
+
+    auto inputs =
+        adaptor.getOperands().drop_front(static_cast<size_t>(isClocked) + 1);
+
+    rewriter.replaceOpWithNewOp<DPICallIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), functionName, clock, enable, inputs);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -704,4 +743,5 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
+  lowering.add<CirctDPICallConverter>("circt.dpi_call", "circt_dpi_call");
 }

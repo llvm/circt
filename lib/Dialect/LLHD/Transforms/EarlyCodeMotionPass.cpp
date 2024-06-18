@@ -10,17 +10,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "TemporalRegions.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace llhd {
+#define GEN_PASS_DEF_EARLYCODEMOTION
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+} // namespace llhd
+} // namespace circt
 
 using namespace circt;
-
 namespace {
 struct EarlyCodeMotionPass
-    : public llhd::EarlyCodeMotionBase<EarlyCodeMotionPass> {
+    : public circt::llhd::impl::EarlyCodeMotionBase<EarlyCodeMotionPass> {
   void runOnOperation() override;
 };
 } // namespace

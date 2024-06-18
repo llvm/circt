@@ -758,6 +758,24 @@ hw::InnerSymTarget circt::firrtl::getTargetFor(FieldRef ref) {
   return hw::InnerSymTarget(root.getDefiningOp(), ref.getFieldID());
 }
 
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+FieldRef circt::firrtl::getFieldRefForTarget(const hw::InnerSymTarget &ist) {
+  if (ist.isPort()) {
+    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+        .Case<FModuleOp>([&](auto fmod) {
+          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+        })
+        .Default({});
+  }
+
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+  assert(symOp && symOp.getTargetResultIndex() &&
+         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+  return FieldRef(symOp.getTargetResult(), ist.getField());
+}
+
 // Return InnerSymAttr with sym on specified fieldID.
 std::pair<hw::InnerSymAttr, StringAttr> circt::firrtl::getOrAddInnerSym(
     MLIRContext *context, hw::InnerSymAttr attr, uint64_t fieldID,

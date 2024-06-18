@@ -6,11 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 
 #include <mutex>
 #include <numeric>
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_MODULESUMMARY
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -52,7 +61,8 @@ static size_t knownWidths(Type type) {
 }
 
 namespace {
-struct ModuleSummaryPass : public ModuleSummaryBase<ModuleSummaryPass> {
+struct ModuleSummaryPass
+    : public circt::firrtl::impl::ModuleSummaryBase<ModuleSummaryPass> {
   struct KeyTy {
     SmallVector<size_t> portSizes;
     size_t opcount;
@@ -121,8 +131,7 @@ void ModuleSummaryPass::runOnOperation() {
 
   SmallVector<MapTy::value_type> sortedData(data.begin(), data.end());
   std::sort(sortedData.begin(), sortedData.end(),
-            [](const std::tuple<KeyTy, SmallVector<FModuleOp>> &lhs,
-               const std::tuple<KeyTy, SmallVector<FModuleOp>> &rhs) {
+            [](const MapTy::value_type &lhs, const MapTy::value_type &rhs) {
               return std::get<0>(lhs).opcount * std::get<1>(lhs).size() *
                          std::get<1>(lhs).size() >
                      std::get<0>(rhs).opcount * std::get<1>(rhs).size() *

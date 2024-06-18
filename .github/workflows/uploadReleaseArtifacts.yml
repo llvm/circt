@@ -29,10 +29,10 @@ on:
         required: true
         type: choice
         options:
-          - release
-          - relwithdebinfo
-          - debug
-        default: release
+          - Release
+          - RelWithDebInfo
+          - Debug
+        default: Release
 
   # Run every day at 0700 UTC which is:
   #   - 0000 PDT / 2300 PST

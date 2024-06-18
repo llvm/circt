@@ -114,7 +114,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">,
-       Emittable]>{
+       HWEmittableModuleLike]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given

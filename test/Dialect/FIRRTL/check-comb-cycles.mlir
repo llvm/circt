@@ -137,9 +137,9 @@ firrtl.circuit "hasloops"   {
 
 // -----
 
-firrtl.circuit "strictConnectAndConnect" {
-  // expected-error @below {{strictConnectAndConnect.{a <- b <- a}}}
-  firrtl.module @strictConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
+firrtl.circuit "matchingConnectAndConnect" {
+  // expected-error @below {{matchingConnectAndConnect.{a <- b <- a}}}
+  firrtl.module @matchingConnectAndConnect(out %a: !firrtl.uint<11>, out %b: !firrtl.uint<11>) {
     %w = firrtl.wire : !firrtl.uint<11>
     firrtl.matchingconnect %b, %w : !firrtl.uint<11>
     firrtl.connect %a, %b : !firrtl.uint<11>, !firrtl.uint<11>
@@ -1030,46 +1030,6 @@ firrtl.circuit "UnrealizedConversionCast" {
     // Casts have cast-like behavior
     %b = firrtl.wire   : !firrtl.uint<32>
     %a = builtin.unrealized_conversion_cast %b : !firrtl.uint<32> to !firrtl.uint<32>
-    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
-  }
-}
-
-// -----
-
-firrtl.circuit "OutsideDialect" {
-  firrtl.module @OutsideDialect() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    // expected-remark @below {{Non-firrtl operations detected, combinatorial loop checking may miss some loops.}}
-    %a = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
-    // Should only trigger once
-    %c = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
-    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
-  }
-}
-
-// -----
-
-// Foreign op looks sink like, no loop
-firrtl.circuit "OutsideDialectSink" {
-  firrtl.module @OutsideDialectSink() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    "foo"(%b) : (!firrtl.uint<32>) -> ()
-  }
-}
-
-// -----
-
-// Foreign op looks source like, no loop
-firrtl.circuit "OutsideDialectSource" {
-  firrtl.module @OutsideDialectSource() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    %a = "foo"() : () -> !firrtl.uint<32>
     firrtl.matchingconnect %b, %a : !firrtl.uint<32>
   }
 }

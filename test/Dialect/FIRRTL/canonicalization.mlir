@@ -3422,7 +3422,7 @@ firrtl.module @ForceRelease(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
     // CHECK-NEXT: }
 }
 
-// Don't produce invalid IR (strictconnect w/flips).
+// Don't produce invalid IR (matchingconnect w/flips).
 // CHECK-LABEL: @Issue5650(
 firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) {
   %io = firrtl.wire : !firrtl.bundle<y flip: uint<1>, x: uint<1>>

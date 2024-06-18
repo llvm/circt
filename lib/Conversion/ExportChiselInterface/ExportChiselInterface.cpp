@@ -11,13 +11,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportChiselInterface.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/Version.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
+
+namespace circt {
+#define GEN_PASS_DEF_EXPORTCHISELINTERFACE
+#define GEN_PASS_DEF_EXPORTSPLITCHISELINTERFACE
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -279,7 +284,7 @@ static LogicalResult exportSplitChiselInterface(CircuitOp circuit,
 
 namespace {
 struct ExportChiselInterfacePass
-    : public ExportChiselInterfaceBase<ExportChiselInterfacePass> {
+    : public circt::impl::ExportChiselInterfaceBase<ExportChiselInterfacePass> {
 
   explicit ExportChiselInterfacePass(llvm::raw_ostream &os) : os(os) {}
 
@@ -293,7 +298,8 @@ private:
 };
 
 struct ExportSplitChiselInterfacePass
-    : public ExportSplitChiselInterfaceBase<ExportSplitChiselInterfacePass> {
+    : public circt::impl::ExportSplitChiselInterfaceBase<
+          ExportSplitChiselInterfacePass> {
 
   explicit ExportSplitChiselInterfacePass(StringRef directory) {
     directoryName = directory.str();

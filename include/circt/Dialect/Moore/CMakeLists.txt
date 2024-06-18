@@ -15,3 +15,7 @@ mlir_tablegen(MooreAttributes.cpp.inc -gen-attrdef-defs
   -attrdefs-dialect MooreDialect)
 add_public_tablegen_target(CIRCTMooreAttributesIncGen)
 add_dependencies(circt-headers CIRCTMooreAttributesIncGen)
+
+set(LLVM_TARGET_DEFINITIONS MoorePasses.td)
+mlir_tablegen(MoorePasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTMooreTransformsIncGen)

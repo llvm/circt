@@ -87,10 +87,12 @@ def PassiveType : FIRRTLDialectType<
 
 def SizedType : FIRRTLDialectType<CPred<"type_isa<FIRRTLBaseType>($_self) && "
     "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
-    "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
+    "a sized type (contains no uninferred widths)", 
+    "::circt::firrtl::FIRRTLBaseType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
-    "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLBaseType">;
+    "a sized passive base type (contains no uninferred widths, or flips)", 
+    "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
@@ -103,12 +105,6 @@ def RWProbe : FIRRTLDialectType<
   CPred<"type_isa<RefType>($_self) && type_cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
-def RWProbeConcreteReset : FIRRTLDialectType<
-  CPred<[{type_isa<RefType>($_self) &&
-         type_cast<RefType>($_self).getForceable() &&
-         !type_cast<RefType>($_self).hasUninferredReset()}]>,
-   "rwprobe type (with concrete resets only)", "::circt::firrtl::RefType">;
-
 def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
                                       "writable type", "::circt::firrtl::LHSType">;
 
@@ -117,13 +113,8 @@ class LHSTypeConstraint<string result, string input>
                    input, result,
                    "type_cast<LHSType>($_self).getType()">;
 
-class OptRefTypeConstraint<string result, string input>
-  : OptionalTypesMatchWith<"Result must be ref of input type",
-                   input, result,
-                   "type_cast<RefType>($_self).getType()">;
-
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
+def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers
