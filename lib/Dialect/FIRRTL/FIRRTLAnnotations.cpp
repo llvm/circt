@@ -77,7 +77,7 @@ AnnotationSet AnnotationSet::forPort(MemOp op, size_t portNo) {
 
 /// Get an annotation set for the specified value.
 AnnotationSet AnnotationSet::get(Value v) {
-  if (auto op = v.getDefiningOp())
+  if (auto *op = v.getDefiningOp())
     return AnnotationSet(op);
   // If its not an Operation, then must be a block argument.
   auto arg = dyn_cast<BlockArgument>(v);
@@ -149,8 +149,7 @@ bool AnnotationSet::hasDontTouch() const {
 bool AnnotationSet::setDontTouch(bool dontTouch) {
   if (dontTouch)
     return addDontTouch();
-  else
-    return removeDontTouch();
+  return removeDontTouch();
 }
 
 bool AnnotationSet::addDontTouch() {
@@ -173,8 +172,7 @@ bool AnnotationSet::hasDontTouch(Operation *op) {
 bool AnnotationSet::setDontTouch(Operation *op, bool dontTouch) {
   if (dontTouch)
     return addDontTouch(op);
-  else
-    return removeDontTouch(op);
+  return removeDontTouch(op);
 }
 
 bool AnnotationSet::addDontTouch(Operation *op) {
@@ -407,8 +405,8 @@ void Annotation::removeMember(StringAttr name) {
   auto dict = getDict();
   SmallVector<NamedAttribute> attributes;
   attributes.reserve(dict.size() - 1);
-  auto i = dict.begin();
-  auto e = dict.end();
+  auto *i = dict.begin();
+  auto *e = dict.end();
   while (i != e && i->getValue() != name)
     attributes.push_back(*(i++));
   // If the member was not here, just return.

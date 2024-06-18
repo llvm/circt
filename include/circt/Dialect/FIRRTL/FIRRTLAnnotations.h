@@ -50,7 +50,7 @@ bool isOMIRStringEncodedPassthrough(StringRef type);
 /// This class provides a read-only projection of an annotation.
 class Annotation {
 public:
-  Annotation() {}
+  Annotation() = default;
 
   explicit Annotation(Attribute attr) : attr(attr) {
     assert(attr && "null attributes not allowed");
@@ -519,7 +519,7 @@ struct DenseMapInfo<circt::firrtl::Annotation> {
   static unsigned getHashValue(Annotation val) {
     return mlir::hash_value(val.getAttr());
   }
-  static bool isEqual(Annotation LHS, Annotation RHS) { return LHS == RHS; }
+  static bool isEqual(Annotation lhs, Annotation rhs) { return lhs == rhs; }
 };
 
 /// Make `AnnoTarget` hash.
