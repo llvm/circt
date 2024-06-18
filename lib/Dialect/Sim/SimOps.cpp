@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 
 using namespace mlir;
@@ -176,6 +177,120 @@ OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
     return StringAttr::get(getContext(), str);
   }
   return {};
+}
+
+static StringAttr concatLiterals(MLIRContext *ctxt, ArrayRef<StringRef> lits) {
+  assert(!lits.empty() && "No literals to concatenate");
+  if (lits.size() == 1)
+    return StringAttr::get(ctxt, lits.front());
+  SmallString<64> newLit;
+  for (auto lit : lits)
+    newLit += lit;
+  return StringAttr::get(ctxt, newLit);
+}
+
+OpFoldResult FormatStringConcatOp::fold(FoldAdaptor adaptor) {
+  if (getNumOperands() == 0)
+    return StringAttr::get(getContext(), "");
+  if (getNumOperands() == 1)
+    return getOperand(0);
+
+  // Fold if all operands are literals.
+  SmallVector<StringRef> lits;
+  for (auto attr : adaptor.getInputs()) {
+    auto lit = dyn_cast_or_null<StringAttr>(attr);
+    if (!lit)
+      return {};
+    lits.push_back(lit);
+  }
+  return concatLiterals(getContext(), lits);
+}
+
+LogicalResult FormatStringConcatOp::verify() {
+  if (llvm::any_of(getOperands(),
+                   [&](Value operand) { return operand == getResult(); }))
+    return emitOpError(
+        "Illegal recursive format string concatenation detected.");
+  return success();
+}
+
+LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
+                                                 PatternRewriter &rewriter) {
+  if (op.getNumOperands() < 2)
+    return failure(); // Should be handled by the folder
+
+  // Check if there are adjacent literals we can merge or empty literals to
+  // remove
+  bool canBeSimplified = false;
+  bool prevIsLit = false;
+  for (auto oper : op.getOperands())
+    if (auto litOp = dyn_cast_or_null<FormatLitOp>(oper.getDefiningOp())) {
+      if (prevIsLit || litOp.getLiteral().empty()) {
+        canBeSimplified = true;
+        break;
+      }
+      prevIsLit = true;
+    } else {
+      prevIsLit = false;
+    }
+
+  if (!canBeSimplified)
+    return failure();
+
+  auto fmtStrType = FormatStringType::get(op.getContext());
+
+  // Simplify literal operands
+  SmallVector<StringRef> litSequence;
+  SmallVector<Value> newOperands;
+  FormatLitOp prevLitOp;
+
+  for (auto operand : op.getOperands()) {
+    if (auto litOp = operand.getDefiningOp<FormatLitOp>()) {
+      if (!litOp.getLiteral().empty()) {
+        prevLitOp = litOp;
+        litSequence.push_back(litOp.getLiteral());
+      }
+    } else {
+      if (!litSequence.empty()) {
+        if (litSequence.size() > 1) {
+          // Create a fused literal.
+          auto newLit = rewriter.createOrFold<FormatLitOp>(
+              op.getLoc(), fmtStrType,
+              concatLiterals(op.getContext(), litSequence));
+          newOperands.push_back(newLit);
+        } else {
+          // Reuse the existing literal.
+          newOperands.push_back(prevLitOp.getResult());
+        }
+        litSequence.clear();
+      }
+      newOperands.push_back(operand);
+    }
+  }
+
+  // Push trailing literals into the new operand list
+  if (!litSequence.empty()) {
+    if (litSequence.size() > 1) {
+      // Create a fused literal.
+      auto newLit = rewriter.createOrFold<FormatLitOp>(
+          op.getLoc(), fmtStrType,
+          concatLiterals(op.getContext(), litSequence));
+      newOperands.push_back(newLit);
+    } else {
+      // Reuse the existing literal.
+      newOperands.push_back(prevLitOp.getResult());
+    }
+  }
+
+  if (newOperands.empty())
+    rewriter.replaceOpWithNewOp<FormatLitOp>(op, fmtStrType,
+                                             rewriter.getStringAttr(""));
+  else if (newOperands.size() == 1)
+    rewriter.replaceOp(op, newOperands);
+  else
+    rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
