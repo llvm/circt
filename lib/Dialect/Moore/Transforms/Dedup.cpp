@@ -72,10 +72,9 @@ void DedupPass::runOnOperation() {
     // Do hash calculation
     StructuralHash moduleInfo;
     auto moduleName = moduleOp.getSymNameAttr();
-    setHashValue(moduleInfo, 0, moduleName);
 
     auto moduleType = moduleOp.getModuleTypeAttrName();
-    setHashValue(moduleInfo, 1, moduleType);
+    setHashValue(moduleInfo, 0, moduleType);
 
     // Compare and record to replacetable and erase this op if there is a
     // equiplance
