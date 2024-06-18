@@ -71,10 +71,11 @@ void DedupPass::runOnOperation() {
 
     // Compare and record to replacetable and erase this op if there is a
     // equiplance
+
     for (auto existModuleInfo : moduleInfoTable) {
-      if (moduleInfo == existModuleInfo.getSecond()) {
-        replaceTable.insert({moduleName, existModuleInfo.getFirst()});
-        moduleOp.erase();
+      if (existModuleInfo.second == moduleInfo) {
+        moduleOp->erase();
+        replaceTable.insert({moduleName, existModuleInfo.first});
         return WalkResult::advance();
       }
     }
@@ -82,7 +83,6 @@ void DedupPass::runOnOperation() {
     return WalkResult::advance();
   });
 
-  // updata instanceOp module name to the new name
   getOperation()->walk([&](InstanceOp instanceOp) {
     auto instanceName = instanceOp.getModuleNameAttr().getAttr();
     if (replaceTable.lookup(instanceName)) {
