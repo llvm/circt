@@ -366,14 +366,9 @@ bool AnnotationSet::removeAnnotation(StringRef className) {
 /// returns true.
 bool AnnotationSet::removeAnnotations(
     llvm::function_ref<bool(Annotation)> predicate) {
-  // Fast path for empty sets.
-  auto attr = getArrayAttr();
-  if (!attr)
-    return false;
-
   // Search for the first match.
   ArrayRef<Attribute> annos = getArrayAttr().getValue();
-  auto it = annos.begin();
+  auto *it = annos.begin();
   while (it != annos.end() && !predicate(Annotation(*it)))
     ++it;
 
