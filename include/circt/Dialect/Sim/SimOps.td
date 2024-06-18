@@ -271,5 +271,27 @@ def FormatCharOp : SimOp<"fmt.char", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
+  let summary = "Concatenate format strings";
+
+  let description = [{
+    Concatenates an arbitrary number of format string (tokens) from left to right. 
+    If the argument list is empty, it produces the empty string literal.
+
+    Concatenations should not be recursive. I.e., a concatenated string should
+    not contain itself.
+  }];
+
+
+  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = true;
+
+  let assemblyFormat = "$inputs attr-dict";
+}
+
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
