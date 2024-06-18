@@ -12,13 +12,6 @@
 
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
-#include "circt/Dialect/Moore/MooreTypes.h"
-#include "circt/Support/LLVM.h"
-#include "mlir/IR/Attributes.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Support/LLVM.h"
-#include "llvm/ADT/ScopedHashTable.h"
 
 namespace circt {
 namespace moore {
@@ -72,7 +65,7 @@ void DedupPass::runOnOperation() {
 
     // Compare and record to replacetable
     // erase this op if there is a equiplance
-    for (auto existModuleInfo : moduleInfoTable) {
+    for (const auto &existModuleInfo : moduleInfoTable) {
       if (existModuleInfo.second == moduleInfo) {
         moduleOp->erase();
         replaceTable.insert({moduleName, existModuleInfo.first});
