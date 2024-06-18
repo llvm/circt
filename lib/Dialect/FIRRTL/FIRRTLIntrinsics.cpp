@@ -18,21 +18,19 @@ using namespace firrtl;
 // GenericIntrinsic
 //===----------------------------------------------------------------------===//
 
-ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
-  if (op.getNumOperands() != n)
-    return emitError() << " has " << op.getNumOperands()
-                       << " inputs instead of " << n;
-  return success();
-}
-
-// Checks for a number of operands between n and m (allows for (n-m) optional
-// parameters)
-ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned m) {
+// Checks for a number of operands between n and n+c (allows for c optional
+// inputs)
+ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c = 0U) {
   auto numOps = op.getNumOperands();
-  if (!(n <= numOps && numOps <= m))
-    return emitError() << " has " << op.getNumOperands()
-                       << " inputs, which is not within [" << n << ", " << m
-                       << "]";
+  unsigned m = n + c;
+  if (!(n <= numOps && numOps <= m)) {
+    auto err = emitError() << " has " << numOps << " inputs instead of ";
+    if (c == 0)
+      err << n;
+    else
+      err << " between " << n << " and " << m;
+    return failure();
+  }
   return success();
 }
 
