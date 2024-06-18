@@ -120,9 +120,32 @@ struct MemberVisitor {
 
     for (const auto *con : instNode.getPortConnections()) {
       const auto *expr = con->getExpression();
-      if (!expr)
-        return mlir::emitError(loc)
-               << "unconnected port `" << con->port.name << "` not supported";
+      if (!expr) {
+        auto *port = con->port.as_if<PortSymbol>();
+        switch (port->direction) {
+        case slang::ast::ArgumentDirection::In: {
+          auto refType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+          auto unconnectedOp =
+              builder.create<moore::UnconnectedOp>(loc, refType);
+          auto readOp = builder.create<moore::ReadOp>(
+              loc, refType.getNestedType(), unconnectedOp);
+          portValues.insert({port, readOp});
+          continue;
+        }
+
+        // No need to express unconnected behavior for output port, skip to the
+        // next iteration of the loop.
+        case slang::ast::ArgumentDirection::Out:
+          continue;
+
+        // TODO: Mark Inout port as unsupported and it will be supported later.
+        default:
+          return mlir::emitError(loc)
+                 << "unsupported port `" << port->name << "` ("
+                 << slang::ast::toString(port->kind) << ")";
+        }
+      }
 
       // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for
       // output and inout ports.
@@ -185,7 +208,6 @@ struct MemberVisitor {
 
     for (auto &port : moduleLowering->ports) {
       auto value = portValues.lookup(&port.ast);
-      assert(value && "no prepared value for port");
       if (port.ast.direction == ArgumentDirection::Out)
         outputValues.push_back(value);
       else
@@ -202,7 +224,8 @@ struct MemberVisitor {
 
     // Assign output values from the instance to the connected expression.
     for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs()))
-      builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
+      if (lvalue)
+        builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
 
     return success();
   }
