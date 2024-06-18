@@ -43,10 +43,11 @@ class DedupPass : public circt::moore::impl::DedupBase<DedupPass> {
            lhs.outputTypes == rhs.outputTypes;
   }
 
+  // This table records Op name and Op info
   using ModuleInfoTable = DenseMap<mlir::StringAttr, ModuleInfo>;
   ModuleInfoTable moduleInfoTable;
 
-  // This tale records old module name and equiplance module name to update
+  // This table records old module name and equiplance module name to update
   using Symbol2Symbol = DenseMap<mlir::StringAttr, mlir::StringAttr>;
   Symbol2Symbol replaceTable;
 
