@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Operation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
@@ -40,6 +41,10 @@ inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
 
 /// Return the name of the dialect-prefixed attribute used for annotations.
 inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
+
+inline ArrayAttr getAnnotationsIfPresent(Operation *op) {
+  return op->getAttrOfType<ArrayAttr>(getAnnotationAttrName());
+}
 
 /// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
 /// simply passes through as a string without any decoding.
@@ -252,6 +257,16 @@ public:
   }
   bool hasAnnotation(StringAttr className) const {
     return !annotations.empty() && hasAnnotationImpl(className);
+  }
+
+  /// Return true if we have an annotation with the specified class name.
+  template <typename... Args>
+  static bool hasAnnotation(Operation *op, Args... args) {
+    auto annosArray = getAnnotationsIfPresent(op);
+    if (!annosArray)
+      return false;
+    AnnotationSet annotations(annosArray);
+    return !annotations.empty() && (... || annotations.hasAnnotationImpl(args));
   }
 
   /// If this annotation set has an annotation with the specified class name,

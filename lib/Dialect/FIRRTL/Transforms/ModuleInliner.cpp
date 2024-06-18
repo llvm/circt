@@ -931,11 +931,11 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet(op).hasAnnotation(flattenAnnoClass);
+  return AnnotationSet::hasAnnotation(op, flattenAnnoClass);
 }
 
 bool Inliner::shouldInline(Operation *op) {
-  return AnnotationSet(op).hasAnnotation(inlineAnnoClass);
+  return AnnotationSet::hasAnnotation(op, inlineAnnoClass);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)

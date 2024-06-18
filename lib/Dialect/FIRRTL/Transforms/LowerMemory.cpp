@@ -526,7 +526,7 @@ void LowerMemoryPass::runOnOperation() {
   // If no module is marked as the DUT, then the top module is the DUT.
   auto *dut = instanceGraph.getTopLevelNode();
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
   });
   if (it != body->end())
     dut = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));
