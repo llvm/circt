@@ -25,8 +25,12 @@
 using namespace circt;
 using namespace firrtl;
 
+static ArrayAttr getAnnotationsIfPresent(Operation *op) {
+  return op->getAttrOfType<ArrayAttr>(getAnnotationAttrName());
+}
+
 static ArrayAttr getAnnotationsFrom(Operation *op) {
-  if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
+  if (auto annots = getAnnotationsIfPresent(op))
     return annots;
   return ArrayAttr::get(op->getContext(), {});
 }
@@ -394,8 +398,12 @@ bool AnnotationSet::removeAnnotations(
 /// Remove all annotations from an operation for which `predicate` returns true.
 bool AnnotationSet::removeAnnotations(
     Operation *op, llvm::function_ref<bool(Annotation)> predicate) {
-  AnnotationSet annos(op);
-  if (!annos.empty() && annos.removeAnnotations(predicate)) {
+  // Fast-path for no annotations.
+  auto annosArray = getAnnotationsIfPresent(op);
+  if (!annosArray)
+    return false;
+  AnnotationSet annos(annosArray);
+  if (annos.removeAnnotations(predicate)) {
     annos.applyToOperation(op);
     return true;
   }
