@@ -116,8 +116,9 @@ private:
 /// Service for calling functions.
 class FuncService : public Service {
 public:
-  FuncService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
-              ServiceImplDetails details, HWClientDetails clients);
+  FuncService(AcceleratorConnection *acc, AppIDPath id,
+              const std::string &implName, ServiceImplDetails details,
+              HWClientDetails clients);
 
   virtual std::string getServiceSymbol() const override;
   virtual ServicePort *getPort(AppIDPath id, const BundleType *type,

@@ -83,8 +83,8 @@ CustomService::CustomService(AppIDPath idPath,
 }
 
 FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
-                         std::string implName, ServiceImplDetails details,
-                         HWClientDetails clients) {
+                         const std::string &implName,
+                         ServiceImplDetails details, HWClientDetails clients) {
   if (auto f = details.find("service"); f != details.end())
     // Strip off initial '@'.
     symbol = any_cast<string>(f->second).substr(1);

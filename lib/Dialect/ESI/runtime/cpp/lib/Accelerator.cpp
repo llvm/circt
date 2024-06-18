@@ -84,7 +84,7 @@ private:
   volatile bool shutdown = false;
   std::thread me;
 
-  // Protect the listerners map.
+  // Protect the listeners map.
   std::mutex listenerMutex;
   // Map of read ports to callbacks.
   std::map<ReadChannelPort *,
