@@ -83,10 +83,10 @@ void DedupPass::runOnOperation() {
   });
 
   // updata instanceOp module name to the new name
-  getOperation()->walk([&](InstanceOp InstanceOp) {
-    auto instanceName = InstanceOp.getModuleNameAttr().getAttr();
+  getOperation()->walk([&](InstanceOp instanceOp) {
+    auto instanceName = instanceOp.getModuleNameAttr().getAttr();
     if (replaceTable.lookup(instanceName)) {
-      InstanceOp.setModuleName(replaceTable[instanceName]);
+      instanceOp.setModuleName(replaceTable[instanceName]);
     }
     return WalkResult::advance();
   });
