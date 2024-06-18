@@ -178,7 +178,7 @@ def ProcedureOp : MooreOp<"procedure", [
 def UnconnectedOp : MooreOp<"unconnected"> {
   let summary = "Indicate the unconnected behavior of a port";
   let description = [{
-    The `moore.unconnected` operation represents no connect in circuit design.
+    The `moore.unconnected` operation represents no connection in circuit design.
 
     |     Port Type    |    Unconnected Behavior    |
     |------------------|----------------------------|
