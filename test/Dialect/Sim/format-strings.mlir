@@ -1,6 +1,7 @@
-// RUN: circt-opt %s --canonicalize | FileCheck %s
+// RUN: circt-opt %s --canonicalize | FileCheck --strict-whitespace %s
 
 // CHECK-LABEL: hw.module @constant_fold0
+// CHECK: sim.fmt.lit ",0,0,;0,0, 0,0;1,1,-1,1;0011, 3, 3,3;01010,10, 10,0a;10000000,128,-128,80;0000001100101011111110,  51966,   51966,00cafe"
 hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
   %comma = sim.fmt.lit ","
   %semicolon = sim.fmt.lit ";"
@@ -55,32 +56,37 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
   %w22hcafe = sim.fmt.hex %cstcafe_22 : i22
   %catw22_cafe = sim.fmt.concat (%w22bcafe, %comma, %w22ucafe, %comma, %w22scafe, %comma, %w22hcafe)
 
-
-
   %catout = sim.fmt.concat (%catw0, %semicolon, %catw1_0, %semicolon, %catw1_1, %nocat, %semicolon, %catw4_3, %semicolon, %catw5_10, %semicolon, %catw8_128, %semicolon, %catw22_cafe)
   %catcatout = sim.fmt.concat (%catout)
   hw.output %catcatout : !sim.fstring
 }
 
+// CHECK-LABEL: hw.module @constant_fold1
+// CHECK: sim.fmt.lit " %b: '111111111111111111111111111111111111111111111111111000110100000010010001001010111001101011110010101010110010011011001001110' %u: '10633823966279322740806214058000332366' %d: '               -4242424242424242424242' %x: '7ffffffffffff1a04895cd79559364e'"
 hw.module @constant_fold1(out res: !sim.fstring) {
-  %pre = sim.fmt.lit "42@123B-> "
   %preb = sim.fmt.lit " %b: '"
   %preu = sim.fmt.lit " %u: '"
   %pres = sim.fmt.lit " %d: '"
   %preh = sim.fmt.lit " %x: '"
   %q = sim.fmt.lit "'"
 
-  %cst42_123 = hw.constant 42 : i123
+  %cst42_123 = hw.constant -4242424242424242424242 : i123
   %w123b42 = sim.fmt.bin %cst42_123 : i123
   %w123u42 = sim.fmt.dec %cst42_123 : i123
   %w123s42 = sim.fmt.dec signed %cst42_123 : i123
   %w123h42 = sim.fmt.hex %cst42_123 : i123
-  %res = sim.fmt.concat (%pre, %preb, %w123b42, %q, %preu, %w123u42, %q, %pres, %w123s42, %q, %preh, %w123h42, %q)
+  %res = sim.fmt.concat (%preb, %w123b42, %q, %preu, %w123u42, %q, %pres, %w123s42, %q, %preh, %w123h42, %q)
 
   hw.output %res : !sim.fstring
 }
 
+// CHECK-LABEL: hw.module @constant_fold2
 hw.module @constant_fold2(in %foo: i1027, out res: !sim.fstring) {
+  // CHECK: [[SDS:%.+]] = sim.fmt.lit " - "
+  // CHECK: [[HEX:%.+]] = sim.fmt.hex %foo : i1027
+  // CHECK: [[CAT:%.+]] = sim.fmt.concat ([[SDS]], [[HEX]], [[SDS]])
+  // CHECK: hw.output [[CAT]] : !sim.fstring
+
   %space = sim.fmt.lit " "
   %dash = sim.fmt.lit "-"
   %spaceDashSpace = sim.fmt.lit " - "
@@ -90,6 +96,8 @@ hw.module @constant_fold2(in %foo: i1027, out res: !sim.fstring) {
   hw.output %res : !sim.fstring
 }
 
+// CHECK-LABEL: hw.module @constant_fold3
+// CHECK: sim.fmt.lit "Foo\0A\0D\00Foo\00\C8"
 hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
   %F = hw.constant 70 : i7
   %o = hw.constant 111 : i8
@@ -104,8 +112,8 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
   %cext = sim.fmt.char %ext : i8
 
   %null = sim.fmt.char %zeroWitdh : i0
-  
+
   %foo = sim.fmt.concat (%cF, %co, %co)
-  %cat = sim.fmt.concat (%foo, %ccr, %clf, %null, %foo, %null, %cext)
+  %cat = sim.fmt.concat (%foo, %clf, %ccr, %null, %foo, %null, %cext)
   hw.output %cat : !sim.fstring
 }
