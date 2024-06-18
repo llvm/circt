@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -20,7 +19,13 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CALYXREMOVEGROUPSFROMFSM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -30,7 +35,8 @@ using namespace fsm;
 namespace {
 
 struct CalyxRemoveGroupsFromFSM
-    : public CalyxRemoveGroupsFromFSMBase<CalyxRemoveGroupsFromFSM> {
+    : public circt::impl::CalyxRemoveGroupsFromFSMBase<
+          CalyxRemoveGroupsFromFSM> {
   void runOnOperation() override;
 
   // Outlines the `fsm.machine` operation from within the `calyx.control`

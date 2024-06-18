@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HWToBTOR2.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -27,9 +26,15 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTHWTOBTOR2
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
@@ -38,7 +43,7 @@ namespace {
 // The goal here is to traverse the operations in order and convert them one by
 // one into btor2
 struct ConvertHWToBTOR2Pass
-    : public ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
+    : public circt::impl::ConvertHWToBTOR2Base<ConvertHWToBTOR2Pass>,
       public comb::CombinationalVisitor<ConvertHWToBTOR2Pass>,
       public sv::Visitor<ConvertHWToBTOR2Pass>,
       public hw::TypeOpVisitor<ConvertHWToBTOR2Pass> {
@@ -52,7 +57,7 @@ private:
   raw_ostream &os;
 
   // Create a counter that attributes a unique id to each generated btor2 line
-  size_t lid = 1;          // btor2 line identifiers usually start at 1
+  size_t lid = 1; // btor2 line identifiers usually start at 1
   size_t nclocks = 0;
 
   // Create maps to keep track of lid associations
@@ -72,12 +77,6 @@ private:
   // with their most recent expression. Btor uses unique identifiers for each
   // instruction, so we need to have an association between those and MLIR Ops.
   DenseMap<Operation *, size_t> opLIDMap;
-  // Keeps track of operation aliases. This is used for wire inlining, as
-  // btor2 does not have the concept of a wire. This means that wires in
-  // hw will simply create an alias for the operation that will point to
-  // the same LID as the original op.
-  // key: alias, value: original op
-  DenseMap<Operation *, Operation *> opAliasMap;
   // Stores the LID of the associated input.
   // This holds a similar function as the opLIDMap but keeps
   // track of block argument index -> LID mappings
@@ -108,7 +107,7 @@ public:
   size_t getOpLID(Operation *op) {
     // Look for the original operation declaration
     // Make sure that wires are considered when looking for an lid
-    Operation *defOp = getOpAlias(op);
+    Operation *defOp = op;
     auto &f = opLIDMap[defOp];
 
     // If the op isn't associated to an lid, assign it a new one
@@ -129,8 +128,7 @@ public:
   // If so, its lid will be returned
   // Otherwise -1 will be returned
   size_t getOpLID(Value value) {
-    // Check for an operation alias
-    Operation *defOp = getOpAlias(value.getDefiningOp());
+    Operation *defOp = value.getDefiningOp();
 
     if (auto it = opLIDMap.find(defOp); it != opLIDMap.end())
       return it->second;
@@ -151,31 +149,6 @@ public:
   }
 
 private:
-  // Checks if an operation has an alias. This is the case for wires
-  // If so, the original operation is returned
-  // Otherwise the argument is returned as it is the original op
-  Operation *getOpAlias(Operation *op) {
-
-    // Remove the alias until none are left (for wires of wires of wires ...)
-    if (auto it = opAliasMap.find(op); it != opAliasMap.end()) {
-      // check for aliases of inputs
-      if (!it->second) {
-        op->emitError("BTOR2 emission does not support for wires of inputs!");
-        return op;
-      }
-      return it->second;
-    }
-
-    // If the op isn't an alias then simply return it
-    return op;
-  }
-
-  // Updates or creates an entry for the given operation
-  // associating it with the current lid
-  void setOpAlias(Operation *alias, Operation *op) {
-    opAliasMap[alias] = getOpAlias(op);
-  }
-
   // Checks if a sort was declared with the given width
   // If so, its lid will be returned
   // Otherwise -1 will be returned
@@ -616,13 +589,10 @@ public:
     genConst(value, w, op);
   }
 
-  // Wires can generally be ignored in bto2, however we do need
-  // to keep track of the new alias it creates
+  // Wires should have been removed in PrepareForFormal
   void visit(hw::WireOp op) {
-    // Retrieve the aliased operation
-    Operation *defOp = op.getOperand().getDefiningOp();
-    // Wires don't output anything so just record alias
-    setOpAlias(op, defOp);
+    op->emitError("Wires are not supported in btor!");
+    return signalPassFailure();
   }
 
   void visitTypeOp(Operation *op) { visitInvalidTypeOp(op); }
@@ -955,7 +925,6 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   sortToLIDMap.clear();
   constToLIDMap.clear();
   opLIDMap.clear();
-  opAliasMap.clear();
   inputLIDs.clear();
   regOps.clear();
   handledOps.clear();

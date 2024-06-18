@@ -31,8 +31,12 @@ def CircuitOp : FIRRTLOp<"circuit",
     The "firrtl.circuit" operation represents an overall Verilog circuit,
     containing a list of modules.
   }];
-  let arguments = (ins StrAttr:$name,
-                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins
+    StrAttr:$name,
+    DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+    OptionalAttr<SymbolRefArrayAttr>:$enable_layers,
+    OptionalAttr<SymbolRefArrayAttr>:$disable_layers
+  );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 

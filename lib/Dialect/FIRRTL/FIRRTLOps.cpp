@@ -113,6 +113,28 @@ bool firrtl::isDuplexValue(Value val) {
   return false;
 }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+MemOp::computeDataFlow() {
+  // If read result has non-zero latency, then no combinational dependency
+  // exists.
+  if (getReadLatency() > 0)
+    return {};
+
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+  // Add a dependency from the enable and address fields to the data field.
+  for (auto memPort : getResults())
+    if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
+      auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+      auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
+      auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+      deps.push_back({FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+                      FieldRef(memPort, static_cast<unsigned>(enableFieldId))});
+      deps.push_back({{memPort, static_cast<unsigned>(dataFieldId)},
+                      {memPort, static_cast<unsigned>(addressFieldId)}});
+    }
+  return deps;
+}
+
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;
@@ -2728,6 +2750,51 @@ InstanceChoiceOp::getTargetChoices() {
   }
 
   return choices;
+}
+
+InstanceChoiceOp
+InstanceChoiceOp::erasePorts(OpBuilder &builder,
+                             const llvm::BitVector &portIndices) {
+  assert(portIndices.size() >= getNumResults() &&
+         "portIndices is not at least as large as getNumResults()");
+
+  if (portIndices.none())
+    return *this;
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(getPortNames().getValue(), portIndices);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+
+  auto newOp = builder.create<InstanceChoiceOp>(
+      getLoc(), newResultTypes, getModuleNames(), getCaseNames(), getName(),
+      getNameKind(), direction::packAttribute(getContext(), newPortDirections),
+      ArrayAttr::get(getContext(), newPortNames), getAnnotationsAttr(),
+      ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
+      getInnerSymAttr());
+
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (portIndices.test(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  // Copy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
+  return newOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -5439,6 +5506,40 @@ void VerbatimWireOp::getAsmResultNames(
   name = name.take_while(isOkCharacter);
   if (!name.empty())
     setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
+// DPICallIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeAllowedForDPI(Operation *op, Type type) {
+  return !type.walk([&](firrtl::IntType intType) -> mlir::WalkResult {
+                auto width = intType.getWidth();
+                if (width < 0) {
+                  op->emitError() << "unknown width is not allowed for DPI";
+                  return WalkResult::interrupt();
+                }
+                if (width == 1 || width == 8 || width == 16 || width == 32 ||
+                    width >= 64)
+                  return WalkResult::advance();
+                op->emitError()
+                    << "integer types used by DPI functions must have a "
+                       "specific bit width; "
+                       "it must be equal to 1(bit), 8(byte), 16(shortint), "
+                       "32(int), 64(longint) "
+                       "or greater than 64, but got "
+                    << intType;
+                return WalkResult::interrupt();
+              })
+              .wasInterrupted();
+}
+
+LogicalResult DPICallIntrinsicOp::verify() {
+  auto checkType = [this](Type type) {
+    return isTypeAllowedForDPI(*this, type);
+  };
+  return success(llvm::all_of(this->getResultTypes(), checkType) &&
+                 llvm::all_of(this->getOperandTypes(), checkType));
 }
 
 //===----------------------------------------------------------------------===//

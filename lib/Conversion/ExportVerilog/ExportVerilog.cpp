@@ -16,7 +16,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -56,8 +55,13 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace circt;
+namespace circt {
+#define GEN_PASS_DEF_EXPORTSPLITVERILOG
+#define GEN_PASS_DEF_EXPORTVERILOG
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
+using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
@@ -1435,7 +1439,8 @@ public:
   };
 
   void emitParameters(Operation *module, ArrayAttr params);
-  void emitPortList(Operation *module, const ModulePortInfo &portInfo);
+  void emitPortList(Operation *module, const ModulePortInfo &portInfo,
+                    bool emitAsTwoStateType = false);
 
   void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
@@ -1472,7 +1477,8 @@ public:
   /// This returns true if anything was printed.
   bool printPackedType(Type type, raw_ostream &os, Location loc,
                        Type optionalAliasType = {}, bool implicitIntType = true,
-                       bool singleBitDefaultType = true);
+                       bool singleBitDefaultType = true,
+                       bool emitAsTwoStateType = false);
 
   /// Output the unpacked array dimensions.  This is the part of the type that
   /// is to the right of the name.
@@ -1646,6 +1652,23 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   emitDims(dims, os, loc, *this);
 }
 
+/// Return a 2-state integer atom type name if the width matches. See Spec 6.8
+/// Variable declarations.
+static StringRef getTwoStateIntegerAtomType(size_t width) {
+  switch (width) {
+  case 8:
+    return "byte";
+  case 16:
+    return "shortint";
+  case 32:
+    return "int";
+  case 64:
+    return "longint";
+  default:
+    return "";
+  }
+}
+
 /// Output the basic type that consists of packed and primitive types.  This is
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
@@ -1659,16 +1682,28 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
                                 ModuleEmitter &emitter,
-                                Type optionalAliasType = {}) {
+                                Type optionalAliasType = {},
+                                bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
-        if (!implicitIntType)
-          os << "logic";
+        if (emitAsTwoStateType && dims.empty()) {
+          auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
+          if (!typeName.empty()) {
+            os << typeName;
+            return true;
+          }
+        }
         if (integerType.getWidth() != 1 || !singleBitDefaultType)
           dims.push_back(
               getInt32Attr(type.getContext(), integerType.getWidth()));
-        if (!dims.empty() && !implicitIntType)
-          os << ' ';
+
+        StringRef typeName =
+            (emitAsTwoStateType ? "bit" : (implicitIntType ? "" : "logic"));
+        if (!typeName.empty()) {
+          os << typeName;
+          if (!dims.empty())
+            os << ' ';
+        }
 
         emitDims(dims, os, loc, emitter);
         return !dims.empty() || !implicitIntType;
@@ -1684,12 +1719,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         dims.push_back(arrayType.getSizeAttr());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum ";
@@ -1722,7 +1759,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims,
                               /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+                              /*singleBitDefaultType=*/true, emitter,
+                              /*optionalAliasType=*/{}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
@@ -1750,23 +1788,24 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           if (needsPadding) {
             os << " struct packed {";
             if (element.offset) {
-              os << "logic [" << element.offset - 1 << ":0] "
+              os << (emitAsTwoStateType ? "bit" : "logic") << " ["
+                 << element.offset - 1 << ":0] "
                  << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
 
           SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims,
-                              /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+          printPackedTypeImpl(
+              stripUnpackedTypes(element.type), os, loc, structDims,
+              /*implicitIntType=*/false,
+              /*singleBitDefaultType=*/true, emitter, {}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << ";";
 
           if (needsPadding) {
             if (elementWidth + (int64_t)element.offset < unionWidth) {
-              os << " logic ["
+              os << " " << (emitAsTwoStateType ? "bit" : "logic") << " ["
                  << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
                  << "__post_padding_" << element.name.getValue() << ";";
             }
@@ -1815,15 +1854,19 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 ///        struct fields and typedefs.
 ///  * When `singleBitDefaultType` is false, single bit values are printed as
 ///       `[0:0]`.  This is used in parameter lists.
+///  * When `emitAsTwoStateType` is true, a "bit" is printed. This is used in
+///        DPI function import statement.
 ///
 /// This returns true if anything was printed.
 bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
                                     Type optionalAliasType,
                                     bool implicitIntType,
-                                    bool singleBitDefaultType) {
+                                    bool singleBitDefaultType,
+                                    bool emitAsTwoStateType) {
   SmallVector<Attribute, 8> packedDimensions;
   return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
-                             singleBitDefaultType, *this, optionalAliasType);
+                             singleBitDefaultType, *this, optionalAliasType,
+                             emitAsTwoStateType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -4351,21 +4394,23 @@ LogicalResult StmtEmitter::visitSV(FuncCallOp op) {
 
 template <typename PPS>
 void emitFunctionSignature(ModuleEmitter &emitter, PPS &ps, FuncOp op,
-                           bool isAutomatic = false) {
+                           bool isAutomatic = false,
+                           bool emitAsTwoStateType = false) {
   ps << "function" << PP::nbsp;
   if (isAutomatic)
     ps << "automatic" << PP::nbsp;
   auto retType = op.getExplicitlyReturnedType();
   if (retType) {
     ps.invokeWithStringOS([&](auto &os) {
-      emitter.printPackedType(retType, os, op->getLoc(), {}, false);
+      emitter.printPackedType(retType, os, op->getLoc(), {}, false, true,
+                              emitAsTwoStateType);
     });
   } else
     ps << "void";
   ps << PP::nbsp << PPExtString(getSymOpName(op));
 
   emitter.emitPortList(
-      op, ModulePortInfo(op.getPortList(/*excludeExplicitReturn=*/true)));
+      op, ModulePortInfo(op.getPortList(/*excludeExplicitReturn=*/true)), true);
 }
 
 LogicalResult StmtEmitter::visitSV(ReturnOp op) {
@@ -4385,7 +4430,8 @@ LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
   auto op =
       cast<FuncOp>(state.symbolCache.getDefinition(importOp.getCalleeAttr()));
   assert(op.isDeclaration() && "function must be a declaration");
-  emitFunctionSignature(emitter, ps, op);
+  emitFunctionSignature(emitter, ps, op, /*isAutomatic=*/false,
+                        /*emitAsTwoStateType=*/true);
   assert(state.pendingNewline);
   ps << PP::newline;
 
@@ -6190,7 +6236,8 @@ void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
 }
 
 void ModuleEmitter::emitPortList(Operation *module,
-                                 const ModulePortInfo &portInfo) {
+                                 const ModulePortInfo &portInfo,
+                                 bool emitAsTwoStateType) {
   ps << "(";
   if (portInfo.size())
     emitLocationInfo(module->getLoc());
@@ -6213,7 +6260,7 @@ void ModuleEmitter::emitPortList(Operation *module,
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
       printPackedType(stripUnpackedTypes(port.type), stringStream,
-                      module->getLoc());
+                      module->getLoc(), {}, true, true, emitAsTwoStateType);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -6959,7 +7006,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 namespace {
 
-struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+struct ExportVerilogPass
+    : public circt::impl::ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
@@ -7139,7 +7187,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 namespace {
 
 struct ExportSplitVerilogPass
-    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
+    : public circt::impl::ExportSplitVerilogBase<ExportSplitVerilogPass> {
   ExportSplitVerilogPass(StringRef directory) {
     directoryName = directory.str();
   }

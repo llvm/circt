@@ -11,16 +11,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERMATCHES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-class LowerMatchesPass : public LowerMatchesBase<LowerMatchesPass> {
+class LowerMatchesPass
+    : public circt::firrtl::impl::LowerMatchesBase<LowerMatchesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

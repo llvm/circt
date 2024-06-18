@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
@@ -14,10 +16,18 @@
 #include "circt/Dialect/Ibis/IbisTypes.h"
 
 #include "circt/Dialect/HW/ConversionPatterns.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
 
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISCALLPREP
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace circt;
 using namespace ibis;
@@ -198,7 +208,7 @@ void MergeMethodArgs::rewrite(MethodOp func, OpAdaptor adaptor,
 
 namespace {
 /// Run all the physical lowerings.
-struct CallPrepPass : public IbisCallPrepBase<CallPrepPass> {
+struct CallPrepPass : public circt::ibis::impl::IbisCallPrepBase<CallPrepPass> {
   void runOnOperation() override;
 
 private:

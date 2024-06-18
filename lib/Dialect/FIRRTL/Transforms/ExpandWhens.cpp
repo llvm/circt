@@ -10,15 +10,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_EXPANDWHENS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -509,6 +516,7 @@ public:
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
   using LastConnectResolver<WhenOpVisitor>::visitStmt;
+  using LastConnectResolver<WhenOpVisitor>::visitStmtExpr;
 
   /// Process a block, recording each declaration, and expanding all whens.
   void process(Block &block);
@@ -529,6 +537,7 @@ public:
   void visitStmt(RefForceInitialOp op);
   void visitStmt(RefReleaseOp op);
   void visitStmt(RefReleaseInitialOp op);
+  void visitStmtExpr(DPICallIntrinsicOp op);
 
 private:
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -616,6 +625,13 @@ void WhenOpVisitor::visitStmt(RefReleaseOp op) {
 
 void WhenOpVisitor::visitStmt(RefReleaseInitialOp op) {
   op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmtExpr(DPICallIntrinsicOp op) {
+  if (op.getEnable())
+    op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
+  else
+    op.getEnableMutable().assign(condition);
 }
 
 /// This is a common helper that is dispatched to by the concrete visitors.
@@ -783,7 +799,8 @@ LogicalResult ModuleVisitor::checkInitialization() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class ExpandWhensPass : public ExpandWhensBase<ExpandWhensPass> {
+class ExpandWhensPass
+    : public circt::firrtl::impl::ExpandWhensBase<ExpandWhensPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
