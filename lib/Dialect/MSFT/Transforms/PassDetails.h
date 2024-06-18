@@ -47,9 +47,6 @@ struct RemoveOpLowering : public OpConversionPattern<OpTy> {
   }
 };
 
-#define GEN_PASS_CLASSES
-#include "circt/Dialect/MSFT/MSFTPasses.h.inc"
-
 } // namespace msft
 } // namespace circt
 

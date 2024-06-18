@@ -14,12 +14,12 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_CONVERTVERIFTOSMT
+#include "circt/Conversion/Passes.h.inc"
+
 /// Get the Verif to SMT conversion patterns.
 void populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                           RewritePatternSet &patterns);
-
-#define GEN_PASS_DECL_CONVERTVERIFTOSMT
-#include "circt/Conversion/Passes.h.inc"
 
 } // namespace circt
 

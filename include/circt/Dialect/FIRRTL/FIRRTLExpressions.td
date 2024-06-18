@@ -1412,7 +1412,7 @@ def RWProbeOp : FIRRTLOp<"ref.rwprobe",
   }];
 
   let arguments = (ins InnerRefAttr:$target);
-  let results = (outs RWProbeConcreteReset:$result);
+  let results = (outs RWProbe:$result);
   let assemblyFormat = "$target attr-dict `:` type($result)";
 }
 

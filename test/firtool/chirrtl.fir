@@ -5,11 +5,12 @@
 ; be enabled.  If they are accidentally removed before the lower-chirrtl pass,
 ; then they won't be enabled.
 
+FIRRTL version 4.0.0
 circuit test: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~test|test"
   }]]
-  module test:
+  public module test:
     input p: UInt<1>
     input addr1: UInt<4>
     input addr2: UInt<4>

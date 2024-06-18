@@ -1636,9 +1636,6 @@ private:
   // the representation simpler and more consistent.
   void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
 
-  /// Emit the logic for a partial connect using standard connect.
-  void emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst, Value src);
-
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
     LocationAttr loc;
@@ -1800,77 +1797,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
           emitInvalidate(subindex, flow);
         }
       });
-}
-
-void FIRStmtParser::emitPartialConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                       Value src) {
-  auto dstType = type_dyn_cast<FIRRTLBaseType>(dst.getType());
-  auto srcType = type_dyn_cast<FIRRTLBaseType>(src.getType());
-  if (!dstType || !srcType)
-    return emitConnect(builder, dst, src);
-
-  if (type_isa<AnalogType>(dstType)) {
-    builder.create<AttachOp>(ArrayRef<Value>{dst, src});
-  } else if (dstType == srcType && !dstType.containsAnalog()) {
-    emitConnect(builder, dst, src);
-  } else if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
-    auto srcBundle = type_cast<BundleType>(srcType);
-    auto numElements = dstBundle.getNumElements();
-    for (size_t dstIndex = 0; dstIndex < numElements; ++dstIndex) {
-      // Find a matching field by name in the other bundle.
-      auto &dstElement = dstBundle.getElements()[dstIndex];
-      auto name = dstElement.name;
-      auto maybe = srcBundle.getElementIndex(name);
-      // If there was no matching field name, don't connect this one.
-      if (!maybe)
-        continue;
-      auto dstRef = moduleContext.getCachedSubaccess(dst, dstIndex);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubfieldOp>(dst, dstIndex);
-      }
-      // We are pulling two fields from the cache. If the dstField was a
-      // pointer into the cache, then the lookup for srcField might invalidate
-      // it. So, we just copy dstField into a local.
-      auto dstField = dstRef;
-      auto srcIndex = *maybe;
-      auto &srcField = moduleContext.getCachedSubaccess(src, srcIndex);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubfieldOp>(src, srcIndex);
-      }
-      if (!dstElement.isFlip)
-        emitPartialConnect(builder, dstField, srcField);
-      else
-        emitPartialConnect(builder, srcField, dstField);
-    }
-  } else if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
-    auto srcVector = type_cast<FVectorType>(srcType);
-    auto dstNumElements = dstVector.getNumElements();
-    auto srcNumEelemnts = srcVector.getNumElements();
-    // Partial connect will connect all elements up to the end of the array.
-    auto numElements = std::min(dstNumElements, srcNumEelemnts);
-    for (size_t i = 0; i != numElements; ++i) {
-      auto &dstRef = moduleContext.getCachedSubaccess(dst, i);
-      if (!dstRef) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(dst);
-        dstRef = builder.create<SubindexOp>(dst, i);
-      }
-      auto dstField = dstRef; // copy to ensure not invalidated
-      auto &srcField = moduleContext.getCachedSubaccess(src, i);
-      if (!srcField) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointAfterValue(src);
-        srcField = builder.create<SubindexOp>(src, i);
-      }
-      emitPartialConnect(builder, dstField, srcField);
-    }
-  } else {
-    emitConnect(builder, dst, src);
-  }
 }
 
 //===-------------------------------
@@ -2519,7 +2445,6 @@ FIRStmtParser::parseExpWithLeadingKeyword(FIRToken keyword) {
   case FIRToken::l_square:   // exp `[` index `]`
   case FIRToken::kw_is:      // exp is invalid
   case FIRToken::less_equal: // exp <= thing
-  case FIRToken::less_minus: // exp <- thing
     break;
   }
 
@@ -3247,6 +3172,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   // 2. Forceable declaration.
   // 3. BlockArgument.
 
+  // We use inner symbols for all.
+
   // Figure out what we have, and parse indexing.
   Value result;
   if (auto unbundledId = dyn_cast<UnbundledID>(symtabEntry)) {
@@ -3271,8 +3198,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // If it's already forceable, use that.
         auto *defining = instResult.getDefiningOp();
         assert(defining);
-        if (isa<Forceable>(defining)) {
-          assert(cast<Forceable>(defining).isForceable());
+        if (isa<WireOp>(defining)) {
           result = instResult;
           break;
         }
@@ -3296,9 +3222,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         locationProcessor.setLoc(loc);
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPoint(defining);
-        auto bounce =
-            builder.create<WireOp>(type, name, NameKindEnum::InterestingName,
-                                   annotations, sym, /*forceable=*/true);
+        auto bounce = builder.create<WireOp>(
+            type, name, NameKindEnum::InterestingName, annotations, sym);
         auto bounceVal = bounce.getData();
 
         // Replace instance result with reads from bounce wire.
@@ -3329,7 +3254,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
   }
 
   assert(result);
-  assert(isa<BlockArgument>(result) || result.getDefiningOp<Forceable>());
+  assert(isa<BlockArgument>(result) ||
+         result.getDefiningOp<hw::InnerSymbolOpInterface>());
 
   // We have our root value, we just need to parse the field id.
   // Build up the FieldRef as processing indexing expressions, and
@@ -3610,24 +3536,6 @@ ParseResult FIRStmtParser::parseRWProbe(Value &result) {
     return emitError(startTok.getLoc(), "cannot force target of type ")
            << targetType;
 
-  // Use Forceable if necessary (reset).
-  if (targetType.hasUninferredReset()) {
-    if (!definingOp)
-      return emitError(startTok.getLoc(),
-                       "must have concrete reset type in type ")
-             << targetType;
-
-    auto forceable = dyn_cast<Forceable>(definingOp);
-    if (!forceable || !forceable.isForceable() /* e.g., is/has const type*/)
-      return emitError(startTok.getLoc(), "rwprobe target not forceable")
-          .attachNote(definingOp->getLoc());
-
-    result = getValueByFieldID(builder, forceable.getDataRef(),
-                               staticRef.getFieldID());
-    assert(result.getType() == forceableType);
-    return success();
-  }
-
   // Get InnerRef for target field.
   auto sym = getInnerRefTo(
       getTargetFor(staticRef),
@@ -3893,7 +3801,6 @@ ParseResult FIRStmtParser::parseLayerBlockOrGroup(unsigned indent) {
 }
 
 /// leading-exp-stmt ::= exp '<=' exp info?
-///                  ::= exp '<-' exp info?
 ///                  ::= exp 'is' 'invalid' info?
 ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   auto loc = getToken().getLoc();
@@ -3910,18 +3817,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   }
 
   auto kind = getToken().getKind();
-  switch (kind) {
-  case FIRToken::less_equal:
-    break;
-  case FIRToken::less_minus:
-    if (removedFeature({2, 0, 0}, "partial connects"))
-      return failure();
-    break;
-  default:
-    return emitError() << "unexpected token '" << getToken().getSpelling()
-                       << "' in statement",
-           failure();
-  }
+  if (getToken().isNot(FIRToken::less_equal))
+    return emitError("expected '<=' in statement");
   consumeToken();
 
   Value rhs;
@@ -3938,19 +3835,11 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   if (lhsType.containsReference() || rhsType.containsReference())
     return emitError(loc, "cannot connect types containing references");
 
-  if (kind == FIRToken::less_equal) {
-    if (!areTypesEquivalent(lhsType, rhsType))
-      return emitError(loc, "cannot connect non-equivalent type ")
-             << rhsType << " to " << lhsType;
-    emitConnect(builder, lhs, rhs);
-  } else {
-    assert(kind == FIRToken::less_minus && "unexpected kind");
-    if (!areTypesWeaklyEquivalent(lhsType, rhsType))
-      return emitError(loc,
-                       "cannot partially connect non-weakly-equivalent type ")
-             << rhsType << " to " << lhsType;
-    emitPartialConnect(builder, lhs, rhs);
-  }
+  assert(kind == FIRToken::less_equal && "unexpected kind");
+  if (!areTypesEquivalent(lhsType, rhsType))
+    return emitError(loc, "cannot connect non-equivalent type ")
+           << rhsType << " to " << lhsType;
+  emitConnect(builder, lhs, rhs);
   return success();
 }
 
@@ -4399,11 +4288,8 @@ ParseResult FIRStmtParser::parseNode() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable =
-      !!firrtl::detail::getForceableResultType(true, initializer.getType());
-  auto result =
-      builder.create<NodeOp>(initializer, id, NameKindEnum::InterestingName,
-                             annotations, sym, forceable);
+  auto result = builder.create<NodeOp>(
+      initializer, id, NameKindEnum::InterestingName, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4429,14 +4315,12 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations = getConstants().emptyArrayAttr;
   StringAttr sym = {};
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   // Names of only-nonHW should be droppable.
   auto namekind = isa<PropertyType, RefType>(type)
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
-  auto result =
-      builder.create<WireOp>(type, id, namekind, annotations, sym, forceable);
+  auto result = builder.create<WireOp>(type, id, namekind, annotations, sym);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -4529,17 +4413,16 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
   if (resetSignal)
-    result = builder
-                 .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
-                                     NameKindEnum::InterestingName, annotations,
-                                     sym, forceable)
-                 .getResult();
+    result =
+        builder
+            .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                                NameKindEnum::InterestingName, annotations, sym)
+            .getResult();
   else
     result = builder
                  .create<RegOp>(type, clock, id, NameKindEnum::InterestingName,
-                                annotations, sym, forceable)
+                                annotations, sym)
                  .getResult();
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -4570,13 +4453,12 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  bool forceable = !!firrtl::detail::getForceableResultType(true, type);
-  auto result = builder
-                    .create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, NameKindEnum::InterestingName,
-                                        getConstants().emptyArrayAttr,
-                                        StringAttr{}, forceable)
-                    .getResult();
+  auto result =
+      builder
+          .create<RegResetOp>(type, clock, resetSignal, resetValue, id,
+                              NameKindEnum::InterestingName,
+                              getConstants().emptyArrayAttr, StringAttr{})
+          .getResult();
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -5317,6 +5199,15 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
       return failure();
     }
     consumeToken();
+
+    hw::OutputFileAttr outputDir;
+    if (getToken().getKind() == FIRToken::string) {
+      auto text = getToken().getStringValue();
+      if (text.empty())
+        return emitError() << "output directory must not be blank";
+      outputDir = hw::OutputFileAttr::getAsDirectory(getContext(), text);
+      consumeToken(FIRToken::string);
+    }
     if (parseToken(FIRToken::colon, "expected ':' after layer definition") ||
         info.parseOptionalInfo())
       return failure();
@@ -5324,6 +5215,8 @@ ParseResult FIRCircuitParser::parseLayer(CircuitOp circuit) {
     // Create the layer definition and give it an empty block.
     auto layerOp = builder.create<LayerOp>(info.getLoc(), id, *layerConvention);
     layerOp->getRegion(0).push_back(new Block());
+    if (outputDir)
+      layerOp->setAttr("output_file", outputDir);
     layerStack.push_back({indent, layerOp});
     return success();
   };
@@ -5419,12 +5312,6 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
     }
   }
 
-  // Demote any forceable operations that aren't being forced.
-  deferredModule.moduleOp.walk([](Forceable fop) {
-    if (fop.isForceable() && fop.getDataRef().use_empty())
-      firrtl::detail::replaceWithNewForceability(fop, false);
-  });
-
   return success();
 }
 
@@ -5442,17 +5329,17 @@ ParseResult FIRCircuitParser::parseCircuit(
     mlir::TimingScope &ts) {
 
   auto indent = getIndentation();
-  if (consumeIf(FIRToken::kw_FIRRTL)) {
-    if (!indent.has_value())
-      return emitError("'FIRRTL' must be first token on its line"), failure();
-    if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
-        parseVersionLit("expected version literal"))
-      return failure();
-    indent = getIndentation();
-  }
+  if (parseToken(FIRToken::kw_FIRRTL, "expected 'FIRRTL'"))
+    return failure();
+  if (!indent.has_value())
+    return emitError("'FIRRTL' must be first token on its line");
+  if (parseToken(FIRToken::kw_version, "expected version after 'FIRRTL'") ||
+      parseVersionLit("expected version literal"))
+    return failure();
+  indent = getIndentation();
 
   if (!indent.has_value())
-    return emitError("'circuit' must be first token on its line"), failure();
+    return emitError("'circuit' must be first token on its line");
   unsigned circuitIndent = *indent;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -5598,6 +5485,34 @@ DoneParsing:
   if (failed(anyFailed))
     return failure();
 
+  // Helper to transform a layer name specification of the form `A::B::C` into
+  // a SymbolRefAttr.
+  auto parseLayerName = [&](StringRef name) {
+    // Parse the layer name into a SymbolRefAttr.
+    auto [head, rest] = name.split("::");
+    SmallVector<FlatSymbolRefAttr> nestedRefs;
+    while (!rest.empty()) {
+      StringRef next;
+      std::tie(next, rest) = rest.split("::");
+      nestedRefs.push_back(FlatSymbolRefAttr::get(getContext(), next));
+    }
+    return SymbolRefAttr::get(getContext(), head, nestedRefs);
+  };
+
+  auto parseLayers = [&](const auto &layers) {
+    SmallVector<Attribute> layersAttr;
+    for (const auto &layer : layers)
+      layersAttr.push_back(parseLayerName(layer));
+    if (layersAttr.empty())
+      return ArrayAttr();
+    return ArrayAttr::get(getContext(), layersAttr);
+  };
+
+  if (auto enableLayers = parseLayers(getConstants().options.enableLayers))
+    circuit.setEnableLayersAttr(enableLayers);
+  if (auto disableLayers = parseLayers(getConstants().options.disableLayers))
+    circuit.setDisableLayersAttr(disableLayers);
+
   return success();
 }
 
@@ -5631,8 +5546,7 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  FIRVersion version = defaultFIRVersion;
-  if (FIRCircuitParser(state, lexer, *module, version)
+  if (FIRCircuitParser(state, lexer, *module, minimumFIRVersion)
           .parseCircuit(annotationsBufs, omirBufs, ts))
     return nullptr;
 

@@ -133,8 +133,10 @@ struct MemberVisitor {
       // either attach it to the instance as an operand (for input, inout, and
       // ref ports), or assign an instance output to it (for output ports).
       if (auto *port = con->port.as_if<PortSymbol>()) {
-        // TODO: Convert as rvalue for inputs, lvalue for all others.
-        auto value = context.convertExpression(*expr);
+        // Convert as rvalue for inputs, lvalue for all others.
+        auto value = (port->direction == slang::ast::ArgumentDirection::In)
+                         ? context.convertRvalueExpression(*expr)
+                         : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
         portValues.insert({port, value});
@@ -145,8 +147,8 @@ struct MemberVisitor {
       // it up into multiple sub-values, one for each of the ports in the
       // multi-port.
       if (const auto *multiPort = con->port.as_if<MultiPortSymbol>()) {
-        // TODO: Convert as lvalue.
-        auto value = context.convertExpression(*expr);
+        // Convert as lvalue.
+        auto value = context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
         unsigned offset = 0;
@@ -157,9 +159,12 @@ struct MemberVisitor {
           auto sliceType = context.convertType(port->getType());
           if (!sliceType)
             return failure();
-          auto slice =
-              builder.create<moore::ExtractOp>(loc, sliceType, value, index);
-          // TODO: Read to map to rvalue for input ports.
+          Value slice = builder.create<moore::ExtractRefOp>(
+              loc, moore::RefType::get(cast<moore::UnpackedType>(sliceType)),
+              value, index);
+          // Read to map to rvalue for input ports.
+          if (port->direction == slang::ast::ArgumentDirection::In)
+            slice = builder.create<moore::ReadOp>(loc, sliceType, slice);
           portValues.insert({port, slice});
           offset += width;
         }
@@ -210,17 +215,14 @@ struct MemberVisitor {
 
     Value initial;
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertExpression(*init);
+      initial = context.convertRvalueExpression(*init);
       if (!initial)
         return failure();
-
-      if (initial.getType() != loweredType)
-        initial =
-            builder.create<moore::ConversionOp>(loc, loweredType, initial);
     }
 
     auto varOp = builder.create<moore::VariableOp>(
-        loc, loweredType, builder.getStringAttr(varNode.name), initial);
+        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(varNode.name), initial);
     context.valueSymbols.insert(&varNode, varOp);
     return success();
   }
@@ -233,7 +235,7 @@ struct MemberVisitor {
 
     Value assignment;
     if (netNode.getInitializer()) {
-      assignment = context.convertExpression(*netNode.getInitializer());
+      assignment = context.convertRvalueExpression(*netNode.getInitializer());
       if (!assignment)
         return failure();
     }
@@ -246,8 +248,8 @@ struct MemberVisitor {
              << netNode.netType.name << "`";
 
     auto netOp = builder.create<moore::NetOp>(
-        loc, loweredType, builder.getStringAttr(netNode.name), netkind,
-        assignment);
+        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(netNode.name), netkind, assignment);
     context.valueSymbols.insert(&netNode, netOp);
     return success();
   }
@@ -263,13 +265,10 @@ struct MemberVisitor {
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
 
-    auto lhs = context.convertExpression(expr.left());
-    auto rhs = context.convertExpression(expr.right());
+    auto lhs = context.convertLvalueExpression(expr.left());
+    auto rhs = context.convertRvalueExpression(expr.right());
     if (!lhs || !rhs)
       return failure();
-
-    if (lhs.getType() != rhs.getType())
-      rhs = builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
 
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
@@ -288,17 +287,12 @@ struct MemberVisitor {
 
   // Handle parameters.
   LogicalResult visit(const slang::ast::ParameterSymbol &paramNode) {
-    auto type = context.convertType(*paramNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(paramNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = paramNode.getInitializer();
-    // skip parameters without value.
-    if (!init)
-      return success();
-    Value initial = context.convertExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = paramNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
@@ -307,30 +301,25 @@ struct MemberVisitor {
                                          moore::NamedConst::LocalParameter)
             : moore::NamedConstAttr::get(context.getContext(),
                                          moore::NamedConst::Parameter),
-        initial);
+        value);
     context.valueSymbols.insert(&paramNode, namedConstantOp);
     return success();
   }
 
   // Handle specparam.
   LogicalResult visit(const slang::ast::SpecparamSymbol &spNode) {
-    auto type = context.convertType(*spNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(spNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = spNode.getInitializer();
-    // skip specparam without value.
-    if (!init)
-      return success();
-    Value initial = context.convertExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = spNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(spNode.name),
         moore::NamedConstAttr::get(context.getContext(),
                                    moore::NamedConst::SpecParameter),
-        initial);
+        value);
     context.valueSymbols.insert(&spNode, namedConstantOp);
     return success();
   }
@@ -437,8 +426,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       if (port.direction == ArgumentDirection::Out) {
         modulePorts.push_back({portName, type, hw::ModulePort::Output});
       } else {
-        // TODO: Once we have net/ref type wrappers, wrap `inout` and `ref`
-        // ports in the corresponding type wrapper.
+        // Only the ref type wrapper exists for the time being, the net type
+        // wrapper for inout may be introduced later if necessary.
+        if (port.direction != slang::ast::ArgumentDirection::In)
+          type = moore::RefType::get(cast<moore::UnpackedType>(type));
         modulePorts.push_back({portName, type, hw::ModulePort::Input});
         arg = block->addArgument(type, portLoc);
       }
@@ -509,9 +500,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   for (auto &port : lowering.ports) {
     Value value;
     if (auto *expr = port.ast.getInternalExpr()) {
-      // TODO: Once we have separate lvalue/rvalue lowering, this should use
-      // rvalue lowering for outputs and lvalue lowering for everything else.
-      value = convertExpression(*expr);
+      value = convertLvalueExpression(*expr);
     } else if (port.ast.internalSymbol) {
       if (const auto *sym =
               port.ast.internalSymbol->as_if<slang::ast::ValueSymbol>())
@@ -524,13 +513,22 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
     // Collect output port values to be returned in the terminator.
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
+      if (isa<moore::RefType>(value.getType()))
+        value = builder.create<moore::ReadOp>(
+            value.getLoc(),
+            cast<moore::RefType>(value.getType()).getNestedType(), value);
       outputs.push_back(value);
       continue;
     }
 
     // Assign the value coming in through the port to the internal net or symbol
     // of that port.
-    builder.create<moore::ContinuousAssignOp>(port.loc, value, port.arg);
+    Value portArg = port.arg;
+    if (port.ast.direction != slang::ast::ArgumentDirection::In)
+      portArg = builder.create<moore::ReadOp>(
+          port.loc, cast<moore::RefType>(value.getType()).getNestedType(),
+          port.arg);
+    builder.create<moore::ContinuousAssignOp>(port.loc, value, portArg);
   }
   builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
 

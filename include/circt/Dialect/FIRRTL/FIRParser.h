@@ -15,6 +15,8 @@
 #define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
 #include "circt/Support/LLVM.h"
+#include <string>
+#include <vector>
 
 namespace llvm {
 class SourceMgr;
@@ -49,6 +51,8 @@ struct FIRParserOptions {
   bool scalarizePublicModules = false;
   bool scalarizeInternalModules = false;
   bool scalarizeExtModules = false;
+  std::vector<std::string> enableLayers;
+  std::vector<std::string> disableLayers;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
@@ -107,10 +111,9 @@ struct FIRVersion {
   uint16_t patch;
 };
 
-constexpr FIRVersion minimumFIRVersion(0, 2, 0);
+constexpr FIRVersion minimumFIRVersion(2, 0, 0);
 constexpr FIRVersion nextFIRVersion(3, 3, 0);
 constexpr FIRVersion exportFIRVersion(4, 0, 0);
-constexpr FIRVersion defaultFIRVersion(1, 0, 0);
 
 template <typename T>
 T &operator<<(T &os, FIRVersion version) {

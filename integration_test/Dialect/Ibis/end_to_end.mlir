@@ -6,14 +6,14 @@ ibis.design @foo {
 
 // A class hierarchy with a shared parent, and accessing between the children
 
-ibis.class @C1 {
+ibis.class sym @C1 {
   %this = ibis.this <@foo::@C1>
   %out = ibis.port.output "out" sym @out : i32
   %c0 = hw.constant 42 : i32
   ibis.port.write %out, %c0 : !ibis.portref<out i32>
 }
 
-ibis.class @C2 {
+ibis.class sym @C2 {
   %this = ibis.this <@foo::@C2>
 
   %go_port = ibis.port.input "go" sym @go : i1
@@ -22,7 +22,7 @@ ibis.class @C2 {
   %done_port = ibis.port.output "done" sym @done : i1
   %out_port = ibis.port.output "out" sym @out : i32
 
-  ibis.container @MyMethod {
+  ibis.container sym @MyMethod {
     %t = ibis.this <@foo::@MyMethod>
 
     // Grab parent go, clk, reset inputs - note that the requested direction of
@@ -68,7 +68,7 @@ ibis.class @C2 {
   }
 }
 
-ibis.class @Parent {
+ibis.class sym @Parent {
   %this = ibis.this <@foo::@Parent>
   %c1 = ibis.instance @c1, <@foo::@C1>
   %c2 = ibis.instance @c2, <@foo::@C2>

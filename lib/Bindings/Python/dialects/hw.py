@@ -183,7 +183,7 @@ class ModuleLike:
       entry_block = self.add_entry_block()
 
       with InsertionPoint(entry_block):
-        with support.BackedgeBuilder():
+        with support.BackedgeBuilder(str(name)):
           outputs = body_builder(self)
           _create_output_op(name, output_ports, entry_block, outputs)
 
