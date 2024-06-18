@@ -885,13 +885,13 @@ def SpecializeLayers : Pass<"firrtl-specialize-layers", "firrtl::CircuitOp"> {
     This pass performs specialization of layers, layerblocks, and probe
     operations by permanantly enabling or disabling layers.  The layers are
     specified by attributes on the `firrtl.circuit` operation in the
-    `firrtl.enable_layers` and `firrtl.disable_layers` attributes which are both
-    lists of SymbolRefAttrs.  When a layer is specialized, it will be removed
-    from the circuit and all references to it should be cleaned up.  If a layer
-    is disabled, all layerblock are referencing that layer will be deleted, and
-    all probe colored by that layer will be removed.  When a layer is enabled,
-    all contents of the layer will be inlined in to the outer context, and
-    probes colored by that layer will no longer be colored.
+    `enable_layers` and `disable_layers` attributes which are both lists of
+    SymbolRefAttrs.  When a layer is specialized, it will be removed from the
+    circuit and all references to it should be cleaned up.  If a layer is
+    disabled, all layerblock are referencing that layer will be deleted, and all
+    probe colored by that layer will be removed.  When a layer is enabled, all
+    contents of the layer will be inlined in to the outer context, and probes
+    colored by that layer will no longer be colored.
   }];
   let constructor = "circt::firrtl::createSpecializeLayersPass()";
 }
