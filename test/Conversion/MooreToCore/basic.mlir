@@ -193,3 +193,64 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: return
   return
 }
+
+// CHECK-LABEL: hw.module @InstanceNull() {
+moore.module @InstanceNull() {
+
+  // CHECK-NEXT: hw.instance "null_instance" @Null() -> ()
+  moore.instance "null_instance" @Null() -> ()
+
+  // CHECK-NEXT: hw.output
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @Null() {
+moore.module @Null() {
+
+  // CHECK-NEXT: hw.output
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @Top(in
+// CHECK-SAME: %[[V0:.*]] : i1, in
+// CHECK-SAME: %[[V1:.*]] : i1, out out0 : i1) {
+moore.module @Top(in %arg0 : !moore.l1, in %arg1 : !moore.l1, out out0 : !moore.l1) {
+// CHECK-NEXT: %[[V2:.*]] = hw.instance "inst_0" @SubModule_0(a: %[[V0]]: i1, b: %[[V1]]: i1) -> (c: i1)
+  %inst_0.c = moore.instance "inst_0" @SubModule_0(a: %arg0 : !moore.l1, b: %arg1 : !moore.l1) -> (c: !moore.l1)
+
+// CHECK-NEXT: %[[V3:.*]] = hw.instance "inst_1" @SubModule_0(a: %[[V2]]: i1, b: %[[V1]]: i1) -> (c: i1)
+  %inst_1.c = moore.instance "inst_1" @SubModule_0(a: %inst_0.c : !moore.l1, b: %arg1 : !moore.l1) -> (c: !moore.l1)
+
+// CHECK-NEXT: hw.output %[[V3]] : i1
+  moore.output %inst_1.c : !moore.l1
+}
+
+// CHECK-LABEL: hw.module @SubModule_0(in
+// CHECK-SAME: %[[V0:.*]] : i1, in
+// CHECK-SAME: %[[V1:.*]] : i1, out c : i1) {
+moore.module @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1) {
+  // CHECK-NEXT: %[[V2:.*]] = comb.and %[[V0]], %[[V1]] : i1
+  %0 = moore.and %a, %b : !moore.l1
+
+  // CHECK-NEXT: hw.output %[[V2]] : i1
+  moore.output %0 : !moore.l1
+}
+
+// CHECK-LABEL: hw.module @ParamTest() {
+moore.module @ParamTest(){
+
+  // CHECK-NEXT: [[Pa:%.+]] = hw.constant 1 : i32
+  // CHECK-NEXT: %p1 = hw.wire [[Pa]] sym @parameter:p1 : i32
+  %0 = moore.constant 1 : l32
+  %p1 = moore.named_constant parameter %0 : l32
+
+  // CHECK-NEXT: [[LPa:%.+]] = hw.constant 2 : i32
+  // CHECK-NEXT: %lp1 = hw.wire [[LPa]] sym @localparameter:lp1 : i32
+  %1 = moore.constant 2 : l32
+  %lp1 = moore.named_constant localparam %1 : l32
+
+  // CHECK-NEXT: [[SPa:%.+]] = hw.constant 3 : i32
+  // CHECK-NEXT: %sp1 = hw.wire [[SPa]] sym @specparameter:sp1 : i32
+  %2 = moore.constant 3 : l32
+  %sp1 = moore.named_constant specparam %2 : l32
+}

@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  AssignOutputDirs.cpp
   AddSeqMemPorts.cpp
   BlackBoxReader.cpp
   CheckCombLoops.cpp
@@ -28,6 +29,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerAnnotations.cpp
   LowerCHIRRTL.cpp
   LowerClasses.cpp
+  LowerDPI.cpp
   LowerIntmodules.cpp
   LowerIntrinsics.cpp
   LowerLayers.cpp
@@ -53,6 +55,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ResolvePaths.cpp
   ResolveTraces.cpp
   SFCCompat.cpp
+  SpecializeLayers.cpp
   SpecializeOption.cpp
   VBToBV.cpp
   Vectorization.cpp
@@ -69,6 +72,8 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CIRCTEmit
   CIRCTHW
   CIRCTOM
+  CIRCTSeq
+  CIRCTSim
   CIRCTSV
   CIRCTSupport
   MLIRIR

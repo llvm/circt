@@ -13,7 +13,6 @@
 #include "../PassDetails.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/ESI/APIUtilities.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -27,6 +26,13 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
+
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_LOWERESITOHW
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
 
 using namespace circt;
 using namespace circt::esi;
@@ -215,7 +221,7 @@ public:
 } // anonymous namespace
 
 namespace {
-struct ESItoHWPass : public LowerESItoHWBase<ESItoHWPass> {
+struct ESItoHWPass : public circt::esi::impl::LowerESItoHWBase<ESItoHWPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace

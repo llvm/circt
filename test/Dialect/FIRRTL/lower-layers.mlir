@@ -594,7 +594,7 @@ firrtl.circuit "Foo" attributes {
     }
   ]
 } {
-  firrtl.layer @A  bind {}
+  firrtl.layer @A  bind attributes {output_file = #hw.output_file<"testbench/", excludeFromFileList>} {}
   firrtl.module @Bar() attributes {
     annotations = [
       {

@@ -7,12 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ConvertToArcs.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "convert-to-arcs"

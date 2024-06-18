@@ -1,5 +1,6 @@
 ; RUN: firtool --verilog --allow-adding-ports-on-public-modules %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
@@ -37,7 +38,7 @@ circuit Top : %[[
       infer mport write = rf[io.addr], clock
       write <= io.dataIn
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}

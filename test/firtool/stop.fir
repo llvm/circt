@@ -9,8 +9,9 @@
 ; CHECK:   }
 ; CHECK: }
 
+FIRRTL version 4.0.0
 circuit StopAndFinishTest:
-  module StopAndFinishTest :
+  public module StopAndFinishTest :
     input clock : Clock
     input cond : UInt<1>
 

@@ -23,6 +23,9 @@ class LLVMTypeConverter;
 
 namespace circt {
 
+#define GEN_PASS_DECL_CONVERTLLHDTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+
 /// Get the LLHD to LLVM type conversions
 void populateLLHDToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
