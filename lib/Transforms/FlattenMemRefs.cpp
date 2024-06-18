@@ -47,6 +47,9 @@ struct FunctionRewrite {
   FunctionType type;
 };
 
+static std::atomic<unsigned> globalCounter(0);
+static DenseMap<StringAttr, StringAttr> globalNameMap;
+
 static MemRefType getFlattenedMemRefType(MemRefType type) {
   return MemRefType::get(SmallVector<int64_t>{type.getNumElements()},
                          type.getElementType());
@@ -54,8 +57,9 @@ static MemRefType getFlattenedMemRefType(MemRefType type) {
 
 static std::string getFlattenedMemRefName(StringAttr baseName,
                                           MemRefType type) {
-  return llvm::formatv("{0}_{1}x{2}", baseName, type.getNumElements(),
-                       type.getElementType());
+  unsigned uniqueID = globalCounter++;
+  return llvm::formatv("{0}_{1}x{2}_{3}", baseName, type.getNumElements(),
+                       type.getElementType(), uniqueID);
 }
 
 // Flatten indices by generating the product of the i'th index and the [0:i-1]
@@ -190,14 +194,17 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
       flattenedVals.push_back(attr);
 
     auto newTypeAttr = TypeAttr::get(newType);
-    auto newName = getFlattenedMemRefName(op.getConstantAttrName(), type);
+    auto newNameStr = getFlattenedMemRefName(op.getConstantAttrName(), type);
+    auto newName = rewriter.getStringAttr(newNameStr);
+    globalNameMap[op.getSymNameAttr()] = newName;
+
     RankedTensorType tensorType = RankedTensorType::get(
         {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
     auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
-        op, rewriter.getStringAttr(newName), op.getSymVisibilityAttr(),
-        newTypeAttr, newInitValue, op.getConstantAttr(), op.getAlignmentAttr());
+        op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
+        op.getConstantAttr(), op.getAlignmentAttr());
 
     return success();
   }
@@ -218,10 +225,13 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
       return failure();
 
     MemRefType newType = getFlattenedMemRefType(type);
-    auto newName = getFlattenedMemRefName(globalOp.getConstantAttrName(), type);
+    auto originalName = globalOp.getSymNameAttr();
+    auto newNameIt = globalNameMap.find(originalName);
+    if (newNameIt == globalNameMap.end())
+      return failure();
+    auto newName = newNameIt->second;
 
-    rewriter.replaceOpWithNewOp<memref::GetGlobalOp>(
-        op, newType, rewriter.getStringAttr(newName));
+    rewriter.replaceOpWithNewOp<memref::GetGlobalOp>(op, newType, newName);
 
     return success();
   }
