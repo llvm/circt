@@ -69,9 +69,8 @@ void DedupPass::runOnOperation() {
                              moduleType.getInputTypes(),
                              moduleType.getOutputTypes()};
 
-    // Compare and record to replacetable and erase this op if there is a
-    // equiplance
-
+    // Compare and record to replacetable
+    // erase this op if there is a equiplance
     for (auto existModuleInfo : moduleInfoTable) {
       if (existModuleInfo.second == moduleInfo) {
         moduleOp->erase();
@@ -83,6 +82,7 @@ void DedupPass::runOnOperation() {
     return WalkResult::advance();
   });
 
+  //Referring to replacetable, replace instance's module name
   getOperation()->walk([&](InstanceOp instanceOp) {
     auto instanceName = instanceOp.getModuleNameAttr().getAttr();
     if (replaceTable.lookup(instanceName)) {
