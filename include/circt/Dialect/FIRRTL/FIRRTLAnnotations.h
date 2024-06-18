@@ -39,9 +39,6 @@ inline StringRef getAnnotationAttrName() { return "annotations"; }
 /// Return the name of the attribute used for port annotations on FIRRTL ops.
 inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
 
-/// Return the name of the dialect-prefixed attribute used for annotations.
-inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
-
 inline ArrayAttr getAnnotationsIfPresent(Operation *op) {
   return op->getAttrOfType<ArrayAttr>(getAnnotationAttrName());
 }
@@ -203,53 +200,6 @@ public:
   /// true if the operation was modified, false otherwise.
   bool applyToPort(FModuleLike op, size_t portNo) const;
   bool applyToPort(MemOp op, size_t portNo) const;
-
-  /// Store the annotations in this set in a `NamedAttrList` as an array
-  /// attribute with the name `annotations`. Overwrites existing annotations.
-  /// Removes the `annotations` attribute if the set is empty. Returns true if
-  /// the list was modified, false otherwise.
-  ///
-  /// This function is useful if you are in the process of modifying an
-  /// operation's attributes as a `NamedAttrList`, or you are preparing the
-  /// attributes of a operation yet to be created. In that case
-  /// `applyToAttrList` allows you to set the `annotations` attribute in that
-  /// list to the contents of this set.
-  bool applyToAttrList(NamedAttrList &attrs) const;
-
-  /// Store the annotations in this set in a `NamedAttrList` as an array
-  /// attribute with the name `firrtl.annotations`. Overwrites existing
-  /// annotations. Removes the `firrtl.annotations` attribute if the set is
-  /// empty. Returns true if the list was modified, false otherwise.
-  ///
-  /// This function is useful if you are in the process of modifying a port's
-  /// attributes as a `NamedAttrList`, or you are preparing the attributes of a
-  /// port yet to be created as part of an operation. In that case
-  /// `applyToPortAttrList` allows you to set the `firrtl.annotations` attribute
-  /// in that list to the contents of this set.
-  bool applyToPortAttrList(NamedAttrList &attrs) const;
-
-  /// Insert this annotation set into a `DictionaryAttr` under the `annotations`
-  /// key. Overwrites any existing attribute stored under `annotations`. Removes
-  /// the `annotations` attribute in the dictionary if the set is empty. Returns
-  /// the updated dictionary.
-  ///
-  /// This function is useful if you hold an operation's attributes dictionary
-  /// and want to set the `annotations` key in the dictionary to the contents of
-  /// this set.
-  DictionaryAttr applyToDictionaryAttr(DictionaryAttr attrs) const;
-  DictionaryAttr applyToDictionaryAttr(ArrayRef<NamedAttribute> attrs) const;
-
-  /// Insert this annotation set into a `DictionaryAttr` under the
-  /// `firrtl.annotations` key. Overwrites any existing attribute stored under
-  /// `firrtl.annotations`. Removes the `firrtl.annotations` attribute in the
-  /// dictionary if the set is empty. Returns the updated dictionary.
-  ///
-  /// This function is useful if you hold a port's attributes dictionary and
-  /// want to set the `firrtl.annotations` key in the dictionary to the contents
-  /// of this set.
-  DictionaryAttr applyToPortDictionaryAttr(DictionaryAttr attrs) const;
-  DictionaryAttr
-  applyToPortDictionaryAttr(ArrayRef<NamedAttribute> attrs) const;
 
   /// Return true if we have an annotation with the specified class name.
   bool hasAnnotation(StringRef className) const {
