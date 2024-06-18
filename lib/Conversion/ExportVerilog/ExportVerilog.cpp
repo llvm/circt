@@ -3517,7 +3517,7 @@ void PropertyEmitter::emitEnabledProperty(
   if (enable) {
     ps << "disable iff" << PP::nbsp << "(~(";
     ps.scopedBox(PP::ibox2, [&] {
-      emitNestedProperty(enable, PropertyPrecedence::Lowest);
+      emitNestedProperty(enable, PropertyPrecedence::Unary);
       ps << "))";
     });
     ps << PP::space;

@@ -64,15 +64,15 @@ template <typename TargetOp, typename Op>
 static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
   // If the property is a block argument, then no canonicalization is possible
   Value property = op.getProperty();
-  if (!property.getDefiningOp())
+  auto clockOp = property.getDefiningOp<ltl::ClockOp>();
+  if (!clockOp)
     return failure();
 
   // Check for clock operand
-  if (auto clockOp = dyn_cast<ltl::ClockOp>(property.getDefiningOp()))
-    // If it exists, fold it into a clocked assertlike
-    rewriter.replaceOpWithNewOp<TargetOp>(
-        op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
-        clockOp.getClock(), op.getEnable(), op.getLabelAttr());
+  // If it exists, fold it into a clocked assertlike
+  rewriter.replaceOpWithNewOp<TargetOp>(
+      op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
+      clockOp.getClock(), op.getEnable(), op.getLabelAttr());
 
   return success();
 }
