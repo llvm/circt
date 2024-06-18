@@ -547,4 +547,26 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
   ];
 }
 
+def CombDataflow : OpInterface<"CombDataFlow"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    This interface is used for specifying the combinational dataflow that exists
+    in the results and operands of an operation.
+    Any operation that doesn't implement this interface is assumed to have a
+    combinational dependence from each operand to each result.
+  }];
+  let methods = [
+    InterfaceMethod<"Get the combinational dataflow relations between the"
+     "operands and the results. This returns a pair of ground type fieldrefs."
+     "The first element is the destination and the second is the source of"
+     "the dependence."
+     "The default implementation returns an empty list, which implies that the"
+     "operation is not combinational.",
+     "SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>",
+     "computeDataFlow", (ins), [{}], /*defaultImplementation=*/[{
+      return {};
+    }]>,
+  ];
+}
+
 #endif
