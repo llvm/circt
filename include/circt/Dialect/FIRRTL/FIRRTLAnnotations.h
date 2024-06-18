@@ -182,7 +182,10 @@ public:
   ArrayRef<Attribute> getArray() const { return annotations.getValue(); }
 
   /// Return this annotation set as an ArrayAttr.
-  ArrayAttr getArrayAttr() const { return annotations; }
+  ArrayAttr getArrayAttr() const {
+    assert(annotations && "Cannot use null attribute set");
+    return annotations;
+  }
 
   /// Store the annotations in this set in an operation's `annotations`
   /// attribute, overwriting any existing annotations. Removes the `annotations`
