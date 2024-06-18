@@ -102,6 +102,82 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
        getPerArgumentAttrsAttrName(), getArgumentLocsAttrName()});
 }
 
+OpFoldResult FormatLitOp::fold(FoldAdaptor adaptor) { return getLiteralAttr(); }
+
+OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType() == IntegerType::get(getContext(), 0U))
+    return StringAttr::get(getContext(), "0");
+
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
+    SmallVector<char, 16> strBuf;
+    intAttr.getValue().toString(strBuf, 10U, getIsSigned());
+
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = FormatDecOp::getDecimalWidth(width, getIsSigned());
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+    SmallVector<char, 32> padding(padWidth, ' ');
+    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+
+    return StringAttr::get(getContext(), Twine(strBuf));
+  }
+  return {};
+}
+
+OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType() == IntegerType::get(getContext(), 0U))
+    return StringAttr::get(getContext(), "");
+
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
+    SmallVector<char, 8> strBuf;
+    intAttr.getValue().toString(strBuf, 16U, /*Signed*/ false,
+                                /*formatAsCLiteral*/ false,
+                                /*UpperCase*/ false);
+
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = width / 4;
+    if (width % 4 != 0)
+      padWidth++;
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+    SmallVector<char, 8> padding(padWidth, '0');
+    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+  }
+  return {};
+}
+
+OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType() == IntegerType::get(getContext(), 0U))
+    return StringAttr::get(getContext(), "");
+
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
+    SmallVector<char, 32> strBuf;
+    intAttr.getValue().toString(strBuf, 2U, false);
+
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = width > strBuf.size() ? width - strBuf.size() : 0;
+
+    SmallVector<char, 32> padding(padWidth, '0');
+    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+  }
+  return {};
+}
+
+OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
+    if (intAttr.getType().getIntOrFloatBitWidth() > 8)
+      return {};
+    if (intAttr.getValue().isZero())
+      return {};
+
+    SmallString<1> str;
+    str.push_back((char)intAttr.getValue().getZExtValue());
+
+    return StringAttr::get(getContext(), str);
+  }
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
