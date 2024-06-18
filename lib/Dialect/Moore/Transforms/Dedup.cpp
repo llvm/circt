@@ -82,7 +82,7 @@ void DedupPass::runOnOperation() {
     return WalkResult::advance();
   });
 
-  //Referring to replacetable, replace instance's module name
+  // Referring to replacetable, replace instance's module name
   getOperation()->walk([&](InstanceOp instanceOp) {
     auto instanceName = instanceOp.getModuleNameAttr().getAttr();
     if (replaceTable.lookup(instanceName)) {
