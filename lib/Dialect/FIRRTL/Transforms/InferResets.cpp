@@ -1292,24 +1292,20 @@ InferResetsPass::collectAnnos(FModuleOp module) {
   // Consume a possible "ignore" annotation on the module itself, which
   // explicitly assigns it no reset domain.
   bool ignore = false;
-  AnnotationSet moduleAnnos(module);
-  if (!moduleAnnos.empty()) {
-    moduleAnnos.removeAnnotations([&](Annotation anno) {
-      if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
-        ignore = true;
-        conflictingAnnos.insert({anno, module.getLoc()});
-        return true;
-      }
-      if (anno.isClass(fullAsyncResetAnnoClass)) {
-        anyFailed = true;
-        module.emitError("'FullAsyncResetAnnotation' cannot target module; "
-                         "must target port or wire/node instead");
-        return true;
-      }
-      return false;
-    });
-    moduleAnnos.applyToOperation(module);
-  }
+  AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
+    if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
+      ignore = true;
+      conflictingAnnos.insert({anno, module.getLoc()});
+      return true;
+    }
+    if (anno.isClass(fullAsyncResetAnnoClass)) {
+      anyFailed = true;
+      module.emitError("'FullAsyncResetAnnotation' cannot target module; "
+                       "must target port or wire/node instead");
+      return true;
+    }
+    return false;
+  });
   if (anyFailed)
     return failure();
 
@@ -1344,24 +1340,23 @@ InferResetsPass::collectAnnos(FModuleOp module) {
     return failure();
 
   // Consume any reset annotations on wires in the module body.
-  module.walk([&](Operation *op) {
-    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-      // Reset annotations must target wire/node ops.
-      if (!isa<WireOp, NodeOp>(op)) {
-        if (anno.isClass(fullAsyncResetAnnoClass,
-                         ignoreFullAsyncResetAnnoClass)) {
-          anyFailed = true;
-          op->emitError(
-              "reset annotations must target module, port, or wire/node");
-          return true;
-        }
-        return false;
+  module.getBody().walk([&](Operation *op) {
+    // Reset annotations must target wire/node ops.
+    if (!isa<WireOp, NodeOp>(op)) {
+      if (AnnotationSet::hasAnnotation(op, fullAsyncResetAnnoClass,
+                                       ignoreFullAsyncResetAnnoClass)) {
+        anyFailed = true;
+        op->emitError(
+            "reset annotations must target module, port, or wire/node");
       }
+      return;
+    }
 
-      // At this point we know that we have a WireOp/NodeOp. Process the reset
-      // annotations.
-      auto resultType = op->getResult(0).getType();
+    // At this point we know that we have a WireOp/NodeOp. Process the reset
+    // annotations.
+    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       if (anno.isClass(fullAsyncResetAnnoClass)) {
+        auto resultType = op->getResult(0).getType();
         if (!isa<AsyncResetType>(resultType)) {
           mlir::emitError(op->getLoc(), "'FullAsyncResetAnnotation' must "
                                         "target async reset, but targets ")

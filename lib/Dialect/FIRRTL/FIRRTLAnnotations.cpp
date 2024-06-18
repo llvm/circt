@@ -25,10 +25,6 @@
 using namespace circt;
 using namespace firrtl;
 
-static ArrayAttr getAnnotationsIfPresent(Operation *op) {
-  return op->getAttrOfType<ArrayAttr>(getAnnotationAttrName());
-}
-
 static ArrayAttr getAnnotationsFrom(Operation *op) {
   if (auto annots = getAnnotationsIfPresent(op))
     return annots;
