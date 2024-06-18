@@ -1,4 +1,4 @@
-// RUN: circt-opt ---moore-dedup %s | FileCheck %s
+// RUN: circt-opt --moore-dedup %s | FileCheck %s
 
 // CHECK-LABEL: moore.module @Foo()
 moore.module @Foo() {
