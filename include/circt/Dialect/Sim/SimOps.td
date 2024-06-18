@@ -256,11 +256,16 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
 def FormatCharOp : SimOp<"fmt.char", [Pure]> {
   let summary = "Character format specifier";
   let description = [{
-    Format the given integer value as a single ASCII
-    encoded character. If the argument's type width is
-    less than eight bits, the value is zero extended.
-    If the width is greater than eight
-    bits, the resulting formatted string is undefined.
+    Format the given integer value as a single character.
+    
+    If the argument's type width is less than eight bits,
+    the value is zero extended.
+    If the width is greater than eight bits,
+    the resulting formatted string is undefined.
+    
+    For integer values up to 127, ASCII compatible 
+    encoding is assumed. For larger values, the
+    encoding is unspecified.
   }];
 
   let arguments = (ins AnyInteger:$value);
@@ -290,7 +295,7 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let hasCanonicalizeMethod = true;
   let hasVerifier = true;
 
-  let assemblyFormat = "$inputs attr-dict";
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
 }
 
 
