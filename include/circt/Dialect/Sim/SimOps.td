@@ -169,6 +169,7 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   let summary = "Hexadecimal format specifier";
   let description = [{
     Format the given integer value as lower-case hexadecimal string.
+
     The printed value will be left-padded with '0' up to the
     length required to print the maximum value of the argument's
     type. Zero width values will produce the empty string.
@@ -188,6 +189,7 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
   let summary = "Binary format specifier";
   let description = [{
     Format the given integer value as binary (base two) string.
+
     The printed value will be left-padded with '0' up to the number
     of bits of the argument's type. Zero width values will produce
     the empty string. No further prefix will be added.
@@ -206,20 +208,19 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
   let summary = "Decimal format specifier";
   let description = [{
     Format the given integer value as signed or unsigned decimal string.
-    Non-negative or unsigned values will _not_ be prefixed with a '+'.
-    Leading zeros are omitted.
+
+    Leading zeros are omitted. Non-negative or unsigned values will
+    _not_ be prefixed with a '+'.
 
     For unsigned formatting, the printed value will
-    be left-padded with spaces up to _at least_ the the length required to print
-    the maximum value of the argument's type.
-
+    be left-padded with spaces up to _at least_ the length required to print
+    the maximum unsigned value of the argument's type.
     For signed formatting, the printed value will be
     left-padded with spaces up to _at least_ the length required
-    to print the minimum value of the argument's type including the minus sign.
-
+    to print the minimum signed value of the argument's type
+    including the '-' character.
     E.g., a zero value of type `i1` requires no padding for unsigend
     formatting and one leading space for signed formatting.
-
     Format specifiers of same argument type and signedness must be
     padded to the same width. Zero width values will produce
     a single '0'.
@@ -257,15 +258,14 @@ def FormatCharOp : SimOp<"fmt.char", [Pure]> {
   let summary = "Character format specifier";
   let description = [{
     Format the given integer value as a single character.
-    
-    If the argument's type width is less than eight bits,
-    the value is zero extended.
-    If the width is greater than eight bits,
-    the resulting formatted string is undefined.
-    
-    For integer values up to 127, ASCII compatible 
-    encoding is assumed. For larger values, the
-    encoding is unspecified.
+
+    For integer values up to 127, ASCII compatible encoding is assumed.
+    For larger values, the encoding is unspecified.
+
+    If the argument's type width is less than eight bits, the value is
+    zero extended.
+    If the width is greater than eight bits, the resulting formatted string
+    is undefined.
   }];
 
   let arguments = (ins AnyInteger:$value);
@@ -280,11 +280,12 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate format strings";
 
   let description = [{
-    Concatenates an arbitrary number of format string (tokens) from left to right. 
-    If the argument list is empty, it produces the empty string literal.
+    Concatenates an arbitrary number of format string (tokens) from
+    left to right. If the argument list is empty, the empty string
+    literal is produced.
 
     Concatenations should not be recursive. I.e., a concatenated string should
-    not contain itself.
+    not contain itself directly or indirectly.
   }];
 
 

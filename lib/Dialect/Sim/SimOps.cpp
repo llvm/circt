@@ -165,19 +165,14 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
-
   auto width = getValue().getType().getIntOrFloatBitWidth();
-
   if (width > 8)
     return {};
-
   if (width == 0)
     return StringAttr::get(getContext(), Twine(static_cast<char>(0)));
 
   if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
     auto intValue = intAttr.getValue().getZExtValue();
-    if (intValue > 127)
-      return {};
     return StringAttr::get(getContext(), Twine(static_cast<char>(intValue)));
   }
 
