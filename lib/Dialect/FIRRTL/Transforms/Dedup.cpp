@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -25,6 +24,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
@@ -34,6 +34,13 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_DEDUP
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -1569,7 +1576,7 @@ struct DenseMapInfo<ModuleInfo> {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class DedupPass : public DedupBase<DedupPass> {
+class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
   void runOnOperation() override {
     auto *context = &getContext();
     auto circuit = getOperation();

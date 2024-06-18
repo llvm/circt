@@ -66,6 +66,9 @@ on:
           - clang-12
           - clang-13
           - clang-14
+          - clang-15
+          - clang-16
+          - clang-17
           - gcc
           - cl
         default: clang
@@ -80,6 +83,9 @@ on:
           - clang++-12
           - clang++-13
           - clang++-14
+          - clang++-15
+          - clang++-16
+          - clang++-17
           - gcc++
           - cl
         default: clang++

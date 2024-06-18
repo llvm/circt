@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -21,12 +23,19 @@
 
 #define DEBUG_TYPE "firrtl-remove-unused-ports"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_REMOVEUNUSEDPORTS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
 struct RemoveUnusedPortsPass
-    : public RemoveUnusedPortsBase<RemoveUnusedPortsPass> {
+    : public circt::firrtl::impl::RemoveUnusedPortsBase<RemoveUnusedPortsPass> {
   void runOnOperation() override;
   void removeUnusedModulePorts(FModuleOp module,
                                InstanceGraphNode *instanceGraphNode);
