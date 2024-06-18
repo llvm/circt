@@ -10,10 +10,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/OwningModuleCache.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_RESOLVEPATHS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -229,7 +238,8 @@ struct PathResolver {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct ResolvePathsPass : public ResolvePathsBase<ResolvePathsPass> {
+struct ResolvePathsPass
+    : public circt::firrtl::impl::ResolvePathsBase<ResolvePathsPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
