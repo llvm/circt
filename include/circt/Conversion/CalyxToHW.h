@@ -24,6 +24,10 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+
+#define GEN_PASS_DECL_CALYXTOHW
+#include "circt/Conversion/Passes.h.inc"
+
 namespace calyx {
 
 /// Returns a hw.module.extern operation describing the Verilog module which a

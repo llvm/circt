@@ -586,7 +586,7 @@ firrtl.circuit "Verbatim"  {
 // -----
 
 // This test is only checking that IMCP doesn't generate invalid IR.  IMCP needs
-// to delete the strictconnect instead of replacing its destination with an
+// to delete the matchingconnect instead of replacing its destination with an
 // invalid value that will replace the register.  For more information, see:
 //   - https://github.com/llvm/circt/issues/4498
 //

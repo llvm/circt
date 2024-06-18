@@ -132,9 +132,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
-    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
-    /// and updates any users of the remaining ports to point at the new
-    /// instance.
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
     InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
 
     /// Clone the instance op and add ports.  This is usually used in
@@ -205,6 +204,11 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
 
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
+    InstanceChoiceOp erasePorts(OpBuilder &builder,
+                                const llvm::BitVector &portIndices);
+
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -235,7 +239,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 }
 
 
-def MemOp : HardwareDeclOp<"mem"> {
+def MemOp : HardwareDeclOp<"mem", [CombDataflow]> {
   let summary = "Define a new mem";
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -329,6 +333,8 @@ def MemOp : HardwareDeclOp<"mem"> {
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
+
+    SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> computeDataFlow();
   }];
 }
 
@@ -388,7 +394,7 @@ def NodeOp : HardwareDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : HardwareDeclOp<"reg", [Forceable]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable, CombDataflow]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -480,7 +486,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable, CombDataflow]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:

@@ -25,6 +25,19 @@
 namespace circt {
 namespace ImportVerilog {
 
+/// Port lowering information.
+struct PortLowering {
+  const slang::ast::PortSymbol &ast;
+  Location loc;
+  BlockArgument arg;
+};
+
+/// Module lowering information.
+struct ModuleLowering {
+  moore::SVModuleOp op;
+  SmallVector<PortLowering> ports;
+};
+
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
 /// operations. Keeps track of the destination MLIR module, builders, and
 /// various worklists and utilities needed for conversion.
@@ -55,7 +68,7 @@ struct Context {
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation(slang::ast::Compilation &compilation);
-  moore::SVModuleOp
+  ModuleLowering *
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
 
@@ -63,7 +76,12 @@ struct Context {
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
   // Convert an expression AST node to MLIR ops.
-  Value convertExpression(const slang::ast::Expression &expr);
+  Value convertRvalueExpression(const slang::ast::Expression &expr);
+  Value convertLvalueExpression(const slang::ast::Expression &expr);
+
+  // Convert a slang timing control into an MLIR timing control.
+  LogicalResult
+  convertTimingControl(const slang::ast::TimingControl &timingControl);
 
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
@@ -78,7 +96,9 @@ struct Context {
   /// used to produce IR that follows the source file order.
   std::map<slang::SourceLocation, Operation *> orderedRootOps;
   /// How we have lowered modules to MLIR.
-  DenseMap<const slang::ast::InstanceBodySymbol *, moore::SVModuleOp> moduleOps;
+  DenseMap<const slang::ast::InstanceBodySymbol *,
+           std::unique_ptr<ModuleLowering>>
+      modules;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;

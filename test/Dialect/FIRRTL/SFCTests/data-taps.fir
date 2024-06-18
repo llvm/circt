@@ -7,6 +7,7 @@
 ; This test was extracted from:
 ; - github.com/sifive/$internal:
 ;   - src/test/scala/grandcentral/DataTapsTest.scala
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -100,7 +101,7 @@ circuit Top : %[[
     signed.io.in <= io.in
     io.out <= signed.io.out
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip in : UInt<1>, out : UInt<1>}
@@ -135,6 +136,7 @@ circuit Top : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -177,7 +179,7 @@ circuit Top : %[[
     g <= inv
     f <= inv
 
-  module Top:
+  public module Top:
     output io : { b : UInt<1>, c : UInt<1>, d: UInt<1> }
 
     inst foo of Foo
@@ -201,13 +203,14 @@ circuit Top : %[[
 
     ; CHECK:      module Top
     ; TODO: fix having constants carry names
-    ; CHECK:        wire inv = 1'h0
+    ; CHECK:        wire k = 1'h0
     ; CHECK:        io_b = Top.foo.f_probe;
     ; CHECK-NEXT:   io_c = Top.foo.g_probe;
-    ; CHECK-NEXT:   io_d = inv;
+    ; CHECK-NEXT:   io_d = k;
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit TestHarness : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -224,7 +227,7 @@ circuit TestHarness : %[[
     "target": "~TestHarness|Test>inv"
   }
 ]]
-  module TestHarness :
+  public module TestHarness :
     output io : UInt<1>
     inst system of Top
     io <= system.io
@@ -261,6 +264,7 @@ circuit TestHarness : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -480,7 +484,7 @@ circuit Top : %[[
     tap_10 is invalid
     tap_11 is invalid
 
-  module Top :
+  public module Top :
     output port_Top : UInt<1>
     port_Top is invalid
 
@@ -512,12 +516,12 @@ circuit Top : %[[
 ; CHECK-NEXT:          [[DUT_tap_8_port:[a-zA-Z0-9_]+]]
 ; CHECK-NEXT:          [[DUT_tap_11_port:[a-zA-Z0-9_]+]]
 ;
-; CHECK-DAG:     tap_6 = DUT.submodule.wire_Submodule_probe;
-; CHECK-DAG:     tap_7 = inv;
 ; CHECK-DAG:     tap_8 = [[DUT_tap_8_port]];
-; CHECK-DAG:     tap_9 = 1'h0;
-; CHECK-DAG:     tap_10 = 1'h0;
 ; CHECK-DAG:     tap_11 = [[DUT_tap_11_port]];
+; CHECK-DAG:     tap_10 = 1'h0;
+; CHECK-DAG:     tap_9 = 1'h0;
+; CHECK-DAG:     tap_7 = inv;
+; CHECK-DAG:     tap_6 = DUT.submodule.inv_probe;
 ;
 ; CHECK:         Submodule submodule (
 ; CHECK-DAG:       .[[Submodule_tap_1_port]] (inv)
@@ -526,8 +530,8 @@ circuit Top : %[[
 
 ; CHECK-LABEL: module Top
 ;
-; CHECK-DAG:     tap_12_0 = Top.dut.submodule.wire_Submodule
-; CHECK-DAG:     tap_12_1 = Top.dut.wire_DUT
+; CHECK-DAG:     tap_12_0 = Top.dut.submodule.inv_probe
+; CHECK-DAG:     tap_12_1 = Top.dut.inv_probe
 ; CHECK-DAG:     tap_12_2 = inv;
 ; CHECK-DAG:     tap_12_3 = 1'h0
 ; CHECK-DAG:     tap_12_4 = 1'h0
@@ -541,6 +545,7 @@ circuit Top : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
@@ -571,7 +576,7 @@ circuit Top : %[[
 
     io.out <= sum
 
-  module Top :
+  public module Top :
     output io : { flip in : UInt<8>, out : UInt<8>}
     output taps : UInt<8>[2]
 

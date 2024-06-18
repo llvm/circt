@@ -1815,10 +1815,10 @@ firrtl.circuit "ConstOpenBundle" {
 }
 
 // -----
-// Strict connect between non-equivalent anonymous type operands.
+// Matching connect between non-equivalent anonymous type operands.
 
-firrtl.circuit "NonEquivalenctStrictConnect" {
-  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+firrtl.circuit "NonEquivalenctMatchingConnect" {
+  firrtl.module @NonEquivalenctMatchingConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
     firrtl.matchingconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
@@ -2051,16 +2051,6 @@ firrtl.circuit "RWProbeTypes" {
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
@@ -2480,5 +2470,78 @@ firrtl.circuit "Top" {
       @C -> @Bar
     } ()
   }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{unknown width is not allowed for DPI}}
+    %1 = firrtl.int.dpi.call "clocked_result"(%in_1) clock %clock enable %enable : (!firrtl.uint) -> !firrtl.uint<8>
+  }
+}
+
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{integer types used by DPI functions must have a specific bit width; it must be equal to 1(bit), 8(byte), 16(shortint), 32(int), 64(longint) or greater than 64, but got '!firrtl.uint<4>'}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.bundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.vector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{bundle element "a" cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openbundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{vector cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openvector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{lhs type cannot contain an AnalogType}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<analog<1>>
+}
 }
 

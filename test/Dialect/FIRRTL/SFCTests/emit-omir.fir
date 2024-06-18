@@ -1,5 +1,6 @@
 ; RUN: firtool --repl-seq-mem --repl-seq-mem-file="dummy" --emit-omir %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit Foo : %[[
   {
     "class": "freechips.rocketchip.objectmodel.OMIRFileAnnotation",
@@ -69,7 +70,7 @@ circuit Foo : %[[
 ]]
   extmodule MySRAM:
     defname = MySRAM
-  module Foo :
+  public module Foo :
     input unsigned : UInt<29>
     input zeroW : UInt<0>
     output signed : UInt<31>

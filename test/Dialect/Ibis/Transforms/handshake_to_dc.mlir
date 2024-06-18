@@ -3,7 +3,7 @@
 // Actual handshake-to-dc conversion is tested in the respective pass tests.
 // This file just tests the ibis-specific hooks.
 
-// CHECK-LABEL:   ibis.class @ToDC {
+// CHECK-LABEL:   ibis.class sym @ToDC {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@ToDC>
 // CHECK:           ibis.method.df @foo(%[[VAL_1:.*]]: !dc.value<i32>) -> !dc.value<i32> {
 // CHECK:             %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i32>
@@ -19,7 +19,7 @@
 // CHECK:         }
 
 ibis.design @foo {
-ibis.class @ToDC {
+ibis.class sym @ToDC {
   %this = ibis.this <@foo::@ToDC> 
   ibis.method.df @foo(%arg0: i32) -> (i32) {
     %o0, %o1 = handshake.fork [2] %arg0 : i32

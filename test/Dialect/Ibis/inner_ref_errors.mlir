@@ -1,7 +1,7 @@
 // RUN: circt-opt --hw-verify-irn --split-input-file --verify-diagnostics %s
 
 ibis.design @foo {
-ibis.class @MissingPort {
+ibis.class sym @MissingPort {
   %this = ibis.this <@foo::@MissingPort>
   // expected-error @+1 {{'ibis.get_port' op port '@C_in' does not exist in @MissingPort}}
   %c_in = ibis.get_port %this, @C_in : !ibis.scoperef<@foo::@MissingPort> -> !ibis.portref<in i1>
@@ -11,7 +11,7 @@ ibis.class @MissingPort {
 // -----
 
 ibis.design @foo {
-ibis.class @InvalidGetVar2 {
+ibis.class sym @InvalidGetVar2 {
   %this = ibis.this <@foo::@InvalidGetVar2>
   ibis.var @var : memref<i32>
   ibis.method @foo()  {
@@ -28,7 +28,7 @@ ibis.class @InvalidGetVar2 {
 // -----
 
 ibis.design @foo {
-ibis.class @InvalidGetVar {
+ibis.class sym @InvalidGetVar {
   %this = ibis.this <@foo::@InvalidGetVar>
   ibis.var @var : memref<i32>
   ibis.method @foo()  {
@@ -45,7 +45,7 @@ ibis.class @InvalidGetVar {
 // -----
 
 ibis.design @foo {
-ibis.class @PortTypeMismatch {
+ibis.class sym @PortTypeMismatch {
   %this = ibis.this <@foo::@PortTypeMismatch>
   ibis.port.input "in" sym @in : i1
   // expected-error @+1 {{'ibis.get_port' op symbol '@in' refers to a port of type 'i1', but this op has type 'i2'}}
@@ -56,7 +56,7 @@ ibis.class @PortTypeMismatch {
 // -----
 
 ibis.design @foo {
-ibis.class @PathStepNonExistingChild {
+ibis.class sym @PathStepNonExistingChild {
   %this = ibis.this <@foo::@PathStepNonExistingChild>
   // expected-error @+1 {{'ibis.path' op ibis.step scoperef symbol '@A' does not exist}}
   %p = ibis.path [#ibis.step<child , @a : !ibis.scoperef<@foo::@A>>]
@@ -66,7 +66,7 @@ ibis.class @PathStepNonExistingChild {
 // -----
 
 ibis.design @foo {
-ibis.class @PathStepNonExistingParent {
+ibis.class sym @PathStepNonExistingParent {
   %this = ibis.this <@foo::@PathStepNonExistingParent>
   // expected-error @+1 {{'ibis.path' op last ibis.step in path must specify a symbol for the scoperef}}
   %p = ibis.path [#ibis.step<parent : !ibis.scoperef>]

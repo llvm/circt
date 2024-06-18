@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
@@ -16,6 +16,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -23,6 +24,13 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-imdeadcodeelim"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_IMDEADCODEELIM
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -48,7 +56,8 @@ static bool isDeletableDeclaration(Operation *op) {
 }
 
 namespace {
-struct IMDeadCodeElimPass : public IMDeadCodeElimBase<IMDeadCodeElimPass> {
+struct IMDeadCodeElimPass
+    : public circt::firrtl::impl::IMDeadCodeElimBase<IMDeadCodeElimPass> {
   void runOnOperation() override;
 
   void rewriteModuleSignature(FModuleOp module);

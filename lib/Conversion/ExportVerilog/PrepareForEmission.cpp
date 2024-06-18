@@ -17,14 +17,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -32,6 +34,11 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "prepare-for-emission"
+
+namespace circt {
+#define GEN_PASS_DEF_PREPAREFOREMISSION
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace comb;
@@ -103,6 +110,38 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
   }
 }
 
+// Introduces a wire to replace an output port SSA wire. If the operation
+// is in a procedural region, it creates a temporary logic, otherwise it
+// places a wire. The connecting op is inserted in the op's region.
+static void replacePortWithWire(ImplicitLocOpBuilder &builder, Operation *op,
+                                Value result, StringRef name) {
+
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  Value newTarget;
+  if (isProcedural) {
+    newTarget = builder.create<sv::LogicOp>(result.getType(),
+                                            builder.getStringAttr(name));
+  } else {
+    newTarget = builder.create<sv::WireOp>(result.getType(), name);
+  }
+
+  while (!result.use_empty()) {
+    auto newRead = builder.create<sv::ReadInOutOp>(newTarget);
+    OpOperand &use = *result.getUses().begin();
+    use.set(newRead);
+    newRead->moveBefore(use.getOwner());
+  }
+
+  Operation *connect;
+  if (isProcedural) {
+    connect = builder.create<sv::BPAssignOp>(newTarget, result);
+  } else {
+    connect = builder.create<sv::AssignOp>(newTarget, result);
+  }
+  connect->moveAfter(op);
+}
+
 static StringAttr getResName(Operation *op, size_t idx) {
   if (auto inst = dyn_cast<hw::InstanceOp>(op))
     return inst.getResultName(idx);
@@ -156,6 +195,33 @@ static void lowerInstanceResults(HWInstanceLike op) {
 
     auto connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(op);
+  }
+}
+
+// Ensure that each output of a function call is used only by a wire or reg.
+static void lowerFunctionCallResults(Operation *op) {
+  Block *block = op->getParentOfType<HWModuleLike>().getBodyBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op->getLoc(), block);
+  auto callee = op->getAttrOfType<FlatSymbolRefAttr>("callee");
+  assert(callee);
+  SmallString<32> nameTmp{"_", callee.getValue(), "_"};
+
+  auto namePrefixSize = nameTmp.size();
+
+  for (auto [i, result] : llvm::enumerate(op->getResults())) {
+    if (result.hasOneUse()) {
+      Operation *user = *result.getUsers().begin();
+      if (isa<BPAssignOp, AssignOp>(user)) {
+        // Move assign op after instance to resolve cyclic dependencies.
+        user->moveAfter(op);
+        continue;
+      }
+    }
+
+    nameTmp.resize(namePrefixSize);
+    // TODO: Use a result name as suffix.
+    nameTmp += std::to_string(i);
+    replacePortWithWire(builder, op, result, nameTmp);
   }
 }
 
@@ -906,6 +972,9 @@ static LogicalResult legalizeHWModule(Block &block,
         spillWiresForInstanceInputs(inst);
     }
 
+    if (auto call = dyn_cast<mlir::CallOpInterface>(op))
+      lowerFunctionCallResults(call);
+
     // If logic op is located in a procedural region, we have to move the logic
     // op declaration to a valid program point.
     if (isProceduralRegion && isa<LogicOp>(op)) {
@@ -1247,8 +1316,12 @@ static LogicalResult legalizeHWModule(Block &block,
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
+  // If the module body is empty, just skip it.
+  if (!module.getBodyBlock())
+    return success();
+
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
 
@@ -1265,9 +1338,14 @@ LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
 namespace {
 
 struct PrepareForEmissionPass
-    : public PrepareForEmissionBase<PrepareForEmissionPass> {
+    : public circt::impl::PrepareForEmissionBase<PrepareForEmissionPass> {
+
+  bool canScheduleOn(mlir::RegisteredOperationName opName) const final {
+    return opName.hasInterface<hw::HWEmittableModuleLike>();
+  }
+
   void runOnOperation() override {
-    HWModuleOp module = getOperation();
+    auto module = cast<hw::HWEmittableModuleLike>(getOperation());
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();

@@ -9,18 +9,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/RWMutex.h"
 
 #define DEBUG_TYPE "firrtl-lower-layers"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERLAYERS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -118,11 +126,32 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 // LowerLayersPass
 //===----------------------------------------------------------------------===//
 
-class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
+class LowerLayersPass
+    : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
+  hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
+    auto layer = dyn_cast<LayerOp>(
+        symbolTable->lookupSymbolIn(getOperation(), layerName));
+    if (!layer)
+      return nullptr;
+    return layer->getAttrOfType<hw::OutputFileAttr>("output_file");
+  }
+
+  hw::OutputFileAttr outputFileForLayer(StringRef circuitName,
+                                        SymbolRefAttr layerName) {
+    if (auto file = getOutputFile(layerName))
+      return hw::OutputFileAttr::getFromDirectoryAndFilename(
+          &getContext(), file.getDirectory(),
+          fileNameForLayer(circuitName, layerName),
+          /*excludeFromFileList=*/true);
+    return hw::OutputFileAttr::getFromFilename(
+        &getContext(), fileNameForLayer(circuitName, layerName),
+        /*excludeFromFileList=*/true);
+  }
+
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
-  FModuleOp buildNewModule(OpBuilder &builder, Location location,
-                           Twine namehint, SmallVectorImpl<PortInfo> &ports);
+  FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock,
+                           SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
   InnerRefMap runOnModuleLike(FModuleLike moduleLike);
@@ -141,47 +170,36 @@ class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
   /// remove the cast itself from the IR.
   void removeLayersFromRefCast(RefCastOp cast);
 
-  /// Set an output file attribute pointing at the testbench directory if a
-  /// testbench directory is known to the pass.
-  void maybeSetOutputDir(Operation *op);
-
-  /// Set an output file attribute pointing at the provided filename.  Prepend
-  /// the testbench directory if one is known to the pass.
-  void setOutputFile(Operation *op, const Twine &filename);
-
   /// Entry point for the function.
   void runOnOperation() override;
 
   /// Indicates exclusive access to modify the circuitNamespace and the circuit.
   llvm::sys::SmartMutex<true> *circuitMutex;
 
+  SymbolTable *symbolTable;
+
   /// A map of layer blocks to module name that should be created for it.
   DenseMap<LayerBlockOp, StringRef> moduleNames;
-
-  /// The design-under-test (DUT) as indicated by the presence of a
-  /// "sifive.enterprise.firrtl.MarkDUTAnnotation".  This will be null if no
-  /// annotation is present.
-  FModuleOp dut;
-
-  /// The directory for verification collateral as indicated by the presence of
-  /// a "sifive.enterprise.firrtl.TestBenchDirAnnotation".  Empty if not
-  /// specified.
-  StringRef testBenchDir;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
 /// The name provided is only a namehint for the module---a unique name will be
 /// generated if there are conflicts with the namehint in the circuit-level
 /// namespace.
-FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder, Location location,
-                                          Twine namehint,
+FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder,
+                                          LayerBlockOp layerBlock,
                                           SmallVectorImpl<PortInfo> &ports) {
+  auto location = layerBlock.getLoc();
+  auto namehint = moduleNames.lookup(layerBlock);
   llvm::sys::SmartScopedLock<true> instrumentationLock(*circuitMutex);
   FModuleOp newModule = builder.create<FModuleOp>(
       location, builder.getStringAttr(namehint),
       ConventionAttr::get(builder.getContext(), Convention::Internal), ports,
       ArrayAttr{});
-  maybeSetOutputDir(newModule);
+  if (auto dir = getOutputFile(layerBlock.getLayerNameAttr())) {
+    assert(dir.isDirectory());
+    newModule->setAttr("output_file", dir);
+  }
   SymbolTable::setSymbolVisibility(newModule, SymbolTable::Visibility::Private);
   return newModule;
 }
@@ -487,7 +505,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       // point in creating deeply squiggled connections if we don't have to.
       //
       // This pattern matches the following structure.  Move the ref.resolve
-      // outside the layer block.  The strictconnect will be moved outside in
+      // outside the layer block.  The matchingconnect will be moved outside in
       // the next loop iteration:
       //     %0 = ...
       //     %1 = ...
@@ -513,8 +531,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     }
 
     // Create the new module.  This grabs a lock to modify the circuit.
-    FModuleOp newModule = buildNewModule(builder, layerBlock.getLoc(),
-                                         moduleNames.lookup(layerBlock), ports);
+    FModuleOp newModule = buildNewModule(builder, layerBlock, ports);
     SymbolTable::setSymbolVisibility(newModule,
                                      SymbolTable::Visibility::Private);
     newModule.getBody().takeBody(layerBlock.getRegion());
@@ -554,8 +571,9 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                            : hw::InnerSymAttr::get(builder.getStringAttr(
                                  ns.newName(instanceName)))));
 
-    auto fileName = fileNameForLayer(circuitName, layerBlock.getLayerName());
-    setOutputFile(instanceOp, fileName);
+    auto outputFile =
+        outputFileForLayer(circuitName, layerBlock.getLayerName());
+    instanceOp->setAttr("output_file", outputFile);
 
     createdInstances.try_emplace(instanceOp, newModule);
 
@@ -605,28 +623,6 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   });
 }
 
-/// Set an output file attribute on the provided operation if the pass has a
-/// non-empty test bench directory.
-void LowerLayersPass::maybeSetOutputDir(Operation *op) {
-  if (!testBenchDir.empty() && dut)
-    op->setAttr("output_file", hw::OutputFileAttr::getAsDirectory(
-                                   op->getContext(), testBenchDir,
-                                   /*excludeFromFileList=*/true));
-}
-
-void LowerLayersPass::setOutputFile(Operation *op, const Twine &filename) {
-  if (!testBenchDir.empty() && dut) {
-    op->setAttr("output_file", hw::OutputFileAttr::getFromDirectoryAndFilename(
-                                   op->getContext(), testBenchDir, filename,
-                                   /*excludeFromFileList=*/true));
-
-    return;
-  }
-  op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
-                                 op->getContext(), filename,
-                                 /*excludeFromFileList=*/true));
-}
-
 /// Process a circuit to remove all layer blocks in each module and top-level
 /// layer definition.
 void LowerLayersPass::runOnOperation() {
@@ -638,23 +634,12 @@ void LowerLayersPass::runOnOperation() {
   // Initialize members which cannot be initialized automatically.
   llvm::sys::SmartMutex<true> mutex;
   circuitMutex = &mutex;
-
-  // Extract information from circuit-level annotations.
-  for (auto anno : AnnotationSet(circuitOp)) {
-    if (!anno.isClass(testBenchDirAnnoClass))
-      continue;
-    auto dir = anno.getMember<StringAttr>("dirname");
-    assert(dir && "invalid test bench annotation");
-    testBenchDir = dir.getValue();
-  }
+  symbolTable = &getAnalysis<SymbolTable>();
 
   // Determine names for all modules that will be created.  Do this serially to
-  // avoid non-determinism from creating these in the parallel region.  While
-  // walking modules, set the DUT if it is so marked.
+  // avoid non-determinism from creating these in the parallel region.
   CircuitNamespace ns(circuitOp);
   WalkResult result = circuitOp->walk([&](FModuleOp moduleOp) {
-    if (failed(extractDUT(moduleOp, dut)))
-      return WalkResult::interrupt();
     moduleOp->walk([&](LayerBlockOp layerBlockOp) {
       auto name = moduleNameForLayer(moduleOp.getModuleName(),
                                      layerBlockOp.getLayerName());
@@ -749,21 +734,35 @@ void LowerLayersPass::runOnOperation() {
       includes.append("\n");
     }
 
+    hw::OutputFileAttr bindFile;
+    if (auto outputFile =
+            layerOp->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+      auto dir = outputFile.getDirectory();
+      bindFile = hw::OutputFileAttr::getFromDirectoryAndFilename(
+          &getContext(), dir, prefix + ".sv",
+          /*excludeFromFileList=*/true);
+    } else {
+      bindFile = hw::OutputFileAttr::getFromFilename(
+          &getContext(), prefix + ".sv", /*excludeFromFileList=*/true);
+    }
+
     // Write header to a verbatim.
-    setOutputFile(builder.create<sv::VerbatimOp>(
-                      layerOp.getLoc(), includes + "`ifndef " + prefix + "\n" +
-                                            "`define " + prefix),
-                  prefix + ".sv");
+    auto header = builder.create<sv::VerbatimOp>(
+        layerOp.getLoc(),
+        includes + "`ifndef " + prefix + "\n" + "`define " + prefix);
+    header->setAttr("output_file", bindFile);
 
     // Write footer to a verbatim.
     builder.setInsertionPointToEnd(circuitOp.getBodyBlock());
-    setOutputFile(
-        builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix),
-        prefix + ".sv");
+    auto footer =
+        builder.create<sv::VerbatimOp>(layerOp.getLoc(), "`endif // " + prefix);
+    footer->setAttr("output_file", bindFile);
 
     if (!layerOp.getBody().getOps<LayerOp>().empty())
-      layers.push_back(
-          {layerOp, builder.getStringAttr("`include \"" + prefix + ".sv\"")});
+      layers.emplace_back(
+          layerOp,
+          builder.getStringAttr("`include \"" +
+                                bindFile.getFilename().getValue() + "\""));
   });
 
   // All layers definitions can now be deleted.

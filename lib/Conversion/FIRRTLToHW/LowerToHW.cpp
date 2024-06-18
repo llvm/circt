@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
@@ -47,6 +46,11 @@
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "lower-to-hw"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERFIRRTLTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -544,7 +548,8 @@ void CircuitLoweringState::processRemainingAnnotations(
 } // end anonymous namespace
 
 namespace {
-struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
+struct FIRRTLModuleLowering
+    : public circt::impl::LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }

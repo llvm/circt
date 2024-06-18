@@ -59,7 +59,7 @@ def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
-    Connect two values with strict type constraints.  The types of the lhs and
+    Connect two values with matching type constraints.  The types of the lhs and
     rhs must match:
     ```
       firrtl.matchingconnect %dest, %src : t1
@@ -67,8 +67,8 @@ def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
     ```
     }];
 
-  let arguments = (ins StrictConnectableType:$dest,
-                       StrictConnectableType:$src);
+  let arguments = (ins MatchingConnectableType:$dest,
+                       MatchingConnectableType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -271,7 +271,7 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
           !firrtl.matchingconnect %w, %arg0 : !firrtl.uint<1>
         }
         case None(%arg0) {
-          !firrt.strictconnect %w, %c1 : !firrtl.uint<1>
+          !firrt.matchingconnect %w, %c1 : !firrtl.uint<1>
         }
       }
     ```

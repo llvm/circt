@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LTLToCore.h"
-#include "../PassDetail.h"
 #include "circt/Conversion/HWToSV.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -26,8 +25,14 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/MathExtras.h"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERLTLTOCORE
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -211,7 +216,8 @@ struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerLTLToCorePass : public LowerLTLToCoreBase<LowerLTLToCorePass> {
+struct LowerLTLToCorePass
+    : public circt::impl::LowerLTLToCoreBase<LowerLTLToCorePass> {
   LowerLTLToCorePass() = default;
   void runOnOperation() override;
 };

@@ -16,6 +16,21 @@
 include "mlir/Pass/PassBase.td"
 
 /**
+ * Performs preparation transformations for formal verification.
+ * This includes things like flattening wires, removing unnecessary information
+ * such as OM Classes, handles formal contracts and transforms module instances.
+ */
+ def PrepareForFormal : Pass<"prepare-for-formal", "hw::HWModuleOp"> {
+  let summary = "Prepares a given top-level circuit for formal verification.";
+  let description = [{
+    Prepares a circuit for formal verification. This performs semantic-retaining 
+    transformations that make model checking easier, e.g. flattening wires, handling 
+    formal contracts, removing unwanted information such as OM Classes, etc...
+  }];
+  let constructor = "circt::verif::createPrepareForFormalPass()";
+ }
+
+/**
  * Checks the validity of clocked assertions, assumptions, and cover ops.
  */
 def VerifyClockedAssertLike : Pass<"verify-clocked-assert-like", "hw::HWModuleOp"> {

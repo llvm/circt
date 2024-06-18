@@ -22,10 +22,6 @@ class Pass;
 namespace circt {
 namespace msft {
 
-std::unique_ptr<mlir::Pass> createLowerInstancesPass();
-std::unique_ptr<mlir::Pass> createLowerConstructsPass();
-std::unique_ptr<mlir::Pass> createExportTclPass();
-
 /// A set of methods which are broadly useful in a number of dialects.
 struct PassCommon {
 protected:
@@ -45,6 +41,13 @@ protected:
                                 SmallVectorImpl<hw::HWModuleLike> &mods,
                                 DenseSet<Operation *> &modsSeen);
 };
+
+#define GEN_PASS_DECL
+#include "circt/Dialect/MSFT/MSFTPasses.h.inc"
+
+std::unique_ptr<mlir::Pass> createLowerInstancesPass();
+std::unique_ptr<mlir::Pass> createLowerConstructsPass();
+std::unique_ptr<mlir::Pass> createExportTclPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
