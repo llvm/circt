@@ -209,8 +209,7 @@ OpFoldResult FormatStringConcatOp::fold(FoldAdaptor adaptor) {
 LogicalResult FormatStringConcatOp::verify() {
   if (llvm::any_of(getOperands(),
                    [&](Value operand) { return operand == getResult(); }))
-    return emitOpError(
-        "Illegal recursive format string concatenation detected.");
+    return emitOpError("is infinitely recursive.");
   return success();
 }
 
