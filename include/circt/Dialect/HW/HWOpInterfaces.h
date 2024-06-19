@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"

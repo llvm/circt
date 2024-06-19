@@ -9,18 +9,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/RWMutex.h"
 
 #define DEBUG_TYPE "firrtl-lower-layers"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERLAYERS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -118,7 +126,8 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 // LowerLayersPass
 //===----------------------------------------------------------------------===//
 
-class LowerLayersPass : public LowerLayersBase<LowerLayersPass> {
+class LowerLayersPass
+    : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
     auto layer = dyn_cast<LayerOp>(
         symbolTable->lookupSymbolIn(getOperation(), layerName));

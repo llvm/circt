@@ -180,12 +180,12 @@ public:
     bool hasEnable = !!op.getEnable();
 
     SmallVector<sv::RegOp> temporaries;
+    SmallVector<Value> reads;
     for (auto [type, result] :
          llvm::zip(op.getResultTypes(), op.getResults())) {
       temporaries.push_back(rewriter.create<sv::RegOp>(op.getLoc(), type));
-      auto read =
-          rewriter.create<sv::ReadInOutOp>(op.getLoc(), temporaries.back());
-      rewriter.replaceAllUsesWith(result, read);
+      reads.push_back(
+          rewriter.create<sv::ReadInOutOp>(op.getLoc(), temporaries.back()));
     }
 
     auto emitCall = [&]() {
@@ -229,7 +229,7 @@ public:
       });
     }
 
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, reads);
     return success();
   }
 };

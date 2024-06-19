@@ -6,10 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -17,6 +18,13 @@
 #include "llvm/ADT/STLExtras.h"
 #include <optional>
 #include <type_traits>
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_SPECIALIZELAYERS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -647,17 +655,18 @@ struct SpecializeLayers {
     for (auto hierPath : llvm::make_early_inc_range(
              circuit.getBody().getOps<hw::HierPathOp>())) {
       auto namepath = hierPath.getNamepath().getValue();
-      for (auto ref : namepath.drop_back()) {
-        if (removedSyms.contains(ref)) {
-          removedPaths.insert(SymbolTable::getSymbolName(hierPath));
-          hierPath->erase();
-          continue;
-        }
+      auto shouldDelete = [&](Attribute ref) {
+        return removedSyms.contains(ref);
+      };
+      if (llvm::any_of(namepath.drop_back(), shouldDelete)) {
+        removedPaths.insert(SymbolTable::getSymbolName(hierPath));
+        hierPath->erase();
+        continue;
       }
       // If we deleted the target of the hierpath, we don't need to add it to
       // the list of removedPaths, since no annotation will be left around to
       // reference this path.
-      if (removedSyms.contains(namepath.back()))
+      if (shouldDelete(namepath.back()))
         hierPath->erase();
     }
 
@@ -679,7 +688,7 @@ struct SpecializeLayers {
 };
 
 struct SpecializeLayersPass
-    : public SpecializeLayersBase<SpecializeLayersPass> {
+    : public circt::firrtl::impl::SpecializeLayersBase<SpecializeLayersPass> {
 
   void runOnOperation() override {
     auto circuit = getOperation();
