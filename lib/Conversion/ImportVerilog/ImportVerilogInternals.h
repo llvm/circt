@@ -116,6 +116,8 @@ struct Context {
   /// side. This allows expressions to resolve the opaque
   /// `LValueReferenceExpression`s in the AST.
   SmallVector<Value> lvalueStack;
+
+  bool dedupEnabled = false;
 };
 
 } // namespace ImportVerilog

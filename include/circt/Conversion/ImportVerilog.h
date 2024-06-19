@@ -51,37 +51,14 @@ struct ImportVerilogOptions {
   /// suitable for software simulation. Different symbolName
   /// modules relate to different hardware units in hardware simulation. So this
   /// option is not recommended in hardware simulation. For example,
-  /// ```
-  /// module {
-  /// moore.module @top() {
-  ///   %a = moore.net wire : <l4>
-  ///   %0 = moore.read %a : l4
-  ///   moore.instance "insA" @NestedA(a: %0: !moore.l4) -> ()
-  ///   %1 = moore.read %a : l4
-  ///   --- moore.instance "insB" @NestedA_0(a: %1: !moore.l4) -> ()
-  ///   +++ moore.instance "insB" @NestedA(a: %1: !moore.l4) -> ()
-  ///   moore.output
-  ///   }
-  ///   --- moore.module @NestedA_0(in %a : !moore.l4) {
-  ///   ---   %a_0 = moore.net name "a" wire : <l4>
-  ///   ---   moore.assign %a_0, %a : l4
-  ///   ---   moore.output
-  ///   --- }
-  ///   moore.module @NestedA(in %a : !moore.l4) {
-  ///   %a_0 = moore.net name "a" wire : <l4>
-  ///   moore.assign %a_0, %a : l4
-  ///   moore.output
-  ///   }
-  /// }
-  /// ```
-  enum class Dedup {
+  enum class DedupMode {
     /// check whether we have already converted an exact version of the module
     /// and reuse that instead of creating a new one
-    Enable,
+    Disable = 0,
     /// create a new one even already converted
-    Disable
+    Enable = 1
   };
-  Dedup dedup = Dedup::Disable;
+  DedupMode dedupMode = DedupMode::Disable;
 
   //===--------------------------------------------------------------------===//
   // Include paths

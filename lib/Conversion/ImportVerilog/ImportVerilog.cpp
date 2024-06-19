@@ -263,6 +263,8 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
       ->loadDialect<moore::MooreDialect, hw::HWDialect, scf::SCFDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
   Context context(module, driver.sourceManager, bufferFilePaths);
+  context.dedupEnabled =
+      options.dedupMode == circt::ImportVerilogOptions::DedupMode::Enable;
   if (failed(context.convertCompilation(*compilation)))
     return failure();
   conversionTimer.stop();
