@@ -120,17 +120,38 @@ struct MemberVisitor {
 
     for (const auto *con : instNode.getPortConnections()) {
       const auto *expr = con->getExpression();
+
+      // Handle unconnected behavior. The expression is null if it have no
+      // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
         switch (port->direction) {
         case slang::ast::ArgumentDirection::In: {
           auto refType = moore::RefType::get(
               cast<moore::UnpackedType>(context.convertType(port->getType())));
-          auto unconnectedOp =
-              builder.create<moore::UnconnectedOp>(loc, refType);
-          auto readOp = builder.create<moore::ReadOp>(
-              loc, refType.getNestedType(), unconnectedOp);
-          portValues.insert({port, readOp});
+
+          if (const auto *net =
+                  port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netOp = builder.create<moore::NetOp>(
+                loc, refType, StringAttr::get(builder.getContext(), net->name),
+                convertNetKind(net->netType.netKind), nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), netOp);
+            portValues.insert({port, readOp});
+          } else if (const auto *var =
+                         port->internalSymbol
+                             ->as_if<slang::ast::VariableSymbol>()) {
+            auto varOp = builder.create<moore::VariableOp>(
+                loc, refType, StringAttr::get(builder.getContext(), var->name),
+                nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), varOp);
+            portValues.insert({port, readOp});
+          } else {
+            return mlir::emitError(loc)
+                   << "unsupported internal symbol for unconnected port `"
+                   << port->name << "`";
+          }
           continue;
         }
 

@@ -175,47 +175,6 @@ def ProcedureOp : MooreOp<"procedure", [
   }];
 }
 
-def UnconnectedOp : MooreOp<"unconnected"> {
-  let summary = "Indicate the unconnected behavior of a port";
-  let description = [{
-    The `moore.unconnected` operation represents no connection in circuit design.
-
-    |     Port Type    |    Unconnected Behavior    |
-    |------------------|----------------------------|
-    | Input (Net)      | High-impedance value ('Z)  |
-    | Input (Variable) | Default initial value      |
-    | Output           | No effect on Simulation    |
-    | Inout (Net)      | High-impedance value ('Z)  |
-    | Inout (Variable) | Default initial value      |
-    | Ref              | Cannot be left unconnected |
-    | Interconnect     | Cannot be left unconnected |
-    | Interface        | Cannot be left unconnected |
-
-    See IEEE 1800 - 2017 § 23.3.3 Port connection rules
-    The default initial value corresponds to the data type.
-
-    |             Type            |   Default initial value         |
-    |-----------------------------|---------------------------------|
-    | 4-state integral            | 'X                              |
-    | 2-state integral            | '0                              |
-    | **real**, **shortreal**     | 0.0                             |
-    | Enumeration                 | Base type default initial value |
-    | **string**                  | "" (empty string)               |
-    | **event**                   | New event                       |
-    | **class**                   | **null**                        |
-    | **interface class**         | **null**                        |
-    | **chandle (Opaque handle)** | **null**                        |
-    | **virtual interface**       | **null**                        |
-
-  }];
-
-  let arguments = (ins);
-  let results = (outs RefType:$result);
-  let assemblyFormat = [{
-    attr-dict `:` type($result)
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//

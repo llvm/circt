@@ -1056,18 +1056,21 @@ module PortsTop;
   MultiPorts p3(x3, y3, z3, w3);
 
   wire x4, y4;
-  // CHECK: [[UN0:%.*]] = moore.unconnected : <l1>
-  // CHECK: [[UN0_VALUE:%.*]] = moore.read [[UN0]] : l1
-  // CHECK: [[X4:%.*]] = moore.read %x4 : l1
-  // CHECK: [[C_VALUE:%.*]], [[D_VALUE:%.*]] = moore.instance "p4" @PortsUnconnected(
-  // CHECK-SAME: a: [[UN0_VALUE]]: !moore.l1
+  // CHECK: %a = moore.net wire : <l1>
+  // CHECK: [[A_VALUE:%.+]] = moore.read %a : l1
+  // CHECK: [[X4:%.+]] = moore.read %x4 : l1
+  // CHECK: %c = moore.variable : <l1>
+  // CHECK: [[C_VALUE:%.+]] = moore.read %c : l1
+  // CHECK: [[D_VALUE:%.+]], [[E_VALUE:%.+]] = moore.instance "p4" @PortsUnconnected(
+  // CHECK-SAME: a: [[A_VALUE]]: !moore.l1
   // CHECK-SAME: b: [[X4]]: !moore.l1
+  // CHECK-SAME: c: [[C_VALUE]]: !moore.l1
   // CHECK-SAME: ) -> (
-  // CHECK-SAME: c: !moore.l1
   // CHECK-SAME: d: !moore.l1
+  // CHECK-SAME: e: !moore.l1
   // CHECK-SAME: )
-  // CHECK: moore.assign %y4, [[C_VALUE]] : l1
-  PortsUnconnected p4(.a(), .b(x4), .c(y4), .d());
+  // CHECK: moore.assign %y4, [[D_VALUE]] : l1
+  PortsUnconnected p4(.a(), .b(x4), .c(), .d(y4), .e());
 endmodule
 
 // CHECK-LABEL: moore.module @PortsAnsi
@@ -1187,23 +1190,26 @@ module PortsUnconnected(
   input a,
   // CHECK-SAME: in %b : !moore.l1
   input b,
-  // CHECK-SAME: out c : !moore.l1
-  output c,
+  // CHECK-SAME: in %c : !moore.l1
+  input logic c,
   // CHECK-SAME: out d : !moore.l1
-  output d
+  output d,
+  // CHECK-SAME: out e : !moore.l1
+  output e
 );
   // Internal nets and variables created by Slang for each port.
   // CHECK: [[A_INT:%.+]] = moore.net name "a" wire : <l1>
   // CHECK: [[B_INT:%.+]] = moore.net name "b" wire : <l1>
-  // CHECK: [[C_INT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[C_INT:%.+]] = moore.variable name "c" : <l1>
   // CHECK: [[D_INT:%.+]] = moore.net wire : <l1>
+  // CHECK: [[E_INT:%.+]] = moore.net wire : <l1>
   
   // Mapping ports to local declarations.
   // CHECK: moore.assign [[A_INT]], %a : l1
   // CHECK: moore.assign [[B_INT]], %b : l1
-  // CHECK: [[C_READ:%.+]] = moore.read [[C_INT]] : l1
   // CHECK: [[D_READ:%.+]] = moore.read [[D_INT]] : l1
-  // CHECK: moore.output [[C_READ]], [[D_READ]] : !moore.l1, !moore.l1
+  // CHECK: [[E_READ:%.+]] = moore.read [[E_INT]] : l1
+  // CHECK: moore.output [[D_READ]], [[E_READ]] : !moore.l1, !moore.l1
 endmodule
 
 // CHECK-LABEL: moore.module @EventControl(in %clk : !moore.l1)
