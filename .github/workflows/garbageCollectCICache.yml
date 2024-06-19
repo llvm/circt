@@ -1,0 +1,21 @@
+name: Garbage collect github CI cache that unlikely reused
+
+# Run every 4 hours
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 */4 * * *
+
+jobs:
+  run-script:
+    name: Check cache and remove 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check cache and remove
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Pretty print
+          gh cache list -k ccache-short-clang-Release-ON-ON -L 50
+          # Keep top 3 caches (in the case LLVM bump involved)
+          gh cache list -k ccache-short-clang-Release-ON-ON -L 50  --jq ".[3:]|.[].id" --json id | ./utils/delete-cache.sh
