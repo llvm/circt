@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "llvm/ADT/DenseMap.h"
@@ -19,6 +19,13 @@
 #include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "firrtl-assign-output-dirs"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_ASSIGNOUTPUTDIRS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -76,7 +83,7 @@ static OutputFileAttr getOutputFile(igraph::ModuleOpInterface op) {
 
 namespace {
 struct AssignOutputDirsPass
-    : public AssignOutputDirsBase<AssignOutputDirsPass> {
+    : public circt::firrtl::impl::AssignOutputDirsBase<AssignOutputDirsPass> {
   AssignOutputDirsPass(StringRef outputDir) {
     if (!outputDir.empty())
       outputDirOption = std::string(outputDir);

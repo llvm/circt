@@ -92,3 +92,16 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // VERILOG-NEXT: assign o8 = [[RESULT_7]]; 
   hw.output %0, %1, %2, %3, %4, %5, %6, %7: i1, i1, i1, i1, i1, i1, i1, i1
 }
+
+sim.func.dpi private @increment_counter(in %in_0 : i64, out out_0 : i32)
+sim.func.dpi private @create_counter(out out_0 : i64)
+// CHECK-LABEL: hw.module @Issue7191
+// Check lowering successes.
+hw.module @Issue7191(out result : i32) {
+  // CHECK: call.procedural @create_counter
+  // CHECK: call.procedural @increment_counter
+
+  %0 = sim.func.dpi.call @create_counter() : () -> i64
+  %1 = sim.func.dpi.call @increment_counter(%0) : (i64) -> i32
+  hw.output %1 : i32
+}
