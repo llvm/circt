@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // DO NOT EDIT!
-// This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT
-// (lib/dialect/ESI/runtime/cpp/lib/backends/Cosim.cpp).
+// This file is distributed as part of an ESI runtime package. The source for
+// this file should always be modified within CIRCT
+// (lib/dialect/ESI/runtime/cpp/tools/esitester.cpp).
 //
 //===----------------------------------------------------------------------===//
 //

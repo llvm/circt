@@ -1,3 +1,18 @@
+# ===- esitester.py - accelerator for testing ESI functionality -----------===//
+#
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#
+# ===----------------------------------------------------------------------===//
+#
+#  This accelerator is intended to eventually grow into a full ESI accelerator
+#  test image. It will be used both to test system functionality and system
+#  performance. The corresponding software appliciation in the ESI runtime and
+#  the ESI cosim. Where this should live longer-term is a unclear.
+#
+# ===----------------------------------------------------------------------===//
+
 # REQUIRES: esi-runtime, esi-cosim, rtl-sim, esitester
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
