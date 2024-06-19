@@ -655,17 +655,18 @@ struct SpecializeLayers {
     for (auto hierPath : llvm::make_early_inc_range(
              circuit.getBody().getOps<hw::HierPathOp>())) {
       auto namepath = hierPath.getNamepath().getValue();
-      for (auto ref : namepath.drop_back()) {
-        if (removedSyms.contains(ref)) {
-          removedPaths.insert(SymbolTable::getSymbolName(hierPath));
-          hierPath->erase();
-          continue;
-        }
+      auto shouldDelete = [&](Attribute ref) {
+        return removedSyms.contains(ref);
+      };
+      if (llvm::any_of(namepath.drop_back(), shouldDelete)) {
+        removedPaths.insert(SymbolTable::getSymbolName(hierPath));
+        hierPath->erase();
+        continue;
       }
       // If we deleted the target of the hierpath, we don't need to add it to
       // the list of removedPaths, since no annotation will be left around to
       // reference this path.
-      if (removedSyms.contains(namepath.back()))
+      if (shouldDelete(namepath.back()))
         hierPath->erase();
     }
 

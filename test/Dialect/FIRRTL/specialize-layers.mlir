@@ -371,6 +371,41 @@ firrtl.circuit "HierPathDelete" attributes {
   firrtl.extmodule @Deleted() attributes {layers = [@Layer]}
 }
 
+// CHECK-LABEL: firrtl.circuit "HierPathDelete"
+firrtl.circuit "HierPathDelete" attributes {
+  disable_layers = [@Layer]
+} {
+  firrtl.layer @Layer bind { }
+
+  // CHECK-NOT: hw.hierpath private @hierpath1 [@HierPathDelete::@middle, @Middle::@leaf, @Leaf]
+  hw.hierpath private @hierpath1 [@HierPathDelete::@middle, @Middle::@leaf, @Leaf]
+  // CHECK-NOT: hw.hierpath private @hierpath2 [@HierPathDelete::@middle, @Middle::@leaf]
+  hw.hierpath private @hierpath2 [@HierPathDelete::@middle, @Middle::@leaf]
+  // CHECK-NOT: hw.hierpath private @hierpath3 [@Middle::@leaf, @Leaf]
+  hw.hierpath private @hierpath3 [@Middle::@leaf, @Leaf]
+  // CHECK-NOT: hw.hierpath private @hierpath4 [@Middle::@leaf]
+  hw.hierpath private @hierpath4 [@Middle::@leaf]
+
+  firrtl.module @HierPathDelete() {
+    firrtl.layerblock @Layer {
+      firrtl.instance middle sym @middle @Middle()
+    }
+  }
+  
+  firrtl.module @Middle() {
+    firrtl.layerblock @Layer {
+      firrtl.instance leaf sym @leaf @Leaf()
+    }
+  }
+  
+  firrtl.extmodule @Leaf()
+
+  // CHECK-NOT: hw.hierpath private @DeletedPath [@Deleted]
+  hw.hierpath private @DeletedPath [@Deleted]
+  firrtl.extmodule @Deleted() attributes {layers = [@Layer]}
+}
+
+
 //===----------------------------------------------------------------------===//
 // Annotations
 //===----------------------------------------------------------------------===//
