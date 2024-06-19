@@ -4580,6 +4580,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       case EventControl::AtNegEdge:
         event = circt::sv::EventControl::AtNegEdge;
         break;
+      default:
+        event = circt::sv::EventControl::AtPosEdge;
+        break;
       }
 
       buildConcurrentVerifOp(
