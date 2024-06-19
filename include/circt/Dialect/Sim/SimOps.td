@@ -219,13 +219,13 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     left-padded with spaces up to _at least_ the length required
     to print the minimum signed value of the argument's type
     including the '-' character.
-    E.g., a zero value of type `i1` requires no padding for unsigend
+    E.g., a zero value of type `i1` requires no padding for unsigned
     formatting and one leading space for signed formatting.
     Format specifiers of same argument type and signedness must be
     padded to the same width. Zero width values will produce
     a single '0'.
 
-    Backends are reccomended to not exceed the required amount of padding.
+    Backends are recommended to not exceed the required amount of padding.
   }];
 
   let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
@@ -280,11 +280,11 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate format strings";
 
   let description = [{
-    Concatenates an arbitrary number of format string (tokens) from
+    Concatenates an arbitrary number of format strings from
     left to right. If the argument list is empty, the empty string
     literal is produced.
 
-    Concatenations should not be recursive. I.e., a concatenated string should
+    Concatenations must not be recursive. I.e., a concatenated string should
     not contain itself directly or indirectly.
   }];
 
