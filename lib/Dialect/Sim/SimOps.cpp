@@ -117,10 +117,8 @@ OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
     unsigned padWidth = FormatDecOp::getDecimalWidth(width, getIsSigned());
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 32> padding(padWidth, ' ');
+    SmallVector<char, 8> padding(padWidth, ' ');
     return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
-
-    return StringAttr::get(getContext(), Twine(strBuf));
   }
   return {};
 }
