@@ -400,7 +400,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     def __init__(self, builder: ModuleLikeBuilderBase, ports: PortProxyBase, ip,
                  loc: ir.Location) -> None:
       self.bc = _BlockContext()
-      self.bb = BackedgeBuilder()
+      self.bb = BackedgeBuilder(builder.name)
       self.ip = ir.InsertionPoint(ip)
       self.loc = loc
       self.clk = None
