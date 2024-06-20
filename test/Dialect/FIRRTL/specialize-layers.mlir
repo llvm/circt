@@ -389,22 +389,22 @@ firrtl.circuit "HierPathDelete" attributes {
   firrtl.extmodule @Deleted() attributes {layers = [@Layer]}
 }
 
-// CHECK-LABEL: firrtl.circuit "HierPathDelete"
-firrtl.circuit "HierPathDelete" attributes {
+// CHECK-LABEL: firrtl.circuit "HierPathDelete2"
+firrtl.circuit "HierPathDelete2" attributes {
   disable_layers = [@Layer]
 } {
   firrtl.layer @Layer bind { }
 
-  // CHECK-NOT: hw.hierpath private @hierpath1 [@HierPathDelete::@middle, @Middle::@leaf, @Leaf]
-  hw.hierpath private @hierpath1 [@HierPathDelete::@middle, @Middle::@leaf, @Leaf]
-  // CHECK-NOT: hw.hierpath private @hierpath2 [@HierPathDelete::@middle, @Middle::@leaf]
-  hw.hierpath private @hierpath2 [@HierPathDelete::@middle, @Middle::@leaf]
+  // CHECK-NOT: hw.hierpath private @hierpath1 [@HierPathDelete2::@middle, @Middle::@leaf, @Leaf]
+  hw.hierpath private @hierpath1 [@HierPathDelete2::@middle, @Middle::@leaf, @Leaf]
+  // CHECK-NOT: hw.hierpath private @hierpath2 [@HierPathDelete2::@middle, @Middle::@leaf]
+  hw.hierpath private @hierpath2 [@HierPathDelete2::@middle, @Middle::@leaf]
   // CHECK-NOT: hw.hierpath private @hierpath3 [@Middle::@leaf, @Leaf]
   hw.hierpath private @hierpath3 [@Middle::@leaf, @Leaf]
   // CHECK-NOT: hw.hierpath private @hierpath4 [@Middle::@leaf]
   hw.hierpath private @hierpath4 [@Middle::@leaf]
 
-  firrtl.module @HierPathDelete() {
+  firrtl.module @HierPathDelete2() {
     firrtl.layerblock @Layer {
       firrtl.instance middle sym @middle @Middle()
     }
