@@ -11,6 +11,35 @@ The main goal of the `moore` dialect is to provide a set of operations and types
 
 In contrast, the `sv` dialect is geared towards emission of SystemVerilog text, and is focused on providing a good lowering target to allow for emission. The `moore` and `sv` dialect may eventually converge into a single dialect. As we are building out the Verilog frontend capabilities of CIRCT it is valuable to have a separate ingestion dialect, such that we do not have to make disruptive changes to the load-bearing `sv` dialect used in production.
 
+## LRM Rules
+### Unconnection rules
+The SystemVerilog LRM defines unconnected behavior while leaving ports unconnected.
+
+| Port Type        | Unconnected Behavior       |
+| ---------------- | -------------------------- |
+| Input (Net)      | High-impedance value ('Z)  |
+| Input (Variable) | Default initial value      |
+| Output           | No effect on Simulation    |
+| Inout (Net)      | High-impedance value ('Z)  |
+| Inout (Variable) | Default initial value      |
+| Ref              | Cannot be left unconnected |
+| Interconnect     | Cannot be left unconnected |
+| Interface        | Cannot be left unconnected |
+
+For variables that do not have a specified initializer. It has a default rule to initialize data value according to its type:
+
+| Type                        | Default initial value           |
+| --------------------------- | ------------------------------- |
+| 4-state integral            | 'X                              |
+| 2-state integral            | '0                              |
+| **real**, **shortreal**     | 0.0                             |
+| Enumeration                 | Base type default initial value |
+| **string**                  | "" (empty string)               |
+| **event**                   | New event                       |
+| **class**                   | **null**                        |
+| **interface class**         | **null**                        |
+| **chandle (Opaque handle)** | **null**                        |
+| **virtual interface**       | **null**                        |
 
 ## Types
 
@@ -19,7 +48,7 @@ In contrast, the `sv` dialect is geared towards emission of SystemVerilog text, 
 The `moore.iN` and `moore.lN` types represent a two-valued or four-valued simple bit vector of width `N`.
 
 | Verilog    | Moore Dialect |
-|------------|---------------|
+| ---------- | ------------- |
 | `bit`      | `!moore.i1`   |
 | `logic`    | `!moore.l1`   |
 | `reg`      | `!moore.l1`   |
