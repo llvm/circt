@@ -3,8 +3,6 @@
 [![](https://github.com/llvm/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/llvm/circt/actions?query=workflow%3A%22Build+and+Test%22)
 [![Nightly integration tests](https://github.com/llvm/circt/workflows/Nightly%20integration%20tests/badge.svg)](https://github.com/llvm/circt/actions?query=workflow%3A%22Nightly+integration+tests%22)
 
-[![Track LLVM Changes](https://github.com/llvm/circt/actions/workflows/trackLLVMChanges.yml/badge.svg)](https://github.com/llvm/circt/actions/workflows/trackLLVMChanges.yml) <br>↳ If failing, there exists an upstream LLVM commit which breaks CIRCT.
-
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
 
 "CIRCT" stands for "Circuit IR Compilers and Tools".  One might also interpret
