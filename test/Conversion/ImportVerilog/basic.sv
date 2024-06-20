@@ -25,6 +25,29 @@ module NestedA;
   endmodule
 endmodule
 
+// CHECK-LABEL: moore.module @Dedup
+module Dedup;
+  module NestedD(input wire a,
+  input wire b);
+  endmodule
+  module NestedE(input wire a,
+  input wire b);
+  endmodule
+  wire [3:0] a;
+  wire [3:0] b;
+  // CHECK: moore.instance "insA" @NestedD
+  NestedD insA(.a(a));
+  // CHECK: moore.instance "insB" @NestedD
+  NestedD insB(.b(b));
+  // CHECK: moore.instance "insC" @NestedE
+  NestedE insC();
+  // CHECK: moore.instance "insD" @NestedE
+  NestedE insD(.a(a), .b(b));
+  // CHECK: moore.module @NestedD(in %a : !moore.l1, in %b : !moore.l1)
+  // CHECK: moore.module @NestedE(in %a : !moore.l1, in %b : !moore.l1)
+endmodule
+
+
 // CHECK-LABEL: moore.module @Child() {
 // CHECK:       }
 module Child;
