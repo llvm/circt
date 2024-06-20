@@ -533,23 +533,8 @@ struct SpecializeLayers {
   }
 
   template <typename T>
-  void specializeModuleLike(T op, DenseSet<Attribute> &removedSyms) {
-    // Update the required layers on the module.
-    if (auto newLayers = specializeEnableLayers(op.getLayersAttr())) {
-      op.setLayersAttr(newLayers.getValue());
-    } else {
-      // If we disabled a layer which this module requires, we must delete the
-      // whole module.
-      auto moduleName = op.getNameAttr();
-      removedSyms.insert(FlatSymbolRefAttr::get(moduleName));
-
-      if constexpr (std::is_same_v<T, FModuleOp>)
-        recordRemovedInnerSyms(removedSyms, moduleName,
-                               cast<FModuleOp>(op).getBodyBlock());
-
-      op->erase();
-      return;
-    }
+  DenseSet<Attribute> specializeModuleLike(T op) {
+    DenseSet<Attribute> removedSyms;
 
     // Specialize all operations in the body of the module. This must be done
     // before specializing the module ports so that we don't try to erase values
@@ -562,6 +547,28 @@ struct SpecializeLayers {
 
     // Specialize the ports of this module.
     specializeModulePorts(op, removedSyms);
+
+    return removedSyms;
+  }
+
+  template <typename T>
+  T specializeEnableLayers(T module, DenseSet<Attribute> &removedSyms) {
+    // Update the required layers on the module.
+    if (auto newLayers = specializeEnableLayers(module.getLayersAttr())) {
+      module.setLayersAttr(newLayers.getValue());
+      return module;
+    }
+
+    // If we disabled a layer which this module requires, we must delete the
+    // whole module.
+    auto moduleName = module.getNameAttr();
+    removedSyms.insert(FlatSymbolRefAttr::get(moduleName));
+    if constexpr (std::is_same_v<T, FModuleOp>)
+      recordRemovedInnerSyms(removedSyms, moduleName,
+                             cast<FModuleOp>(module).getBodyBlock());
+
+    module->erase();
+    return nullptr;
   }
 
   /// Specialize a layer operation, by removing enabled layers and inlining
@@ -617,24 +624,20 @@ struct SpecializeLayers {
     handleLayer(layer, Block::iterator(layer), "");
   }
 
-  DenseSet<Attribute> specializeTopLevelOp(Operation *op) {
-    // Set of InnerSymRefs and FlatSymbolRefs which were removed due to
-    // specialization.
-    DenseSet<Attribute> removedSyms;
-    TypeSwitch<Operation *>(op)
-        .Case<FModuleOp, FExtModuleOp>(
-            [&](auto op) { specializeModuleLike(op, removedSyms); })
-        .Case<LayerOp>([&](LayerOp layer) { specializeLayer(layer); });
-    return removedSyms;
-  }
-
   void operator()() {
     // Gather all operations we need to specialize, and all the ops that we
-    // need to clean.
+    // need to clean. We specialize layers and module's enable layers here
+    // because that can delete the operations and must be done serially.
     SmallVector<Operation *> specialize;
-    for (auto &op : *circuit.getBodyBlock())
-      if (isa<FModuleOp, FExtModuleOp, LayerOp>(op))
-        specialize.push_back(&op);
+    DenseSet<Attribute> removedSyms;
+    for (auto &op : llvm::make_early_inc_range(*circuit.getBodyBlock())) {
+      TypeSwitch<Operation *>(&op)
+          .Case<FModuleOp, FExtModuleOp>([&](auto module) {
+            if (specializeEnableLayers(module, removedSyms))
+              specialize.push_back(module);
+          })
+          .Case<LayerOp>([&](LayerOp layer) { specializeLayer(layer); });
+    }
 
     // Function to merge two sets together.
     auto mergeSets = [](auto &&a, auto &&b) {
@@ -644,9 +647,13 @@ struct SpecializeLayers {
 
     // Specialize all modules in parallel. The result is a set of all inner
     // symbol references which are no longer valid due to disabling layers.
-    auto removedSyms = transformReduce(
-        context, specialize, DenseSet<Attribute>{}, mergeSets,
-        [&](Operation *op) { return specializeTopLevelOp(op); });
+    removedSyms = transformReduce(
+        context, specialize, removedSyms, mergeSets,
+        [&](Operation *op) -> DenseSet<Attribute> {
+          return TypeSwitch<Operation *, DenseSet<Attribute>>(op)
+              .Case<FModuleOp, FExtModuleOp>(
+                  [&](auto op) { return specializeModuleLike(op); });
+        });
 
     // Remove all hierarchical path operations which reference deleted symbols,
     // and create a set of the removed paths operations.  We will have to remove
