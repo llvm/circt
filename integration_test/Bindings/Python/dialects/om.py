@@ -168,6 +168,9 @@ print(snd)
 # CHECK: loc("-":39:7)
 print(obj.get_field_loc("tuple"))
 
+# CHECK: loc("-":25:5)
+print(obj.loc)
+
 try:
   print(obj.tuple[3])
 except IndexError as e:
