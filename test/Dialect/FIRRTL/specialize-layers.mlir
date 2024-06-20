@@ -93,6 +93,20 @@ firrtl.circuit "LayerDisableB" attributes {
   firrtl.extmodule @LayerDisableB()
 }
 
+// CHECK-LABEL: firrtl.circuit "LayerDisableInARow"
+firrtl.circuit "LayerDisableInARow" attributes {
+    disable_layers = [@A, @B, @C]
+  } {
+  // CHECK-NOT: firrtl.layer @A bind { }
+  firrtl.layer @A bind { }
+  // CHECK-NOT: firrtl.layer @B bind { }
+  firrtl.layer @B bind { }
+  // CHECK-NOT: firrtl.layer @C bind { }
+  firrtl.layer @C bind { }
+  firrtl.extmodule @LayerDisableInARow()
+}
+
+
 //===----------------------------------------------------------------------===//
 // LayerBlock Specialization
 //===----------------------------------------------------------------------===//
@@ -182,7 +196,7 @@ firrtl.circuit "LayerblockDisableB" attributes {
 }
 
 //===----------------------------------------------------------------------===//
-// Module Required Layers
+// Module Enable Layers
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "EnableLayerB"
@@ -226,6 +240,10 @@ firrtl.circuit "DisableLayerA" attributes {
   firrtl.layer @A bind { }
   // CHECK-NOT: firrtl.extmodule @Test0()
   firrtl.extmodule @Test0() attributes {layers = [@A]}
+  // CHECK-NOT: firrtl.extmodule @Test1() attributes {layers = [@A]}
+  firrtl.extmodule @Test1() attributes {layers = [@A]}
+  // CHECK-NOT: firrtl.extmodule @Test2() attributes {layers = [@A]}
+  firrtl.extmodule @Test2() attributes {layers = [@A]}
 
   // Top level module, which can't be deleted by the pass.
   firrtl.extmodule @DisableLayerA()
