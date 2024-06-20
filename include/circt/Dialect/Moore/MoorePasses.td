@@ -15,10 +15,10 @@
 
 include "mlir/Pass/PassBase.td"
 
-def SimplifyProcedures : Pass<"simplify-procedures", "moore::SVModuleOp"> {
+def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> {
     let summary = "Simplify procedures";
     let description = [{
-      Cause we want to introduce mem2reg in the moore dialect to eliminate the
+      Because we want to introduce mem2reg in the moore dialect to eliminate the
       local temporary variables, if the local variabels exist in the procedure
       body, it can be promoted by mem2reg. But global/module-level variables
       don't be promoted. So this pass is aimed at inserting a local "shadow"

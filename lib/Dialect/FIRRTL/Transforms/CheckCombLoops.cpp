@@ -95,7 +95,7 @@ public:
 
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
-          .Case<CombDataFlow>([&](CombDataFlow df) {
+          .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
             // computeDataFlow returns a pair of FieldRefs, first element is the
             // destination and the second is the source.
             for (auto &dep : df.computeDataFlow())
