@@ -231,6 +231,13 @@ install(TARGETS esiquery
   COMPONENT ESIRuntime
 )
 
+# The esitester tool is both an example and test driver. As it is not intended
+# for production use, it is not installed.
+add_executable(esitester
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
+)
+target_link_libraries(esitester PRIVATE ESIRuntime)
+
 # Global variable for the path to the ESI runtime for use by tests.
 set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
   CACHE INTERNAL "Path to ESI runtime" FORCE)

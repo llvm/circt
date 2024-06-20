@@ -14,6 +14,7 @@
 
 #include "esi/Accelerator.h"
 
+#include <cassert>
 #include <map>
 #include <stdexcept>
 
@@ -23,6 +24,8 @@ using namespace esi;
 using namespace esi::services;
 
 namespace esi {
+AcceleratorConnection::AcceleratorConnection(Context &ctxt)
+    : ctxt(ctxt), serviceThread(make_unique<AcceleratorServiceThread>()) {}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
@@ -62,4 +65,105 @@ unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
 }
 
 } // namespace registry
+
+struct AcceleratorServiceThread::Impl {
+  Impl() {}
+  void start() { me = std::thread(&Impl::loop, this); }
+  void stop() {
+    shutdown = true;
+    me.join();
+  }
+  /// When there's data on any of the listenPorts, call the callback. This
+  /// method can be called from any thread.
+  void
+  addListener(std::initializer_list<ReadChannelPort *> listenPorts,
+              std::function<void(ReadChannelPort *, MessageData)> callback);
+
+private:
+  void loop();
+  volatile bool shutdown = false;
+  std::thread me;
+
+  // Protect the listeners map.
+  std::mutex listenerMutex;
+  // Map of read ports to callbacks.
+  std::map<ReadChannelPort *,
+           std::function<void(ReadChannelPort *, MessageData)>>
+      listeners;
+};
+
+void AcceleratorServiceThread::Impl::loop() {
+  // These two variables should logically be in the loop, but this avoids
+  // reconstructing them on each iteration.
+  std::vector<std::tuple<ReadChannelPort *,
+                         std::function<void(ReadChannelPort *, MessageData)>,
+                         MessageData>>
+      portUnlockWorkList;
+  MessageData data;
+
+  while (!shutdown) {
+    // Ideally we'd have some wake notification here, but this sufficies for
+    // now.
+    // TODO: investigate better ways to do this.
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+    // Check and gather data from all the read ports we are monitoring. Put the
+    // callbacks to be called later so we can release the lock.
+    {
+      std::lock_guard<std::mutex> g(listenerMutex);
+      for (auto &[channel, cb] : listeners) {
+        assert(channel && "Null channel in listener list");
+        if (channel->read(data))
+          portUnlockWorkList.emplace_back(channel, cb, std::move(data));
+      }
+    }
+
+    // Call the callbacks outside the lock.
+    for (auto [channel, cb, data] : portUnlockWorkList)
+      cb(channel, std::move(data));
+
+    // Clear the worklist for the next iteration.
+    portUnlockWorkList.clear();
+  }
+}
+
+void AcceleratorServiceThread::Impl::addListener(
+    std::initializer_list<ReadChannelPort *> listenPorts,
+    std::function<void(ReadChannelPort *, MessageData)> callback) {
+  std::lock_guard<std::mutex> g(listenerMutex);
+  for (auto port : listenPorts) {
+    if (listeners.count(port))
+      throw runtime_error("Port already has a listener");
+    listeners[port] = callback;
+  }
+}
+
 } // namespace esi
+
+AcceleratorServiceThread::AcceleratorServiceThread()
+    : impl(std::make_unique<Impl>()) {
+  impl->start();
+}
+AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
+
+void AcceleratorServiceThread::stop() {
+  if (impl) {
+    impl->stop();
+    impl.reset();
+  }
+}
+
+/// When there's data on any of the listenPorts, call the callback.
+void AcceleratorServiceThread::addListener(
+    std::initializer_list<ReadChannelPort *> listenPorts,
+    std::function<void(ReadChannelPort *, MessageData)> callback) {
+  assert(impl && "Service thread not running");
+  impl->addListener(listenPorts, callback);
+}
+
+void AcceleratorConnection::disconnect() {
+  if (serviceThread) {
+    serviceThread->stop();
+    serviceThread.reset();
+  }
+}

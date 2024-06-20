@@ -170,6 +170,7 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 if config.esi_runtime == "1":
   config.available_features.add('esi-runtime')
   tools.append('esiquery')
+  tools.append('esitester')
 
   llvm_config.with_environment('PYTHONPATH',
                                [f"{config.esi_runtime_path}/python/"],

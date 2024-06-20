@@ -447,9 +447,8 @@ bool BlackBoxReaderPass::isDut(Operation *module) {
   auto iter = dutModuleMap.find(module);
   if (iter != dutModuleMap.end())
     return iter->getSecond();
-  AnnotationSet annos(module);
   // Any module with the dutAnno, is the DUT.
-  if (annos.hasAnnotation(dutAnnoClass)) {
+  if (AnnotationSet::hasAnnotation(module, dutAnnoClass)) {
     dutModuleMap[module] = true;
     return true;
   }

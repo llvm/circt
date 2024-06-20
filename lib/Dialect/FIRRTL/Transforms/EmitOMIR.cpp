@@ -661,8 +661,7 @@ void EmitOMIRPass::runOnOperation() {
     AnnotationSet::removeAnnotations(
         op, std::bind(setTracker, -1, std::placeholders::_1));
     if (auto modOp = dyn_cast<FModuleOp>(op)) {
-      AnnotationSet annos(modOp.getAnnotations());
-      if (!annos.hasAnnotation(dutAnnoClass))
+      if (!AnnotationSet::hasAnnotation(modOp, dutAnnoClass))
         return;
       dutModuleName = modOp.getNameAttr();
     }
