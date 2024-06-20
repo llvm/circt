@@ -222,6 +222,7 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, uint64_t fieldID,
 inline FIRRTLBaseType getBaseType(Type type) {
   return TypeSwitch<Type, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<LHSType>([](auto lhs) { return lhs.getType(); })
       .Case<RefType>([](auto ref) { return ref.getType(); })
       .Default([](Type type) { return nullptr; });
 }

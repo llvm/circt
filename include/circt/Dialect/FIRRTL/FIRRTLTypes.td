@@ -99,12 +99,14 @@ def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset
 
 def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
 
-
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 
 def RWProbe : FIRRTLDialectType<
   CPred<"type_isa<RefType>($_self) && type_cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
+
+def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
+                                      "writable type", "::circt::firrtl::LHSType">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
 def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
