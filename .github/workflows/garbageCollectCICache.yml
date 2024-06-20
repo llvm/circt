@@ -28,5 +28,5 @@ jobs:
         run: |
           # Pretty print
           gh cache list -k ccache-short-clang-Release-ON-ON -L 50
-          # Keep top 3 caches (in the case LLVM bump involved)
-          gh cache list -k ccache-short-clang-Release-ON-ON -L 50  --jq ".[3:]|.[].id" --json id | ./utils/delete-cache.sh
+          # Keep top 5 caches (in the case LLVM bump involved)
+          gh cache list -k ccache-short-clang-Release-ON-ON -L 50  --jq ".[5:]|.[].id" --json id | ./utils/delete-cache.sh
