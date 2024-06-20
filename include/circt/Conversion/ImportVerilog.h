@@ -45,21 +45,6 @@ struct ImportVerilogOptions {
   };
   Mode mode = Mode::Full;
 
-  /// Options that enable instance dedup method.
-  ///
-  /// See FIRRTL and ARC dedup pass for inspiration. This option is only
-  /// suitable for software simulation. Different symbolName
-  /// modules relate to different hardware units in hardware simulation. So this
-  /// option is not recommended in hardware simulation. For example,
-  enum class DedupMode {
-    /// check whether we have already converted an exact version of the module
-    /// and reuse that instead of creating a new one
-    Disable = 0,
-    /// create a new one even already converted
-    Enable = 1
-  };
-  DedupMode dedupMode = DedupMode::Disable;
-
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//
