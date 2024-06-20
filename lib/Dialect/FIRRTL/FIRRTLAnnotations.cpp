@@ -26,7 +26,7 @@ using namespace circt;
 using namespace firrtl;
 
 static ArrayAttr getAnnotationsFrom(Operation *op) {
-  if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
+  if (auto annots = getAnnotationsIfPresent(op))
     return annots;
   return ArrayAttr::get(op->getContext(), {});
 }
@@ -77,7 +77,7 @@ AnnotationSet AnnotationSet::forPort(MemOp op, size_t portNo) {
 
 /// Get an annotation set for the specified value.
 AnnotationSet AnnotationSet::get(Value v) {
-  if (auto op = v.getDefiningOp())
+  if (auto *op = v.getDefiningOp())
     return AnnotationSet(op);
   // If its not an Operation, then must be a block argument.
   auto arg = dyn_cast<BlockArgument>(v);
@@ -118,96 +118,6 @@ bool AnnotationSet::applyToPort(MemOp op, size_t portNo) const {
   return ::applyToPort(*this, op.getOperation(), op->getNumResults(), portNo);
 }
 
-static bool applyToAttrListImpl(const AnnotationSet &annoSet, StringRef key,
-                                NamedAttrList &attrs) {
-  if (annoSet.empty())
-    return bool(attrs.erase(key));
-  else {
-    auto attr = annoSet.getArrayAttr();
-    return attrs.set(key, attr) != attr;
-  }
-}
-
-/// Store the annotations in this set in a `NamedAttrList` as an array attribute
-/// with the name `annotations`.
-bool AnnotationSet::applyToAttrList(NamedAttrList &attrs) const {
-  return applyToAttrListImpl(*this, getAnnotationAttrName(), attrs);
-}
-
-/// Store the annotations in this set in a `NamedAttrList` as an array attribute
-/// with the name `firrtl.annotations`.
-bool AnnotationSet::applyToPortAttrList(NamedAttrList &attrs) const {
-  return applyToAttrListImpl(*this, getDialectAnnotationAttrName(), attrs);
-}
-
-static DictionaryAttr applyToDictionaryAttrImpl(const AnnotationSet &annoSet,
-                                                StringRef key,
-                                                ArrayRef<NamedAttribute> attrs,
-                                                bool sorted,
-                                                DictionaryAttr originalDict) {
-  // Find the location in the dictionary where the entry would go.
-  ArrayRef<NamedAttribute>::iterator it;
-  if (sorted) {
-    it = llvm::lower_bound(attrs, key);
-    if (it != attrs.end() && it->getName() != key)
-      it = attrs.end();
-  } else {
-    it = llvm::find_if(
-        attrs, [key](NamedAttribute attr) { return attr.getName() == key; });
-  }
-
-  // Fast path in case there are no annotations in the dictionary and we are not
-  // supposed to add any.
-  if (it == attrs.end() && annoSet.empty())
-    return originalDict;
-
-  // Fast path in case there already is an entry in the dictionary, it matches
-  // the set, and, in the case we're supposed to remove empty sets, we're not
-  // leaving an empty entry in the dictionary.
-  if (it != attrs.end() && it->getValue() == annoSet.getArrayAttr() &&
-      !annoSet.empty())
-    return originalDict;
-
-  // If we arrive here, we are supposed to assemble a new dictionary.
-  SmallVector<NamedAttribute> newAttrs;
-  newAttrs.reserve(attrs.size() + 1);
-  newAttrs.append(attrs.begin(), it);
-  if (!annoSet.empty())
-    newAttrs.push_back(
-        {StringAttr::get(annoSet.getContext(), key), annoSet.getArrayAttr()});
-  if (it != attrs.end())
-    newAttrs.append(it + 1, attrs.end());
-  return sorted ? DictionaryAttr::getWithSorted(annoSet.getContext(), newAttrs)
-                : DictionaryAttr::get(annoSet.getContext(), newAttrs);
-}
-
-/// Update the attribute dictionary of an operation to contain this annotation
-/// set.
-DictionaryAttr
-AnnotationSet::applyToDictionaryAttr(DictionaryAttr attrs) const {
-  return applyToDictionaryAttrImpl(*this, getAnnotationAttrName(),
-                                   attrs.getValue(), true, attrs);
-}
-
-DictionaryAttr
-AnnotationSet::applyToDictionaryAttr(ArrayRef<NamedAttribute> attrs) const {
-  return applyToDictionaryAttrImpl(*this, getAnnotationAttrName(), attrs, false,
-                                   {});
-}
-
-/// Update the attribute dictionary of a port to contain this annotation set.
-DictionaryAttr
-AnnotationSet::applyToPortDictionaryAttr(DictionaryAttr attrs) const {
-  return applyToDictionaryAttrImpl(*this, getDialectAnnotationAttrName(),
-                                   attrs.getValue(), true, attrs);
-}
-
-DictionaryAttr
-AnnotationSet::applyToPortDictionaryAttr(ArrayRef<NamedAttribute> attrs) const {
-  return applyToDictionaryAttrImpl(*this, getDialectAnnotationAttrName(), attrs,
-                                   false, {});
-}
-
 Annotation AnnotationSet::getAnnotationImpl(StringAttr className) const {
   for (auto annotation : *this) {
     if (annotation.getClassAttr() == className)
@@ -239,8 +149,7 @@ bool AnnotationSet::hasDontTouch() const {
 bool AnnotationSet::setDontTouch(bool dontTouch) {
   if (dontTouch)
     return addDontTouch();
-  else
-    return removeDontTouch();
+  return removeDontTouch();
 }
 
 bool AnnotationSet::addDontTouch() {
@@ -263,8 +172,7 @@ bool AnnotationSet::hasDontTouch(Operation *op) {
 bool AnnotationSet::setDontTouch(Operation *op, bool dontTouch) {
   if (dontTouch)
     return addDontTouch(op);
-  else
-    return removeDontTouch(op);
+  return removeDontTouch(op);
 }
 
 bool AnnotationSet::addDontTouch(Operation *op) {
@@ -362,14 +270,9 @@ bool AnnotationSet::removeAnnotation(StringRef className) {
 /// returns true.
 bool AnnotationSet::removeAnnotations(
     llvm::function_ref<bool(Annotation)> predicate) {
-  // Fast path for empty sets.
-  auto attr = getArrayAttr();
-  if (!attr)
-    return false;
-
   // Search for the first match.
   ArrayRef<Attribute> annos = getArrayAttr().getValue();
-  auto it = annos.begin();
+  auto *it = annos.begin();
   while (it != annos.end() && !predicate(Annotation(*it)))
     ++it;
 
@@ -394,8 +297,12 @@ bool AnnotationSet::removeAnnotations(
 /// Remove all annotations from an operation for which `predicate` returns true.
 bool AnnotationSet::removeAnnotations(
     Operation *op, llvm::function_ref<bool(Annotation)> predicate) {
-  AnnotationSet annos(op);
-  if (!annos.empty() && annos.removeAnnotations(predicate)) {
+  // Fast-path for no annotations.
+  auto annosArray = getAnnotationsIfPresent(op);
+  if (!annosArray)
+    return false;
+  AnnotationSet annos(annosArray);
+  if (annos.removeAnnotations(predicate)) {
     annos.applyToOperation(op);
     return true;
   }
@@ -498,8 +405,8 @@ void Annotation::removeMember(StringAttr name) {
   auto dict = getDict();
   SmallVector<NamedAttribute> attributes;
   attributes.reserve(dict.size() - 1);
-  auto i = dict.begin();
-  auto e = dict.end();
+  auto *i = dict.begin();
+  auto *e = dict.end();
   while (i != e && i->getValue() != name)
     attributes.push_back(*(i++));
   // If the member was not here, just return.

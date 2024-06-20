@@ -19,6 +19,7 @@ else()
     CIRCTPythonModules
     ESIRuntime
     ESIPythonRuntime
+    esitester
   )
 
   # If ESI Cosim is available to build then enable its tests.
