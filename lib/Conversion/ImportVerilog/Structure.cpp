@@ -193,10 +193,12 @@ struct MemberVisitor {
                          : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
-        for (auto &existPort : duplicateInstanceBodySymbol->getPortList()) {
-          if (existPort->name == port->name) {
-            port = existPort->as_if<PortSymbol>();
-            break;
+        if (duplicateInstanceBodySymbol) {
+          for (auto &existPort : duplicateInstanceBodySymbol->getPortList()) {
+            if (existPort->name == port->name) {
+              port = existPort->as_if<PortSymbol>();
+              break;
+            }
           }
         }
         portValues.insert({port, value});
