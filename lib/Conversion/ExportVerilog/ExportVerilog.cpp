@@ -4883,7 +4883,6 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
-template <typename Op>
 LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
                                                Value enable,
                                                PPExtString opName) {
