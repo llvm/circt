@@ -1634,7 +1634,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
-  LogicalResult visitVerifIntrinsicOp(IntrinsicOp op);
+  LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
@@ -2035,7 +2035,6 @@ Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
 /// This returns a null value for FIRRTL values that cannot be lowered, e.g.
 /// unknown width integers.
 Value FIRRTLLowering::getLoweredValue(Value value) {
-
   auto result = getPossiblyInoutLoweredValue(value);
   if (!result)
     return result;
@@ -3795,7 +3794,7 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
 }
 
 template <typename TargetOp, typename IntrinsicOp>
-LogicalResult FIRRTLLowering::visitVerifIntrinsicOp(IntrinsicOp op) {
+LogicalResult FIRRTLLowering::lowerVerifIntrinsicOp(IntrinsicOp op) {
   auto property = getLoweredValue(op.getProperty());
   auto enable = op.getEnable() ? getLoweredValue(op.getEnable()) : Value();
   builder.create<TargetOp>(property, enable, op.getLabelAttr());
@@ -3803,15 +3802,15 @@ LogicalResult FIRRTLLowering::visitVerifIntrinsicOp(IntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssertIntrinsicOp op) {
-  return visitVerifIntrinsicOp<verif::AssertOp>(op);
+  return lowerVerifIntrinsicOp<verif::AssertOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssumeIntrinsicOp op) {
-  return visitVerifIntrinsicOp<verif::AssumeOp>(op);
+  return lowerVerifIntrinsicOp<verif::AssumeOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
-  return visitVerifIntrinsicOp<verif::CoverOp>(op);
+  return lowerVerifIntrinsicOp<verif::CoverOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {

@@ -4008,14 +4008,15 @@ private:
                             const SmallPtrSetImpl<Operation *> &locationOps,
                             StringRef multiLineComment = StringRef());
 
-  template <typename Op>
-  LogicalResult emitVerifAssertLike(Op op, PPExtString opName);
+  LogicalResult emitVerifAssertLike(Operation *op, Value property, Value enable,
+                                    PPExtString opName);
   LogicalResult visitVerif(verif::AssertOp op);
   LogicalResult visitVerif(verif::AssumeOp op);
   LogicalResult visitVerif(verif::CoverOp op);
 
-  template <typename Op>
-  LogicalResult emitVerifClockedAssertLike(Op op, PPExtString opName);
+  LogicalResult emitVerifClockedAssertLike(Operation *op, Value property,
+                                           Value clock, verif::ClockEdge edge,
+                                           Value enable, PPExtString opName);
   LogicalResult visitVerif(verif::ClockedAssertOp op);
   LogicalResult visitVerif(verif::ClockedAssumeOp op);
   LogicalResult visitVerif(verif::ClockedCoverOp op);
@@ -4883,7 +4884,9 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
 template <typename Op>
-LogicalResult StmtEmitter::emitVerifAssertLike(Op op, PPExtString opName) {
+LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
+                                               Value enable,
+                                               PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4896,7 +4899,7 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Op op, PPExtString opName) {
   // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
   // procedural code".
   Operation *parent = op->getParentOp();
-  bool isTemporal = !op.getProperty().getType().isSignlessInteger(1);
+  bool isTemporal = !property.getType().isSignlessInteger(1);
   bool isProcedural = parent->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
@@ -4912,8 +4915,7 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Op op, PPExtString opName) {
       else
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
-        PropertyEmitter(emitter, ops)
-            .emitEnabledProperty(op.getProperty(), op.getEnable());
+        PropertyEmitter(emitter, ops).emitEnabledProperty(property, enable);
         ps << ");";
       });
     });
@@ -4924,22 +4926,26 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Op op, PPExtString opName) {
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::AssertOp op) {
-  return emitVerifAssertLike(op, PPExtString("assert"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::AssumeOp op) {
-  return emitVerifAssertLike(op, PPExtString("assume"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
-  return emitVerifAssertLike(op, PPExtString("cover"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("cover"));
 }
 
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
-template <typename Op>
-LogicalResult StmtEmitter::emitVerifClockedAssertLike(Op op,
-                                                      PPExtString opName) {
+LogicalResult
+StmtEmitter::emitVerifClockedAssertLike(Operation *op, Value property,
+                                        Value clock, verif::ClockEdge edge,
+                                        Value enable, PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4952,7 +4958,7 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(Op op,
   // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
   // procedural code".
   Operation *parent = op->getParentOp();
-  bool isTemporal = !op.getProperty().getType().isSignlessInteger(1);
+  bool isTemporal = !property.getType().isSignlessInteger(1);
   bool isProcedural = parent->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
@@ -4969,9 +4975,8 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(Op op,
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
         PropertyEmitter(emitter, ops)
-            .emitClockedProperty(op.getProperty(), op.getClock(),
-                                 verifToltlClockEdge(op.getEdge()),
-                                 op.getEnable());
+            .emitClockedProperty(property, clock, verifToltlClockEdge(edge),
+                                 enable);
         ps << ");";
       });
     });
@@ -4983,15 +4988,21 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(Op op,
 
 // FIXME: emit property assertion wrapped in a clock and disabled
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
-  return emitVerifClockedAssertLike(op, PPExtString("assert"));
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
+                                    PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
-  return emitVerifClockedAssertLike(op, PPExtString("assume"));
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
+                                    PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
-  return emitVerifClockedAssertLike(op, PPExtString("cover"));
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
+                                    PPExtString("cover"));
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
