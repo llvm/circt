@@ -6,6 +6,9 @@ on:
   schedule:
     - cron: 0 */4 * * *
 
+permissions:
+  actions: write
+
 jobs:
   run-script:
     # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
