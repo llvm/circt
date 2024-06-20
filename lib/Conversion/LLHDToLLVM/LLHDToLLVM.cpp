@@ -1916,7 +1916,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   patterns.clear();
 
-  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
+  // mlir::populateReconcileUnrealizedCastsPatterns(patterns);
   target.addIllegalOp<UnrealizedConversionCastOp>();
 
   // Apply the full conversion.

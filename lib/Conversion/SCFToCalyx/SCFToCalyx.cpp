@@ -1707,7 +1707,7 @@ public:
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
     GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
     if (runOnce)
       config.maxIterations = 1;
 

@@ -191,7 +191,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
   // possible in many cases (especially the explicitly inserted target
   // materializations in the lowering of the 'miter' operation).
   RewritePatternSet cleanupPatterns(&getContext());
-  populateReconcileUnrealizedCastsPatterns(cleanupPatterns);
+  //populateReconcileUnrealizedCastsPatterns(cleanupPatterns);
 
   if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
                                                 std::move(cleanupPatterns))))
