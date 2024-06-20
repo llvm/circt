@@ -135,6 +135,14 @@ struct MemberVisitor {
       // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
+        if (duplicateInstanceBodySymbol) {
+          for (auto &existPort : duplicateInstanceBodySymbol->getPortList()) {
+            if (existPort->name == port->name) {
+              port = existPort->as_if<PortSymbol>();
+              break;
+            }
+          }
+        }
         switch (port->direction) {
         case slang::ast::ArgumentDirection::In: {
           auto refType = moore::RefType::get(
