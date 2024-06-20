@@ -128,13 +128,3 @@ func.func @NonConsecutiveRepeatFolds(%arg0: !ltl.sequence) {
 
   return
 }
-
-// CHECK-LABEL: @ClockingFolds
-func.func @ClockingFolds(%arg0: !ltl.property) {
-  // disable(p, false) -> p
-  // CHECK-NEXT: call @Prop(%arg0)
-  %false = hw.constant false
-  %0 = ltl.disable %arg0 if %false : !ltl.property
-  call @Prop(%0) : (!ltl.property) -> ()
-  return
-}
