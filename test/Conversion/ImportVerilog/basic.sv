@@ -23,16 +23,16 @@ module Dedup;
   wire [3:0] a;
   wire [3:0] b;
   wire [3:0] c;
-  // CHECK: moore.instance "insA" @NestedA
+  // CHECK-LABEL: moore.instance "insA" @NestedA_0
   NestedA insA(.a(a), .c(c));
-  // CHECK: moore.instance "insB" @NestedA
+  // CHECK-LABEL: moore.instance "insB" @NestedA_0
   NestedA insB(.b(b), .c(c));
-  // CHECK: moore.instance "insC" @NestedB
+  // CHECK-LABEL: moore.instance "insC" @NestedB
   NestedB insC(.c(c));
-  // CHECK: moore.instance "insD" @NestedB
+  // CHECK-LABEL: moore.instance "insD" @NestedB
   NestedB insD(.a(a), .b(b), .c(c));
-  // CHECK: moore.module @NestedA
-  // CHECK: moore.module @NestedB
+  // CHECK-LABEL: moore.module @NestedA_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module @NestedB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA() {
