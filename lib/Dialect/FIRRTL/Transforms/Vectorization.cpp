@@ -22,8 +22,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "firrtl-vectorization"
-
 namespace circt {
 namespace firrtl {
 #define GEN_PASS_DEF_VECTORIZATION
@@ -33,6 +31,8 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
+
+#define DEBUG_TYPE "firrtl-vectorization"
 
 namespace {
 //===----------------------------------------------------------------------===//
