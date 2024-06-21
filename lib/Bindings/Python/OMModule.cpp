@@ -156,6 +156,9 @@ struct Object {
   /// Get the Type from an Object, which will be a ClassType.
   MlirType getType() { return omEvaluatorObjectGetType(value); }
 
+  /// Get the Location from an Object, which will be an MlirLocation.
+  MlirLocation getLocation() { return omEvaluatorValueGetLoc(value); }
+
   // Get the field location info.
   MlirLocation getFieldLoc(const std::string &name) {
     // Wrap the requested field name in an attribute.
@@ -461,6 +464,8 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def_property_readonly("field_names", &Object::getFieldNames,
                              "Get field names from an Object")
       .def_property_readonly("type", &Object::getType, "The Type of the Object")
+      .def_property_readonly("loc", &Object::getLocation,
+                             "The Location of the Object")
       .def("__hash__", &Object::getHash, "Get object hash")
       .def("__eq__", &Object::eq, "Check if two objects are same");
 

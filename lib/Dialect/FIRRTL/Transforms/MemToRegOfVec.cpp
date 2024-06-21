@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -20,17 +19,26 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "mem-to-reg-of-vec"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_MEMTOREGOFVEC
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
+struct MemToRegOfVecPass
+    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
   MemToRegOfVecPass(bool replSeqMem, bool ignoreReadEnable)
       : replSeqMem(replSeqMem), ignoreReadEnable(ignoreReadEnable){};
 
@@ -44,7 +52,7 @@ struct MemToRegOfVecPass : public MemToRegOfVecBase<MemToRegOfVecPass> {
 
     // Find the device under test and create a set of all modules underneath it.
     auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-      return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+      return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
     });
     if (it != body->end()) {
       auto &instanceGraph = getAnalysis<InstanceGraph>();

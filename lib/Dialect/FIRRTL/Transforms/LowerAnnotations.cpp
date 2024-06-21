@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
@@ -37,6 +39,13 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "lower-annos"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERFIRRTLANNOTATIONS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -387,6 +396,45 @@ static LogicalResult applyLoadMemoryAnno(const AnnoPathValue &target,
   return success();
 }
 
+static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
+                                        DictionaryAttr anno,
+                                        ApplyState &state) {
+  auto *op = target.ref.getOp();
+  auto *context = op->getContext();
+  auto loc = op->getLoc();
+
+  auto error = [&]() {
+    return mlir::emitError(loc) << outputDirAnnoClass << " ";
+  };
+
+  auto opTarget = dyn_cast<OpAnnoTarget>(target.ref);
+  if (!opTarget)
+    return error() << "must target a module";
+  if (!target.isLocal())
+    return error() << "must be local";
+
+  auto moduleOp = dyn_cast<FModuleOp>(op);
+  if (!moduleOp)
+    return error() << "must target a module";
+  if (!moduleOp.isPublic())
+    return error() << "must target a public module";
+  if (moduleOp->hasAttr("output_file"))
+    return error() << "target already has an output file";
+
+  auto dirname =
+      tryGetAs<StringAttr>(anno, anno, "dirname", loc, outputDirAnnoClass);
+  if (!dirname)
+    return failure();
+  if (dirname.empty())
+    return error() << "dirname must not be empty";
+
+  auto outputFile =
+      hw::OutputFileAttr::getAsDirectory(context, dirname.getValue());
+
+  moduleOp->setAttr("output_file", outputFile);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Driving table
 //===----------------------------------------------------------------------===//
@@ -480,6 +528,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<false, FModuleOp, FExtModuleOp>}},
     {metadataDirectoryAttrName, NoTargetAnnotation},
     {moduleHierAnnoClass, NoTargetAnnotation},
+    {outputDirAnnoClass, {stdResolve, applyOutputDirAnno}},
     {sitestTestHarnessBlackBoxAnnoClass, NoTargetAnnotation},
     {testBenchDirAnnoClass, NoTargetAnnotation},
     {testHarnessHierAnnoClass, NoTargetAnnotation},
@@ -539,7 +588,8 @@ static const AnnoRecord *getAnnotationHandler(StringRef annoStr,
 
 namespace {
 struct LowerAnnotationsPass
-    : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
+    : public circt::firrtl::impl::LowerFIRRTLAnnotationsBase<
+          LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
   LogicalResult legacyToWiringProblems(ApplyState &state);
@@ -704,12 +754,20 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
     }
 
     // If the sink is a wire with no users, then convert this to a node.
-    auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
-    if (destOp && dest.getUses().empty()) {
-      builder.create<NodeOp>(src, destOp.getName())
-          .setAnnotationsAttr(destOp.getAnnotations());
-      opsToErase.push_back(destOp);
-      return success();
+    // This is done to convert the undriven wires created for GCView's
+    // into the NodeOp's they're required to be in GrandCentral.cpp.
+    if (auto destOp = dyn_cast_or_null<WireOp>(dest.getDefiningOp());
+        destOp && dest.getUses().empty()) {
+      // Only perform this if the type is suitable (passive).
+      if (auto baseType = dyn_cast<FIRRTLBaseType>(src.getType());
+          baseType && baseType.isPassive()) {
+        // Note that the wire is replaced with the source type
+        // regardless, continue this behavior.
+        builder.create<NodeOp>(src, destOp.getName())
+            .setAnnotationsAttr(destOp.getAnnotations());
+        opsToErase.push_back(destOp);
+        return success();
+      }
     }
 
     // Otherwise, just connect to the source.
@@ -857,11 +915,23 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // (connectable).
       if (sourceFType != sinkFType &&
           !areTypesEquivalent(sinkFType, sourceFType)) {
-        auto diag = mlir::emitError(source.getLoc())
-                    << "Wiring Problem source type " << sourceType
-                    << " does not match sink type " << sinkType;
-        diag.attachNote(sink.getLoc()) << "The sink is here.";
-        return failure();
+        // Support tapping mixed alignment -> passive , emulate probe behavior.
+        if (auto sourceBaseType = dyn_cast<FIRRTLBaseType>(sourceFType);
+            problem.refTypeUsage == WiringProblem::RefTypeUsage::Prefer &&
+            sourceBaseType &&
+            areTypesEquivalent(sinkFType, sourceBaseType.getPassiveType())) {
+          // Change "sourceType" to the passive version that's type-equivalent,
+          // this will be used for wiring on the "up" side.
+          // This relies on `emitConnect` supporting connecting to the passive
+          // version from the original source.
+          sourceType = sourceBaseType.getPassiveType();
+        } else {
+          auto diag = mlir::emitError(source.getLoc())
+                      << "Wiring Problem source type " << sourceType
+                      << " does not match sink type " << sinkType;
+          diag.attachNote(sink.getLoc()) << "The sink is here.";
+          return failure();
+        }
       }
     }
     // If wiring using references, check that the sink value we connect to is

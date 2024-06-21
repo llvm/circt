@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
@@ -20,9 +19,17 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/AttrTypeSubElements.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/StringMap.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_PREFIXMODULES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -91,7 +98,8 @@ static StringRef getPrefix(Operation *module) {
 /// module is instantiated under two different prefix hierarchies, it will be
 /// duplicated and each module will have one prefix applied.
 namespace {
-class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
+class PrefixModulesPass
+    : public circt::firrtl::impl::PrefixModulesBase<PrefixModulesPass> {
   void removeDeadAnnotations(StringAttr moduleName, Operation *op);
   void renameModuleBody(std::string prefix, StringRef oldName,
                         FModuleOp module);
@@ -213,7 +221,7 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, StringRef oldName,
       //   - This is a Grand Central Mem Tap
       if (auto *extModule = dyn_cast_or_null<FExtModuleOp>(&target)) {
         auto isDataTap =
-            AnnotationSet(*extModule).hasAnnotation(dataTapsBlackboxClass);
+            AnnotationSet::hasAnnotation(*extModule, dataTapsBlackboxClass);
         auto isMemTap = AnnotationSet::forPort(*extModule, 0)
                             .hasAnnotation(memTapPortClass);
         if (!isDataTap && !isMemTap)

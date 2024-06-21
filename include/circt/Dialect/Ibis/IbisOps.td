@@ -50,10 +50,10 @@ def ClassOp : IbisOp<"class", [
     `ibis.port`s, `ibis.container`s, and contain logic for member variables.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym);
+  let arguments = (ins InnerSymAttr:$inner_sym, OptionalAttr<StrAttr>:$name);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $inner_sym attr-dict-with-keyword $body
+    ($name^)? `sym` $inner_sym attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{
@@ -61,14 +61,6 @@ def ClassOp : IbisOp<"class", [
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
 
     Block* getBodyBlock() { return &getBody().front(); }
-
-    StringAttr getModuleNameAttr() {
-      return getInnerSymAttr().getSymName();
-    }
-
-    llvm::StringRef getModuleName() {
-      return getModuleNameAttr();
-    }
 
     // For hw:InnerSymbol - the symbol targets the operation and not any result.
     static std::optional<size_t> getTargetResultIndex() {
@@ -604,7 +596,7 @@ def ContainerOp : IbisOp<"container", [
   ScopeOpInterface, IsolatedFromAbove,
   InstanceGraphModuleOpInterface,
   RegionKindInterface,
-  DeclareOpInterfaceMethods<InnerSymbol>,
+  DeclareOpInterfaceMethods<NamedInnerSymbol>,
   ParentOneOf<["DesignOp", "ClassOp"]>
 ]> {
   let summary = "Ibis container";
@@ -612,11 +604,11 @@ def ContainerOp : IbisOp<"container", [
     An ibis container describes a collection of logic nested within an Ibis class.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym, UnitAttr:$isTopLevel);
+  let arguments = (ins InnerSymAttr:$inner_sym, UnitAttr:$isTopLevel, OptionalAttr<StrAttr>:$name);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
+    ($name^)? `sym` $inner_sym (`top_level` $isTopLevel^)? attr-dict-with-keyword $body
   }];
 
   let extraClassDeclaration = [{
@@ -625,34 +617,33 @@ def ContainerOp : IbisOp<"container", [
 
     Block* getBodyBlock() { return &getBody().front(); }
 
-    StringAttr getModuleNameAttr() {
-      return getInnerSymAttr().getSymName();
-    }
-
-    llvm::StringRef getModuleName() {
-      return getModuleNameAttr();
-    }
-  }];
-
-  let extraClassDefinition = [{
     // For hw:InnerSymbol - the symbol targets the operation and not any result.
-    std::optional<size_t> $cppClass::getTargetResultIndex() {
+    static std::optional<size_t> getTargetResultIndex() {
       return std::nullopt;
+    }
+
+    // Override InstanceGraphModuleOpInterface::getModuleNameAttr to return the
+    // inner_sym name of the container instead of the `name` which is the default
+    // behavior of InstanceGraphModuleOpInterface.
+    mlir::StringAttr getModuleNameAttr() {
+      return getInnerSymAttr().getSymName();
     }
   }];
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringRef":$inner_sym, "bool":$isTopLevel), [{
+    OpBuilder<(ins "StringRef":$inner_sym, "bool":$isTopLevel, CArg<"mlir::StringAttr", "nullptr">:$name), [{
       build($_builder, $_state,
-        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), isTopLevel);
+        hw::InnerSymAttr::get($_builder.getStringAttr(inner_sym)), isTopLevel, name);
     }]>,
-    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "bool":$isTopLevel), [{
+    OpBuilder<(ins "hw::InnerSymAttr":$inner_sym, "bool":$isTopLevel, CArg<"mlir::StringAttr", "nullptr">:$name), [{
       auto region = $_state.addRegion();
       region->push_back(new Block());
       $_state.addAttribute(getInnerSymAttrName($_state.name), inner_sym);
       if (isTopLevel)
         $_state.addAttribute(getIsTopLevelAttrName($_state.name), $_builder.getUnitAttr());
+      if(name)
+        $_state.addAttribute(getNameAttrName($_state.name), name);
     }]>
   ];
 }
@@ -740,7 +731,7 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
       ParentOneOf<["ClassOp", "ContainerOp"]>,
       InferTypeOpInterface,
       HasCustomSSAName,
-      DeclareOpInterfaceMethods<InnerSymbol,["getTargetResultIndex"]>
+      NamedInnerSymbol
   ])> {
 
   let description = [{
@@ -749,7 +740,7 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
     related, and all references to a port is done through the port symbol.
   }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$name, InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type);
+  let arguments = (ins InnerSymAttr:$inner_sym, TypeAttrOf<AnyType>:$type, OptionalAttr<StrAttr>:$name);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
     ($name^)? `sym` $inner_sym `:` $type attr-dict
@@ -758,10 +749,6 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
   let extraClassDeclaration = [{
     Type getPortType() {
       return getTypeAttr().getValue();
-    }
-
-    mlir::StringAttr getPortName() {
-      return getInnerSymAttr().getSymName();
     }
 
     static ibis::Direction getPortDirection();
@@ -779,6 +766,11 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
         getPortDirection()));
       return success();
     }
+
+    // For hw:InnerSymbol - the symbol targets the operation and not any result.
+    static std::optional<size_t> getTargetResultIndex() {
+      return std::nullopt;
+    }
   }];
 
   let hasVerifier = 1;
@@ -790,15 +782,6 @@ class PortLikeOp<string mnemonic, list<Trait> traits = []> :
         return emitOpError("port type cannot be a scope reference");
 
       return success();
-    }
-
-    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-      setNameFn(getResult(), getPortName());
-    }
-
-    // For hw:InnerSymbol - the symbol targets the operation and not any result.
-    std::optional<size_t> $cppClass::getTargetResultIndex() {
-      return std::nullopt;
     }
   }];
 }
@@ -836,10 +819,6 @@ class WireLikeOp<string mnemonic, list<Trait> traits = []> :
       return getPort().getType();
     }
 
-    mlir::StringAttr getPortName() {
-      return getInnerSymAttr().getSymName();
-    }
-
     static ibis::Direction getPortDirection();
   }];
 
@@ -869,7 +848,7 @@ def InputWireOp : WireLikeOp<"wire.input", [
     of type `T` which represents the value to-be-written to the wire.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym);
+  let arguments = (ins InnerSymAttr:$inner_sym, OptionalAttr<StrAttr>:$name);
   let results = (outs PortRefType:$port, AnyType:$output);
   let assemblyFormat = [{
     $inner_sym `:` qualified(type($output)) attr-dict
@@ -879,19 +858,13 @@ def InputWireOp : WireLikeOp<"wire.input", [
     ibis::Direction $cppClass::getPortDirection() {
       return ibis::Direction::Input;
     }
-
-    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-      setNameFn(getPort(), getPortName());
-      setNameFn(getOutput(), StringAttr::get(getContext(),
-        getPortName().strref() + ".out").strref());
-    }
   }];
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "Type":$innerPortType), [{
+    OpBuilder<(ins "StringAttr":$inner_sym, "Type":$innerPortType, CArg<"mlir::StringAttr", "nullptr">:$name), [{
       build($_builder, $_state,
         {$_builder.getType<PortRefType>(
-          innerPortType, ibis::Direction::Input), innerPortType}, hw::InnerSymAttr::get(name));
+          innerPortType, ibis::Direction::Input), innerPortType}, hw::InnerSymAttr::get(inner_sym), name);
     }]>
   ];
 
@@ -908,7 +881,7 @@ def OutputWireOp : WireLikeOp<"wire.output", [
     on the output portref.
   }];
 
-  let arguments = (ins InnerSymAttr:$inner_sym, AnyType:$input);
+  let arguments = (ins InnerSymAttr:$inner_sym, AnyType:$input, OptionalAttr<StrAttr>:$name);
   let results = (outs PortRefType:$port);
   let assemblyFormat = [{
     $inner_sym `,` $input `:` qualified(type($input)) attr-dict
@@ -917,10 +890,6 @@ def OutputWireOp : WireLikeOp<"wire.output", [
   let extraWireClassDefinition = [{
     ibis::Direction $cppClass::getPortDirection() {
       return ibis::Direction::Output;
-    }
-
-    void $cppClass::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-      setNameFn(getPort(), getPortName());
     }
   }];
 

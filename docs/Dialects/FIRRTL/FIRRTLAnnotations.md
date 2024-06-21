@@ -1458,6 +1458,26 @@ Example:
 }
 ```
 
+### OutputDirAnnotation
+
+| Property   | Type   | Description                             |
+| ---------- | ------ | --------------------------------------- |
+| class      | string | `circt.OutputDirAnnotation`             |
+| dirname    | string | The output directory                    |
+| target     | string | Reference target                        |
+
+Specify the output directory for a module. The target must be a public module,
+and must be local.
+
+Example:
+```json
+{
+  "class": "circt.OutputDirAnnotation",
+  "dirname": "verification",
+  "target": "~Foo|Bar"
+}
+```
+
 ## Attributes in SV
 
 Some annotations transform into attributes consumed by non-FIRRTL passes.  This

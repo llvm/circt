@@ -55,9 +55,8 @@ public:
             LTLRepeatIntrinsicOp, LTLGoToRepeatIntrinsicOp,
             LTLNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
             LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
-            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp,
-            LTLDisableIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
-            HasBeenResetIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp, Mux2CellIntrinsicOp,
+            Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -186,7 +185,6 @@ public:
   HANDLE(LTLUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLClockIntrinsicOp, Unhandled);
-  HANDLE(LTLDisableIntrinsicOp, Unhandled);
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
   HANDLE(HasBeenResetIntrinsicOp, Unhandled);
@@ -347,6 +345,48 @@ public:
 #undef HANDLE
 };
 
+/// StmtExprVisitor is a visitor for FIRRTL operation that has an optional
+/// result.
+template <typename ConcreteType, typename ResultType = void,
+          typename... ExtraArgs>
+class StmtExprVisitor {
+public:
+  ResultType dispatchStmtExprVisitor(Operation *op, ExtraArgs... args) {
+    auto *thisCast = static_cast<ConcreteType *>(this);
+    return TypeSwitch<Operation *, ResultType>(op)
+        .template Case<GenericIntrinsicOp, DPICallIntrinsicOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitStmtExpr(expr, args...);
+            })
+        .Default([&](auto expr) -> ResultType {
+          return thisCast->visitInvalidStmtExpr(op, args...);
+        });
+  }
+
+  /// This callback is invoked on any non-StmtExpr operations.
+  ResultType visitInvalidStmtExpr(Operation *op, ExtraArgs... args) {
+    op->emitOpError("unknown FIRRTL stmt expression");
+    abort();
+  }
+
+  /// This callback is invoked on any StmtExpr operations that are not handled
+  /// by the concrete visitor.
+  ResultType visitUnhandledStmtExpr(Operation *op, ExtraArgs... args) {
+    return ResultType();
+  }
+
+#define HANDLE(OPTYPE, OPKIND)                                                 \
+  ResultType visitStmtExpr(OPTYPE op, ExtraArgs... args) {                     \
+    return static_cast<ConcreteType *>(this)->visit##OPKIND##StmtExpr(         \
+        op, args...);                                                          \
+  }
+
+  // Statement expressions.
+  HANDLE(DPICallIntrinsicOp, Unhandled);
+  HANDLE(GenericIntrinsicOp, Unhandled);
+#undef HANDLE
+};
+
 /// FIRRTLVisitor allows you to visit all of the expr/stmt/decls with one class
 /// declaration.
 ///
@@ -359,18 +399,12 @@ template <typename ConcreteType, typename ResultType = void,
 class FIRRTLVisitor
     : public ExprVisitor<ConcreteType, ResultType, ExtraArgs...>,
       public StmtVisitor<ConcreteType, ResultType, ExtraArgs...>,
-      public DeclVisitor<ConcreteType, ResultType, ExtraArgs...> {
+      public DeclVisitor<ConcreteType, ResultType, ExtraArgs...>,
+      public StmtExprVisitor<ConcreteType, ResultType, ExtraArgs...> {
 public:
   /// This is the main entrypoint for the FIRRTLVisitor.
   ResultType dispatchVisitor(Operation *op, ExtraArgs... args) {
     return this->dispatchExprVisitor(op, args...);
-  }
-
-  /// Special handling for generic intrinsic op which aren't quite expressions
-  /// nor statements in the usual FIRRTL sense.
-  /// Refactor into specific visitor instead of adding more here.
-  ResultType visitIntrinsicOp(GenericIntrinsicOp op, ExtraArgs... args) {
-    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 
   // Chain from each visitor onto the next one.
@@ -381,15 +415,10 @@ public:
     return this->dispatchDeclVisitor(op, args...);
   }
   ResultType visitInvalidDecl(Operation *op, ExtraArgs... args) {
-    auto *thisCast = static_cast<ConcreteType *>(this);
-    return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<GenericIntrinsicOp>(
-            [&](auto genIntrinsicOp) -> ResultType {
-              return thisCast->visitIntrinsicOp(genIntrinsicOp, args...);
-            })
-        .Default([&](auto expr) -> ResultType {
-          return thisCast->visitInvalidOp(op, args...);
-        });
+    return this->dispatchStmtExprVisitor(op, args...);
+  }
+  ResultType visitInvalidStmtExpr(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitInvalidOp(op, args...);
   }
 
   // Default to chaining visitUnhandledXXX to visitUnhandledOp.
@@ -400,6 +429,9 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
   ResultType visitUnhandledDecl(Operation *op, ExtraArgs... args) {
+    return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
+  }
+  ResultType visitUnhandledStmtExpr(Operation *op, ExtraArgs... args) {
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);
   }
 

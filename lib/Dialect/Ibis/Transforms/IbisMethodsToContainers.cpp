@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
@@ -16,6 +18,13 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISCONVERTMETHODSTOCONTAINERS
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace circt;
 using namespace ibis;
@@ -45,7 +54,7 @@ struct DataflowMethodOpConversion
     for (auto [arg, name] : llvm::zip_equal(
              op.getArguments(), op.getArgNames().getAsRange<StringAttr>())) {
       auto port = rewriter.create<InputPortOp>(
-          arg.getLoc(), name, hw::InnerSymAttr::get(name), arg.getType());
+          arg.getLoc(), hw::InnerSymAttr::get(name), arg.getType(), name);
       argValues.push_back(rewriter.create<PortReadOp>(arg.getLoc(), port));
     }
 
@@ -54,7 +63,7 @@ struct DataflowMethodOpConversion
              cast<MethodLikeOpInterface>(op.getOperation()).getResultTypes())) {
       auto portName = rewriter.getStringAttr("out" + std::to_string(idx));
       auto port = rewriter.create<OutputPortOp>(
-          op.getLoc(), portName, hw::InnerSymAttr::get(portName), resType);
+          op.getLoc(), hw::InnerSymAttr::get(portName), resType, portName);
       rewriter.create<PortWriteOp>(op.getLoc(), port, returnOp.getOperand(idx));
     }
 
@@ -67,7 +76,8 @@ struct DataflowMethodOpConversion
 };
 
 struct MethodsToContainersPass
-    : public IbisConvertMethodsToContainersBase<MethodsToContainersPass> {
+    : public circt::ibis::impl::IbisConvertMethodsToContainersBase<
+          MethodsToContainersPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace

@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -22,12 +21,20 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 
 #define DEBUG_TYPE "firrtl-resolve-traces"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_RESOLVETRACES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -66,7 +73,8 @@ LogicalResult circt::firrtl::applyTraceName(const AnnoPathValue &target,
   return success();
 }
 
-struct ResolveTracesPass : public ResolveTracesBase<ResolveTracesPass> {
+struct ResolveTracesPass
+    : public circt::firrtl::impl::ResolveTracesBase<ResolveTracesPass> {
   using ResolveTracesBase::outputAnnotationFilename;
 
   void runOnOperation() override;

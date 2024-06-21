@@ -16,7 +16,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ExportVerilog.h"
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -56,8 +55,13 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace circt;
+namespace circt {
+#define GEN_PASS_DEF_EXPORTSPLITVERILOG
+#define GEN_PASS_DEF_EXPORTVERILOG
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
+using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
@@ -202,7 +206,7 @@ StringRef ExportVerilog::getSymOpName(Operation *symOp) {
   if (auto attr = symOp->getAttrOfType<StringAttr>("hw.verilogName"))
     return attr.getValue();
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp, FuncOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
@@ -356,69 +360,6 @@ static bool hasStructType(Type type) {
       .Default([](auto) { return false; });
 }
 // NOLINTEND(misc-no-recursion)
-
-/// Return the word (e.g. "reg") in Verilog to declare the specified thing.
-static StringRef getVerilogDeclWord(Operation *op,
-                                    const LoweringOptions &options) {
-  if (isa<RegOp>(op)) {
-    // Check if the type stored in this register is a struct or array of
-    // structs. In this case, according to spec section 6.8, the "reg" prefix
-    // should be left off.
-    auto elementType =
-        cast<InOutType>(op->getResult(0).getType()).getElementType();
-    if (isa<StructType>(elementType))
-      return "";
-    if (isa<UnionType>(elementType))
-      return "";
-    if (isa<EnumType>(elementType))
-      return "";
-    if (auto innerType = dyn_cast<ArrayType>(elementType)) {
-      while (isa<ArrayType>(innerType.getElementType()))
-        innerType = cast<ArrayType>(innerType.getElementType());
-      if (isa<StructType>(innerType.getElementType()) ||
-          isa<TypeAliasType>(innerType.getElementType()))
-        return "";
-    }
-    if (isa<TypeAliasType>(elementType))
-      return "";
-
-    return "reg";
-  }
-  if (isa<sv::WireOp>(op))
-    return "wire";
-  if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
-    return "localparam";
-
-  // Interfaces instances use the name of the declared interface.
-  if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-    return interface.getInterfaceType().getInterface().getValue();
-
-  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
-  // fall through to default.
-  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
-
-  if (isa<LogicOp>(op)) {
-    // If the logic op is defined in a procedural region, add 'automatic'
-    // keyword. If the op has a struct type, 'logic' keyword is already emitted
-    // within a struct type definition (e.g. struct packed {logic foo;}). So we
-    // should not emit extra 'logic'.
-    bool hasStruct = hasStructType(op->getResult(0).getType());
-    if (isProcedural)
-      return hasStruct ? "automatic" : "automatic logic";
-    return hasStruct ? "" : "logic";
-  }
-
-  if (!isProcedural)
-    return "wire";
-
-  // "automatic" values aren't allowed in disallowLocalVariables mode.
-  assert(!options.disallowLocalVariables && "automatic variables not allowed");
-
-  // If the type contains a struct type, we have to use only "automatic" because
-  // "automatic struct" is syntactically correct.
-  return hasStructType(op->getResult(0).getType()) ? "automatic"
-                                                   : "automatic logic";
-}
 
 //===----------------------------------------------------------------------===//
 // Location comparison
@@ -838,9 +779,6 @@ static bool isExpressionUnableToInline(Operation *op,
       // Helper to determine if the use will be part of "event control",
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
-        // "disable iff" condition must be a name.
-        if (auto disableOp = dyn_cast<ltl::DisableOp>(user))
-          return disableOp.getCondition() == use.get();
         // LTL Clock up's clock operand must be a name.
         if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
           return clockOp.getClock() == use.get();
@@ -1498,11 +1436,13 @@ public:
   };
 
   void emitParameters(Operation *module, ArrayAttr params);
-  void emitPortList(Operation *module, const ModulePortInfo &portInfo);
+  void emitPortList(Operation *module, const ModulePortInfo &portInfo,
+                    bool emitAsTwoStateType = false);
 
   void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
+  void emitFunc(FuncOp);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -1534,7 +1474,8 @@ public:
   /// This returns true if anything was printed.
   bool printPackedType(Type type, raw_ostream &os, Location loc,
                        Type optionalAliasType = {}, bool implicitIntType = true,
-                       bool singleBitDefaultType = true);
+                       bool singleBitDefaultType = true,
+                       bool emitAsTwoStateType = false);
 
   /// Output the unpacked array dimensions.  This is the part of the type that
   /// is to the right of the name.
@@ -1572,6 +1513,79 @@ public:
 };
 
 } // end anonymous namespace
+
+/// Return the word (e.g. "reg") in Verilog to declare the specified thing.
+/// If `stripAutomatic` is true, "automatic" is not used even for a declaration
+/// in a non-procedural region.
+static StringRef getVerilogDeclWord(Operation *op,
+                                    const ModuleEmitter &emitter) {
+  if (isa<RegOp>(op)) {
+    // Check if the type stored in this register is a struct or array of
+    // structs. In this case, according to spec section 6.8, the "reg" prefix
+    // should be left off.
+    auto elementType =
+        cast<InOutType>(op->getResult(0).getType()).getElementType();
+    if (isa<StructType>(elementType))
+      return "";
+    if (isa<UnionType>(elementType))
+      return "";
+    if (isa<EnumType>(elementType))
+      return "";
+    if (auto innerType = dyn_cast<ArrayType>(elementType)) {
+      while (isa<ArrayType>(innerType.getElementType()))
+        innerType = cast<ArrayType>(innerType.getElementType());
+      if (isa<StructType>(innerType.getElementType()) ||
+          isa<TypeAliasType>(innerType.getElementType()))
+        return "";
+    }
+    if (isa<TypeAliasType>(elementType))
+      return "";
+
+    return "reg";
+  }
+  if (isa<sv::WireOp>(op))
+    return "wire";
+  if (isa<ConstantOp, AggregateConstantOp, LocalParamOp, ParamValueOp>(op))
+    return "localparam";
+
+  // Interfaces instances use the name of the declared interface.
+  if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
+    return interface.getInterfaceType().getInterface().getValue();
+
+  // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
+  // fall through to default.
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  // If this decl is within a function, "automatic" is not needed because
+  // "automatic" is added to its definition.
+  bool stripAutomatic = isa_and_nonnull<FuncOp>(emitter.currentModuleOp);
+
+  if (isa<LogicOp>(op)) {
+    // If the logic op is defined in a procedural region, add 'automatic'
+    // keyword. If the op has a struct type, 'logic' keyword is already emitted
+    // within a struct type definition (e.g. struct packed {logic foo;}). So we
+    // should not emit extra 'logic'.
+    bool hasStruct = hasStructType(op->getResult(0).getType());
+    if (isProcedural && !stripAutomatic)
+      return hasStruct ? "automatic" : "automatic logic";
+    return hasStruct ? "" : "logic";
+  }
+
+  if (!isProcedural)
+    return "wire";
+
+  if (stripAutomatic)
+    return hasStructType(op->getResult(0).getType()) ? "" : "logic";
+
+  // "automatic" values aren't allowed in disallowLocalVariables mode.
+  assert(!emitter.state.options.disallowLocalVariables &&
+         "automatic variables not allowed");
+
+  // If the type contains a struct type, we have to use only "automatic" because
+  // "automatic struct" is syntactically correct.
+  return hasStructType(op->getResult(0).getType()) ? "automatic"
+                                                   : "automatic logic";
+}
 
 //===----------------------------------------------------------------------===//
 // Methods for formatting types.
@@ -1635,6 +1649,23 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   emitDims(dims, os, loc, *this);
 }
 
+/// Return a 2-state integer atom type name if the width matches. See Spec 6.8
+/// Variable declarations.
+static StringRef getTwoStateIntegerAtomType(size_t width) {
+  switch (width) {
+  case 8:
+    return "byte";
+  case 16:
+    return "shortint";
+  case 32:
+    return "int";
+  case 64:
+    return "longint";
+  default:
+    return "";
+  }
+}
+
 /// Output the basic type that consists of packed and primitive types.  This is
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
@@ -1648,16 +1679,28 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
                                 ModuleEmitter &emitter,
-                                Type optionalAliasType = {}) {
+                                Type optionalAliasType = {},
+                                bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
-        if (!implicitIntType)
-          os << "logic";
+        if (emitAsTwoStateType && dims.empty()) {
+          auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
+          if (!typeName.empty()) {
+            os << typeName;
+            return true;
+          }
+        }
         if (integerType.getWidth() != 1 || !singleBitDefaultType)
           dims.push_back(
               getInt32Attr(type.getContext(), integerType.getWidth()));
-        if (!dims.empty() && !implicitIntType)
-          os << ' ';
+
+        StringRef typeName =
+            (emitAsTwoStateType ? "bit" : (implicitIntType ? "" : "logic"));
+        if (!typeName.empty()) {
+          os << typeName;
+          if (!dims.empty())
+            os << ' ';
+        }
 
         emitDims(dims, os, loc, emitter);
         return !dims.empty() || !implicitIntType;
@@ -1673,12 +1716,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         dims.push_back(arrayType.getSizeAttr());
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
-                                   emitter);
+                                   emitter, /*optionalAliasType=*/{},
+                                   emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
         os << "enum ";
@@ -1711,7 +1756,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims,
                               /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+                              /*singleBitDefaultType=*/true, emitter,
+                              /*optionalAliasType=*/{}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << "; ";
@@ -1739,23 +1785,24 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           if (needsPadding) {
             os << " struct packed {";
             if (element.offset) {
-              os << "logic [" << element.offset - 1 << ":0] "
+              os << (emitAsTwoStateType ? "bit" : "logic") << " ["
+                 << element.offset - 1 << ":0] "
                  << "__pre_padding_" << element.name.getValue() << "; ";
             }
           }
 
           SmallVector<Attribute, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
-                              structDims,
-                              /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true, emitter);
+          printPackedTypeImpl(
+              stripUnpackedTypes(element.type), os, loc, structDims,
+              /*implicitIntType=*/false,
+              /*singleBitDefaultType=*/true, emitter, {}, emitAsTwoStateType);
           os << ' ' << emitter.getVerilogStructFieldName(element.name);
           emitter.printUnpackedTypePostfix(element.type, os);
           os << ";";
 
           if (needsPadding) {
             if (elementWidth + (int64_t)element.offset < unionWidth) {
-              os << " logic ["
+              os << " " << (emitAsTwoStateType ? "bit" : "logic") << " ["
                  << unionWidth - (elementWidth + element.offset) - 1 << ":0] "
                  << "__post_padding_" << element.name.getValue() << ";";
             }
@@ -1804,15 +1851,19 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 ///        struct fields and typedefs.
 ///  * When `singleBitDefaultType` is false, single bit values are printed as
 ///       `[0:0]`.  This is used in parameter lists.
+///  * When `emitAsTwoStateType` is true, a "bit" is printed. This is used in
+///        DPI function import statement.
 ///
 /// This returns true if anything was printed.
 bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
                                     Type optionalAliasType,
                                     bool implicitIntType,
-                                    bool singleBitDefaultType) {
+                                    bool singleBitDefaultType,
+                                    bool emitAsTwoStateType) {
   SmallVector<Attribute, 8> packedDimensions;
   return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
-                             singleBitDefaultType, *this, optionalAliasType);
+                             singleBitDefaultType, *this, optionalAliasType,
+                             emitAsTwoStateType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -3399,15 +3450,15 @@ public:
     assert(state.pp.getListener() == &state.saver);
   }
 
-  /// Emit the specified value as an SVA property or sequence. This is the entry
-  /// point to print an entire tree of property or sequence expressions in one
-  /// go.
-  void emitProperty(
-      Value property,
+  /// Emit the specified value as an SVA property or sequence with an enable
+  /// signal. This is the entry point to print an entire tree of property or
+  /// sequence expressions in one go.
+  void emitEnabledProperty(
+      Value property, Value enable,
       PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
   // Emits a property that is directly associated to a single clock and a single
-  // disable. Note that it is illegal to nest disable or clock operations in the
+  // enable. Note that it is illegal to nest clock operations in the
   // property itself here.
   void emitClockedProperty(
       Value property, Value clock, ltl::ClockEdge edge, Value disable,
@@ -3436,7 +3487,6 @@ private:
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
-  EmittedProperty visitLTL(ltl::DisableOp op);
 
   void emitLTLConcat(ValueRange inputs);
 
@@ -3459,10 +3509,20 @@ private:
 };
 } // end anonymous namespace
 
-void PropertyEmitter::emitProperty(
-    Value property, PropertyPrecedence parenthesizeIfLooserThan) {
+void PropertyEmitter::emitEnabledProperty(
+    Value property, Value enable, PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
-  // Wrap to this column.
+
+  // If the property is tied to an enable, emit that.
+  if (enable) {
+    ps << "disable iff" << PP::nbsp << "(~(";
+    ps.scopedBox(PP::ibox2, [&] {
+      emitNestedProperty(enable, PropertyPrecedence::Unary);
+      ps << "))";
+    });
+    ps << PP::space;
+  }
+
   ps.scopedBox(PP::ibox0,
                [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
   // If we are not using an external token buffer provided through the
@@ -3473,7 +3533,7 @@ void PropertyEmitter::emitProperty(
 }
 
 void PropertyEmitter::emitClockedProperty(
-    Value property, Value clock, ltl::ClockEdge edge, Value disable,
+    Value property, Value clock, ltl::ClockEdge edge, Value enable,
     PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
   // Wrap to this column.
@@ -3484,12 +3544,15 @@ void PropertyEmitter::emitClockedProperty(
     ps << ")";
   });
 
-  ps << PP::space;
-  ps << "disable iff" << PP::nbsp << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(disable, PropertyPrecedence::Lowest);
-    ps << ")";
-  });
+  // If the property is tied to an enable, emit that.
+  if (enable) {
+    ps << PP::space;
+    ps << "disable iff" << PP::nbsp << "(~(";
+    ps.scopedBox(PP::ibox2, [&] {
+      emitNestedProperty(enable, PropertyPrecedence::Lowest);
+      ps << "))";
+    });
+  }
 
   ps << PP::space;
   ps.scopedBox(PP::ibox0,
@@ -3732,17 +3795,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
   return {PropertyPrecedence::Clocking};
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::DisableOp op) {
-  ps << "disable iff" << PP::nbsp << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(op.getCondition(), PropertyPrecedence::Lowest);
-    ps << ")";
-  });
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
-}
-
 // NOLINTEND(misc-no-recursion)
 
 //===----------------------------------------------------------------------===//
@@ -3780,15 +3832,15 @@ void NameCollector::collectNames(Block &block) {
     // Instances have an instance name to recognize but we don't need to look
     // at the result values since wires used by instances should be traversed
     // anyway.
-    if (isa<InstanceOp, InstanceChoiceOp, InterfaceInstanceOp>(op))
+    if (isa<InstanceOp, InstanceChoiceOp, InterfaceInstanceOp,
+            FuncCallProceduralOp, FuncCallOp>(op))
       continue;
     if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
 
     if (!isVerilogExpression(&op)) {
       for (auto result : op.getResults()) {
-        StringRef declName =
-            getVerilogDeclWord(&op, moduleEmitter.state.options);
+        StringRef declName = getVerilogDeclWord(&op, moduleEmitter);
         maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
         SmallString<16> typeString;
 
@@ -3882,6 +3934,7 @@ private:
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitSV(InterfaceInstanceOp op);
+  LogicalResult emitOutputLikeOp(Operation *op, const ModulePortInfo &ports);
   LogicalResult visitStmt(OutputOp op);
 
   LogicalResult visitStmt(InstanceOp op);
@@ -3955,19 +4008,25 @@ private:
                             const SmallPtrSetImpl<Operation *> &locationOps,
                             StringRef multiLineComment = StringRef());
 
-  LogicalResult emitVerifAssertLike(Operation *op, Value property,
+  LogicalResult emitVerifAssertLike(Operation *op, Value property, Value enable,
                                     PPExtString opName);
   LogicalResult visitVerif(verif::AssertOp op);
   LogicalResult visitVerif(verif::AssumeOp op);
   LogicalResult visitVerif(verif::CoverOp op);
 
   LogicalResult emitVerifClockedAssertLike(Operation *op, Value property,
-                                           Value disable, Value clock,
-                                           verif::ClockEdge edge,
-                                           PPExtString opName);
+                                           Value clock, verif::ClockEdge edge,
+                                           Value enable, PPExtString opName);
   LogicalResult visitVerif(verif::ClockedAssertOp op);
   LogicalResult visitVerif(verif::ClockedAssumeOp op);
   LogicalResult visitVerif(verif::ClockedCoverOp op);
+
+  LogicalResult visitSV(FuncDPIImportOp op);
+  template <typename CallOp>
+  LogicalResult emitFunctionCall(CallOp callOp);
+  LogicalResult visitSV(FuncCallProceduralOp op);
+  LogicalResult visitSV(FuncCallOp op);
+  LogicalResult visitSV(ReturnOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4050,9 +4109,9 @@ StmtEmitter::emitAssignLike(Op op, PPExtString syntax,
 }
 
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
-  // prepare assigns wires to instance outputs, but these are logically handled
-  // in the port binding list when outputing an instance.
-  if (dyn_cast_or_null<HWInstanceLike>(op.getSrc().getDefiningOp()))
+  // prepare assigns wires to instance outputs and function results, but these
+  // are logically handled in the port binding list when outputing an instance.
+  if (isa_and_nonnull<HWInstanceLike, FuncCallOp>(op.getSrc().getDefiningOp()))
     return success();
 
   if (emitter.assignsInlined.count(op))
@@ -4065,6 +4124,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
+  if (op.getSrc().getDefiningOp<FuncCallProceduralOp>())
+    return success();
+
   // If the assign is emitted into logic declaration, we must not emit again.
   if (emitter.assignsInlined.count(op))
     return success();
@@ -4166,16 +4228,16 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   return success();
 }
 
-/// For OutputOp we put "assign" statements at the end of the Verilog module to
-/// assign the module outputs to intermediate wires.
-LogicalResult StmtEmitter::visitStmt(OutputOp op) {
+/// For OutputOp and ReturnOp we put "assign" statements at the end of the
+/// Verilog module or function respectively to assign outputs to intermediate
+/// wires.
+LogicalResult StmtEmitter::emitOutputLikeOp(Operation *op,
+                                            const ModulePortInfo &ports) {
   SmallPtrSet<Operation *, 8> ops;
-  auto parent = op->getParentOfType<PortList>();
-
   size_t operandIndex = 0;
-  ModulePortInfo ports(parent.getPortList());
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   for (PortInfo port : ports.getOutputs()) {
-    auto operand = op.getOperand(operandIndex);
+    auto operand = op->getOperand(operandIndex);
     // Outputs that are set by the output port of an instance are handled
     // directly when the instance is emitted.
     // Keep synced with countStatements() and visitStmt(InstanceOp).
@@ -4194,8 +4256,9 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
       if (isZeroBit)
         ps << "// Zero width: ";
-
-      ps << "assign" << PP::space;
+      // Emit "assign" only in a non-procedural region.
+      if (!isProcedural)
+        ps << "assign" << PP::space;
       ps << PPExtString(port.getVerilogName());
       ps << PP::space << "=" << PP::space;
       ps.scopedBox(PP::ibox0, [&]() {
@@ -4216,6 +4279,12 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     ++operandIndex;
   }
   return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(OutputOp op) {
+  auto parent = op->getParentOfType<PortList>();
+  ModulePortInfo ports(parent.getPortList());
+  return emitOutputLikeOp(op, ports);
 }
 
 LogicalResult StmtEmitter::visitStmt(TypeScopeOp op) {
@@ -4256,6 +4325,113 @@ LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
   if (zeroBitType)
     ps << PP::end;
   emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+template <typename CallOpTy>
+LogicalResult StmtEmitter::emitFunctionCall(CallOpTy op) {
+  startStatement();
+
+  auto callee =
+      dyn_cast<FuncOp>(state.symbolCache.getDefinition(op.getCalleeAttr()));
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  assert(callee);
+
+  auto explicitReturn = op.getExplicitlyReturnedValue(callee);
+  if (explicitReturn) {
+    assert(explicitReturn.hasOneUse());
+    if (op->getParentOp()->template hasTrait<ProceduralRegion>()) {
+      auto bpassignOp = cast<sv::BPAssignOp>(*explicitReturn.user_begin());
+      emitExpression(bpassignOp.getDest(), ops);
+    } else {
+      auto assignOp = cast<sv::AssignOp>(*explicitReturn.user_begin());
+      ps << "assign" << PP::nbsp;
+      emitExpression(assignOp.getDest(), ops);
+    }
+    ps << PP::nbsp << "=" << PP::nbsp;
+  }
+
+  auto arguments = callee.getPortList(true);
+
+  ps << PPExtString(getSymOpName(callee)) << "(";
+
+  bool needsComma = false;
+  auto printArg = [&](Value value) {
+    if (needsComma)
+      ps << "," << PP::space;
+    emitExpression(value, ops);
+    needsComma = true;
+  };
+
+  ps.scopedBox(PP::ibox0, [&] {
+    unsigned inputIndex = 0, outputIndex = 0;
+    for (auto arg : arguments) {
+      if (arg.dir == hw::ModulePort::Output)
+        printArg(
+            op.getResults()[outputIndex++].getUsers().begin()->getOperand(0));
+      else
+        printArg(op.getInputs()[inputIndex++]);
+    }
+  });
+
+  ps << ");";
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(FuncCallProceduralOp op) {
+  return emitFunctionCall(op);
+}
+
+LogicalResult StmtEmitter::visitSV(FuncCallOp op) {
+  return emitFunctionCall(op);
+}
+
+template <typename PPS>
+void emitFunctionSignature(ModuleEmitter &emitter, PPS &ps, FuncOp op,
+                           bool isAutomatic = false,
+                           bool emitAsTwoStateType = false) {
+  ps << "function" << PP::nbsp;
+  if (isAutomatic)
+    ps << "automatic" << PP::nbsp;
+  auto retType = op.getExplicitlyReturnedType();
+  if (retType) {
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printPackedType(retType, os, op->getLoc(), {}, false, true,
+                              emitAsTwoStateType);
+    });
+  } else
+    ps << "void";
+  ps << PP::nbsp << PPExtString(getSymOpName(op));
+
+  emitter.emitPortList(
+      op, ModulePortInfo(op.getPortList(/*excludeExplicitReturn=*/true)), true);
+}
+
+LogicalResult StmtEmitter::visitSV(ReturnOp op) {
+  auto parent = op->getParentOfType<sv::FuncOp>();
+  ModulePortInfo ports(parent.getPortList(false));
+  return emitOutputLikeOp(op, ports);
+}
+
+LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
+  startStatement();
+
+  ps << "import" << PP::nbsp << "\"DPI-C\"" << PP::nbsp;
+
+  // Emit a linkage name if provided.
+  if (auto linkageName = importOp.getLinkageName())
+    ps << *linkageName << PP::nbsp << "=" << PP::nbsp;
+  auto op =
+      cast<FuncOp>(state.symbolCache.getDefinition(importOp.getCalleeAttr()));
+  assert(op.isDeclaration() && "function must be a declaration");
+  emitFunctionSignature(emitter, ps, op, /*isAutomatic=*/false,
+                        /*emitAsTwoStateType=*/true);
+  assert(state.pendingNewline);
+  ps << PP::newline;
+
   return success();
 }
 
@@ -4708,6 +4884,7 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.assert`, `verif.assume`, and `verif.cover`.
 LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
+                                               Value enable,
                                                PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
@@ -4720,8 +4897,9 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
   // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
   // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
   // procedural code".
+  Operation *parent = op->getParentOp();
   bool isTemporal = !property.getType().isSignlessInteger(1);
-  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  bool isProcedural = parent->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
   startStatement();
@@ -4736,7 +4914,7 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
       else
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
-        PropertyEmitter(emitter, ops).emitProperty(property);
+        PropertyEmitter(emitter, ops).emitEnabledProperty(property, enable);
         ps << ");";
       });
     });
@@ -4747,22 +4925,26 @@ LogicalResult StmtEmitter::emitVerifAssertLike(Operation *op, Value property,
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::AssertOp op) {
-  return emitVerifAssertLike(op, op.getProperty(), PPExtString("assert"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::AssumeOp op) {
-  return emitVerifAssertLike(op, op.getProperty(), PPExtString("assume"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::CoverOp op) {
-  return emitVerifAssertLike(op, op.getProperty(), PPExtString("cover"));
+  return emitVerifAssertLike(op, op.getProperty(), op.getEnable(),
+                             PPExtString("cover"));
 }
 
 /// Emit an assert-like operation from the `verif` dialect. This covers
 /// `verif.clocked_assert`, `verif.clocked_assume`, and `verif.clocked_cover`.
-LogicalResult StmtEmitter::emitVerifClockedAssertLike(
-    Operation *op, Value property, Value disable, Value clock,
-    verif::ClockEdge edge, PPExtString opName) {
+LogicalResult
+StmtEmitter::emitVerifClockedAssertLike(Operation *op, Value property,
+                                        Value clock, verif::ClockEdge edge,
+                                        Value enable, PPExtString opName) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4774,8 +4956,9 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
   // See IEEE 1800-2017 section 16.14.5 "Using concurrent assertion statements
   // outside procedural code" and 16.14.6 "Embedding concurrent assertions in
   // procedural code".
+  Operation *parent = op->getParentOp();
   bool isTemporal = !property.getType().isSignlessInteger(1);
-  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  bool isProcedural = parent->hasTrait<ProceduralRegion>();
   bool emitAsImmediate = !isTemporal && isProcedural;
 
   startStatement();
@@ -4792,7 +4975,7 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
       ps.scopedBox(PP::ibox2, [&]() {
         PropertyEmitter(emitter, ops)
             .emitClockedProperty(property, clock, verifToltlClockEdge(edge),
-                                 disable);
+                                 enable);
         ps << ");";
       });
     });
@@ -4804,20 +4987,20 @@ LogicalResult StmtEmitter::emitVerifClockedAssertLike(
 
 // FIXME: emit property assertion wrapped in a clock and disabled
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssertOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
                                     PPExtString("assert"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedAssumeOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
                                     PPExtString("assume"));
 }
 
 LogicalResult StmtEmitter::visitVerif(verif::ClockedCoverOp op) {
-  return emitVerifClockedAssertLike(op, op.getProperty(), op.getDisable(),
-                                    op.getClock(), op.getEdge(),
+  return emitVerifClockedAssertLike(op, op.getProperty(), op.getClock(),
+                                    op.getEdge(), op.getEnable(),
                                     PPExtString("cover"));
 }
 
@@ -5630,7 +5813,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
 
   // Emit the leading word, like 'wire', 'reg' or 'logic'.
   auto type = value.getType();
-  auto word = getVerilogDeclWord(op, state.options);
+  auto word = getVerilogDeclWord(op, emitter);
   auto isZeroBit = isZeroBitType(type);
   ps.scopedBox(isZeroBit ? PP::neverbox : PP::ibox2, [&]() {
     unsigned targetColumn = 0;
@@ -6057,7 +6240,8 @@ void ModuleEmitter::emitParameters(Operation *module, ArrayAttr params) {
 }
 
 void ModuleEmitter::emitPortList(Operation *module,
-                                 const ModulePortInfo &portInfo) {
+                                 const ModulePortInfo &portInfo,
+                                 bool emitAsTwoStateType) {
   ps << "(";
   if (portInfo.size())
     emitLocationInfo(module->getLoc());
@@ -6080,7 +6264,7 @@ void ModuleEmitter::emitPortList(Operation *module,
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
       printPackedType(stripUnpackedTypes(port.type), stringStream,
-                      module->getLoc());
+                      module->getLoc(), {}, true, true, emitAsTwoStateType);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -6252,6 +6436,24 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   currentModuleOp = nullptr;
 }
 
+void ModuleEmitter::emitFunc(FuncOp func) {
+  // Nothing to emit for a declaration.
+  if (func.isDeclaration())
+    return;
+
+  currentModuleOp = func;
+  startStatement();
+  ps.addCallback({func, true});
+  // A function is moduled as an automatic function.
+  emitFunctionSignature(*this, ps, func, /*isAutomatic=*/true);
+  // Emit the body of the module.
+  StmtEmitter(*this, state.options).emitStatementBlock(*func.getBodyBlock());
+  startStatement();
+  ps << "endfunction";
+  ps << PP::newline;
+  currentModuleOp = nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // Emitter for files & file lists.
 //===----------------------------------------------------------------------===//
@@ -6278,7 +6480,7 @@ void FileEmitter::emit(Block *block) {
   for (Operation &op : *block) {
     TypeSwitch<Operation *>(&op)
         .Case<emit::VerbatimOp, emit::RefOp>([&](auto op) { emitOp(op); })
-        .Case<VerbatimOp, IfDefOp, MacroDefOp>(
+        .Case<VerbatimOp, IfDefOp, MacroDefOp, sv::FuncDPIImportOp>(
             [&](auto op) { ModuleEmitter(state).emitStatement(op); })
         .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
         .Case<BindInterfaceOp>(
@@ -6315,6 +6517,7 @@ void FileEmitter::emitOp(emit::RefOp op) {
   assert(isa<emit::Emittable>(targetOp) && "target must be emittable");
 
   TypeSwitch<Operation *>(targetOp)
+      .Case<sv::FuncOp>([&](auto func) { ModuleEmitter(state).emitFunc(func); })
       .Case<hw::HWModuleOp>(
           [&](auto module) { ModuleEmitter(state).emitHWModule(module); })
       .Case<TypeScopeOp>([&](auto typedecls) {
@@ -6505,13 +6708,24 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, MacroDefOp>([&](Operation *op) {
+        .Case<VerbatimOp, IfDefOp, MacroDefOp, FuncDPIImportOp>(
+            [&](Operation *op) {
+              // Emit into a separate file using the specified file name or
+              // replicate the operation in each outputfile.
+              if (!attr) {
+                replicatedOps.push_back(op);
+              } else
+                separateFile(op, "");
+            })
+        .Case<FuncOp>([&](auto op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
           if (!attr) {
             replicatedOps.push_back(op);
           } else
             separateFile(op, "");
+
+          symbolCache.addDefinition(op.getSymNameAttr(), op);
         })
         .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
@@ -6634,8 +6848,9 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       })
       .Case<emit::FileOp, emit::FileListOp, emit::FragmentOp>(
           [&](auto op) { FileEmitter(state).emit(op); })
-      .Case<MacroDefOp>(
+      .Case<MacroDefOp, FuncDPIImportOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
+      .Case<FuncOp>([&](auto op) { ModuleEmitter(state).emitFunc(op); })
       .Default([&](auto *op) {
         state.encounteredError = true;
         op->emitError("unknown operation (ExportVerilog::emitOperation)");
@@ -6795,7 +7010,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 namespace {
 
-struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+struct ExportVerilogPass
+    : public circt::impl::ExportVerilogBase<ExportVerilogPass> {
   ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
@@ -6975,7 +7191,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 namespace {
 
 struct ExportSplitVerilogPass
-    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
+    : public circt::impl::ExportSplitVerilogBase<ExportSplitVerilogPass> {
   ExportSplitVerilogPass(StringRef directory) {
     directoryName = directory.str();
   }

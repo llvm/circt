@@ -74,10 +74,10 @@ circuit Testbench: %[[
   },
   {
     "class": "sifive.enterprise.firrtl.TestBenchDirAnnotation",
-    "dirname": "testbench"
+    "dirname": "verification/testbench"
   }
 ]]
-  layer A, bind:
+  layer A, bind, "verification/testbench":
 
   module Foo:
     node a = UInt<1>(0)
@@ -95,7 +95,7 @@ circuit Testbench: %[[
     inst qux of Qux
     inst quz of Quz
 
-  module DUT:
+  public module DUT:
     inst foo of Foo
     inst baz of Baz
     inst grandCentral of GrandCentral
@@ -118,10 +118,10 @@ circuit Testbench: %[[
 
 ; The following modules are all in the Testbench directory.
 ;
-; CHECK-DAG: FILE "testbench{{[/\]}}Bar.sv"
-; CHECK-DAG: FILE "testbench{{[/\]}}DUT_A.sv"
-; CHECK-DAG: FILE "testbench{{[/\]}}Testbench.sv"
-; CHECK-DAG: FILE "testbench{{[/\]}}layers_Testbench_A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}layers_Testbench_A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Bar.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}DUT_A.sv"
+; CHECK-DAG: FILE "verification{{[/\]}}testbench{{[/\]}}Testbench.sv"
 
 ; The following modules are all in the Grand Central directory.
 ;

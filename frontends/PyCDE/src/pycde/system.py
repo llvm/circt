@@ -147,7 +147,7 @@ class System:
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
-      if isinstance(op, hw.HWModuleOp):
+      if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
         from .module import import_hw_module
         im = import_hw_module(op)
         self._create_circt_mod(im._builder)
@@ -158,6 +158,8 @@ class System:
         ret[ir.StringAttr(op.sym_name).value] = ram
         self.body.append(op)
       else:
+        if "sym_name" in op.attributes:
+          ret[ir.StringAttr(op.attributes["sym_name"]).value] = op
         # TODO: do symbol renaming.
         self.body.append(op)
     return ret

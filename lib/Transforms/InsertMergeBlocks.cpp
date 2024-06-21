@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Analysis/CFGLoopInfo.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
@@ -15,8 +14,14 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_INSERTMERGEBLOCKS
+#include "circt/Transforms/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -344,7 +349,7 @@ private:
 };
 
 struct InsertMergeBlocksPass
-    : public InsertMergeBlocksBase<InsertMergeBlocksPass> {
+    : public circt::impl::InsertMergeBlocksBase<InsertMergeBlocksPass> {
 public:
   void runOnOperation() override {
     auto *ctx = &getContext();

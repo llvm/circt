@@ -1036,46 +1036,6 @@ firrtl.circuit "UnrealizedConversionCast" {
 
 // -----
 
-firrtl.circuit "OutsideDialect" {
-  firrtl.module @OutsideDialect() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    // expected-remark @below {{Non-firrtl operations detected, combinatorial loop checking may miss some loops.}}
-    %a = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
-    // Should only trigger once
-    %c = "foo"(%b) : (!firrtl.uint<32>) -> !firrtl.uint<32>
-    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
-  }
-}
-
-// -----
-
-// Foreign op looks sink like, no loop
-firrtl.circuit "OutsideDialectSink" {
-  firrtl.module @OutsideDialectSink() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    "foo"(%b) : (!firrtl.uint<32>) -> ()
-  }
-}
-
-// -----
-
-// Foreign op looks source like, no loop
-firrtl.circuit "OutsideDialectSource" {
-  firrtl.module @OutsideDialectSource() {
-    // Other dialects might need to close loops in their own ops. Ignore 
-    // ops from other dialects
-    %b = firrtl.wire   : !firrtl.uint<32>
-    %a = "foo"() : () -> !firrtl.uint<32>
-    firrtl.matchingconnect %b, %a : !firrtl.uint<32>
-  }
-}
-
-// -----
-
 // Check RWProbeOp + force doesn't crash.
 // No loop here.
 firrtl.circuit "Issue6820" {
@@ -1091,5 +1051,59 @@ firrtl.circuit "Issue6820" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
     firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.clock
+  }
+}
+
+// -----
+
+// Single-element combinational loop under a when.
+firrtl.circuit "WhenLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: WhenLoop.{w <- w}}}
+  firrtl.module @WhenLoop(in %in : !firrtl.uint<1>) {
+    firrtl.when %in : !firrtl.uint<1> {
+      %w = firrtl.wire  : !firrtl.uint<8>
+      firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop under a match.
+firrtl.circuit "MatchLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: MatchLoop.{w <- w}}}
+  firrtl.module @MatchLoop(in %in : !firrtl.enum<a: uint<1>>) {
+    firrtl.match %in : !firrtl.enum<a: uint<1>> {
+      case a(%arg0) {
+        %w = firrtl.wire  : !firrtl.uint<8>
+        firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+      }
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop under a layerblock.
+firrtl.circuit "LayerLoop"   {
+  firrtl.layer @A bind { }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: LayerLoop.{w <- w}}}
+  firrtl.module @LayerLoop() {
+    firrtl.layerblock @A {
+      %w = firrtl.wire  : !firrtl.uint<8>
+      firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop with multiple connects.
+firrtl.circuit "MultipleConnects"   {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: MultipleConnects.{w <- w}}}
+  firrtl.module @MultipleConnects(in %in : !firrtl.uint<8>) {
+    %w = firrtl.wire  : !firrtl.uint<8>
+    firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %w, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

@@ -1,8 +1,9 @@
 ; RUN: firtool --preserve-values=named %s | FileCheck %s 
 
+FIRRTL version 4.0.0
 circuit Foo:
   ; CHECK-LABEL: module Foo
-  module Foo:
+  public module Foo:
     input a: {a: UInt<1>, flip b: UInt<1>}
     output b: {a: UInt<1>, flip b: UInt<1>}
 

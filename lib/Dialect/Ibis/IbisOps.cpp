@@ -46,7 +46,7 @@ static llvm::raw_string_ostream &genValueName(llvm::raw_string_ostream &os,
       .Case<ThisOp>([&](auto op) { os << "this"; })
       .Case<InstanceOp, ContainerInstanceOp>(
           [&](auto op) { os << op.getInstanceNameAttr().strref(); })
-      .Case<PortOpInterface>([&](auto op) { os << op.getPortName().strref(); })
+      .Case<PortOpInterface>([&](auto op) { os << op.getNameHint(); })
       .Case<PathOp>([&](auto op) {
         llvm::interleave(
             op.getPathAsRange(), os,
@@ -518,6 +518,18 @@ LogicalResult OutputPortOp::canonicalize(OutputPortOp op,
   return failure();
 }
 
+void OutputPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getPort(), genValueNameAttr(getPort()));
+}
+
+//===----------------------------------------------------------------------===//
+// InputPortOp
+//===----------------------------------------------------------------------===//
+
+void InputPortOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getPort(), genValueNameAttr(getPort()));
+}
+
 //===----------------------------------------------------------------------===//
 // InputWireOp
 //===----------------------------------------------------------------------===//
@@ -538,6 +550,13 @@ LogicalResult InputWireOp::canonicalize(InputWireOp op,
   }
 
   return failure();
+}
+
+void InputWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto name = genValueNameAttr(getOutput());
+  setNameFn(getPort(), name);
+  setNameFn(getOutput(),
+            StringAttr::get(getContext(), name.strref() + ".out").strref());
 }
 
 //===----------------------------------------------------------------------===//
@@ -561,6 +580,10 @@ LogicalResult OutputWireOp::canonicalize(OutputWireOp op,
   }
 
   return failure();
+}
+
+void OutputWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getPort(), genValueNameAttr(getPort()));
 }
 
 //===----------------------------------------------------------------------===//

@@ -10,13 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/OwningModuleCache.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -24,11 +24,19 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERCLASSES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -189,7 +197,8 @@ struct LoweringState {
   DenseMap<om::ClassLike, ClassLoweringState> classLoweringStateTable;
 };
 
-struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
+struct LowerClassesPass
+    : public circt::firrtl::impl::LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
@@ -293,27 +302,15 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
   SmallVector<PathTracker> trackers;
 
-  // First allocate module namespaces. Don't capture a namespace reference at
-  // this point since they could be invalidated when DenseMap grows.
   for (auto *node : instanceGraph)
-    if (auto module = node->getModule<FModuleLike>())
-      (void)namespaces.get(module);
-
-  // Prepare workers.
-  for (auto *node : instanceGraph)
-    if (auto module = node->getModule<FModuleLike>())
-      trackers.emplace_back(module, namespaces, instanceGraph, symbolTable,
-                            owningModules);
-
-  if (failed(failableParallelForEach(
-          circuit.getContext(), trackers,
-          [](PathTracker &tracker) { return tracker.runOnModule(); })))
-    return failure();
-
-  // Update the pathInfoTable sequentially.
-  for (const auto &tracker : trackers)
-    if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
-      return failure();
+    if (auto module = node->getModule<FModuleLike>()) {
+      PathTracker tracker(module, namespaces, instanceGraph, symbolTable,
+                          owningModules);
+      if (failed(tracker.runOnModule()))
+        return failure();
+      if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
+        return failure();
+    }
 
   return success();
 }
