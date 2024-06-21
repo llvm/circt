@@ -43,9 +43,8 @@ using mlir::TypeStorageAllocator;
 /// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
-  if (isConst(type)) {
+  if (isConst(type))
     os << "const.";
-  }
 
   auto printWidthQualifier = [&](std::optional<int32_t> width) {
     if (width)
@@ -113,6 +112,11 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
         if (auto layer = refType.getLayer())
           os << ", " << layer;
         os << '>';
+      })
+      .Case<LHSType>([&](LHSType lhstype) {
+        os << "lhs<";
+        printNestedType(lhstype.getType(), os);
+        os << ">";
       })
       .Case<StringType>([&](auto stringType) { os << "string"; })
       .Case<FIntegerType>([&](auto integerType) { os << "integer"; })
@@ -349,6 +353,16 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
       return failure();
 
     return result = RefType::get(type, false, layer), success();
+  }
+  if (name == "lhs") {
+    FIRRTLType type;
+    if (parser.parseLess() || parseNestedType(type, parser) ||
+        parser.parseGreater())
+      return failure();
+    if (!isa<FIRRTLBaseType>(type))
+      return parser.emitError(parser.getNameLoc(), "expected base type");
+    result = parser.getChecked<LHSType>(context, cast<FIRRTLBaseType>(type));
+    return failure(!result);
   }
   if (name == "rwprobe") {
     FIRRTLBaseType type;
@@ -659,6 +673,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
         return RecursiveTypeProperties{true,  false, false, false,
                                        false, false, false};
       })
+      .Case<LHSType>(
+          [](auto type) { return type.getType().getRecursiveTypeProperties(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return RecursiveTypeProperties{};
@@ -1766,6 +1782,9 @@ OpenBundleType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
       return emitErrorFn()
              << "'const' bundle cannot have references, but element "
              << element.name << " has type " << element.type;
+    if (type_isa<LHSType>(element.type))
+      return emitErrorFn() << "bundle element " << element.name
+                           << " cannot have a left-hand side type";
   }
 
   return success();
@@ -2031,6 +2050,8 @@ OpenVectorType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
                        bool isConst) {
   if (elementType.containsReference() && isConst)
     return emitErrorFn() << "vector cannot be const with references";
+  if (type_isa<LHSType>(elementType))
+    return emitErrorFn() << "vector cannot have a left-hand side type";
   return success();
 }
 
@@ -2366,6 +2387,28 @@ uint64_t BaseTypeAliasType::getFieldID(uint64_t index) const {
 std::pair<uint64_t, uint64_t>
 BaseTypeAliasType::getIndexAndSubfieldID(uint64_t fieldID) const {
   return hw::FieldIdImpl::getIndexAndSubfieldID(getInnerType(), fieldID);
+}
+
+//===----------------------------------------------------------------------===//
+// LHSType
+//===----------------------------------------------------------------------===//
+
+LHSType LHSType::get(FIRRTLBaseType type) {
+  return LHSType::get(type.getContext(), type);
+}
+
+LogicalResult LHSType::verify(function_ref<InFlightDiagnostic()> emitError,
+                              FIRRTLBaseType type) {
+  if (type.containsAnalog())
+    return emitError() << "lhs type cannot contain an AnalogType";
+  if (!type.isPassive())
+    return emitError() << "lhs type cannot contain a non-passive type";
+  if (type.containsReference())
+    return emitError() << "lhs type cannot contain a reference";
+  if (type_isa<LHSType>(type))
+    return emitError() << "lhs type cannot contain a lhs type";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

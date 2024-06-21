@@ -1,4 +1,4 @@
-// RUN: circt-opt --simplify-procedures %s | FileCheck %s
+// RUN: circt-opt --moore-simplify-procedures %s | FileCheck %s
 
 // CHECK-LABEL: moore.module @Foo()
 moore.module @Foo() {
