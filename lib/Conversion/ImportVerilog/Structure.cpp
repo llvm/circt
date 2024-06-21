@@ -107,7 +107,8 @@ struct MemberVisitor {
 
     const slang::ast::InstanceBodySymbol *duplicateInstanceBodySymbol = nullptr;
     for (auto const &module : context.modules) {
-      if (instNode.body.name == module.first->name) {
+      if (instNode.body.name == module.first->name &&
+          instNode.getParentScope() == module.getFirst()->getParentScope()) {
         duplicateInstanceBodySymbol = module.first;
         break;
       }
