@@ -103,11 +103,15 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // ---- Traditional cosim DPI entry points ----
 
+// Lookups for registered ports. As a future optimization, change the DPI API to
+// return a handle when registering wherein said handle is a pointer to a port.
 std::map<std::string, ReadChannelPort &> readPorts;
 std::map<std::string, WriteChannelPort &> writePorts;
 
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
+// TODO: Change this by breaking it in two functions, one for read and one for
+// write. Also return the pointer as a handle.
 DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
                                   int fromHostTypeSize, char *toHostTypeIdC,
                                   int toHostTypeSize) {
@@ -311,6 +315,10 @@ sv2cCosimserverSetManifest(int esiVersion,
 }
 
 // ---- Low-level cosim DPI entry points ----
+
+// TODO: These had the shit broken outta them in the gRPC conversion. We're not
+// actively using them at the moment, but they'll have to be revived again in
+// the future.
 
 static bool mmioRegistered = false;
 DPI int sv2cCosimserverMMIORegister() {

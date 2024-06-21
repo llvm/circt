@@ -61,7 +61,8 @@ public:
   requestChannelsFor(AppIDPath, const BundleType *) override;
 
   // C++ doesn't have a mechanism to forward declare a nested class and we don't
-  // want to include the generated header here
+  // want to include the generated header here. So we have to wrap it in a
+  // forward-declared struct we write ourselves.
   struct StubContainer;
 
 protected:
@@ -71,7 +72,7 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  std::unique_ptr<StubContainer> rpcClient;
+  StubContainer *rpcClient;
 
   /// Get the type ID for a channel name.
   bool getChannelDesc(const std::string &channelName,

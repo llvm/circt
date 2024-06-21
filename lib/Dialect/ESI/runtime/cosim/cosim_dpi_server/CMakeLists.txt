@@ -16,7 +16,6 @@ set_target_properties(EsiCosimDpiServer
 add_dependencies(EsiCosimDpiServer ESIRuntime MtiPli)
 target_link_libraries(EsiCosimDpiServer
   PRIVATE
-  EsiCosimCapnp
   ESIRuntime
   CosimRpcServer
   MtiPli

@@ -25,8 +25,13 @@ class RpcServer {
 public:
   ~RpcServer();
 
+  /// Set the manifest and version. There is a race condition here in that the
+  /// RPC server can be started and a connection from the client could happen
+  /// before the manifest is set. TODO: rework the DPI API to require that the
+  /// manifest gets set first.
   void setManifest(int esiVersion, std::vector<uint8_t> compressedManifest);
 
+  /// Register a read or write port which communicates over RPC.
   ReadChannelPort &registerReadPort(const std::string &name,
                                     const std::string &type);
   WriteChannelPort &registerWritePort(const std::string &name,
@@ -35,6 +40,7 @@ public:
   void stop();
   void run(int port);
 
+  /// Hide the implementation details from this header file.
   class Impl;
 
 private:

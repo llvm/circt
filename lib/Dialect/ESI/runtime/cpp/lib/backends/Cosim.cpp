@@ -49,6 +49,7 @@ static void checkStatus(Status s, string msg) {
                         s.error_message() + " (" + s.error_details() + ")");
 }
 
+/// Hack around C++ not having a way to forward declare a nested class.
 struct esi::backends::cosim::CosimAccelerator::StubContainer {
   StubContainer(std::unique_ptr<ChannelServer::Stub> stub)
       : stub(std::move(stub)) {}
@@ -109,9 +110,13 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, string hostname,
   // Connect to the simulation.
   auto channel = grpc::CreateChannel(hostname + ":" + to_string(port),
                                      grpc::InsecureChannelCredentials());
-  rpcClient = std::make_unique<StubContainer>(ChannelServer::NewStub(channel));
+  rpcClient = new StubContainer(ChannelServer::NewStub(channel));
 }
-CosimAccelerator::~CosimAccelerator() { channels.clear(); }
+CosimAccelerator::~CosimAccelerator() {
+  if (rpcClient)
+    delete rpcClient;
+  channels.clear();
+}
 
 // TODO: Fix MMIO!
 // namespace {
@@ -153,9 +158,7 @@ CosimAccelerator::~CosimAccelerator() { channels.clear(); }
 namespace {
 class CosimSysInfo : public SysInfo {
 public:
-  CosimSysInfo(
-      const std::unique_ptr<esi::cosim::ChannelServer::Stub> &rpcClient)
-      : rpcClient(rpcClient) {}
+  CosimSysInfo(ChannelServer::Stub *rpcClient) : rpcClient(rpcClient) {}
 
   uint32_t getEsiVersion() const override {
     ::esi::cosim::Manifest response = getManifest();
@@ -172,6 +175,8 @@ public:
 private:
   ::esi::cosim::Manifest getManifest() const {
     ::esi::cosim::Manifest response;
+    // To get around the a race condition where the manifest may not be set yet,
+    // loop until it is. TODO: fix this with the DPI API change.
     do {
       ClientContext context;
       VoidMessage arg;
@@ -182,11 +187,12 @@ private:
     return response;
   }
 
-  const std::unique_ptr<esi::cosim::ChannelServer::Stub> &rpcClient;
+  esi::cosim::ChannelServer::Stub *rpcClient;
 };
 } // namespace
 
 namespace {
+/// Cosim client implementation of a write channel port.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
   WriteCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
@@ -204,6 +210,7 @@ public:
     assert(desc.name() == name);
   }
 
+  /// Send a write message to the server.
   void write(const MessageData &data) override {
     ClientContext context;
     AddressedMessage msg;
@@ -219,12 +226,16 @@ public:
 
 protected:
   ChannelServer::Stub *rpcClient;
+  /// The channel description as provided by the server.
   ChannelDesc desc;
+  /// The name of the channel from the manifest.
   string name;
 };
 } // namespace
 
 namespace {
+/// Cosim client implementation of a read channel port. Since gRPC read protocol
+/// streams messages back, this implementation is quite complex.
 class ReadCosimChannelPort
     : public ReadChannelPort,
       public grpc::ClientReadReactor<esi::cosim::Message> {
@@ -236,6 +247,8 @@ public:
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
   virtual void connect() override {
+    // Sanity checking.
+    ReadChannelPort::connect();
     if (desc.type() != getType()->getID())
       throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
                           getType()->getID() + ", got " + desc.type());
@@ -243,20 +256,31 @@ public:
       throw runtime_error("Channel '" + name + "' is not a to server channel");
     assert(desc.name() == name);
 
+    // Initiate a stream of messages from the server.
     context = new ClientContext();
     rpcClient->async()->ConnectToClientChannel(context, &desc, this);
     StartCall();
     StartRead(&incomingMessage);
   }
+
+  /// Gets called when there's a new message from the server. It'll be stored in
+  /// `incomingMessage`.
   void OnReadDone(bool ok) override {
     if (!ok)
+      // TODO: should we do something here?
       return;
+
+    // Read the delivered message and push it onto the queue.
     const std::string &messageString = incomingMessage.data();
     MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
                      messageString.size());
     messageQueue.push(data);
+
+    // Initiate the next read.
     StartRead(&incomingMessage);
   }
+
+  /// Disconnect this channel from the server.
   void disconnect() override {
     if (!context)
       return;
@@ -264,27 +288,31 @@ public:
     delete context;
     context = nullptr;
   }
-  bool read(MessageData &) override;
+
+  /// Poll the queue.
+  bool read(MessageData &data) override {
+    std::optional<MessageData> msg = messageQueue.pop();
+    if (!msg.has_value())
+      return false;
+    data = std::move(*msg);
+    return true;
+  }
 
 protected:
   ChannelServer::Stub *rpcClient;
+  /// The channel description as provided by the server.
   ChannelDesc desc;
+  /// The name of the channel from the manifest.
   string name;
 
   ClientContext *context;
+  /// Storage location for the incoming message.
   esi::cosim::Message incomingMessage;
+  /// Queue of messages read from the server.
   esi::utils::TSQueue<MessageData> messageQueue;
 };
 
 } // namespace
-
-bool ReadCosimChannelPort::read(MessageData &data) {
-  std::optional<MessageData> msg = messageQueue.pop();
-  if (!msg.has_value())
-    return false;
-  data = *msg;
-  return true;
-}
 
 map<string, ChannelPort &>
 CosimAccelerator::requestChannelsFor(AppIDPath idPath,
@@ -326,6 +354,9 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
   return channelResults;
 }
 
+/// Get the channel description for a channel name. Iterate through the list
+/// each time. Since this will only be called a small number of times on a small
+/// list, it's not worth doing anything fancy.
 bool CosimAccelerator::getChannelDesc(const string &channelName,
                                       ChannelDesc &desc) {
   ClientContext context;
@@ -368,7 +399,7 @@ Service *CosimAccelerator::createService(Service::Type svcType,
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:
-      return new CosimSysInfo(rpcClient->stub);
+      return new CosimSysInfo(rpcClient->stub.get());
     case ManifestMethod::MMIO:
       return new MMIOSysInfo(getService<services::MMIO>());
     }

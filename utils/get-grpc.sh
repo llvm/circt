@@ -12,7 +12,8 @@
 
 mkdir -p "$(dirname "$BASH_SOURCE[0]")/../ext"
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
-GRPC_VER=1.64.2
+# v1.54.2 is the version in Ubuntu 22.04
+GRPC_VER=1.54.2
 echo "Installing gRPC..."
 
 echo $EXT_DIR

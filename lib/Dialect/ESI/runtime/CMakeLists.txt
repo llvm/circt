@@ -37,7 +37,7 @@ find_package(ZLIB REQUIRED)
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
-  message("  -- ESI runtime pulling down json")
+  message("-- ESI runtime pulling down json")
   FetchContent_Declare(json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG        v3.11.3
@@ -163,6 +163,14 @@ if (XRT_PATH)
     ${ESIRuntimeLibDirs}
     ${XRT_PATH}/lib
   )
+  get_filename_component(XRT_SO ${XRT_PATH}/lib/libxrt_coreutil.so REALPATH)
+  install(FILES
+      ${XRT_SO}
+      ${XRT_PATH}/lib/libxrt_coreutil.so.2
+      ${XRT_PATH}/lib/libxrt_coreutil.so
+    DESTINATION lib
+    COMPONENT ESIRuntime
+  )
 endif()
 
 # The core API. For now, compile the backends into it directly.
@@ -181,16 +189,6 @@ install(TARGETS ESIRuntime
   DESTINATION lib
   COMPONENT ESIRuntime
 )
-install(IMPORTED_RUNTIME_ARTIFACTS ESIRuntime
-  RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  COMPONENT ESIRuntime
-)
-# install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-#   DESTINATION lib
-#   PRE_EXCLUDE_REGEXES .*
-#   COMPONENT ESIRuntime
-# )
 install(FILES ${ESIRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
