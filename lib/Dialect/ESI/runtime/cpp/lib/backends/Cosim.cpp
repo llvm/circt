@@ -29,8 +29,6 @@
 #include <iostream>
 #include <set>
 
-using namespace std;
-
 using namespace esi;
 using namespace esi::cosim;
 using namespace esi::services;
@@ -43,10 +41,11 @@ using grpc::ClientReaderWriter;
 using grpc::ClientWriter;
 using grpc::Status;
 
-static void checkStatus(Status s, const string &msg) {
+static void checkStatus(Status s, const std::string &msg) {
   if (!s.ok())
-    throw runtime_error(msg + ". Code " + to_string(s.error_code()) + ": " +
-                        s.error_message() + " (" + s.error_details() + ")");
+    throw std::runtime_error(msg + ". Code " + to_string(s.error_code()) +
+                             ": " + s.error_message() + " (" +
+                             s.error_details() + ")");
 }
 
 /// Hack around C++ not having a way to forward declare a nested class.
@@ -56,25 +55,25 @@ struct esi::backends::cosim::CosimAccelerator::StubContainer {
   std::unique_ptr<ChannelServer::Stub> stub;
 };
 
-/// Parse the connection string and instantiate the accelerator. Support the
-/// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
-/// the cosimulation when it starts (which is useful when it chooses its own
+/// Parse the connection std::string and instantiate the accelerator. Support
+/// the traditional 'host:port' syntax and a path to 'cosim.cfg' which is output
+/// by the cosimulation when it starts (which is useful when it chooses its own
 /// port).
-unique_ptr<AcceleratorConnection>
-CosimAccelerator::connect(Context &ctxt, string connectionString) {
-  string portStr;
-  string host = "localhost";
+std::unique_ptr<AcceleratorConnection>
+CosimAccelerator::connect(Context &ctxt, std::string connectionString) {
+  std::string portStr;
+  std::string host = "localhost";
 
   size_t colon;
-  if ((colon = connectionString.find(':')) != string::npos) {
+  if ((colon = connectionString.find(':')) != std::string::npos) {
     portStr = connectionString.substr(colon + 1);
     host = connectionString.substr(0, colon);
   } else if (connectionString.ends_with("cosim.cfg")) {
-    ifstream cfg(connectionString);
-    string line, key, value;
+    std::ifstream cfg(connectionString);
+    std::string line, key, value;
 
     while (getline(cfg, line))
-      if ((colon = line.find(":")) != string::npos) {
+      if ((colon = line.find(":")) != std::string::npos) {
         key = line.substr(0, colon);
         value = line.substr(colon + 1);
         if (key == "port")
@@ -84,7 +83,7 @@ CosimAccelerator::connect(Context &ctxt, string connectionString) {
       }
 
     if (portStr.size() == 0)
-      throw runtime_error("port line not found in file");
+      throw std::runtime_error("port line not found in file");
   } else if (connectionString == "env") {
     char *hostEnv = getenv("ESI_COSIM_HOST");
     if (hostEnv)
@@ -95,20 +94,21 @@ CosimAccelerator::connect(Context &ctxt, string connectionString) {
     if (portEnv)
       portStr = portEnv;
     else
-      throw runtime_error("ESI_COSIM_PORT environment variable not set");
+      throw std::runtime_error("ESI_COSIM_PORT environment variable not set");
   } else {
-    throw runtime_error("Invalid connection string '" + connectionString + "'");
+    throw std::runtime_error("Invalid connection string '" + connectionString +
+                             "'");
   }
   uint16_t port = stoul(portStr);
   return make_unique<CosimAccelerator>(ctxt, host, port);
 }
 
 /// Construct and connect to a cosim server.
-CosimAccelerator::CosimAccelerator(Context &ctxt, string hostname,
+CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  auto channel = grpc::CreateChannel(hostname + ":" + to_string(port),
+  auto channel = grpc::CreateChannel(hostname + ":" + std::to_string(port),
                                      grpc::InsecureChannelCredentials());
   rpcClient = new StubContainer(ChannelServer::NewStub(channel));
 }
@@ -165,7 +165,7 @@ public:
     return response.esi_version();
   }
 
-  vector<uint8_t> getCompressedManifest() const override {
+  std::vector<uint8_t> getCompressedManifest() const override {
     ::esi::cosim::Manifest response = getManifest();
     std::string compressedManifestStr = response.compressed_manifest();
     return std::vector<uint8_t>(compressedManifestStr.begin(),
@@ -196,17 +196,19 @@ namespace {
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
   WriteCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
-                        const Type *type, string name)
+                        const Type *type, std::string name)
       : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
   ~WriteCosimChannelPort() = default;
 
   void connect() override {
     WriteChannelPort::connect();
     if (desc.type() != getType()->getID())
-      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + desc.type());
+      throw std::runtime_error("Channel '" + name +
+                               "' has wrong type. Expected " +
+                               getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
-      throw runtime_error("Channel '" + name + "' is not a to server channel");
+      throw std::runtime_error("Channel '" + name +
+                               "' is not a to server channel");
     assert(desc.name() == name);
   }
 
@@ -219,9 +221,9 @@ public:
     VoidMessage response;
     grpc::Status sendStatus = rpcClient->SendToServer(&context, msg, &response);
     if (!sendStatus.ok())
-      throw runtime_error("Failed to write to channel '" + name +
-                          "': " + sendStatus.error_message() +
-                          ". Details: " + sendStatus.error_details());
+      throw std::runtime_error("Failed to write to channel '" + name +
+                               "': " + sendStatus.error_message() +
+                               ". Details: " + sendStatus.error_details());
   }
 
 protected:
@@ -229,7 +231,7 @@ protected:
   /// The channel description as provided by the server.
   ChannelDesc desc;
   /// The name of the channel from the manifest.
-  string name;
+  std::string name;
 };
 } // namespace
 
@@ -241,7 +243,7 @@ class ReadCosimChannelPort
       public grpc::ClientReadReactor<esi::cosim::Message> {
 public:
   ReadCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
-                       const Type *type, string name)
+                       const Type *type, std::string name)
       : ReadChannelPort(type), rpcClient(rpcClient), desc(desc), name(name),
         context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
@@ -250,10 +252,12 @@ public:
     // Sanity checking.
     ReadChannelPort::connect();
     if (desc.type() != getType()->getID())
-      throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + desc.type());
+      throw std::runtime_error("Channel '" + name +
+                               "' has wrong type. Expected " +
+                               getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
-      throw runtime_error("Channel '" + name + "' is not a to server channel");
+      throw std::runtime_error("Channel '" + name +
+                               "' is not a to server channel");
     assert(desc.name() == name);
 
     // Initiate a stream of messages from the server.
@@ -304,7 +308,7 @@ protected:
   /// The channel description as provided by the server.
   ChannelDesc desc;
   /// The name of the channel from the manifest.
-  string name;
+  std::string name;
 
   std::unique_ptr<ClientContext> context;
   /// Storage location for the incoming message.
@@ -315,31 +319,31 @@ protected:
 
 } // namespace
 
-map<string, ChannelPort &>
+std::map<std::string, ChannelPort &>
 CosimAccelerator::requestChannelsFor(AppIDPath idPath,
                                      const BundleType *bundleType) {
-  map<string, ChannelPort &> channelResults;
+  std::map<std::string, ChannelPort &> channelResults;
 
   // Find the client details for the port at 'fullPath'.
   auto f = clientChannelAssignments.find(idPath);
   if (f == clientChannelAssignments.end())
     return channelResults;
-  const map<string, string> &channelAssignments = f->second;
+  const std::map<std::string, std::string> &channelAssignments = f->second;
 
   // Each channel in a bundle has a separate cosim endpoint. Find them all.
   for (auto [name, dir, type] : bundleType->getChannels()) {
     auto f = channelAssignments.find(name);
     if (f == channelAssignments.end())
-      throw runtime_error("Could not find channel assignment for '" +
-                          idPath.toStr() + "." + name + "'");
-    string channelName = f->second;
+      throw std::runtime_error("Could not find channel assignment for '" +
+                               idPath.toStr() + "." + name + "'");
+    std::string channelName = f->second;
 
     // Get the endpoint, which may or may not exist. Construct the port.
     // Everything is validated when the client calls 'connect()' on the port.
     ChannelDesc chDesc;
     if (!getChannelDesc(channelName, chDesc))
-      throw runtime_error("Could not find channel '" + channelName +
-                          "' in cosimulation");
+      throw std::runtime_error("Could not find channel '" + channelName +
+                               "' in cosimulation");
 
     ChannelPort *port;
     if (BundlePort::isWrite(dir)) {
@@ -358,7 +362,7 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
 /// Get the channel description for a channel name. Iterate through the list
 /// each time. Since this will only be called a small number of times on a small
 /// list, it's not worth doing anything fancy.
-bool CosimAccelerator::getChannelDesc(const string &channelName,
+bool CosimAccelerator::getChannelDesc(const std::string &channelName,
                                       ChannelDesc &desc) {
   ClientContext context;
   VoidMessage arg;
@@ -386,11 +390,11 @@ Service *CosimAccelerator::createService(Service::Type svcType,
     // Get the channel assignments for each client.
     for (auto client : clients) {
       AppIDPath fullClientPath = prefix + client.relPath;
-      map<string, string> channelAssignments;
-      for (auto assignment : any_cast<map<string, any>>(
+      std::map<std::string, std::string> channelAssignments;
+      for (auto assignment : any_cast<std::map<std::string, std::any>>(
                client.implOptions.at("channel_assignments")))
         channelAssignments[assignment.first] =
-            any_cast<string>(assignment.second);
+            std::any_cast<std::string>(assignment.second);
       clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
     }
   }
