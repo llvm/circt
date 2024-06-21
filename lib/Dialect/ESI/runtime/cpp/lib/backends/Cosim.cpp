@@ -43,7 +43,7 @@ using grpc::ClientReaderWriter;
 using grpc::ClientWriter;
 using grpc::Status;
 
-static void checkStatus(Status s, string msg) {
+static void checkStatus(Status s, const string &msg) {
   if (!s.ok())
     throw runtime_error(msg + ". Code " + to_string(s.error_code()) + ": " +
                         s.error_message() + " (" + s.error_details() + ")");
@@ -257,8 +257,8 @@ public:
     assert(desc.name() == name);
 
     // Initiate a stream of messages from the server.
-    context = new ClientContext();
-    rpcClient->async()->ConnectToClientChannel(context, &desc, this);
+    context = std::make_unique<ClientContext>();
+    rpcClient->async()->ConnectToClientChannel(context.get(), &desc, this);
     StartCall();
     StartRead(&incomingMessage);
   }
@@ -266,9 +266,11 @@ public:
   /// Gets called when there's a new message from the server. It'll be stored in
   /// `incomingMessage`.
   void OnReadDone(bool ok) override {
-    if (!ok)
+    if (!ok) {
       // TODO: should we do something here?
+      std::cerr << "Internal error: read failed due to not `ok`." << std::endl;
       return;
+    }
 
     // Read the delivered message and push it onto the queue.
     const std::string &messageString = incomingMessage.data();
@@ -285,8 +287,7 @@ public:
     if (!context)
       return;
     context->TryCancel();
-    delete context;
-    context = nullptr;
+    context.reset();
   }
 
   /// Poll the queue.
@@ -305,7 +306,7 @@ protected:
   /// The name of the channel from the manifest.
   string name;
 
-  ClientContext *context;
+  std::unique_ptr<ClientContext> context;
   /// Storage location for the incoming message.
   esi::cosim::Message incomingMessage;
   /// Queue of messages read from the server.

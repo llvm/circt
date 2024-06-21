@@ -42,7 +42,7 @@ class TSQueue {
   /// is critical that locks be obtained on this and `qM` same order in both pop
   /// methods. This lock should be obtained first since one of the pop methods
   /// must unlock `qM` then relock it.
-  mutable std::mutex popM;
+  std::mutex popM;
 
 public:
   /// Push onto the queue.

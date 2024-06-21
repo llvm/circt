@@ -120,12 +120,8 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
   std::string fromHostTypeId(fromHostTypeIdC), toHostTypeId(toHostTypeIdC);
 
   // Both only one type allowed.
-  if (!fromHostTypeId.empty() && !toHostTypeId.empty()) {
+  if (!(fromHostTypeId.empty() ^ toHostTypeId.empty())) {
     printf("ERROR: Only one of fromHostTypeId and toHostTypeId can be set!\n");
-    return -1;
-  }
-  if (fromHostTypeId.empty() && toHostTypeId.empty()) {
-    printf("ERROR: One of fromHostTypeId and toHostTypeId must be set!\n");
     return -2;
   }
   if (readPorts.contains(endpointId)) {
@@ -155,13 +151,13 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   if (server == nullptr)
     return -1;
 
-  auto portF = readPorts.find(endpointId);
-  if (portF == readPorts.end()) {
+  auto portIt = readPorts.find(endpointId);
+  if (portIt == readPorts.end()) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
 
-  ReadChannelPort &port = portF->second;
+  ReadChannelPort &port = portIt->second;
   MessageData msg;
   // Poll for a message.
   if (!port.read(msg)) {
@@ -244,13 +240,13 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   auto blob = std::make_unique<esi::MessageData>(dataVec);
 
   // Queue the blob.
-  auto portF = writePorts.find(endpointId);
-  if (portF == writePorts.end()) {
+  auto portIt = writePorts.find(endpointId);
+  if (portIt == writePorts.end()) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
   log(endpointId, true, *blob);
-  WriteChannelPort &port = portF->second;
+  WriteChannelPort &port = portIt->second;
   port.write(*blob);
   return 0;
 }

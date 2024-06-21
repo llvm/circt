@@ -163,14 +163,6 @@ if (XRT_PATH)
     ${ESIRuntimeLibDirs}
     ${XRT_PATH}/lib
   )
-  get_filename_component(XRT_SO ${XRT_PATH}/lib/libxrt_coreutil.so REALPATH)
-  install(FILES
-      ${XRT_SO}
-      ${XRT_PATH}/lib/libxrt_coreutil.so.2
-      ${XRT_PATH}/lib/libxrt_coreutil.so
-    DESTINATION lib
-    COMPONENT ESIRuntime
-  )
 endif()
 
 # The core API. For now, compile the backends into it directly.

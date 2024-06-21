@@ -1,4 +1,4 @@
-//===- Server.h - Run a cosim server ----------------------------*- C++ -*-===//
+//===- RpcServer.h - Run a cosim server -------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -29,7 +29,8 @@ public:
   /// RPC server can be started and a connection from the client could happen
   /// before the manifest is set. TODO: rework the DPI API to require that the
   /// manifest gets set first.
-  void setManifest(int esiVersion, std::vector<uint8_t> compressedManifest);
+  void setManifest(int esiVersion,
+                   const std::vector<uint8_t> &compressedManifest);
 
   /// Register a read or write port which communicates over RPC.
   ReadChannelPort &registerReadPort(const std::string &name,

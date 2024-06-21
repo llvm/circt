@@ -37,7 +37,7 @@ using grpc::StatusCode;
 static void writePort(uint16_t port) {
   // "cosim.cfg" since we may want to include other info in the future.
   FILE *fd = fopen("cosim.cfg", "w");
-  fprintf(fd, "port: %u\n", (unsigned int)port);
+  fprintf(fd, "port: %u\n", static_cast<unsigned int>(port));
   fclose(fd);
 }
 
@@ -56,8 +56,9 @@ public:
   // Internal API
   //===--------------------------------------------------------------------===//
 
-  void setManifest(int esiVersion, std::vector<uint8_t> compressedManifest) {
-    this->compressedManifest = std::move(compressedManifest);
+  void setManifest(int esiVersion,
+                   const std::vector<uint8_t> &compressedManifest) {
+    this->compressedManifest = compressedManifest;
     this->esiVersion = esiVersion;
   }
 
@@ -87,8 +88,8 @@ public:
 private:
   int esiVersion;
   std::vector<uint8_t> compressedManifest;
-  std::map<std::string, RpcServerReadPort *> readPorts;
-  std::map<std::string, RpcServerWritePort *> writePorts;
+  std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
+  std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
 
   std::unique_ptr<Server> server;
 };
@@ -162,10 +163,6 @@ void Impl::stop() {
 Impl::~Impl() {
   if (server)
     stop();
-  for (auto &port : readPorts)
-    delete port.second;
-  for (auto &port : writePorts)
-    delete port.second;
 }
 
 ReadChannelPort &Impl::registerReadPort(const std::string &name,
@@ -195,13 +192,13 @@ ServerUnaryReactor *Impl::GetManifest(CallbackServerContext *context,
 ServerUnaryReactor *Impl::ListChannels(CallbackServerContext *context,
                                        const VoidMessage *,
                                        ListOfChannels *channelsOut) {
-  for (auto [name, port] : readPorts) {
+  for (auto &[name, port] : readPorts) {
     auto *channel = channelsOut->add_channels();
     channel->set_name(name);
     channel->set_type(port->getType()->getID());
     channel->set_dir(ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER);
   }
-  for (auto [name, port] : writePorts) {
+  for (auto &[name, port] : writePorts) {
     auto *channel = channelsOut->add_channels();
     channel->set_name(name);
     channel->set_type(port->getType()->getID());
@@ -228,9 +225,21 @@ public:
   }
   ~RpcServerWriteReactor() {
     shutdown = true;
+    // Wake up the potentially sleeping thread.
+    sentSuccessfullyCV.notify_one();
     myThread.join();
   }
 
+  // Deleting 'this' from within a callback is safe since this is how gRPC tells
+  // us that it's released the reference. This pattern lets gRPC manage this
+  // object. (Though a shared pointer would be better.) It was actually copied
+  // from one of the gRPC examples:
+  // https://github.com/grpc/grpc/blob/4795c5e69b25e8c767b498bea784da0ef8c96fd5/examples/cpp/route_guide/route_guide_callback_server.cc#L120
+  // The alternative is to have something else (e.g. Impl) manage this object
+  // and have this method tell it that gRPC is done with it and it should be
+  // deleted. As of now, there's no specific need for that and it adds
+  // additional complexity. If there is at some point in the future, change
+  // this.
   void OnDone() override { delete this; }
   void OnWriteDone(bool ok) override {
     std::scoped_lock<std::mutex> lock(sentMutex);
@@ -258,7 +267,7 @@ private:
   volatile SendStatus sentSuccessfully;
   std::condition_variable sentSuccessfullyCV;
 
-  volatile bool shutdown;
+  std::atomic<bool> shutdown;
 };
 
 } // namespace
@@ -284,8 +293,9 @@ void RpcServerWriteReactor::threadLoop() {
       std::unique_lock<std::mutex> lock(sentMutex);
       sentSuccessfully = SendStatus::UnknownStatus;
       StartWrite(&msg);
-      while (!shutdown && sentSuccessfully == SendStatus::UnknownStatus)
-        sentSuccessfullyCV.wait_for(lock, std::chrono::milliseconds(10));
+      sentSuccessfullyCV.wait(lock, [&]() {
+        return shutdown || sentSuccessfully != SendStatus::UnknownStatus;
+      });
       bool ret = sentSuccessfully == SendStatus::Success;
       lock.unlock();
       return ret;
@@ -305,7 +315,7 @@ Impl::ConnectToClientChannel(CallbackServerContext *context,
     reactor->Finish(Status(StatusCode::NOT_FOUND, "Unknown channel"));
     return reactor;
   }
-  return new RpcServerWriteReactor(it->second);
+  return new RpcServerWriteReactor(it->second.get());
 }
 
 /// When a client sends a message to a write port (a read port on this end),
@@ -337,8 +347,8 @@ RpcServer::~RpcServer() {
     delete impl;
 }
 void RpcServer::setManifest(int esiVersion,
-                            std::vector<uint8_t> compressedManifest) {
-  impl->setManifest(esiVersion, std::move(compressedManifest));
+                            const std::vector<uint8_t> &compressedManifest) {
+  impl->setManifest(esiVersion, compressedManifest);
 }
 ReadChannelPort &RpcServer::registerReadPort(const std::string &name,
                                              const std::string &type) {
