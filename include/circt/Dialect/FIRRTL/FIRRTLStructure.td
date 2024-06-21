@@ -324,6 +324,69 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   let hasCustomAssemblyFormat = 1;
 }
 
+// Strict modules have Passive or foriegn or analog or reference ports.  They
+// 
+def FStrictModuleOp : FIRRTLModuleLike<"strictmodule", [SingleBlock, NoTerminator]> {
+  let summary = "FIRRTL Module";
+  let description = [{
+    The "firrtl.strictmodule" operation represents a Verilog module, including a 
+    given name, a list of ports, and a body that represents the connections within
+    the module.  The ports of a strict module must be passive, foreign, or analog
+    types.  Output ports of firrtl types will be generated as LHSType wrapped
+    blockargs.
+  }];
+  let arguments =
+      (ins ConventionAttr:$convention,
+           DenseBoolArrayAttr:$portDirections,
+           ArrayRefAttr:$portLocations,
+           ArrayRefAttr:$portAnnotations,
+           ArrayRefAttr:$portSyms,
+           ArrayRefAttr:$portNames,
+           ArrayRefAttr:$portTypes,
+           DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+           DefaultValuedAttr<LayerArrayAttr, "{}">:$layers
+      );
+
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+
+  let skipDefaultBuilders = 1;
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
+               "ArrayRef<PortInfo>":$ports,
+               CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+               CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
+  ];
+
+  let extraModuleClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
+  }];
+
+}
+
 def ClassOp : FIRRTLModuleLike<"class", [
   SingleBlock, NoTerminator,
   DeclareOpInterfaceMethods<FModuleLike, [

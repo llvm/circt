@@ -270,6 +270,7 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(MatchingConnectOp);
+  HANDLE(StrictConnectOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);
@@ -304,10 +305,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<InstanceOp, InstanceChoiceOp, ObjectOp, MemOp, NodeOp,
-                       RegOp, RegResetOp, WireOp, VerbatimWireOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitDecl(opNode, args...);
-            })
+                       RegOp, RegResetOp, StrictRegOp, WireOp, StrictWireOp,
+                       VerbatimWireOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitDecl(opNode, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -337,7 +338,9 @@ public:
   HANDLE(NodeOp);
   HANDLE(RegOp);
   HANDLE(RegResetOp);
+  HANDLE(StrictRegOp);
   HANDLE(WireOp);
+  HANDLE(StrictWireOp);
   HANDLE(VerbatimWireOp);
 #undef HANDLE
 };

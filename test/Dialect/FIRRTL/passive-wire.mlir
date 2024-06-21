@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-passive-wires)))' --allow-unregistered-dialect %s | FileCheck --check-prefixes=CHECK %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-passive-wires)))' %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 

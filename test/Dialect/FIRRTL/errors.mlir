@@ -279,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.strictmodule, firrtl.layerblock, firrtl.when, firrtl.match'}}
   firrtl.instance "" @Foo()
 }
 
@@ -751,8 +751,18 @@ firrtl.circuit "SubfieldOpInputTypeMismatch" {
 firrtl.circuit "SubfieldOpNonBundleInputType" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.subfield' input must be bundle type, got '!firrtl.uint<1>'}}
+    // expected-error @+1 {{'firrtl.subfield' input must be bundle or lhs of bundle type, got '!firrtl.uint<1>'}}
     %w_a = firrtl.subfield %w[a] : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpNonBundleInputType" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w, %w_write = firrtl.strictwire : !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.subfield' input must be bundle or lhs of bundle type, got '!firrtl.lhs<uint<1>>'}}
+    %w_a = firrtl.subfield %w_write[a] : !firrtl.lhs<uint<1>>
   }
 }
 
@@ -1829,7 +1839,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.strictmodule, firrtl.layerblock, firrtl.when, firrtl.match'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }

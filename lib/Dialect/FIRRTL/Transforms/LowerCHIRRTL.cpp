@@ -54,7 +54,7 @@ struct LowerCHIRRTLPass
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
-  void visitStmt(MatchingConnectOp op);
+  void visitStmt(MatchingConnectOp connect);
   void visitUnhandledOp(Operation *op);
 
   // Chain the CHIRRTL visitor to the FIRRTL visitor.
