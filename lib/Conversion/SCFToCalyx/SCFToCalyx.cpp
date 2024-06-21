@@ -967,69 +967,78 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   componentState.registerMemoryInterface(allocOp.getResult(),
                                          calyx::MemoryInterface(memoryOp));
 
+  bool isFloat = !memtype.getElementType().isInteger();
+
+  auto shape = allocOp.getType().getShape();
+  std::vector<int> dimensions;
+  int totalSize = 1;
+  for (auto dim : shape) {
+    totalSize *= dim;
+    dimensions.push_back(dim);
+  }
+
+  std::vector<double> flattenedVals(totalSize, 0);
+
+  // Helper function to get the correct indices
+  auto getIndices = [&dimensions](int flatIndex) {
+    std::vector<int> indices(dimensions.size(), 0);
+    for (int i = dimensions.size() - 1; i >= 0; --i) {
+      indices[i] = flatIndex % dimensions[i];
+      flatIndex /= dimensions[i];
+    }
+    return indices;
+  };
+
+  json result = json::array();
   if (isa<memref::GetGlobalOp>(allocOp)) {
     auto getGlobalOp = cast<memref::GetGlobalOp>(allocOp);
-    auto shape = getGlobalOp.getType().getShape();
-    std::vector<int> dimensions;
-    for (auto dim : shape) {
-      dimensions.push_back(dim);
-    }
-
-    // Flatten the values in the attribute
     auto *symbolTableOp =
         getGlobalOp->template getParentWithTrait<mlir::OpTrait::SymbolTable>();
     auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
         SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
+    // Flatten the values in the attribute
     auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
         globalOp.getConstantInitValue());
-    std::vector<float> flattenedVals;
+    int sizeCount = 0;
     for (auto attr : cstAttr.template getValues<Attribute>()) {
       if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr))
-        flattenedVals.push_back(fltAttr.getValueAsDouble());
+        flattenedVals[sizeCount++] = fltAttr.getValueAsDouble();
+      else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(attr))
+        flattenedVals[sizeCount++] = intAttr.getInt();
     }
-
-    // Helper function to get the correct indices
-    auto getIndices = [&dimensions](int flatIndex) {
-      std::vector<int> indices(dimensions.size(), 0);
-      for (int i = dimensions.size() - 1; i >= 0; --i) {
-        indices[i] = flatIndex % dimensions[i];
-        flatIndex /= dimensions[i];
-      }
-      return indices;
-    };
-
-    json result = json::array();
-
-    // Put the flattened values in the multi-dimensional structure
-    for (size_t i = 0; i < flattenedVals.size(); ++i) {
-      std::vector<int> indices = getIndices(i);
-      json *nested = &result;
-      for (size_t j = 0; j < indices.size() - 1; ++j) {
-        while (nested->size() <= static_cast<json::size_type>(indices[j])) {
-          nested->push_back(json::array());
-        }
-        nested = &(*nested)[indices[j]];
-      }
-      nested->push_back(flattenedVals[i]);
-    }
-
-    componentState.setDataField(memoryOp.getName(), result);
-    auto width = memtype.getElementType().getIntOrFloatBitWidth();
-
-    std::string numType;
-    bool isSigned;
-    if (memtype.getElementType().isInteger()) {
-      numType = "bitnum";
-      isSigned = false;
-    } else {
-      numType = "floating_point";
-      isSigned = true;
-    }
-
-    componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
 
     rewriter.eraseOp(globalOp);
   }
+
+  // Put the flattened values in the multi-dimensional structure
+  for (size_t i = 0; i < flattenedVals.size(); ++i) {
+    std::vector<int> indices = getIndices(i);
+    json *nested = &result;
+    for (size_t j = 0; j < indices.size() - 1; ++j) {
+      while (nested->size() <= static_cast<json::size_type>(indices[j])) {
+        nested->push_back(json::array());
+      }
+      nested = &(*nested)[indices[j]];
+    }
+    if (isFloat)
+      nested->push_back(flattenedVals[i]);
+    else
+      nested->push_back(static_cast<int64_t>(flattenedVals[i]));
+  }
+
+  componentState.setDataField(memoryOp.getName(), result);
+  auto width = memtype.getElementType().getIntOrFloatBitWidth();
+
+  std::string numType;
+  bool isSigned;
+  if (memtype.getElementType().isInteger()) {
+    numType = "bitnum";
+    isSigned = false;
+  } else {
+    numType = "floating_point";
+    isSigned = true;
+  }
+  componentState.setFormat(memoryOp.getName(), numType, isSigned, width);
 
   return success();
 }
