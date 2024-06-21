@@ -24,6 +24,10 @@ jobs:
           fetch-depth: 2
           submodules: "false"
 
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
+
       # --------
       # Lint the CIRCT C++ code.
       # -------
