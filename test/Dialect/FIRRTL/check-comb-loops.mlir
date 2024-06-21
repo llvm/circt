@@ -1053,3 +1053,57 @@ firrtl.circuit "Issue6820" {
     firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.clock
   }
 }
+
+// -----
+
+// Single-element combinational loop under a when.
+firrtl.circuit "WhenLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: WhenLoop.{w <- w}}}
+  firrtl.module @WhenLoop(in %in : !firrtl.uint<1>) {
+    firrtl.when %in : !firrtl.uint<1> {
+      %w = firrtl.wire  : !firrtl.uint<8>
+      firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop under a match.
+firrtl.circuit "MatchLoop" {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: MatchLoop.{w <- w}}}
+  firrtl.module @MatchLoop(in %in : !firrtl.enum<a: uint<1>>) {
+    firrtl.match %in : !firrtl.enum<a: uint<1>> {
+      case a(%arg0) {
+        %w = firrtl.wire  : !firrtl.uint<8>
+        firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+      }
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop under a layerblock.
+firrtl.circuit "LayerLoop"   {
+  firrtl.layer @A bind { }
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: LayerLoop.{w <- w}}}
+  firrtl.module @LayerLoop() {
+    firrtl.layerblock @A {
+      %w = firrtl.wire  : !firrtl.uint<8>
+      firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    }
+  }
+}
+
+// -----
+
+// Single-element combinational loop with multiple connects.
+firrtl.circuit "MultipleConnects"   {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: MultipleConnects.{w <- w}}}
+  firrtl.module @MultipleConnects(in %in : !firrtl.uint<8>) {
+    %w = firrtl.wire  : !firrtl.uint<8>
+    firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %w, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}

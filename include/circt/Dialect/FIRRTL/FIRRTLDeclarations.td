@@ -723,7 +723,7 @@ def StrictRegOp : HardwareDeclOp<"strictreg", [Forceable, SameVariadicOperandSiz
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     $clockVal (`,` `reset` `(` $resetSignal^ `:` type($resetSignal) `,` $resetValue `:` type($resetValue) `)` )? (`,` `forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
-    `:` type($clockVal) `,` type($read) `,` type($write) (`,` qualified(type($ref))^)?
+    `:` type($clockVal) `,` custom<OptionalLHSOpTypes>(type($write), type($read)) (`,` qualified(type($ref))^)?
 
   }];
 

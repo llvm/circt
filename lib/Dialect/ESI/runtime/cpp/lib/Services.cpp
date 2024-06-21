@@ -83,8 +83,8 @@ CustomService::CustomService(AppIDPath idPath,
 }
 
 FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
-                         std::string implName, ServiceImplDetails details,
-                         HWClientDetails clients) {
+                         const std::string &implName,
+                         ServiceImplDetails details, HWClientDetails clients) {
   if (auto f = details.find("service"); f != details.end())
     // Strip off initial '@'.
     symbol = any_cast<string>(f->second).substr(1);
@@ -104,8 +104,7 @@ FuncService::Function::Function(
     : ServicePort(id, channels),
       arg(dynamic_cast<WriteChannelPort &>(channels.at("arg"))),
       result(dynamic_cast<ReadChannelPort &>(channels.at("result"))) {
-  if (channels.size() != 2)
-    throw runtime_error("FuncService must have exactly two channels");
+  assert(channels.size() == 2 && "FuncService must have exactly two channels");
 }
 
 void FuncService::Function::connect() {
@@ -119,6 +118,45 @@ FuncService::Function::call(const MessageData &argData) {
   return result.readAsync();
 }
 
+CallService::CallService(AcceleratorConnection *acc, AppIDPath idPath,
+                         std::string implName, ServiceImplDetails details,
+                         HWClientDetails clients) {
+  if (auto f = details.find("service"); f != details.end())
+    // Strip off initial '@'.
+    symbol = any_cast<string>(f->second).substr(1);
+}
+
+std::string CallService::getServiceSymbol() const { return symbol; }
+
+ServicePort *
+CallService::getPort(AppIDPath id, const BundleType *type,
+                     const std::map<std::string, ChannelPort &> &channels,
+                     AcceleratorConnection &acc) const {
+  return new Callback(acc, id.back(), channels);
+}
+
+CallService::Callback::Callback(
+    AcceleratorConnection &acc, AppID id,
+    const std::map<std::string, ChannelPort &> &channels)
+    : ServicePort(id, channels),
+      arg(dynamic_cast<ReadChannelPort &>(channels.at("arg"))),
+      result(dynamic_cast<WriteChannelPort &>(channels.at("result"))),
+      acc(acc) {
+  if (channels.size() != 2)
+    throw runtime_error("CallService must have exactly two channels");
+}
+
+void CallService::Callback::connect(
+    std::function<MessageData(const MessageData &)> callback) {
+  arg.connect();
+  result.connect();
+  acc.getServiceThread()->addListener(
+      {&arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
+        MessageData resultMsg = callback(std::move(argMsg));
+        this->result.write(std::move(resultMsg));
+      });
+}
+
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,
                                         Service::Type svcType, AppIDPath id,
                                         std::string implName,
@@ -127,6 +165,8 @@ Service *ServiceRegistry::createService(AcceleratorConnection *acc,
   // TODO: Add a proper registration mechanism.
   if (svcType == typeid(FuncService))
     return new FuncService(acc, id, implName, details, clients);
+  if (svcType == typeid(CallService))
+    return new CallService(acc, id, implName, details, clients);
   return nullptr;
 }
 
@@ -134,5 +174,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
   // TODO: Add a proper registration mechanism.
   if (svcName == "esi.service.std.func")
     return typeid(FuncService);
+  if (svcName == "esi.service.std.call")
+    return typeid(CallService);
   return typeid(CustomService);
 }

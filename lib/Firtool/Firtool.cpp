@@ -119,12 +119,24 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass(
       opt.getPreserveAggregate(), firrtl::PreserveAggregate::None));
 
-  auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-  modulePM.addPass(firrtl::createExpandWhensPass());
-  modulePM.addPass(firrtl::createEliminateWiresPass());
-  modulePM.addPass(firrtl::createSFCCompatPass());
-  modulePM.addPass(firrtl::createLayerMergePass());
-  modulePM.addPass(firrtl::createLayerSinkPass());
+  {
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    modulePM.addPass(firrtl::createExpandWhensPass());
+    modulePM.addPass(firrtl::createEliminateWiresPass());
+    modulePM.addPass(firrtl::createSFCCompatPass());
+  }
+
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoopsPass());
+
+  // Must run this pass after all diagnostic passes have run, otherwise it can
+  // hide errors.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
+
+  {
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    modulePM.addPass(firrtl::createLayerMergePass());
+    modulePM.addPass(firrtl::createLayerSinkPass());
+  }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
@@ -137,12 +149,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   if (opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg))
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createRandomizeRegisterInitPass());
-
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombLoopsPass());
-
-  // Must run this pass after all diagnostic passes have run, otherwise it can
-  // hide errors.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())

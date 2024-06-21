@@ -41,11 +41,12 @@ def IntTypeImpl : HWType<"Int"> {
 
   let skipDefaultBuilders = 1;
 
-  let extraClassDeclaration = [{
+  let builders = [
     /// Get an integer type for the specified width.  Note that this may return
     /// a builtin integer type if the width is a known-constant value.
-    static Type get(::mlir::TypedAttr width);
-  }];
+    TypeBuilderWithInferredContext<(ins "::mlir::TypedAttr":$width), "", "Type">
+  ];
+
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
@@ -62,15 +63,18 @@ def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInte
   let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{
+      auto *ctx = elementType.getContext();
+      auto intType = mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = mlir::IntegerAttr::get(intType, size);
+      return $_get(ctx, elementType, sizeAttr);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` custom<HWArray>($sizeAttr, $elementType) `>`";
 
   let extraClassDeclaration = [{
-    static ArrayType get(Type elementType, size_t size) {
-      auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 64);
-      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
-      return ArrayType::get(ctx, elementType, sizeAttr);
-    }
     size_t getNumElements() const;
   }];
 }
@@ -87,15 +91,18 @@ def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<Fie
   let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{
+      auto *ctx = elementType.getContext();
+      auto intType = mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = mlir::IntegerAttr::get(intType, size);
+      return $_get(ctx, elementType, sizeAttr);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` custom<HWArray>($sizeAttr, $elementType) `>`";
 
   let extraClassDeclaration = [{
-    static UnpackedArrayType get(Type elementType, size_t size) {
-      auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 64);
-      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
-      return UnpackedArrayType::get(ctx, elementType, sizeAttr);
-    }
     size_t getNumElements() const;
   }];
 }
@@ -112,13 +119,12 @@ def InOutTypeImpl : HWType<"InOut"> {
   let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    static InOutType get(Type elementType) {
-      return get(elementType.getContext(), elementType);
-    }
-  }];
+  let assemblyFormat = "`<` custom<HWElementType>($elementType) `>`";
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+       return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
 }
 
 // A packed struct. Declares the hw::StructType in C++.
