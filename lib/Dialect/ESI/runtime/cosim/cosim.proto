@@ -1,0 +1,68 @@
+//===- cosim.proto - ESI cosim RPC definitions ------------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// The ESI cosimulation gRPC schema. If something (client or server) wants to
+// talk to an ESI runtime, it mergely needs to implement this schema. If
+// possible, however, it is encouraged to use the C++ esiruntime API as that is
+// expected to be more portable and supports more than just cosim.
+//
+//===----------------------------------------------------------------------===//
+
+syntax = "proto3";
+
+package esi.cosim;
+
+// Description of a channel that can be connected to by the client.
+message ChannelDesc {
+  string name = 1;
+
+  enum Direction {
+    TO_SERVER = 0;
+    TO_CLIENT = 1;
+  }
+  Direction dir = 2;
+
+  string type = 3;
+}
+
+// List of channels that the client can connect to.
+message ListOfChannels { repeated ChannelDesc channels = 1; }
+
+// Empty message since gRPC only supports exactly one argument and return.
+message VoidMessage {}
+
+// The manifest package.
+message Manifest {
+  int32 esi_version = 1;
+  bytes compressed_manifest = 2;
+}
+
+// An ESI message.
+message Message { bytes data = 1; }
+
+// An ESI message and the channel to which is should be directed.
+message AddressedMessage {
+  string channel_name = 1;
+  Message message = 2;
+}
+
+// The server interface provided by the ESI cosim server.
+service ChannelServer {
+  // Get the manifest embedded in the accelertor.
+  rpc GetManifest(VoidMessage) returns (Manifest) {}
+
+  // List the channels that the client can connect to.
+  rpc ListChannels(VoidMessage) returns (ListOfChannels) {}
+
+  // Send a message to the server.
+  rpc SendToServer(AddressedMessage) returns (VoidMessage) {}
+
+  // Connect to a client channel and return a stream of messages coming from
+  // that channel.
+  rpc ConnectToClientChannel(ChannelDesc) returns (stream Message) {}
+}

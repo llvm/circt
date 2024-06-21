@@ -37,7 +37,7 @@ find_package(ZLIB REQUIRED)
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
-  message("  -- ESI runtime pulling down json")
+  message("-- ESI runtime pulling down json")
   FetchContent_Declare(json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG        v3.11.3
@@ -94,49 +94,37 @@ ENDIF(MSVC)
 
 option(ESI_COSIM "Enable ESI cosimulation." ON)
 if(ESI_COSIM)
+  # gRPC for cosimulation. Local install required.
+  option(GRPC_PATH "Location of gRPC install.")
+  if (${GRPC_PATH})
+    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
+    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
+  else()
+    find_package(Protobuf REQUIRED CONFIG)
+    find_package(gRPC REQUIRED CONFIG)
+  endif()
+
+  add_subdirectory(cosim)
   # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
   # backends should only need to be linked in.
   # TODO: Once the hack in the python bindings is remidied, remove this.
   add_compile_definitions(ESI_COSIM)
-
-  # Try to find Cap'nProto. If the user has set CAPNP_PATH, use that.
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
-  else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
-  endif()
-
-  # If Cap'nProto has been found, generate the headers and definitions.
-  if(CapnProto_FOUND)
-    message("-- ESI cosim enabled")
-
-    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-    add_subdirectory(cosim)
-
-    set(ESIRuntimeSources
-      ${ESIRuntimeSources}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
-    )
-    set(ESIRuntimeBackendHeaders
-      ${ESIRuntimeBackendHeaders}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
-    )
-    set(ESIRuntimeLinkLibraries
-      ${ESIRuntimeLinkLibraries}
-      EsiCosimCapnp
-    )
-    set(ESIRuntimeIncludeDirs
-      ${ESIRuntimeIncludeDirs}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
-    )
-  else()
-    message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
-                        Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
-  endif()
+  set(ESIRuntimeSources
+    ${ESIRuntimeSources}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+  )
+  set(ESIRuntimeBackendHeaders
+    ${ESIRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
+  )
+  set(ESIRuntimeLinkLibraries
+    ${ESIRuntimeLinkLibraries}
+    EsiCosimGRPC
+  )
+  set(ESIRuntimeIncludeDirs
+    ${ESIRuntimeIncludeDirs}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
+  )
 else()
   message("-- ESI cosim disabled")
 endif()
@@ -191,17 +179,6 @@ target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
 target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
 install(TARGETS ESIRuntime
   DESTINATION lib
-  COMPONENT ESIRuntime
-)
-install(IMPORTED_RUNTIME_ARTIFACTS ESIRuntime
-  RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  COMPONENT ESIRuntime
-)
-install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES capnp kj
   COMPONENT ESIRuntime
 )
 install(FILES ${ESIRuntimeHeaders}

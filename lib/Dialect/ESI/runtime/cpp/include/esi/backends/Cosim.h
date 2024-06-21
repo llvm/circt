@@ -31,8 +31,8 @@
 
 namespace esi {
 namespace cosim {
-class RpcClient;
-} // namespace cosim
+class ChannelDesc;
+}
 
 namespace backends {
 namespace cosim {
@@ -41,6 +41,8 @@ namespace cosim {
 class CosimAccelerator : public esi::AcceleratorConnection {
 public:
   CosimAccelerator(Context &, std::string hostname, uint16_t port);
+  ~CosimAccelerator();
+
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 
@@ -58,6 +60,11 @@ public:
   virtual std::map<std::string, ChannelPort &>
   requestChannelsFor(AppIDPath, const BundleType *) override;
 
+  // C++ doesn't have a mechanism to forward declare a nested class and we don't
+  // want to include the generated header here. So we have to wrap it in a
+  // forward-declared struct we write ourselves.
+  struct StubContainer;
+
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
                                  std::string implName,
@@ -65,7 +72,11 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  std::unique_ptr<esi::cosim::RpcClient> rpcClient;
+  StubContainer *rpcClient;
+
+  /// Get the type ID for a channel name.
+  bool getChannelDesc(const std::string &channelName,
+                      esi::cosim::ChannelDesc &desc);
 
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
