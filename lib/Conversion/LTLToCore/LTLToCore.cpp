@@ -38,68 +38,11 @@ using namespace mlir;
 using namespace circt;
 using namespace hw;
 
-static sv::EventControl ltlToSVEventControl(ltl::ClockEdge ce) {
-  switch (ce) {
-  case ltl::ClockEdge::Pos:
-    return sv::EventControl::AtPosEdge;
-  case ltl::ClockEdge::Neg:
-    return sv::EventControl::AtNegEdge;
-  case ltl::ClockEdge::Both:
-    return sv::EventControl::AtEdge;
-  }
-  llvm_unreachable("Unknown event control kind");
-}
-
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-// Custom pattern matchers
-
-// Matches and records a boolean attribute
-struct I1ValueMatcher {
-  Value *what;
-  I1ValueMatcher(Value *what) : what(what) {}
-  bool match(Value op) const {
-    if (!op.getType().isSignlessInteger(1))
-      return false;
-    *what = op;
-    return true;
-  }
-};
-
-static inline I1ValueMatcher mBool(Value *const val) {
-  return I1ValueMatcher(val);
-}
-
-// Matches and records an arbitrary op
-template <typename OpType, typename... OperandMatchers>
-struct BindingRecursivePatternMatcher
-    : mlir::detail::RecursivePatternMatcher<OpType, OperandMatchers...> {
-
-  using BaseMatcher =
-      mlir::detail::RecursivePatternMatcher<OpType, OperandMatchers...>;
-  BindingRecursivePatternMatcher(OpType *bop, OperandMatchers... matchers)
-      : BaseMatcher(matchers...), opBind(bop) {}
-
-  bool match(Operation *op) {
-    if (BaseMatcher::match(op)) {
-      *opBind = llvm::cast<OpType>(op);
-      return true;
-    }
-    return false;
-  }
-
-  OpType *opBind;
-};
-
-template <typename OpType, typename... Matchers>
-static inline auto mOpWithBind(OpType *op, Matchers... matchers) {
-  return BindingRecursivePatternMatcher<OpType, Matchers...>(op, matchers...);
-}
-
 struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   using OpConversionPattern<verif::HasBeenResetOp>::OpConversionPattern;
 
@@ -147,68 +90,6 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
-struct AssertOpConversionPattern : OpConversionPattern<verif::AssertOp> {
-  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
-
-  Value visit(ltl::DisableOp op, ConversionPatternRewriter &rewriter,
-              Value operand = nullptr) const {
-    // Replace the ltl::DisableOp with an OR op as it represents a disabling
-    // implication: (implies (not condition) input) is equivalent to
-    // (or (not (not condition)) input) which becomes (or condition input)
-    return rewriter.replaceOpWithNewOp<comb::OrOp>(
-        op, op.getCondition(), operand ? operand : op.getInput());
-  }
-
-  // Special case : we want to detect the Non-overlapping implication,
-  // Overlapping Implication or simply AssertProperty patterns and reject
-  // everything else for now: antecedent : ltl::concatOp || immediate predicate
-  // consequent : any other non-sequence op
-  // We want to support a ##n true |-> b and a |-> b
-  LogicalResult
-  matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Value ltlClock, disableCond, disableInput, disableVal;
-    ltl::ClockOp clockOp;
-    ltl::DisableOp disableOp;
-
-    // Look for the Assert Property pattern
-    bool matchedProperty = matchPattern(
-        op.getProperty(),
-        mOpWithBind<ltl::ClockOp>(
-            &clockOp,
-            mOpWithBind<ltl::DisableOp>(&disableOp, mBool(&disableInput),
-                                        mBool(&disableCond)),
-            mBool(&ltlClock)));
-
-    if (!matchedProperty)
-      return rewriter.notifyMatchFailure(
-          op, " verif.assert used outside of an assert property!");
-
-    // Then visit the disable op
-    disableVal = visit(disableOp, rewriter, disableInput);
-
-    // Generate the parenting sv.always posedge clock from the ltl
-    // clock, containing the generated sv.assert
-    rewriter.create<sv::AlwaysOp>(
-        clockOp.getLoc(), ltlToSVEventControl(clockOp.getEdge()), ltlClock,
-        [&] {
-          // Generate the sv assertion using the input to the
-          // parenting clock
-          rewriter.replaceOpWithNewOp<sv::AssertOp>(
-              op, disableVal,
-              sv::DeferAssertAttr::get(getContext(),
-                                       sv::DeferAssert::Immediate),
-              op.getLabelAttr());
-        });
-
-    // Erase Converted Ops
-    rewriter.eraseOp(clockOp);
-
-    return success();
-  }
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -234,7 +115,8 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
   target.addLegalDialect<seq::SeqDialect>();
   target.addLegalDialect<ltl::LTLDialect>();
-  target.addIllegalDialect<verif::VerifDialect>();
+  target.addLegalDialect<verif::VerifDialect>();
+  target.addIllegalOp<verif::HasBeenResetOp>();
 
   // Create type converters, mostly just to convert an ltl property to a bool
   mlir::TypeConverter converter;
@@ -269,8 +151,7 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<AssertOpConversionPattern, HasBeenResetOpConversion>(
-      converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion>(converter, patterns.getContext());
 
   // Apply the conversions
   if (failed(

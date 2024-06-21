@@ -114,5 +114,3 @@ unrealized_conversion_cast %clk0 : !ltl.sequence to index
 unrealized_conversion_cast %clk1 : !ltl.sequence to index
 unrealized_conversion_cast %clk2 : !ltl.property to index
 
-// CHECK: ltl.disable {{%.+}} if {{%.+}} : !ltl.property
-ltl.disable %p if %true : !ltl.property

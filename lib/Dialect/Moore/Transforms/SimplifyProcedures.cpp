@@ -14,11 +14,6 @@
 
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
-#include "circt/Dialect/Moore/MooreTypes.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/Pass/Pass.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 namespace moore {
@@ -61,23 +56,27 @@ void SimplifyProceduresPass::runOnOperation() {
           if (!users.contains(user))
             users.insert(user);
 
-        auto varOp = cast<VariableOp>(nestedOp.getOperand(0).getDefiningOp());
-        auto varName = builder.getStringAttr("local_" + varOp.getName());
-        auto resultType = varOp.getResult().getType();
-        builder.setInsertionPointToStart(procedureOp.getBody());
-        auto readOp = builder.create<ReadOp>(
-            nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
-            varOp.getResult());
-        auto newVarOp = builder.create<VariableOp>(nestedOp.getLoc(),
-                                                   resultType, varName, readOp);
-        builder.clearInsertionPoint();
+        // Because the operand of moore.event_wait is net.
+        if (auto varOp = llvm::dyn_cast_or_null<VariableOp>(
+                nestedOp.getOperand(0).getDefiningOp())) {
+          auto varName =
+              builder.getStringAttr(Twine("local_") + varOp.getName());
+          auto resultType = varOp.getResult().getType();
+          builder.setInsertionPointToStart(procedureOp.getBody());
+          auto readOp = builder.create<ReadOp>(
+              nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
+              varOp.getResult());
+          auto newVarOp = builder.create<VariableOp>(
+              nestedOp.getLoc(), resultType, varName, readOp);
+          builder.clearInsertionPoint();
 
-        // Replace the users of the global variable with a corresponding
-        // "shadow" variable.
-        for (auto *user : users) {
-          user->replaceUsesOfWith(user->getOperand(0), newVarOp);
-          if (isa<BlockingAssignOp>(user))
-            assignOps.insert(user);
+          // Replace the users of the global variable with a corresponding
+          // "shadow" variable.
+          for (auto *user : users) {
+            user->replaceUsesOfWith(user->getOperand(0), newVarOp);
+            if (isa<BlockingAssignOp>(user))
+              assignOps.insert(user);
+          }
         }
       }
 

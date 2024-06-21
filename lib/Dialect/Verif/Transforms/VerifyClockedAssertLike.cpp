@@ -65,7 +65,7 @@ private:
 
       if (operandIt == op->operand_end()) {
         // Check that our property doesn't contain any illegal ops
-        if (isa<ltl::ClockOp, ltl::DisableOp>(op)) {
+        if (isa<ltl::ClockOp>(op)) {
           op->emitError("Nested clock or disable operations are not "
                         "allowed for clock_assertlike operations.");
           return;
@@ -86,12 +86,7 @@ private:
       if (!defOp || handledOps.contains(defOp))
         continue;
 
-      // This is triggered if our operand is already in the worklist and
-      // wasn't handled
-      if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
-        op->emitError("dependency cycle");
-        return;
-      }
+      worklist.insert({defOp, defOp->operand_begin()});
     }
 
     // Clear worklist and such
