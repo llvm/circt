@@ -136,9 +136,9 @@ struct MemberVisitor {
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
         if (duplicateInstanceBodySymbol) {
-          for (auto &existPort : duplicateInstanceBodySymbol->getPortList()) {
-            if (existPort->name == port->name) {
-              port = existPort->as_if<PortSymbol>();
+          for (auto &existPort : moduleLowering->ports) {
+            if (existPort.ast.name == port->name) {
+              port = &existPort.ast;
               break;
             }
           }
@@ -202,9 +202,9 @@ struct MemberVisitor {
         if (!value)
           return failure();
         if (duplicateInstanceBodySymbol) {
-          for (auto &existPort : duplicateInstanceBodySymbol->getPortList()) {
-            if (existPort->name == port->name) {
-              port = existPort->as_if<PortSymbol>();
+          for (auto &existPort : moduleLowering->ports) {
+            if (existPort.ast.name == port->name) {
+              port = &existPort.ast;
               break;
             }
           }
@@ -224,6 +224,14 @@ struct MemberVisitor {
         unsigned offset = 0;
         auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
+          if (duplicateInstanceBodySymbol) {
+            for (auto &existPort : moduleLowering->ports) {
+              if (existPort.ast.name == port->name) {
+                port = &existPort.ast;
+                break;
+              }
+            }
+          }
           unsigned width = port->getType().getBitWidth();
           auto index = builder.create<moore::ConstantOp>(loc, i32, offset);
           auto sliceType = context.convertType(port->getType());
