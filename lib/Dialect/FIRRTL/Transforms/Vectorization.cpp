@@ -22,8 +22,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "firrtl-vectorization"
-
 namespace circt {
 namespace firrtl {
 #define GEN_PASS_DEF_VECTORIZATION
@@ -34,7 +32,8 @@ namespace firrtl {
 using namespace circt;
 using namespace firrtl;
 
-namespace {
+#define DEBUG_TYPE "firrtl-vectorization"
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -77,7 +76,6 @@ public:
     return failure();
   }
 };
-} // namespace
 
 struct VectorizationPass
     : public circt::firrtl::impl::VectorizationBase<VectorizationPass> {
