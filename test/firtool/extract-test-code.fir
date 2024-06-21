@@ -44,13 +44,14 @@ circuit Top:
 
   ; CHECK: module Top_assert(
   ; CHECK-NOT: endmodule
-  ; CHECK:   foo: assert property (cond);
+  ; CHECK:   foo: assert property (disable iff (~(en)) cond);
   ; CHECK: endmodule
 
   public module Top:
     input clock : Clock
-    input cond : UInt<1>
-    output out : UInt<1>
+    input cond  : UInt<1>
+    input en    : UInt<1>
+    output out  : UInt<1>
 
     inst instance_extracted of InstanceExtracted
     connect instance_extracted.clock, clock
@@ -61,4 +62,4 @@ circuit Top:
     connect input_only.clock, clock
     connect input_only.cond, cond
 
-    intrinsic(circt_verif_assert<label="foo">, cond)
+    intrinsic(circt_verif_assert<label="foo">, cond, en)

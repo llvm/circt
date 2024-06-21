@@ -1756,7 +1756,8 @@ void GrandCentralPass::runOnOperation() {
         }
         auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
         if (dutModules.contains(mod) ||
-            AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
+            AnnotationSet::hasAnnotation(mod->getModule(),
+                                         companionAnnoClass) ||
             (instOp && instOp.getLowerToBind()))
           continue;
         modules.push_back(mod);

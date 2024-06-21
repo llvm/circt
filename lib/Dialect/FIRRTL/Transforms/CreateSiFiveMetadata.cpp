@@ -876,7 +876,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   auto *body = circuitOp.getBodyBlock();
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
   });
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   if (it != body->end()) {

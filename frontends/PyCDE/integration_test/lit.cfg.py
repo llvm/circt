@@ -152,6 +152,7 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 # Enable ESI runtime tests.
 if config.esi_runtime == "ON":
   config.available_features.add('esi-runtime')
+  config.available_features.add('esitester')
 
   llvm_config.with_environment('PYTHONPATH',
                                [f"{config.esi_runtime_path}/python/"],

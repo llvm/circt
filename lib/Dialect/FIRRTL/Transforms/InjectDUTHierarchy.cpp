@@ -138,7 +138,7 @@ void InjectDUTHierarchy::runOnOperation() {
   // this information on the Circuit so that we don't have to dig through all
   // the modules to find the DUT.
   for (auto mod : circuit.getOps<FModuleOp>()) {
-    if (!AnnotationSet(mod).hasAnnotation(dutAnnoClass))
+    if (!AnnotationSet::hasAnnotation(mod, dutAnnoClass))
       continue;
     if (dut) {
       auto diag = emitError(mod.getLoc())

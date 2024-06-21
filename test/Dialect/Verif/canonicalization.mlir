@@ -35,3 +35,24 @@ hw.module @HasBeenReset(in %clock: i1, in %reset: i1) {
   %constClockS0 = hw.wire %c2 sym @constClockS0 : i1
   %constClockS1 = hw.wire %c3 sym @constClockS1 : i1
 }
+
+// CHECK-LABEL: @clockedAssert
+hw.module @clockedAssert(in %clock : i1, in %a : i1, in %en : i1) {
+  // CHECK: verif.clocked_assert %a if %en, posedge %clock : i1
+  %clk = ltl.clock %a, posedge %clock : i1
+  verif.assert %clk if %en : !ltl.sequence
+}
+
+// CHECK-LABEL: @clockedAssume
+hw.module @clockedAssume(in %clock : i1, in %a : i1, in %en : i1) {
+  // CHECK: verif.clocked_assume %a if %en, posedge %clock : i1
+  %clk = ltl.clock %a, posedge %clock : i1
+  verif.assume %clk if %en : !ltl.sequence
+}
+
+// CHECK-LABEL: @clockedCover
+hw.module @clockedCover(in %clock : i1, in %a : i1, in %en : i1) {
+  // CHECK: verif.clocked_cover %a if %en,  posedge %clock : i1
+  %clk = ltl.clock %a, posedge %clock : i1
+  verif.cover %clk if %en : !ltl.sequence
+}

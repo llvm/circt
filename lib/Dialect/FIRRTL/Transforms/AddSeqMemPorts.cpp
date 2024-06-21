@@ -176,7 +176,7 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
 InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
   // Find the DUT module.
   for (auto *node : *instanceGraph) {
-    if (AnnotationSet(node->getModule()).hasAnnotation(dutAnnoClass))
+    if (AnnotationSet::hasAnnotation(node->getModule(), dutAnnoClass))
       return node;
   }
   return instanceGraph->getTopLevelNode();
