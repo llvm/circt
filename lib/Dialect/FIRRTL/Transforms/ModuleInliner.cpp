@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
@@ -27,6 +26,7 @@
 #include "circt/Support/Debug.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SetVector.h"
@@ -36,6 +36,13 @@
 #include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "firrtl-inliner"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INLINER
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -924,11 +931,11 @@ void Inliner::cloneAndRename(
 }
 
 bool Inliner::shouldFlatten(Operation *op) {
-  return AnnotationSet(op).hasAnnotation(flattenAnnoClass);
+  return AnnotationSet::hasAnnotation(op, flattenAnnoClass);
 }
 
 bool Inliner::shouldInline(Operation *op) {
-  return AnnotationSet(op).hasAnnotation(inlineAnnoClass);
+  return AnnotationSet::hasAnnotation(op, inlineAnnoClass);
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -1473,7 +1480,7 @@ void Inliner::run() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class InlinerPass : public InlinerBase<InlinerPass> {
+class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   void runOnOperation() override {
     LLVM_DEBUG(debugPassHeader(this) << "\n");
     Inliner inliner(getOperation(), getAnalysis<SymbolTable>());

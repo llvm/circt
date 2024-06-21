@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
@@ -18,7 +20,16 @@
 
 #include "circt/Transforms/Passes.h"
 
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+
 #include <iterator>
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISADDOPERATORLIBRARY
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -27,7 +38,8 @@ using namespace ibis;
 namespace {
 
 struct AddOperatorLibraryPass
-    : public IbisAddOperatorLibraryBase<AddOperatorLibraryPass> {
+    : public circt::ibis::impl::IbisAddOperatorLibraryBase<
+          AddOperatorLibraryPass> {
   void runOnOperation() override;
 };
 

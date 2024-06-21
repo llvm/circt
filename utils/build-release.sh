@@ -34,7 +34,6 @@ cmake ../../llvm/llvm \
     -DLLVM_INSTALL_UTILS=ON \
     -DLLVM_OPTIMIZED_TABLEGEN=ON \
     -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
-    -DLLVM_ENABLE_TERMINFO=OFF \
     -DLLVM_TARGETS_TO_BUILD="host" && \
 cmake --build . --target install -- -j$(nproc)  && \
 cd ../circt && \
@@ -49,7 +48,6 @@ cmake ../.. \
     -DCMAKE_INSTALL_PREFIX=../install \
     -DVERILATOR_DISABLE=ON \
     -DLLVM_EXTERNAL_LIT=../llvm/bin \
-    -DLLVM_ENABLE_TERMINFO=OFF && \
 cmake --build . --target install -- -j$(nproc) && \
 cd ../install && \
 tar --transform 's,^,circt-release/,' -czf ../circt-release.tgz .

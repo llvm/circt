@@ -10,13 +10,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_REMOVEGROUPS
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -94,7 +100,8 @@ void inlineGroups(ComponentOp component) {
 
 namespace {
 
-struct RemoveGroupsPass : public RemoveGroupsBase<RemoveGroupsPass> {
+struct RemoveGroupsPass
+    : public circt::calyx::impl::RemoveGroupsBase<RemoveGroupsPass> {
   void runOnOperation() override;
 };
 

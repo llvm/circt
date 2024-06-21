@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -22,17 +21,26 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_ADDSEQMEMPORTS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
+struct AddSeqMemPortsPass
+    : public circt::firrtl::impl::AddSeqMemPortsBase<AddSeqMemPortsPass> {
   void runOnOperation() override;
   LogicalResult processAddPortAnno(Location loc, Annotation anno);
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
@@ -168,7 +176,7 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
 InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
   // Find the DUT module.
   for (auto *node : *instanceGraph) {
-    if (AnnotationSet(node->getModule()).hasAnnotation(dutAnnoClass))
+    if (AnnotationSet::hasAnnotation(node->getModule(), dutAnnoClass))
       return node;
   }
   return instanceGraph->getTopLevelNode();

@@ -1198,6 +1198,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredPort::@[[IN_SYM]]> : !firrtl.rwprobe<uint>
     define p = rwprobe(in[1])
 
+  ; CHECK-LABEL: @RWProbeUninferredReset(
+  module RWProbeUninferredReset:
+    ; CHECK: in %in: !firrtl.bundle<a: reset> sym [<@[[IN_SYM:.+]],1,public>],
+    input in : {a : Reset}
+    output p : RWProbe<Reset>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredReset::@[[IN_SYM]]> : !firrtl.rwprobe<reset>
+    define p = rwprobe(in.a)
+
   ; CHECK-LABEL: module private @ProbeInvalidate
   ; CHECK-NEXT: }
   module ProbeInvalidate:
@@ -1294,32 +1302,6 @@ circuit Foo_v3p0p0:
     node `a` = `0`
     ; CHECK-NEXT: %b = firrtl.node {{.+}}%a
     node b = a
-
-;// -----
-
-FIRRTL version 1.2.0
-circuit Foo_v1p9p9:
-  module Foo_v1p9p9:
-    input a: UInt<1>
-    output b: UInt<1>
-    output auto : UInt<1>
-
-    ; CHECK: firrtl.matchingconnect %b, %a
-    b <- a
-
-    ; CHECK: [[a0:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: [[a1:%.+]] = firrtl.subfield %bundleWithAnalog[a]
-    ; CHECK: firrtl.attach [[a1]], [[a0]]
-    wire bundleWithAnalog : {a: Analog<1>}
-    bundleWithAnalog <- bundleWithAnalog
-
-
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0[member] : !firrtl.bundle<member: bundle<"0": bundle<clock: clock, reset: uint<1>>>>
-    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]["0"] : !firrtl.bundle<"0": bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]][reset] : !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: firrtl.matchingconnect %auto, [[C]] : !firrtl.uint<1>
-    wire out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
-    auto <- out_0.member.0.reset @[Field 173:49]
 
 ;// -----
 ; Check reference expressions using literal identifiers or keywords.
@@ -1429,6 +1411,7 @@ circuit RadixEncodedIntegerLiterals:
 
 ;// -----
 ; Tests for type alias
+FIRRTL version 4.0.0
 circuit Top:
   type WordType = const UInt<32>
   type ValidType = UInt<1>
@@ -1447,7 +1430,7 @@ circuit Top:
   ; CHECK-NEXT: %[[RESULT:.+]] = firrtl.subfield %in_data[valid] : !firrtl.alias<Data, bundle<w: const.vector<const.alias<WordType, const.uint<32>>, 2>, valid: alias<ValidType, uint<1>>, ready flip: uint<1>>>
   ; CHECK-NEXT: %c = firrtl.wire interesting_name : !firrtl.alias<Complex_id, alias<Complex, bundle<real: sint<10>, imag: sint<10>>>>
   ; CHECK-NEXT: firrtl.matchingconnect %out_valid, %[[RESULT]] : !firrtl.alias<ValidType, uint<1>>
-  module Top:
+  public module Top:
     input in_data: Data
     input in_complex: Complex
     output out: ProbeComplex
@@ -1525,6 +1508,10 @@ circuit Layers:
     ; CHECK-NEXT:   }
     ; CHECK-NEXT: }
 
+  ; CHECK: firrtl.layer @WithDirectory1 bind attributes {output_file = #hw.output_file<"foo{{/|\\\\}}">}
+  layer WithDirectory1, bind, "foo":
+  ; CHECK: firrtl.layer @WithDirectory2 bind attributes {output_file = #hw.output_file<"foo{{/|\\\\}}">}
+  layer WithDirectory2, bind, "foo/":
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
@@ -1706,8 +1693,9 @@ circuit VecOfProps:
 ;// -----
 ; Test parsing of wires of probes, wires of agg of probes, and namekinds.
 ; CHECK-LABEL: circuit "WireOfProbesAndNames"
+FIRRTL version 4.0.0
 circuit WireOfProbesAndNames:
-  module WireOfProbesAndNames:
+  public module WireOfProbesAndNames:
     ; CHECK: %mixed = firrtl.wire interesting_name : !firrtl.openbundle
     wire mixed : { a : UInt<3>, b : Probe<UInt<3>> }
     ; CHECK: %probe = firrtl.wire : !firrtl.probe

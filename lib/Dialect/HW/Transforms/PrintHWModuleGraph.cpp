@@ -9,18 +9,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWModuleGraph.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_PRINTHWMODULEGRAPH
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
 
 namespace {
 struct PrintHWModuleGraphPass
-    : public PrintHWModuleGraphBase<PrintHWModuleGraphPass> {
+    : public circt::hw::impl::PrintHWModuleGraphBase<PrintHWModuleGraphPass> {
   PrintHWModuleGraphPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     getOperation().walk([&](hw::HWModuleOp module) {

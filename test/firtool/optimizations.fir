@@ -1,8 +1,9 @@
 ; RUN: firtool %s --format=fir --ir-fir              | circt-opt | FileCheck %s --check-prefix=OPT
 ; RUN: firtool %s --format=fir --ir-fir -disable-opt | circt-opt | FileCheck %s --check-prefix=NOOPT
 
+FIRRTL version 4.0.0
 circuit test_cse :
-  module test_cse :
+  public module test_cse :
     input a1: UInt<4>
     input a2: UInt<4>
     output b: UInt<5>

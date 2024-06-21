@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Conversion/HandshakeToHW.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -20,9 +20,17 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKELOWEREXTMEMTOHW
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -107,7 +115,8 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
 
 namespace {
 struct HandshakeLowerExtmemToHWPass
-    : public HandshakeLowerExtmemToHWBase<HandshakeLowerExtmemToHWPass> {
+    : public circt::handshake::impl::HandshakeLowerExtmemToHWBase<
+          HandshakeLowerExtmemToHWPass> {
 
   HandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper) {
     if (createESIWrapper)

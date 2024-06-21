@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Ibis/IbisDialect.h"
@@ -18,6 +20,13 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISCONTAINERSTOHW
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace circt;
 using namespace ibis;
@@ -64,7 +73,7 @@ struct ContainerPortInfo {
     Namespace portNs;
     for (auto input : container.getBodyBlock()->getOps<InputPortOp>()) {
       auto uniquePortName =
-          StringAttr::get(ctx, portNs.newName(input.getNameAttr().getValue()));
+          StringAttr::get(ctx, portNs.newName(input.getNameHint()));
       opInputs[uniquePortName] = input;
       hw::PortInfo portInfo;
       portInfo.name = uniquePortName;
@@ -97,17 +106,16 @@ using ContainerPortInfoMap =
     llvm::DenseMap<hw::InnerRefAttr, ContainerPortInfo>;
 using ContainerHWModSymbolMap = llvm::DenseMap<hw::InnerRefAttr, StringAttr>;
 
-static StringAttr concatNames(hw::InnerRefAttr ref) {
-  return StringAttr::get(ref.getContext(), ref.getModule().getValue() + "_" +
-                                               ref.getName().getValue());
+static StringAttr concatNames(mlir::StringAttr lhs, mlir::StringAttr rhs) {
+  return StringAttr::get(lhs.getContext(), lhs.strref() + "_" + rhs.strref());
 }
 
 struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
-  ContainerOpConversionPattern(MLIRContext *ctx,
+  ContainerOpConversionPattern(MLIRContext *ctx, Namespace &modNamespace,
                                ContainerPortInfoMap &portOrder,
                                ContainerHWModSymbolMap &modSymMap)
-      : OpConversionPattern<ContainerOp>(ctx), portOrder(portOrder),
-        modSymMap(modSymMap) {}
+      : OpConversionPattern<ContainerOp>(ctx), modNamespace(modNamespace),
+        portOrder(portOrder), modSymMap(modSymMap) {}
 
   LogicalResult
   matchAndRewrite(ContainerOp op, OpAdaptor adaptor,
@@ -115,12 +123,17 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
     auto design = op->getParentOfType<DesignOp>();
     rewriter.setInsertionPoint(design);
 
+    // Generate and de-alias the hw.module name.
     // If the container is a top level container, ignore the design name.
     StringAttr hwmodName;
     if (op.getIsTopLevel())
-      hwmodName = op.getInnerNameAttr();
+      hwmodName = op.getNameHintAttr();
     else
-      hwmodName = concatNames(op.getInnerRef());
+      hwmodName =
+          concatNames(op.getInnerRef().getModule(), op.getNameHintAttr());
+
+    hwmodName = StringAttr::get(op.getContext(),
+                                modNamespace.newName(hwmodName.getValue()));
 
     const ContainerPortInfo &cpi = portOrder.at(op.getInnerRef());
     auto hwMod =
@@ -175,6 +188,7 @@ struct ContainerOpConversionPattern : public OpConversionPattern<ContainerOp> {
     return success();
   }
 
+  Namespace &modNamespace;
   ContainerPortInfoMap &portOrder;
   ContainerHWModSymbolMap &modSymMap;
 };
@@ -330,7 +344,8 @@ struct ContainerInstanceOpConversionPattern
   ContainerHWModSymbolMap &modSymMap;
 }; // namespace
 
-struct ContainersToHWPass : public IbisContainersToHWBase<ContainersToHWPass> {
+struct ContainersToHWPass
+    : public circt::ibis::impl::IbisContainersToHWBase<ContainersToHWPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -347,6 +362,10 @@ void ContainersToHWPass::runOnOperation() {
 
   ConversionTarget target(*ctx);
   ContainerHWModSymbolMap modSymMap;
+  SymbolCache modSymCache;
+  modSymCache.addDefinitions(getOperation());
+  Namespace modNamespace;
+  modNamespace.add(modSymCache);
   target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
@@ -357,9 +376,9 @@ void ContainersToHWPass::runOnOperation() {
   target.addLegalDialect<IbisDialect>();
 
   RewritePatternSet patterns(ctx);
-  patterns
-      .add<ContainerOpConversionPattern, ContainerInstanceOpConversionPattern>(
-          ctx, portOrder, modSymMap);
+  patterns.add<ContainerOpConversionPattern>(ctx, modNamespace, portOrder,
+                                             modSymMap);
+  patterns.add<ContainerInstanceOpConversionPattern>(ctx, portOrder, modSymMap);
   patterns.add<ThisOpConversionPattern>(ctx);
 
   if (failed(

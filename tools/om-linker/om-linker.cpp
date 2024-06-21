@@ -14,9 +14,11 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
@@ -210,8 +212,10 @@ int main(int argc, char **argv) {
   context.loadDialect<comb::CombDialect>();
   context.loadDialect<emit::EmitDialect>();
   context.loadDialect<hw::HWDialect>();
+  context.loadDialect<ltl::LTLDialect>();
   context.loadDialect<om::OMDialect>();
   context.loadDialect<sv::SVDialect>();
+  context.loadDialect<verif::VerifDialect>();
 
   // Do the guts of the om-linker process.
   auto result = executeOMLinker(context);

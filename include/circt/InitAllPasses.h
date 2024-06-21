@@ -28,6 +28,7 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
 #include "circt/Dialect/SSP/SSPPasses.h"
@@ -70,6 +71,7 @@ inline void registerAllPasses() {
   ssp::registerPasses();
   systemc::registerPasses();
   verif::registerPasses();
+  moore::registerPasses();
 }
 
 } // namespace circt

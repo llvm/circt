@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -24,11 +23,19 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_CREATESIFIVEMETADATA
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -373,6 +380,42 @@ struct ObjectModelIR {
                   builder.getStringAttr("retime_modules_metadata")),
               "retime");
 
+    if (dutMod) {
+      // This can handle multiple DUTs or multiple paths to a DUT.
+      // Create a list of paths to the DUTs.
+      SmallVector<Value, 2> pathOpsToDut;
+
+      auto dutPaths = instancePathCache.getAbsolutePaths(dutMod);
+      // For each path to the DUT.
+      for (auto dutPath : dutPaths) {
+        SmallVector<Attribute> namepath;
+        // Construct the list of inner refs to the instances in the path.
+        for (auto inst : dutPath)
+          namepath.emplace_back(firrtl::getInnerRefTo(
+              inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
+                return getModuleNamespace(mod);
+              }));
+        if (namepath.empty())
+          continue;
+        // The path op will refer to the leaf instance in the path (and not the
+        // actual DUT module!!).
+        auto leafInst = dutPath.leaf();
+        auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
+        auto nla = nlaBuilder.create<hw::HierPathOp>(
+            dutMod->getLoc(),
+            nlaBuilder.getStringAttr(circtNamespace.newName("dutNLA")),
+            nlaBuilder.getArrayAttr(namepath));
+        // Create the path ref op and record it.
+        pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
+      }
+      auto *context = builder.getContext();
+      // Create the list of paths op and add it as a field of the class.
+      auto pathList = builder.create<ListCreateOp>(
+          ListType::get(context, cast<PropertyType>(PathType::get(context))),
+          pathOpsToDut);
+      addPort(pathList, "dutModulePath");
+    }
+
     builder.setInsertionPointToEnd(topMod.getBodyBlock());
     return builder.create<ObjectOp>(sifiveMetadataClass,
                                     builder.getStringAttr("sifive_metadata"));
@@ -402,7 +445,8 @@ struct ObjectModelIR {
 }; // namespace
 
 class CreateSiFiveMetadataPass
-    : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
+    : public circt::firrtl::impl::CreateSiFiveMetadataBase<
+          CreateSiFiveMetadataPass> {
   LogicalResult emitRetimeModulesMetadata(ObjectModelIR &omir);
   LogicalResult emitSitestBlackboxMetadata(ObjectModelIR &omir);
   LogicalResult emitMemoryMetadata(ObjectModelIR &omir);
@@ -832,7 +876,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   auto *body = circuitOp.getBodyBlock();
   // Find the device under test and create a set of all modules underneath it.
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
   });
   auto &instanceGraph = getAnalysis<InstanceGraph>();
   if (it != body->end()) {
@@ -856,11 +900,12 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       SmallVector<std::pair<unsigned, PortInfo>> ports = {
           {portIndex,
            PortInfo(StringAttr::get(objectOp->getContext(), "metadataObj"),
-                    objectOp.getType(), Direction::Out)}};
+                    AnyRefType::get(objectOp->getContext()), Direction::Out)}};
       topMod.insertPorts(ports);
       auto builderOM = mlir::ImplicitLocOpBuilder::atBlockEnd(
           topMod->getLoc(), topMod.getBodyBlock());
-      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectOp);
+      auto objectCast = builderOM.create<ObjectAnyRefCastOp>(objectOp);
+      builderOM.create<PropAssignOp>(topMod.getArgument(portIndex), objectCast);
     }
 
   // This pass modifies the hierarchy, InstanceGraph is not preserved.

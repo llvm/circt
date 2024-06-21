@@ -118,6 +118,7 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+  void legalizeFunctionNames(FuncOp func);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
   void gatherEnumPrefixes(mlir::ModuleOp topLevel);
@@ -158,8 +159,16 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
   auto ports = module.getPortList();
   SmallVector<Attribute> newNames(ports.size());
   bool updated = false;
+  bool isFuncOp = isa<FuncOp>(module);
   for (auto [idx, port] : llvm::enumerate(ports)) {
     auto verilogName = port.attrs.get(verilogNameAttr);
+    // A function return value must named the exact same name to its function
+    // Verilog name.
+    if (isFuncOp && port.attrs.get(FuncOp::getExplicitlyReturnedAttrName())) {
+      updated = true;
+      newNames[idx] = StringAttr::get(ctxt, getSymOpName(module));
+      continue;
+    }
     if (verilogName) {
       auto newName = StringAttr::get(
           ctxt, nameResolver.getLegalName(cast<StringAttr>(verilogName)));
@@ -339,6 +348,18 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
       if (newName != name)
         op.setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
     }
+  }
+}
+
+void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
+  MLIRContext *ctxt = func.getContext();
+  if (auto verilogName = func.getVerilogName()) {
+    globalNameResolver.insertUsedName(*verilogName);
+    return;
+  }
+  auto newName = globalNameResolver.getLegalName(func.getName());
+  if (newName != func.getName()) {
+    func.setVerilogName(StringAttr::get(ctxt, newName));
   }
 }
 

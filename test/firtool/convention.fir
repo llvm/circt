@@ -11,6 +11,7 @@
 
 ; Ensure that top module and ext modules are marked scalarized.
 
+FIRRTL version 4.0.0
 circuit Top :
   ; SCALARIZE_FFF-NOT: attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_TFF:     attributes {convention = #firrtl<convention scalarized>}
@@ -20,7 +21,7 @@ circuit Top :
   ; SCALARIZE_TFT:     attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_FTT-NOT: attributes {convention = #firrtl<convention scalarized>}
   ; SCALARIZE_TTT:     attributes {convention = #firrtl<convention scalarized>}
-  module Top :
+  public module Top :
     output port: UInt<8>[2]
     port[0] <= UInt<8>(0)
     port[1] <= UInt<8>(0)
