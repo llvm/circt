@@ -216,29 +216,13 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
   if (op.getNumOperands() < 2)
     return failure(); // Should be handled by the folder
 
-  // Check if there are adjacent literals we can merge or empty literals to
-  // remove
-  bool canBeSimplified = false;
-  bool prevIsLit = false;
-  for (auto oper : op.getOperands())
-    if (auto litOp = dyn_cast_or_null<FormatLitOp>(oper.getDefiningOp())) {
-      if (prevIsLit || litOp.getLiteral().empty()) {
-        canBeSimplified = true;
-        break;
-      }
-      prevIsLit = true;
-    } else {
-      prevIsLit = false;
-    }
-
-  if (!canBeSimplified)
-    return failure();
-
   auto fmtStrType = FormatStringType::get(op.getContext());
 
-  // Simplify literal operands
+  // Check if there are adjacent literals we can merge or empty literals to
+  // remove
   SmallVector<StringRef> litSequence;
   SmallVector<Value> newOperands;
+  newOperands.reserve(op.getNumOperands());
   FormatLitOp prevLitOp;
 
   for (auto operand : op.getOperands()) {
@@ -278,6 +262,9 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
       newOperands.push_back(prevLitOp.getResult());
     }
   }
+
+  if (newOperands.size() == op.getNumOperands())
+    return failure(); // Nothing changed
 
   if (newOperands.empty())
     rewriter.replaceOpWithNewOp<FormatLitOp>(op, fmtStrType,
