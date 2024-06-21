@@ -353,10 +353,10 @@ private:
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
 
-  /// Mapping of FModuleOp to HWModuleOp
+  /// Mapping of FStrictModuleOp to HWModuleOp
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
-  /// Mapping of HWModuleOp to FModuleOp
+  /// Mapping of HWModuleOp to FStrictModuleOp
   DenseMap<Operation *, Operation *> newToOldModuleMap;
 
   /// Cache of module symbols.  We need to test hirarchy-based properties to
@@ -567,7 +567,7 @@ private:
                            CircuitLoweringState &loweringState);
   bool handleForceNameAnnos(FModuleLike oldModule, AnnotationSet &annos,
                             CircuitLoweringState &loweringState);
-  hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
+  hw::HWModuleOp lowerModule(FStrictModuleOp oldModule, Block *topLevelModule,
                              CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                       Block *topLevelModule,
@@ -577,7 +577,8 @@ private:
                                       CircuitLoweringState &loweringState);
 
   LogicalResult
-  lowerModulePortsAndMoveBody(FModuleOp oldModule, hw::HWModuleOp newModule,
+  lowerModulePortsAndMoveBody(FStrictModuleOp oldModule,
+                              hw::HWModuleOp newModule,
                               CircuitLoweringState &loweringState);
   LogicalResult lowerModuleOperations(hw::HWModuleOp module,
                                       CircuitLoweringState &loweringState);
@@ -640,7 +641,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
     auto result =
         TypeSwitch<Operation *, LogicalResult>(&op)
-            .Case<FModuleOp>([&](auto module) {
+            .Case<FStrictModuleOp>([&](auto module) {
               auto loweredMod = lowerModule(module, topLevelModule, state);
               if (!loweredMod)
                 return failure();
@@ -1079,7 +1080,8 @@ FIRRTLModuleLowering::lowerMemModule(FMemModuleOp oldModule,
 
 /// Run on each firrtl.module, creating a basic hw.module for the firrtl module.
 hw::HWModuleOp
-FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
+FIRRTLModuleLowering::lowerModule(FStrictModuleOp oldModule,
+                                  Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
@@ -1097,7 +1099,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
     newModule.setCommentAttr(comment);
 
-  // Copy over any attributes which are not required for FModuleOp.
+  // Copy over any attributes which are not required for FStrictModuleOp.
   SmallVector<StringRef, 12> attrNames = {
       "annotations",   "convention",      "layers",
       "portNames",     "sym_name",        "portDirections",
@@ -1192,19 +1194,22 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   if (type_isa<AnalogType>(flipValue.getType()))
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
-  Operation *connectOp = nullptr;
+  assert(isa<LHSType>(flipValue.getType()));
+
+  StrictConnectOp connectOp;
   for (auto &use : flipValue.getUses()) {
     // We only know how to deal with connects where this value is the
-    // destination.
+    // destination.  This is trivially true for LHSType values.
     if (use.getOperandNumber() != 0)
       return {};
-    if (!isa<ConnectOp, MatchingConnectOp>(use.getOwner()))
+    auto thisCon = dyn_cast<StrictConnectOp>(use.getOwner());
+    if (!thisCon)
       return {};
 
     // We only support things with a single connect.
     if (connectOp)
       return {};
-    connectOp = use.getOwner();
+    connectOp = thisCon;
   }
 
   // We don't have an HW equivalent of "poison" so just don't special case
@@ -1214,7 +1219,7 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
 
   // Don't special case zero-bit results.
   auto loweredType =
-      loweringState.lowerType(flipValue.getType(), flipValue.getLoc());
+      loweringState.lowerType(connectOp.getSrc().getType(), flipValue.getLoc());
   if (loweredType.isInteger(0))
     return {};
 
@@ -1222,46 +1227,9 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   // output.
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
-  auto connectSrc = connectOp->getOperand(1);
+  auto connectSrc = connectOp.getSrc();
 
-  // Directly forward foreign types.
-  if (!isa<FIRRTLType>(connectSrc.getType())) {
-    connectOp->erase();
-    return connectSrc;
-  }
-
-  // Convert fliped sources to passive sources.
-  if (!type_cast<FIRRTLBaseType>(connectSrc.getType()).isPassive())
-    connectSrc = builder
-                     .create<mlir::UnrealizedConversionCastOp>(
-                         type_cast<FIRRTLBaseType>(connectSrc.getType())
-                             .getPassiveType(),
-                         connectSrc)
-                     .getResult(0);
-
-  // We know it must be the destination operand due to the types, but the
-  // source may not match the destination width.
-  auto destTy = type_cast<FIRRTLBaseType>(flipValue.getType()).getPassiveType();
-
-  if (destTy != connectSrc.getType() &&
-      (isa<BaseTypeAliasType>(connectSrc.getType()) ||
-       isa<BaseTypeAliasType>(destTy))) {
-    connectSrc =
-        builder.createOrFold<BitCastOp>(flipValue.getType(), connectSrc);
-  }
-  if (!destTy.isGround()) {
-    // If types are not ground type and they don't match, we give up.
-    if (destTy != type_cast<FIRRTLType>(connectSrc.getType()))
-      return {};
-  } else if (destTy.getBitWidthOrSentinel() !=
-             type_cast<FIRRTLBaseType>(connectSrc.getType())
-                 .getBitWidthOrSentinel()) {
-    // The only type mismatchs we care about is due to integer width
-    // differences.
-    auto destWidth = destTy.getBitWidthOrSentinel();
-    assert(destWidth != -1 && "must know integer widths");
-    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
-  }
+  // loweredType only exists if all widths were known.
 
   // Remove the connect and use its source as the value for the output.
   connectOp->erase();
@@ -1288,7 +1256,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and output op.
 LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
-    FModuleOp oldModule, hw::HWModuleOp newModule,
+    FStrictModuleOp oldModule, hw::HWModuleOp newModule,
     CircuitLoweringState &loweringState) {
   ImplicitLocOpBuilder bodyBuilder(oldModule.getLoc(), newModule.getBody());
 
@@ -1357,17 +1325,23 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    auto newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+    auto newArg = bodyBuilder.create<StrictWireOp>(
+        cast<FIRRTLBaseType>(port.type),
+        bodyBuilder.getStringAttr("." + port.getName().str() + ".output"),
+        NameKindEnumAttr::get(bodyBuilder.getContext(),
+                              NameKindEnum::DroppableName),
+        bodyBuilder.getArrayAttr({}), hw::InnerSymAttr{}, UnitAttr{});
 
     // Switch all uses of the old operands to the new ones.
-    oldArg.replaceAllUsesWith(newArg.getResult());
+    // FStrictModuleOp's outputs are write only and already LHSs.
+    assert(isa<LHSType>(oldArg.getType()));
+    oldArg.replaceAllUsesWith(newArg.getWrite());
 
     // Don't output zero bit results or inouts.
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
       auto output =
-          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
+          castFromFIRRTLType(newArg.getRead(), resultHWType, outputBuilder);
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
@@ -1696,10 +1670,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(RefReleaseOp op);
   LogicalResult visitStmt(RefReleaseInitialOp op);
 
-  template<typename SIOP>
+  template <typename SIOP>
   FailureOr<Value> lowerSubindex(SIOP op, Value input);
   FailureOr<Value> lowerSubaccess(SubaccessOp op, Value input);
-  template<typename SFOP>
+  template <typename SFOP>
   FailureOr<Value> lowerSubfield(SFOP op, Value input);
 
   LogicalResult fixupLTLOps();
@@ -2725,15 +2699,14 @@ LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   return setLowering(op, cst);
 }
 
-template<typename SIOP>
+template <typename SIOP>
 FailureOr<Value> FIRRTLLowering::lowerSubindex(SIOP op, Value input) {
   Type inputType = op.getInput().getType();
   if (auto lhs = dyn_cast<LHSType>(inputType))
     inputType = lhs.getType();
   auto iIdx = getOrCreateIntConstant(
       getBitWidthFromVectorSize(
-          firrtl::type_cast<FVectorType>(inputType)
-              .getNumElements()),
+          firrtl::type_cast<FVectorType>(inputType).getNumElements()),
       op.getIndex());
 
   // If the input has an inout type, we need to lower to ArrayIndexInOutOp;
@@ -2770,7 +2743,7 @@ FailureOr<Value> FIRRTLLowering::lowerSubaccess(SubaccessOp op, Value input) {
   return result;
 }
 
-template<typename SFOP>
+template <typename SFOP>
 FailureOr<Value> FIRRTLLowering::lowerSubfield(SFOP op, Value input) {
   Type inputType = op.getInput().getType();
   if (auto lhs = dyn_cast<LHSType>(inputType))
@@ -2787,8 +2760,8 @@ FailureOr<Value> FIRRTLLowering::lowerSubfield(SFOP op, Value input) {
 
   // If the input has an inout type, we need to lower to StructFieldInOutOp;
   // otherwise, StructExtractOp.
-  auto field = firrtl::type_cast<BundleType>(inputType)
-                   .getElementName(op.getFieldIndex());
+  auto field = firrtl::type_cast<BundleType>(inputType).getElementName(
+      op.getFieldIndex());
   Value result;
   if (isa<sv::InOutType>(input.getType()))
     result = builder.createOrFold<sv::StructFieldInOutOp>(input, field);
@@ -2960,7 +2933,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubtagOp op) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-// FIXME: This shouldn't be here.  Foriegn types should require that the foriegn 
+// FIXME: This shouldn't be here.  Foriegn types should require that the foriegn
 // dialect provide a base variable storage op and not use wire.
 LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto origResultType = op.getResult().getType();
@@ -3537,7 +3510,6 @@ LogicalResult FIRRTLLowering::visitDecl(StrictInstanceOp oldInstance) {
   }
   return success();
 }
-
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -4451,7 +4423,6 @@ LogicalResult FIRRTLLowering::visitStmt(StrictConnectOp op) {
   builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
-
 
 LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
   auto dest = op.getDest();

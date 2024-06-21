@@ -14,7 +14,7 @@
 //          read-under-write => undefined
 // COM: This is a memory with aggregates which is currently not supported.
 firrtl.circuit "Div" {
-  firrtl.module @Div(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
+  firrtl.strictmodule @Div(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
     // expected-error @+2 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
     // expected-error @+1 {{'firrtl.mem' op LowerToHW couldn't handle this operation}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
@@ -34,7 +34,7 @@ firrtl.circuit "Div" {
 //         read-under-write => undefined
 // COM: This is an aggregate memory which is not supported.
 firrtl.circuit "MemOne" {
-  firrtl.module @MemOne() {
+  firrtl.strictmodule @MemOne() {
     // expected-error @+2 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
     // expected-error @+1 {{'firrtl.mem' op LowerToHW couldn't handle this operation}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 1 : i64, name = "_M", portNames=["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, other: sint<8>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>
@@ -46,7 +46,7 @@ firrtl.circuit "MemOne" {
 // COM: Unknown widths are unsupported
 firrtl.circuit "UnknownWidth" {
   // expected-error @+1 {{cannot lower this port type to HW}}
-  firrtl.module @UnknownWidth(in %a: !firrtl.uint) {}
+  firrtl.strictmodule @UnknownWidth(in %a: !firrtl.uint) {}
 }
 
 // -----
@@ -54,7 +54,7 @@ firrtl.circuit "UnknownWidth" {
 // This should not produce an error.
 // https://github.com/llvm/circt/issues/778
 firrtl.circuit "zero_width_mem" {
-  firrtl.module @zero_width_mem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %r0en: !firrtl.uint<1>) {
+  firrtl.strictmodule @zero_width_mem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %r0en: !firrtl.uint<1>) {
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c0_ui25 = firrtl.constant 0 : !firrtl.uint<25>

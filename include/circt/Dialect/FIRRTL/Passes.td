@@ -114,10 +114,10 @@ def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createPassiveWiresPass()";
 }
 
-def StrictWires : Pass<"firrtl-strict-wires", "firrtl::FModuleOp"> {
+def StrictWires : Pass<"firrtl-strict-wires", "firrtl::FStrictModuleOp"> {
   let summary = "Make FIRRTL wires have separate read and write ports";
   let description = [{
-    Make multi-ported wires.
+    Make multi-ported wires.  Operates only on StrictModules.
   }];
   let constructor = "circt::firrtl::createStrictWiresPass()";
 }

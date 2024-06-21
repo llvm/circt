@@ -2,7 +2,7 @@
 
 firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @Intrinsics
-  firrtl.module @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>,
+  firrtl.strictmodule @Intrinsics(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>,
                             in %b: !firrtl.vector<uint<2>, 3>,
                             in %c: !firrtl.bundle<a: uint<3>, b: uint<3>>) {
     // CHECK-NEXT: %x_i6 = sv.constantX : i6
@@ -43,7 +43,7 @@ firrtl.circuit "Intrinsics" {
   }
 
   // CHECK-LABEL: hw.module @ClockGate
-  firrtl.module @ClockGate(
+  firrtl.strictmodule @ClockGate(
     in %clk: !firrtl.clock,
     in %enable: !firrtl.uint<1>,
     in %testEnable: !firrtl.uint<1>,
@@ -55,12 +55,12 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: hw.output [[CLK0]], [[CLK1]]
     %0 = firrtl.int.clock_gate %clk, %enable
     %1 = firrtl.int.clock_gate %clk, %enable, %testEnable
-    firrtl.matchingconnect %gated_clk0, %0 : !firrtl.clock
-    firrtl.matchingconnect %gated_clk1, %1 : !firrtl.clock
+    firrtl.strictconnect %gated_clk0, %0 : !firrtl.clock
+    firrtl.strictconnect %gated_clk1, %1 : !firrtl.clock
   }
 
   // CHECK-LABEL: hw.module @LTLAndVerif
-  firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  firrtl.strictmodule @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1
     %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -122,7 +122,7 @@ firrtl.circuit "Intrinsics" {
   }
 
   // CHECK-LABEL: hw.module @LowerIntrinsicStyle
-  firrtl.module @LowerIntrinsicStyle(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  firrtl.strictmodule @LowerIntrinsicStyle(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // Wires can make the lowering really weird. Try some strange setup where
     // the ops are totally backwards. This is tricky to lower since a lot of the
     // LTL ops' result type depends on the inputs, and LowerToHW lowers them
@@ -168,7 +168,7 @@ firrtl.circuit "Intrinsics" {
   }
 
   // CHECK-LABEL: hw.module @HasBeenReset
-  firrtl.module @HasBeenReset(
+  firrtl.strictmodule @HasBeenReset(
     in %clock: !firrtl.clock,
     in %reset1: !firrtl.uint<1>,
     in %reset2: !firrtl.asyncreset,
@@ -181,12 +181,12 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
     %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
     %1 = firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
-    firrtl.matchingconnect %hbr1, %0 : !firrtl.uint<1>
-    firrtl.matchingconnect %hbr2, %1 : !firrtl.uint<1>
+    firrtl.strictconnect %hbr1, %0 : !firrtl.uint<1>
+    firrtl.strictconnect %hbr2, %1 : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module @FPGAProbe
-  firrtl.module @FPGAProbe(
+  firrtl.strictmodule @FPGAProbe(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.uint<1>,
     in %in: !firrtl.uint<8>
@@ -196,17 +196,17 @@ firrtl.circuit "Intrinsics" {
   }
 
   // CHECK-LABEL: hw.module @ClockOps
-  firrtl.module @ClockOps(
+  firrtl.strictmodule @ClockOps(
     in %clock_in: !firrtl.clock,
     out %clock_inv: !firrtl.clock,
     out %clock_div: !firrtl.clock
   ) {
     // CHECK: seq.clock_inv %clock_in
     %clock_inv_out = firrtl.int.clock_inv %clock_in
-    firrtl.matchingconnect %clock_inv, %clock_inv_out : !firrtl.clock
+    firrtl.strictconnect %clock_inv, %clock_inv_out : !firrtl.clock
 
     // CHECK: seq.clock_div %clock_in
     %clock_div_out = firrtl.int.clock_div %clock_in by 4
-    firrtl.matchingconnect %clock_div, %clock_div_out : !firrtl.clock
+    firrtl.strictconnect %clock_div, %clock_div_out : !firrtl.clock
   }
 }

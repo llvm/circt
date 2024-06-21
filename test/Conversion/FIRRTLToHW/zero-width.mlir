@@ -2,7 +2,7 @@
 
 firrtl.circuit "Arithmetic" {
   // CHECK-LABEL: hw.module @Arithmetic
-  firrtl.module @Arithmetic(in %uin3c: !firrtl.uint<3>,
+  firrtl.strictmodule @Arithmetic(in %uin3c: !firrtl.uint<3>,
                             out %out0: !firrtl.uint<3>,
                             out %out1: !firrtl.uint<4>,
                             out %out2: !firrtl.uint<4>,
@@ -11,7 +11,7 @@ firrtl.circuit "Arithmetic" {
 
     // CHECK-DAG: [[MULZERO:%.+]] = hw.constant 0 : i3
     %0 = firrtl.mul %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    firrtl.connect %out0, %0 : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %out0, %0 : !firrtl.uint<3>
 
     // Lowers to nothing.
     %m0 = firrtl.mul %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
@@ -27,20 +27,20 @@ firrtl.circuit "Arithmetic" {
     // CHECK-NEXT: [[UIN3EXT:%.+]] = comb.concat %false, %uin3c : i1, i3
     // CHECK-NEXT: [[ADDRES:%.+]] = comb.add bin [[UIN3EXT]], %c0_i4 : i4
     %1 = firrtl.add %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<4>
-    firrtl.connect %out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out1, %1 : !firrtl.uint<4>
 
     %2 = firrtl.shl %node, 4 : (!firrtl.uint<0>) -> !firrtl.uint<4>
-    firrtl.connect %out2, %2 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out2, %2 : !firrtl.uint<4>
 
     // Issue #436
     %3 = firrtl.eq %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
-    firrtl.connect %out3, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.strictconnect %out3, %3 : !firrtl.uint<1>
 
     // CHECK: hw.output %c0_i3, [[ADDRES]], %c0_i4, %true
   }
 
   // CHECK-LABEL: hw.module private @Exotic
-  firrtl.module private @Exotic(in %uin3c: !firrtl.uint<3>,
+  firrtl.strictmodule private @Exotic(in %uin3c: !firrtl.uint<3>,
                         out %out0: !firrtl.uint<3>,
                         out %out1: !firrtl.uint<3>) {
     %uin0c = firrtl.wire : !firrtl.uint<0>
@@ -55,11 +55,11 @@ firrtl.circuit "Arithmetic" {
 
     // Lowers to the uin3 value.
     %3 = firrtl.cat %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    firrtl.connect %out0, %3 : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %out0, %3 : !firrtl.uint<3>
 
     // Lowers to the uin3 value.
     %4 = firrtl.cat %uin3c, %uin0c : (!firrtl.uint<3>, !firrtl.uint<0>) -> !firrtl.uint<3>
-    firrtl.connect %out1, %4 : !firrtl.uint<3>, !firrtl.uint<3>
+    firrtl.strictconnect %out1, %4 : !firrtl.uint<3>
 
     // Lowers to nothing.
     %5 = firrtl.cat %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
@@ -68,7 +68,7 @@ firrtl.circuit "Arithmetic" {
   }
 
   // CHECK-LABEL: hw.module private @Decls
-  firrtl.module private @Decls(in %uin3c: !firrtl.uint<3>) {
+  firrtl.strictmodule private @Decls(in %uin3c: !firrtl.uint<3>) {
     %sin0c = firrtl.wire : !firrtl.sint<0>
     %uin0c = firrtl.wire : !firrtl.uint<0>
 
@@ -82,9 +82,10 @@ firrtl.circuit "Arithmetic" {
   // Check that a zero-width value shifted right produces a zero.
   // See: https://github.com/llvm/circt/issues/6652
   // CHECK-LABEL: hw.module @ShrZW
-  firrtl.module @ShrZW(in %x: !firrtl.uint<0>, out %out: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
+  firrtl.strictmodule @ShrZW(in %x: !firrtl.uint<0>, out %out: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.shr %x, 5 : (!firrtl.uint<0>) -> !firrtl.uint<0>
-    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<0>
+    %1 = firrtl.pad %0, 1 : (!firrtl.uint<0>) -> !firrtl.uint<1>
+    firrtl.strictconnect %out, %1 : !firrtl.uint<1>
     // CHECK:      %[[false:.+]] = hw.constant false
     // CHECK-NEXT: hw.output %false
   }

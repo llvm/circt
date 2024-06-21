@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --firrtl-lower-types --lower-firrtl-to-hw --canonicalize | FileCheck %s
+// RUN: circt-opt %s --firrtl-lower-types --firrtl-strict-modules --firrtl-strict-wires --lower-firrtl-to-hw --canonicalize | FileCheck %s
 firrtl.circuit "BitcastIsANop1" {
 
 // Bitcasting bundle -> bits -> bundle should be a nop and should not shuffle

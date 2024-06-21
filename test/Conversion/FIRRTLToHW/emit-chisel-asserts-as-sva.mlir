@@ -5,7 +5,7 @@
 
 firrtl.circuit "ifElseFatalToSVA" {
   // CHECK-LABEL: hw.module @ifElseFatalToSVA
-  firrtl.module @ifElseFatalToSVA(
+  firrtl.strictmodule @ifElseFatalToSVA(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>
@@ -35,7 +35,7 @@ firrtl.circuit "ifElseFatalToSVA" {
   // Test that an immediate assertion is converted to an assertion with a specified flavor.
   //
   // CHECK-LABEL: hw.module @immediateToConcurrent
-  firrtl.module @immediateToConcurrent(
+  firrtl.strictmodule @immediateToConcurrent(
     in %clock: !firrtl.clock,
     in %cond: !firrtl.uint<1>,
     in %enable: !firrtl.uint<1>

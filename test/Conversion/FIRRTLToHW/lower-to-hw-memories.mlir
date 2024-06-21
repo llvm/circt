@@ -2,7 +2,7 @@
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: hw.module @Foo
-  firrtl.module @Foo(
+  firrtl.strictmodule @Foo(
     in %clk: !firrtl.clock,
     in %en: !firrtl.uint<1>,
     in %addr: !firrtl.uint<4>,
@@ -100,7 +100,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @ZeroDataWidth
-  firrtl.module @ZeroDataWidth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<0>, in %mask: !firrtl.uint<1>) {
+  firrtl.strictmodule @ZeroDataWidth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<0>, in %mask: !firrtl.uint<1>) {
     // CHECK: [[CONST_X:%.+]] = sv.constantX : i1
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 0>
     // CHECK: seq.firmem.write_port %mem[{{%.+}}] = [[CONST_X]], clock {{.+}} enable {{%.+}} : <12 x 0>
@@ -123,7 +123,7 @@ firrtl.circuit "Foo" {
   // into the enable condition on the write port.
   //
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoEnable
-  firrtl.module @FoldSingleMaskBitIntoEnable(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>, in %mask: !firrtl.uint<1>) {
+  firrtl.strictmodule @FoldSingleMaskBitIntoEnable(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>, in %mask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
     // CHECK: [[TMP:%.+]] = comb.and bin %en, %mask :
     // CHECK: seq.firmem.write_port %mem[{{%.+}}] = {{%.+}}, clock {{%.+}} enable [[TMP]] :
@@ -146,7 +146,7 @@ firrtl.circuit "Foo" {
   // into the mode operand on the read-write port.
   //
   // CHECK-LABEL: hw.module @FoldSingleMaskBitIntoMode
-  firrtl.module @FoldSingleMaskBitIntoMode(in %clk : !firrtl.clock, in %en : !firrtl.uint<1>, in %addr : !firrtl.uint<4>, in %wdata : !firrtl.uint<42>, in %wmode: !firrtl.uint<1>, in %wmask: !firrtl.uint<1>) {
+  firrtl.strictmodule @FoldSingleMaskBitIntoMode(in %clk : !firrtl.clock, in %en : !firrtl.uint<1>, in %addr : !firrtl.uint<4>, in %wdata : !firrtl.uint<42>, in %wmode: !firrtl.uint<1>, in %wmask: !firrtl.uint<1>) {
     // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <12 x 42>
     // CHECK: [[TMP:%.+]] = comb.and bin %wmode, %wmask :
     // CHECK: seq.firmem.read_write_port %mem[{{%.+}}] = {{%.+}} if [[TMP]], clock {{%.+}} enable {{%.+}} :
@@ -167,7 +167,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @MemInit
-  firrtl.module @MemInit(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>) {
+  firrtl.strictmodule @MemInit(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr: !firrtl.uint<4>, in %data: !firrtl.uint<42>) {
     // CHECK: %mem1 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", false, false>
     %mem1_r = firrtl.mem Undefined {depth = 12 : i64, name = "mem1", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32, init = #firrtl.meminit<"mem.txt", false, false>} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
@@ -200,7 +200,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @IncompleteRead
-  firrtl.module @IncompleteRead(
+  firrtl.strictmodule @IncompleteRead(
     in %clock: !firrtl.clock,
     in %addr: !firrtl.uint<4>,
     in %en: !firrtl.uint<1>
@@ -219,7 +219,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: hw.module @Depth1
-  firrtl.module @Depth1(
+  firrtl.strictmodule @Depth1(
     in %clock: !firrtl.clock,
     in %addr: !firrtl.uint<1>,
     in %en: !firrtl.uint<1>,
@@ -236,11 +236,11 @@ firrtl.circuit "Foo" {
     firrtl.connect %mem_r.clk, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %mem_r.addr, %addr : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_r.en, %en : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %data, %mem_r.data : !firrtl.uint<42>, !firrtl.uint<42>
+    firrtl.strictconnect %data, %mem_r.data : !firrtl.uint<42>
   }
 
   // CHECK-LABEL: hw.module @ExcessiveDepth
-  firrtl.module @ExcessiveDepth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr31: !firrtl.uint<31>, in %addr33: !firrtl.uint<33>, in %data: !firrtl.uint<42>) {
+  firrtl.strictmodule @ExcessiveDepth(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %addr31: !firrtl.uint<31>, in %addr33: !firrtl.uint<33>, in %data: !firrtl.uint<42>) {
     // CHECK: seq.firmem 0, 1, undefined, port_order : <2147483648 x 42>
     // CHECK: seq.firmem 0, 1, undefined, port_order : <8589934592 x 42>
     %mem_0 = firrtl.mem Undefined {depth = 2147483648 : i64, name = "mem31", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>

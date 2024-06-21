@@ -22,7 +22,7 @@ firrtl.circuit "Simple" {
     attributes {defname = "name_thing"}
 
    // CHECK-LABEL: hw.module @Simple(in %in1 : i4, in %in2 : i2, in %in3 : i8, out out4 : i4)
-   firrtl.module @Simple(in %in1: !firrtl.uint<4>,
+   firrtl.strictmodule @Simple(in %in1: !firrtl.uint<4>,
                          in %in2: !firrtl.uint<2>,
                          in %in3: !firrtl.sint<8>,
                          out %out4: !firrtl.uint<4>) {
@@ -42,12 +42,12 @@ firrtl.circuit "Simple" {
     // CHECK: [[RESULT:%.+]] = comb.xor
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out4, %5 : !firrtl.uint<4>
     // CHECK-NEXT: hw.output [[RESULT]] : i4
   }
 
   // CHECK-LABEL: hw.module private @TestInstance(
-  firrtl.module private @TestInstance(in %u2: !firrtl.uint<2>, in %s8: !firrtl.sint<8>,
+  firrtl.strictmodule private @TestInstance(in %u2: !firrtl.uint<2>, in %s8: !firrtl.sint<8>,
                               in %clock: !firrtl.clock,
                               in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
@@ -81,10 +81,10 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @OutputFirst(out out4 : i4, in %in1 : i1, in %in4 : i4) {
-  firrtl.module private @OutputFirst(out %out4: !firrtl.uint<4>,
+  firrtl.strictmodule private @OutputFirst(out %out4: !firrtl.uint<4>,
                              in %in1: !firrtl.uint<1>,
                              in %in4: !firrtl.uint<4>) {
-    firrtl.connect %out4, %in4 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %out4, %in4 : !firrtl.uint<4>
 
     // CHECK-NEXT: hw.output %in4 : i4
   }
@@ -92,7 +92,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module private @PortMadness(
   // CHECK: in %inA : i4, in %inB : i4, in %inC : i4,
   // CHECK: out outA : i4, out outB : i4, out outC : i4, out outD : i4, in %inE : i3, out outE : i4) {
-  firrtl.module private @PortMadness(in %inA: !firrtl.uint<4>,
+  firrtl.strictmodule private @PortMadness(in %inA: !firrtl.uint<4>,
                              in %inB: !firrtl.uint<4>,
                              in %inC: !firrtl.uint<4>,
                              out %outA: !firrtl.uint<4>,
@@ -102,11 +102,11 @@ firrtl.circuit "Simple" {
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
     // Normal
-    firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outA, %inA : !firrtl.uint<4>
 
     // Multi connect
-    firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outB, %inA : !firrtl.uint<4>
+    firrtl.strictconnect %outB, %inB : !firrtl.uint<4>
 
     // Unconnected port outC reads as sv.constantZ.
     // CHECK:      [[OUTB:%.+]] = hw.wire %inB
@@ -114,20 +114,16 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
     // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
     // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
-    // CHECK-NEXT: comb.sub bin [[T0]], [[T1]]
-    %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+
+    // Strict modules don't allow reads from outputs, this is handled by firrtl-strict-modules
 
     // No connections to outD.
 
-    firrtl.connect %outE, %inE : !firrtl.uint<4>, !firrtl.uint<3>
-
-    // Extension for outE
-    // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : i1, i3
-    // CHECK: hw.output %inA, [[OUTB]], [[OUTC]], [[OUTD]], [[OUTE]]
+    // Strict connects require matching types
   }
 
-  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
-  firrtl.module private @InputPortsParent(in %in : !firrtl.uint<1>) {
+  firrtl.strictmodule private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.strictmodule private @InputPortsParent(in %in : !firrtl.uint<1>) {
     // Double connected.
     // CHECK: hw.instance "ip1" @InputPorts(in: %in: i1) -> ()
     %ip1_in = firrtl.instance ip1 @InputPorts(in in : !firrtl.uint<1>)
@@ -139,16 +135,16 @@ firrtl.circuit "Simple" {
   // CHECK-NEXT:    [[READ:%.+]] = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:    [[CLK:%.+]] = seq.to_clock [[READ]]
   // CHECK-NEXT:    hw.output [[CLK]] : !seq.clock
-  firrtl.module private @Analog(in %a1: !firrtl.analog<1>,
+  firrtl.strictmodule private @Analog(in %a1: !firrtl.analog<1>,
                         out %outClock: !firrtl.clock) {
 
     %clock = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
-    firrtl.connect %outClock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.strictconnect %outClock, %clock : !firrtl.clock
   }
 
   // Issue #373: https://github.com/llvm/circt/issues/373
   // CHECK-LABEL: hw.module private @instance_ooo
-  firrtl.module private @instance_ooo(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>,
+  firrtl.strictmodule private @instance_ooo(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>,
                               in %arg2: !firrtl.uint<3>,
                               out %out0: !firrtl.uint<8>) {
     // CHECK: %false = hw.constant false
@@ -167,13 +163,13 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[ARG]] = comb.icmp bin eq [[ADD]], %arg2 : i3
     firrtl.connect %myext#0, %a : !firrtl.uint<1>, !firrtl.uint<1>
 
-    firrtl.connect %out0, %myext#1 : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.strictconnect %out0, %myext#1 : !firrtl.uint<8>
 
     // CHECK-NEXT: hw.output %myext.out
   }
 
   // CHECK-LABEL: hw.module private @instance_cyclic
-  firrtl.module private @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
+  firrtl.strictmodule private @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %0: i1)
     %myext:2 = firrtl.instance myext @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
 
@@ -185,16 +181,16 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: hw.module private @ZeroWidthPorts(in %inA : i4, out outa : i4) {
-  firrtl.module private @ZeroWidthPorts(in %inA: !firrtl.uint<4>,
+  firrtl.strictmodule private @ZeroWidthPorts(in %inA: !firrtl.uint<4>,
                                 in %inB: !firrtl.uint<0>,
                                 in %inC: !firrtl.analog<0>,
                                 out %outa: !firrtl.uint<4>,
                                 out %outb: !firrtl.uint<0>) {
      %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
-    firrtl.connect %outa, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.strictconnect %outa, %0 : !firrtl.uint<4>
 
     %1 = firrtl.mul %inB, %inB : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
-    firrtl.connect %outb, %1 : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.strictconnect %outb, %1 : !firrtl.uint<0>
 
     firrtl.attach %inC, %inC : !firrtl.analog<0>, !firrtl.analog<0>
 
@@ -207,7 +203,7 @@ firrtl.circuit "Simple" {
                                 out outa: !firrtl.uint<4>,
                                 out outa: !firrtl.uint<1>)
   // CHECK-LABEL: hw.module private @ZeroWidthInstance
-  firrtl.module private @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
+  firrtl.strictmodule private @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
                                    in %iB: !firrtl.uint<0>,
                                    in %iC: !firrtl.analog<0>,
                                    in %iD: !firrtl.uint<1>,
@@ -223,8 +219,8 @@ firrtl.circuit "Simple" {
     firrtl.connect %myinst#0, %iA : !firrtl.uint<4>, !firrtl.uint<4>
     firrtl.connect %myinst#1, %iB : !firrtl.uint<0>, !firrtl.uint<0>
     firrtl.attach %myinst#2, %iC : !firrtl.analog<0>, !firrtl.analog<0>
-    firrtl.connect %oA, %myinst#3 : !firrtl.uint<4>, !firrtl.uint<4>
-    firrtl.connect %oB, %myinst#4 : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.strictconnect %oA, %myinst#3 : !firrtl.uint<4>
+    firrtl.strictconnect %oB, %myinst#4 : !firrtl.uint<0>
 
     // CHECK: = hw.instance "myinst" @SameNamePorts(inA: {{.+}}, inA: {{.+}}, inA: {{.+}}) -> (outa: i4, outa: i1)
     %myinst_sameName:5 = firrtl.instance myinst @SameNamePorts(
@@ -238,23 +234,23 @@ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: hw.module private @SimpleStruct(in %source : !hw.struct<valid: i1, ready: i1, data: i64>, out sink : !hw.struct<valid: i1, ready: i1, data: i64>) {
   // CHECK-NEXT:    hw.output %source : !hw.struct<valid: i1, ready: i1, data: i64>
-  firrtl.module private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
+  firrtl.strictmodule private @SimpleStruct(in %source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               out %sink: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) {
-    firrtl.connect %sink, %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
+    firrtl.strictconnect %sink, %source : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
   }
 
   // https://github.com/llvm/circt/issues/690
   // CHECK-LABEL: hw.module private @bar690(inout %led_0 : i1) {
-  firrtl.module private @bar690(in %led_0: !firrtl.analog<1>) {
+  firrtl.strictmodule private @bar690(in %led_0: !firrtl.analog<1>) {
   }
   // CHECK-LABEL: hw.module private @foo690()
-  firrtl.module private @foo690() {
+  firrtl.strictmodule private @foo690() {
     // CHECK: %.led_0.wire = sv.wire
     // CHECK: hw.instance "fpga" @bar690(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
   }
   // CHECK-LABEL: hw.module private @foo690a(inout %a : i1) {
-  firrtl.module private @foo690a(in %a: !firrtl.analog<1>) {
+  firrtl.strictmodule private @foo690a(in %a: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar690(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
   }
@@ -263,13 +259,13 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module private @foo740(inout %led_0 : i1) {
   // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %led_0: !hw.inout<i1>) -> ()
   firrtl.extmodule private @bar740(in led_0: !firrtl.analog<1>)
-  firrtl.module private @foo740(in %led_0: !firrtl.analog<1>) {
+  firrtl.strictmodule private @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance fpga @bar740(in led_0: !firrtl.analog<1>)
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
 
   firrtl.extmodule private @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
-  firrtl.module @Example(out %port: !firrtl.analog<8>) {
+  firrtl.strictmodule @Example(out %port: !firrtl.analog<8>) {
     // CHECK-LABEL: hw.module @Example(inout %port : i8)
     // CHECK-NEXT: hw.instance "a2b" @UIntToAnalog_8(a: %port: !hw.inout<i8>, b: %port: !hw.inout<i8>)
     %a2b_a, %a2b_b = firrtl.instance a2b  @UIntToAnalog_8(out a: !firrtl.analog<8>, out b: !firrtl.analog<8>)
@@ -297,7 +293,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: @PortDT2
   // CHECK-SAME:  {hw.exportPort = #hw<innerSym@__PortDT2__DONTTOUCH__0__>}
   // CHECK-SAME:  {hw.exportPort = #hw<innerSym@__PortDT2__DONTTOUCH__1__>}
-  firrtl.module private @PortDT2(
+  firrtl.strictmodule private @PortDT2(
     in %0: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}],
     in %1: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}]
   ) {}
