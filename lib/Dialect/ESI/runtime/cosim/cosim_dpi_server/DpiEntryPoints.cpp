@@ -16,32 +16,33 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "cosim/CapnpThreads.h"
 #include "dpi.h"
+#include "esi/Ports.h"
+#include "esi/cosim/RpcServer.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
 
+using namespace esi;
 using namespace esi::cosim;
 
 /// If non-null, log to this file. Protected by 'serverMutex`.
 static FILE *logFile;
-static RpcServer *server = nullptr;
+static std::unique_ptr<RpcServer> server = nullptr;
 static std::mutex serverMutex;
 
 // ---- Helper functions ----
 
 /// Emit the contents of 'msg' to the log file in hex.
-static void log(char *epId, bool toClient,
-                const Endpoint::MessageDataPtr &msg) {
+static void log(char *epId, bool toClient, const MessageData &msg) {
   std::lock_guard<std::mutex> g(serverMutex);
   if (!logFile)
     return;
 
   fprintf(logFile, "[ep: %50s to: %4s]", epId, toClient ? "host" : "sim");
-  size_t msgSize = msg->getSize();
-  auto bytes = msg->getBytes();
+  size_t msgSize = msg.getSize();
+  auto bytes = msg.getBytes();
   for (size_t i = 0; i < msgSize; ++i) {
     auto b = bytes[i];
     // Separate 32-bit words.
@@ -61,7 +62,8 @@ static void log(char *epId, bool toClient,
 static int findPort() {
   const char *portEnv = getenv("COSIM_PORT");
   if (portEnv == nullptr) {
-    printf("[COSIM] RPC server port not found. Letting CapnpRPC select one\n");
+    printf(
+        "[COSIM] RPC server port not found. Letting RPC server select one\n");
     return 0;
   }
   printf("[COSIM] Opening RPC server on port %s\n", portEnv);
@@ -101,17 +103,39 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 
 // ---- Traditional cosim DPI entry points ----
 
+// Lookups for registered ports. As a future optimization, change the DPI API to
+// return a handle when registering wherein said handle is a pointer to a port.
+std::map<std::string, ReadChannelPort &> readPorts;
+std::map<std::string, WriteChannelPort &> writePorts;
+
 // Register simulated device endpoints.
 // - return 0 on success, non-zero on failure (duplicate EP registered).
-DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeId,
-                                  int fromHostTypeSize, char *toHostTypeId,
+// TODO: Change this by breaking it in two functions, one for read and one for
+// write. Also return the pointer as a handle.
+DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
+                                  int fromHostTypeSize, char *toHostTypeIdC,
                                   int toHostTypeSize) {
   // Ensure the server has been constructed.
   sv2cCosimserverInit();
-  // Then register with it.
-  if (server->registerEndpoint(endpointId, fromHostTypeId, toHostTypeId))
-    return 0;
-  return -1;
+  std::string fromHostTypeId(fromHostTypeIdC), toHostTypeId(toHostTypeIdC);
+
+  // Both only one type allowed.
+  if (!(fromHostTypeId.empty() ^ toHostTypeId.empty())) {
+    printf("ERROR: Only one of fromHostTypeId and toHostTypeId can be set!\n");
+    return -2;
+  }
+  if (readPorts.contains(endpointId)) {
+    printf("ERROR: Endpoint already registered!\n");
+    return -3;
+  }
+
+  if (!fromHostTypeId.empty())
+    readPorts.emplace(endpointId,
+                      server->registerReadPort(endpointId, fromHostTypeId));
+  else
+    writePorts.emplace(endpointId,
+                       server->registerWritePort(endpointId, toHostTypeId));
+  return 0;
 }
 
 // Attempt to recieve data from a client.
@@ -127,25 +151,25 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   if (server == nullptr)
     return -1;
 
-  Endpoint *ep = server->getEndpoint(endpointId);
-  if (!ep) {
+  auto portIt = readPorts.find(endpointId);
+  if (portIt == readPorts.end()) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
 
-  Endpoint::MessageDataPtr msg;
+  ReadChannelPort &port = portIt->second;
+  MessageData msg;
   // Poll for a message.
-  if (!ep->getMessageToSim(msg)) {
+  if (!port.read(msg)) {
     // No message.
     *dataSize = 0;
     return 0;
   }
+  log(endpointId, false, msg);
+
   // Do the validation only if there's a message available. Since the
   // simulator is going to poll up to every tick and there's not going to be
   // a message most of the time, this is important for performance.
-
-  log(endpointId, false, msg);
-
   if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
     printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
            __LINE__);
@@ -161,7 +185,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
     return -3;
   }
   // Verify it'll fit.
-  size_t msgSize = msg->getSize();
+  size_t msgSize = msg.getSize();
   if (msgSize > *dataSize) {
     printf("ERROR: Message size too big to fit in HW buffer\n");
     return -5;
@@ -169,7 +193,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
 
   // Copy the message data.
   size_t i;
-  auto bytes = msg->getBytes();
+  auto bytes = msg.getBytes();
   for (i = 0; i < msgSize; ++i) {
     auto b = bytes[i];
     *(char *)svGetArrElemPtr1(data, i) = b;
@@ -179,7 +203,7 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
     *(char *)svGetArrElemPtr1(data, i) = 0;
   }
   // Set the output data size.
-  *dataSize = msg->getSize();
+  *dataSize = msg.getSize();
   return 0;
 }
 
@@ -213,16 +237,17 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   for (int i = 0; i < dataSize; ++i) {
     dataVec[i] = *(char *)svGetArrElemPtr1(data, i);
   }
-  Endpoint::MessageDataPtr blob = std::make_unique<esi::MessageData>(dataVec);
+  auto blob = std::make_unique<esi::MessageData>(dataVec);
 
   // Queue the blob.
-  Endpoint *ep = server->getEndpoint(endpointId);
-  if (!ep) {
+  auto portIt = writePorts.find(endpointId);
+  if (portIt == writePorts.end()) {
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
-  log(endpointId, true, blob);
-  ep->pushMessageToClient(std::move(blob));
+  log(endpointId, true, *blob);
+  WriteChannelPort &port = portIt->second;
+  port.write(*blob);
   return 0;
 }
 
@@ -254,7 +279,7 @@ DPI int sv2cCosimserverInit() {
 
     // Find the port and run.
     printf("[cosim] Starting RPC server.\n");
-    server = new RpcServer();
+    server = std::make_unique<RpcServer>();
     server->run(findPort());
   }
   return 0;
@@ -263,7 +288,7 @@ DPI int sv2cCosimserverInit() {
 // ---- Manifest DPI entry points ----
 
 DPI void
-sv2cCosimserverSetManifest(unsigned int esiVersion,
+sv2cCosimserverSetManifest(int esiVersion,
                            const svOpenArrayHandle compressedManifest) {
   if (server == nullptr)
     sv2cCosimserverInit();
@@ -287,6 +312,10 @@ sv2cCosimserverSetManifest(unsigned int esiVersion,
 
 // ---- Low-level cosim DPI entry points ----
 
+// TODO: These had the shit broken outta them in the gRPC conversion. We're not
+// actively using them at the moment, but they'll have to be revived again in
+// the future.
+
 static bool mmioRegistered = false;
 DPI int sv2cCosimserverMMIORegister() {
   if (mmioRegistered) {
@@ -299,47 +328,50 @@ DPI int sv2cCosimserverMMIORegister() {
 }
 
 DPI int sv2cCosimserverMMIOReadTryGet(uint32_t *address) {
-  assert(server);
-  LowLevel *ll = server->getLowLevel();
-  std::optional<int> reqAddress = ll->readReqs.pop();
-  if (!reqAddress.has_value())
-    return -1;
-  *address = reqAddress.value();
-  ll->readsOutstanding++;
-  return 0;
+  // assert(server);
+  // LowLevel *ll = server->getLowLevel();
+  // std::optional<int> reqAddress = ll->readReqs.pop();
+  // if (!reqAddress.has_value())
+  return -1;
+  // *address = reqAddress.value();
+  // ll->readsOutstanding++;
+  // return 0;
 }
 
 DPI void sv2cCosimserverMMIOReadRespond(uint32_t data, char error) {
-  assert(server);
-  LowLevel *ll = server->getLowLevel();
-  if (ll->readsOutstanding == 0) {
-    printf("ERROR: More read responses than requests! Not queuing response.\n");
-    return;
-  }
-  ll->readsOutstanding--;
-  ll->readResps.push(data, error);
+  assert(false && "unimplemented");
+  // assert(server);
+  // LowLevel *ll = server->getLowLevel();
+  // if (ll->readsOutstanding == 0) {
+  //   printf("ERROR: More read responses than requests! Not queuing
+  //   response.\n"); return;
+  // }
+  // ll->readsOutstanding--;
+  // ll->readResps.push(data, error);
 }
 
 DPI void sv2cCosimserverMMIOWriteRespond(char error) {
-  assert(server);
-  LowLevel *ll = server->getLowLevel();
-  if (ll->writesOutstanding == 0) {
-    printf(
-        "ERROR: More write responses than requests! Not queuing response.\n");
-    return;
-  }
-  ll->writesOutstanding--;
-  ll->writeResps.push(error);
+  assert(false && "unimplemented");
+  // assert(server);
+  // LowLevel *ll = server->getLowLevel();
+  // if (ll->writesOutstanding == 0) {
+  //   printf(
+  //       "ERROR: More write responses than requests! Not queuing
+  //       response.\n");
+  //   return;
+  // }
+  // ll->writesOutstanding--;
+  // ll->writeResps.push(error);
 }
 
 DPI int sv2cCosimserverMMIOWriteTryGet(uint32_t *address, uint32_t *data) {
-  assert(server);
-  LowLevel *ll = server->getLowLevel();
-  auto req = ll->writeReqs.pop();
-  if (!req.has_value())
-    return -1;
-  *address = req.value().first;
-  *data = req.value().second;
-  ll->writesOutstanding++;
-  return 0;
+  // assert(server);
+  // LowLevel *ll = server->getLowLevel();
+  // auto req = ll->writeReqs.pop();
+  // if (!req.has_value())
+  return -1;
+  // *address = req.value().first;
+  // *data = req.value().second;
+  // ll->writesOutstanding++;
+  // return 0;
 }

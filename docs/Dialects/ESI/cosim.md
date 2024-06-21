@@ -15,7 +15,9 @@ variety of languages: the Cap'nProto website lists C++, C#, Erlang, Go,
 Haskell, JavaScript, Ocaml, Python, and Rust as languages which support
 messages and RPC!
 
-Status: **prototype**
+Status: **production**
+Documentation status: **out of date** needs to be updated to reflect the new RPC
+interface and library.
 
 ## Usage
 

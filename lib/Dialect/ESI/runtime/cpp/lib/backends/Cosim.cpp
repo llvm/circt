@@ -15,8 +15,15 @@
 
 #include "esi/backends/Cosim.h"
 #include "esi/Services.h"
+#include "esi/Utils.h"
 
-#include "cosim/CapnpThreads.h"
+#include "cosim.grpc.pb.h"
+
+#include <grpc/grpc.h>
+#include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
 
 #include <fstream>
 #include <iostream>
@@ -25,8 +32,29 @@
 using namespace std;
 
 using namespace esi;
+using namespace esi::cosim;
 using namespace esi::services;
 using namespace esi::backends::cosim;
+
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::ClientReader;
+using grpc::ClientReaderWriter;
+using grpc::ClientWriter;
+using grpc::Status;
+
+static void checkStatus(Status s, const string &msg) {
+  if (!s.ok())
+    throw runtime_error(msg + ". Code " + to_string(s.error_code()) + ": " +
+                        s.error_message() + " (" + s.error_details() + ")");
+}
+
+/// Hack around C++ not having a way to forward declare a nested class.
+struct esi::backends::cosim::CosimAccelerator::StubContainer {
+  StubContainer(std::unique_ptr<ChannelServer::Stub> stub)
+      : stub(std::move(stub)) {}
+  std::unique_ptr<ChannelServer::Stub> stub;
+};
 
 /// Parse the connection string and instantiate the accelerator. Support the
 /// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
@@ -80,146 +108,212 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  rpcClient = std::make_unique<esi::cosim::RpcClient>();
-  rpcClient->run(hostname, port);
+  auto channel = grpc::CreateChannel(hostname + ":" + to_string(port),
+                                     grpc::InsecureChannelCredentials());
+  rpcClient = new StubContainer(ChannelServer::NewStub(channel));
+}
+CosimAccelerator::~CosimAccelerator() {
+  if (rpcClient)
+    delete rpcClient;
+  channels.clear();
 }
 
-namespace {
-class CosimMMIO : public MMIO {
-public:
-  CosimMMIO(esi::cosim::LowLevel *lowLevel) : lowLevel(lowLevel) {}
+// TODO: Fix MMIO!
+// namespace {
+// class CosimMMIO : public MMIO {
+// public:
+//   CosimMMIO(esi::cosim::LowLevel *lowLevel) : lowLevel(lowLevel) {}
 
-  // Push the read request into the LowLevel capnp bridge and wait for the
-  // response.
-  uint32_t read(uint32_t addr) const override {
-    lowLevel->readReqs.push(addr);
+//   // Push the read request into the LowLevel capnp bridge and wait for the
+//   // response.
+//   uint32_t read(uint32_t addr) const override {
+//     lowLevel->readReqs.push(addr);
 
-    std::optional<std::pair<uint64_t, uint8_t>> resp;
-    while (resp = lowLevel->readResps.pop(), !resp.has_value())
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-    if (resp->second != 0)
-      throw runtime_error("MMIO read error" + to_string(resp->second));
-    return resp->first;
-  }
+//     std::optional<std::pair<uint64_t, uint8_t>> resp;
+//     while (resp = lowLevel->readResps.pop(), !resp.has_value())
+//       std::this_thread::sleep_for(std::chrono::microseconds(10));
+//     if (resp->second != 0)
+//       throw runtime_error("MMIO read error" + to_string(resp->second));
+//     return resp->first;
+//   }
 
-  // Push the write request into the LowLevel capnp bridge and wait for the ack
-  // or error.
-  void write(uint32_t addr, uint32_t data) override {
-    lowLevel->writeReqs.push(make_pair(addr, data));
+//   // Push the write request into the LowLevel capnp bridge and wait for the
+//   ack
+//   // or error.
+//   void write(uint32_t addr, uint32_t data) override {
+//     lowLevel->writeReqs.push(make_pair(addr, data));
 
-    std::optional<uint8_t> resp;
-    while (resp = lowLevel->writeResps.pop(), !resp.has_value())
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
-    if (*resp != 0)
-      throw runtime_error("MMIO write error" + to_string(*resp));
-  }
+//     std::optional<uint8_t> resp;
+//     while (resp = lowLevel->writeResps.pop(), !resp.has_value())
+//       std::this_thread::sleep_for(std::chrono::microseconds(10));
+//     if (*resp != 0)
+//       throw runtime_error("MMIO write error" + to_string(*resp));
+//   }
 
-private:
-  esi::cosim::LowLevel *lowLevel;
-};
-} // namespace
+// private:
+//   esi::cosim::LowLevel *lowLevel;
+// };
+// } // namespace
 
 namespace {
 class CosimSysInfo : public SysInfo {
 public:
-  CosimSysInfo(const std::unique_ptr<esi::cosim::RpcClient> &rpcClient)
-      : rpcClient(rpcClient) {}
+  CosimSysInfo(ChannelServer::Stub *rpcClient) : rpcClient(rpcClient) {}
 
   uint32_t getEsiVersion() const override {
-    unsigned int esiVersion;
-    std::vector<uint8_t> compressedManifest;
-    if (!rpcClient->getCompressedManifest(esiVersion, compressedManifest))
-      throw runtime_error("Could not get ESI version from cosim");
-    return esiVersion;
+    ::esi::cosim::Manifest response = getManifest();
+    return response.esi_version();
   }
 
   vector<uint8_t> getCompressedManifest() const override {
-    unsigned int esiVersion;
-    std::vector<uint8_t> compressedManifest;
-    if (!rpcClient->getCompressedManifest(esiVersion, compressedManifest))
-      throw runtime_error("Could not get ESI version from cosim");
-    return compressedManifest;
+    ::esi::cosim::Manifest response = getManifest();
+    std::string compressedManifestStr = response.compressed_manifest();
+    return std::vector<uint8_t>(compressedManifestStr.begin(),
+                                compressedManifestStr.end());
   }
 
 private:
-  const std::unique_ptr<esi::cosim::RpcClient> &rpcClient;
+  ::esi::cosim::Manifest getManifest() const {
+    ::esi::cosim::Manifest response;
+    // To get around the a race condition where the manifest may not be set yet,
+    // loop until it is. TODO: fix this with the DPI API change.
+    do {
+      ClientContext context;
+      VoidMessage arg;
+      Status s = rpcClient->GetManifest(&context, arg, &response);
+      checkStatus(s, "Failed to get manifest");
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (response.esi_version() < 0);
+    return response;
+  }
+
+  esi::cosim::ChannelServer::Stub *rpcClient;
 };
 } // namespace
 
 namespace {
+/// Cosim client implementation of a write channel port.
 class WriteCosimChannelPort : public WriteChannelPort {
 public:
-  WriteCosimChannelPort(esi::cosim::Endpoint *ep, const Type *type, string name)
-      : WriteChannelPort(type), ep(ep), name(name) {}
-  virtual ~WriteCosimChannelPort() = default;
+  WriteCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
+                        const Type *type, string name)
+      : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
+  ~WriteCosimChannelPort() = default;
 
-  // TODO: Replace this with a request to connect to the capnp thread.
-  virtual void connect() override {
-    if (!ep)
-      throw runtime_error("Could not find channel '" + name +
-                          "' in cosimulation");
-    if (ep->getSendTypeId() == "")
-      throw runtime_error("Channel '" + name + "' is not a read channel");
-    if (ep->getSendTypeId() != getType()->getID())
+  void connect() override {
+    WriteChannelPort::connect();
+    if (desc.type() != getType()->getID())
       throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + ep->getSendTypeId());
-    ep->setInUse();
+                          getType()->getID() + ", got " + desc.type());
+    if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
+      throw runtime_error("Channel '" + name + "' is not a to server channel");
+    assert(desc.name() == name);
   }
-  virtual void disconnect() override {
-    if (ep)
-      ep->returnForUse();
+
+  /// Send a write message to the server.
+  void write(const MessageData &data) override {
+    ClientContext context;
+    AddressedMessage msg;
+    msg.set_channel_name(name);
+    msg.mutable_message()->set_data(data.getBytes(), data.getSize());
+    VoidMessage response;
+    grpc::Status sendStatus = rpcClient->SendToServer(&context, msg, &response);
+    if (!sendStatus.ok())
+      throw runtime_error("Failed to write to channel '" + name +
+                          "': " + sendStatus.error_message() +
+                          ". Details: " + sendStatus.error_details());
   }
-  virtual void write(const MessageData &) override;
 
 protected:
-  esi::cosim::Endpoint *ep;
+  ChannelServer::Stub *rpcClient;
+  /// The channel description as provided by the server.
+  ChannelDesc desc;
+  /// The name of the channel from the manifest.
   string name;
 };
 } // namespace
-
-void WriteCosimChannelPort::write(const MessageData &data) {
-  ep->pushMessageToSim(make_unique<esi::MessageData>(data));
-}
 
 namespace {
-class ReadCosimChannelPort : public ReadChannelPort {
+/// Cosim client implementation of a read channel port. Since gRPC read protocol
+/// streams messages back, this implementation is quite complex.
+class ReadCosimChannelPort
+    : public ReadChannelPort,
+      public grpc::ClientReadReactor<esi::cosim::Message> {
 public:
-  ReadCosimChannelPort(esi::cosim::Endpoint *ep, const Type *type, string name)
-      : ReadChannelPort(type), ep(ep), name(name) {}
-  virtual ~ReadCosimChannelPort() = default;
+  ReadCosimChannelPort(ChannelServer::Stub *rpcClient, const ChannelDesc &desc,
+                       const Type *type, string name)
+      : ReadChannelPort(type), rpcClient(rpcClient), desc(desc), name(name),
+        context(nullptr) {}
+  virtual ~ReadCosimChannelPort() { disconnect(); }
 
-  // TODO: Replace this with a request to connect to the capnp thread.
   virtual void connect() override {
-    if (!ep)
-      throw runtime_error("Could not find channel '" + name +
-                          "' in cosimulation");
-    if (ep->getRecvTypeId() == "")
-      throw runtime_error("Channel '" + name + "' is not a read channel");
-    if (ep->getRecvTypeId() != getType()->getID())
+    // Sanity checking.
+    ReadChannelPort::connect();
+    if (desc.type() != getType()->getID())
       throw runtime_error("Channel '" + name + "' has wrong type. Expected " +
-                          getType()->getID() + ", got " + ep->getRecvTypeId());
-    ep->setInUse();
+                          getType()->getID() + ", got " + desc.type());
+    if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
+      throw runtime_error("Channel '" + name + "' is not a to server channel");
+    assert(desc.name() == name);
+
+    // Initiate a stream of messages from the server.
+    context = std::make_unique<ClientContext>();
+    rpcClient->async()->ConnectToClientChannel(context.get(), &desc, this);
+    StartCall();
+    StartRead(&incomingMessage);
   }
-  virtual void disconnect() override {
-    if (ep)
-      ep->returnForUse();
+
+  /// Gets called when there's a new message from the server. It'll be stored in
+  /// `incomingMessage`.
+  void OnReadDone(bool ok) override {
+    if (!ok) {
+      // TODO: should we do something here?
+      std::cerr << "Internal error: read failed due to not `ok`." << std::endl;
+      return;
+    }
+
+    // Read the delivered message and push it onto the queue.
+    const std::string &messageString = incomingMessage.data();
+    MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
+                     messageString.size());
+    messageQueue.push(data);
+
+    // Initiate the next read.
+    StartRead(&incomingMessage);
   }
-  virtual bool read(MessageData &) override;
+
+  /// Disconnect this channel from the server.
+  void disconnect() override {
+    if (!context)
+      return;
+    context->TryCancel();
+    context.reset();
+  }
+
+  /// Poll the queue.
+  bool read(MessageData &data) override {
+    std::optional<MessageData> msg = messageQueue.pop();
+    if (!msg.has_value())
+      return false;
+    data = std::move(*msg);
+    return true;
+  }
 
 protected:
-  esi::cosim::Endpoint *ep;
+  ChannelServer::Stub *rpcClient;
+  /// The channel description as provided by the server.
+  ChannelDesc desc;
+  /// The name of the channel from the manifest.
   string name;
+
+  std::unique_ptr<ClientContext> context;
+  /// Storage location for the incoming message.
+  esi::cosim::Message incomingMessage;
+  /// Queue of messages read from the server.
+  esi::utils::TSQueue<MessageData> messageQueue;
 };
 
 } // namespace
-
-bool ReadCosimChannelPort::read(MessageData &data) {
-  esi::cosim::Endpoint::MessageDataPtr msg;
-  if (!ep->getMessageToClient(msg))
-    return false;
-  data = *msg;
-  return true;
-}
 
 map<string, ChannelPort &>
 CosimAccelerator::requestChannelsFor(AppIDPath idPath,
@@ -242,16 +336,41 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
 
     // Get the endpoint, which may or may not exist. Construct the port.
     // Everything is validated when the client calls 'connect()' on the port.
-    esi::cosim::Endpoint *ep = rpcClient->getEndpoint(channelName);
+    ChannelDesc chDesc;
+    if (!getChannelDesc(channelName, chDesc))
+      throw runtime_error("Could not find channel '" + channelName +
+                          "' in cosimulation");
+
     ChannelPort *port;
-    if (BundlePort::isWrite(dir))
-      port = new WriteCosimChannelPort(ep, type, channelName);
-    else
-      port = new ReadCosimChannelPort(ep, type, channelName);
+    if (BundlePort::isWrite(dir)) {
+      port = new WriteCosimChannelPort(rpcClient->stub.get(), chDesc, type,
+                                       channelName);
+    } else {
+      port = new ReadCosimChannelPort(rpcClient->stub.get(), chDesc, type,
+                                      channelName);
+    }
     channels.emplace(port);
     channelResults.emplace(name, *port);
   }
   return channelResults;
+}
+
+/// Get the channel description for a channel name. Iterate through the list
+/// each time. Since this will only be called a small number of times on a small
+/// list, it's not worth doing anything fancy.
+bool CosimAccelerator::getChannelDesc(const string &channelName,
+                                      ChannelDesc &desc) {
+  ClientContext context;
+  VoidMessage arg;
+  ListOfChannels response;
+  Status s = rpcClient->stub->ListChannels(&context, arg, &response);
+  checkStatus(s, "Failed to list channels");
+  for (const auto &channel : response.channels())
+    if (channel.name() == channelName) {
+      desc = channel;
+      return true;
+    }
+  return false;
 }
 
 Service *CosimAccelerator::createService(Service::Type svcType,
@@ -277,11 +396,11 @@ Service *CosimAccelerator::createService(Service::Type svcType,
   }
 
   if (svcType == typeid(services::MMIO)) {
-    return new CosimMMIO(rpcClient->getLowLevel());
+    // return new CosimMMIO(rpcClient->getLowLevel());
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:
-      return new CosimSysInfo(rpcClient);
+      return new CosimSysInfo(rpcClient->stub.get());
     case ManifestMethod::MMIO:
       return new MMIOSysInfo(getService<services::MMIO>());
     }
