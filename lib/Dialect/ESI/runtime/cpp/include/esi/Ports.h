@@ -96,6 +96,15 @@ public:
     return channels;
   }
 
+  /// Cast this Bundle port to a subclass which is actually useful. Returns
+  /// nullptr if the cast fails.
+  // TODO: this probably shouldn't be 'const', but bundle ports' user access are
+  // const. Change that.
+  template <typename T>
+  T *getAs() const {
+    return const_cast<T *>(dynamic_cast<const T *>(this));
+  }
+
 private:
   AppID id;
   std::map<std::string, ChannelPort &> channels;

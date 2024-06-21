@@ -168,6 +168,9 @@ print(snd)
 # CHECK: loc("-":39:7)
 print(obj.get_field_loc("tuple"))
 
+# CHECK: loc("-":25:5)
+print(obj.loc)
+
 try:
   print(obj.tuple[3])
 except IndexError as e:
@@ -177,7 +180,7 @@ except IndexError as e:
 for (name, field) in obj:
   # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc("-":31:7)
+  # CHECK-SAME: loc: loc("-":30:12)
   # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
   # CHECK-SAME: loc: loc("-":27:7)

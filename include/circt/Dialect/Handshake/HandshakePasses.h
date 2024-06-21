@@ -27,6 +27,9 @@ namespace circt {
 namespace handshake {
 class FuncOp;
 
+#define GEN_PASS_DECL
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createHandshakeDotPrintPass();
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>

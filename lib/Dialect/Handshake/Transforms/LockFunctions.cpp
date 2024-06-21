@@ -10,13 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKELOCKFUNCTIONS
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -68,7 +75,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
 namespace {
 
 struct HandshakeLockFunctionsPass
-    : public HandshakeLockFunctionsBase<HandshakeLockFunctionsPass> {
+    : public circt::handshake::impl::HandshakeLockFunctionsBase<
+          HandshakeLockFunctionsPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
     if (op.isExternal())

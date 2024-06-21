@@ -507,6 +507,45 @@ class _FuncService(ServiceDecl):
 FuncService = _FuncService()
 
 
+class _CallService(ServiceDecl):
+  """ESI standard service to request execution of a function."""
+
+  def __init__(self):
+    super().__init__(self.__class__)
+
+  def call(self, name: AppID, arg: ChannelSignal,
+           result_type: Type) -> ChannelSignal:
+    """Call a function with the given argument. 'arg' must be a ChannelSignal
+    with the argument value."""
+    func_bundle = Bundle([
+        BundledChannel("arg", ChannelDirection.FROM, arg.type),
+        BundledChannel("result", ChannelDirection.TO, result_type)
+    ])
+    call_bundle = self.get(name, func_bundle)
+    bundle_rets = call_bundle.unpack(arg=arg)
+    return bundle_rets['result']
+
+  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
+    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
+    'result' channels going FROM the server and TO the server, respectively."""
+    self._materialize_service_decl()
+
+    func_call = _FromCirctValue(
+        raw_esi.RequestConnectionOp(
+            func_type._type,
+            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+            name._appid).toClient)
+    assert isinstance(func_call, BundleSignal)
+    return func_call
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.CallServiceDeclOp(sym_name)
+
+
+CallService = _CallService()
+
+
 def package(sys: System):
   """Package all ESI collateral."""
 
