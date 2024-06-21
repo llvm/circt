@@ -548,15 +548,21 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
-  // Create an implication from the condition to the given value
-  // This is implemented as (or (not condition) value) to avoid
-  // the corner case where value is an implication.
-  Value impliesLTLCondition(Operation *op, Value value) {
-    OpBuilder builder = OpBuilder(op);
-    Value notCond = builder.createOrFold<LTLNotIntrinsicOp>(
-        condition.getLoc(), condition.getType(), condition);
-    return builder.createOrFold<LTLOrIntrinsicOp>(
-        condition.getLoc(), condition.getType(), notCond, value);
+  /// Concurrent and of a property with the current condition.  If we are in
+  /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
+  Value ltlAndWithCondition(Operation *op, Value value) {
+    // 'ltl.and' the value with the current condition.
+    return OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
+        condition.getLoc(), condition.getType(), condition, value);
+  }
+
+  /// Overlapping implication with the condition as its antecedent and a given
+  /// property as the consequent.  If we are in the outer scope, i.e. not in a
+  /// WhenOp region, then there is no condition.
+  Value ltlImplicationWithCondition(Operation *op, Value value) {
+    // 'and' the value with the current condition.
+    return OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+        condition.getLoc(), condition.getType(), condition, value);
   }
 
 private:
@@ -580,15 +586,17 @@ void WhenOpVisitor::visitStmt(StopOp op) {
 }
 
 void WhenOpVisitor::visitStmt(VerifAssertIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(
+      ltlImplicationWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(VerifAssumeIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(
+      ltlImplicationWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(VerifCoverIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(ltlAndWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {

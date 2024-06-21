@@ -373,10 +373,26 @@ firrtl.strictmodule @FlowFix(in %in : !firrtl.uint<8>, out %out : !firrtl.uint<8
   firrtl.strictconnect %out, %mod_out : !firrtl.uint<8>
 }
 
+// CHECK-LABEL: FlowFix2
 firrtl.strictmodule @FlowFix2(in %in : !firrtl.uint<3>) {
   %wire, %wire_write = firrtl.strictwire : !firrtl.bundle<a: uint<3>>
   %w_a = firrtl.lhssubfield %wire_write[a] : !firrtl.lhs<bundle<a: uint<3>>>
   firrtl.strictconnect %w_a, %in : !firrtl.uint<3>
+
+// CHECK-LABEL: FlowFix3
+firrtl.module @FlowFix3(in %clk : !firrtl.clock) {
+  %wireb, %wireb_write = firrtl.strictwire : !firrtl.bundle<a: uint<3>>
+  %regb, %regb_write = firrtl.strictreg %clk : !firrtl.clock, !firrtl.bundle<a: uint<3>>
+
+  %wirev, %wirev_write = firrtl.strictwire : !firrtl.vector<uint<3>,2>
+  %regv, %regv_write = firrtl.strictreg %clk : !firrtl.clock, !firrtl.vector<uint<3>,2>
+
+  %b_a = firrtl.subfield %wireb[a] : !firrtl.bundle<a: uint<3>>
+  %v_a = firrtl.subindex %wirev[0] : !firrtl.vector<uint<3>,2>
+  %wb_a = firrtl.lhssubfield %wireb_write[a] : !firrtl.lhs<bundle<a: uint<3>>>
+  %wv_a = firrtl.lhssubindex %wirev_write[0] : !firrtl.lhs<vector<uint<3>,2>>
+  firrtl.strictconnect %wb_a, %v_a : !firrtl.uint<3>
+  firrtl.strictconnect %wv_a, %b_a : !firrtl.uint<3>
 }
 
 }

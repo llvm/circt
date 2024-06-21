@@ -5170,8 +5170,7 @@ FIRRTLType LHSSubfieldOp::inferReturnType(ValueRange operands,
 
   // OpenSubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return LHSType::get(inType.getContext(),
-                      inType.getElementTypePreservingConst(fieldIndex));
+  return LHSType::get(inType.getElementTypePreservingConst(fieldIndex));
 }
 
 bool SubfieldOp::isFieldFlipped() {
@@ -5227,7 +5226,7 @@ FIRRTLType LHSSubindexOp::inferReturnType(ValueRange operands,
 
   if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
     if (fieldIdx < vectorType.getNumElements())
-      return vectorType.getElementTypePreservingConst();
+      return LHSType::get(vectorType.getElementTypePreservingConst());
     return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
                                  "' in vector type ", inType);
   }

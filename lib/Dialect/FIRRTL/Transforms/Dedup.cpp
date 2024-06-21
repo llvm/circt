@@ -757,13 +757,11 @@ struct Equivalence {
     hw::InnerSymbolTable aTable(a);
     hw::InnerSymbolTable bTable(b);
     ModuleData data(aTable, bTable);
-    AnnotationSet aAnnos(a);
-    AnnotationSet bAnnos(b);
-    if (aAnnos.hasAnnotation(noDedupClass)) {
+    if (AnnotationSet::hasAnnotation(a, noDedupClass)) {
       diag.attachNote(a->getLoc()) << "module marked NoDedup";
       return;
     }
-    if (bAnnos.hasAnnotation(noDedupClass)) {
+    if (AnnotationSet::hasAnnotation(b, noDedupClass)) {
       diag.attachNote(b->getLoc()) << "module marked NoDedup";
       return;
     }
@@ -1644,9 +1642,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
     auto result = mlir::failableParallelForEach(
         context, llvm::seq(modules.size()), [&](unsigned idx) {
           auto module = modules[idx];
-          AnnotationSet annotations(module);
           // If the module is marked with NoDedup, just skip it.
-          if (annotations.hasAnnotation(noDedupClass))
+          if (AnnotationSet::hasAnnotation(module, noDedupClass))
             return success();
 
           // Only dedup extmodule's with defname.
