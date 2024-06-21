@@ -18,12 +18,24 @@ using namespace firrtl;
 // GenericIntrinsic
 //===----------------------------------------------------------------------===//
 
-ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
-  if (op.getNumOperands() != n)
-    return emitError() << " has " << op.getNumOperands()
-                       << " inputs instead of " << n;
+// Checks for a number of operands between n and n+c (allows for c optional
+// inputs)
+ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c = 0U) {
+  auto numOps = op.getNumOperands();
+  unsigned m = n + c;
+  if (!(n <= numOps && numOps <= m)) {
+    auto err = emitError() << " has " << numOps << " inputs instead of ";
+    if (c == 0)
+      err << n;
+    else
+      err << " between " << n << " and " << m;
+    return failure();
+  }
   return success();
 }
+
+// Accessor method for the number of inputs
+unsigned GenericIntrinsic::getNumInputs() { return op.getNumOperands(); }
 
 ParseResult GenericIntrinsic::hasNOutputElements(unsigned n) {
   auto b = getOutputBundle();
@@ -447,7 +459,7 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+    return gi.hasNInputs(1, 2) || gi.sizedInput<UIntType>(0, 1) ||
            gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
            gi.hasNoOutput();
   }
@@ -455,8 +467,14 @@ public:
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
     auto label = gi.getParamValue<StringAttr>("label");
+    auto operands = adaptor.getOperands();
 
-    rewriter.replaceOpWithNewOp<Op>(gi.op, adaptor.getOperands()[0], label);
+    // Check if an enable was provided
+    Value enable;
+    if (gi.getNumInputs() == 2)
+      enable = operands[1];
+
+    rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], enable, label);
   }
 };
 
@@ -708,8 +726,6 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
       "circt.ltl.implication", "circt_ltl_implication");
   lowering.add<CirctLTLBinaryConverter<LTLUntilIntrinsicOp>>("circt.ltl.until",
                                                              "circt_ltl_until");
-  lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
-      "circt.ltl.disable", "circt_ltl_disable");
   lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not",
                                                           "circt_ltl_not");
   lowering.add<CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>>(

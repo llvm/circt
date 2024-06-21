@@ -31,6 +31,13 @@ using namespace circt;
 using namespace circt::hw;
 using namespace circt::hw::detail;
 
+static ParseResult parseHWArray(AsmParser &parser, Attribute &dim,
+                                Type &elementType);
+static void printHWArray(AsmPrinter &printer, Attribute dim, Type elementType);
+
+static ParseResult parseHWElementType(AsmParser &parser, Type &elementType);
+static void printHWElementType(AsmPrinter &printer, Type dim);
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.cpp.inc"
 
@@ -161,7 +168,7 @@ bool circt::hw::hasHWInOutType(Type type) {
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.
-static ParseResult parseHWElementType(Type &result, AsmParser &p) {
+static ParseResult parseHWElementType(AsmParser &p, Type &result) {
   // If this is an HW dialect type, then we don't need/want the !hw. prefix
   // redundantly specified.
   auto fullString = static_cast<DialectAsmParser &>(p).getFullSymbolSpec();
@@ -181,7 +188,7 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   return p.parseType(result);
 }
 
-static void printHWElementType(Type element, AsmPrinter &p) {
+static void printHWElementType(AsmPrinter &p, Type element) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
@@ -547,10 +554,7 @@ size_t EnumType::getBitWidth() {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
-  if (p.parseLess())
-    return failure();
-
+static ParseResult parseHWArray(AsmParser &p, Attribute &dim, Type &inner) {
   uint64_t dimLiteral;
   auto int64Type = p.getBuilder().getIntegerType(64);
 
@@ -564,33 +568,16 @@ static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
     return failure();
   }
 
-  if (p.parseXInDimensionList() || parseHWElementType(inner, p) ||
-      p.parseGreater())
+  if (p.parseXInDimensionList() || parseHWElementType(p, inner))
     return failure();
 
   return success();
 }
 
-Type ArrayType::parse(AsmParser &p) {
-  Attribute dim;
-  Type inner;
-
-  if (failed(parseArray(p, dim, inner)))
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
-    return Type();
-
-  return get(inner.getContext(), inner, dim);
-}
-
-void ArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
+static void printHWArray(AsmPrinter &p, Attribute dim, Type elementType) {
+  p.printAttributeWithoutType(dim);
   p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
+  printHWElementType(p, elementType);
 }
 
 size_t ArrayType::getNumElements() const {
@@ -648,28 +635,6 @@ uint64_t ArrayType::getFieldID(uint64_t index) const {
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
 
-Type UnpackedArrayType::parse(AsmParser &p) {
-  Attribute dim;
-  Type inner;
-
-  if (failed(parseArray(p, dim, inner)))
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
-    return Type();
-
-  return get(inner.getContext(), inner, dim);
-}
-
-void UnpackedArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
-  p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
-}
-
 LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                           Type innerType, Attribute size) {
@@ -726,24 +691,6 @@ uint64_t UnpackedArrayType::getFieldID(uint64_t index) const {
 //===----------------------------------------------------------------------===//
 // InOutType
 //===----------------------------------------------------------------------===//
-
-Type InOutType::parse(AsmParser &p) {
-  Type inner;
-  if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
-    return Type();
-
-  return get(p.getContext(), inner);
-}
-
-void InOutType::print(AsmPrinter &p) const {
-  p << "<";
-  printHWElementType(getElementType(), p);
-  p << '>';
-}
 
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
@@ -809,9 +756,9 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // ModuleType
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<ModulePort> ports) {
@@ -1090,9 +1037,9 @@ detail::ModuleTypeStorage::ModuleTypeStorage(ArrayRef<ModulePort> inPorts)
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // BoilerPlate
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 void HWDialect::registerTypes() {
   addTypes<
