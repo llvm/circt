@@ -39,8 +39,6 @@ namespace {
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
-namespace {
-
 template <typename OpTy, typename ResultOpType>
 class VectorCreateToLogicElementwise : public mlir::RewritePattern {
 public:
@@ -77,7 +75,6 @@ public:
     return failure();
   }
 };
-} // namespace
 
 struct VectorizationPass
     : public circt::firrtl::impl::VectorizationBase<VectorizationPass> {

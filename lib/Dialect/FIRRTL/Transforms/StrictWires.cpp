@@ -21,6 +21,14 @@
 
 #include <deque>
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_STRICTWIRES
+#define GEN_PASS_DEF_STRICTMODULES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 #define DEBUG_TYPE "firrtl-strict-wires"
 
 using namespace circt;
@@ -117,10 +125,12 @@ static void updateUses(mlir::OpBuilder &builder,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct StrictWiresPass : public StrictWiresBase<StrictWiresPass> {
+struct StrictWiresPass
+    : public ::circt::firrtl::impl::StrictWiresBase<StrictWiresPass> {
   void runOnOperation() override;
 };
-struct StrictModulesPass : public StrictModulesBase<StrictModulesPass> {
+struct StrictModulesPass
+    : public ::circt::firrtl::impl::StrictModulesBase<StrictModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -137,9 +147,10 @@ void StrictWiresPass::runOnOperation() {
       if (!cast<FIRRTLType>(wire.getResult().getType())
                .getRecursiveTypeProperties()
                .isPassive) {
-                wire.emitWarning("Wire is not passive, skipping.  All wires should be passive by this point in the pipeline.");
+        wire.emitWarning("Wire is not passive, skipping.  All wires should be "
+                         "passive by this point in the pipeline.");
         return WalkResult::advance();
-               }
+      }
       auto newWire = cloneWireTo(builder, wire);
       updateUses(builder, toDelete, wire.getResult(), newWire.getRead(),
                  newWire.getWrite());
@@ -148,7 +159,9 @@ void StrictWiresPass::runOnOperation() {
       for (auto type : inst.getResultTypes()) {
         auto rtype = type_dyn_cast<FIRRTLBaseType>(type);
         if (rtype && !rtype.isPassive()) {
-          inst.emitWarning("Instance has non-passive type, skipping.  All instances should have passive types by this point in the pipeline.");
+          inst.emitWarning(
+              "Instance has non-passive type, skipping.  All instances should "
+              "have passive types by this point in the pipeline.");
           return WalkResult::advance();
         }
       }
@@ -182,7 +195,9 @@ void StrictModulesPass::runOnOperation() {
       for (auto port : module.getPorts())
         if (auto type = type_dyn_cast<FIRRTLBaseType>(port.type))
           if (!type.isPassive()) {
-            module.emitWarning("Module has non-passive ports, skipping.  All modules should have passive ports by this point in the pipeline.");
+            module.emitWarning(
+                "Module has non-passive ports, skipping.  All modules should "
+                "have passive ports by this point in the pipeline.");
             return WalkResult::advance();
           }
 
