@@ -375,9 +375,9 @@ firrtl.module @FlowFix(in %clk : !firrtl.clock) {
   %regv, %regv_write = firrtl.strictreg %clk : !firrtl.clock, !firrtl.vector<uint<3>,2>
 
   %b_a = firrtl.subfield %wireb[a] : !firrtl.bundle<a: uint<3>>
-  %v_a = firrtl.subfield %wirev[0] : !firrtl.vector<uint<3>,2>
+  %v_a = firrtl.subindex %wirev[0] : !firrtl.vector<uint<3>,2>
   %wb_a = firrtl.lhssubfield %wireb_write[a] : !firrtl.lhs<bundle<a: uint<3>>>
-  %wv_a = firrtl.lhssubfield %wirev_write[0] : !firrtl.lhs<vector<uint<3>,2>>
+  %wv_a = firrtl.lhssubindex %wirev_write[0] : !firrtl.lhs<vector<uint<3>,2>>
   firrtl.strictconnect %wb_a, %v_a : !firrtl.uint<3>
   firrtl.strictconnect %wv_a, %b_a : !firrtl.uint<3>
 }
