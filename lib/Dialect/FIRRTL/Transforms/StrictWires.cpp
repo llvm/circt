@@ -70,7 +70,14 @@ static FStrictModuleOp cloneModuleTo(mlir::OpBuilder &builder, FModuleOp mod) {
       mod.getLoc(), mod.getNameAttr(), mod.getConventionAttr(), mod.getPorts(),
 
       mod.getAnnotationsAttr(), mod.getLayersAttr());
-
+  
+  // The reasons for this are annoying.
+  for (auto attr : mod->getAttrs()) {
+    if (newMod->hasAttr(attr.getName()))
+      continue;
+    newMod->setAttr(attr.getName(), attr.getValue());
+  }
+      
   // Move the body of the module.
   newMod.getRegion().takeBody(mod.getRegion());
   // Update the types in the body.

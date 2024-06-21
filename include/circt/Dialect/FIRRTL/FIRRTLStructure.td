@@ -336,7 +336,8 @@ def FStrictModuleOp : FIRRTLModuleLike<"strictmodule", [SingleBlock, NoTerminato
     blockargs.
   }];
   let arguments =
-      (ins ConventionAttr:$convention,
+      (ins SymbolNameAttr:$sym_name,
+           ConventionAttr:$convention,
            DenseBoolArrayAttr:$portDirections,
            ArrayRefAttr:$portLocations,
            ArrayRefAttr:$portAnnotations,
