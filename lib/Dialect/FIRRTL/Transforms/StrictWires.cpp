@@ -11,9 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
@@ -135,8 +136,10 @@ void StrictWiresPass::runOnOperation() {
     if (auto wire = dyn_cast<WireOp>(op)) {
       if (!cast<FIRRTLType>(wire.getResult().getType())
                .getRecursiveTypeProperties()
-               .isPassive)
+               .isPassive) {
+                wire.emitWarning("Wire is not passive, skipping.  All wires should be passive by this point in the pipeline.");
         return WalkResult::advance();
+               }
       auto newWire = cloneWireTo(builder, wire);
       updateUses(builder, toDelete, wire.getResult(), newWire.getRead(),
                  newWire.getWrite());
@@ -144,8 +147,10 @@ void StrictWiresPass::runOnOperation() {
     } else if (auto inst = dyn_cast<InstanceOp>(op)) {
       for (auto type : inst.getResultTypes()) {
         auto rtype = type_dyn_cast<FIRRTLBaseType>(type);
-        if (rtype && !rtype.isPassive())
+        if (rtype && !rtype.isPassive()) {
+          inst.emitWarning("Instance has non-passive type, skipping.  All instances should have passive types by this point in the pipeline.");
           return WalkResult::advance();
+        }
       }
       auto newInst = cloneInstTo(builder, inst);
       // For now, assume outputs are not duplex.  If this isn't true, make a
@@ -176,8 +181,10 @@ void StrictModulesPass::runOnOperation() {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       for (auto port : module.getPorts())
         if (auto type = type_dyn_cast<FIRRTLBaseType>(port.type))
-          if (!type.isPassive())
+          if (!type.isPassive()) {
+            module.emitWarning("Module has non-passive ports, skipping.  All modules should have passive ports by this point in the pipeline.");
             return WalkResult::advance();
+          }
 
       auto newMod = cloneModuleTo(builder, module);
       toDelete.push_back(module);
