@@ -945,9 +945,7 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-]> {
+def StructCreateOp : MooreOp<"struct_create"> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
@@ -972,11 +970,10 @@ def StructCreateOp : MooreOp<"struct_create", [
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins StrAttr:$name,  Variadic<UnpackedType>:$input);
+  let arguments = (ins Variadic<UnpackedType>:$fields);
   let results = (outs AnyStructType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $input attr-dict
-    `:` type($input) `->` type($result)
+    $fields attr-dict `:` type($fields) `->` type($result)
   }];
 }
 
