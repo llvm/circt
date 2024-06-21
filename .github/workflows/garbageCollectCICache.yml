@@ -1,23 +1,26 @@
 name: Garbage collect github CI cache
 
-# Run every 4 hours
+# Run every hour
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 */4 * * *
+    - cron: 0 * * * *
 
 permissions:
   actions: write
 
 jobs:
   run-script:
-    # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-    # time.
+    strategy:
+      matrix:
+        key_prefix: [ccache-short-clang-Release-ON-ON, sccache-windows-2022-cl-cl-release-OFF-ON-ON]
     
     name: Garbage collect cache
     runs-on: ubuntu-latest
     steps:
       - name: Get CIRCT
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
         uses: actions/checkout@v3
         with:
           fetch-depth: 2
@@ -29,7 +32,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Pretty print
-          gh cache list -k ccache-short-clang-Release-ON-ON -L 50
-          # Keep top 5 caches (in the case LLVM bump involved)
-          gh cache list -k ccache-short-clang-Release-ON-ON -L 50  --jq ".[5:]|.[].id" --json id | ./utils/delete-cache.sh
+          # Keep top 3 caches (in the case LLVM bump involved)
+          gh cache list -k ${{ matrix.key_prefix }} -L 50
+          gh cache list -k ${{ matrix.key_prefix }} -L 50  --jq ".[3:]|.[].id" --json id | ./utils/delete-cache.sh
