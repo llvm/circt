@@ -6,9 +6,9 @@
 # Note that this includes a relatively large build of LLVM (~2400 C++ files)
 # and can take a considerable amount of time, especially with defaults.
 # To install:
-#   pip install . --use-feature=in-tree-build
+#   pip install .
 # To build a wheel:
-#   pip wheel . --use-feature=in-tree-build
+#   pip wheel .
 #
 # It is recommended to build with Ninja and ccache. To do so, set environment
 # variables by prefixing to above invocations:
