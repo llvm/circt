@@ -11,14 +11,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
 
 #include <deque>
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_STRICTWIRES
+#define GEN_PASS_DEF_STRICTMODULES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 #define DEBUG_TYPE "firrtl-strict-wires"
 
@@ -51,6 +60,32 @@ static StrictInstanceOp cloneInstTo(mlir::OpBuilder &builder, InstanceOp inst) {
       inst.getLowerToBind(), inst.getInnerSymAttr());
       si->setAttrs(inst->getAttrs());
       return si;
+}
+
+static FStrictModuleOp cloneModuleTo(mlir::OpBuilder &builder, FModuleOp mod) {
+  builder.setInsertionPoint(mod);
+
+  // This uses the builtin and needs types fixed
+  auto newMod = builder.create<FStrictModuleOp>(
+      mod.getLoc(), mod.getNameAttr(), mod.getConventionAttr(), mod.getPorts(),
+
+      mod.getAnnotationsAttr(), mod.getLayersAttr());
+
+  // Move the body of the module.
+  newMod.getRegion().takeBody(mod.getRegion());
+  // Update the types in the body.
+  builder.setInsertionPointToStart(newMod.getBodyBlock());
+  for (auto &arg : newMod.getArguments()) {
+    if (mod.getPortDirection(arg.getArgNumber()) == Direction::Out &&
+        type_isa<FIRRTLBaseType>(arg.getType())) {
+      auto wire = builder.create<WireOp>(arg.getLoc(), arg.getType());
+      arg.replaceAllUsesWith(wire.getResult());
+      arg.setType(LHSType::get(type_cast<FIRRTLBaseType>(arg.getType())));
+      builder.create<StrictConnectOp>(arg.getLoc(), arg, wire.getResult());
+    }
+  }
+
+  return newMod;
 }
 
 // This is recursive, but effectively recursive on a type.
@@ -94,7 +129,12 @@ static void updateUses(mlir::OpBuilder &builder,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct StrictWiresPass : public StrictWiresBase<StrictWiresPass> {
+struct StrictWiresPass
+    : public ::circt::firrtl::impl::StrictWiresBase<StrictWiresPass> {
+  void runOnOperation() override;
+};
+struct StrictModulesPass
+    : public ::circt::firrtl::impl::StrictModulesBase<StrictModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -110,8 +150,11 @@ void StrictWiresPass::runOnOperation() {
     if (auto wire = dyn_cast<WireOp>(op)) {
       if (!cast<FIRRTLType>(wire.getResult().getType())
                .getRecursiveTypeProperties()
-               .isPassive)
+               .isPassive) {
+        wire.emitWarning("Wire is not passive, skipping.  All wires should be "
+                         "passive by this point in the pipeline.");
         return WalkResult::advance();
+      }
       auto newWire = cloneWireTo(builder, wire);
       updateUses(builder, toDelete, wire.getResult(), newWire.getRead(),
                  newWire.getWrite());
@@ -119,8 +162,12 @@ void StrictWiresPass::runOnOperation() {
     } else if (auto inst = dyn_cast<InstanceOp>(op)) {
       for (auto type : inst.getResultTypes()) {
         auto rtype = type_dyn_cast<FIRRTLBaseType>(type);
-        if (rtype && !rtype.isPassive())
+        if (rtype && !rtype.isPassive()) {
+          inst.emitWarning(
+              "Instance has non-passive type, skipping.  All instances should "
+              "have passive types by this point in the pipeline.");
           return WalkResult::advance();
+        }
       }
       auto newInst = cloneInstTo(builder, inst);
       // For now, assume outputs are not duplex.  If this isn't true, make a
@@ -140,7 +187,39 @@ void StrictWiresPass::runOnOperation() {
     w->erase();
 }
 
+// This is the main entrypoint for the lowering pass.
+void StrictModulesPass::runOnOperation() {
+  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  auto circuit = getOperation();
+  mlir::OpBuilder builder(circuit);
+  std::deque<Operation *> toDelete;
+
+  circuit.walk([&](Operation *op) -> WalkResult {
+    if (auto module = dyn_cast<FModuleOp>(op)) {
+      for (auto port : module.getPorts())
+        if (auto type = type_dyn_cast<FIRRTLBaseType>(port.type))
+          if (!type.isPassive()) {
+            module.emitWarning(
+                "Module has non-passive ports, skipping.  All modules should "
+                "have passive ports by this point in the pipeline.");
+            return WalkResult::advance();
+          }
+
+      auto newMod = cloneModuleTo(builder, module);
+      toDelete.push_back(module);
+    }
+    return WalkResult::advance();
+  });
+
+  for (auto w : toDelete)
+    w->erase();
+}
+
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createStrictWiresPass() {
   return std::make_unique<StrictWiresPass>();
+}
+
+std::unique_ptr<mlir::Pass> circt::firrtl::createStrictModulesPass() {
+  return std::make_unique<StrictModulesPass>();
 }

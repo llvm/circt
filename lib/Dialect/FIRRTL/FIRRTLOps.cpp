@@ -652,6 +652,10 @@ SmallVector<PortInfo> FIntModuleOp::getPorts() { return ::getPortImpl(*this); }
 
 SmallVector<PortInfo> FMemModuleOp::getPorts() { return ::getPortImpl(*this); }
 
+SmallVector<PortInfo> FStrictModuleOp::getPorts() {
+  return ::getPortImpl(*this);
+}
+
 static hw::ModulePort::Direction dirFtoH(Direction dir) {
   if (dir == Direction::In)
     return hw::ModulePort::Direction::Input;
@@ -697,6 +701,10 @@ SmallVector<::circt::hw::PortInfo> FMemModuleOp::getPortList() {
   return ::getPortListImpl(*this);
 }
 
+SmallVector<::circt::hw::PortInfo> FStrictModuleOp::getPortList() {
+  return ::getPortListImpl(*this);
+}
+
 static hw::PortInfo getPortImpl(FModuleLike module, size_t idx) {
   return {{module.getPortNameAttr(idx), module.getPortType(idx),
            dirFtoH(module.getPortDirection(idx))},
@@ -723,6 +731,10 @@ static hw::PortInfo getPortImpl(FModuleLike module, size_t idx) {
 }
 
 ::circt::hw::PortInfo FMemModuleOp::getPort(size_t idx) {
+  return ::getPortImpl(*this, idx);
+}
+
+::circt::hw::PortInfo FStrictModuleOp::getPort(size_t idx) {
   return ::getPortImpl(*this, idx);
 }
 
@@ -911,6 +923,11 @@ void FModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   getBodyBlock()->eraseArguments(portIndices);
 }
 
+void FStrictModuleOp::erasePorts(const llvm::BitVector &portIndices) {
+  ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
+  getBodyBlock()->eraseArguments(portIndices);
+}
+
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
@@ -924,6 +941,26 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     // insert we have to increase the index by 1.
     auto &[index, port] = ports[i];
     body->insertArgument(index + i, port.type, port.loc);
+  }
+}
+
+/// Inserts the given ports. The insertion indices are expected to be in order.
+/// Insertion occurs in-order, such that ports with the same insertion index
+/// appear in the module in the same order they appeared in the list.
+void FStrictModuleOp::insertPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> ports) {
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
+
+  // Insert the block arguments.
+  auto *body = getBodyBlock();
+  for (size_t i = 0, e = ports.size(); i < e; ++i) {
+    // Block arguments are inserted one at a time, so for each argument we
+    // insert we have to increase the index by 1.
+    auto &[index, port] = ports[i];
+    auto type = port.type;
+    if (port.direction == Direction::Out)
+      type = LHSType::get(type_cast<FIRRTLBaseType>(port.type));
+    body->insertArgument(index + i, type, port.loc);
   }
 }
 
@@ -1030,6 +1067,27 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   // Add arguments to the body block.
   for (auto &elt : ports)
     body->addArgument(elt.type, elt.loc);
+}
+
+void FStrictModuleOp::build(OpBuilder &builder, OperationState &result,
+                            StringAttr name, ConventionAttr convention,
+                            ArrayRef<PortInfo> ports, ArrayAttr annotations,
+                            ArrayAttr layers) {
+  buildModule(builder, result, name, ports, annotations, layers);
+  result.addAttribute("convention", convention);
+
+  // Create a region and a block for the body.
+  auto *bodyRegion = result.regions[0].get();
+  Block *body = new Block();
+  bodyRegion->push_back(body);
+
+  // Add arguments to the body block.
+  for (auto &elt : ports) {
+    auto type = elt.type;
+    if (elt.direction == Direction::Out)
+      type = LHSType::get(type_cast<FIRRTLBaseType>(type));
+    body->addArgument(type, elt.loc);
+  }
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1181,7 +1239,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
                  SmallVectorImpl<Attribute> &portTypes,
                  SmallVectorImpl<Attribute> &portAnnotations,
                  SmallVectorImpl<Attribute> &portSyms,
-                 SmallVectorImpl<Attribute> &portLocs) {
+                 SmallVectorImpl<Attribute> &portLocs, bool isStrict) {
   auto *context = parser.getContext();
 
   auto parseArgument = [&]() -> ParseResult {
@@ -1231,8 +1289,14 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
 
-    if (hasSSAIdentifiers)
-      entryArgs.back().type = portType;
+    if (hasSSAIdentifiers) {
+      if (isStrict && portDirections.back() == Direction::Out &&
+          type_isa<FIRRTLBaseType>(portType))
+        entryArgs.back().type =
+            LHSType::get(type_cast<FIRRTLBaseType>(portType));
+      else
+        entryArgs.back().type = portType;
+    }
 
     // Parse the optional port symbol.
     if (supportsSymbols) {
@@ -1360,6 +1424,20 @@ void FModuleOp::print(OpAsmPrinter &p) {
   }
 }
 
+void FStrictModuleOp::print(OpAsmPrinter &p) {
+  printFModuleLikeOp(p, *this);
+
+  // Print the body if this is not an external function. Since this block does
+  // not have terminators, printing the terminator actually just prints the last
+  // operation.
+  Region &fbody = getBody();
+  if (!fbody.empty()) {
+    p << " ";
+    p.printRegion(fbody, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+  }
+}
+
 /// Parse an parameter list if present.
 /// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
 /// parameter-decl ::= identifier `:` type
@@ -1405,7 +1483,8 @@ static ParseResult parseParameterList(OpAsmParser &parser,
 
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       OperationState &result,
-                                      bool hasSSAIdentifiers) {
+                                      bool hasSSAIdentifiers,
+                                      bool isStrict = false) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
 
@@ -1434,7 +1513,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portLocs;
   if (parseModulePorts(parser, hasSSAIdentifiers, /*supportsSymbols=*/true,
                        entryArgs, portDirections, portNames, portTypes,
-                       portAnnotations, portSyms, portLocs))
+                       portAnnotations, portSyms, portLocs, isStrict))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1512,6 +1591,19 @@ ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+ParseResult FStrictModuleOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true, true))
+    return failure();
+  if (!result.attributes.get("convention"))
+    result.addAttribute(
+        "convention",
+        ConventionAttr::get(result.getContext(), Convention::Internal));
+  if (!result.attributes.get("layers"))
+    result.addAttribute("layers", ArrayAttr::get(parser.getContext(), {}));
+  return success();
+}
+
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false))
     return failure();
@@ -1545,6 +1637,35 @@ LogicalResult FModuleOp::verify() {
   // Verify the block arguments' types and locations match our attributes.
   for (auto [arg, type, loc] : zip(body->getArguments(), portTypes, portLocs)) {
     if (arg.getType() != cast<TypeAttr>(type).getValue())
+      return emitOpError("block argument types should match signature types");
+    if (arg.getLoc() != cast<LocationAttr>(loc))
+      return emitOpError(
+          "block argument locations should match signature locations");
+  }
+
+  return success();
+}
+
+LogicalResult FStrictModuleOp::verify() {
+  // Verify the block arguments.
+  auto *body = getBodyBlock();
+  auto portTypes = getPortTypes();
+  auto portLocs = getPortLocations();
+  auto numPorts = portTypes.size();
+
+  // Verify that we have the correct number of block arguments.
+  if (body->getNumArguments() != numPorts)
+    return emitOpError("entry block must have ")
+           << numPorts << " arguments to match module signature";
+
+  // Verify the block arguments' types and locations match our attributes.
+  for (auto [arg, type, loc, dir] :
+       zip(body->getArguments(), portTypes, portLocs, getPortDirections())) {
+    auto expectedType = cast<TypeAttr>(type).getValue();
+    if (direction::get(dir) == Direction::Out &&
+        type_isa<FIRRTLBaseType>(expectedType))
+      expectedType = LHSType::get(type_cast<FIRRTLBaseType>(expectedType));
+    if (arg.getType() != expectedType)
       return emitOpError("block argument types should match signature types");
     if (arg.getLoc() != cast<LocationAttr>(loc))
       return emitOpError(
@@ -1698,6 +1819,21 @@ LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 LogicalResult
+FStrictModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (failed(
+          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+    return failure();
+
+  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  for (auto layer : getLayers()) {
+    if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
+      return emitOpError() << "enables unknown layer '" << layer << "'";
+  }
+
+  return success();
+}
+
+LogicalResult
 FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
 }
@@ -1714,6 +1850,11 @@ FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
                                          mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+void FStrictModuleOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
@@ -1735,6 +1876,8 @@ void FMemModuleOp::getAsmBlockArgumentNames(
 ArrayAttr FMemModuleOp::getParameters() { return {}; }
 
 ArrayAttr FModuleOp::getParameters() { return {}; }
+
+ArrayAttr FStrictModuleOp::getParameters() { return {}; }
 
 Convention FIntModuleOp::getConvention() { return Convention::Internal; }
 
@@ -1835,7 +1978,7 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   if (parseModulePorts(parser, hasSSAIdentifiers,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       portLocs, false))
     return failure();
 
   // Ports on ClassLike ops cannot have annotations
@@ -2415,7 +2558,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       portLocs, false))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -2737,7 +2880,7 @@ ParseResult StrictInstanceOp::parse(OpAsmParser &parser,
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       portLocs, false))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
@@ -2958,7 +3101,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   if (parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
                        /*supportsSymbols=*/false, entryArgs, portDirections,
                        portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       portLocs, false))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
