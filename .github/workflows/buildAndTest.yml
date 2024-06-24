@@ -14,15 +14,19 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20220216182244
+      image: ghcr.io/circt/images/circt-ci-build:20240213211952
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "false"
+
+      - name: Set git safe
+        run: |
+          git config --global --add safe.directory $PWD
 
       # --------
       # Lint the CIRCT C++ code.
@@ -93,7 +97,7 @@ jobs:
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload format patches
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         continue-on-error: true
         if: ${{ failure() }}
         with:
@@ -119,12 +123,12 @@ jobs:
   # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
   configure-circt-unified:
     name: Configure Unified Build
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -150,7 +154,7 @@ jobs:
     needs: sanity-check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20220216182244
+      image: ghcr.io/circt/images/circt-ci-build:20240213211952
     strategy:
       matrix:
         compiler:
@@ -175,7 +179,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -196,7 +200,7 @@ jobs:
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
         id: cache-llvm
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             llvm/build
@@ -292,7 +296,7 @@ jobs:
       # Upload the tidy patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload tidy patches
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         continue-on-error: true
         if: ${{ failure() }}
         with:
