@@ -39,6 +39,7 @@ install(FILES
 )
 
 add_library(EsiCosimGRPC SHARED "${CMAKE_CURRENT_LIST_DIR}/cosim.proto")
+install(TARGETS EsiCosimGRPC DESTINATION lib COMPONENT ESIRuntime)
 target_link_libraries(EsiCosimGRPC PUBLIC protobuf::libprotobuf gRPC::grpc++)
 set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_include_directories(EsiCosimGRPC PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
@@ -55,7 +56,7 @@ protobuf_generate(
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 
-add_library(CosimRpcServer
+add_library(CosimRpcServer SHARED
   lib/RpcServer.cpp
 )
 target_link_libraries(CosimRpcServer
@@ -63,6 +64,7 @@ target_link_libraries(CosimRpcServer
   EsiCosimGRPC
   ESIRuntime
 )
+install(TARGETS CosimRpcServer DESTINATION lib COMPONENT ESIRuntime)
 
 add_subdirectory(cosim_dpi_server)
 add_subdirectory(MtiPliStub)
