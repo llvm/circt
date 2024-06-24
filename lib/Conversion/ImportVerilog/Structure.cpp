@@ -453,9 +453,10 @@ ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
   using slang::ast::MultiPortSymbol;
+  using slang::ast::ParameterSymbol;
   using slang::ast::PortSymbol;
 
-  // auto parameters = module->body.parameters;
+  auto parameters = module->parameters;
   // If there is already exist a module that has the same name with this
   // module ,has the same parent scope and has the same parameters we can
   // define this module is a duplicate module
@@ -463,18 +464,19 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
     if (module->name == existModule.first->name &&
         module->getParentScope() == existModule.getFirst()->getParentScope()) {
       bool moduleSame = true;
-      // if (!parameters.empty()) {
-      //   auto moduleParameters = module.getFirst()->parameters;
-      //   for (auto it1 = parameters.begin(), it2 =
-      // moduleParameters.begin();
-      //        it1 != parameters.end() && it2 != moduleParameters.end();
-      //        it1++, it2++) {
-      //     if (*it1 != *it2) {
-      //       moduleSame = false;
-      //       break;
-      //     }
-      //   }
-      // }
+      if (!parameters.empty()) {
+        auto moduleParameters = existModule.getFirst()->parameters;
+        for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
+             it1 != parameters.end() && it2 != moduleParameters.end();
+             it1++, it2++) {
+          if (it1 == parameters.end() || it2 == moduleParameters.end() ||
+              ((*it1)->symbol.as<ParameterSymbol>().getValue() !=
+               (*it2)->symbol.as<ParameterSymbol>().getValue())) {
+            moduleSame = false;
+            break;
+          }
+        }
+      }
       module = moduleSame ? existModule.first : module;
       break;
     }
