@@ -13,8 +13,14 @@ set_target_properties(EsiCosimDpiServer
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
         CXX_VISIBILITY_PRESET "default"
 )
-add_dependencies(EsiCosimDpiServer EsiCosimCapnp MtiPli)
-target_link_libraries(EsiCosimDpiServer PRIVATE EsiCosimCapnp MtiPli)
+add_dependencies(EsiCosimDpiServer ESIRuntime MtiPli)
+target_link_libraries(EsiCosimDpiServer
+  PRIVATE
+  ESIRuntime
+  CosimRpcServer
+  MtiPli
+)
+
 install(TARGETS EsiCosimDpiServer
   DESTINATION lib
   COMPONENT ESIRuntime
