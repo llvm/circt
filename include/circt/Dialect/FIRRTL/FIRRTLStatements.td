@@ -357,7 +357,7 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<"int.verif." # mnemonic, traits> {
   let summary = "FIRRTL variant of `verif." # mnemonic # "`";
   let description = "See `verif." # mnemonic # "` op in the Verif dialect.";
-  let arguments = (ins UInt1Type:$property, OptionalAttr<StrAttr>:$label);
+  let arguments = (ins UInt1Type:$property, Optional<UInt1Type>:$enable, OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
