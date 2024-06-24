@@ -83,7 +83,7 @@ struct Context {
   LogicalResult
   convertTimingControl(const slang::ast::TimingControl &timingControl);
 
-  // Update duplicae port symbol
+  // Update duplicate port symbol
   const slang::ast::PortSymbol *
   updatePortsSymbol(ModuleLowering *moduleLowering,
                     const slang::ast::PortSymbol *port);
