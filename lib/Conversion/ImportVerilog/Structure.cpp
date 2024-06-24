@@ -455,6 +455,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::MultiPortSymbol;
   using slang::ast::ParameterSymbol;
   using slang::ast::PortSymbol;
+  using slang::ast::TypeParameterSymbol;
 
   auto parameters = module->parameters;
   // If there is already exist a module that has the same name with this
@@ -469,10 +470,30 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
              it1 != parameters.end() && it2 != moduleParameters.end();
              it1++, it2++) {
-          if (it1 == parameters.end() || it2 == moduleParameters.end() ||
-              ((*it1)->symbol.as<ParameterSymbol>().getValue() !=
-               (*it2)->symbol.as<ParameterSymbol>().getValue())) {
+          auto para1 = (*it1)->symbol.as_if<ParameterSymbol>();
+          auto para2 = (*it2)->symbol.as_if<ParameterSymbol>();
+          // Parameters size different
+          if (it1 == parameters.end() || it2 == moduleParameters.end()) {
             moduleSame = false;
+            break;
+          }
+          // Parameters kind different
+          if ((para1 == nullptr) ^ (para2 == nullptr)) {
+            moduleSame = false;
+            break;
+          }
+          // Compare ParameterSymbol
+          if (para1 != nullptr) {
+            moduleSame = para1->getValue() == para2->getValue();
+            break;
+          }
+          // Compare TypeParameterSymbol
+          if (para1 == nullptr) {
+            auto para1Type = convertType(
+                (*it1)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+            auto para2Type = convertType(
+                (*it2)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+            moduleSame = para1Type == para2Type;
             break;
           }
         }
