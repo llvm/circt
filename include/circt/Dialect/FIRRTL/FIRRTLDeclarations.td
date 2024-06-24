@@ -37,7 +37,7 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+      "firrtl::FModuleOp", "firrtl::FStrictModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
@@ -140,6 +140,128 @@ def InstanceOp : HardwareDeclOp<"instance", [
     /// conjuction with adding ports to the referenced module. This will emit
     /// the new InstanceOp to the same location.
     InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+
+    //===------------------------------------------------------------------===//
+    // Instance graph methods
+    //===------------------------------------------------------------------===//
+
+    // Quick lookup of the referenced module using the instance graph.
+    template <typename T = ::circt::igraph::ModuleOpInterface>
+    T getReferencedModule(::circt::igraph::InstanceGraph &instanceGraph) {
+      auto moduleNameAttr = getModuleNameAttr().getAttr();
+      auto *node =  instanceGraph.lookup(moduleNameAttr);
+      if (!node)
+        return nullptr;
+      Operation *moduleOp = node->getModule();
+      return dyn_cast_or_null<T>(moduleOp);
+    }
+  }];
+
+  let hasVerifier = true;
+}
+
+def StrictInstanceOp : HardwareDeclOp<"strictinstance", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getModuleName"
+    ]>,
+  ]> {
+  let summary = "Instantiate an instance of a module";
+  let description = [{
+    This represents an instance of a module.  The results are the modules inputs
+    and outputs.  The inputs have LHSType wrapped types, the outputs do not.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.strictinstance foo @Foo(in io: !firrtl.uint)
+    firrtl.strictconnect %0, %c0_ui
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
+                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations,
+                       LayerArrayAttr:$layers,
+                       UnitAttr:$lowerToBind,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   "::mlir::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
+                   "ArrayRef<Attribute>":$annotations,
+                   "ArrayRef<Attribute>":$portAnnotations,
+                   "::mlir::ArrayRef<Attribute>":$layers,
+                   "bool":$lowerToBind,
+                   "hw::InnerSymAttr":$innerSym)>,
+
+    /// Constructor when you have the target module in hand.
+    OpBuilder<(ins "FModuleLike":$module,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+
+    /// Constructor when you have a port info list in hand.
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "::mlir::StringRef":$moduleName,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(getPortDirections()[resultNo]);
+    }
+
+    /// Return the port name for the specified result number.
+    StringAttr getPortName(size_t resultNo) {
+      return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+    StringRef getPortNameStr(size_t resultNo) {
+      return getPortName(resultNo).getValue();
+    }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Builds a new `StrictInstanceOp` with the ports listed in `portIndices` erased,
+    /// and updates any users of the remaining ports to point at the new
+    /// instance.
+    StrictInstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
+
+    /// Clone the instance op and add ports.  This is usually used in
+    /// conjuction with adding ports to the referenced module. This will emit
+    /// the new StrictInstanceOp to the same location.
+    StrictInstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
 
     //===------------------------------------------------------------------===//
     // Instance graph methods
@@ -579,6 +701,41 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, CombDataflow]> {
   let hasVerifier = 1;
 }
 
+def StrictRegOp : HardwareDeclOp<"strictreg", [Forceable, SameVariadicOperandSize]> {
+  let summary = "Define a new register with an optional reset";
+  let description = [{
+    Declare a new register:
+    ```
+      %name, %name_write = firrtl.regreset %clockVal (reset %resetSignal, %resetValue)? : t1 (, rt)?
+    ```
+    }];
+
+  let arguments = (
+    ins ClockType:$clockVal, 
+        Optional<AnyResetType>:$resetSignal,
+        Optional<AnyRegisterType>:$resetValue,
+        StrAttr:$name, NameKindAttr:$nameKind,
+        AnnotationArrayAttr:$annotations,
+        OptionalAttr<InnerSymAttr>:$inner_sym,
+        UnitAttr:$forceable);
+  let results = (outs AnyRegisterType:$read, LHSType:$write, Optional<RefType>:$ref);
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    $clockVal (`,` `reset` `(` $resetSignal^ `:` type($resetSignal) `,` $resetValue `:` type($resetValue) `)` )? (`,` `forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict)
+    `:` type($clockVal) `,` custom<OptionalLHSOpTypes>(type($write), type($read)) (`,` qualified(type($ref))^)?
+
+  }];
+
+//  let hasCanonicalizer = true;
+//  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Value getResult();
+  }];
+}
+
+
 def WireOp : HardwareDeclOp<"wire", [
     Forceable,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
@@ -670,12 +827,47 @@ def WireOp : HardwareDeclOp<"wire", [
   }];
 }
 
+def StrictWireOp : HardwareDeclOp<"strictwire", [
+    Forceable,
+    LHSTypeConstraint<"read", "write">,
+    OptRefTypeConstraint<"read", "ref">,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Define a new wire";
+  let description = [{
+    Declare a new wire:
+    ```
+      %name,%name.wp,%name.ref = firrtl.strictwire forceable : t1
+    ```
+    }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
+                       AnnotationArrayAttr:$annotations,
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       UnitAttr:$forceable); // ReferenceKinds
+  let results = (outs PassiveType:$read, 
+                      LHSType:$write,
+                      Optional<RefType>:$ref);
+
+//  let hasCanonicalizer = true;
+
+  let assemblyFormat = [{
+    (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
+    (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    custom<OptionalLHSOpTypes>(type($write), type($read)) (`,` qualified(type($ref))^)?
+  }];
+
+  let extraClassDeclaration = [{
+    Value getResult();
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Property Ops
 //===----------------------------------------------------------------------===//
 
 def ObjectOp :  FIRRTLOp<"object", [
-    ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
+    ParentOneOf<["firrtl::FModuleOp, firrtl::FStrictModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
     DeclareOpInterfaceMethods<FInstanceLike, [
       "getReferencedOperation",
