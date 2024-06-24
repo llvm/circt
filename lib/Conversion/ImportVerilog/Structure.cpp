@@ -458,13 +458,13 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::TypeParameterSymbol;
 
   auto parameters = module->parameters;
+  bool hasModuleSame = false;
   // If there is already exist a module that has the same name with this
   // module ,has the same parent scope and has the same parameters we can
   // define this module is a duplicate module
   for (auto const &existModule : modules) {
     if (module->name == existModule.first->name &&
         module->getParentScope() == existModule.getFirst()->getParentScope()) {
-      bool moduleSame = true;
       if (!parameters.empty()) {
         auto moduleParameters = existModule.getFirst()->parameters;
         for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
@@ -474,17 +474,15 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           const auto *para2 = (*it2)->symbol.as_if<ParameterSymbol>();
           // Parameters size different
           if (it1 == parameters.end() || it2 == moduleParameters.end()) {
-            moduleSame = false;
             break;
           }
           // Parameters kind different
           if ((para1 == nullptr) ^ (para2 == nullptr)) {
-            moduleSame = false;
             break;
           }
           // Compare ParameterSymbol
           if (para1 != nullptr) {
-            moduleSame = para1->getValue() == para2->getValue();
+            hasModuleSame = para1->getValue() == para2->getValue();
             break;
           }
           // Compare TypeParameterSymbol
@@ -493,13 +491,15 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
                 (*it1)->symbol.as<TypeParameterSymbol>().getTypeAlias());
             auto para2Type = convertType(
                 (*it2)->symbol.as<TypeParameterSymbol>().getTypeAlias());
-            moduleSame = para1Type == para2Type;
+            hasModuleSame = para1Type == para2Type;
             break;
           }
         }
       }
-      module = moduleSame ? existModule.first : module;
-      break;
+      if (hasModuleSame) {
+        module = existModule.first;
+        break;
+      }
     }
   }
   auto &slot = modules[module];
