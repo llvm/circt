@@ -470,8 +470,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
              it1 != parameters.end() && it2 != moduleParameters.end();
              it1++, it2++) {
-          auto para1 = (*it1)->symbol.as_if<ParameterSymbol>();
-          auto para2 = (*it2)->symbol.as_if<ParameterSymbol>();
+          const auto *para1 = (*it1)->symbol.as_if<ParameterSymbol>();
+          const auto *para2 = (*it2)->symbol.as_if<ParameterSymbol>();
           // Parameters size different
           if (it1 == parameters.end() || it2 == moduleParameters.end()) {
             moduleSame = false;
