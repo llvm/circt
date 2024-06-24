@@ -105,18 +105,7 @@ struct MemberVisitor {
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
 
-    const slang::ast::InstanceBodySymbol *duplicateInstanceBodySymbol = nullptr;
-    for (auto const &module : context.modules) {
-      if (instNode.body.name == module.first->name &&
-          instNode.getParentScope() == module.getFirst()->getParentScope()) {
-        duplicateInstanceBodySymbol = module.first;
-        break;
-      }
-    }
-    auto *moduleLowering =
-        duplicateInstanceBodySymbol
-            ? context.modules.find(duplicateInstanceBodySymbol)->second.get()
-            : context.convertModuleHeader(&instNode.body);
+    auto *moduleLowering = context.convertModuleHeader(&instNode.body);
     if (!moduleLowering)
       return failure();
     auto module = moduleLowering->op;
@@ -136,12 +125,10 @@ struct MemberVisitor {
       // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
-        if (duplicateInstanceBodySymbol) {
-          for (auto &existPort : moduleLowering->ports) {
-            if (existPort.ast.name == port->name) {
-              port = &existPort.ast;
-              break;
-            }
+        for (auto &existPort : moduleLowering->ports) {
+          if (existPort.ast.name == port->name) {
+            port = &existPort.ast;
+            break;
           }
         }
         switch (port->direction) {
@@ -202,12 +189,10 @@ struct MemberVisitor {
                          : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
-        if (duplicateInstanceBodySymbol) {
-          for (auto &existPort : moduleLowering->ports) {
-            if (existPort.ast.name == port->name) {
-              port = &existPort.ast;
-              break;
-            }
+        for (auto &existPort : moduleLowering->ports) {
+          if (existPort.ast.name == port->name) {
+            port = &existPort.ast;
+            break;
           }
         }
         portValues.insert({port, value});
@@ -225,12 +210,10 @@ struct MemberVisitor {
         unsigned offset = 0;
         auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
-          if (duplicateInstanceBodySymbol) {
-            for (auto &existPort : moduleLowering->ports) {
-              if (existPort.ast.name == port->name) {
-                port = &existPort.ast;
-                break;
-              }
+          for (auto &existPort : moduleLowering->ports) {
+            if (existPort.ast.name == port->name) {
+              port = &existPort.ast;
+              break;
             }
           }
           unsigned width = port->getType().getBitWidth();
@@ -472,7 +455,32 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::MultiPortSymbol;
   using slang::ast::PortSymbol;
 
-  auto &slot = modules[module];
+  const slang::ast::InstanceBodySymbol *duplicateInstanceBodySymbol = module;
+  // auto parameters = module->body.parameters;
+  // If there is already exist a module that has the same name with this
+  // module ,has the same parent scope and has the same parameters we can
+  // define this module is a duplicate module
+  for (auto const &existModule : modules) {
+    if (module->name == existModule.first->name &&
+        module->getParentScope() == existModule.getFirst()->getParentScope()) {
+      bool moduleSame = true;
+      // if (!parameters.empty()) {
+      //   auto moduleParameters = module.getFirst()->parameters;
+      //   for (auto it1 = parameters.begin(), it2 =
+      // moduleParameters.begin();
+      //        it1 != parameters.end() && it2 != moduleParameters.end();
+      //        it1++, it2++) {
+      //     if (*it1 != *it2) {
+      //       moduleSame = false;
+      //       break;
+      //     }
+      //   }
+      // }
+      duplicateInstanceBodySymbol = moduleSame ? existModule.first : module;
+      break;
+    }
+  }
+  auto &slot = modules[duplicateInstanceBodySymbol];
   if (slot)
     return slot.get();
   slot = std::make_unique<ModuleLowering>();
