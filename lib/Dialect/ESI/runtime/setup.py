@@ -11,7 +11,7 @@
 #
 # It is recommended to build with Ninja and ccache. To do so, set environment
 # variables by prefixing to above invocations:
-#   CMAKE_GENERATOR=Ninja CMAKE_CXX_COMPILER=clang++
+#   CC=clang CXX=clang++
 #
 # On CIs, it is often advantageous to re-use/control the CMake build directory.
 # This can be set with the PYCDE_CMAKE_BUILD_DIR env var.
@@ -67,9 +67,9 @@ class CMakeBuild(build_py):
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
-        "-DCAPNP_PATH={}".format(os.getenv("CAPNP_PATH")),
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
+        "-GNinja",
     ]
     cxx = os.getenv("CXX")
     if cxx is not None:
