@@ -455,7 +455,6 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::MultiPortSymbol;
   using slang::ast::PortSymbol;
 
-  const slang::ast::InstanceBodySymbol *duplicateInstanceBodySymbol = module;
   // auto parameters = module->body.parameters;
   // If there is already exist a module that has the same name with this
   // module ,has the same parent scope and has the same parameters we can
@@ -476,11 +475,11 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       //     }
       //   }
       // }
-      duplicateInstanceBodySymbol = moduleSame ? existModule.first : module;
+      module = moduleSame ? existModule.first : module;
       break;
     }
   }
-  auto &slot = modules[duplicateInstanceBodySymbol];
+  auto &slot = modules[module];
   if (slot)
     return slot.get();
   slot = std::make_unique<ModuleLowering>();
