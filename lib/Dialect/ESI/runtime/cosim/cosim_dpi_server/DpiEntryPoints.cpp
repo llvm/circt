@@ -106,6 +106,7 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 // Lookups for registered ports. As a future optimization, change the DPI API to
 // return a handle when registering wherein said handle is a pointer to a port.
 std::map<std::string, ReadChannelPort &> readPorts;
+std::map<ReadChannelPort *, std::future<MessageData>> readFutures;
 std::map<std::string, WriteChannelPort &> writePorts;
 
 // Register simulated device endpoints.
@@ -129,12 +130,15 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
     return -3;
   }
 
-  if (!fromHostTypeId.empty())
-    readPorts.emplace(endpointId,
-                      server->registerReadPort(endpointId, fromHostTypeId));
-  else
+  if (!fromHostTypeId.empty()) {
+    ReadChannelPort &port =
+        server->registerReadPort(endpointId, fromHostTypeId);
+    readPorts.emplace(endpointId, port);
+    readFutures.emplace(&port, port.readAsync());
+  } else {
     writePorts.emplace(endpointId,
                        server->registerWritePort(endpointId, toHostTypeId));
+  }
   return 0;
 }
 
@@ -158,13 +162,15 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   }
 
   ReadChannelPort &port = portIt->second;
-  MessageData msg;
+  std::future<MessageData> &f = readFutures.at(&port);
   // Poll for a message.
-  if (!port.read(msg)) {
+  if (f.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
     // No message.
     *dataSize = 0;
     return 0;
   }
+  MessageData msg = f.get();
+  f = port.readAsync();
   log(endpointId, false, msg);
 
   // Do the validation only if there's a message available. Since the

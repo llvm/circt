@@ -1,7 +1,6 @@
 import esiaccel as esi
 
 import sys
-from typing import Optional
 
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
@@ -22,10 +21,7 @@ send.connect()
 data = 10234
 send.write(data)
 got_data = False
-resp: Optional[int] = None
-# Reads are non-blocking, so we need to poll.
-while not got_data:
-  (got_data, resp) = recv.read()
+resp = recv.read()
 
 print(f"data: {data}")
 print(f"resp: {resp}")
