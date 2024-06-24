@@ -1884,14 +1884,13 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
-  target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   // Apply the partial conversion.
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
+    return signalPassFailure();
   patterns.clear();
 
   // Setup the full conversion.
@@ -1907,21 +1906,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateCombToArithConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
-  target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
 
-  // Apply a full conversion to remove unrealized conversion casts.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-
-  patterns.clear();
-
-  // mlir::populateReconcileUnrealizedCastsPatterns(patterns);
-  target.addIllegalOp<UnrealizedConversionCastOp>();
-
-  // Apply the full conversion.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
+    return signalPassFailure();
 }
 
 /// Create an LLHD to LLVM conversion pass.

@@ -1,9 +1,9 @@
-// RUN: circt-opt %s --convert-hw-to-llvm | FileCheck %s
+// RUN: circt-opt %s --convert-hw-to-llvm -reconcile-unrealized-casts | FileCheck %s
 
 // CHECK-LABEL: @convertBitcast
 func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
-  // CHECK-NEXT: %[[AARG1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
   // CHECK-NEXT: %[[AARG2:.*]] = builtin.unrealized_conversion_cast %arg2 : !hw.struct<foo: i32, bar: i32> to !llvm.struct<(i32, i32)>
+  // CHECK-NEXT: %[[AARG1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
 
   // CHECK-NEXT: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[A1:.*]] = llvm.alloca %[[ONE1]] x i32 {alignment = 4 : i64} : (i32) -> !llvm.ptr

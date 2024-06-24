@@ -29,6 +29,7 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/PrettyStackTrace.h"
+#include "mlir/Conversion/Passes.h"
 
 // Defined in the test directory, no public header.
 namespace circt {
@@ -67,6 +68,7 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
   mlir::registerViewOpGraphPass();
   mlir::registerSymbolDCEPass();
+  mlir::registerReconcileUnrealizedCastsPass();
   llvm::cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 

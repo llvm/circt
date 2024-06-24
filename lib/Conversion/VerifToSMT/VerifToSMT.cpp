@@ -179,21 +179,4 @@ void ConvertVerifToSMTPass::runOnOperation() {
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
     return signalPassFailure();
-
-  // Cleanup as many unrealized conversion casts as possible. This is applied
-  // separately because we would otherwise need to make them entirely illegal,
-  // but we want to allow them such that we can run a series of conversion
-  // passes to SMT converting different dialects. Also, not marking the
-  // unrealized conversion casts legal above (but adding the simplification
-  // patterns) does not work, because the dialect conversion framework adds
-  // IRRewrite patterns to replace values which are only applied after all
-  // operations are legalized. This means, folding the casts away will not be
-  // possible in many cases (especially the explicitly inserted target
-  // materializations in the lowering of the 'miter' operation).
-  RewritePatternSet cleanupPatterns(&getContext());
-  // populateReconcileUnrealizedCastsPatterns(cleanupPatterns);
-
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                                std::move(cleanupPatterns))))
-    return signalPassFailure();
 }
