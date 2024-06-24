@@ -1057,7 +1057,8 @@ def StructInjectOp : MooreOp<"struct_inject"> {
 }
 
 def UnionCreateOp : MooreOp<"union_create", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+  TypesMatchWith<"input and result types match",
+  "result", "input", "RefType::get(cast<UnpackedType>($_self))">
 ]> {
   let summary = "Union Create operation";
   let description = [{
@@ -1083,11 +1084,10 @@ def UnionCreateOp : MooreOp<"union_create", [
     ```
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
-  let arguments = (ins StrAttr:$name, UnpackedType:$input);
+  let arguments = (ins UnpackedType:$input);
   let results = (outs AnyUnionType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $input attr-dict
-    `:` type($input) `->` type($result)
+    $input attr-dict `:` type($input) `->` type($result)
   }];
 }
 

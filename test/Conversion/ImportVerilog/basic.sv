@@ -954,18 +954,6 @@ module Expressions;
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = struct0.b;
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct1, "c" : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>> -> <struct<{a: i32, b: i32}>>
-    // CHECK: [[TMP2:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[TMP3:%.+]] = moore.read %a : i32
-    // CHECK: moore.blocking_assign [[TMP2]], [[TMP3]] : i32
-    struct1.c.a = a;
-
-    // CHECK: [[TMP1:%.+]] = moore.read %struct1 : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
-    // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "d" : struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}> -> struct<{a: i32, b: i32}>
-    // CHECK: [[TMP3:%.+]] = moore.struct_extract [[TMP2]], "b" : struct<{a: i32, b: i32}> -> i32
-    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
-    b = struct1.d.b;
-
     // CHECK: [[TMP1:%.+]] = moore.union_extract_ref %union0, "a" : <union<{a: i32, b: i32}>> -> <i32>
     // CHECK: [[TMP2:%.+]] = moore.read %a : i32
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32

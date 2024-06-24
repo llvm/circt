@@ -456,7 +456,9 @@ struct RvalueExprVisitor {
       return builder.create<moore::UnionExtractOp>(
           loc, type, builder.getStringAttr(expr.member.name), value);
     }
-    llvm_unreachable("unsupported symbol kind");
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
   }
 
   // Handle set membership operator.
