@@ -17,7 +17,7 @@
 # RUN: rm -rf %t
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim.py -- esitester cosim env | FileCheck %s
+# RUN: esi-cosim.py --source %t -- esitester cosim env wait | FileCheck %s
 
 import pycde
 from pycde import AppID, Clock, Module, Reset, generator

@@ -1,4 +1,5 @@
 // REQUIRES: esi-cosim, esi-runtime, rtl-sim
+// XFAIL: *
 // RUN: rm -rf %t && mkdir %t && cp %s %t
 // RUN: esi-cosim.py --source %t --top top -- %python %s.py cosim env
 

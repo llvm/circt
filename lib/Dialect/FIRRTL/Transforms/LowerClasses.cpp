@@ -308,7 +308,8 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                           owningModules);
       if (failed(tracker.runOnModule()))
         return failure();
-      tracker.updatePathInfoTable(pathInfoTable, cache);
+      if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
+        return failure();
     }
 
   return success();
