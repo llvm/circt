@@ -42,15 +42,58 @@ ReadChannelPort &BundlePort::getRawRead(const string &name) const {
     throw runtime_error("Channel '" + name + "' is not a read channel");
   return *read;
 }
+void ReadChannelPort::connect(std::function<bool(MessageData)> callback) {
+  if (mode != Mode::Disconnected)
+    throw std::runtime_error("Channel already connected");
+  mode = Mode::Callback;
+  this->callback = callback;
+  ChannelPort::connect();
+}
+
+void ReadChannelPort::connect() {
+  mode = Mode::Polling;
+  maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  this->callback = [this](MessageData data) {
+    std::scoped_lock<std::mutex> lock(pollingM);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!promiseQueue.empty()) {
+      // If there are promises waiting, fulfill the first one.
+      std::promise<MessageData> p = std::move(promiseQueue.front());
+      promiseQueue.pop();
+      p.set_value(std::move(data));
+    } else {
+      // If not, add it to the data queue, unless the queue is full.
+      if (dataQueue.size() >= maxDataQueueMsgs && maxDataQueueMsgs != 0)
+        return false;
+      dataQueue.push(std::move(data));
+    }
+    return true;
+  };
+  ChannelPort::connect();
+}
 
 std::future<MessageData> ReadChannelPort::readAsync() {
-  // TODO: running this deferred is a horrible idea considering that it blocks!
-  // It's a hack since Capnp RPC refuses to work with multiple threads.
-  return std::async(std::launch::deferred, [this]() {
-    MessageData output;
-    while (!read(output)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    return output;
-  });
+  if (mode == Mode::Callback)
+    throw std::runtime_error(
+        "Cannot read from a callback channel. `connect()` without a callback "
+        "specified to use polling mode.");
+
+  std::scoped_lock<std::mutex> lock(pollingM);
+  assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+         "Both queues are in use.");
+
+  if (!dataQueue.empty()) {
+    // If there's data available, fulfill the promise immediately.
+    std::promise<MessageData> p;
+    std::future<MessageData> f = p.get_future();
+    p.set_value(std::move(dataQueue.front()));
+    dataQueue.pop();
+    return f;
+  } else {
+    // Otherwise, add a promise to the queue and return the future.
+    promiseQueue.emplace();
+    return promiseQueue.back().get_future();
+  }
 }
