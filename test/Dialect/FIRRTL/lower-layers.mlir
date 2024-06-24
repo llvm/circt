@@ -34,7 +34,7 @@ firrtl.circuit "Test" {
     %0 = firrtl.wire : !firrtl.probe<bundle<f: uint<1>>, @A>
     // CHECK: %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>>
     %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>, @A>
-    // CHECK-NOT: firrtl.cast
+    // CHECK-NOT: firrtl.ref.cast
     %2 = firrtl.ref.cast %1 : (!firrtl.probe<uint<1>, @A>) -> !firrtl.probe<uint<1>, @A::@B>
   }
 
@@ -46,7 +46,7 @@ firrtl.circuit "Test" {
       %0 = firrtl.wire : !firrtl.probe<bundle<f: uint<1>>, @A>
       // CHECK: %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>>
       %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>, @A>
-      // CHECK-NOT: firrtl.cast
+      // CHECK-NOT: firrtl.ref.cast
       %2 = firrtl.ref.cast %1 : (!firrtl.probe<uint<1>, @A>) -> !firrtl.probe<uint<1>, @A::@B>
     }
   }
