@@ -88,7 +88,8 @@ private:
   std::mutex listenerMutex;
   // Map of read ports to callbacks.
   std::map<ReadChannelPort *,
-           std::function<void(ReadChannelPort *, MessageData)>>
+           std::pair<std::function<void(ReadChannelPort *, MessageData)>,
+                     std::future<MessageData>>>
       listeners;
 };
 
@@ -111,10 +112,13 @@ void AcceleratorServiceThread::Impl::loop() {
     // callbacks to be called later so we can release the lock.
     {
       std::lock_guard<std::mutex> g(listenerMutex);
-      for (auto &[channel, cb] : listeners) {
+      for (auto &[channel, cbfPair] : listeners) {
         assert(channel && "Null channel in listener list");
-        if (channel->read(data))
-          portUnlockWorkList.emplace_back(channel, cb, std::move(data));
+        std::future<MessageData> &f = cbfPair.second;
+        if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+          portUnlockWorkList.emplace_back(channel, cbfPair.first, f.get());
+          f = channel->readAsync();
+        }
       }
     }
 
@@ -134,7 +138,7 @@ void AcceleratorServiceThread::Impl::addListener(
   for (auto port : listenPorts) {
     if (listeners.count(port))
       throw runtime_error("Port already has a listener");
-    listeners[port] = callback;
+    listeners[port] = std::make_pair(callback, port->readAsync());
   }
 }
 
@@ -153,7 +157,9 @@ void AcceleratorServiceThread::stop() {
   }
 }
 
-/// When there's data on any of the listenPorts, call the callback.
+// When there's data on any of the listenPorts, call the callback. This is kinda
+// silly now that we have callback port support, especially given the polling
+// loop. Keep the functionality for now.
 void AcceleratorServiceThread::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
     std::function<void(ReadChannelPort *, MessageData)> callback) {
