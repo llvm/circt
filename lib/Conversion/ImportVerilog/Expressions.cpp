@@ -681,7 +681,9 @@ struct LvalueExprVisitor {
           loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
           builder.getStringAttr(expr.member.name), value);
     }
-    llvm_unreachable("unsupported symbol kind");
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
   }
   /// Emit an error for all other expressions.
   template <typename T>
