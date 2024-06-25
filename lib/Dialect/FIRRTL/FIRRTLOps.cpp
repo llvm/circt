@@ -1291,7 +1291,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
 
     if (hasSSAIdentifiers) {
       if (isStrict && portDirections.back() == Direction::Out &&
-          type_isa<FIRRTLBaseType>(portType))
+          type_isa<FIRRTLBaseType>(portType) && !isa<AnalogType>(portType))
         entryArgs.back().type =
             LHSType::get(type_cast<FIRRTLBaseType>(portType));
       else
@@ -1663,7 +1663,8 @@ LogicalResult FStrictModuleOp::verify() {
        zip(body->getArguments(), portTypes, portLocs, getPortDirections())) {
     auto expectedType = cast<TypeAttr>(type).getValue();
     if (direction::get(dir) == Direction::Out &&
-        type_isa<FIRRTLBaseType>(expectedType))
+        type_isa<FIRRTLBaseType>(expectedType) &&
+        !type_isa<AnalogType>(expectedType))
       expectedType = LHSType::get(type_cast<FIRRTLBaseType>(expectedType));
     if (arg.getType() != expectedType)
       return emitOpError("block argument types should match signature types");
@@ -2648,7 +2649,6 @@ void StrictInstanceOp::build(
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotationsVec));
   } else {
-    auto x = resultTypes.size();
     assert(portAnnotations.size() == resultTypes.size());
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));

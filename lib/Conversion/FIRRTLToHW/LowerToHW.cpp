@@ -1194,7 +1194,8 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   if (type_isa<AnalogType>(flipValue.getType()))
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
-  assert(isa<LHSType>(flipValue.getType()));
+  if (!isa<LHSType>(flipValue.getType()))
+    return {};
 
   StrictConnectOp connectOp;
   for (auto &use : flipValue.getUses()) {
@@ -1283,7 +1284,6 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
   for (auto [firrtlPortIndex, port] : llvm::enumerate(firrtlPorts)) {
     // Inputs and outputs are both modeled as arguments in the FIRRTL level.
     auto oldArg = oldModule.getBody().getArgument(firrtlPortIndex);
-
     bool isZeroWidth =
         type_isa<FIRRTLBaseType>(port.type) &&
         type_cast<FIRRTLBaseType>(port.type).getBitWidthOrSentinel() == 0;
@@ -1323,30 +1323,40 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       continue;
     }
 
-    // Outputs need a temporary wire so they can be connect'd to, which we
-    // then return.
-    auto newArg = bodyBuilder.create<StrictWireOp>(
-        cast<FIRRTLBaseType>(port.type),
-        bodyBuilder.getStringAttr("." + port.getName().str() + ".output"),
-        NameKindEnumAttr::get(bodyBuilder.getContext(),
-                              NameKindEnum::DroppableName),
-        bodyBuilder.getArrayAttr({}), hw::InnerSymAttr{}, UnitAttr{});
+    Value newArg;
+    // Deal with analog types.
+    if (port.isInOut() || !isa<FIRRTLBaseType>(port.type)) {
+      auto newArgW = bodyBuilder.create<WireOp>(
+          port.type, "." + port.getName().str() + ".analog");
+      newArg = newArgW.getResult();
+      oldArg.replaceAllUsesWith(newArg);
+    } else {
+      // Outputs need a temporary wire so they can be connect'd to, which we
+      // then return.
+      auto newArgW = bodyBuilder.create<StrictWireOp>(
+          cast<FIRRTLBaseType>(port.type),
+          bodyBuilder.getStringAttr("." + port.getName().str() + ".output"),
+          NameKindEnumAttr::get(bodyBuilder.getContext(),
+                                NameKindEnum::DroppableName),
+          bodyBuilder.getArrayAttr({}), hw::InnerSymAttr{}, UnitAttr{});
 
-    // Switch all uses of the old operands to the new ones.
-    // FStrictModuleOp's outputs are write only and already LHSs.
-    assert(isa<LHSType>(oldArg.getType()));
-    oldArg.replaceAllUsesWith(newArg.getWrite());
+      // Switch all uses of the old operands to the new ones.
+      // FStrictModuleOp's outputs are write only and already LHSs.
+      assert(isa<LHSType>(oldArg.getType()));
+      newArg = newArgW.getRead();
+      oldArg.replaceAllUsesWith(newArgW.getWrite());
+    }
 
     // Don't output zero bit results or inouts.
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
-      auto output =
-          castFromFIRRTLType(newArg.getRead(), resultHWType, outputBuilder);
+      auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
       if (auto sym = newModule.getPort(hwPortIndex).getSym()) {
-        newArg.setInnerSymAttr(sym);
+        // Wires and StrictWires use the same names
+        newArg.getDefiningOp()->setAttr("innerSym", sym);
         newModule.setPortSymbolAttr(hwPortIndex, {});
       }
     }

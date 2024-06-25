@@ -10,7 +10,7 @@
 // CHECK-NEXT:  }
 
 firrtl.circuit "OperandTypeIsFIRRTL" {
-  firrtl.module @OperandTypeIsFIRRTL() { }
+  firrtl.strictmodule @OperandTypeIsFIRRTL() { }
     func.func @Test() {
     // expected-error @+1 {{Found unhandled FIRRTL operation 'firrtl.constant'}}
     %a = firrtl.constant 0 : !firrtl.uint<1>
@@ -21,7 +21,7 @@ firrtl.circuit "OperandTypeIsFIRRTL" {
 // -----
 
 firrtl.circuit "ResultTypeIsFIRRTL" {
-  firrtl.module @ResultTypeIsFIRRTL() { }
+  firrtl.strictmodule @ResultTypeIsFIRRTL() { }
   // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
   %1 = "fake_op"() : () -> (!firrtl.uint<1>)
 }
@@ -29,7 +29,7 @@ firrtl.circuit "ResultTypeIsFIRRTL" {
 // -----
 
 firrtl.circuit "RecursiveCheck" {
-  firrtl.module @RecursiveCheck() { }
+  firrtl.strictmodule @RecursiveCheck() { }
   func.func private @CheckRecursive() {
     // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
     %1 = "fake_op"() : () -> (!firrtl.uint<1>)
@@ -39,7 +39,7 @@ firrtl.circuit "RecursiveCheck" {
 // -----
 
 firrtl.circuit "BlockArgType" {
-  firrtl.module @BlockArgType() { }
+  firrtl.strictmodule @BlockArgType() { }
   // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
   "fake_op"() ({
     ^bb0(%a: !firrtl.uint<1>):
@@ -50,9 +50,9 @@ firrtl.circuit "BlockArgType" {
 // -----
 
 firrtl.circuit "unprocessedAnnotations" {
- firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>){
+ firrtl.strictmodule @bar(in %io_cpu_flush: !firrtl.uint<1>){
   }
-  firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  firrtl.strictmodule @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                                         in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>,
                                         in %io_cpu_flush: !firrtl.uint<1>) {
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation1'}}
@@ -93,7 +93,7 @@ firrtl.circuit "unprocessedAnnotations" {
 // expected-warning @+1 {{unprocessed annotation:'circuitOpAnnotation'}}
 firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnotation"}]} {
   // expected-warning @+1 {{unprocessed annotation:'a'}}
-  firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1>) attributes
+  firrtl.strictmodule @moduleAnno(in %io_cpu_flush: !firrtl.uint<1>) attributes
     {portAnnotations = [[{class="a"}]]} {  }
   // expected-warning @+1 {{unprocessed annotation:'b'}}
   firrtl.extmodule @extModPorts(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="b"}]]}
@@ -101,9 +101,9 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
   firrtl.extmodule @extMod(in io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "c"}] }
   // expected-warning @+1 {{unprocessed annotation:'d'}}
-  firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>)
+  firrtl.strictmodule @foo(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "d"}] } {}
-  firrtl.module @foo2(in %io_cpu_flush: !firrtl.uint<1>)
+  firrtl.strictmodule @foo2(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "b"}] } {}
   firrtl.extmodule @extModPorts2(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="c"}]]}
 }
@@ -118,7 +118,7 @@ firrtl.circuit "Foo" attributes {annotations = [
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", directory = "gct-dir", filename = "gct-dir/bindings.sv"}
   ]} {
-    firrtl.module @Foo() attributes {annotations = [
+    firrtl.strictmodule @Foo() attributes {annotations = [
         {class = "firrtl.transforms.NoDedupAnnotation"},
         {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
@@ -126,7 +126,7 @@ firrtl.circuit "Foo" attributes {annotations = [
     ]} {}
     // Non-local annotations should not produce errors either.
     hw.hierpath private  @nla_1 [@Bar::@s1, @Foo]
-    firrtl.module @Bar() {
+    firrtl.strictmodule @Bar() {
       firrtl.instance foo sym @s1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
     }
 }
@@ -135,7 +135,7 @@ firrtl.circuit "Foo" attributes {annotations = [
 
 firrtl.circuit "SymArgZero" {
   // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR) but must be removed}}
-  firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
+  firrtl.strictmodule @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
   }
 }
 
@@ -143,7 +143,7 @@ firrtl.circuit "SymArgZero" {
 
 firrtl.circuit "DTArgZero" {
   // expected-warning @below {{zero width port "foo" has dontTouch annotation, removing anyway}}
-  firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
+  firrtl.strictmodule @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
   }
 }
 
@@ -151,14 +151,14 @@ firrtl.circuit "DTArgZero" {
 
 firrtl.circuit "ArgWithFieldSym" {
   // expected-error @below {{cannot lower aggregate port "foo" with field sensitive symbols, HW dialect does not support per field symbols yet}}
-  firrtl.module @ArgWithFieldSym(in %foo :!firrtl.vector<uint<1>,2> sym [<@x,1,public>]) {
+  firrtl.strictmodule @ArgWithFieldSym(in %foo :!firrtl.vector<uint<1>,2> sym [<@x,1,public>]) {
   }
 }
 
 // -----
 
 firrtl.circuit "ConnectDestSubfield" {
-  firrtl.module @ConnectDestSubfield(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+  firrtl.strictmodule @ConnectDestSubfield(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: uint<1>>
     // expected-error @below {{'hw.struct_extract' op used as connect destination}}
     %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<1>>
@@ -170,7 +170,7 @@ firrtl.circuit "ConnectDestSubfield" {
 // -----
 
 firrtl.circuit "ConnectDestSubindex" {
-  firrtl.module @ConnectDestSubindex(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
+  firrtl.strictmodule @ConnectDestSubindex(in %clock: !firrtl.clock, in %value: !firrtl.uint<1>) {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
@@ -182,7 +182,7 @@ firrtl.circuit "ConnectDestSubindex" {
 // -----
 
 firrtl.circuit "ConnectDestSubaccess" {
-  firrtl.module @ConnectDestSubaccess(in %clock: !firrtl.clock, in %index: !firrtl.uint<1>, in %value: !firrtl.uint<1>) {
+  firrtl.strictmodule @ConnectDestSubaccess(in %clock: !firrtl.clock, in %index: !firrtl.uint<1>, in %value: !firrtl.uint<1>) {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subaccess %0[%index] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
@@ -196,7 +196,7 @@ firrtl.circuit "ConnectDestSubaccess" {
 firrtl.circuit "UndrivenInputPort" {
   firrtl.extmodule private @Blackbox(in inst: !firrtl.uint<1>)
 
-  firrtl.module @UndrivenInputPort() {
+  firrtl.strictmodule @UndrivenInputPort() {
     // expected-error @below {{sink in combinational loop}}
     %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
     // expected-note @below {{through driver here}}
@@ -209,8 +209,8 @@ firrtl.circuit "UndrivenInputPort" {
 // -----
 
 firrtl.circuit "InputSelfDriver" {
-  firrtl.module private @InputPorts(in %in : !firrtl.uint<1>) { }
-  firrtl.module @InputSelfDriver(in %in : !firrtl.uint<1>) {
+  firrtl.strictmodule private @InputPorts(in %in : !firrtl.uint<1>) { }
+  firrtl.strictmodule @InputSelfDriver(in %in : !firrtl.uint<1>) {
     // expected-error @below {{sink does not have a driver}}
     %ip2_in = firrtl.instance ip2 @InputPorts(in in : !firrtl.uint<1>)
     firrtl.connect %ip2_in, %ip2_in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -220,7 +220,7 @@ firrtl.circuit "InputSelfDriver" {
 // -----
 
 firrtl.circuit "IfElseFatalOnAssume" {
-  firrtl.module @IfElseFatalOnAssume (in %clock: !firrtl.clock, in %pred: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
+  firrtl.strictmodule @IfElseFatalOnAssume (in %clock: !firrtl.clock, in %pred: !firrtl.uint<1>, in %en: !firrtl.uint<1>) {
     // expected-error @+2 {{ifElseFatal format cannot be used for non-assertions}}
     // expected-error @below {{'firrtl.assume' op LowerToHW couldn't handle this operation}}
     firrtl.assume %clock, %en, %pred, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}

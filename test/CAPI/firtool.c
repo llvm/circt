@@ -79,8 +79,7 @@ void testExportVerilog(MlirContext ctx) {
   // CHECK-NEXT:   output [31:0] out     // -:4:45
   // CHECK-NEXT: );
   // CHECK-EMPTY:
-  // CHECK-NEXT:   wire [31:0] _GEN = in_1 & in_2 & in_2; // -:4:45, :5:10, :6:10 
-  // CHECK-NEXT:   assign out = _GEN; // -:2:3, :4:45
+  // CHECK-NEXT:   assign out = in_1 & in_2; // -:2:3, :5:10, :6:10
   // CHECK-NEXT: endmodule
 
   exportVerilog(ctx, true);
@@ -92,7 +91,7 @@ void testExportVerilog(MlirContext ctx) {
   // CHECK-NEXT: );
   // CHECK-EMPTY:
   // CHECK-NEXT:   wire [31:0] _GEN = in_1 & in_2 & in_2; // -:4:45, :5:10, :6:10 
-  // CHECK-NEXT:   assign out = _GEN; // -:2:3, :5:10, :6:10
+  // CHECK-NEXT:   assign out = _GEN; // -:2:3, :4:45
   // CHECK-NEXT: endmodule
 }
 

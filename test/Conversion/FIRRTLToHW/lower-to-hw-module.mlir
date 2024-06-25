@@ -112,8 +112,6 @@ firrtl.circuit "Simple" {
     // CHECK:      [[OUTB:%.+]] = hw.wire %inB
     // CHECK-NEXT: [[OUTC:%.+]] = hw.wire %z_i4
     // CHECK-NEXT: [[OUTD:%.+]] = hw.wire %z_i4
-    // CHECK-NEXT: [[T0:%.+]] = comb.concat %false, %inA
-    // CHECK-NEXT: [[T1:%.+]] = comb.concat %false, [[OUTC]]
 
     // Strict modules don't allow reads from outputs, this is handled by firrtl-strict-modules
 
