@@ -485,7 +485,7 @@ LogicalResult StructExtractRefOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructInjectOp::verify() {
-  /// checks if the type of the result match field type in this struct
+  /// checks if the type of the new value match field type in this struct
   return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
@@ -557,8 +557,8 @@ LogicalResult UnionExtractOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionExtractRefOp::verify() {
-  /// checks if the types of the input is exactly equal to the one of the types
-  /// of the result union fields
+  /// checks if the types of the result is exactly equal to the type of the refe
+  /// union field
   return TypeSwitch<Type, LogicalResult>(
              this->getInput().getType().getNestedType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
