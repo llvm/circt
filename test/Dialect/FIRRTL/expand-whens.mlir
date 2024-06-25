@@ -592,11 +592,11 @@ firrtl.module @WhenInGroup(in %cond : !firrtl.uint<1>) {
 // Check that expand whens works for layers under when's.
 firrtl.layer @Layer bind {}
 // CHECK-LABEL: firrtl.module @LayerUnderWhen(
-// CHECK-NOT:   firrtl.when
-// CHECK: firrtl.printf %clock, %cond
+// CHECK-NEXT:  firrtl.layerblock @Layer
+// CHECK:       firrtl.printf %clock, %cond
 firrtl.module @LayerUnderWhen(in %cond : !firrtl.uint<1>, in %clock : !firrtl.clock) {
   firrtl.when %cond : !firrtl.uint<1> {
-    firrtl.layerblock @Layer{
+    firrtl.layerblock @Layer {
       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
       firrtl.printf %clock, %c1_ui1, "Condition is true" : !firrtl.clock, !firrtl.uint<1>
     }
