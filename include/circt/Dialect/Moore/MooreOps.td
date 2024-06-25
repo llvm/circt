@@ -971,7 +971,7 @@ def StructCreateOp : MooreOp<"struct_create"> {
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
   let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs AnyStructType:$result);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
@@ -1009,9 +1009,9 @@ def StructExtractOp : MooreOp<"struct_extract"> {
   let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $fieldName  attr-dict `:`
-  type($input) `->` type($result)
+  $input `,`   $fieldName  attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
@@ -1022,6 +1022,7 @@ def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
   $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def StructInjectOp : MooreOp<"struct_inject"> {
@@ -1055,6 +1056,7 @@ def StructInjectOp : MooreOp<"struct_inject"> {
     $input `,`   $fieldName `,` $newValue
     attr-dict `:` type($input) type($newValue) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def UnionCreateOp : MooreOp<"union_create"> {
@@ -1083,7 +1085,7 @@ def UnionCreateOp : MooreOp<"union_create"> {
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
   let arguments = (ins UnpackedType:$input);
-  let results = (outs AnyUnionType:$result);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];

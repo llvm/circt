@@ -416,11 +416,93 @@ LogicalResult StructCreateOp::verify() {
         if (inputs.size() != members.size())
           return failure();
         for (size_t i = 0; i < members.size(); i++)
-          if (inputs[i].getType() != members[i].type)
+          if (inputs[i].getType() != members[i].type) {
+            emitOpError("input types must match struct field types and orders");
             return failure();
+          }
         return success();
       })
-      .Default([](auto &) { return failure(); });
+      .Default([this](auto &) {
+        emitOpError("Result type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getResult().getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractRefOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(
+             this->getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getResult().getType().getNestedType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError(
+            "input type must be refrence of StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// StructInjectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructInjectOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto newValueType = getNewValue().getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == newValueType) {
+            return success();
+          }
+        }
+        emitOpError("new value type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -437,9 +519,13 @@ LogicalResult UnionCreateOp::verify() {
         for (size_t i = 0; i < members.size(); i++)
           if (input.getType() == members[i].type)
             return success();
+        emitOpError("input type must match one of the union field types");
         return failure();
       })
-      .Default([](auto &) { return failure(); });
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
 }
 
 //===----------------------------------------------------------------------===//
