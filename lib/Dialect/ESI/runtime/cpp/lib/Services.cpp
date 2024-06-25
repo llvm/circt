@@ -114,6 +114,7 @@ void FuncService::Function::connect() {
 
 std::future<MessageData>
 FuncService::Function::call(const MessageData &argData) {
+  std::scoped_lock<std::mutex> lock(callMutex);
   arg.write(argData);
   return result.readAsync();
 }
@@ -147,14 +148,25 @@ CallService::Callback::Callback(
 }
 
 void CallService::Callback::connect(
-    std::function<MessageData(const MessageData &)> callback) {
-  arg.connect();
+    std::function<MessageData(const MessageData &)> callback, bool quick) {
   result.connect();
-  acc.getServiceThread()->addListener(
-      {&arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
-        MessageData resultMsg = callback(std::move(argMsg));
-        this->result.write(std::move(resultMsg));
-      });
+  if (quick) {
+    // If it's quick, we can just call the callback directly.
+    arg.connect([this, callback](MessageData argMsg) -> bool {
+      MessageData resultMsg = callback(std::move(argMsg));
+      this->result.write(std::move(resultMsg));
+      return true;
+    });
+  } else {
+    // If it's not quick, we need to use the service thread.
+    arg.connect();
+    acc.getServiceThread()->addListener(
+        {&arg},
+        [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
+          MessageData resultMsg = callback(std::move(argMsg));
+          this->result.write(std::move(resultMsg));
+        });
+  }
 }
 
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,

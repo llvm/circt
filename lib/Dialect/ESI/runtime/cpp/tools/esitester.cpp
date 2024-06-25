@@ -80,9 +80,11 @@ void registerCallbacks(Accelerator *accel) {
   if (f != ports.end()) {
     auto callPort = f->second.getAs<services::CallService::Callback>();
     if (callPort)
-      callPort->connect([](const MessageData &data) -> MessageData {
-        cout << "PrintfExample: " << *data.as<uint32_t>() << endl;
-        return MessageData();
-      });
+      callPort->connect(
+          [](const MessageData &data) -> MessageData {
+            cout << "PrintfExample: " << *data.as<uint32_t>() << endl;
+            return MessageData();
+          },
+          true);
   }
 }

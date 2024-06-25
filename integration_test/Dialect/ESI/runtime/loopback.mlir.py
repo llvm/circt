@@ -30,14 +30,8 @@ assert isinstance(mysvc_send.type, types.VoidType)
 
 mysvc_recv = loopback.ports[esiaccel.AppID("mysvc_send")].read_port("send")
 mysvc_recv.connect()
-resp: bool = False
-# Reads are non-blocking, so we need to poll.
-while not resp:
-  print("i0 polling")
-  (resp, _) = mysvc_recv.read()
-  if not resp:
-    time.sleep(0.1)
-print(f"i0 resp: {resp}")
+mysvc_recv.read()
+print("mysvc_recv.read() returned")
 
 recv = loopback.ports[esiaccel.AppID("loopback_tohw")].write_port("recv")
 recv.connect()
@@ -45,17 +39,11 @@ assert isinstance(recv.type, types.BitsType)
 
 send = loopback.ports[esiaccel.AppID("loopback_fromhw")].read_port("send")
 send.connect()
+assert isinstance(send.type, types.BitsType)
 
 data = 24
 recv.write(int.to_bytes(data, 1, "little"))
-resp = False
-# Reads are non-blocking, so we need to poll.
-resp_data: bytearray
-while not resp:
-  print("polling")
-  (resp, resp_data) = send.read()
-  if not resp:
-    time.sleep(0.1)
+resp_data: bytearray = send.read()
 resp_int = int.from_bytes(resp_data, "little")
 
 print(f"data: {data}")
@@ -76,6 +64,17 @@ for _ in range(10):
   if platform != "trace":
     assert result == {"y": -22, "x": -21}
 
+if platform != "trace":
+  print("Checking function call result ordering.")
+  future_result1 = myfunc(a=15, b=-32)
+  future_result2 = myfunc(a=32, b=47)
+  result2 = future_result2.result()
+  result1 = future_result1.result()
+  print(f"result1: {result1}")
+  print(f"result2: {result2}")
+  assert result1 == {"y": -32, "x": -31}, "result1 is incorrect"
+  assert result2 == {"y": 47, "x": 48}, "result2 is incorrect"
+
 myfunc = d.ports[esiaccel.AppID("arrayFunc")]
 arg_chan = myfunc.write_port("arg").connect()
 result_chan = myfunc.read_port("result").connect()
@@ -83,13 +82,7 @@ result_chan = myfunc.read_port("result").connect()
 arg = [-22]
 arg_chan.write(arg)
 
-result: Optional[List[int]] = None
-resp = False
-while not resp:
-  print("polling")
-  (resp, result) = result_chan.read()
-  if not resp:
-    time.sleep(0.1)
+result: List[int] = result_chan.read()
 
 print(f"result: {result}")
 if platform != "trace":
