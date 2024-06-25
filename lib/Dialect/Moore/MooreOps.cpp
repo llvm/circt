@@ -515,11 +515,12 @@ LogicalResult UnionCreateOp::verify() {
   return TypeSwitch<Type, LogicalResult>(this->getResult().getType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
-        auto input = getInput();
-        for (size_t i = 0; i < members.size(); i++)
-          if (input.getType() == members[i].type)
+        auto resultType = getResult().getType();
+        auto fieldName = getFieldName();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
             return success();
-        emitOpError("input type must match one of the union field types");
+        emitOpError("input type must match the union field type");
         return failure();
       })
       .Default([this](auto &) {
@@ -543,7 +544,7 @@ LogicalResult UnionExtractOp::verify() {
         for (const auto &member : members)
           if (member.name == fieldName && member.type == resultType)
             return success();
-        emitOpError("result type must match one of the union field types");
+        emitOpError("result type must match the union field type");
         return failure();
       })
       .Default([this](auto &) {
@@ -568,7 +569,7 @@ LogicalResult UnionExtractRefOp::verify() {
         for (const auto &member : members)
           if (member.name == fieldName && member.type == resultType)
             return success();
-        emitOpError("result type must match one of the union field types");
+        emitOpError("result type must match the union field type");
         return failure();
       })
       .Default([this](auto &) {

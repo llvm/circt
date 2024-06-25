@@ -1084,7 +1084,7 @@ def UnionCreateOp : MooreOp<"union_create"> {
     ```
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
-  let arguments = (ins UnpackedType:$input);
+  let arguments = (ins UnpackedType:$input, StrAttr:$fieldName);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
