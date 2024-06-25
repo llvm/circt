@@ -1056,10 +1056,7 @@ def StructInjectOp : MooreOp<"struct_inject"> {
   }];
 }
 
-def UnionCreateOp : MooreOp<"union_create", [
-  TypesMatchWith<"input and result types match",
-  "result", "input", "RefType::get(cast<UnpackedType>($_self))">
-]> {
+def UnionCreateOp : MooreOp<"union_create"> {
   let summary = "Union Create operation";
   let description = [{
     A union is a data type that represents a single piece
