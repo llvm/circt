@@ -1121,6 +1121,7 @@ def UnionExtractOp : MooreOp<"union_extract"> {
   $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
@@ -1131,6 +1132,7 @@ def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
   $input `,`   $fieldName  attr-dict `:`
   type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def ConditionalOp : MooreOp<"conditional",[

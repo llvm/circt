@@ -529,6 +529,55 @@ LogicalResult UnionCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractOp::verify() {
+  /// checks if the types of the input is exactly equal to the one of the types
+  /// of the result union fields
+  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getResult().getType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match one of the union field types");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractRefOp::verify() {
+  /// checks if the types of the input is exactly equal to the one of the types
+  /// of the result union fields
+  return TypeSwitch<Type, LogicalResult>(
+             this->getInput().getType().getNestedType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getResult().getType().getNestedType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match one of the union field types");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
 // YieldOp
 //===----------------------------------------------------------------------===//
 
