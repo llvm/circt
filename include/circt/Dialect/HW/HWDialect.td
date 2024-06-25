@@ -28,9 +28,6 @@ def HWDialect : Dialect {
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
 
-  // This will be the default after next LLVM bump.
-  let usePropertiesForAttributes = 1;
-
   let extraClassDeclaration = [{
     /// Register all HW types.
     void registerTypes();
