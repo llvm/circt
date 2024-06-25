@@ -200,8 +200,7 @@ public:
       : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
   ~WriteCosimChannelPort() = default;
 
-  void connect() override {
-    WriteChannelPort::connect();
+  void connectImpl() override {
     if (desc.type() != getType()->getID())
       throw std::runtime_error("Channel '" + name +
                                "' has wrong type. Expected " +
@@ -222,7 +221,8 @@ public:
     grpc::Status sendStatus = rpcClient->SendToServer(&context, msg, &response);
     if (!sendStatus.ok())
       throw std::runtime_error("Failed to write to channel '" + name +
-                               "': " + sendStatus.error_message() +
+                               "': " + std::to_string(sendStatus.error_code()) +
+                               " " + sendStatus.error_message() +
                                ". Details: " + sendStatus.error_details());
   }
 
@@ -248,9 +248,8 @@ public:
         context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
-  virtual void connect() override {
+  void connectImpl() override {
     // Sanity checking.
-    ReadChannelPort::connect();
     if (desc.type() != getType()->getID())
       throw std::runtime_error("Channel '" + name +
                                "' has wrong type. Expected " +
@@ -270,17 +269,18 @@ public:
   /// Gets called when there's a new message from the server. It'll be stored in
   /// `incomingMessage`.
   void OnReadDone(bool ok) override {
-    if (!ok) {
-      // TODO: should we do something here?
-      std::cerr << "Internal error: read failed due to not `ok`." << std::endl;
+    if (!ok)
+      // This happens when we are disconnecting since we are canceling the call.
       return;
-    }
 
     // Read the delivered message and push it onto the queue.
     const std::string &messageString = incomingMessage.data();
     MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
                      messageString.size());
-    messageQueue.push(data);
+    while (!callback(data))
+      // Blocking here could cause deadlocks in specific situations.
+      // TODO: Implement a way to handle this better.
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // Initiate the next read.
     StartRead(&incomingMessage);
@@ -292,15 +292,7 @@ public:
       return;
     context->TryCancel();
     context.reset();
-  }
-
-  /// Poll the queue.
-  bool read(MessageData &data) override {
-    std::optional<MessageData> msg = messageQueue.pop();
-    if (!msg.has_value())
-      return false;
-    data = std::move(*msg);
-    return true;
+    ReadChannelPort::disconnect();
   }
 
 protected:
@@ -313,8 +305,6 @@ protected:
   std::unique_ptr<ClientContext> context;
   /// Storage location for the incoming message.
   esi::cosim::Message incomingMessage;
-  /// Queue of messages read from the server.
-  esi::utils::TSQueue<MessageData> messageQueue;
 };
 
 } // namespace

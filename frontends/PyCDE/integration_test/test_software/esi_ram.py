@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import cast
 import esiaccel as esi
 import random
 import sys
@@ -31,10 +31,7 @@ assert info[1].name == "Dummy"
 
 def read(addr: int) -> bytearray:
   mem_read_addr.write([addr])
-  got_data = False
-  resp: Optional[bytearray] = None
-  while not got_data:
-    (got_data, resp) = mem_read_data.read()
+  resp = cast(bytearray, mem_read_data.read())
   print(f"resp: {resp}")
   return resp
 
