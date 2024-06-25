@@ -16,6 +16,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::moore;
@@ -399,6 +400,46 @@ LogicalResult ConcatRefOp::inferReturnTypes(
   }
   results.push_back(RefType::get(IntType::get(context, width, domain)));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StructCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructCreateOp::verify() {
+  /// checks if the types of the inputs are exactly equal to the types of the
+  /// result struct fields
+  return TypeSwitch<Type, LogicalResult>(this->getResult().getType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto inputs = getInput();
+        if (inputs.size() != members.size())
+          return failure();
+        for (size_t i = 0; i < members.size(); i++)
+          if (inputs[i].getType() != members[i].type)
+            return failure();
+        return success();
+      })
+      .Default([](auto &) { return failure(); });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionCreateOp::verify() {
+  /// checks if the types of the input is exactly equal to the one of the types
+  /// of the result union fields
+  return TypeSwitch<Type, LogicalResult>(this->getResult().getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto input = getInput();
+        for (size_t i = 0; i < members.size(); i++)
+          if (input.getType() == members[i].type)
+            return success();
+        return failure();
+      })
+      .Default([](auto &) { return failure(); });
 }
 
 //===----------------------------------------------------------------------===//

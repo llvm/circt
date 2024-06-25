@@ -970,11 +970,12 @@ def StructCreateOp : MooreOp<"struct_create"> {
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins Variadic<UnpackedType>:$fields);
+  let arguments = (ins Variadic<UnpackedType>:$input);
   let results = (outs AnyStructType:$result);
   let assemblyFormat = [{
-    $fields attr-dict `:` type($fields) `->` type($result)
+    $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def StructExtractOp : MooreOp<"struct_extract"> {
@@ -1086,6 +1087,7 @@ def UnionCreateOp : MooreOp<"union_create"> {
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def UnionExtractOp : MooreOp<"union_extract"> {
