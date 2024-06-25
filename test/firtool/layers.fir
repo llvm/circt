@@ -9,6 +9,10 @@ circuit Foo: %[[
   {
     "class": "firrtl.transforms.DontTouchAnnotation",
     "target": "~Foo|Foo>y"
+  },
+  {
+    "class": "firrtl.transforms.DontTouchAnnotation",
+    "target": "~Foo|Foo>z"
   }
 ]]
   layer A, bind:
@@ -23,10 +27,16 @@ circuit Foo: %[[
       layerblock B:
         node y = x
 
+      when in:
+        layerblock B:
+          when x:
+            node z = x
+
 ; CHECK-LABEL: module Foo_A_B(
 ; CHECK-NEXT:    input x
 ; CHECK-NEXT:  );
 ; CHECK:         wire y = x;
+; CHECK:         wire z = x;
 ; CHECK-NEXT:  endmodule
 
 ; CHECK-LABEL: module Foo_A(
