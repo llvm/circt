@@ -409,7 +409,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 LogicalResult StructCreateOp::verify() {
   /// checks if the types of the inputs are exactly equal to the types of the
   /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(this->getResult().getType())
+  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto inputs = getInput();
@@ -428,17 +428,78 @@ LogicalResult StructCreateOp::verify() {
       });
 }
 
+SmallVector<DestructurableMemorySlot> StructCreateOp::getDestructurableSlots() {
+  auto refType = getType();
+  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
+  if (!destructurable)
+    return {};
+
+  auto destructuredType = destructurable.getSubelementIndexMap();
+  if (!destructuredType)
+    return {};
+
+  return {DestructurableMemorySlot{{getResult(), refType}, *destructuredType}};
+}
+
+DenseMap<Attribute, MemorySlot> StructCreateOp::destructure(
+    const DestructurableMemorySlot &slot,
+    const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
+    SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
+  builder.setInsertionPointAfter(*this);
+
+  DenseMap<Attribute, MemorySlot> slotMap;
+  auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
+  llvm::ArrayRef<StructLikeMember> members;
+  auto inputs = getInput();
+  TypeSwitch<Type>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>(
+          [&members](auto &type) { members = type.getMembers(); })
+      .Default([this](auto &) {
+        emitOpError("Result type must be StructType or UnpackedStructType");
+      });
+  for (Attribute usedIndex : usedIndices) {
+    auto elemType =
+        cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
+    auto elemRefType = RefType::get(elemType);
+    StringAttr *name = nullptr;
+    auto value = Value();
+    for (const auto &member : members) {
+      if (member.type == elemType)
+        *name = member.name;
+    }
+    for (const auto &input : inputs) {
+      if (input.getType() == elemType)
+        value = input;
+    }
+    if (name) {
+      auto varOp =
+          builder.create<VariableOp>(getLoc(), elemRefType, *name, value);
+      slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
+    }
+  }
+
+  return slotMap;
+}
+
+std::optional<DestructurableAllocationOpInterface>
+StructCreateOp::handleDestructuringComplete(
+    const DestructurableMemorySlot &slot, OpBuilder &builder) {
+  assert(slot.ptr == getResult());
+  this->erase();
+  return std::nullopt;
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractOp::verify() {
   /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+  return TypeSwitch<Type, LogicalResult>(getInput().getType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto filedName = getFieldName();
-        auto resultType = getResult().getType();
+        auto resultType = getType();
         for (const auto &member : members) {
           if (member.name == filedName && member.type == resultType) {
             return success();
@@ -459,12 +520,11 @@ LogicalResult StructExtractOp::verify() {
 
 LogicalResult StructExtractRefOp::verify() {
   /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(
-             this->getInput().getType().getNestedType())
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto filedName = getFieldName();
-        auto resultType = getResult().getType().getNestedType();
+        auto resultType = getType().getNestedType();
         for (const auto &member : members) {
           if (member.name == filedName && member.type == resultType) {
             return success();
@@ -474,8 +534,8 @@ LogicalResult StructExtractRefOp::verify() {
         return failure();
       })
       .Default([this](auto &) {
-        emitOpError(
-            "input type must be refrence of StructType or UnpackedStructType");
+        emitOpError("input type must be refrence of StructType or "
+                    "UnpackedStructType");
         return failure();
       });
 }
@@ -486,7 +546,7 @@ LogicalResult StructExtractRefOp::verify() {
 
 LogicalResult StructInjectOp::verify() {
   /// checks if the type of the new value match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+  return TypeSwitch<Type, LogicalResult>(getInput().getType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto filedName = getFieldName();
@@ -510,11 +570,12 @@ LogicalResult StructInjectOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionCreateOp::verify() {
-  /// checks if the types of the input is exactly equal to the union field type
-  return TypeSwitch<Type, LogicalResult>(this->getResult().getType())
+  /// checks if the types of the input is exactly equal to the union field
+  /// type
+  return TypeSwitch<Type, LogicalResult>(getType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
-        auto resultType = getResult().getType();
+        auto resultType = getType();
         auto fieldName = getFieldName();
         for (const auto &member : members)
           if (member.name == fieldName && member.type == resultType)
@@ -533,13 +594,13 @@ LogicalResult UnionCreateOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionExtractOp::verify() {
-  /// checks if the types of the input is exactly equal to the one of the types
-  /// of the result union fields
-  return TypeSwitch<Type, LogicalResult>(this->getInput().getType())
+  /// checks if the types of the input is exactly equal to the one of the
+  /// types of the result union fields
+  return TypeSwitch<Type, LogicalResult>(getInput().getType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
         auto fieldName = getFieldName();
-        auto resultType = getResult().getType();
+        auto resultType = getType();
         for (const auto &member : members)
           if (member.name == fieldName && member.type == resultType)
             return success();
@@ -557,14 +618,13 @@ LogicalResult UnionExtractOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionExtractRefOp::verify() {
-  /// checks if the types of the result is exactly equal to the type of the refe
-  /// union field
-  return TypeSwitch<Type, LogicalResult>(
-             this->getInput().getType().getNestedType())
+  /// checks if the types of the result is exactly equal to the type of the
+  /// refe union field
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
         auto fieldName = getFieldName();
-        auto resultType = getResult().getType().getNestedType();
+        auto resultType = getType().getNestedType();
         for (const auto &member : members)
           if (member.name == fieldName && member.type == resultType)
             return success();

@@ -945,7 +945,8 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create"> {
+def StructCreateOp : MooreOp<"struct_create",
+  [DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>]> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
@@ -971,7 +972,7 @@ def StructCreateOp : MooreOp<"struct_create"> {
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
   let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs UnpackedType:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
