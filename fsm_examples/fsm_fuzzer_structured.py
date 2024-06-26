@@ -14,7 +14,7 @@ for n in num_fsm:
 
     const = []
 
-    nl = 0# np.random.randint(2, n-1)
+    nl = 0 # np.random.randint(2, n-1)
 
     print("num loops: "+str(nl))
 

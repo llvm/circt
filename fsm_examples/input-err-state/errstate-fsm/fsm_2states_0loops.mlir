@@ -1,10 +1,11 @@
-fsm.machine @fsm5(%err: i16) -> () attributes {initialState = "_0"} {
+fsm.machine @fsm5(%err: i16) -> (i16) attributes {initialState = "_0"} {
 	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
 	%c1 = hw.constant 1 : i16
 	%c0 = hw.constant 0 : i16
 
 
 	fsm.state @_0 output {
+		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_1
 			guard {
@@ -22,6 +23,7 @@ fsm.machine @fsm5(%err: i16) -> () attributes {initialState = "_0"} {
 	}
 
 	fsm.state @_1 output {
+		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_2
 			guard {
@@ -39,11 +41,13 @@ fsm.machine @fsm5(%err: i16) -> () attributes {initialState = "_0"} {
 	}
 
 	fsm.state @_2 output {
+		fsm.output %x0: i16
 	} transitions {
 
 	}
 
 	fsm.state @ERR output {
+		fsm.output %x0: i16
 	} transitions {
 	}
 }
