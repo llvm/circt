@@ -6171,6 +6171,10 @@ LogicalResult LayerBlockOp::verify() {
   auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
 
+  // Get parent operation that isn't a when or match.
+  while (isa<WhenOp, MatchOp>(parentOp))
+    parentOp = parentOp->getParentOp();
+
   // Verify the correctness of the symbol reference.  Only verify that this
   // layer block makes sense in its parent module or layer block.
   auto nestedReferences = layerName.getNestedReferences();

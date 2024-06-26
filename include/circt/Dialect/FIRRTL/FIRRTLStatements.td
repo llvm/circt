@@ -374,7 +374,9 @@ def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
 def LayerBlockOp : FIRRTLOp<
   "layerblock",
   [SingleBlock, NoTerminator, NoRegionArguments,
-   ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
+   ParentOneOf<[
+     "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+     "firrtl::WhenOp", "firrtl::MatchOp"]>,
    DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";
