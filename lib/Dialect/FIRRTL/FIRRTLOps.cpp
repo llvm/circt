@@ -113,26 +113,23 @@ bool firrtl::isDuplexValue(Value val) {
   return false;
 }
 
-SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
-MemOp::computeDataFlow() {
+void MemOp::computeDataFlow(CombDataFlowCallbackTy callback) {
   // If read result has non-zero latency, then no combinational dependency
   // exists.
   if (getReadLatency() > 0)
-    return {};
+    return;
 
-  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
   // Add a dependency from the enable and address fields to the data field.
   for (auto memPort : getResults())
     if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
       auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
       auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
       auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-      deps.push_back({FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
-                      FieldRef(memPort, static_cast<unsigned>(enableFieldId))});
-      deps.push_back({{memPort, static_cast<unsigned>(dataFieldId)},
-                      {memPort, static_cast<unsigned>(addressFieldId)}});
+      callback(FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+               FieldRef(memPort, static_cast<unsigned>(enableFieldId)));
+      callback({memPort, static_cast<unsigned>(dataFieldId)},
+               {memPort, static_cast<unsigned>(addressFieldId)});
     }
-  return deps;
 }
 
 /// Return the kind of port this is given the port type from a 'mem' decl.
@@ -3325,6 +3322,10 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
 
+void RegOp::computeDataFlow(CombDataFlowCallbackTy f) {
+  // A register does't have any combinational dataflow.
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3347,6 +3348,10 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
+void RegResetOp::computeDataFlow(CombDataFlowCallbackTy callback) {
+  // RegResetOp does't have any combinational dataflow.
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
@@ -5540,6 +5545,29 @@ LogicalResult DPICallIntrinsicOp::verify() {
   };
   return success(llvm::all_of(this->getResultTypes(), checkType) &&
                  llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+void DPICallIntrinsicOp::computeDataFlow(CombDataFlowCallbackTy callback) {
+  if (getClock())
+    return;
+
+  for (auto operand : getOperands()) {
+    auto type = type_cast<FIRRTLBaseType>(operand.getType());
+    auto baseFieldRef = getFieldRefFromValue(operand);
+    SmallVector<circt::FieldRef> operandFields;
+    walkGroundTypes(
+        type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+          operandFields.push_back(baseFieldRef.getSubField(dstIndex));
+        });
+
+    // Record operand -> result dependency.
+    for (auto result : getResults())
+      walkGroundTypes(type,
+                      [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+                        for (auto field : operandFields)
+                          callback(circt::FieldRef(result, dstIndex), field);
+                      });
+  }
 }
 
 //===----------------------------------------------------------------------===//

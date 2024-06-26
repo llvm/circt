@@ -1107,3 +1107,27 @@ firrtl.circuit "MultipleConnects"   {
     firrtl.connect %w, %in : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
+
+// -----
+
+firrtl.circuit "DPI"   {
+  firrtl.module @DPI(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, out %out_0: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    %in = firrtl.wire : !firrtl.uint<8>
+    %0 = firrtl.int.dpi.call "clocked_result"(%in) clock %clock enable %enable : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    firrtl.matchingconnect %in, %0 : !firrtl.uint<8>
+    firrtl.matchingconnect %out_0, %0 : !firrtl.uint<8>
+  }
+}
+
+
+// -----
+
+firrtl.circuit "DPI"   {
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: DPI.{in <- ... <- in}}}
+  firrtl.module @DPI(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, out %out_0: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
+    %in = firrtl.wire : !firrtl.uint<8>
+    %0 = firrtl.int.dpi.call "unclocked_result"(%in) enable %enable : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    firrtl.matchingconnect %in, %0 : !firrtl.uint<8>
+    firrtl.matchingconnect %out_0, %0 : !firrtl.uint<8>
+  }
+}
