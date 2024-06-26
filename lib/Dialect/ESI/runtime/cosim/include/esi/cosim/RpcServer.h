@@ -45,7 +45,7 @@ public:
   class Impl;
 
 private:
-  Impl *impl;
+  Impl *impl = nullptr;
 };
 
 } // namespace cosim
