@@ -26,10 +26,12 @@ cd grpc
 mkdir -p cmake/build
 cd cmake/build
 cmake -S ../.. -B . -DCMAKE_INSTALL_PREFIX=$EXT_DIR \
+  -GNinja \
   -DgRPC_INSTALL=ON \
+  -DgRPC_ZLIB_PROVIDER=package \
   -DCMAKE_BUILD_TYPE=Debug
-make -j$(nproc)
-make install
+ninja
+cmake --install . --prefix $EXT_DIR
 
 cd ../../../
 rm -rf grpc
