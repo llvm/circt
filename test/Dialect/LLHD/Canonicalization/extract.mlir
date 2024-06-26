@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=aggressive' | FileCheck %s
 
 // CHECK-LABEL: @sigExtractOp
 func.func @sigExtractOp(%arg0 : !llhd.sig<i32>, %arg1: i5) -> (!llhd.sig<i32>, !llhd.sig<i32>) {

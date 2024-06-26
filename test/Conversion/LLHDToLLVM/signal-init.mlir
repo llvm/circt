@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
+// RUN: circt-opt %s --convert-llhd-to-llvm --reconcile-unrealized-casts  | FileCheck %s
 
 // CHECK-LABEL: llvm.func @llhd_init
 // CHECK-SAME:    %arg0: !llvm.ptr) {
