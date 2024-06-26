@@ -946,7 +946,8 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create"> {
+def StructCreateOp : MooreOp<"struct_create",
+  [DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>]> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
