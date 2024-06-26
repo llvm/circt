@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=false' --allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=disabled' --allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {

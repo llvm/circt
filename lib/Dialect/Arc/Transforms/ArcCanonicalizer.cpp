@@ -599,7 +599,7 @@ void ArcCanonicalizerPass::runOnOperation() {
   DenseMap<StringAttr, StringAttr> arcMapping;
 
   mlir::GreedyRewriteConfig config;
-  config.enableRegionSimplification = false;
+  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
   config.maxIterations = 10;
   config.useTopDownTraversal = true;
   ArcListener listener(&cache);
