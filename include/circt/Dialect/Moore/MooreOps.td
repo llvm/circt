@@ -180,6 +180,7 @@ def ProcedureOp : MooreOp<"procedure", [
 //===----------------------------------------------------------------------===//
 
 def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<PromotableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
@@ -971,7 +972,7 @@ def StructCreateOp : MooreOp<"struct_create"> {
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
   let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs UnpackedType:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
