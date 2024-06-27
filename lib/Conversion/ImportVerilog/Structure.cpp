@@ -448,8 +448,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // module ,has the same parent scope and has the same parameters we can
   // define this module is a duplicate module
   for (auto const &existModule : modules) {
-    if (module->name == existModule.first->name &&
-        module->getParentScope() == existModule.getFirst()->getParentScope()) {
+    if (module->getDeclaringDefinition() ==
+        existModule.getFirst()->getDeclaringDefinition()) {
       auto moduleParameters = existModule.getFirst()->parameters;
       hasModuleSame = true;
       for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
