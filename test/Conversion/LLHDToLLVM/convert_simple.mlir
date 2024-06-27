@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-llhd-to-llvm | FileCheck %s
+// RUN: circt-opt %s --convert-llhd-to-llvm --reconcile-unrealized-casts | FileCheck %s
 
 // CHECK-LABEL: llvm.func @driveSignal(!llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64)
 

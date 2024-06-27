@@ -1,4 +1,4 @@
-// RUN: circt-opt --split-input-file -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
+// RUN: circt-opt --split-input-file -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s
 
 
 firrtl.circuit "ReadOnlyMemory" {

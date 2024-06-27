@@ -533,6 +533,7 @@ public:
   void visitStmt(PrintFOp op);
   void visitStmt(StopOp op);
   void visitStmt(WhenOp op);
+  void visitStmt(LayerBlockOp op);
   void visitStmt(RefForceOp op);
   void visitStmt(RefForceInitialOp op);
   void visitStmt(RefReleaseOp op);
@@ -617,6 +618,11 @@ void WhenOpVisitor::visitStmt(CoverOp op) {
 
 void WhenOpVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, condition);
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
+  process(*layerBlockOp.getBody());
 }
 
 void WhenOpVisitor::visitStmt(RefForceOp op) {

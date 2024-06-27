@@ -49,7 +49,7 @@ struct OperationPruner : public Reduction {
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   GreedyRewriteConfig config;
   config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
+  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
   return createCanonicalizerPass(config);
 }
 
