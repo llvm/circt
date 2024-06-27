@@ -299,11 +299,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     auto elemType =
         cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
     auto elemRefType = RefType::get(elemType);
-    StringAttr name = {};
-    for (const auto &member : members) {
-      if (member.type == elemType)
-        name = member.name;
-    }
+    auto name = cast<StringAttr>(usedIndex).getValue();
     auto varOp =
         builder.create<VariableOp>(getLoc(), elemRefType, name, Value());
     inputs.push_back(varOp);
@@ -527,7 +523,7 @@ bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
             usedIndices.insert(index);
             return true;
           })
-      .Default([](auto)  { return false; });
+      .Default([](auto) { return false; });
 }
 
 DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
@@ -543,7 +539,7 @@ DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
         setOperand(memorySlot.ptr);
         return DeletionKind::Keep;
       })
-      .Default([](auto)  { return DeletionKind::Keep; });
+      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -843,7 +839,8 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
 
 // DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
 //                             DenseMap<Attribute, MemorySlot> &subslots,
-//                             OpBuilder &builder, const DataLayout &dataLayout) {
+//                             OpBuilder &builder, const DataLayout &dataLayout)
+//                             {
 //   return TypeSwitch<Type, DeletionKind>(getType())
 //       .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
 //         auto members = type.getMembers();
