@@ -514,6 +514,40 @@ LogicalResult StructExtractOp::verify() {
       });
 }
 
+bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
+                                SmallPtrSetImpl<Attribute> &usedIndices,
+                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getType())
+      .Case<StructType, UnpackedStructType>(
+          [this, &slot, &usedIndices](auto &type) {
+            if (slot.ptr != getInput())
+              return false;
+            auto index = getFieldNameAttr();
+            if (!index || !slot.elementPtrs.contains(index))
+              return false;
+            usedIndices.insert(index);
+            return true;
+          })
+      .Default([](auto)  { return false; });
+}
+
+DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
+                                     DenseMap<Attribute, MemorySlot> &subslots,
+                                     OpBuilder &builder,
+                                     const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+        auto index = getFieldNameAttr();
+        if (!index)
+          return DeletionKind::Keep;
+        const auto &memorySlot = subslots.at(index);
+        setOperand(memorySlot.ptr);
+        return DeletionKind::Keep;
+      })
+      .Default([](auto)  { return DeletionKind::Keep; });
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractRefOp
 //===----------------------------------------------------------------------===//
@@ -538,6 +572,41 @@ LogicalResult StructExtractRefOp::verify() {
                     "UnpackedStructType");
         return failure();
       });
+}
+
+bool StructExtractRefOp::canRewire(
+    const DestructurableMemorySlot &slot,
+    SmallPtrSetImpl<Attribute> &usedIndices,
+    SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>(
+          [this, &slot, &usedIndices](auto &type) {
+            if (slot.ptr != getInput())
+              return false;
+            auto index = getFieldNameAttr();
+            if (!index || !slot.elementPtrs.contains(index))
+              return false;
+            usedIndices.insert(index);
+            return true;
+          })
+      .Default([](auto) { return false; });
+}
+
+DeletionKind
+StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+        auto index = getFieldNameAttr();
+        if (!index)
+          return DeletionKind::Keep;
+        const auto &memorySlot = subslots.at(index);
+        setOperand(memorySlot.ptr);
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -754,6 +823,41 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
 }
+
+// bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
+//                        SmallPtrSetImpl<Attribute> &usedIndices,
+//                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+//                        const DataLayout &dataLayout) {
+//   return TypeSwitch<Type, bool>(getType())
+//       .Case<StructType, UnpackedStructType>(
+//           [this, &slot, &usedIndices](auto &type) {
+//             if (slot.ptr != getOperand())
+//               return false;
+//             auto members = type.getMembers();
+//             for (const auto &member : members) {
+//               auto attr = StringAttr::get(getContext(), member.name);
+//               usedIndices.insert(attr);
+//             }
+//             return true;
+//           })
+//       .Default([]() { return false; });
+// }
+
+// DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
+//                             DenseMap<Attribute, MemorySlot> &subslots,
+//                             OpBuilder &builder, const DataLayout &dataLayout) {
+//   return TypeSwitch<Type, DeletionKind>(getType())
+//       .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+//         auto members = type.getMembers();
+//         for (const auto &member : members) {
+//           auto index = StringAttr::get(getContext(), member.name);
+//           const auto &memorySlot = subslots.at(index);
+//           setOperand(memorySlot.ptr);
+//         }
+//         return DeletionKind::Keep;
+//       })
+//       .Default([]() { return DeletionKind::Keep; });
+// }
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

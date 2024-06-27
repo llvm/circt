@@ -946,7 +946,7 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create"> {
+def StructCreateOp : MooreOp<"struct_create", [Pure]> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
@@ -979,7 +979,9 @@ def StructCreateOp : MooreOp<"struct_create"> {
   let hasVerifier = 1;
 }
 
-def StructExtractOp : MooreOp<"struct_extract"> {
+def StructExtractOp : MooreOp<"struct_extract", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+  ]> {
   let summary = "Struct Extract operation";
   let description = [{
     Structures can be converted to bits preserving the bit pattern.
@@ -1015,7 +1017,9 @@ def StructExtractOp : MooreOp<"struct_extract"> {
   let hasVerifier = 1;
 }
 
-def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
+def StructExtractRefOp : MooreOp<"struct_extract_ref", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+  ]> {
   let summary = "Struct Extract operation";
   let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
@@ -1026,7 +1030,7 @@ def StructExtractRefOp : MooreOp<"struct_extract_ref"> {
   let hasVerifier = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject"> {
+def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
   let summary = "Struct Field operation";
   let description = [{
     A structure can be assigned as a whole and passed to
@@ -1060,7 +1064,7 @@ def StructInjectOp : MooreOp<"struct_inject"> {
   let hasVerifier = 1;
 }
 
-def UnionCreateOp : MooreOp<"union_create"> {
+def UnionCreateOp : MooreOp<"union_create", [Pure]> {
   let summary = "Union Create operation";
   let description = [{
     A union is a data type that represents a single piece
