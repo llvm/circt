@@ -294,6 +294,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
       .Default([this](auto &) {
         emitOpError("Result type must be StructType or UnpackedStructType");
       });
+  SmallVector<Value> inputs;
   for (Attribute usedIndex : usedIndices) {
     auto elemType =
         cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
@@ -305,8 +306,12 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     }
     auto varOp =
         builder.create<VariableOp>(getLoc(), elemRefType, name, Value());
+    // context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),&var,
+    // varOp);
+    inputs.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
   }
+  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
 
   return slotMap;
 }
@@ -468,78 +473,20 @@ LogicalResult StructCreateOp::verify() {
         auto inputs = getInput();
         if (inputs.size() != members.size())
           return failure();
-        for (size_t i = 0; i < members.size(); i++)
-          if (inputs[i].getType() != members[i].type) {
+        for (size_t i = 0; i < members.size(); i++) {
+          auto memberType = cast<UnpackedType>(members[i].type);
+          auto inputType = cast<RefType>(inputs[i].getType()).getNestedType();
+          if (inputType != memberType) {
             emitOpError("input types must match struct field types and orders");
             return failure();
           }
+        }
         return success();
       })
       .Default([this](auto &) {
         emitOpError("Result type must be StructType or UnpackedStructType");
         return failure();
       });
-}
-
-SmallVector<DestructurableMemorySlot> StructCreateOp::getDestructurableSlots() {
-  auto refType = getType();
-  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
-  if (!destructurable)
-    return {};
-
-  auto destructuredType = destructurable.getSubelementIndexMap();
-  if (!destructuredType)
-    return {};
-
-  return {DestructurableMemorySlot{{getResult(), refType}, *destructuredType}};
-}
-
-DenseMap<Attribute, MemorySlot> StructCreateOp::destructure(
-    const DestructurableMemorySlot &slot,
-    const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
-    SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
-  builder.setInsertionPointAfter(*this);
-
-  DenseMap<Attribute, MemorySlot> slotMap;
-  auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
-  llvm::ArrayRef<StructLikeMember> members;
-  auto inputs = getInput();
-  TypeSwitch<Type>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>(
-          [&members](auto &type) { members = type.getMembers(); })
-      .Default([this](auto &) {
-        emitOpError("Result type must be StructType or UnpackedStructType");
-      });
-  for (Attribute usedIndex : usedIndices) {
-    auto elemType =
-        cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
-    auto elemRefType = RefType::get(elemType);
-    StringAttr *name = nullptr;
-    auto value = Value();
-    for (const auto &member : members) {
-      if (member.type == elemType)
-        *name = member.name;
-    }
-    for (const auto &input : inputs) {
-      if (input.getType() == elemType)
-        value = input;
-    }
-    if (name) {
-      auto varOp =
-          builder.create<VariableOp>(getLoc(), elemRefType, *name, value);
-      slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
-    }
-  }
-
-  return slotMap;
-}
-
-std::optional<DestructurableAllocationOpInterface>
-StructCreateOp::handleDestructuringComplete(
-    const DestructurableMemorySlot &slot, OpBuilder &builder) {
-  assert(slot.ptr == getResult());
-  this->erase();
-  return std::nullopt;
 }
 
 //===----------------------------------------------------------------------===//
