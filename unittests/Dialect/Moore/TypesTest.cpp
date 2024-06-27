@@ -174,4 +174,26 @@ TEST(TypesTest, Structs) {
   ASSERT_EQ(u3.getBitSize(), std::nullopt);
 }
 
+TEST(TypesTest, Refs) {
+  MLIRContext context;
+  context.loadDialect<MooreDialect>();
+
+  auto bitType = IntType::getInt(&context, 1);
+  auto logicType = IntType::getLogic(&context, 8);
+  auto bitRefType = RefType::get(&context, bitType);
+  auto logicRefType = RefType::get(&context, logicType);
+
+  // Value domain
+  ASSERT_EQ(bitRefType.getDomain(), Domain::TwoValued);
+  ASSERT_EQ(logicRefType.getDomain(), Domain::FourValued);
+
+  // Bit size
+  ASSERT_EQ(bitRefType.getBitSize(), 1u);
+  ASSERT_EQ(logicRefType.getBitSize(), 8u);
+
+  // Nested type
+  ASSERT_EQ(bitRefType.getNestedType(), bitType);
+  ASSERT_EQ(logicRefType.getNestedType(), logicType);
+}
+
 } // namespace
