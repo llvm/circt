@@ -842,7 +842,8 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
 //                             OpBuilder &builder, const DataLayout &dataLayout)
 //                             {
 //   return TypeSwitch<Type, DeletionKind>(getType())
-//       .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+//       .Case<StructType, UnpackedStructType>([this, &subslots](auto &type)
+// {
 //         auto members = type.getMembers();
 //         for (const auto &member : members) {
 //           auto index = StringAttr::get(getContext(), member.name);
