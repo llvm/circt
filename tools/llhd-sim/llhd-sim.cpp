@@ -18,6 +18,7 @@
 #include "circt/Dialect/LLHD/Simulator/Trace.h"
 #include "circt/Support/Version.h"
 
+#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -156,6 +157,7 @@ static LogicalResult applyMLIRPasses(ModuleOp module) {
   PassManager pm(module.getContext());
 
   pm.addPass(createConvertLLHDToLLVMPass());
+  pm.addPass(::mlir::createReconcileUnrealizedCastsPass());
 
   return pm.run(module);
 }
