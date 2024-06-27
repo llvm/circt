@@ -306,8 +306,6 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     }
     auto varOp =
         builder.create<VariableOp>(getLoc(), elemRefType, name, Value());
-    // context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),&var,
-    // varOp);
     inputs.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
   }
