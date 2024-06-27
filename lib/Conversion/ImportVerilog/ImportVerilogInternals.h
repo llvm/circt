@@ -83,6 +83,11 @@ struct Context {
   LogicalResult
   convertTimingControl(const slang::ast::TimingControl &timingControl);
 
+  // Update duplicate port symbol
+  const slang::ast::PortSymbol *
+  updatePortsSymbol(ModuleLowering *moduleLowering,
+                    const slang::ast::PortSymbol *port);
+
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
   SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;

@@ -125,6 +125,7 @@ struct MemberVisitor {
       // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
+        port = context.updatePortsSymbol(moduleLowering, port);
         switch (port->direction) {
         case slang::ast::ArgumentDirection::In: {
           auto refType = moore::RefType::get(
@@ -183,6 +184,7 @@ struct MemberVisitor {
                          : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
+        port = context.updatePortsSymbol(moduleLowering, port);
         portValues.insert({port, value});
         continue;
       }
@@ -198,6 +200,7 @@ struct MemberVisitor {
         unsigned offset = 0;
         auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
+          port = context.updatePortsSymbol(moduleLowering, port);
           unsigned width = port->getType().getBitWidth();
           auto index = builder.create<moore::ConstantOp>(loc, i32, offset);
           auto sliceType = context.convertType(port->getType());
@@ -435,7 +438,56 @@ ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
   using slang::ast::MultiPortSymbol;
+  using slang::ast::ParameterSymbol;
   using slang::ast::PortSymbol;
+  using slang::ast::TypeParameterSymbol;
+
+  auto parameters = module->parameters;
+  bool hasModuleSame = false;
+  // If there is already exist a module that has the same name with this
+  // module ,has the same parent scope and has the same parameters we can
+  // define this module is a duplicate module
+  for (auto const &existModule : modules) {
+    if (module->getDeclaringDefinition() ==
+        existModule.getFirst()->getDeclaringDefinition()) {
+      auto moduleParameters = existModule.getFirst()->parameters;
+      hasModuleSame = true;
+      for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
+           it1 != parameters.end() && it2 != moduleParameters.end();
+           it1++, it2++) {
+        // Parameters size different
+        if (it1 == parameters.end() || it2 == moduleParameters.end()) {
+          hasModuleSame = false;
+          break;
+        }
+        const auto *para1 = (*it1)->symbol.as_if<ParameterSymbol>();
+        const auto *para2 = (*it2)->symbol.as_if<ParameterSymbol>();
+        // Parameters kind different
+        if ((para1 == nullptr) ^ (para2 == nullptr)) {
+          hasModuleSame = false;
+          break;
+        }
+        // Compare ParameterSymbol
+        if (para1 != nullptr) {
+          hasModuleSame = para1->getValue() == para2->getValue();
+        }
+        // Compare TypeParameterSymbol
+        if (para1 == nullptr) {
+          auto para1Type = convertType(
+              (*it1)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+          auto para2Type = convertType(
+              (*it2)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+          hasModuleSame = para1Type == para2Type;
+        }
+        if (!hasModuleSame)
+          break;
+      }
+      if (hasModuleSame) {
+        module = existModule.first;
+        break;
+      }
+    }
+  }
 
   auto &slot = modules[module];
   if (slot)
@@ -577,4 +629,17 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
 
   return success();
+}
+
+/// Let duplicate port symbol be existing port symbol
+const slang::ast::PortSymbol *
+Context::updatePortsSymbol(ModuleLowering *moduleLowering,
+                           const slang::ast::PortSymbol *port) {
+  if (!moduleLowering || !port)
+    return port;
+  for (const auto &existPort : moduleLowering->ports) {
+    if (existPort.ast.name == port->name)
+      return &existPort.ast;
+  }
+  return port;
 }

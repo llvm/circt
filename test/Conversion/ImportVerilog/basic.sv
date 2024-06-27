@@ -10,10 +10,39 @@ module Empty;
   ; // empty member
 endmodule
 
+// CHECK-LABEL: moore.module @Dedup
+module Dedup;
+  module NestedA(input wire a,
+  input wire b,
+  output wire [3:0] c);
+  endmodule
+  module NestedB #(parameter p = 32)
+  (input wire a,
+  input wire b,
+  output wire [3:0] c);
+  endmodule
+  wire [3:0] a;
+  wire [3:0] b;
+  wire [3:0] c;
+  // CHECK-LABEL: moore.instance "insA" @NestedA_0
+  NestedA insA(.a(a), .c(c));
+  // CHECK-LABEL: moore.instance "insB" @NestedA_0
+  NestedA insB(.b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insC" @NestedB
+  NestedB insC(.c(c));
+  // CHECK-LABEL: moore.instance "insD" @NestedB
+  NestedB insD(.a(a), .b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insE" @NestedB_1
+  NestedB #(8) insE(.c(c));
+  // CHECK-LABEL: moore.module @NestedA_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module @NestedB_1(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module @NestedB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+endmodule
+
 // CHECK-LABEL: moore.module @NestedA() {
-// CHECK:         moore.instance "NestedB" @NestedB
+// CHECK:         moore.instance "NestedB" @NestedB_2
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedB() {
+// CHECK-LABEL: moore.module @NestedB_2() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
 // CHECK-LABEL: moore.module @NestedC() {
