@@ -9,12 +9,14 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/MapVector.h"
@@ -104,6 +106,37 @@ LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
     return emitOpError()
            << "types of the yielded values of both regions must match";
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BMCOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BMCOp::verifyRegions() {
+  if (getInit().getArgumentTypes().size() != 0)
+    return emitOpError() << "init region must have no arguments";
+  if (getLoop().getArgumentTypes() != getCircuit().getArgumentTypes())
+    return emitOpError()
+           << "block argument types of loop and circuit regions must match";
+  size_t totalClocks = 0;
+  for (auto input : getCircuit().getArgumentTypes())
+    if (isa<seq::ClockType>(input))
+      totalClocks++;
+  if (getInit().front().getTerminator()->getOperandTypes().size() !=
+          totalClocks ||
+      getLoop().front().getTerminator()->getOperandTypes().size() !=
+          totalClocks)
+    return emitOpError()
+           << "number of yielded values in init and loop regions must match "
+              "the number of clock inputs in the circuit region";
+  for (auto arg : getInit().front().getTerminator()->getOperandTypes())
+    if (!isa<seq::ClockType>(arg)) {
+      return emitOpError() << "init region must only yield clock values";
+    }
+  for (auto arg : getLoop().front().getTerminator()->getOperandTypes())
+    if (!isa<seq::ClockType>(arg))
+      return emitOpError() << "loop region must only yield clock values";
   return success();
 }
 

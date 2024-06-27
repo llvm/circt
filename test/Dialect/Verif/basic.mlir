@@ -84,7 +84,23 @@ verif.lec {verif.some_attr} first {
   verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
 }
 
-verif.bmc bound 10 attributes {verif.some_attr} {
+verif.bmc bound 10 attributes {verif.some_attr}
+init {
+  %c0_i1 = hw.constant 0 : i1
+  %clk = seq.to_clock %c0_i1
+  %arg0 = smt.declare_fun : !smt.bv<32>
+  %state0 = smt.declare_fun : !smt.bv<32>
+  verif.yield %clk : !seq.clock
+}
+loop {
+  ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
+  %from_clock = seq.from_clock %clk
+  %c-1_i1 = hw.constant -1 : i1
+  %neg_clock = comb.xor %from_clock, %c-1_i1 : i1
+  %newclk = seq.to_clock %neg_clock
+  verif.yield %newclk : !seq.clock
+}
+circuit {
 ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
   %c-1_i32 = hw.constant -1 : i32
   %0 = comb.add %arg0, %state0 : i32

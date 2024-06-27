@@ -6,13 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Location.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -96,6 +102,50 @@ void LowerToBMCPass::runOnOperation() {
 
   auto bmcOp = builder.create<verif::BMCOp>(loc, bound);
   bmcOp->setAttr("num_regs", hwModule->getAttr("num_regs"));
+  // Check that there's only one clock input to the module
+  std::optional<unsigned long> clkIndex;
+  for (auto [i, input] : llvm::enumerate(hwModule.getInputTypes())) {
+    if (isa<seq::ClockType>(input)) {
+      if (clkIndex) {
+        getOperation().emitError(
+            "Designs with multiple clocks not yet supported.");
+        return signalPassFailure();
+      }
+      clkIndex = i;
+    }
+  }
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    // Initialize clock to 0 if it exists, otherwise just yield nothing
+    auto *initBlock = builder.createBlock(&bmcOp.getInit());
+    builder.setInsertionPointToStart(initBlock);
+    if (clkIndex) {
+      auto initVal =
+          builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 0);
+      auto toClk = builder.create<seq::ToClockOp>(loc, initVal);
+      builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+    } else {
+      builder.create<verif::YieldOp>(loc, ValueRange{});
+    }
+
+    // Toggle clock in loop region if it exists, otherwise just yield nothing
+    auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
+    builder.setInsertionPointToStart(loopBlock);
+    SmallVector<Location> locs(
+        hwModule.getBodyBlock()->getArgumentTypes().size(), loc);
+    loopBlock->addArguments(hwModule.getBodyBlock()->getArgumentTypes(), locs);
+    if (clkIndex) {
+      auto fromClk = builder.create<seq::FromClockOp>(
+          loc, loopBlock->getArgument(clkIndex.value()));
+      auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
+      auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
+      auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
+      // Only yield clock val
+      builder.create<verif::YieldOp>(loc, ValueRange{toClk});
+    } else {
+      builder.create<verif::YieldOp>(loc, ValueRange{});
+    }
+  }
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
@@ -118,4 +168,5 @@ void LowerToBMCPass::runOnOperation() {
     Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
     builder.create<func::ReturnOp>(loc, constZero);
   }
+  bmcOp.dump();
 }

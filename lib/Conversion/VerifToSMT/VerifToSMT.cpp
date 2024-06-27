@@ -10,6 +10,7 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
@@ -19,6 +20,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/SmallVector.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTVERIFTOSMT
@@ -166,11 +168,24 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
 
     Location loc = op.getLoc();
     SmallVector<Type> oldInputTy(op.getCircuit().getArgumentTypes());
-    SmallVector<Type> inputTy, outputTy;
+    SmallVector<Type> inputTy;
+    SmallVector<Type> initOutputTy;
+    SmallVector<Type> loopOutputTy;
+    SmallVector<Type> circuitOutputTy;
     if (failed(typeConverter->convertTypes(oldInputTy, inputTy)))
       return failure();
     if (failed(typeConverter->convertTypes(
-            op.getCircuit().front().back().getOperandTypes(), outputTy)))
+            op.getInit().front().back().getOperandTypes(), initOutputTy)))
+      return failure();
+    // loop and init should have same output types (all the clocks in the
+    // design)
+    loopOutputTy = initOutputTy;
+    if (failed(typeConverter->convertTypes(
+            op.getCircuit().front().back().getOperandTypes(), circuitOutputTy)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&op.getInit(), *typeConverter)))
+      return failure();
+    if (failed(rewriter.convertRegionTypes(&op.getLoop(), *typeConverter)))
       return failure();
     if (failed(rewriter.convertRegionTypes(&op.getCircuit(), *typeConverter)))
       return failure();
@@ -178,34 +193,56 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
     unsigned numRegs =
         cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
 
-    auto funcTy = rewriter.getFunctionType(inputTy, outputTy);
-    func::FuncOp funcOp;
+    auto initFuncTy = rewriter.getFunctionType({}, initOutputTy);
+    auto loopFuncTy = rewriter.getFunctionType(inputTy, loopOutputTy);
+    auto circuitFuncTy = rewriter.getFunctionType(inputTy, circuitOutputTy);
+
+    func::FuncOp initFuncOp, loopFuncOp, circuitFuncOp;
+
     {
       OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(
           op->getParentOfType<ModuleOp>().getBody());
-      funcOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc"), funcTy);
-      rewriter.inlineRegionBefore(op.getCircuit(), funcOp.getFunctionBody(),
-                                  funcOp.end());
-      auto operands = funcOp.getBody().front().back().getOperands();
-      rewriter.eraseOp(&funcOp.getFunctionBody().front().back());
-      rewriter.setInsertionPointToEnd(&funcOp.getBody().front());
-      SmallVector<Value> toReturn;
-      for (unsigned i = 0; i < outputTy.size(); ++i)
-        toReturn.push_back(typeConverter->materializeTargetConversion(
-            rewriter, loc, outputTy[i], operands[i]));
-      rewriter.create<func::ReturnOp>(loc, toReturn);
+      initFuncOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc_init"),
+                                                 initFuncTy);
+      rewriter.inlineRegionBefore(op.getInit(), initFuncOp.getFunctionBody(),
+                                  initFuncOp.end());
+      loopFuncOp = rewriter.create<func::FuncOp>(loc, names.newName("bmc_loop"),
+                                                 loopFuncTy);
+      rewriter.inlineRegionBefore(op.getLoop(), loopFuncOp.getFunctionBody(),
+                                  loopFuncOp.end());
+      circuitFuncOp = rewriter.create<func::FuncOp>(
+          loc, names.newName("bmc_circuit"), circuitFuncTy);
+      rewriter.inlineRegionBefore(op.getCircuit(),
+                                  circuitFuncOp.getFunctionBody(),
+                                  circuitFuncOp.end());
+      auto funcOps = {&initFuncOp, &loopFuncOp, &circuitFuncOp};
+      auto outputTys = {initOutputTy, loopOutputTy, circuitOutputTy};
+      for (auto [funcOp, outputTy] : llvm::zip(funcOps, outputTys)) {
+        auto operands = funcOp->getBody().front().back().getOperands();
+        rewriter.eraseOp(&funcOp->getFunctionBody().front().back());
+        rewriter.setInsertionPointToEnd(&funcOp->getBody().front());
+        SmallVector<Value> toReturn;
+        for (unsigned i = 0; i < outputTy.size(); ++i)
+          toReturn.push_back(typeConverter->materializeTargetConversion(
+              rewriter, loc, outputTy[i], operands[i]));
+        rewriter.create<func::ReturnOp>(loc, toReturn);
+      }
     }
 
     auto solver =
         rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(), ValueRange{});
     rewriter.createBlock(&solver.getBodyRegion());
 
+    // Call init func to get initial clock val
+    ValueRange clockInitVals =
+        rewriter.create<func::CallOp>(loc, initFuncOp)->getResults();
+
+    int clockIndex = 0;
     SmallVector<Value> inputDecls;
     for (auto [oldTy, newTy] : llvm::zip(oldInputTy, inputTy)) {
       if (isa<seq::ClockType>(oldTy))
-        inputDecls.push_back(rewriter.create<smt::BVConstantOp>(
-            loc, smt::BitVectorAttr::get(getContext(), 0, 1)));
+        inputDecls.push_back(clockInitVals[clockIndex++]);
       else
         inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
     }
@@ -221,11 +258,14 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
     Value constTrue =
         rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
     inputDecls.push_back(constFalse); // wasViolated?
+
     auto forOp = rewriter.create<scf::ForOp>(
         loc, lowerBound, upperBound, step, inputDecls,
         [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
-          ValueRange phaseOneOuts =
-              builder.create<func::CallOp>(loc, funcOp, iterArgs.drop_back())
+          ValueRange circuitCallOuts =
+              builder
+                  .create<func::CallOp>(loc, circuitFuncOp,
+                                        iterArgs.drop_back())
                   ->getResults();
           auto checkOp =
               rewriter.create<smt::CheckOp>(loc, builder.getI1Type());
@@ -243,46 +283,25 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
               loc, checkOp.getResult(0), iterArgs.back());
 
           SmallVector<Value> newDecls;
+
+          // Call loop func to update clock val
+          ValueRange clockVals =
+              builder
+                  .create<func::CallOp>(loc, loopFuncOp, iterArgs.drop_back())
+                  ->getResults();
+
+          auto clockIndex = 0;
           for (auto [oldTy, newTy] :
                llvm::zip(TypeRange(oldInputTy).drop_back(numRegs),
                          TypeRange(inputTy).drop_back(numRegs))) {
             if (isa<seq::ClockType>(oldTy))
-              newDecls.push_back(builder.create<smt::BVConstantOp>(
-                  loc, smt::BitVectorAttr::get(getContext(), 1, 1)));
+              newDecls.push_back(clockVals[clockIndex++]);
             else
               newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
           }
 
-          newDecls.append(llvm::to_vector(phaseOneOuts.take_back(numRegs)));
-
-          ValueRange phaseTwoOuts =
-              builder.create<func::CallOp>(loc, funcOp, newDecls)->getResults();
-          auto phaseTwoCheckOp =
-              builder.create<smt::CheckOp>(loc, builder.getI1Type());
-          {
-            OpBuilder::InsertionGuard guard(builder);
-            builder.createBlock(&phaseTwoCheckOp.getSatRegion());
-            builder.create<smt::YieldOp>(loc, constTrue);
-            builder.createBlock(&phaseTwoCheckOp.getUnknownRegion());
-            builder.create<smt::YieldOp>(loc, constTrue);
-            builder.createBlock(&phaseTwoCheckOp.getUnsatRegion());
-            builder.create<smt::YieldOp>(loc, constFalse);
-          }
-          violated = builder.create<arith::OrIOp>(
-              loc, phaseTwoCheckOp.getResult(0), violated);
-
-          newDecls.clear();
-          for (auto [oldTy, newTy] :
-               llvm::zip(TypeRange(oldInputTy).drop_back(numRegs),
-                         TypeRange(inputTy).drop_back(numRegs))) {
-            if (isa<seq::ClockType>(oldTy))
-              newDecls.push_back(builder.create<smt::BVConstantOp>(
-                  loc, smt::BitVectorAttr::get(getContext(), 0, 1)));
-            else
-              newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
-          }
-
-          newDecls.append(SmallVector<Value>(phaseTwoOuts.take_back(numRegs)));
+          newDecls.append(
+              SmallVector<Value>(circuitCallOuts.take_back(numRegs)));
           newDecls.push_back(violated);
 
           builder.create<scf::YieldOp>(loc, newDecls);

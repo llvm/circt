@@ -216,14 +216,35 @@ def YieldOp : VerifOp<"yield", [
 
 def BMCOp : VerifOp<"bmc", []> {
   let summary = "Perform a bounded model check";
+  let description = [{
+    This operation represents a bounded model checking problem explicitly in
+    the IR. The `circuit` region contains the circuit (alongside the `verif`
+    property checking operations) to be checked.
+
+    The `init` region contains the logic to initialize the clock signals, and
+    will be executed once before any other region - it cannot take any
+    arguments, and should return as many `!seq.clock` values as the `circuit`
+    region has `!seq.clock` arguments.
+
+    The `loop` region contains the logic to advance the clock signals, and will
+    be executed after each execution of the `circuit` region. It should have
+    the same arguments as the `circuit` region, and should yield as many
+    `!seq.clock` values as the `circuit` region has `!seq.clock` arguments.
+  }];
 
   let arguments = (ins I32Attr:$bound);
-  let regions = (region SizedRegion<1>:$circuit);
+  let regions = (region SizedRegion<1>:$init,
+                        SizedRegion<1>:$loop,
+                        SizedRegion<1>:$circuit);
+
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
-    `bound` $bound attr-dict-with-keyword $circuit
+    `bound` $bound attr-dict-with-keyword `init` $init `loop` $loop `circuit`
+    $circuit
   }];
+
+  let hasRegionVerifier = true;
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
