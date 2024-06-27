@@ -15,6 +15,6 @@ using namespace circt;
 std::unique_ptr<Pass> circt::createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
   config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
+  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
   return mlir::createCanonicalizerPass(config);
 }

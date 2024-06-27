@@ -62,7 +62,7 @@ add_library(CosimRpcServer SHARED
 target_link_libraries(CosimRpcServer
   PUBLIC
   EsiCosimGRPC
-  ESIRuntime
+  ESICppRuntime
 )
 install(TARGETS CosimRpcServer DESTINATION lib COMPONENT ESIRuntime)
 

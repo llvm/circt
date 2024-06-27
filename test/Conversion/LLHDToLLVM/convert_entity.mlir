@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-llhd-to-llvm --split-input-file | FileCheck %s
+// RUN: circt-opt %s --convert-llhd-to-llvm --reconcile-unrealized-casts --split-input-file | FileCheck %s
 
 // CHECK-LABEL: llvm.func @convert_empty(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {

@@ -6,7 +6,6 @@ llhd.entity @root() -> () {
 }
 
 llhd.entity @initUsesProbedValue () -> () {
-  // expected-error @+1 {{failed to legalize operation 'hw.constant'}}
   %0 = hw.constant 0 : i1
   %1 = llhd.sig "sig" %0 : i1
   %2 = llhd.prb %1 : !llhd.sig<i1>

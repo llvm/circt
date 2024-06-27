@@ -15,6 +15,7 @@
 #include "circt/InitAllPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
+#include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -67,6 +68,7 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
   mlir::registerViewOpGraphPass();
   mlir::registerSymbolDCEPass();
+  mlir::registerReconcileUnrealizedCastsPass();
   llvm::cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
