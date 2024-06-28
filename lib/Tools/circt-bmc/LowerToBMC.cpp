@@ -100,9 +100,13 @@ void LowerToBMCPass::runOnOperation() {
     terminator->erase();
   }
 
-  auto bmcOp = builder.create<verif::BMCOp>(loc, bound);
+  // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
+  // iterations
+  auto bmcOp = builder.create<verif::BMCOp>(loc, 2 * bound);
   bmcOp->setAttr("num_regs", hwModule->getAttr("num_regs"));
   // Check that there's only one clock input to the module
+  // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
+  // toggles just needs to be generated
   std::optional<unsigned long> clkIndex;
   for (auto [i, input] : llvm::enumerate(hwModule.getInputTypes())) {
     if (isa<seq::ClockType>(input)) {
@@ -140,7 +144,7 @@ void LowerToBMCPass::runOnOperation() {
       auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
       auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
       auto toClk = builder.create<seq::ToClockOp>(loc, nClk);
-      // Only yield clock val
+      // Only yield clock value
       builder.create<verif::YieldOp>(loc, ValueRange{toClk});
     } else {
       builder.create<verif::YieldOp>(loc, ValueRange{});
@@ -168,5 +172,4 @@ void LowerToBMCPass::runOnOperation() {
     Value constZero = builder.create<LLVM::ConstantOp>(loc, i32Ty, 0);
     builder.create<func::ReturnOp>(loc, constZero);
   }
-  bmcOp.dump();
 }

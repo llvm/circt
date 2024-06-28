@@ -9,7 +9,6 @@
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
-#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
@@ -19,7 +18,6 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace circt {
@@ -297,7 +295,7 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
         rewriter.create<smt::SolverOp>(loc, rewriter.getI1Type(), ValueRange{});
     rewriter.createBlock(&solver.getBodyRegion());
 
-    // Call init func to get initial clock val
+    // Call init func to get initial clock value
     ValueRange clockInitVals =
         rewriter.create<func::CallOp>(loc, initFuncOp)->getResults();
 
@@ -322,9 +320,13 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
         rewriter.create<arith::ConstantOp>(loc, rewriter.getBoolAttr(true));
     inputDecls.push_back(constFalse); // wasViolated?
 
+    // TODO: swapping to a whileOp here would allow early exit once the property
+    // is violated
+    // Perform model check up to the provided bound
     auto forOp = rewriter.create<scf::ForOp>(
         loc, lowerBound, upperBound, step, inputDecls,
         [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
+          // Execute the circuit
           ValueRange circuitCallOuts =
               builder
                   .create<func::CallOp>(loc, circuitFuncOp,
@@ -347,7 +349,7 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
 
           SmallVector<Value> newDecls;
 
-          // Call loop func to update clock val
+          // Call loop func to update clock value
           ValueRange clockVals =
               builder
                   .create<func::CallOp>(loc, loopFuncOp, iterArgs.drop_back())
