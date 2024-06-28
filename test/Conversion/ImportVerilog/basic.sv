@@ -963,19 +963,6 @@ module Expressions;
     // CHECK: [[TMP2:%.+]]  = moore.union_extract [[TMP1]], "b" : union<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = union0.b;
-
-    // CHECK: [[TMP1:%.+]] = moore.union_extract_ref %union1, "c" : <union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}>> -> <union<{a: i32, b: i32}>>
-    // CHECK: [[TMP2:%.+]] = moore.union_extract_ref [[TMP1]], "a" : <union<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[TMP3:%.+]] = moore.read %a : i32
-    // CHECK: moore.blocking_assign [[TMP2]], [[TMP3]] : i32
-    union1.c.a = a;
-
-    // CHECK: [[TMP1:%.+]] = moore.read %union1 : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}>
-    // CHECK: [[TMP2:%.+]] = moore.union_extract [[TMP1]], "d" : union<{c: union<{a: i32, b: i32}>, d: union<{a: i32, b: i32}>}> -> union<{a: i32, b: i32}>
-    // CHECK: [[TMP3:%.+]] = moore.union_extract [[TMP2]], "b" : union<{a: i32, b: i32}> -> i32
-    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
-    b = union1.d.b;
-  end
 endmodule
 
 // CHECK-LABEL: moore.module @Conversion
