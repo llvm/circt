@@ -305,7 +305,6 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     inputs.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
   }
-  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
 
   return slotMap;
 }
@@ -807,6 +806,8 @@ bool BlockingAssignOp::canRewire(const DestructurableMemorySlot &slot,
   if (slot.ptr != getDst() || getSrc() == slot.ptr)
     return false;
   auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
+  if (!index || !slot.elementPtrs.contains(index))
+    return false;
   usedIndices.insert(ArrayAttr::get(getContext(), index));
   return true;
 }
@@ -817,7 +818,7 @@ DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
                                       const DataLayout &dataLayout) {
   auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
   const auto &memoreSlot = subslots.at(index);
-  setOperand(1, memoreSlot.ptr);
+  setOperand(0, memoreSlot.ptr);
   return DeletionKind::Keep;
 }
 
@@ -861,9 +862,11 @@ bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
                        SmallPtrSetImpl<Attribute> &usedIndices,
                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                        const DataLayout &dataLayout) {
-  if (slot.ptr != getOperand())
+  if (slot.ptr != getInput())
     return false;
   auto index = getAttributeIndexFromStruct(getContext(), getType());
+  if (!index)
+    return false;
   usedIndices.insert(index);
   return true;
 }
