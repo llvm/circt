@@ -224,6 +224,7 @@ static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
   modulePM.addPass(moore::createLowerConcatRefPass());
   modulePM.addPass(moore::createSimplifyProceduresPass());
   pm.addPass(mlir::createMem2Reg());
+
   // TODO: like dedup pass.
 
   return success();
