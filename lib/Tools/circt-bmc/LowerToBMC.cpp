@@ -111,8 +111,7 @@ void LowerToBMCPass::runOnOperation() {
   for (auto [i, input] : llvm::enumerate(hwModule.getInputTypes())) {
     if (isa<seq::ClockType>(input)) {
       if (clkIndex) {
-        getOperation().emitError(
-            "Designs with multiple clocks not yet supported.");
+        hwModule.emitError("Designs with multiple clocks not yet supported.");
         return signalPassFailure();
       }
       clkIndex = i;
