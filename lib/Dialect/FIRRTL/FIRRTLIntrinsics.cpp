@@ -23,7 +23,7 @@ using namespace firrtl;
 ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c) {
   auto numOps = op.getNumOperands();
   unsigned m = n + c;
-  if (!(n <= numOps && numOps <= m)) {
+  if (numOps < n || numOps > m) {
     auto err = emitError() << " has " << numOps << " inputs instead of ";
     if (c == 0)
       err << n;
