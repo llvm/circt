@@ -295,6 +295,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
         emitOpError("Result type must be StructType or UnpackedStructType");
       });
   SmallVector<Value> inputs;
+  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
   for (Attribute usedIndex : usedIndices) {
     auto elemType =
         cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
@@ -517,7 +518,7 @@ bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
             if (slot.ptr != getInput())
               return false;
             auto index = getFieldNameAttr();
-            if (!index || !slot.elementPtrs.contains(index))
+            if (!index)
               return false;
             usedIndices.insert(index);
             return true;
