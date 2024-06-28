@@ -99,6 +99,9 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 ^bb0(%arg0: i32):
 } circuit {
 ^bb0(%arg0: i32):
+  %false = hw.constant false
+  // Arbitrary assertion so op verifies
+  verif.assert %false : i1
   verif.yield %arg0 : i32
 }
 
@@ -148,5 +151,8 @@ circuit {
   %0 = comb.add %arg0, %state0 : i32
   // %state0 is the result of a seq.compreg taking %0 as input
   %2 = comb.xor %state0, %c-1_i32 : i32
+  %false = hw.constant false
+  // Arbitrary assertion so op verifies
+  verif.assert %false : i1
   verif.yield %2, %0 : i32, i32
 }

@@ -27,6 +27,9 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 } loop {
 } circuit {
 ^bb0(%arg0: i32):
+  %true = hw.constant true
+  // Arbitrary assertion to avoid failure
+  verif.assert %true : i1
   verif.yield %arg0 : i32
 }
 
@@ -38,6 +41,8 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 ^bb0(%clk: !seq.clock, %arg0: i32):
 } circuit {
 ^bb0(%clk: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
   verif.yield %arg0 : i32
 }
 
@@ -50,6 +55,8 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 ^bb0(%clk: !seq.clock, %arg0: i32):
 } circuit {
 ^bb0(%clk: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
   verif.yield %arg0 : i32
 }
 
@@ -65,6 +72,8 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
   verif.yield %clk1, %clk2 : !seq.clock, !seq.clock
 } circuit {
 ^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
   verif.yield %arg0 : i32
 }
 
@@ -80,5 +89,17 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
   verif.yield %clk1, %arg0 : !seq.clock, i32
 } circuit {
 ^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{op block argument types of loop and circuit regions must match}}
+verif.bmc bound 10 attributes {verif.some_attr} init {
+} loop {
+} circuit {
+^bb0(%arg0: i32):
   verif.yield %arg0 : i32
 }

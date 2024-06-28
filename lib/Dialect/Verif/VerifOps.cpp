@@ -137,6 +137,11 @@ LogicalResult BMCOp::verifyRegions() {
   for (auto arg : getLoop().front().getTerminator()->getOperandTypes())
     if (!isa<seq::ClockType>(arg))
       return emitOpError() << "loop region must only yield clock values";
+  // Any model with no Assert or Cover ops is trivially satisfiable
+  if (getCircuit().getOps<AssertOp>().empty() &&
+      getCircuit().getOps<CoverOp>().empty())
+    return emitOpError() << "no property checked in circuit region, so model "
+                            "will be trivially satisfiable.";
   return success();
 }
 

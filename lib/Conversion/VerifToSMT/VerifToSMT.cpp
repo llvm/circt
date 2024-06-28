@@ -154,7 +154,8 @@ struct LogicEquivalenceCheckingOpConversion
   }
 };
 
-///
+/// Lower a verif::BMCOp operation to an MLIR program that performs the bounded
+/// model check
 struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
   using OpConversionPattern<verif::BMCOp>::OpConversionPattern;
 
