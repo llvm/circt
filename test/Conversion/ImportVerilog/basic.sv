@@ -963,6 +963,7 @@ module Expressions;
     // CHECK: [[TMP2:%.+]]  = moore.union_extract [[TMP1]], "b" : union<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = union0.b;
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @Conversion

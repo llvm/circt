@@ -750,6 +750,24 @@ OpFoldResult BoolCastOp::fold(FoldAdaptor adaptor) {
 // BlockingAssignOp
 //===----------------------------------------------------------------------===//
 
+/// Returns the index of a struct like type in attribute form, given its
+/// indices. Returns a null pointer if whether the indices form a valid index
+/// for the provided  Struct Like Type cannot be computed. The indices must come
+/// from a memory-read or memory-store op.
+static Attribute getAttributeIndexFromStruct(MLIRContext *ctx, Type type) {
+  return TypeSwitch<Type, Attribute>(type)
+      .Case<StructType, UnpackedStructType>([ctx](auto &type) {
+        SmallVector<Attribute> index;
+        auto members = type.getMembers();
+        for (const auto &member : members) {
+          auto attr = StringAttr::get(ctx, Twine(member.name));
+          index.push_back(attr);
+        }
+        return ArrayAttr::get(ctx, index);
+      })
+      .Default([](auto) { return Attribute(); });
+}
+
 bool BlockingAssignOp::loadsFrom(const MemorySlot &slot) { return false; }
 
 bool BlockingAssignOp::storesTo(const MemorySlot &slot) {
@@ -786,41 +804,21 @@ bool BlockingAssignOp::canRewire(const DestructurableMemorySlot &slot,
                                  SmallPtrSetImpl<Attribute> &usedIndices,
                                  SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                  const DataLayout &dataLayout) {
-  return TypeSwitch<Type, bool>(getSrc().getType())
-      .Case<StructType, UnpackedStructType>(
-          [this, &slot, &usedIndices](auto &type) {
-            if (slot.ptr != getDst() || getSrc() == slot.ptr)
-              return false;
-            auto members = type.getMembers();
-            SmallVector<Attribute> index;
-            for (const auto &member : members) {
-              auto attr = StringAttr::get(getContext(), Twine(member.name));
-              index.push_back(attr);
-            }
-            usedIndices.insert(ArrayAttr::get(getContext(), index));
-            return true;
-          })
-      .Default([](auto) { return false; });
+  if (slot.ptr != getDst() || getSrc() == slot.ptr)
+    return false;
+  auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
+  usedIndices.insert(ArrayAttr::get(getContext(), index));
+  return true;
 }
 
 DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
                                       DenseMap<Attribute, MemorySlot> &subslots,
                                       OpBuilder &builder,
                                       const DataLayout &dataLayout) {
-  return TypeSwitch<Type, DeletionKind>(getSrc().getType())
-      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
-        auto members = type.getMembers();
-        SmallVector<Attribute> index;
-        for (const auto &member : members) {
-          auto attr = StringAttr::get(getContext(), Twine(member.name));
-          index.push_back(attr);
-        }
-        auto indexAttr = ArrayAttr::get(getContext(), index);
-        const auto &memoreSlot = subslots.at(indexAttr);
-        setOperand(1, memoreSlot.ptr);
-        return DeletionKind::Keep;
-      })
-      .Default([](auto) { return DeletionKind::Keep; });
+  auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
+  const auto &memoreSlot = subslots.at(index);
+  setOperand(1, memoreSlot.ptr);
+  return DeletionKind::Keep;
 }
 
 //===----------------------------------------------------------------------===//
@@ -863,37 +861,20 @@ bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
                        SmallPtrSetImpl<Attribute> &usedIndices,
                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                        const DataLayout &dataLayout) {
-  return TypeSwitch<Type, bool>(getType())
-      .Case<StructType, UnpackedStructType>(
-          [this, &slot, &usedIndices](auto &type) {
-            if (slot.ptr != getOperand())
-              return false;
-            auto members = type.getMembers();
-            SmallVector<Attribute> index;
-            for (const auto &member : members) {
-              auto attr = StringAttr::get(getContext(), Twine(member.name));
-              index.push_back(attr);
-            }
-            usedIndices.insert(ArrayAttr::get(getContext(), index));
-            return true;
-          })
-      .Default([](auto) { return false; });
+  if (slot.ptr != getOperand())
+    return false;
+  auto index = getAttributeIndexFromStruct(getContext(), getType());
+  usedIndices.insert(index);
+  return true;
 }
 
 DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
                             DenseMap<Attribute, MemorySlot> &subslots,
                             OpBuilder &builder, const DataLayout &dataLayout) {
-  return TypeSwitch<Type, DeletionKind>(getType())
-      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
-        auto members = type.getMembers();
-        for (const auto &member : members) {
-          auto index = StringAttr::get(getContext(), Twine(member.name));
-          const auto &memorySlot = subslots.at(index);
-          setOperand(memorySlot.ptr);
-        }
-        return DeletionKind::Keep;
-      })
-      .Default([](auto) { return DeletionKind::Keep; });
+  auto index = getAttributeIndexFromStruct(getContext(), getType());
+  const auto &memorySlot = subslots.at(index);
+  setOperand(memorySlot.ptr);
+  return DeletionKind::Keep;
 }
 
 //===----------------------------------------------------------------------===//
