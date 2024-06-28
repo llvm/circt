@@ -254,6 +254,7 @@ def NetOp : MooreOp<"net", [
 
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   TypesMatchWith<"input and result types match",
     "result", "input", "RefType::get(cast<UnpackedType>($_self))">
 ]> {

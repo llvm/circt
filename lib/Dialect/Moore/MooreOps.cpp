@@ -818,42 +818,40 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
   return DeletionKind::Delete;
 }
 
-// bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
-//                        SmallPtrSetImpl<Attribute> &usedIndices,
-//                        SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-//                        const DataLayout &dataLayout) {
-//   return TypeSwitch<Type, bool>(getType())
-//       .Case<StructType, UnpackedStructType>(
-//           [this, &slot, &usedIndices](auto &type) {
-//             if (slot.ptr != getOperand())
-//               return false;
-//             auto members = type.getMembers();
-//             for (const auto &member : members) {
-//               auto attr = StringAttr::get(getContext(), member.name);
-//               usedIndices.insert(attr);
-//             }
-//             return true;
-//           })
-//       .Default([]() { return false; });
-// }
+bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
+                       SmallPtrSetImpl<Attribute> &usedIndices,
+                       SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                       const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getType())
+      .Case<StructType, UnpackedStructType>(
+          [this, &slot, &usedIndices](auto &type) {
+            if (slot.ptr != getOperand())
+              return false;
+            auto members = type.getMembers();
+            for (const auto &member : members) {
+              auto attr = StringAttr::get(getContext(), Twine(member.name));
+              usedIndices.insert(attr);
+            }
+            return true;
+          })
+      .Default([](auto) { return false; });
+}
 
-// DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
-//                             DenseMap<Attribute, MemorySlot> &subslots,
-//                             OpBuilder &builder, const DataLayout &dataLayout)
-//                             {
-//   return TypeSwitch<Type, DeletionKind>(getType())
-//       .Case<StructType, UnpackedStructType>([this, &subslots](auto &type)
-// {
-//         auto members = type.getMembers();
-//         for (const auto &member : members) {
-//           auto index = StringAttr::get(getContext(), member.name);
-//           const auto &memorySlot = subslots.at(index);
-//           setOperand(memorySlot.ptr);
-//         }
-//         return DeletionKind::Keep;
-//       })
-//       .Default([]() { return DeletionKind::Keep; });
-// }
+DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
+                            DenseMap<Attribute, MemorySlot> &subslots,
+                            OpBuilder &builder, const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+        auto members = type.getMembers();
+        for (const auto &member : members) {
+          auto index = StringAttr::get(getContext(), Twine(member.name));
+          const auto &memorySlot = subslots.at(index);
+          setOperand(memorySlot.ptr);
+        }
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
+}
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

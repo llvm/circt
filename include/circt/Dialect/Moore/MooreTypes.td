@@ -16,6 +16,7 @@
 include "circt/Dialect/Moore/MooreDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 class MooreTypeDef<string name, list<Trait> traits = [],
                    string baseCppClass = "::mlir::Type">
@@ -283,6 +284,9 @@ class StructLikeType<
   let parameters = (ins ArrayRefParameter<"StructLikeMember">:$members);
   let assemblyFormat = [{
     `<` custom<Members>($members) `>`
+  }];
+   let extraClassDeclaration = [{
+   Attribute getMemorySpace();
   }];
 }
 

@@ -28,6 +28,7 @@ static void printMembers(AsmPrinter &printer,
 
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
+Attribute getMemorySpace();
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type
@@ -196,6 +197,17 @@ LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
 LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 ArrayRef<StructLikeMember> members) {
   return verifyAllMembersPacked(emitError, members);
+}
+
+Attribute getMemorySpace(AsmParser &parser,
+                         SmallVector<StructLikeMember> &members) {
+  SmallVector<Attribute> index;
+  auto context = parser.getContext();
+  for (const auto &member : members) {
+    auto attr = mlir::StringAttr::get(context, Twine(member.name));
+    index.push_back(attr);
+  }
+  return ArrayAttr::get(context, index);
 }
 
 //===----------------------------------------------------------------------===//
