@@ -27,8 +27,9 @@ endmodule
 
 // -----
 module Foo;
+  parameter a = 1;
   // expected-error @below {{unsupported construct}}
-  genvar a;
+  defparam a = 2;
 endmodule
 
 // -----
