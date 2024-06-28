@@ -274,6 +274,14 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// AssignedVarOp
+//===----------------------------------------------------------------------===//
+
+void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
