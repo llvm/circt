@@ -47,10 +47,72 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
-    Value not_cond = rewriter.create<smt::NotOp>(op.getLoc(), cond);
-    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, not_cond);
+    Value notCond = rewriter.create<smt::NotOp>(op.getLoc(), cond);
+    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, notCond);
     return success();
   }
+};
+
+/// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp
+struct VerifAssumeOpConversion : OpConversionPattern<verif::AssumeOp> {
+  using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::AssumeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value cond = typeConverter->materializeTargetConversion(
+        rewriter, op.getLoc(), smt::BoolType::get(getContext()),
+        adaptor.getProperty());
+    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, cond);
+    return success();
+  }
+};
+
+// Fail to convert unsupported verif ops to avoid silent failure
+struct VerifCoverOpConversion : OpConversionPattern<verif::CoverOp> {
+  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::CoverOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    return op.emitError("Conversion of CoverOps to SMT not yet supported");
+  };
+};
+
+struct VerifClockedAssertOpConversion
+    : OpConversionPattern<verif::ClockedAssertOp> {
+  using OpConversionPattern<verif::ClockedAssertOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::ClockedAssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    return op.emitError(
+        "Conversion of ClockedAssertOps to SMT not yet supported");
+  };
+};
+
+struct VerifClockedCoverOpConversion
+    : OpConversionPattern<verif::ClockedCoverOp> {
+  using OpConversionPattern<verif::ClockedCoverOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::ClockedCoverOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    return op.emitError(
+        "Conversion of ClockedCoverOps to SMT not yet supported");
+  };
+};
+
+struct VerifClockedAssumeOpConversion
+    : OpConversionPattern<verif::ClockedAssumeOp> {
+  using OpConversionPattern<verif::ClockedAssumeOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::ClockedAssumeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    return op.emitError(
+        "Conversion of ClockedAssumeOps to SMT not yet supported");
+  };
 };
 
 /// Lower a verif::LecOp operation to a miter circuit encoded in SMT.
