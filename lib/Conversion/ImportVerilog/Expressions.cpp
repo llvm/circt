@@ -665,26 +665,6 @@ struct LvalueExprVisitor {
         lowBit);
   }
 
-  Value visit(const slang::ast::MemberAccessExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto valueType = expr.value().type;
-    auto value = context.convertLvalueExpression(expr.value());
-    if (!type || !value)
-      return {};
-    if (valueType->isStruct()) {
-      return builder.create<moore::StructExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
-          builder.getStringAttr(expr.member.name), value);
-    }
-    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
-      return builder.create<moore::UnionExtractRefOp>(
-          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
-          builder.getStringAttr(expr.member.name), value);
-    }
-    mlir::emitError(loc, "expression of type ")
-        << value.getType() << " cannot be accessed";
-    return {};
-  }
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {

@@ -296,6 +296,7 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
 }
 
 def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
 ]> {
   let summary = "Blocking procedural assignment";

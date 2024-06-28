@@ -202,7 +202,7 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
 Attribute getMemorySpace(AsmParser &parser,
                          SmallVector<StructLikeMember> &members) {
   SmallVector<Attribute> index;
-  auto context = parser.getContext();
+  auto *context = parser.getContext();
   for (const auto &member : members) {
     auto attr = mlir::StringAttr::get(context, Twine(member.name));
     index.push_back(attr);
