@@ -9,8 +9,8 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
-#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -93,7 +93,7 @@ struct InstanceOpConversion : OpConversionPattern<InstanceOp> {
   }
 };
 
-///
+/// Remove redundant (seq::FromClock and seq::ToClock) ops.
 template <typename OpTy>
 struct ReplaceWithInput : OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;

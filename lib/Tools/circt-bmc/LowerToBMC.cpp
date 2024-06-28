@@ -153,8 +153,8 @@ void LowerToBMCPass::runOnOperation() {
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
-  auto successString =
-      lookupOrCreateStringGlobal(builder, getOperation(), "Bound reached!\n");
+  auto successString = lookupOrCreateStringGlobal(
+      builder, getOperation(), "Bound reached with no violations!\n");
   auto failureString = lookupOrCreateStringGlobal(
       builder, getOperation(), "Assertion can be violated!\n");
   auto formatString = builder.create<LLVM::SelectOp>(

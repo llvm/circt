@@ -51,7 +51,7 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
   }
 };
 
-/// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp
+/// Lower a verif::AssumeOp operation with an i1 operand to a smt::AssertOp
 struct VerifAssumeOpConversion : OpConversionPattern<verif::AssumeOp> {
   using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
 
@@ -400,8 +400,11 @@ struct ConvertVerifToSMTPass
 void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
                                                  RewritePatternSet &patterns,
                                                  Namespace &names) {
-  patterns.add<VerifAssertOpConversion, LogicEquivalenceCheckingOpConversion>(
-      converter, patterns.getContext());
+  patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
+               VerifCoverOpConversion, VerifClockedAssertOpConversion,
+               VerifClockedAssumeOpConversion, VerifClockedCoverOpConversion,
+               LogicEquivalenceCheckingOpConversion>(converter,
+                                                     patterns.getContext());
   patterns.add<VerifBMCOpConversion>(converter, patterns.getContext(), names);
 }
 

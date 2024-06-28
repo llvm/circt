@@ -2,7 +2,7 @@
 
 
 //  RUN: circt-bmc %s -b 10 --module OrCommutes --shared-libs=%libz3 | FileCheck %s --check-prefix=ORCOMMUTES
-//  ORCOMMUTES: Bound reached!
+//  ORCOMMUTES: Bound reached with no violations!
 
 hw.module @OrCommutes(in %i0: i1, in %i1: i1) {
   %or0 = comb.or bin %i0, %i1 : i1
@@ -13,7 +13,7 @@ hw.module @OrCommutes(in %i0: i1, in %i1: i1) {
 }
 
 //  RUN: circt-bmc %s -b 10 --module demorgan --shared-libs=%libz3 | FileCheck %s --check-prefix=DEMORGAN
-//  DEMORGAN: Bound reached!
+//  DEMORGAN: Bound reached with no violations!
 
 hw.module @demorgan(in %i0: i1, in %i1: i1) {
   %c1 = hw.constant 1 : i1

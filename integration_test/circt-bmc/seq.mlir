@@ -1,7 +1,7 @@
 // These tests will be only enabled if circt-mc is built.
 
 //  RUN: circt-bmc %s -b 10 --module ClkProp --shared-libs=%libz3 | FileCheck %s --check-prefix=CLKPROP
-//  CLKPROP: Bound reached!
+//  CLKPROP: Bound reached with no violations!
 
 hw.module @ClkProp(in %clk: !seq.clock, in %i0: i1) {
   %reg = seq.compreg %i0, %clk : i1
@@ -17,7 +17,7 @@ hw.module @ClkProp(in %clk: !seq.clock, in %i0: i1) {
 // Check propagation of state through comb ops
 
 //  RUN: circt-bmc %s -b 10 --module StateProp --shared-libs=%libz3 | FileCheck %s --check-prefix=STATEPROP
-//  STATEPROP: Bound reached!
+//  STATEPROP: Bound reached with no violations!
 
 hw.module @StateProp(in %clk: !seq.clock, in %i0: i1) {
   %c-1_i1 = hw.constant -1 : i1
