@@ -286,6 +286,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   builder.setInsertionPointAfter(*this);
 
   DenseMap<Attribute, MemorySlot> slotMap;
+
   auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
   llvm::ArrayRef<StructLikeMember> members;
   TypeSwitch<Type>(getType().getNestedType())
@@ -295,7 +296,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
         emitOpError("Result type must be StructType or UnpackedStructType");
       });
   SmallVector<Value> inputs;
-  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
+
   for (Attribute usedIndex : usedIndices) {
     auto elemType =
         cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
@@ -304,8 +305,10 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     auto varOp =
         builder.create<VariableOp>(getLoc(), elemRefType, name, Value());
     inputs.push_back(varOp);
+    newAllocators.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
   }
+  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
 
   return slotMap;
 }
