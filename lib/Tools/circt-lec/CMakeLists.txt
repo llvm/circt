@@ -1,5 +1,6 @@
 add_circt_library(CIRCTLECTransforms
   ConstructLEC.cpp
+  MatchComparePoints.cpp
 
   DEPENDS
   CIRCTLECTransformsIncGen

@@ -19,6 +19,7 @@ namespace circt {
 
 /// Generate the code for registering passes.
 #define GEN_PASS_DECL_CONSTRUCTLEC
+#define GEN_PASS_DECL_MATCHCOMPAREPOINTS
 #define GEN_PASS_REGISTRATION
 #include "circt/Tools/circt-lec/Passes.h.inc"
 
