@@ -150,11 +150,11 @@ annosForFieldIDRange(MLIRContext *ctx,
 static LogicalResult
 computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
                     size_t portID, const PortInfo &port, bool isFlip,
-                    Twine name, FIRRTLType type, uint64_t fieldID,
+                    Twine name, Type type, uint64_t fieldID,
                     const FieldIDSearch<hw::InnerSymAttr> &syms,
                     const FieldIDSearch<AnnotationSet> &annos) {
   auto *ctx = type.getContext();
-  return FIRRTLTypeSwitch<FIRRTLType, LogicalResult>(type)
+  return FIRRTLTypeSwitch<Type, LogicalResult>(type)
       .Case<BundleType>([&](BundleType bundle) -> LogicalResult {
         // This should be enhanced to be able to handle bundle<all flips of
         // passive>, or this should be a canonicalizer
@@ -241,7 +241,7 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         return success();
       })
       .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
-      .Default([&](FIRRTLType type) {
+      .Default([&](Type type) {
         // Properties and other types wind up here.
         newPorts.push_back(
             {{StringAttr::get(ctx, name), type,
@@ -262,7 +262,7 @@ static LogicalResult computeLowering(FModuleLike mod, Convention conv,
   for (auto [idx, port] : llvm::enumerate(mod.getPorts())) {
     if (failed(computeLoweringImpl(
             mod, newPorts, conv, idx, port, port.direction == Direction::Out,
-            port.name.getValue(), type_cast<FIRRTLType>(port.type), 0,
+            port.name.getValue(), port.type, 0,
             FieldIDSearch<hw::InnerSymAttr>(port.sym),
             FieldIDSearch<AnnotationSet>(port.annotations))))
       return failure();
@@ -293,9 +293,10 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
         auto &wire = bounceWires[p.portID];
         if (!wire)
           wire = theBuilder
-                     .create<WireOp>(module.getPortType(p.portID),
-                                     module.getPortNameAttr(p.portID),
-                                     NameKindEnum::InterestingName)
+                     .create<WireOp>(
+                         cast<FIRRTLType>(module.getPortType(p.portID)),
+                         module.getPortNameAttr(p.portID),
+                         NameKindEnum::InterestingName)
                      .getResult();
       } else {
         bounceWires[p.portID] = newArg;
@@ -305,10 +306,11 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // zero-length vectors.
     for (auto idx = 0U; idx < oldNumArgs; ++idx) {
       if (!bounceWires[idx]) {
-        bounceWires[idx] = theBuilder
-                               .create<WireOp>(module.getPortType(idx),
-                                               module.getPortNameAttr(idx))
-                               .getResult();
+        bounceWires[idx] =
+            theBuilder
+                .create<WireOp>(cast<FIRRTLType>(module.getPortType(idx)),
+                                module.getPortNameAttr(idx))
+                .getResult();
       }
       body->getArgument(idx).replaceAllUsesWith(bounceWires[idx]);
     }
@@ -437,7 +439,7 @@ static void lowerModuleBody(FModuleOp mod,
       }
       if (!bounce[p.portID]) {
         bounce[p.portID] = theBuilder.create<WireOp>(
-            inst.getResult(p.portID).getType(),
+            cast<FIRRTLType>(inst.getResult(p.portID).getType()),
             theBuilder.getStringAttr(
                 inst.getName() + "." +
                 cast<StringAttr>(oldNames[p.portID]).getValue()));

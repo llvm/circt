@@ -3204,7 +3204,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         }
 
         // Otherwise, replace with bounce wire.
-        auto type = instResult.getType();
+        auto type = type_cast<FIRRTLType>(instResult.getType());
 
         // Either entire instance result is forceable + bounce wire, or reject.
         // (even if rwprobe is of a portion of the port)

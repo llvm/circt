@@ -27,6 +27,10 @@ namespace firrtl {
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs);
 void emitConnect(ImplicitLocOpBuilder &builder, Value lhs, Value rhs);
 
+/// Find the op which writes to a foreign type either of an instance or an
+/// output module port.
+ForeignOutputOp getForeignOutputOf(Value value);
+
 /// Utiility for generating a constant attribute.
 IntegerAttr getIntAttr(Type type, const APInt &value);
 

@@ -42,7 +42,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
     ```
     }];
 
-  let arguments = (ins ConnectableType:$dest, ConnectableType:$src);
+  let arguments = (ins FIRRTLBaseType:$dest, FIRRTLBaseType:$src);
   let results = (outs);
 
   let assemblyFormat =
@@ -51,6 +51,28 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let hasVerifier = 1;
   let hasCanonicalizer = true;
 }
+
+def ForeignOutputOp : FIRRTLOp<"foreign_output", [HasParent<"FModuleOp">, AllTypesMatch<["dest", "src"]>]> {
+  let summary = "Outputs a foreign value to an output port";
+  let description = [{
+    Output Operation of Foreign Value:
+    ```
+      firrtl.foreign_output %dest, %src : t1
+    ```
+    Dest must be an output port.  Only one foreign_output can be connected to
+    each output port.
+    }];
+
+  let arguments = (ins ForeignType:$dest, ForeignType:$src);
+  let results = (outs);
+
+  let assemblyFormat =
+    "$dest `,` $src  attr-dict `:` type($dest)";
+
+  let hasVerifier = 1;
+}
+
+
 
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",

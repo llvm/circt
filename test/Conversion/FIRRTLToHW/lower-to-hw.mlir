@@ -1257,20 +1257,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %y, %0 : f32
   }
 
-  // CHECK-LABEL: hw.module @wiresWithForeignTypes
+  // CHECK-LABEL: hw.module @WithForeignTypes
   // CHECK-SAME:      (in %in : f32, out out : f32) {
-  // CHECK-NEXT:    [[ADD1:%.+]] = arith.addf [[ADD2:%.+]], [[ADD2]] : f32
-  // CHECK-NEXT:    [[ADD2]] = arith.addf %in, [[ADD2]] : f32
-  // CHECK-NEXT:    hw.output [[ADD1]] : f32
+  // CHECK-NEXT:    hw.output %in : f32
   // CHECK-NEXT:  }
-  firrtl.module @wiresWithForeignTypes(in %in: f32, out %out: f32) {
-    %w1 = firrtl.wire : f32
-    %w2 = firrtl.wire : f32
-    firrtl.matchingconnect %out, %w2 : f32
-    %0 = arith.addf %w1, %w1 : f32
-    firrtl.matchingconnect %w2, %0 : f32
-    %1 = arith.addf %in, %w1 : f32
-    firrtl.matchingconnect %w1, %1 : f32
+  firrtl.module @WithForeignTypes(in %in: f32, out %out: f32) {
+    firrtl.foreign_output %out, %in : f32
   }
 
   // CHECK-LABEL: LowerReadArrayInoutIntoArrayGet

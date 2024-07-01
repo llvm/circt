@@ -595,7 +595,7 @@ def WireOp : HardwareDeclOp<"wire", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable); // ReferenceKinds
-  let results = (outs AnyType:$result, Optional<RefType>:$ref);
+  let results = (outs FIRRTLType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
   let skipDefaultBuilders = true;
@@ -609,7 +609,7 @@ def WireOp : HardwareDeclOp<"wire", [
       assert(resultTypes.size() >= 1u && "mismatched number of return types");
       odsState.addTypes(resultTypes);
     }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::circt::firrtl::FIRRTLType":$elementType,
                    "::mlir::StringAttr":$name,
                    "::circt::firrtl::NameKindEnumAttr":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
@@ -628,7 +628,7 @@ def WireOp : HardwareDeclOp<"wire", [
           $_state.addTypes(type);
       }
     }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::circt::firrtl::FIRRTLType":$elementType,
                    "::llvm::StringRef":$name,
                    "::circt::firrtl::NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
@@ -640,7 +640,7 @@ def WireOp : HardwareDeclOp<"wire", [
                    annotations, innerSym,
                    forceable ? $_builder.getUnitAttr() : nullptr);
     }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::circt::firrtl::FIRRTLType":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
@@ -652,7 +652,7 @@ def WireOp : HardwareDeclOp<"wire", [
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
                    forceable);
     }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
+    OpBuilder<(ins "::circt::firrtl::FIRRTLType":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"bool", "false">:$forceable), [{

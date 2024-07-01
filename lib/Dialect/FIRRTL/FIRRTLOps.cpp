@@ -3654,6 +3654,18 @@ LogicalResult MatchingConnectOp::verify() {
   return success();
 }
 
+LogicalResult ForeignOutputOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  if (!isa<BlockArgument>(getDest()) &&
+      !isa<InstanceOp>(getDest().getDefiningOp()))
+    return emitError("foreign output destination must be an instance or port");
+
+  return success();
+}
+
 LogicalResult RefDefineOp::verify() {
   // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))

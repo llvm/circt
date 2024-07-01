@@ -1335,10 +1335,11 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder
-                         .create<WireOp>(port.type, "." + port.getName().str() +
-                                                        ".0width_input")
-                         .getResult();
+      Value newArg =
+          bodyBuilder
+              .create<WireOp>(type_cast<FIRRTLBaseType>(port.type),
+                              "." + port.getName().str() + ".0width_input")
+              .getResult();
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -1352,10 +1353,15 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       continue;
     }
 
+    if (auto outop = getForeignOutputOf(oldArg)) {
+      outputs.push_back(outop.getSrc());
+      continue;
+    }
+
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     auto newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+        cast<FIRRTLType>(port.type), "." + port.getName().str() + ".output");
 
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg.getResult());
@@ -1676,6 +1682,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FailureOr<bool> lowerConnect(Value dest, Value srcVal);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(MatchingConnectOp op);
+  LogicalResult visitStmt(ForeignOutputOp op);
   LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
@@ -4240,6 +4247,11 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
     return op.emitError("destination isn't an inout type");
 
   builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(ForeignOutputOp op) {
+  // Ignore op, handled in port lowering.
   return success();
 }
 

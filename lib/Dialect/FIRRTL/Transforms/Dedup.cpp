@@ -1520,8 +1520,10 @@ void fixupAllModules(InstanceGraph &instanceGraph) {
           continue;
         // If the type changed we transform it back to the old type with an
         // intermediate wire.
-        auto wire =
-            builder.create<WireOp>(oldType, inst.getPortName(i)).getResult();
+        auto wire = builder
+                        .create<WireOp>(type_cast<FIRRTLType>(oldType),
+                                        inst.getPortName(i))
+                        .getResult();
         result.replaceAllUsesWith(wire);
         result.setType(newType);
         if (inst.getPortDirection(i) == Direction::Out)

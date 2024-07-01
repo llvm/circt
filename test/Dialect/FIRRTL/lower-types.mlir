@@ -1213,9 +1213,9 @@ firrtl.module private @is1436_FOO() {
   }
 
   // COMMON-LABEL: firrtl.module private @ForeignTypes
-  firrtl.module private @ForeignTypes() {
-    // COMMON-NEXT: firrtl.wire : index
-    %0 = firrtl.wire : index
+  firrtl.module private @ForeignTypes(in %in : index, out %out : index) {
+    // COMMON-NEXT: firrtl.foreign_output %out, %in : index
+    firrtl.foreign_output %out, %in : index
   }
 
   // CHECK-LABEL: firrtl.module @MergeBundle

@@ -164,6 +164,24 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     builder.create<ConnectOp>(dst, src);
 }
 
+ForeignOutputOp circt::firrtl::getForeignOutputOf(Value value) {
+  ForeignOutputOp result;
+  for (auto &use : value.getUses()) {
+    auto match = dyn_cast<ForeignOutputOp>(use.getOwner());
+    // any non-output uses cancel this.
+    if (!match)
+      return {};
+    // Must be the dest, not the src
+    if (use.getOperandNumber() != 0)
+      return {};
+    // Multiple outputs
+    if (result)
+      return {};
+    result = match;
+  }
+  return result;
+}
+
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
   auto intType = type_cast<IntType>(type);
   assert((!intType.hasWidth() ||

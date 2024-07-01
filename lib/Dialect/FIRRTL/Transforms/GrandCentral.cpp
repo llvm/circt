@@ -1081,9 +1081,9 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     // Sink type must be passive.  It's required to be converted to a NodeOp by
     // the wiring problem solving, and later checked to be a Node.
     // This also ensures passive sink so works equally well w/ or w/o probes.
-    auto sinkType = source->getType();
-    if (auto baseSinkType = type_dyn_cast<FIRRTLBaseType>(sinkType))
-      sinkType = baseSinkType.getPassiveType();
+    auto sinkType = type_cast<FIRRTLBaseType>(source->getType());
+    if (!sinkType.isPassive())
+      sinkType = sinkType.getPassiveType();
     auto sink = builder.create<WireOp>(sinkType, name);
     state.targetCaches.insertOp(sink);
     AnnotationSet annotations(context);
@@ -1956,8 +1956,8 @@ void GrandCentralPass::runOnOperation() {
                 OpBuilder builder(&getContext());
                 for (auto port : instance->getResults()) {
                   builder.setInsertionPointAfterValue(port);
-                  auto wire =
-                      builder.create<WireOp>(port.getLoc(), port.getType());
+                  auto wire = builder.create<WireOp>(
+                      port.getLoc(), cast<FIRRTLType>(port.getType()));
                   port.replaceAllUsesWith(wire.getResult());
                 }
                 instance->erase();
