@@ -182,12 +182,16 @@ def BMCOp : VerifOp<"bmc", [
     The `init` region contains the logic to initialize the clock signals, and
     will be executed once before any other region - it cannot take any
     arguments, and should return as many `!seq.clock` values as the `circuit`
-    region has `!seq.clock` arguments.
+    region has `!seq.clock` arguments, followed by any initial arguments of
+    'state' arguments to be fed to the `loop` region (see below).
 
     The `loop` region contains the logic to advance the clock signals, and will
-    be executed after each execution of the `circuit` region. It should have
-    the same arguments as the `circuit` region, and should yield as many
-    `!seq.clock` values as the `circuit` region has `!seq.clock` arguments.
+    be executed after each execution of the `circuit` region. It must have all
+    the arguments that the `circuit` region has, but these can be followed by
+    additional 'state' arguments to represent e.g. which clock should be
+    toggled next. The `loop` region should yield as many `!seq.clock` values as
+    the `circuit` region has `!seq.clock` arguments, followed by the updated
+    values of all 'state' arguments.
   }];
 
   let arguments = (ins I32Attr:$bound);

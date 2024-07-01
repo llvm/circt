@@ -22,34 +22,8 @@ verif.lec first {
 
 // -----
 
-// expected-error @below {{op block argument types of loop and circuit regions must match}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
-} loop {
-} circuit {
-^bb0(%arg0: i32):
-  %true = hw.constant true
-  // Arbitrary assertion to avoid failure
-  verif.assert %true : i1
-  verif.yield %arg0 : i32
-}
-
-// -----
-
-// expected-error @below {{number of yielded values in init and loop regions must match the number of clock inputs in the circuit region}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
-} loop {
-^bb0(%clk: !seq.clock, %arg0: i32):
-} circuit {
-^bb0(%clk: !seq.clock, %arg0: i32):
-  %true = hw.constant true
-  verif.assert %true : i1
-  verif.yield %arg0 : i32
-}
-
-// -----
-
 // expected-error @below {{init region must have no arguments}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
+verif.bmc bound 10 init {
 ^bb0(%clk: !seq.clock, %arg0: i32):
 } loop {
 ^bb0(%clk: !seq.clock, %arg0: i32):
@@ -62,25 +36,8 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 
 // -----
 
-// expected-error @below {{init region must only yield clock values}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
-  %clkInit = hw.constant false
-  %toClk = seq.to_clock %clkInit
-  verif.yield %toClk, %clkInit : !seq.clock, i1
-} loop {
-^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
-  verif.yield %clk1, %clk2 : !seq.clock, !seq.clock
-} circuit {
-^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
-  %true = hw.constant true
-  verif.assert %true : i1
-  verif.yield %arg0 : i32
-}
-
-// -----
-
-// expected-error @below {{loop region must only yield clock values}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
+// expected-error @below {{init and loop regions must yield the same types of values}}
+verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
   verif.yield %toClk, %toClk : !seq.clock, !seq.clock
@@ -96,10 +53,129 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 
 // -----
 
-// expected-error @below {{op block argument types of loop and circuit regions must match}}
-verif.bmc bound 10 attributes {verif.some_attr} init {
+// expected-error @below {{init and loop regions must yield the same types of values}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  %c1_i2 = hw.constant 2 : i2
+  verif.yield %toClk, %c1_i2 : !seq.clock, i2
+} loop {
+^bb0(%clk1: !seq.clock, %arg0: i32, %state: i1):
+  verif.yield %clk1, %state : !seq.clock, i1
+} circuit {
+^bb0(%clk1: !seq.clock, %arg0: i32, %state: i1):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{init and loop regions must yield at least as many clock values as there are clock arguments to the circuit region.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk: !seq.clock
+} loop {
+^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
+  verif.yield %clk1 : !seq.clock
+} circuit {
+^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{init and loop regions must yield as many clock values as there are clock arguments in the circuit region before any other values.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk, %clkInit, %toClk: !seq.clock, i1, !seq.clock
+} loop {
+^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32, %state: i1):
+  verif.yield %clk1, %state, %clk2 : !seq.clock, i1, !seq.clock
+} circuit {
+^bb0(%clk1: !seq.clock, %clk2: !seq.clock, %arg0: i32, %state: i1):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{loop region must have at least as many arguments as the circuit region.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk:  !seq.clock
+} loop {
+^bb0(%clk1: !seq.clock):
+  verif.yield %clk1 : !seq.clock
+} circuit {
+^bb0(%clk1: !seq.clock, %state: i1):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield
+}
+
+// -----
+
+// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk: !seq.clock
+} loop {
+^bb0(%clk1: !seq.clock, %arg0: i32, %arg1: i1):
+  verif.yield %clk1 : !seq.clock
+} circuit {
+^bb0(%clk1: !seq.clock, %arg0: i32, %arg1: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk: !seq.clock
+} loop {
+^bb0(%clk1: !seq.clock, %arg0: i32, %arg1: i32):
+  verif.yield %clk1 : !seq.clock
+} circuit {
+^bb0(%clk1: !seq.clock, %arg0: i1, %arg1: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg1 : i32
+}
+
+// -----
+
+// expected-error @below {{additional loop region arguments must match the types of the non-clock values yielded by the init and loop regions.}}
+verif.bmc bound 10 init {
+  %clkInit = hw.constant false
+  %toClk = seq.to_clock %clkInit
+  verif.yield %toClk, %clkInit: !seq.clock, i1
+} loop {
+^bb0(%clk1: !seq.clock, %arg0: i32, %arg1: i2):
+  %true = hw.constant true
+  verif.yield %clk1, %true : !seq.clock, i1
+} circuit {
+^bb0(%clk1: !seq.clock, %arg0: i32):
+  %true = hw.constant true
+  verif.assert %true : i1
+  verif.yield %arg0 : i32
+}
+
+// -----
+
+// expected-error @below {{no property checked in circuit region, so model will be trivially satisfiable.}}
+verif.bmc bound 10 init {
 } loop {
 } circuit {
-^bb0(%arg0: i32):
-  verif.yield %arg0 : i32
 }

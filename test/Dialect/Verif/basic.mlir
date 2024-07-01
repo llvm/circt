@@ -112,15 +112,16 @@ verif.bmc bound 10 attributes {verif.some_attr} init {
 //CHECK:   %{{.*}} = seq.to_clock %{{.*}}
 //CHECK:   %{{.*}} = smt.declare_fun : !smt.bv<32>
 //CHECK:   %{{.*}} = smt.declare_fun : !smt.bv<32>
-//CHECK:   verif.yield %{{.*}} : !seq.clock
+//CHECK:   verif.yield %{{.*}}, %{{.*}} : !seq.clock, i1
 //CHECK: }
 //CHECK: loop {
-//CHECK:   ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i32, %{{.*}}: i32):
+//CHECK:   ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i1):
 //CHECK:   %{{.*}} = seq.from_clock %{{.*}}
 //CHECK:   %{{.*}} = hw.constant true
 //CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i1
+//CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i1
 //CHECK:   %{{.*}} = seq.to_clock %{{.*}}
-//CHECK:   verif.yield %{{.*}} : !seq.clock
+//CHECK:   verif.yield %{{.*}}, %{{.*}} : !seq.clock, i1
 //CHECK: }
 //CHECK: circuit {
 //CHECK: ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i32, %{{.*}}: i32):
@@ -135,15 +136,16 @@ init {
   %clk = seq.to_clock %c0_i1
   %arg0 = smt.declare_fun : !smt.bv<32>
   %state0 = smt.declare_fun : !smt.bv<32>
-  verif.yield %clk : !seq.clock
+  verif.yield %clk, %c0_i1 : !seq.clock, i1
 }
 loop {
-  ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
+  ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32, %stateArg: i1):
   %from_clock = seq.from_clock %clk
   %c-1_i1 = hw.constant -1 : i1
   %neg_clock = comb.xor %from_clock, %c-1_i1 : i1
+  %newStateArg = comb.xor %stateArg, %c-1_i1 : i1
   %newclk = seq.to_clock %neg_clock
-  verif.yield %newclk : !seq.clock
+  verif.yield %newclk, %newStateArg : !seq.clock, i1
 }
 circuit {
 ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):

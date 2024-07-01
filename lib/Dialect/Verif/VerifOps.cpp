@@ -116,27 +116,45 @@ LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
 LogicalResult BMCOp::verifyRegions() {
   if (getInit().getArgumentTypes().size() != 0)
     return emitOpError() << "init region must have no arguments";
-  if (getLoop().getArgumentTypes() != getCircuit().getArgumentTypes())
+  if (getInit().front().getTerminator()->getOperandTypes() !=
+      getLoop().front().getTerminator()->getOperandTypes())
     return emitOpError()
-           << "block argument types of loop and circuit regions must match";
+           << "init and loop regions must yield the same types of values";
   size_t totalClocks = 0;
   for (auto input : getCircuit().getArgumentTypes())
     if (isa<seq::ClockType>(input))
       totalClocks++;
-  if (getInit().front().getTerminator()->getOperandTypes().size() !=
-          totalClocks ||
-      getLoop().front().getTerminator()->getOperandTypes().size() !=
-          totalClocks)
+  auto initYields = getInit().front().getTerminator()->getOperands();
+  // We know init and loop yields match, so only need to check one
+  if (initYields.size() < totalClocks)
     return emitOpError()
-           << "number of yielded values in init and loop regions must match "
-              "the number of clock inputs in the circuit region";
-  for (auto arg : getInit().front().getTerminator()->getOperandTypes())
-    if (!isa<seq::ClockType>(arg)) {
-      return emitOpError() << "init region must only yield clock values";
-    }
-  for (auto arg : getLoop().front().getTerminator()->getOperandTypes())
-    if (!isa<seq::ClockType>(arg))
-      return emitOpError() << "loop region must only yield clock values";
+           << "init and loop regions must yield at least as many clock "
+              "values as there are clock arguments to the circuit region.";
+  for (size_t i = 0; i < totalClocks; i++) {
+    if (!isa<seq::ClockType>(
+            getInit().front().getTerminator()->getOperand(i).getType()))
+      return emitOpError()
+             << "init and loop regions must yield as many clock values as "
+                "there are clock arguments in the circuit region "
+                "before any other values.";
+  }
+  auto circuitArgTy = getCircuit().getArgumentTypes();
+  auto loopArgTy = getLoop().getArgumentTypes();
+  if (circuitArgTy.size() > loopArgTy.size())
+    return emitOpError()
+           << "loop region must have at least as many arguments as the circuit "
+              "region.";
+  for (size_t i = 0; i < circuitArgTy.size(); i++)
+    if (circuitArgTy[i] != loopArgTy[i])
+      return emitOpError()
+             << "loop region must have the same arguments as the circuit "
+                "region before any state arguments.";
+  auto loopYieldTy = getLoop().front().getTerminator()->getOperandTypes();
+  for (size_t i = 0; i < loopArgTy.size() - circuitArgTy.size(); i++)
+    if (loopArgTy[i + circuitArgTy.size()] != loopYieldTy[totalClocks + i])
+      return emitOpError() << "additional loop region arguments must match the "
+                              "types of the non-clock "
+                              "values yielded by the init and loop regions.";
   // Any model with no Assert or Cover ops is trivially satisfiable
   if (getCircuit().getOps<AssertOp>().empty() &&
       getCircuit().getOps<CoverOp>().empty())
