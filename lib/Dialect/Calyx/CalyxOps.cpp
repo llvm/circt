@@ -2605,6 +2605,28 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
   SMLoc loc = parser.getCurrentLocation();
+
+  SmallVector<NamedAttribute, 4> refCellSymbols;
+  if (succeeded(parser.parseOptionalLSquare())) {
+    if (parser.parseCommaSeparatedList([&]() -> ParseResult {
+          std::string refCellName;
+          std::string externalMem;
+          if (parser.parseKeywordOrString(&refCellName) ||
+              parser.parseEqual() || parser.parseKeywordOrString(&externalMem))
+            return failure();
+          auto externalMemAttr =
+              SymbolRefAttr::get(parser.getContext(), externalMem);
+          refCellSymbols.push_back(
+              NamedAttribute(StringAttr::get(parser.getContext(), refCellName),
+                             externalMemAttr));
+          return success();
+        }) ||
+        parser.parseRSquare())
+      return failure();
+  }
+  result.addAttribute("refCellsMap",
+                      DictionaryAttr::get(parser.getContext(), refCellSymbols));
+
   result.addAttribute("callee", callee);
   if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
                          types))
@@ -2621,7 +2643,15 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void InvokeOp::print(OpAsmPrinter &p) {
-  p << " @" << getCallee() << "(";
+  p << " @" << getCallee() << "[";
+  auto refCellNamesMap = getRefCellsMap();
+  llvm::interleaveComma(refCellNamesMap, p, [&](auto arg) {
+    auto refCellName = arg.getName().str();
+    auto externalMem = cast<FlatSymbolRefAttr>(arg.getValue()).getValue();
+    p << refCellName << " = " << externalMem;
+  });
+  p << "](";
+
   auto ports = getPorts();
   auto inputs = getInputs();
   llvm::interleaveComma(llvm::zip(ports, inputs), p, [&](auto arg) {
@@ -2747,10 +2777,12 @@ LogicalResult InvokeOp::verify() {
     return emitOpError() << "with instance '@" << callee
                          << "', which does not exist.";
   // The argument list of invoke is empty.
-  if (getInputs().empty())
+  if (getInputs().empty() && getRefCellsMap().empty()) {
     return emitOpError() << "'@" << callee
                          << "' has zero input and output port connections; "
+                            " and has not passing-by-reference cells; "
                             "expected at least one.";
+  }
   size_t goPortNum = 0, donePortNum = 0;
   // They both have a go port and a done port, but the "go" port for
   // registers and memrey should be "write_en" port.
