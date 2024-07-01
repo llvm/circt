@@ -5535,6 +5535,16 @@ static bool isTypeAllowedForDPI(Operation *op, Type type) {
 }
 
 LogicalResult DPICallIntrinsicOp::verify() {
+  if (auto inputNames = getInputNames()) {
+    if (getInputs().size() != inputNames->size())
+      return emitError() << "inputNames has " << inputNames->size()
+                         << " elements but there are " << getInputs().size()
+                         << " input arguments";
+  }
+  if (auto outputName = getOutputName())
+    if (getNumResults() == 0)
+      return emitError() << "output name is given but there is no result";
+
   auto checkType = [this](Type type) {
     return isTypeAllowedForDPI(*this, type);
   };
@@ -6170,10 +6180,6 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 LogicalResult LayerBlockOp::verify() {
   auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
-
-  // Get parent operation that isn't a when or match.
-  while (isa<WhenOp, MatchOp>(parentOp))
-    parentOp = parentOp->getParentOp();
 
   // Verify the correctness of the symbol reference.  Only verify that this
   // layer block makes sense in its parent module or layer block.
