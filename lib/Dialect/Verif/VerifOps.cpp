@@ -129,37 +129,37 @@ LogicalResult BMCOp::verifyRegions() {
   if (initYields.size() < totalClocks)
     return emitOpError()
            << "init and loop regions must yield at least as many clock "
-              "values as there are clock arguments to the circuit region.";
+              "values as there are clock arguments to the circuit region";
   for (size_t i = 0; i < totalClocks; i++) {
     if (!isa<seq::ClockType>(
             getInit().front().getTerminator()->getOperand(i).getType()))
       return emitOpError()
              << "init and loop regions must yield as many clock values as "
                 "there are clock arguments in the circuit region "
-                "before any other values.";
+                "before any other values";
   }
   auto circuitArgTy = getCircuit().getArgumentTypes();
   auto loopArgTy = getLoop().getArgumentTypes();
   if (circuitArgTy.size() > loopArgTy.size())
     return emitOpError()
            << "loop region must have at least as many arguments as the circuit "
-              "region.";
+              "region";
   for (size_t i = 0; i < circuitArgTy.size(); i++)
     if (circuitArgTy[i] != loopArgTy[i])
       return emitOpError()
              << "loop region must have the same arguments as the circuit "
-                "region before any state arguments.";
+                "region before any state arguments";
   auto loopYieldTy = getLoop().front().getTerminator()->getOperandTypes();
   for (size_t i = 0; i < loopArgTy.size() - circuitArgTy.size(); i++)
     if (loopArgTy[i + circuitArgTy.size()] != loopYieldTy[totalClocks + i])
       return emitOpError() << "additional loop region arguments must match the "
                               "types of the non-clock "
-                              "values yielded by the init and loop regions.";
+                              "values yielded by the init and loop regions";
   // Any model with no Assert or Cover ops is trivially satisfiable
   if (getCircuit().getOps<AssertOp>().empty() &&
       getCircuit().getOps<CoverOp>().empty())
     return emitOpError() << "no property checked in circuit region, so model "
-                            "will be trivially satisfiable.";
+                            "will be trivially satisfiable";
   return success();
 }
 

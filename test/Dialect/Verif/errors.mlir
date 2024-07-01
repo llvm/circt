@@ -71,7 +71,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{init and loop regions must yield at least as many clock values as there are clock arguments to the circuit region.}}
+// expected-error @below {{init and loop regions must yield at least as many clock values as there are clock arguments to the circuit region}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -88,7 +88,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{init and loop regions must yield as many clock values as there are clock arguments in the circuit region before any other values.}}
+// expected-error @below {{init and loop regions must yield as many clock values as there are clock arguments in the circuit region before any other values}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -105,7 +105,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{loop region must have at least as many arguments as the circuit region.}}
+// expected-error @below {{loop region must have at least as many arguments as the circuit region}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -122,7 +122,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments.}}
+// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -139,7 +139,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments.}}
+// expected-error @below {{loop region must have the same arguments as the circuit region before any state arguments}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -156,7 +156,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{additional loop region arguments must match the types of the non-clock values yielded by the init and loop regions.}}
+// expected-error @below {{additional loop region arguments must match the types of the non-clock values yielded by the init and loop regions}}
 verif.bmc bound 10 init {
   %clkInit = hw.constant false
   %toClk = seq.to_clock %clkInit
@@ -174,7 +174,7 @@ verif.bmc bound 10 init {
 
 // -----
 
-// expected-error @below {{no property checked in circuit region, so model will be trivially satisfiable.}}
+// expected-error @below {{no property checked in circuit region, so model will be trivially satisfiable}}
 verif.bmc bound 10 init {
 } loop {
 } circuit {
