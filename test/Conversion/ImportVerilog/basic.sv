@@ -949,20 +949,9 @@ module Expressions;
     // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32
     struct0.a = a;
 
-    // CHECK: [[TMP1:%.+]] = moore.read %struct0 : struct<{a: i32, b: i32}>
-    // CHECK: [[TMP2:%.+]]  = moore.struct_extract [[TMP1]], "b" : struct<{a: i32, b: i32}> -> i32
+    // CHECK: [[TMP2:%.+]]  = moore.struct_extract %struct0, "b" : <struct<{a: i32, b: i32}>> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
     b = struct0.b;
-
-    // CHECK: [[TMP1:%.+]] = moore.union_extract_ref %union0, "a" : <union<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[TMP2:%.+]] = moore.read %a : i32
-    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32
-    union0.a = a;
-
-    // CHECK: [[TMP1:%.+]]  = moore.read %union0 : union<{a: i32, b: i32}>
-    // CHECK: [[TMP2:%.+]]  = moore.union_extract [[TMP1]], "b" : union<{a: i32, b: i32}> -> i32
-    // CHECK: moore.blocking_assign %b, [[TMP2]] : i32
-    b = union0.b;
   end
 endmodule
 

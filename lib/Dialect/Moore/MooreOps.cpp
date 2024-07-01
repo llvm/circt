@@ -242,15 +242,32 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
-  return {MemorySlot{getResult(), getType()}};
+  return TypeSwitch<Type, llvm::SmallVector<MemorySlot>>(
+             getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([](auto &type) {
+        // will go to DestructurableMemorySlot
+        return llvm::SmallVector<MemorySlot>{};
+      })
+      .Default([this](auto) {
+        return llvm::SmallVector<MemorySlot>{
+            MemorySlot{getResult(), getType()}};
+      });
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
   if (auto value = getInitial())
     return value;
-  return builder.create<ConstantOp>(
-      getLoc(),
-      cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()), 0);
+  return TypeSwitch<Type, Value>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([](auto) {
+        // will go to DestructurableMemorySlot
+        return Value();
+      })
+      .Default([this, &slot, &builder](auto) {
+        return builder.create<ConstantOp>(
+            getLoc(),
+            cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()),
+            0);
+      });
 }
 
 void VariableOp::handleBlockArgument(const MemorySlot &slot,
@@ -492,7 +509,7 @@ LogicalResult StructCreateOp::verify() {
 
 LogicalResult StructExtractOp::verify() {
   /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType())
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto filedName = getFieldName();
@@ -571,48 +588,13 @@ LogicalResult StructExtractRefOp::verify() {
       });
 }
 
-bool StructExtractRefOp::canRewire(
-    const DestructurableMemorySlot &slot,
-    SmallPtrSetImpl<Attribute> &usedIndices,
-    SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-    const DataLayout &dataLayout) {
-  return TypeSwitch<Type, bool>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>(
-          [this, &slot, &usedIndices](auto &type) {
-            if (slot.ptr != getInput())
-              return false;
-            auto index = getFieldNameAttr();
-            if (!index || !slot.elementPtrs.contains(index))
-              return false;
-            usedIndices.insert(index);
-            return true;
-          })
-      .Default([](auto) { return false; });
-}
-
-DeletionKind
-StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
-                           DenseMap<Attribute, MemorySlot> &subslots,
-                           OpBuilder &builder, const DataLayout &dataLayout) {
-  return TypeSwitch<Type, DeletionKind>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
-        auto index = getFieldNameAttr();
-        if (!index)
-          return DeletionKind::Keep;
-        const auto &memorySlot = subslots.at(index);
-        setOperand(memorySlot.ptr);
-        return DeletionKind::Keep;
-      })
-      .Default([](auto) { return DeletionKind::Keep; });
-}
-
 //===----------------------------------------------------------------------===//
 // StructInjectOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructInjectOp::verify() {
   /// checks if the type of the new value match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType())
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto filedName = getFieldName();
@@ -629,6 +611,40 @@ LogicalResult StructInjectOp::verify() {
         emitOpError("input type must be StructType or UnpackedStructType");
         return failure();
       });
+}
+
+bool StructInjectOp::canRewire(const DestructurableMemorySlot &slot,
+                               SmallPtrSetImpl<Attribute> &usedIndices,
+                               SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                               const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>(
+          [this, &slot, &usedIndices](auto &type) {
+            if (slot.ptr != getInput())
+              return false;
+            auto index = getFieldNameAttr();
+            if (!index || !slot.elementPtrs.contains(index))
+              return false;
+            usedIndices.insert(index);
+            return true;
+          })
+      .Default([](auto) { return false; });
+}
+
+DeletionKind StructInjectOp::rewire(const DestructurableMemorySlot &slot,
+                                    DenseMap<Attribute, MemorySlot> &subslots,
+                                    OpBuilder &builder,
+                                    const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+        auto index = getFieldNameAttr();
+        if (!index)
+          return DeletionKind::Keep;
+        const auto &memorySlot = subslots.at(index);
+        setOperand(0, memorySlot.ptr);
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -753,24 +769,6 @@ OpFoldResult BoolCastOp::fold(FoldAdaptor adaptor) {
 // BlockingAssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns the index of a struct like type in attribute form, given its
-/// indices. Returns a null pointer if whether the indices form a valid index
-/// for the provided  Struct Like Type cannot be computed. The indices must come
-/// from a memory-read or memory-store op.
-static Attribute getAttributeIndexFromStruct(MLIRContext *ctx, Type type) {
-  return TypeSwitch<Type, Attribute>(type)
-      .Case<StructType, UnpackedStructType>([ctx](auto &type) {
-        SmallVector<Attribute> index;
-        auto members = type.getMembers();
-        for (const auto &member : members) {
-          auto attr = StringAttr::get(ctx, Twine(member.name));
-          index.push_back(attr);
-        }
-        return ArrayAttr::get(ctx, index);
-      })
-      .Default([](auto) { return Attribute(); });
-}
-
 bool BlockingAssignOp::loadsFrom(const MemorySlot &slot) { return false; }
 
 bool BlockingAssignOp::storesTo(const MemorySlot &slot) {
@@ -807,23 +805,33 @@ bool BlockingAssignOp::canRewire(const DestructurableMemorySlot &slot,
                                  SmallPtrSetImpl<Attribute> &usedIndices,
                                  SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                  const DataLayout &dataLayout) {
-  if (slot.ptr != getDst() || getSrc() == slot.ptr)
-    return false;
-  auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
-  if (!index || !slot.elementPtrs.contains(index))
-    return false;
-  usedIndices.insert(ArrayAttr::get(getContext(), index));
-  return true;
+  return TypeSwitch<Type, bool>(getDst().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &slot, &usedIndices](auto) {
+        if (slot.ptr != getDst() || getSrc() == slot.ptr)
+          return false;
+        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
+        auto index = refOp.getFieldNameAttr();
+        if (!index || !slot.elementPtrs.contains(index))
+          return false;
+        usedIndices.insert(index);
+        return true;
+      })
+      .Default([](auto) { return false; });
 }
 
 DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
                                       DenseMap<Attribute, MemorySlot> &subslots,
                                       OpBuilder &builder,
                                       const DataLayout &dataLayout) {
-  auto index = getAttributeIndexFromStruct(getContext(), getSrc().getType());
-  const auto &memoreSlot = subslots.at(index);
-  setOperand(0, memoreSlot.ptr);
-  return DeletionKind::Keep;
+  return TypeSwitch<Type, DeletionKind>(getDst().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto) {
+        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
+        auto index = refOp.getFieldNameAttr();
+        const auto &memorySlot = subslots.at(index);
+        setOperand(0, memorySlot.ptr);
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -860,28 +868,6 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
                            const DataLayout &dataLayout) {
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
-}
-
-bool ReadOp::canRewire(const DestructurableMemorySlot &slot,
-                       SmallPtrSetImpl<Attribute> &usedIndices,
-                       SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                       const DataLayout &dataLayout) {
-  if (slot.ptr != getInput())
-    return false;
-  auto index = getAttributeIndexFromStruct(getContext(), getType());
-  if (!index)
-    return false;
-  usedIndices.insert(index);
-  return true;
-}
-
-DeletionKind ReadOp::rewire(const DestructurableMemorySlot &slot,
-                            DenseMap<Attribute, MemorySlot> &subslots,
-                            OpBuilder &builder, const DataLayout &dataLayout) {
-  auto index = getAttributeIndexFromStruct(getContext(), getType());
-  const auto &memorySlot = subslots.at(index);
-  setOperand(memorySlot.ptr);
-  return DeletionKind::Keep;
 }
 
 //===----------------------------------------------------------------------===//
