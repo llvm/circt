@@ -319,7 +319,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.cat %{{.*}}, %{{.*}} : (!firrtl.uint<12>, !firrtl.uint<23>) -> !firrtl.uint<35>
     node n7 = cat(n5, n6)
 
-    ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint) -> !firrtl.uint
+    ; CHECK: %[[F1:.*]] = firrtl.dep_ext %i8, %c4_ui : !firrtl.uint<8>, !firrtl.const.uint 
+    ; CHECK: %[[F2:.*]] = firrtl.dep_ext %c4_ui, %i8 : !firrtl.const.uint, !firrtl.uint<8> 
+    ; CHECK: firrtl.mux(%reset, %[[F1]], %[[F2]]) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
     ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
@@ -896,9 +898,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input sel: UInt<1>
     output c: UInt[1]
     output z: {u: UInt, v: UInt}
-    ; CHECK: firrtl.mux(%sel, %a, %b)
+    ; CHECK: %[[A:.*]] = firrtl.dep_ext %a, %b : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<32>, 1> 
+    ; CHECK: %[[B:.*]] = firrtl.dep_ext %b, %a : !firrtl.vector<uint<32>, 1>, !firrtl.vector<uint<1>, 1> 
+    ; CHECK: firrtl.mux(%sel, %[[A]], %[[B]])
     ; CHECK-SAME: -> !firrtl.vector<uint<32>, 1>
-    ; CHECK: firrtl.mux(%sel, %x, %y)
+    ; CHECK: %[[X:.*]] = firrtl.dep_ext %x, %y : !firrtl.bundle<u: uint<1>, v: uint<2>>, !firrtl.bundle<u: uint<32>, v: uint<2>> 
+    ; CHECK: %[[Y:.*]] = firrtl.dep_ext %y, %x : !firrtl.bundle<u: uint<32>, v: uint<2>>, !firrtl.bundle<u: uint<1>, v
+    ; CHECK: firrtl.mux(%sel, %[[X]], %[[Y]])
     ; CHECK-SAME: -> !firrtl.bundle<u: uint<32>, v: uint<2>>
     c <= mux(sel, a, b)
     z <= mux(sel, x, y)

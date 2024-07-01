@@ -227,8 +227,10 @@ firrtl.module @MuxConstConditionMixedConstElementBundlesConstElementResult(
     in %p: !firrtl.const.uint<1>, 
     in %a: !firrtl.const.bundle<a: uint<1>>, 
     in %b: !firrtl.bundle<a: const.uint<1>>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.bundle<a: uint<1>>, 
+  %a_adj = firrtl.dep_ext %a, %b : !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
+  %b_adj = firrtl.dep_ext %b, %a : !firrtl.bundle<a: const.uint<1>>, !firrtl.const.bundle<a: uint<1>>
+  %0 = firrtl.mux(%p, %a_adj, %b_adj) : (!firrtl.const.uint<1>, 
+                                 !firrtl.bundle<a: const.uint<1>>, 
                                  !firrtl.bundle<a: const.uint<1>>) 
                                   -> !firrtl.bundle<a: const.uint<1>>
 }
@@ -258,8 +260,10 @@ firrtl.module @MuxConstConditionMixedConstElementVectorsConstElementResult(
     in %p: !firrtl.const.uint<1>, 
     in %a: !firrtl.const.vector<uint<1>, 2>, 
     in %b: !firrtl.vector<const.uint<1>, 2>) {
-  %0 = firrtl.mux(%p, %a, %b) : (!firrtl.const.uint<1>, 
-                                 !firrtl.const.vector<uint<1>, 2>, 
+  %a_adj = firrtl.dep_ext %a, %b : !firrtl.const.vector<uint<1>, 2>, !firrtl.vector<const.uint<1>, 2>
+  %b_adj = firrtl.dep_ext %b, %a : !firrtl.vector<const.uint<1>, 2>, !firrtl.const.vector<uint<1>, 2>
+  %0 = firrtl.mux(%p, %a_adj, %b_adj) : (!firrtl.const.uint<1>, 
+                                 !firrtl.vector<const.uint<1>, 2>, 
                                  !firrtl.vector<const.uint<1>, 2>) 
                                   -> !firrtl.vector<const.uint<1>, 2>
 }

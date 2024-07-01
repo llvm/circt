@@ -1588,7 +1588,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<MuxPrimOp, Mux2CellIntrinsicOp>([&](auto op) {
         auto *sel = getExpr(op.getSel());
         constrainTypes(solver.known(1), sel, /*imposeUpperBounds=*/true);
-        maximumOfTypes(op.getResult(), op.getHigh(), op.getLow());
+        maximumOfTypes(op.getResult(), op.getLow(), op.getHigh());
       })
       .Case<Mux4CellIntrinsicOp>([&](Mux4CellIntrinsicOp op) {
         auto *sel = getExpr(op.getSel());
@@ -1597,8 +1597,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV1());
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
-
-      .Case<ConnectOp, MatchingConnectOp>(
+      .Case<DependentExtensionOp>([&](DependentExtensionOp op) {
+        maximumOfTypes(op.getResult(), op.getInput(), op.getReference());
+      })
+      .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
@@ -2108,6 +2110,57 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     if (failed(result))
       return result;
     anyChanged |= *result;
+  }
+
+  // If this is a Mux, the operands need to be cooerced into the result type.
+  if (auto mux = dyn_cast<MuxPrimOp>(op)) {
+    OpBuilder builder(op);
+    auto newHigh = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getHigh(), mux.getLow());
+    auto newLow = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getLow(), mux.getHigh());
+    mux.setOperand(1, newHigh);
+    mux.setOperand(2, newLow);
+  } else if (auto mux = dyn_cast<Mux2CellIntrinsicOp>(op)) {
+    OpBuilder builder(op);
+    auto newHigh = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getHigh(), mux.getLow());
+    auto newLow = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getLow(), mux.getHigh());
+    mux.setOperand(1, newHigh);
+    mux.setOperand(2, newLow);
+  } else if (auto mux = dyn_cast<Mux4CellIntrinsicOp>(op)) {
+    OpBuilder builder(op);
+    // We could do a butterfly network here, but it's easier to just do it
+    // manually.
+    auto newV0 = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getV0(), mux.getV1());
+    newV0 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV0,
+                                                       mux.getV2());
+    newV0 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV0,
+                                                       mux.getV3());
+    auto newV1 = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getV1(), mux.getV0());
+    newV1 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV1,
+                                                       mux.getV2());
+    newV1 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV1,
+                                                       mux.getV3());
+    auto newV2 = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getV2(), mux.getV0());
+    newV2 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV2,
+                                                       mux.getV1());
+    newV2 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV2,
+                                                       mux.getV3());
+    auto newV3 = builder.createOrFold<DependentExtensionOp>(
+        mux.getLoc(), mux.getV3(), mux.getV0());
+    newV3 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV3,
+                                                       mux.getV1());
+    newV3 = builder.createOrFold<DependentExtensionOp>(mux.getLoc(), newV3,
+                                                       mux.getV2());
+    mux.setOperand(1, newV3);
+    mux.setOperand(2, newV2);
+    mux.setOperand(3, newV1);
+    mux.setOperand(4, newV0);
   }
 
   // If this is a connect operation, width inference might have inferred a RHS

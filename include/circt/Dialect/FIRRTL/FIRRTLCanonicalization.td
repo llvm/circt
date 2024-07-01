@@ -736,4 +736,10 @@ def CVTUnSigned : Pat<
         (NativeCodeCall<"$_builder.getI32IntegerAttr(type_cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
   [(UIntType $x), (KnownWidth $old)]>;
 
+
+def DepExtSimple : Pat<
+  (DependentExtensionOp:$old $input, $ref),
+  (MoveNameHint $old, (PadPrimOp $input, (NativeCodeCall<"type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $ref) )),
+  [(KnownWidth $ref), (IntTypes $input)]>;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

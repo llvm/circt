@@ -365,7 +365,7 @@ firrtl.circuit "Foo" {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
     // CHECK: %2 = firrtl.wire : !firrtl.uint<0>
-    // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
+    // CHECK: firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
@@ -386,8 +386,9 @@ firrtl.circuit "Foo" {
     %0 = firrtl.subfield %w[a] : !firrtl.bundle<a: uint>
     %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<8>>
     firrtl.connect %0, %1 : !firrtl.uint, !firrtl.uint<8>
-    // CHECK: %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
-    %2 = firrtl.mux(%p, %a, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint>) -> !firrtl.bundle<a: uint>
+    // CHECK: firrtl.mux(%p, %2, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint<8>>, !firrtl.bundle<a: uint<8>>) -> !firrtl.bundle<a: uint<8>>
+    %a_adj = firrtl.dep_ext %a, %w : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint>
+    %2 = firrtl.mux(%p, %a_adj, %w) : (!firrtl.uint<1>, !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>) -> !firrtl.bundle<a: uint>
     firrtl.connect %c, %2 : !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>
   }
 
@@ -854,7 +855,8 @@ firrtl.circuit "Foo" {
     %1 = firrtl.tail %b, 1 : (!firrtl.uint) -> !firrtl.uint
     %c = firrtl.node %1  : !firrtl.uint
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    %2 = firrtl.mux(%cond, %c0_ui2, %c) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint) -> !firrtl.uint
+    %c0_adj = firrtl.dep_ext %c0_ui2, %c : !firrtl.uint<2>, !firrtl.uint
+    %2 = firrtl.mux(%cond, %c0_adj, %c) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %a, %2 : !firrtl.uint, !firrtl.uint
   }
 
@@ -967,13 +969,17 @@ firrtl.circuit "Foo" {
     firrtl.connect %sel, %sel_0w : !firrtl.uint, !firrtl.uint<0>
     // CHECK: firrtl.int.mux2cell
     // CHECK-SAME: (!firrtl.uint<0>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %0 = firrtl.int.mux2cell(%sel, %c0_ui1, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint) -> !firrtl.uint
+    %c0_adj = firrtl.dep_ext %c0_ui1, %c1 : !firrtl.uint<1>, !firrtl.uint
+    %0 = firrtl.int.mux2cell(%sel, %c0_adj, %c1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out1, %0: !firrtl.uint, !firrtl.uint
     %sel2 = firrtl.wire : !firrtl.uint
     firrtl.connect %sel2, %sel_1w : !firrtl.uint, !firrtl.uint<1>
     // CHECK: firrtl.int.mux4cell
-    // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint<1>) -> !firrtl.uint<3>
-    %1 = firrtl.int.mux4cell(%sel2, %c1_ui1, %c2_ui2, %c3_ui3, %c1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<3>, !firrtl.uint) -> !firrtl.uint
+    // CHECK-SAME: (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    %c1_adj = firrtl.dep_ext %c1_ui1, %c1 : !firrtl.uint<1>, !firrtl.uint
+    %c2_adj = firrtl.dep_ext %c2_ui2, %c1 : !firrtl.uint<2>, !firrtl.uint
+    %c3_adj = firrtl.dep_ext %c3_ui3, %c1 : !firrtl.uint<3>, !firrtl.uint
+    %1 = firrtl.int.mux4cell(%sel2, %c1_adj, %c2_adj, %c3_adj, %c1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %out2, %1: !firrtl.uint, !firrtl.uint
   }
 

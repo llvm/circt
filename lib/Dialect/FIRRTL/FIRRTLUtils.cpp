@@ -23,17 +23,36 @@ using namespace firrtl;
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
+  auto retval =
+      emitConnect(builder, loc, dst, src, [loc]() { return emitError(loc); });
+  assert(retval.succeeded() && "Unexpected failure in connect emission.");
+}
+
+void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
+                                Value src) {
+  auto loc = builder.getLoc();
+  auto retval =
+      emitConnect(builder, dst, src, [loc]() { return emitError(loc); });
+  assert(retval.succeeded() && "Unexpected failure in connect emission.");
+}
+
+LogicalResult
+circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
+                           Value src,
+                           function_ref<InFlightDiagnostic()> emitError) {
   ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
                                   builder.getInsertionPoint());
-  emitConnect(locBuilder, dst, src);
+  auto retval = emitConnect(locBuilder, dst, src, emitError);
   builder.restoreInsertionPoint(locBuilder.saveInsertionPoint());
+  return retval;
 }
 
 /// Emit a connect between two values.
-void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
-                                Value src) {
-  auto dstFType = type_cast<FIRRTLType>(dst.getType());
-  auto srcFType = type_cast<FIRRTLType>(src.getType());
+LogicalResult
+circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst, Value src,
+                           function_ref<InFlightDiagnostic()> emitError) {
+  auto srcFType = type_dyn_cast<FIRRTLType>(src.getType());
+  auto dstFType = type_dyn_cast<FIRRTLType>(dst.getType());
   auto dstType = type_dyn_cast<FIRRTLBaseType>(dstFType);
   auto srcType = type_dyn_cast<FIRRTLBaseType>(srcFType);
   // Special Connects (non-base, foreign):
@@ -51,20 +70,31 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
       // Other types, give up and leave a connect
       builder.create<ConnectOp>(dst, src);
     }
-    return;
+    return success();
   }
 
   // More special connects
   if (isa<AnalogType>(dstType)) {
     builder.create<AttachOp>(ArrayRef{dst, src});
-    return;
+    return success();
   }
 
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
+     builder.create<MatchingConnectOp>(dst, src);
+    return success();
+      }
+
+  // Let later code handle scalars, but handle aggregate padding here.
+  if ( dstType.isPassive() && srcType.isPassive() &&
+      !dstType.hasUninferredWidth() && !srcType.hasUninferredWidth()
+      && !dstType.hasUninferredReset() && !srcType.hasUninferredReset() &&
+      isTypeLarger(dstType, srcType)
+      && (type_isa<BundleType>(dstType) || type_isa<FVectorType>(dstType))) {
+    src = builder.create<DependentExtensionOp>(src, dst);
     builder.create<MatchingConnectOp>(dst, src);
-    return;
+    return success();
   }
 
   if (auto dstBundle = type_dyn_cast<BundleType>(dstType)) {
@@ -74,17 +104,18 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
-      return;
+      return emitError()
+             << "cannot connect bundle with different number of elements";
     }
+    bool failed = false;
     for (size_t i = 0; i < numElements; ++i) {
       auto dstField = builder.create<SubfieldOp>(dst, i);
       auto srcField = builder.create<SubfieldOp>(src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
-      emitConnect(builder, dstField, srcField);
+      failed |= emitConnect(builder, dstField, srcField, emitError).failed();
     }
-    return;
+    return failed ? failure() : success();
   }
 
   if (auto dstVector = type_dyn_cast<FVectorType>(dstType)) {
@@ -94,15 +125,16 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
-      return;
+      return emitError()
+             << "cannot connect vector with different number of elements";
     }
+    bool failed = false;
     for (size_t i = 0; i < numElements; ++i) {
       auto dstField = builder.create<SubindexOp>(dst, i);
       auto srcField = builder.create<SubindexOp>(src, i);
-      emitConnect(builder, dstField, srcField);
+      failed |= emitConnect(builder, dstField, srcField, emitError).failed();
     }
-    return;
+    return failed ? failure() : success();
   }
 
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
@@ -127,7 +159,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     }
 
     builder.create<ConnectOp>(dst, src);
-    return;
+    return success();
   }
 
   // The source must be extended or truncated.
@@ -160,8 +192,13 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     builder.create<MatchingConnectOp>(dst, src);
-  } else
+    return success();
+  } else if (dstType.hasUninferredWidth() || srcType.hasUninferredWidth()) {
     builder.create<ConnectOp>(dst, src);
+    return success();
+  } else {
+    return emitError() << "Unknown type for connect: " << dstType;
+  }
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {

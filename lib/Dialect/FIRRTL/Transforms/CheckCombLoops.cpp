@@ -175,6 +175,10 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
+          .Case<DependentExtensionOp>([&](DependentExtensionOp ext) {
+            // Record the dataflow between the result and the src operand.
+            recordDataflow(ext.getResult(), ext.getInput());
+          })
           .Default([&](Operation *op) {
             // All other expressions are assumed to be combinational, so record
             // the dataflow between all inputs to outputs.

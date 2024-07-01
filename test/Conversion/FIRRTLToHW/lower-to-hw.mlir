@@ -217,7 +217,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: [[CVT4:%.+]] = comb.concat {{.*}}, [[CVT]] : i1, i3
     // CHECK-NEXT: comb.mux bin {{.*}}, [[CVT4]], [[SUB]] : i4
-    %26 = firrtl.mux(%17, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
+    %adj23 = firrtl.pad %23, 4 : (!firrtl.sint<3>) -> !firrtl.sint<4>
+    %26 = firrtl.mux(%17, %adj23, %25) : (!firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: = comb.icmp bin eq {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>

@@ -58,9 +58,10 @@ public:
             LTLEventuallyIntrinsicOp, LTLClockIntrinsicOp, Mux2CellIntrinsicOp,
             Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
             // Miscellaneous.
-            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
-            RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
+            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, DependentExtensionOp,
+            ShlPrimOp, ShrPrimOp, TailPrimOp, VerbatimExprOp, HWStructCastOp,
+            BitCastOp, RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp,
+            XMRDerefOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
@@ -198,6 +199,7 @@ public:
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+  HANDLE(DependentExtensionOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(RefSendOp, Unhandled);
   HANDLE(RefResolveOp, Unhandled);

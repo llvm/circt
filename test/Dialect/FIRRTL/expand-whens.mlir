@@ -222,7 +222,8 @@ firrtl.module @check_mux_return_type(in %p : !firrtl.uint<1>, out %out : !firrtl
   } else {
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
-  // CHECK: firrtl.mux(%p, %c0_ui1, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK: %1 = firrtl.dep_ext %c0_ui1, %c1_ui2 : !firrtl.uint<1>, !firrtl.uint<2> 
+  // CHECK: firrtl.mux(%p, %1, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 }
 
 // Test that wire written to in only the else block is resolved.

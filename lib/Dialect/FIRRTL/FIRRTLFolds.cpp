@@ -2167,6 +2167,74 @@ OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
   return collectFields(getContext(), adaptor.getOperands());
 }
 
+OpFoldResult DependentExtensionOp::fold(FoldAdaptor adaptor) {
+  if (getInput().getType() == getType())
+    return getInput();
+  return {};
+}
+
+namespace {
+// Expand dependent extensions into their components.
+struct DepExpand : public mlir::RewritePattern {
+  DepExpand(MLIRContext *context)
+      : RewritePattern(DependentExtensionOp::getOperationName(), 0, context) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto dep = cast<DependentExtensionOp>(op);
+
+    // Eliminate useless casts
+    if (areAnonymousTypesEquivalent(dep.getInput().getType(), dep.getType())) {
+      rewriter.replaceAllOpUsesWith(dep, dep.getInput());
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    // Other patterns handle this.
+    if (dep.getType().isGround())
+      return failure();
+
+    rewriter.setInsertionPoint(op);
+
+    if (auto bundle = type_dyn_cast<BundleType>(dep.getInput().getType())) {
+      SmallVector<Value> values;
+      for (uint32_t i = 0, e = bundle.getNumElements(); i != e; ++i) {
+        auto subfield = rewriter.create<SubfieldOp>(
+            op->getLoc(), dep.getInput(), rewriter.getI32IntegerAttr(i));
+        auto subfieldRef = rewriter.create<SubfieldOp>(
+            op->getLoc(), dep.getReference(), rewriter.getI32IntegerAttr(i));
+        auto cast = rewriter.create<DependentExtensionOp>(
+            dep.getLoc(), subfield, subfieldRef);
+        values.push_back(cast);
+      }
+      rewriter.replaceOpWithNewOp<BundleCreateOp>(op, dep.getType(), values);
+    } else if (auto vector =
+                   type_dyn_cast<FVectorType>(dep.getInput().getType())) {
+      SmallVector<Value> values;
+      for (uint32_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+        auto subindex = rewriter.create<SubindexOp>(
+            op->getLoc(), dep.getInput(), rewriter.getI32IntegerAttr(i));
+        auto subindexRef = rewriter.create<SubindexOp>(
+            op->getLoc(), dep.getReference(), rewriter.getI32IntegerAttr(i));
+        auto cast = rewriter.create<DependentExtensionOp>(
+            dep.getLoc(), subindex, subindexRef);
+        values.push_back(cast);
+      }
+      rewriter.replaceOpWithNewOp<VectorCreateOp>(op, dep.getType(), values);
+    } else {
+      return failure();
+    }
+    return success();
+  }
+};
+
+} // namespace
+
+void DependentExtensionOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.add<patterns::DepExtSimple, DepExpand>(context);
+}
+
 OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
   if (getOperand().getType() == getType())
     return getOperand();

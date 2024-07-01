@@ -1197,6 +1197,16 @@ bool firrtl::areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs) {
   return lhs == rhs;
 }
 
+bool firrtl::areAnonymousTypesEquivalent(Operation::operand_type_range types,
+                                         size_t startIndex) {
+  while (startIndex + 1 < types.size()) {
+    if (!areAnonymousTypesEquivalent(types[startIndex], types[startIndex + 1]))
+      return false;
+    ++startIndex;
+  }
+  return true;
+}
+
 /// Return the passive version of a firrtl type
 /// top level for ODS constraint usage
 Type firrtl::getPassiveType(Type anyBaseFIRRTLType) {
@@ -1324,9 +1334,8 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false} {
+        elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1581,9 +1590,8 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()), props{true,    false, false,
-                                                          isConst, false, false,
-                                                          false},
+      : elements(elements.begin(), elements.end()),
+        props{true, false, false, isConst, false, false, false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());

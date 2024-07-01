@@ -248,6 +248,8 @@ bool isTypeLarger(FIRRTLBaseType dstType, FIRRTLBaseType srcType);
 /// comparison.
 bool areAnonymousTypesEquivalent(FIRRTLBaseType lhs, FIRRTLBaseType rhs);
 bool areAnonymousTypesEquivalent(mlir::Type lhs, mlir::Type rhs);
+bool areAnonymousTypesEquivalent(Operation::operand_type_range types,
+                                 size_t startIndex);
 
 mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 

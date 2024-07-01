@@ -120,9 +120,9 @@ firrtl.circuit "optiMux"   {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %0 = firrtl.mux(%c1_ui, %c0_ui2, %c0_ui4) : (!firrtl.uint, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
-    // CHECK: %[[C4:.+]] = firrtl.constant 0 :
-    // CHECK: firrtl.matchingconnect %z, %[[C4]]
+    %c0_adj = firrtl.dep_ext %c0_ui2, %c0_ui4 : !firrtl.uint<2>, !firrtl.uint<4>
+    %0 = firrtl.mux(%c1_ui, %c0_adj, %c0_ui4) : (!firrtl.uint, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    // CHECK: firrtl.matchingconnect %z, %c0_ui4
     firrtl.connect %z, %0 : !firrtl.uint<4>, !firrtl.uint<4>
   }
 }
@@ -223,8 +223,8 @@ firrtl.circuit "asyncReset"   {
   firrtl.module @asyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %en: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
     %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<8>
-    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    %0 = firrtl.mux(%en, %c0_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %r, %0 : !firrtl.uint<8>

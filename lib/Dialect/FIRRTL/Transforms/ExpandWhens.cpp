@@ -283,10 +283,18 @@ public:
     // a more general mux folder.
     // mux(cond, invalid, x) -> x
     // mux(cond, x, invalid) -> x
+    // FIXME: This should be true as a general folder now that invalids are
+    // unique values.
     Value newValue = whenTrue;
-    if (trueIsInvalid == falseIsInvalid)
+    if (trueIsInvalid == falseIsInvalid) {
+      if (whenTrue.getType() != whenFalse.getType()) {
+        whenTrue =
+            b.createOrFold<DependentExtensionOp>(fusedLoc, whenTrue, whenFalse);
+        whenFalse =
+            b.createOrFold<DependentExtensionOp>(fusedLoc, whenFalse, whenTrue);
+      }
       newValue = b.createOrFold<MuxPrimOp>(fusedLoc, cond, whenTrue, whenFalse);
-    else if (trueIsInvalid)
+    } else if (trueIsInvalid)
       newValue = whenFalse;
     return b.create<ConnectOp>(loc, dest, newValue);
   }

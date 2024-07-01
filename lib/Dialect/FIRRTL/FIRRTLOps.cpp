@@ -3636,12 +3636,6 @@ LogicalResult MatchingConnectOp::verify() {
     // Analog types cannot be connected and must be attached.
     if (baseType && baseType.containsAnalog())
       return emitError("analog types may not be connected");
-
-    // The anonymous types of operands must be equivalent.
-    assert(areAnonymousTypesEquivalent(cast<FIRRTLBaseType>(getSrc().getType()),
-                                       baseType) &&
-           "`SameAnonTypeOperands` trait should have already rejected "
-           "structurally non-equivalent types");
   }
 
   // Check that the flows make sense.
@@ -5261,10 +5255,10 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 ///   widthless integer otherwise.
 /// - Vectors inferred based on the element type.
 /// - Bundles inferred in a pairwise fashion based on the field types.
-static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
-                                         FIRRTLBaseType low,
-                                         bool isConstCondition,
-                                         std::optional<Location> loc) {
+static FIRRTLBaseType inferJoinReturnType(FIRRTLBaseType high,
+                                          FIRRTLBaseType low,
+                                          bool isConstCondition,
+                                          std::optional<Location> loc) {
   // If the types are identical we're done.
   if (high == low)
     return isConstCondition ? low : low.getAllConstDroppedType();
@@ -5295,9 +5289,9 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
   auto lowVector = type_dyn_cast<FVectorType>(low);
   if (highVector && lowVector &&
       highVector.getNumElements() == lowVector.getNumElements()) {
-    auto inner = inferMuxReturnType(highVector.getElementTypePreservingConst(),
-                                    lowVector.getElementTypePreservingConst(),
-                                    isConstCondition, loc);
+    auto inner = inferJoinReturnType(highVector.getElementTypePreservingConst(),
+                                     lowVector.getElementTypePreservingConst(),
+                                     isConstCondition, loc);
     if (!inner)
       return {};
     return FVectorType::get(inner, lowVector.getNumElements(),
@@ -5322,7 +5316,7 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
           break;
         }
         auto element = highElements[i];
-        element.type = inferMuxReturnType(
+        element.type = inferJoinReturnType(
             highBundle.getElementTypePreservingConst(i),
             lowBundle.getElementTypePreservingConst(i), isConstCondition, loc);
         if (!element.type)
@@ -5351,8 +5345,8 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
   auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
-  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
-                            loc);
+  return inferJoinReturnType(highType, lowType, isConst(operands[0].getType()),
+                             loc);
 }
 
 FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
@@ -5362,8 +5356,8 @@ FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
   auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
-  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
-                            loc);
+  return inferJoinReturnType(highType, lowType, isConst(operands[0].getType()),
+                             loc);
 }
 
 FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
@@ -5376,8 +5370,8 @@ FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
     if (!types.back())
       return emitInferRetTypeError(loc, "operands must be base type");
     if (result) {
-      result = inferMuxReturnType(result, types.back(),
-                                  isConst(operands[0].getType()), loc);
+      result = inferJoinReturnType(result, types.back(),
+                                   isConst(operands[0].getType()), loc);
       if (!result)
         return result;
     } else {
@@ -5540,6 +5534,20 @@ LogicalResult DPICallIntrinsicOp::verify() {
   };
   return success(llvm::all_of(this->getResultTypes(), checkType) &&
                  llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+//===----------------------------------------------------------------------===//
+// Special inference Operations.
+//===----------------------------------------------------------------------===//
+
+FIRRTLType DependentExtensionOp::inferReturnType(ValueRange operands,
+                                                 ArrayRef<NamedAttribute> attrs,
+                                                 std::optional<Location> loc) {
+  auto inputType = type_dyn_cast<FIRRTLBaseType>(operands[0].getType());
+  auto refType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
+  if (!inputType || !refType)
+    return emitInferRetTypeError(loc, "operands must be base type");
+  return inferJoinReturnType(inputType, refType, true, loc);
 }
 
 //===----------------------------------------------------------------------===//
@@ -5840,6 +5848,9 @@ void CatPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void CvtPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void DependentExtensionOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void DShlPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

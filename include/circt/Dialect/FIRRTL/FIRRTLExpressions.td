@@ -501,7 +501,11 @@ def TagExtractOp : FIRRTLExprOp<"tagextract", [InferTypeOpInterface]> {
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
-def MultibitMuxOp : FIRRTLExprOp<"multibit_mux"> {
+def SameAnonTypeOperands1p: PredOpTrait<
+        "operands must be structurally equivalent",
+        CPred<"areAnonymousTypesEquivalent(getOperandTypes(), 1)">>;
+
+def MultibitMuxOp : FIRRTLExprOp<"multibit_mux", [SameAnonTypeOperands1p]> {
   let summary = "Multibit multiplexer";
   let description = [{
     The multibit mux expression dynamically selects operands. The
@@ -756,7 +760,7 @@ def HeadPrimOp : PrimOp<"head"> {
   let parseValidator = "impl::validateOneOperandOneConst";
 }
 
-def MuxPrimOp : PrimOp<"mux"> {
+def MuxPrimOp : PrimOp<"mux", [SameAnonTypeOperands1p]> {
   let arguments = (ins UIntLTE1OrUnsizedType:$sel, PassiveType:$high,
                        PassiveType:$low);
   let results = (outs PassiveType:$result);
@@ -832,7 +836,7 @@ def TailPrimOp : PrimOp<"tail"> {
 // Target Specific Intrinsics
 //===----------------------------------------------------------------------===//
 
-def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
+def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell", [SameAnonTypeOperands1p]> {
   let summary = [{
     an intrinsic lowered into 2-to-1 MUX cell in synthesis tools.
   }];
@@ -853,7 +857,7 @@ def Mux2CellIntrinsicOp : PrimOp<"int.mux2cell"> {
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 }
 
-def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell"> {
+def Mux4CellIntrinsicOp : PrimOp<"int.mux4cell", [SameAnonTypeOperands1p]> {
   let summary = [{
     an intrinsic lowered into 4-to-1 MUX cell in synthesis tools.
   }];
@@ -981,6 +985,32 @@ def ConstCastOp : FIRRTLOp<"constCast", [HasCustomSSAName, Pure]> {
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 }
+
+def DependentExtensionOp : FIRRTLExprOp<"dep_ext"> {
+  let arguments = (ins FIRRTLBaseType:$input, FIRRTLBaseType:$reference);
+  let results = (outs FIRRTLBaseType:$result);
+
+  let assemblyFormat =
+    "$input `,` $reference attr-dict `:` type($input) `,` type($reference)";
+
+  let description = [{
+    The `dep_ext` operation is an operation which casts the input operand to a
+    type compatible with both the input and reference input.  This is needed
+    when uninferred types exist to ensure two operands infer to a common type.
+    
+    This essentially performs a pairwise comparison of fields and elements, as
+    follows:
+    - Identical operands inferred to their common type
+    - Integer operands inferred to the larger one if both have a known width, a
+      widthless integer otherwise.
+    - Vectors inferred based on the element type.
+    - Bundles inferred in a pairwise fashion based on the field types.
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizer = true;
+}
+
 
 //===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.

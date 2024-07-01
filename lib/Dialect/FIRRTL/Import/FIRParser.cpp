@@ -2324,6 +2324,19 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     if (version < FIRVersion(4, 0, 0) && type_isa<UIntType>(result.getType()))
       result = builder.create<PadPrimOp>(result, 1);
     break;
+  case FIRToken::lp_mux:
+    // Deal with type extension behavior of firrtl muxes
+    auto muxop = cast<MuxPrimOp>(result.getDefiningOp());
+    if (!areAnonymousTypesEquivalent(muxop.getOperand(1).getType(),
+                                     muxop.getOperand(2).getType())) {
+      auto op1 = builder.create<DependentExtensionOp>(muxop.getOperand(1),
+                                                      muxop.getOperand(2));
+      auto op2 = builder.create<DependentExtensionOp>(muxop.getOperand(2),
+                                                      muxop.getOperand(1));
+      muxop->moveAfter(op2);
+      muxop->setOperand(1, op1);
+      muxop->setOperand(2, op2);
+    }
   }
   return success();
 }
