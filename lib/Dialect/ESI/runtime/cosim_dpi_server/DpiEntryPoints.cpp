@@ -18,7 +18,7 @@
 
 #include "dpi.h"
 #include "esi/Ports.h"
-#include "esi/cosim/RpcServer.h"
+#include "esi/backends/RpcServer.h"
 
 #include <algorithm>
 #include <cassert>

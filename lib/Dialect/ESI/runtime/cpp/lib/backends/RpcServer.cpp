@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "esi/cosim/RpcServer.h"
+#include "esi/backends/RpcServer.h"
 #include "esi/Utils.h"
 
 #include "cosim.grpc.pb.h"
