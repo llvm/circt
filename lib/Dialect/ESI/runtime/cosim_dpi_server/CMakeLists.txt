@@ -53,12 +53,12 @@ install(FILES
 add_custom_target(esi-cosim
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${CMAKE_CURRENT_SOURCE_DIR}/esi-cosim.py
-          ${CIRCT_TOOLS_DIR}/esi-cosim.py)
+          ${CMAKE_BINARY_DIR}/esi-cosim.py)
 foreach (cf ${cosim_collateral})
   add_custom_command(TARGET esi-cosim POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               ${CMAKE_CURRENT_SOURCE_DIR}/${cf}
-              ${CIRCT_TOOLS_DIR}/../cosim/${cf}
+              ${CMAKE_BINARY_DIR}/../cosim/${cf}
   )
 endforeach()
 
