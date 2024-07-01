@@ -983,7 +983,7 @@ def StructCreateOp : MooreOp<"struct_create", [Pure]> {
 
 def StructExtractOp : MooreOp<"struct_extract", [
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
-  ]> {
+]> {
   let summary = "Struct Extract operation";
   let description = [{
     Structures can be converted to bits preserving the bit pattern.
@@ -1014,20 +1014,20 @@ def StructExtractOp : MooreOp<"struct_extract", [
   let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $fieldName  attr-dict `:` type($input) `->` type($result)
+    $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
   }];
   let hasVerifier = 1;
 }
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref", [
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
-  ]> {
+]> {
   let summary = "Struct Extract operation";
   let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-  $input `,`   $fieldName  attr-dict `:`
-  type($input) `->` type($result)
+    $input `,` $fieldName attr-dict `:`
+    type($input) `->` type($result)
   }];
   let hasVerifier = 1;
 }
@@ -1060,7 +1060,7 @@ def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
   UnpackedType:$newValue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `,`   $fieldName `,` $newValue
+    $input `,` $fieldName `,` $newValue
     attr-dict `:` type($input) type($newValue) `->` type($result)
   }];
   let hasVerifier = 1;
@@ -1125,8 +1125,8 @@ def UnionExtractOp : MooreOp<"union_extract"> {
   let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $fieldName  attr-dict `:`
-  type($input) `->` type($result)
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
   }];
   let hasVerifier = 1;
 }
@@ -1136,8 +1136,8 @@ def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
   let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-  $input `,`   $fieldName  attr-dict `:`
-  type($input) `->` type($result)
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
   }];
   let hasVerifier = 1;
 }

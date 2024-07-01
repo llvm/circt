@@ -285,8 +285,8 @@ class StructLikeType<
   let assemblyFormat = [{
     `<` custom<Members>($members) `>`
   }];
-   let extraClassDeclaration = [{
-   Attribute getMemorySpace();
+  let extraClassDeclaration = [{
+    Attribute getMemorySpace();
   }];
 }
 
