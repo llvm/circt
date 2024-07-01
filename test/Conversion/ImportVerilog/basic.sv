@@ -1258,3 +1258,43 @@ module EventControl(input clk);
   // CHECK: moore.assign %clk_0, %clk : l1
   // CHECK: moore.output
 endmodule
+
+// CHECK-LABEL: moore.module @GenerateConstructs()
+module GenerateConstructs;
+  genvar i;
+  parameter p=2;
+  
+  generate
+    // CHECK: [[TMP1:%.+]] = moore.constant 0 : l32
+    // CHECK: %i = moore.named_constant localparam [[TMP1]] : l32
+    // CHECK: [[TMP2:%.+]] = moore.conversion %i : !moore.l32 -> !moore.i32
+    // CHECK: %g1 = moore.variable [[TMP2]] : <i32>
+    // CHECK: [[TMP3:%.+]] = moore.constant 1 : l32
+    // CHECK: %i_0 = moore.named_constant localparam name "i" [[TMP3]] : l32
+    // CHECK: [[TMP4:%.+]] = moore.conversion %i_0 : !moore.l32 -> !moore.i32
+    // CHECK: %g1_1 = moore.variable name "g1" [[TMP4]] : <i32>
+    for(i=0; i<2; i=i+1) begin
+      int g1 = i;
+    end
+
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
+    // CHECK: %g2 = moore.variable [[TMP]] : <i32>
+    if(p == 2) begin
+      int g2 = 2;
+    end
+    else begin
+      int g2 = 3;
+    end
+    
+    // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
+    // CHECK: %g3 = moore.variable [[TMP]] : <i32>
+    case (p)
+      2: begin
+        int g3 = 2;
+        end
+      default: begin
+        int g3 = 3;
+        end
+    endcase
+  endgenerate
+endmodule

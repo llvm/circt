@@ -98,6 +98,11 @@ struct MemberVisitor {
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
 
+  // Skip genvars.
+  LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
+    return success();
+  }
+
   // Handle instances.
   LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
     using slang::ast::ArgumentDirection;
@@ -365,6 +370,26 @@ struct MemberVisitor {
                                    moore::NamedConst::SpecParameter),
         value);
     context.valueSymbols.insert(&spNode, namedConstantOp);
+    return success();
+  }
+
+  // Handle generate block.
+  LogicalResult visit(const slang::ast::GenerateBlockSymbol &genNode) {
+    if (!genNode.isUninstantiated) {
+      for (auto &member : genNode.members()) {
+        if (failed(member.visit(MemberVisitor(context, loc))))
+          return failure();
+      }
+    }
+    return success();
+  }
+
+  // Handle generate block array.
+  LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
+    for (const auto *member : genArrNode.entries) {
+      if (failed(member->asSymbol().visit(MemberVisitor(context, loc))))
+        return failure();
+    }
     return success();
   }
 
