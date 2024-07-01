@@ -17,7 +17,7 @@ for file in os.listdir("linear"):
 
     ltl.write("%state = unrealized_conversion_cast to !ltl.property\n")
 
-    ltl.write("%e0 = ltl.eventually %state {state = \"_"+str(states-1)+"\"} : !ltl.property")
+    ltl.write("%e0 = ltl.eventually %state {state = \""+str(states-1)+"\"} : !ltl.property")
 
     ltl.close()
 

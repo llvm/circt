@@ -575,7 +575,9 @@ void populateST(Operation &mod, context &c, vector<string> &stateInv, vector<tra
                       if(auto transop = dyn_cast<fsm::TransitionOp>(op)){
                         transition t;
                         t.from = insertState(currentState, stateInv);
+                        llvm::outs()<<"inserting state from "<<t.from;
                         t.to = insertState(transop.getNextState().str(), stateInv);
+                        llvm::outs()<<" to "<<t.to;
                         t.isGuard = false;
                         t.isAction = false;
                         t.isOutput = false;
@@ -670,14 +672,14 @@ void populateInvInput(vector<std::pair<expr, mlir::Value>> &variables, context &
 
 }
 
-expr parseLTL(string inputFile, vector<string> stateInv, expr_vector &stateExpr, func_decl &timeToState, expr time, vector<std::pair<mlir::Value, func_decl>> &variablesFun){
+expr parseLTL(string inputFile, vector<string> stateInv, func_decl &timeToState, expr time, vector<std::pair<mlir::Value, func_decl>> &variablesFun){
   DialectRegistry registry;
 
   registry.insert<ltl::LTLDialect>();
 
   MLIRContext context(registry);
 
-  int tBound = 30;
+  int tBound = 160;
 
   // Parse the MLIR code into a module.
   OwningOpRef<ModuleOp> module = mlir::parseSourceFile<ModuleOp>(inputFile, &context);
@@ -698,9 +700,9 @@ expr parseLTL(string inputFile, vector<string> stateInv, expr_vector &stateExpr,
             os1.flush();
             state = state.substr(1, state.size() - 2);
 
-            // llvm::outs()<<"\n\n\nTesting reachability of state "<<state;
+            llvm::outs()<<"\n\n\nTesting reachability of state "<<insertState(state, stateInv);
 
-            expr ret = (forall(time, (timeToState(time)!= stateExpr[insertState(state, stateInv)])));
+            expr ret = ((((timeToState(time)!= insertState(state, stateInv)))));
             return ret;
           } else {
             llvm::outs()<<"Reachability Property can not be parsed."; 
@@ -735,8 +737,8 @@ expr parseLTL(string inputFile, vector<string> stateInv, expr_vector &stateExpr,
 
 
 
-            expr body = (timeToState(time)==stateExpr[insertState(state, stateInv)]) == ((variablesFun[v].second(time))!=id);
-            expr ret =(forall(time, body));
+            expr body = (timeToState(time)==insertState(state, stateInv)) == ((variablesFun[v].second(time))!=id);
+            expr ret =(((body)));
 
             return ret;
           } else {
@@ -776,8 +778,8 @@ expr parseLTL(string inputFile, vector<string> stateInv, expr_vector &stateExpr,
               os3.flush();
               state = state.substr(1, state.size() - 2);
 
-              expr body = ((timeToState(time)==stateExpr[insertState(state, stateInv)]) && ((variablesFun[input].second(time))!=signal));
-              expr ret = (forall(time, (body)));
+              expr body = ((timeToState(time)==insertState(state, stateInv)) && ((variablesFun[input].second(time))!=signal));
+              expr ret = (((body)));
               return ret;
           } else{
             llvm::outs()<<"Error Management Property can not be parsed.";
@@ -841,15 +843,6 @@ void parse_fsm(string input, string property, string output){
   populateST(mod, c, stateInv, transitions, variablesFun, outputs.size());
 
 
-  z3::sort state_sort = c.uninterpreted_sort("STATE");
-
-  expr_vector stateExpr(c);
-
-  for(auto state: stateInv){
-    const expr ctmp = c.constant(state.c_str(), state_sort);
-    stateExpr.push_back(ctmp);
-  }
-
   expr time = c.int_const("time");
 
   Z3_sort int_sort = Z3_mk_int_sort(c);
@@ -857,19 +850,23 @@ void parse_fsm(string input, string property, string output){
 
   Z3_sort domain[1] = { int_sort };
   const symbol cc = c.str_symbol(("time-to-state"));
-  Z3_func_decl I = Z3_mk_func_decl(c, cc, 1, domain, state_sort);
+  Z3_func_decl I = Z3_mk_func_decl(c, cc, 1, domain, int_sort);
   func_decl timeToState = func_decl(c, I);
 
-  s.add(timeToState(0)==stateExpr[0]);
-
-  s.add(variablesFun[0].second(0)==0);
+  expr init = timeToState(0)==0;
+    for(int j = 0;  j < arguments.size(); j++){
+    init = init && (variablesFun[j].second(0)==0);
+  }
 
   for(int j = arguments.size();  j < variablesFun.size(); j++){
-    s.add(variablesFun[j].second(0)==0);
+    // TODO should initialize actual value
+    init = init && (variablesFun[j].second(0)==0);
 
   }
 
-  int tBound = 30;
+  s.add(init);
+
+  int tBound = 160;
   
   for (auto t: transitions){
     if(t.isGuard && t.isAction){
@@ -878,10 +875,10 @@ void parse_fsm(string input, string property, string output){
       for(int i = arguments.size()+1; i<variablesFun.size(); i++){
         tmp = tmp && (variablesFun[i].second(time+1) == tmpAc[i]);
       }
-      expr a = forall(time, implies((timeToState(time)==stateExpr[t.from] && t.guard(time)), (timeToState(time+1)==stateExpr[t.to] && tmp)));
+      expr a = forall(time, (implies(timeToState(time)==t.from && t.guard(time), (timeToState(time+1)==t.to && tmp))));
       s.add(a);
     } else if (t.isGuard){
-      expr a = forall(time, implies((timeToState(time)==stateExpr[t.from] && t.guard(time)), (timeToState(time+1)==stateExpr[t.to])));
+      expr a = forall(time, (implies(timeToState(time)==t.from && t.guard(time), (timeToState(time+1)==t.to))));
       s.add(a);
     } else if (t.isAction){
       vector<expr> tmpAc = t.action(time);
@@ -889,20 +886,21 @@ void parse_fsm(string input, string property, string output){
       for(int i = arguments.size()+1; i<variablesFun.size(); i++){
         tmp = tmp && (variablesFun[i].second(time+1) == tmpAc[i]);
       }
-      expr a = forall(time, implies((timeToState(time)==stateExpr[t.from]), (timeToState(time+1)==stateExpr[t.to] && tmp)));
+      expr a = forall(time, (implies((timeToState(time)==t.from), (timeToState(time+1)==t.to && tmp))));
       s.add(a);
 
     } else {
-      expr a = forall(time, implies((timeToState(time)==stateExpr[t.from]), timeToState(time+1)==stateExpr[t.to]));
+      expr a = forall(time, implies((timeToState(time)==t.from), timeToState(time+1)==t.to));
       s.add(a);
     }
   }
 
-  expr r = parseLTL(property, stateInv, stateExpr, timeToState, time, variablesFun);
+  expr r = parseLTL(property, stateInv, timeToState, time, variablesFun);
 
-  s.add(r);
 
-  s.add(distinct(stateExpr));
+
+  s.add(forall(time, r));
+
 
   printSolverAssertions(s, output);
 
