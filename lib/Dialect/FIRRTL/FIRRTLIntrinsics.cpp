@@ -20,10 +20,10 @@ using namespace firrtl;
 
 // Checks for a number of operands between n and n+c (allows for c optional
 // inputs)
-ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c = 0U) {
+ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c) {
   auto numOps = op.getNumOperands();
   unsigned m = n + c;
-  if (!(n <= numOps && numOps <= m)) {
+  if (numOps < n || numOps > m) {
     auto err = emitError() << " has " << numOps << " inputs instead of ";
     if (c == 0)
       err << n;
