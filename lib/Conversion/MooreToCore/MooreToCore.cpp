@@ -181,7 +181,7 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
       break;
     }
     auto symAttr =
-        rewriter.getStringAttr(symStr + Twine(":") + adaptor.getName());
+        rewriter.getStringAttr(symStr + Twine("_") + adaptor.getName());
     rewriter.replaceOpWithNewOp<hw::WireOp>(op, resultType, adaptor.getValue(),
                                             op.getNameAttr(),
                                             hw::InnerSymAttr::get(symAttr));
