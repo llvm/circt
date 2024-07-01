@@ -254,7 +254,6 @@ def NetOp : MooreOp<"net", [
 
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
-  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   TypesMatchWith<"input and result types match",
     "result", "input", "RefType::get(cast<UnpackedType>($_self))">
 ]> {
@@ -1011,7 +1010,7 @@ def StructExtractOp : MooreOp<"struct_extract", [
     ```
     See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
   }];
-  let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
+  let arguments = (ins StrAttr:$fieldName, Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
@@ -1019,9 +1018,7 @@ def StructExtractOp : MooreOp<"struct_extract", [
   let hasVerifier = 1;
 }
 
-def StructExtractRefOp : MooreOp<"struct_extract_ref", [
-  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
-]> {
+def StructExtractRefOp : MooreOp<"struct_extract_ref", [Pure]> {
   let summary = "Struct Extract operation";
   let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
@@ -1032,7 +1029,9 @@ def StructExtractRefOp : MooreOp<"struct_extract_ref", [
   let hasVerifier = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
+def StructInjectOp : MooreOp<"struct_inject", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+]> {
   let summary = "Struct Field operation";
   let description = [{
     A structure can be assigned as a whole and passed to
@@ -1056,7 +1055,7 @@ def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
     ```
     See IEEE 1800-2017 § 7.2. "Assigning to structures".
   }];
-  let arguments = (ins UnpackedType:$input, StrAttr:$fieldName,
+  let arguments = (ins  Arg<RefType, "", [MemWrite]>:$input, StrAttr:$fieldName,
   UnpackedType:$newValue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{

@@ -445,7 +445,7 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertRvalueExpression(expr.value());
+    auto value = context.convertLvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
