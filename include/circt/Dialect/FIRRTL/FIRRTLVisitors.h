@@ -235,9 +235,9 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, MatchingConnectOp, RefDefineOp,
-                       ForceOp, PrintFOp, SkipOp, StopOp, WhenOp, AssertOp,
-                       AssumeOp, CoverOp, PropAssignOp, RefForceOp,
+        .template Case<AttachOp, ConnectOp, MatchingConnectOp, ForeignOutputOp,
+                       RefDefineOp, ForceOp, PrintFOp, SkipOp, StopOp, WhenOp,
+                       AssertOp, AssumeOp, CoverOp, PropAssignOp, RefForceOp,
                        RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
                        FPGAProbeIntrinsicOp, VerifAssertIntrinsicOp,
                        VerifAssumeIntrinsicOp, UnclockedAssumeIntrinsicOp,
@@ -270,6 +270,7 @@ public:
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
   HANDLE(MatchingConnectOp);
+  HANDLE(ForeignOutputOp);
   HANDLE(RefDefineOp);
   HANDLE(ForceOp);
   HANDLE(PrintFOp);

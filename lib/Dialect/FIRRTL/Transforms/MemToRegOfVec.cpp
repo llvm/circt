@@ -404,7 +404,7 @@ struct MemToRegOfVecPass
       // Create a temporary wire to replace the memory port. This makes it
       // simpler to delete the memOp.
       auto wire = builder.create<WireOp>(
-          result.getType(),
+          type_cast<FIRRTLBaseType>(result.getType()),
           (memOp.getName() + "_" + memOp.getPortName(index).getValue()).str(),
           memOp.getNameKind());
       result.replaceAllUsesWith(wire.getResult());

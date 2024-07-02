@@ -124,12 +124,13 @@ struct FlattenMemoryPass
       for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
            ++index) {
         auto result = memOp.getResult(index);
-        auto wire = builder
-                        .create<WireOp>(result.getType(),
-                                        (memOp.getName() + "_" +
-                                         memOp.getPortName(index).getValue())
-                                            .str())
-                        .getResult();
+        auto wire =
+            builder
+                .create<WireOp>(type_cast<FIRRTLBaseType>(result.getType()),
+                                (memOp.getName() + "_" +
+                                 memOp.getPortName(index).getValue())
+                                    .str())
+                .getResult();
         result.replaceAllUsesWith(wire);
         result = wire;
         auto newResult = flatMem.getResult(index);

@@ -108,9 +108,6 @@ def RWProbe : FIRRTLDialectType<
 def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
                                       "writable type", "::circt::firrtl::LHSType">;
 
-def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
-
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers
 //===----------------------------------------------------------------------===//

@@ -89,7 +89,9 @@ void LowerIntmodulesPass::runOnOperation() {
       for (auto [idx, result] : llvm::enumerate(inst.getResults())) {
         // Replace inputs with wires that will be used as operands.
         if (inst.getPortDirection(idx) != Direction::Out) {
-          auto w = builder.create<WireOp>(result.getLoc(), result.getType())
+          auto w = builder
+                       .create<WireOp>(result.getLoc(),
+                                       cast<FIRRTLType>(result.getType()))
                        .getResult();
           result.replaceAllUsesWith(w);
           inputs.push_back(w);
@@ -174,7 +176,9 @@ void LowerIntmodulesPass::runOnOperation() {
         ImplicitLocOpBuilder builder(op.getLoc(), inst);
         auto replaceResults = [](OpBuilder &b, auto &&range) {
           return llvm::map_to_vector(range, [&b](auto v) {
-            auto w = b.create<WireOp>(v.getLoc(), v.getType()).getResult();
+            Value w =
+                b.create<WireOp>(v.getLoc(), cast<FIRRTLType>(v.getType()))
+                    .getResult();
             v.replaceAllUsesWith(w);
             return w;
           });

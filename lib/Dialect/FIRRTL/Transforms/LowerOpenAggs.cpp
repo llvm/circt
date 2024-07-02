@@ -69,7 +69,7 @@ struct NonHWField {
 };
 
 /// Structure that describes how a given operation with a type (which may or may
-/// not contain non-hw typess) should be lowered to one or more operations with
+/// not contain non-hw types) should be lowered to one or more operations with
 /// other types.
 struct MappingInfo {
   /// Preserve this type.  Map any uses of old directly to new.
@@ -78,7 +78,7 @@ struct MappingInfo {
   // When not identity, the type will be split:
 
   /// Type of the hardware-only portion.  May be null, indicating all non-hw.
-  Type hwType;
+  FIRRTLType hwType;
 
   /// List of the individual non-hw fields to be split out.
   SmallVector<NonHWField, 0> fields;

@@ -612,7 +612,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
       return;
     }
 
-    Value wire = builder.create<WireOp>(result.getType()).getResult();
+    Value wire =
+        builder.create<WireOp>(cast<FIRRTLType>(result.getType())).getResult();
     result.replaceAllUsesWith(wire);
     // If a module port is dead but its instance result is alive, the port
     // is used as a temporary wire so make sure that a replaced wire is
@@ -673,7 +674,8 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
       // Ok, this port is used only within its defined module. So we can replace
       // the port with a wire.
-      auto wire = builder.create<WireOp>(argument.getType()).getResult();
+      auto wire = builder.create<WireOp>(cast<FIRRTLType>(argument.getType()))
+                      .getResult();
 
       // Since `liveSet` contains the port, we have to erase it from the set.
       liveElements.erase(argument);
