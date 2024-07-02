@@ -2535,3 +2535,63 @@ firrtl.module @LHSTypes() {
 }
 }
 
+
+// -----
+
+firrtl.circuit "ForeignDouble" {
+// expected-error @below {{output foreign port should have exactly one use}}
+firrtl.module @ForeignDouble(in %in : f32, out %out : f32) {
+  firrtl.foreign_output %out, %in : f32
+  firrtl.foreign_output %out, %in : f32
+}
+}
+
+// -----
+
+firrtl.circuit "InstDouble" {
+firrtl.module @ForeignDouble(in %in : f32, out %out : f32) {
+  firrtl.foreign_output %out, %in : f32
+}
+firrtl.module @InstDouble() {
+  // expected-error @below {{input foreign port should have exactly one use}}
+  %i, %o = firrtl.instance foo @ForeignDouble(in in : f32, out out : f32)
+  firrtl.foreign_output %i, %o : f32
+  firrtl.foreign_output %i, %o : f32
+}
+}
+
+// -----
+
+firrtl.circuit "ForeignBundle" {
+// expected-error @below {{unknown FIRRTL dialect type: "f32"}}
+firrtl.module @ForeignBundle(in %in : !firrtl.bundle<a: f32>) {
+}
+}
+
+// -----
+
+firrtl.circuit "ForeignWire" {
+firrtl.module @ForeignWire(in %clock : !firrtl.clock) {
+  // expected-error @below {{must be FIRRTLType, but got 'f32'}}
+  %w = firrtl.wire : f32
+}
+}
+
+// -----
+
+firrtl.circuit "ForeignReg" {
+firrtl.module @ForeignReg(in %clock : !firrtl.clock) {
+  // expected-error @below {{base type that does not contain analog, but got 'f32'}}
+  %r = firrtl.reg %clock : !firrtl.clock, f32
+}
+}
+
+// -----
+
+firrtl.circuit "ForeignNode" {
+firrtl.module @ForeignNode(in %in : f32) {
+  // expected-error @below {{must be a passive base type (contain no flips), but got 'f32'}}
+  %n = firrtl.node %in: f32
+}
+}
+

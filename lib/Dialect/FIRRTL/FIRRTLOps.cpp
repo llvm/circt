@@ -2228,6 +2228,14 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 LogicalResult InstanceOp::verify() {
+
+  // Check the foreign types
+  for (auto arg : getResults())
+    if (!isa<FIRRTLType>(arg.getType()) &&
+        getPortDirection(arg.getResultNumber()) == Direction::In &&
+        !arg.hasOneUse())
+      return emitOpError("input foreign port should have exactly one use");
+
   // The instance may only be instantiated under its required layers.
   auto ambientLayers = getAmbientLayersAt(getOperation());
   SmallVector<SymbolRefAttr> missingLayers;
