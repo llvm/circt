@@ -15,6 +15,16 @@
 
 include "mlir/Pass/PassBase.td"
 
+def MergeAssignments : Pass<"moore-merge-assignments", "moore::SVModuleOp"> {
+    let summary = "Merge declarations and assignments";
+    let description = [{
+      Find easy uses of declaration and assignment and merge them into
+      assigned_variable. That allows the MooreToCore lowering to look for
+      assigned_variable to create an hw.wire.
+    }];
+    let constructor = "circt::moore::createMergeAssignmentsPass()";
+}
+
 def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> {
     let summary = "Simplify procedures";
     let description = [{
