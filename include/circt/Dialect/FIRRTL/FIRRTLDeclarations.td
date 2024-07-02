@@ -359,7 +359,7 @@ def NodeOp : HardwareDeclOp<"node", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable); // ReferenceKinds
-  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
+  let results = (outs PassiveType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Value":$input,

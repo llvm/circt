@@ -104,7 +104,7 @@ if(ESI_COSIM)
     find_package(gRPC REQUIRED CONFIG)
   endif()
 
-  add_subdirectory(cosim)
+  add_subdirectory(cosim_dpi_server)
   # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
   # backends should only need to be linked in.
   # TODO: Once the hack in the python bindings is remidied, remove this.
@@ -112,18 +112,13 @@ if(ESI_COSIM)
   set(ESICppRuntimeSources
     ${ESICppRuntimeSources}
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
   )
   set(ESICppRuntimeBackendHeaders
     ${ESICppRuntimeBackendHeaders}
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
-  )
-  set(ESICppRuntimeLinkLibraries
-    ${ESICppRuntimeLinkLibraries}
-    EsiCosimGRPC
-  )
-  set(ESICppRuntimeIncludeDirs
-    ${ESICppRuntimeIncludeDirs}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
   )
 else()
   message("-- ESI cosim disabled")
@@ -196,6 +191,21 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(ESICppRuntime PRIVATE -Wno-covered-switch-default)
+endif()
+
+if(ESI_COSIM)
+  target_link_libraries(ESICppRuntime PUBLIC protobuf::libprotobuf gRPC::grpc++)
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_include_directories(ESICppRuntime PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+  protobuf_generate(
+      TARGET ESICppRuntime
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+  protobuf_generate(
+      TARGET ESICppRuntime
+      LANGUAGE grpc
+      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
 endif()
 
 # The esiquery tool is a simple wrapper around the SysInfo API.

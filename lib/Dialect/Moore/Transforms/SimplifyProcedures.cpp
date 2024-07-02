@@ -53,7 +53,8 @@ void SimplifyProceduresPass::runOnOperation() {
         // Collect the users of the global variable that is mentioned above.
         DenseSet<Operation *> users;
         for (auto *user : nestedOp.getOperand(0).getUsers())
-          if (!users.contains(user))
+          // Ensuring don't handle the users existing in another procedure body.
+          if (user->getBlock() == procedureOp.getBody())
             users.insert(user);
 
         // Because the operand of moore.event_wait is net.
@@ -98,6 +99,5 @@ void SimplifyProceduresPass::runOnOperation() {
           assignOps.erase(assignOp);
         }
     }
-    return WalkResult::advance();
   });
 }

@@ -54,6 +54,15 @@ firrtl.module @BundleTarget(in %a : !firrtl.bundle<>) {
 
 // -----
 
+firrtl.circuit "AliasBundleTarget" {
+firrtl.module @AliasBundleTarget(in %a : !firrtl.alias<t, bundle<>>) {
+    // expected-error @below {{unable to target aggregate type '!firrtl.alias<t, bundle<>>'}}
+    %0 = firrtl.unresolved_path "OMReferenceTarget:~AliasBundleTarget|AliasBundleTarget>a"
+}
+}
+
+// -----
+
 firrtl.circuit "VectorTarget" {
 firrtl.module @VectorTarget(in %a : !firrtl.vector<uint<1>, 1>) {
     // expected-error @below {{unable to target aggregate type '!firrtl.vector<uint<1>, 1>'}}
