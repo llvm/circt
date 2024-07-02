@@ -141,6 +141,26 @@ firrtl.circuit "SymArgZero" {
 
 // -----
 
+firrtl.circuit "SymWireZero" {
+  firrtl.module @SymWireZero() {
+    // expected-error @+2 {{couldn't handle this operation}}
+    // expected-error @+1 {{zero width wire is referenced by name [#hw<innerSym@x>] (e.g. in an XMR) but must be removed}}
+    %w = firrtl.wire sym [<@x,0,public>] : !firrtl.uint<0>
+  }
+}
+
+// -----
+
+firrtl.circuit "SymNodeZero" {
+  firrtl.module @SymNodeZero(in %foo :!firrtl.uint<0>) {
+    // expected-error @+2 {{couldn't handle this operation}}
+    // expected-error @+1 {{zero width node is referenced by name [#hw<innerSym@x>] (e.g. in an XMR) but must be removed}}
+    %w = firrtl.node sym [<@x,0,public>] %foo : !firrtl.uint<0>
+  }
+}
+
+// -----
+
 firrtl.circuit "DTArgZero" {
   // expected-warning @below {{zero width port "foo" has dontTouch annotation, removing anyway}}
   firrtl.module @DTArgZero(in %foo :!firrtl.uint<0> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {

@@ -162,12 +162,12 @@ struct PathResolver {
     // we are targeting a module, the type will be null.
     if (Type targetType = path->ref.getType()) {
       auto fieldId = path->fieldIdx;
-      auto baseType = dyn_cast<FIRRTLBaseType>(targetType);
+      auto baseType = type_dyn_cast<FIRRTLBaseType>(targetType);
       if (!baseType)
         return emitError(loc, "unable to target non-hardware type ")
                << targetType;
       targetType = hw::FieldIdImpl::getFinalTypeByFieldID(baseType, fieldId);
-      if (isa<BundleType, FVectorType>(targetType))
+      if (type_isa<BundleType, FVectorType>(targetType))
         return emitError(loc, "unable to target aggregate type ") << targetType;
     }
 

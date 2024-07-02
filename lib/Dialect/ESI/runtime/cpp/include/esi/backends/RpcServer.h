@@ -21,6 +21,7 @@
 namespace esi {
 namespace cosim {
 
+/// TODO: make this a proper backend (as much as possible).
 class RpcServer {
 public:
   ~RpcServer();
