@@ -286,7 +286,8 @@ class StructLikeType<
     `<` custom<Members>($members) `>`
   }];
   let extraClassDeclaration = [{
-    Attribute getMemorySpace();
+    std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
+    Type getTypeAtIndex(Attribute index);
   }];
 }
 

@@ -28,7 +28,11 @@ static void printMembers(AsmPrinter &printer,
 
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
-Attribute getMemorySpace();
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index);
 
 //===----------------------------------------------------------------------===//
 // Unpacked Type
@@ -199,15 +203,63 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return verifyAllMembersPacked(emitError, members);
 }
 
-Attribute getMemorySpace(AsmParser &parser,
-                         SmallVector<StructLikeMember> &members) {
-  SmallVector<Attribute> index;
-  auto *context = parser.getContext();
+//===----------------------------------------------------------------------===//
+// Interfaces for destructurable
+//===----------------------------------------------------------------------===//
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
+  DenseMap<Attribute, Type> destructured;
+  for (const auto &member : members)
+    destructured.insert({member.name, member.type});
+  return destructured;
+}
+
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index) {
+  auto indexAttr = cast<StringAttr>(index);
+  if (!indexAttr)
+    return {};
   for (const auto &member : members) {
-    auto attr = mlir::StringAttr::get(context, Twine(member.name));
-    index.push_back(attr);
+    if (member.name == indexAttr) {
+      return member.type;
+    }
   }
-  return ArrayAttr::get(context, index);
+  return Type();
+}
+
+std::optional<DenseMap<Attribute, Type>> StructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type StructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedStructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedStructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>> UnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedUnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedUnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
 }
 
 //===----------------------------------------------------------------------===//
