@@ -34,6 +34,11 @@ getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
 static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
                               Attribute index);
 
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index);
+
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -203,6 +208,23 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
   return verifyAllMembersPacked(emitError, members);
 }
 
+//===----------------------------------------------------------------------===//
+// Interfaces for destructurable
+//===----------------------------------------------------------------------===//
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
+  DenseMap<Attribute, Type> destructured;
+  for (const auto &member : members)
+    destructured.insert({member.name, member.type});
+  return destructured;
+}
+
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index) {
+  auto indexAttr = cast<StringAttr>(index);
+  if (!indexAttr)
+    return {};
 //===----------------------------------------------------------------------===//
 // Interfaces for destructurable
 //===----------------------------------------------------------------------===//
