@@ -214,6 +214,8 @@ def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
     }];
 
   let arguments = (ins StrAttr:$functionName,
+                       OptionalAttr<StrArrayAttr>:$inputNames,
+                       OptionalAttr<StrAttr>:$outputName,
                        Optional<NonConstClockType>:$clock,
                        Optional<NonConstUInt1Type>:$enable,
                        Variadic<PassiveType>:$inputs);

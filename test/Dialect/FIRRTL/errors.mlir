@@ -2483,6 +2483,25 @@ firrtl.circuit "DPI" {
 
 // -----
 
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{inputNames has 0 elements but there are 1 input arguments}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {inputNames=[]} : (!firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{output name is given but there is no result}}
+    firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {outputName="foo"} : (!firrtl.uint<8>) -> ()
+  }
+}
+
+
+// -----
+
 firrtl.circuit "LHSTypes" {
 firrtl.module @LHSTypes() {
   // expected-error @below {{expected base type}}

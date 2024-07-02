@@ -230,10 +230,12 @@ by another `enable` to model a default value of results.
 For clocked calls, a low enable means that its register state transfer function is
 not called. Hence their values will not be modify in that clock.
 
-| Parameter     | Type   | Description                      |
-| ------------- | ------ | -------------------------------- |
-| isClocked     | int    | Set 1 if the dpi call is clocked |
-| functionName  | string | Specify the function name        |
+| Parameter     | Type   | Description                                         |
+| ------------- | ------ | --------------------------------------------------- |
+| isClocked     | int    | Set 1 if the dpi call is clocked.                   |
+| functionName  | string | Specify the function name.                          |
+| inputNames    | string | Semicolon-delimited list of input names.  Optional. |
+| outputName    | string | Output name. Optional.                              |
 
 
 | Port              | Direction | Type     | Description                     |
