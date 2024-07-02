@@ -1723,6 +1723,11 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
         // Don't delete the node, since it might be in use in worklists.
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp->removeAttr(nodeOp.getInnerSymAttrName());
+        nodeOp.setName("");
+        // Leave forcable alone, since we cannot remove a result.  It will be
+        // cleaned up in canonicalization since it is dead.  As will this node.
+        nodeOp.setNameKind(NameKindEnum::DroppableName);
+        nodeOp.setAnnotationsAttr(ArrayAttr::get(builder.getContext(), {}));
         builder.setInsertionPointAfter(nodeOp);
         emitConnect(builder, wireOp.getResult(), nodeOp.getResult());
         resetOp = wireOp;
