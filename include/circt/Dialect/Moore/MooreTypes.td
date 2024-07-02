@@ -291,7 +291,9 @@ class StructLikeType<
   }];
 }
 
-def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
+def StructType : StructLikeType<"Struct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::PackedType"> {
   let mnemonic = "struct";
   let summary = "a packed struct type";
   let description = [{
@@ -301,7 +303,9 @@ def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
 }
 
 def UnpackedStructType : StructLikeType<
-  "UnpackedStruct", [], "moore::UnpackedType"
+  "UnpackedStruct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType"
 > {
   let mnemonic = "ustruct";
   let summary = "an unpacked struct type";
@@ -310,7 +314,9 @@ def UnpackedStructType : StructLikeType<
   }];
 }
 
-def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
+def UnionType : StructLikeType<"Union", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::PackedType"> {
   let mnemonic = "union";
   let summary = "a packed union type";
   let description = [{
@@ -321,7 +327,9 @@ def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
 
 
 def UnpackedUnionType : StructLikeType<
-  "UnpackedUnion", [], "moore::UnpackedType"
+  "UnpackedUnion", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType"
 > {
   let mnemonic = "uunion";
   let summary = "an unpacked union type";
@@ -334,10 +342,12 @@ def UnpackedUnionType : StructLikeType<
 // Reference type wrapper
 //===----------------------------------------------------------------------===//
 
-def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
+def RefType : MooreTypeDef<"Ref", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType">{
   let mnemonic = "ref";
   let description = [{
-    A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
+  A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
     'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
     related to memory, like alloca/write/read.
   }];
