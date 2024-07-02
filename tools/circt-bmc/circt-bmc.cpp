@@ -60,7 +60,7 @@ using namespace circt;
 // Command-line options declaration
 //===----------------------------------------------------------------------===//
 
-static cl::OptionCategory mainCategory("circt-lec Options");
+static cl::OptionCategory mainCategory("circt-bmc Options");
 
 static cl::opt<std::string>
     moduleName("module",
@@ -159,7 +159,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
   if (verbosePassExecutions)
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
-            "circt-lec"));
+            "circt-bmc"));
 
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
@@ -267,7 +267,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
 #endif
 }
 
-/// The entry point for the `circt-lec` tool:
+/// The entry point for the `circt-bmc` tool:
 /// configures and parses the command-line options,
 /// registers all dialects within a MLIR context,
 /// and calls the `executeLEC` function to do the actual work.
@@ -289,9 +289,10 @@ int main(int argc, char **argv) {
   // Parse the command-line options provided by the user.
   cl::ParseCommandLineOptions(
       argc, argv,
-      "circt-lec - logical equivalence checker\n\n"
-      "\tThis tool compares two input circuit descriptions to determine whether"
-      " they are logically equivalent.\n");
+      "circt-bmc - bounded model checker\n\n"
+      "\tThis tool checks all possible executions of a hardware module up to a "
+      "given time bound to check whether any asserted properties can be "
+      "violated.\n");
 
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
