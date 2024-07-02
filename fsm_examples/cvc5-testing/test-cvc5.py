@@ -3,35 +3,9 @@ import os
 
 reps = 10
 
-folder = "../linear-smtlib-p1/"
+folder = "../linear-smtlib-p3/"
 
-outputfile = open("cvc5-lin-p1.txt", "w")
-
-for file in os.listdir(folder):
-    # print(file)
-    command = "cvc5 "+folder+file+" --stats"
-    print(command)
-    for i in range(reps):
-        outputfile.write("\nrep "+ str(i)+" file "+folder+file)
-        process = subprocess.run([command], shell=True, capture_output=True, text=True)
-        # Store the output
-        output = process.stdout
-        error_output = process.stderr
-        # Print the outputs
-        # print("Standard Output:")
-        # print(output)
-        # print("Error Output:")
-        # print(error_output)
-        outputfile.write(output)
-        outputfile.write(error_output)
-
-
-        
-outputfile.close()
-
-folder = "../linear-comb-smtlib/"
-
-outputfile = open("cvc5-comb.txt", "w")
+outputfile = open("cvc5-lin-p3.txt", "w")
 
 for file in os.listdir(folder):
     # print(file)
@@ -55,28 +29,54 @@ for file in os.listdir(folder):
         
 outputfile.close()
 
-folder = "../linear-errstate-smtlib/"
+# folder = "../linear-comb-smtlib/"
 
-outputfile = open("cvc5-errstate.txt", "w")
+# outputfile = open("cvc5-comb.txt", "w")
 
-for file in os.listdir(folder):
-    # print(file)
-    command = "cvc5 "+folder+file+" --stats"
-    print(command)
-    for i in range(reps):
-        outputfile.write("\nrep "+ str(i)+" file "+folder+file)
-        process = subprocess.run([command], shell=True, capture_output=True, text=True)
-        # Store the output
-        output = process.stdout
-        error_output = process.stderr
-        # Print the outputs
-        # print("Standard Output:")
-        # print(output)
-        # print("Error Output:")
-        # print(error_output)
-        outputfile.write(output)
-        outputfile.write(error_output)
+# for file in os.listdir(folder):
+#     # print(file)
+#     command = "cvc5 "+folder+file+" --stats"
+#     print(command)
+#     for i in range(reps):
+#         outputfile.write("\nrep "+ str(i)+" file "+folder+file)
+#         process = subprocess.run([command], shell=True, capture_output=True, text=True)
+#         # Store the output
+#         output = process.stdout
+#         error_output = process.stderr
+#         # Print the outputs
+#         # print("Standard Output:")
+#         # print(output)
+#         # print("Error Output:")
+#         # print(error_output)
+#         outputfile.write(output)
+#         outputfile.write(error_output)
 
 
         
-outputfile.close()
+# outputfile.close()
+
+# folder = "../linear-errstate-smtlib/"
+
+# outputfile = open("cvc5-errstate.txt", "w")
+
+# for file in os.listdir(folder):
+#     # print(file)
+#     command = "cvc5 "+folder+file+" --stats"
+#     print(command)
+#     for i in range(reps):
+#         outputfile.write("\nrep "+ str(i)+" file "+folder+file)
+#         process = subprocess.run([command], shell=True, capture_output=True, text=True)
+#         # Store the output
+#         output = process.stdout
+#         error_output = process.stderr
+#         # Print the outputs
+#         # print("Standard Output:")
+#         # print(output)
+#         # print("Error Output:")
+#         # print(error_output)
+#         outputfile.write(output)
+#         outputfile.write(error_output)
+
+
+        
+# outputfile.close()

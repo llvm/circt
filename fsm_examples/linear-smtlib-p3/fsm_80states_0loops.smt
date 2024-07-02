@@ -487,8 +487,8 @@
  (=> $x928 (and (= (time-to-state (+ time 1)) 80) $x47))))))
  )
 (assert
- (forall ((time Int) )
-        (< (time-to-state time) 80)
- ))
+ (forall ((time Int) )(let ((?x51 (time-to-state time)))
+ (let (($x932 (= ?x51 81)))
+ (and $x932 (and (distinct (var0_0 time) 1) true)))))
+ )
 (check-sat)
-(get-info :reason-unknown)
