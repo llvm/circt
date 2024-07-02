@@ -1553,6 +1553,23 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
     "terminator"(%add2) : (i32) -> ()
 }) : () -> ()
 
+// CHECK-LABEL:   "test.acrossBlockCanonicalizationPullConstants"() ({
+// CHECK:         ^bb0(%[[A:.*]]: i1):
+// CHECK:           %[[CST_FALSE:.*]] = hw.constant false
+// CHECK:           "terminator"(%[[A]]) : (i1) -> ()
+// CHECK:         ^bb1(%{{.+}}: i1):
+// CHECK:           "terminator"(%[[CST_FALSE]]) : (i1) -> ()
+// CHECK:         }) : () -> ()
+"test.acrossBlockCanonicalizationPullConstants"() ({
+  ^bb0(%a: i1):
+    %cstFalse = hw.constant false
+    "terminator"(%a) : (i1) -> ()
+  ^bb1(%b: i1):
+    // Canonicalization _should_ pull constants across block boundaries.
+    %and = comb.and bin %b, %cstFalse : i1
+    "terminator"(%and) : (i1) -> ()
+}) : () -> ()
+
 // CHECK-LABEL: hw.module @combineOppositeBinCmpIntoConstant
 // CHECK: %[[TRUE:.+]] = hw.constant true
 // CHECK: %[[FALSE:.+]] = hw.constant false
