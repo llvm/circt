@@ -219,6 +219,7 @@ static CLOptions opts;
 /// that simplify these files like deleting local variables, and then emit the
 /// resulting Moore dialect IR .
 static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
+  pm.addPass(mlir::createSROA());
   pm.addPass(mlir::createMem2Reg());
   // TODO: like dedup pass.
 
