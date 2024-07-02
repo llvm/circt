@@ -218,30 +218,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
                          },
                          py::return_value_policy::reference);
 
-// Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
-// to test both styles of manifest retrieval for cosim. Come up with a more
-// generic way to set accelerator-specific properties/configurations.
-#ifdef ESI_COSIM
-  py::enum_<backends::cosim::CosimAccelerator::ManifestMethod>(
-      m, "CosimManifestMethod")
-      .value("ManifestCosim",
-             backends::cosim::CosimAccelerator::ManifestMethod::Cosim)
-      .value("ManifestMMIO",
-             backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
-      .export_values();
-
-  accConn.def(
-      "set_manifest_method",
-      [](AcceleratorConnection &acc,
-         backends::cosim::CosimAccelerator::ManifestMethod method) {
-        auto cosim = dynamic_cast<backends::cosim::CosimAccelerator *>(&acc);
-        if (!cosim)
-          throw std::runtime_error(
-              "set_manifest_method only supported for cosim connections");
-        cosim->setManifestMethod(method);
-      });
-#endif // ESI_COSIM
-
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)

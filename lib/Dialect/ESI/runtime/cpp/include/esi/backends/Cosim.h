@@ -25,10 +25,6 @@
 #include <memory>
 #include <set>
 
-// Only expose this backend class directly if the cosimulation backend is
-// enabled.
-#ifdef ESI_COSIM
-
 namespace esi {
 namespace cosim {
 class ChannelDesc;
@@ -91,7 +87,5 @@ private:
 } // namespace cosim
 } // namespace backends
 } // namespace esi
-
-#endif // ESI_COSIM
 
 #endif // ESI_BACKENDS_COSIM_H

@@ -25,9 +25,11 @@ add_dependencies(EsiCosimDpiServer ESICppRuntime MtiPli)
 target_link_libraries(EsiCosimDpiServer
   PUBLIC
     ESICppRuntime
+    CosimBackend
     MtiPli
 )
 
+add_dependencies(ESIRuntime EsiCosimDpiServer)
 install(TARGETS EsiCosimDpiServer
   DESTINATION lib
   COMPONENT ESIRuntime
@@ -71,5 +73,6 @@ install(FILES
               WORLD_EXECUTE WORLD_READ
   COMPONENT ESIRuntime
 )
+add_dependencies(ESIRuntime esi-cosim)
 set(ESI_COSIM_PATH $<TARGET_FILE:EsiCosimDpiServer>
       CACHE PATH "Path to Cosim DPI shared library")
