@@ -216,7 +216,7 @@ static std::optional<DenseMap<Attribute, Type>>
 getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
   DenseMap<Attribute, Type> destructured;
   for (const auto &member : members)
-    destructured.insert({member.name, member.type});
+    destructured.insert({member.name, RefType::get(member.type)});
   return destructured;
 }
 
@@ -227,7 +227,7 @@ static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
     return {};
   for (const auto &member : members) {
     if (member.name == indexAttr) {
-      return member.type;
+      return RefType::get(member.type);
     }
   }
   return Type();
