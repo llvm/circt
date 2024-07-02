@@ -1,4 +1,5 @@
-// These tests will be only enabled if circt-mc is built.
+// REQUIRES: libz3
+// REQUIRES: circt-bmc-jit
 
 //  RUN: circt-bmc %s -b 10 --module ClkProp --shared-libs=%libz3 | FileCheck %s --check-prefix=CLKPROP
 //  CLKPROP: Bound reached with no violations!
