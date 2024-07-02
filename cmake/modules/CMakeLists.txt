@@ -1,15 +1,21 @@
-# Generate a list of CMake library targets so that other CMake projects can
-# link against them.
-set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/circt)
-set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/${CIRCT_INSTALL_PACKAGE_DIR}")
+include(ExtendPath)
+include(FindPrefixFromConfig)
+include(GNUInstallPackageDir)
 
-# Keep this in sync with mlir/cmake/CMakeLists.txt!
-set(MLIR_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/mlir)
-set(mlir_cmake_builddir "${MLIR_BINARY_DIR}/${MLIR_INSTALL_PACKAGE_DIR}")
+set(CIRCT_INSTALL_PACKAGE_DIR "${CMAKE_INSTALL_PACKAGEDIR}/circt" CACHE STRING
+  "Path for CMake subdirectory for CIRCT (defaults to '${CMAKE_INSTALL_PACKAGEDIR}/circt')")
+# CMAKE_INSTALL_PACKAGEDIR might be absolute, so don't reuse below.
+set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}/cmake/circt")
 
 # Keep this in sync with llvm/cmake/CMakeLists.txt!
-set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
-set(llvm_cmake_builddir "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
+set(LLVM_INSTALL_PACKAGE_DIR "${CMAKE_INSTALL_PACKAGEDIR}/llvm" CACHE STRING
+  "Path for CMake subdirectory for LLVM (defaults to '${CMAKE_INSTALL_PACKAGEDIR}/llvm')")
+set(llvm_cmake_builddir "${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm")
+
+# Keep this in sync with mlir/cmake/CMakeLists.txt!
+set(MLIR_INSTALL_PACKAGE_DIR "${CMAKE_INSTALL_PACKAGEDIR}/mlir" CACHE STRING
+  "Path for CMake subdirectory for MLIR (defaults to '${CMAKE_INSTALL_PACKAGEDIR}/mlir')")
+set(mlir_cmake_builddir "${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}/cmake/mlir")
 
 # Generate a list of CMake library targets so that other CMake projects can
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
@@ -50,26 +56,15 @@ set(CIRCT_CONFIG_INCLUDE_EXPORTS)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
 # Generate CIRCTConfig.cmake for the install tree.
-set(CIRCT_CONFIG_CODE "
-# Compute the installation prefix from this CIRCTConfig.cmake file location.
-get_filename_component(CIRCT_INSTALL_PREFIX \"\${CMAKE_CURRENT_LIST_FILE}\" PATH)")
-# Construct the proper number of get_filename_component(... PATH)
-# calls to compute the installation prefix.
-string(REGEX REPLACE "/" ";" _count "${CIRCT_INSTALL_PACKAGE_DIR}")
-foreach(p ${_count})
-  set(CIRCT_CONFIG_CODE "${CIRCT_CONFIG_CODE}
-get_filename_component(CIRCT_INSTALL_PREFIX \"\${CIRCT_INSTALL_PREFIX}\" PATH)")
-endforeach(p)
-set(CIRCT_CONFIG_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${CIRCT_INSTALL_PACKAGE_DIR}")
-set(CIRCT_CONFIG_LLVM_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${LLVM_INSTALL_PACKAGE_DIR}")
-set(CIRCT_CONFIG_MLIR_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}/${MLIR_INSTALL_PACKAGE_DIR}")
-set(CIRCT_CONFIG_LIBRARY_DIRS "\${CIRCT_INSTALL_PREFIX}/lib")
+find_prefix_from_config(CIRCT_CONFIG_CODE CIRCT_INSTALL_PREFIX "${CIRCT_INSTALL_PACKAGE_DIR}")
 set(CIRCT_CONFIG_BINARY_DIR "\${CIRCT_INSTALL_PREFIX}")
-set(CIRCT_CONFIG_TOOLS_DIR "\${CIRCT_INSTALL_PREFIX}/bin")
 set(CIRCT_CONFIG_INCLUDE_EXPORTS "include(\"\${CIRCT_CMAKE_DIR}/CIRCTTargets.cmake\")")
-set(CIRCT_CONFIG_INCLUDE_DIRS
-  "\${CIRCT_INSTALL_PREFIX}/include"
-  )
+set(CIRCT_CONFIG_INCLUDE_DIRS "\${CIRCT_INSTALL_PREFIX}/include")
+set(CIRCT_CONFIG_LIBRARY_DIRS "\${CIRCT_INSTALL_PREFIX}/lib\${LLVM_LIBDIR_SUFFIX}")
+extend_path(CIRCT_CONFIG_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}" ${CIRCT_INSTALL_PACKAGE_DIR})
+extend_path(CIRCT_CONFIG_LLVM_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}" "${LLVM_INSTALL_PACKAGE_DIR}")
+extend_path(CIRCT_CONFIG_MLIR_CMAKE_DIR "\${CIRCT_INSTALL_PREFIX}" "${MLIR_INSTALL_PACKAGE_DIR}")
+extend_path(CIRCT_CONFIG_TOOLS_DIR "\${CIRCT_INSTALL_PREFIX}" "${CIRCT_TOOLS_INSTALL_DIR}")
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/CIRCTConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/CIRCTConfig.cmake
