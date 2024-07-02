@@ -21,6 +21,7 @@
 #include "mlir/IR/Location.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/APInt.h"
 
 using namespace mlir;
 using namespace circt;
@@ -75,6 +76,11 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
+  if (hwModule.getOps<verif::AssertOp>().empty()) {
+    hwModule.emitError("no property provided to check in module");
+    return signalPassFailure();
+  }
+
   // Create necessary function declarations and globals
   OpBuilder builder(&getContext());
   Location loc = getOperation()->getLoc();
@@ -102,8 +108,17 @@ void LowerToBMCPass::runOnOperation() {
 
   // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
   // iterations
-  auto bmcOp = builder.create<verif::BMCOp>(loc, 2 * bound);
-  bmcOp->setAttr("num_regs", hwModule->getAttr("num_regs"));
+  verif::BMCOp bmcOp;
+  if (auto numRegs = hwModule->getAttr("num_regs"))
+    bmcOp = builder.create<verif::BMCOp>(
+        loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
+  else {
+    hwModule->emitOpError(
+        "No num_regs attribute found - please run externalise "
+        "registers pass first.");
+    return signalPassFailure();
+  }
+
   // Check that there's only one clock input to the module
   // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
   // toggles just needs to be generated

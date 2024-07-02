@@ -2,7 +2,7 @@
 
 // CHECK:  llvm.func @printf(!llvm.ptr, ...)
 // CHECK:  func.func @comb() {
-// CHECK:    [[BMC:%.+]] = verif.bmc bound 20 attributes {num_regs = 0 : i32} init {
+// CHECK:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 0 init {
 // CHECK:    } loop {
 // CHECK:    ^bb0({{%.+}}: i32, {{%.+}}: i32):
 // CHECK:    } circuit {
@@ -32,7 +32,7 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
 
 // CHECK1:  llvm.func @printf(!llvm.ptr, ...)
 // CHECK1:  func.func @seq() {
-// CHECK1:    [[BMC:%.+]] = verif.bmc bound 20 attributes {num_regs = 1 : i32} init {
+// CHECK1:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 1 init {
 // CHECK1:      [[FALSE:%.+]] = hw.constant false
 // CHECK1:      [[INIT_CLK:%.+]] = seq.to_clock [[FALSE]]
 // CHECK1:      verif.yield [[INIT_CLK]]

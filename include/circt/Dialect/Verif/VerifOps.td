@@ -194,7 +194,7 @@ def BMCOp : VerifOp<"bmc", [
     values of all 'state' arguments.
   }];
 
-  let arguments = (ins I32Attr:$bound);
+  let arguments = (ins I32Attr:$bound, I32Attr:$num_regs);
   let regions = (region SizedRegion<1>:$init,
                         SizedRegion<1>:$loop,
                         SizedRegion<1>:$circuit);
@@ -202,7 +202,7 @@ def BMCOp : VerifOp<"bmc", [
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
-    `bound` $bound attr-dict-with-keyword `init` $init `loop` $loop `circuit`
+    `bound` $bound `num_regs` $num_regs attr-dict-with-keyword `init` $init `loop` $loop `circuit`
     $circuit
   }];
 

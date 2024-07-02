@@ -226,20 +226,19 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
   LogicalResult
   matchAndRewrite(verif::BMCOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
     Location loc = op.getLoc();
-    SmallVector<Type> oldInputTy(op.getCircuit().getArgumentTypes());
-    SmallVector<Type> inputTy;
-    SmallVector<Type> initOutputTy;
-    SmallVector<Type> loopOutputTy;
-    SmallVector<Type> circuitOutputTy;
-    if (failed(typeConverter->convertTypes(oldInputTy, inputTy)))
+    SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
+    SmallVector<Type> oldCircuitInputTy(op.getCircuit().getArgumentTypes());
+    SmallVector<Type> loopInputTy, circuitInputTy, initOutputTy, loopOutputTy,
+        circuitOutputTy;
+    if (failed(typeConverter->convertTypes(oldLoopInputTy, loopInputTy)))
+      return failure();
+    if (failed(typeConverter->convertTypes(oldCircuitInputTy, circuitInputTy)))
       return failure();
     if (failed(typeConverter->convertTypes(
             op.getInit().front().back().getOperandTypes(), initOutputTy)))
       return failure();
-    // loop and init should have same output types (all the clocks in the
-    // design)
+    // loop and init should have same output types
     loopOutputTy = initOutputTy;
     if (failed(typeConverter->convertTypes(
             op.getCircuit().front().back().getOperandTypes(), circuitOutputTy)))
@@ -255,8 +254,9 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
         cast<IntegerAttr>(op->getAttr("num_regs")).getValue().getZExtValue();
 
     auto initFuncTy = rewriter.getFunctionType({}, initOutputTy);
-    auto loopFuncTy = rewriter.getFunctionType(inputTy, loopOutputTy);
-    auto circuitFuncTy = rewriter.getFunctionType(inputTy, circuitOutputTy);
+    auto loopFuncTy = rewriter.getFunctionType(loopInputTy, loopOutputTy);
+    auto circuitFuncTy =
+        rewriter.getFunctionType(circuitInputTy, circuitOutputTy);
 
     func::FuncOp initFuncOp, loopFuncOp, circuitFuncOp;
 
@@ -296,17 +296,23 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
     rewriter.createBlock(&solver.getBodyRegion());
 
     // Call init func to get initial clock value
-    ValueRange clockInitVals =
+    ValueRange initVals =
         rewriter.create<func::CallOp>(loc, initFuncOp)->getResults();
 
-    int clockIndex = 0;
+    // InputDecls order should be <circuit arguments> <state arguments>
+    // <wasViolated>
+    size_t initIndex = 0;
     SmallVector<Value> inputDecls;
-    for (auto [oldTy, newTy] : llvm::zip(oldInputTy, inputTy)) {
+    for (auto [oldTy, newTy] : llvm::zip(oldCircuitInputTy, circuitInputTy)) {
       if (isa<seq::ClockType>(oldTy))
-        inputDecls.push_back(clockInitVals[clockIndex++]);
+        inputDecls.push_back(initVals[initIndex++]);
       else
         inputDecls.push_back(rewriter.create<smt::DeclareFunOp>(loc, newTy));
     }
+
+    // Add the rest of the init vals (state args)
+    for (; initIndex < initVals.size(); ++initIndex)
+      inputDecls.push_back(initVals[initIndex]);
 
     Value lowerBound =
         rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(0));
@@ -329,8 +335,9 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
           // Execute the circuit
           ValueRange circuitCallOuts =
               builder
-                  .create<func::CallOp>(loc, circuitFuncOp,
-                                        iterArgs.drop_back())
+                  .create<func::CallOp>(
+                      loc, circuitFuncOp,
+                      iterArgs.take_front(circuitFuncOp.getNumArguments()))
                   ->getResults();
           auto checkOp =
               rewriter.create<smt::CheckOp>(loc, builder.getI1Type());
@@ -350,23 +357,27 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
           SmallVector<Value> newDecls;
 
           // Call loop func to update clock value
-          ValueRange clockVals =
+          ValueRange loopVals =
               builder
                   .create<func::CallOp>(loc, loopFuncOp, iterArgs.drop_back())
                   ->getResults();
 
-          auto clockIndex = 0;
+          size_t loopIndex = 0;
           for (auto [oldTy, newTy] :
-               llvm::zip(TypeRange(oldInputTy).drop_back(numRegs),
-                         TypeRange(inputTy).drop_back(numRegs))) {
+               llvm::zip(TypeRange(oldCircuitInputTy).drop_back(numRegs),
+                         TypeRange(circuitInputTy).drop_back(numRegs))) {
             if (isa<seq::ClockType>(oldTy))
-              newDecls.push_back(clockVals[clockIndex++]);
+              newDecls.push_back(loopVals[loopIndex++]);
             else
               newDecls.push_back(builder.create<smt::DeclareFunOp>(loc, newTy));
           }
-
           newDecls.append(
               SmallVector<Value>(circuitCallOuts.take_back(numRegs)));
+
+          // Add the rest of the loop state args
+          for (; loopIndex < loopVals.size(); ++loopIndex)
+            newDecls.push_back(loopVals[loopIndex]);
+
           newDecls.push_back(violated);
 
           builder.create<scf::YieldOp>(loc, newDecls);
@@ -375,9 +386,7 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
     Value res = rewriter.create<arith::XOrIOp>(loc, forOp->getResults().back(),
                                                constTrue);
     rewriter.create<smt::YieldOp>(loc, res);
-
     rewriter.replaceOp(op, solver.getResults());
-
     return success();
   }
 
