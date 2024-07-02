@@ -105,7 +105,6 @@ verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
   verif.yield %arg0 : i32
 }
 
-
 //CHECK: verif.bmc bound 10 num_regs 1 attributes {verif.some_attr}
 //CHECK: init {
 //CHECK:   %{{.*}} = hw.constant false

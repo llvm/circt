@@ -356,7 +356,7 @@ struct VerifBMCOpConversion : OpConversionPattern<verif::BMCOp> {
 
           SmallVector<Value> newDecls;
 
-          // Call loop func to update clock value
+          // Call loop func to update clock & state arg values
           ValueRange loopVals =
               builder
                   .create<func::CallOp>(loc, loopFuncOp, iterArgs.drop_back())
