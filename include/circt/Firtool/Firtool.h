@@ -55,6 +55,8 @@ public:
   StringRef getOmirOutputFile() const { return omirOutFile; }
   StringRef getBlackBoxRootPath() const { return blackBoxRootPath; }
   StringRef getChiselInterfaceOutputDirectory() const {
+    if (chiselInterfaceOutDirectory.empty() && !isDefaultOutputFilename())
+      return getOutputFilename();
     return chiselInterfaceOutDirectory;
   }
   StringRef getReplaceSequentialMemoriesFile() const { return replSeqMemFile; }
