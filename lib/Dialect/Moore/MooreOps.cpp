@@ -242,16 +242,7 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
-  return TypeSwitch<Type, llvm::SmallVector<MemorySlot>>(
-             getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([](auto &type) {
-        // will go to DestructurableMemorySlot
-        return llvm::SmallVector<MemorySlot>{};
-      })
-      .Default([this](auto) {
-        return llvm::SmallVector<MemorySlot>{
-            MemorySlot{getResult(), getType()}};
-      });
+  return llvm::SmallVector<MemorySlot>{MemorySlot{getResult(), getType()}};
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
@@ -292,16 +283,11 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     const DestructurableMemorySlot &slot,
     const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
     SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
+  assert(slot.ptr == getResult());
   builder.setInsertionPointAfter(*this);
 
-  DenseMap<Attribute, MemorySlot> slotMap;
-
   auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
-  llvm::ArrayRef<StructLikeMember> members;
-  TypeSwitch<Type>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>(
-          [&members](auto &type) { members = type.getMembers(); })
-      .Default([](auto &) {});
+  DenseMap<Attribute, MemorySlot> slotMap;
   SmallVector<Value> inputs;
 
   for (Attribute usedIndex : usedIndices) {
@@ -534,7 +520,10 @@ DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
                                      const DataLayout &dataLayout) {
   auto index = getFieldNameAttr();
   const auto &memorySlot = subslots.at(index);
-  setOperand(memorySlot.ptr);
+  auto readOp = builder.create<moore::ReadOp>(getLoc(), memorySlot.elemType,
+                                              memorySlot.ptr);
+  replaceAllUsesWith(readOp.getResult());
+  getInputMutable().drop();
   return DeletionKind::Keep;
 }
 //===----------------------------------------------------------------------===//
@@ -804,6 +793,7 @@ DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
         auto index = refOp.getFieldNameAttr();
         const auto &memorySlot = subslots.at(index);
         setOperand(0, memorySlot.ptr);
+        getDstMutable().drop();
         return DeletionKind::Keep;
       })
       .Default([](auto) { return DeletionKind::Keep; });
