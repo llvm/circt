@@ -286,7 +286,8 @@ class StructLikeType<
     `<` custom<Members>($members) `>`
   }];
   let extraClassDeclaration = [{
-    Attribute getMemorySpace();
+    std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
+    Type getTypeAtIndex(Attribute index);
   }];
 }
 
@@ -356,6 +357,8 @@ def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
     std::optional<unsigned> getBitSize() {
       return getNestedType().getBitSize();
     };
+    std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
+    Type getTypeAtIndex(Attribute index);
   }];
 }
 
