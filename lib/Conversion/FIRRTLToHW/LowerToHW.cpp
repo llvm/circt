@@ -1353,7 +1353,11 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       continue;
     }
 
-    if (auto outop = getForeignOutputOf(oldArg)) {
+    if (!isa<FIRRTLType>(oldArg.getType())) {
+      // At this point we are only dealing with outputs.  Either there is a
+      // single driver or no driver.
+      auto outop = getForeignOutputOf(oldArg);
+      assert(outop && "Verifier should have checked that a use existed");
       outputs.push_back(outop.getSrc());
       continue;
     }
@@ -4251,6 +4255,16 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ForeignOutputOp op) {
+  auto srcVal = getLoweredValue(op.getSrc());
+  auto destVal = getPossiblyInoutLoweredValue(op.getDest());
+
+  // If this is driving a value that is currently a backedge, record
+  // that the source is the value of the backedge.  We can just do this since
+  // by construction and verification each value has one output op, and this is
+  // it and this is lexically after the creation of the backedge.
+  if (updateIfBackedge(destVal, srcVal))
+    return success();
+
   // Ignore op, handled in port lowering.
   return success();
 }

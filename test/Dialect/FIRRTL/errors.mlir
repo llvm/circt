@@ -2595,3 +2595,10 @@ firrtl.module @ForeignNode(in %in : f32) {
 }
 }
 
+// -----
+
+firrtl.circuit "WithForeignTypesDangling" {
+  // expected-error @below {{output foreign port should have exactly one use}}
+firrtl.module @WithForeignTypesDangling(out %out: f32) {
+}
+}

@@ -1239,12 +1239,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Declaration order intentionally reversed to enforce use-before-def in HW
     %sub2_foo, %sub2_bar = firrtl.instance sub2 @moreForeignTypes(in foo: index, out bar: index)
     %sub1_foo, %sub1_bar = firrtl.instance sub1 @moreForeignTypes(in foo: index, out bar: index)
-    firrtl.matchingconnect %sub1_foo, %inOpaque : index
-    firrtl.matchingconnect %sub2_foo, %sub1_bar : index
-    firrtl.matchingconnect %outOpaque, %sub2_bar : index
+    firrtl.foreign_output %sub1_foo, %inOpaque : index
+    firrtl.foreign_output %sub2_foo, %sub1_bar : index
+    firrtl.foreign_output %outOpaque, %sub2_bar : index
   }
   firrtl.module @moreForeignTypes(in %foo: index, out %bar: index) {
-    firrtl.matchingconnect %bar, %foo : index
+    firrtl.foreign_output %bar, %foo : index
   }
 
   // CHECK-LABEL: hw.module @foreignOpsOnForeignTypes
@@ -1254,7 +1254,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:  }
   firrtl.module @foreignOpsOnForeignTypes(in %x: f32, out %y: f32) {
     %0 = arith.addf %x, %x : f32
-    firrtl.matchingconnect %y, %0 : f32
+    firrtl.foreign_output %y, %0 : f32
   }
 
   // CHECK-LABEL: hw.module @WithForeignTypes

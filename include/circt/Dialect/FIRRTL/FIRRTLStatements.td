@@ -72,8 +72,6 @@ def ForeignOutputOp : FIRRTLOp<"foreign_output", [HasParent<"FModuleOp">, AllTyp
   let hasVerifier = 1;
 }
 
-
-
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",
         CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
@@ -89,8 +87,8 @@ def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
     ```
     }];
 
-  let arguments = (ins MatchingConnectableType:$dest,
-                       MatchingConnectableType:$src);
+  let arguments = (ins SizedPassiveType:$dest,
+                       SizedPassiveType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
