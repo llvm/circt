@@ -1945,6 +1945,62 @@ ParseResult GroupDoneOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+void ConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto type = getType();
+  if (auto intCst = llvm::dyn_cast<IntegerAttr>(getValue())) {
+    auto intType = llvm::dyn_cast<IntegerType>(type);
+
+    // Sugar i1 constants with 'true' and 'false'.
+    if (intType && intType.getWidth() == 1)
+      return setNameFn(getResult(), (intCst.getInt() ? "true" : "false"));
+
+    // Otherwise, build a complex name with the value and type.
+    SmallString<32> specialNameBuffer;
+    llvm::raw_svector_ostream specialName(specialNameBuffer);
+    specialName << 'c' << intCst.getValue();
+    if (intType)
+      specialName << '_' << type;
+    setNameFn(getResult(), specialName.str());
+  } else {
+    setNameFn(getResult(), "cst");
+  }
+}
+
+LogicalResult ConstantOp::verify() {
+  auto type = getType();
+  // The value's type must match the return type.
+  if (getValue().getType() != type) {
+    return emitOpError() << "value type " << getValue().getType()
+                         << " must match return type: " << type;
+  }
+  // Integer values must be signless.
+  if (llvm::isa<IntegerType>(type) &&
+      !llvm::cast<IntegerType>(type).isSignless())
+    return emitOpError("integer return type must be signless");
+  // Any float or elements attribute are acceptable.
+  if (!llvm::isa<IntegerAttr, FloatAttr>(getValue())) {
+    return emitOpError("value must be an integer or float attribute");
+  }
+
+  return success();
+}
+
+OpFoldResult calyx::ConstantOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
+void calyx::ConstantOp::build(OpBuilder &builder, OperationState &state,
+                              FloatAttr attr) {
+  state.addAttribute("value", attr);
+  SmallVector<Type> types;
+  types.push_back(attr.getType()); // Out
+  state.addTypes(types);
+}
+
+//===----------------------------------------------------------------------===//
 // RegisterOp
 //===----------------------------------------------------------------------===//
 
@@ -2147,6 +2203,28 @@ void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
   types.push_back(builder.getI1Type());            // Write enable
   types.push_back(builder.getIntegerType(width));  // Write data
   types.push_back(builder.getIntegerType(width));  // Read data
+  types.push_back(builder.getI1Type());            // Done
+  state.addTypes(types);
+}
+
+void SeqMemoryOp::build(OpBuilder &builder, OperationState &state,
+                        StringRef instanceName, Type type,
+                        ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(instanceName));
+  int64_t width = type.getIntOrFloatBitWidth();
+  state.addAttribute("width", builder.getI64IntegerAttr(width));
+  state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
+  state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
+  SmallVector<Type> types;
+  for (int64_t size : addrSizes)
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getI1Type());            // Reset
+  types.push_back(builder.getI1Type());            // Content enable
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(type);                           // Write data
+  types.push_back(type);                           // Read data
   types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
@@ -2911,7 +2989,53 @@ LogicalResult SliceLibOp::verify() {
             DictionaryAttr::get(getContext())};                                \
   }
 
+#define ImplBinFloatingPointOpCellInterface(OpType)                            \
+  SmallVector<StringRef> OpType::portNames() {                                 \
+    return {                                                                   \
+        clkPort, resetPort,      goPort, "control",        "subOp", "left",    \
+        "right", "roundingMode", "out",  "exceptionFlags", donePort};          \
+  }                                                                            \
+                                                                               \
+  SmallVector<Direction> OpType::portDirections() {                            \
+    return {Input, Input, Input,  Input,  Input, Input,                        \
+            Input, Input, Output, Output, Output};                             \
+  }                                                                            \
+                                                                               \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }                                                                            \
+                                                                               \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    MLIRContext *context = getContext();                                       \
+    IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);     \
+    NamedAttrList go, clk, reset, done;                                        \
+    go.append(goPort, isSet);                                                  \
+    clk.append(clkPort, isSet);                                                \
+    reset.append(resetPort, isSet);                                            \
+    done.append(donePort, isSet);                                              \
+    return {                                                                   \
+        clk.getDictionary(context),   /* Clk    */                             \
+        reset.getDictionary(context), /* Reset  */                             \
+        go.getDictionary(context),    /* Go     */                             \
+        DictionaryAttr::get(context), /* Control */                            \
+        DictionaryAttr::get(context), /* subOp */                              \
+        DictionaryAttr::get(context), /* roundingMode */                       \
+        DictionaryAttr::get(context), /* Lhs    */                             \
+        DictionaryAttr::get(context), /* Rhs    */                             \
+        DictionaryAttr::get(context), /* Out    */                             \
+        done.getDictionary(context),  /* Done   */                             \
+        DictionaryAttr::get(context)  /* exceptionFlags */                     \
+    };                                                                         \
+  }                                                                            \
+  \  
+                                                                               \ 
+  bool                                                                         \
+  OpType::isCombinational() {                                                  \
+    return false;                                                              \
+  }
+
 // clang-format off
+ImplBinFloatingPointOpCellInterface(AddFNOp)
 ImplBinPipeOpCellInterface(MultPipeLibOp, "out")
 ImplBinPipeOpCellInterface(DivUPipeLibOp, "out_quotient")
 ImplBinPipeOpCellInterface(DivSPipeLibOp, "out_quotient")
