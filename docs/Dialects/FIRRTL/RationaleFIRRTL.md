@@ -567,20 +567,30 @@ include the following:
 
 - Ports on a `firrtl.module`, where the foreign types are treated as opaque values moving in and out of the module
 - Ports on a `firrtl.instance`
-- `firrtl.wire` to allow for def-after-use cases; the wire must have a single strict connect that uniquely defines the wire's value
-- `firrtl.matchingconnect` to module outputs, instance inputs, and wires
+- `firrtl.foreign_output` 
 
-The expected lowering for strict connects is for the connect to be eliminated
-and the right-hand-side source value of the connect being instead materialized
-in all places where the left hand side is used. Basically we want wires and
-connects to disappear, and all places where the wire is "read" should instead
-read the value that was driven onto the wire.
+Foreign types on ports are set with the connect-like operation 
+`firrtl.foreign_output`.  This may be the only use of a foreign-typed output 
+module port or the mirrored port on instances.  FIRRTL variables and storage
+(mems, regs, wires, nodes) do not understand the semantics of foreign types
+and thus are explicitly excluded from operating on them.  This is due to the 
+fact that some common uses for foreign types is to represent busses and 
+higher-level abstractions which do not have the "bag of bits" behavior of
+firrtl types.
+
+The expected solution to bag-of-bits foreign types which behave in a 
+firrtl-compatible way and are wanted to be stored in firrtl declaration
+operations is to provide a firrtl wrapper type which fills in the necessary
+properties to make a foreign type usable in firrtl declarations.  This does not
+currently exist and this description is not perscriptive.
+
 
 The reason we provide this foreign type support is to allow for partial lowering
 of FIRRTL to HW and other dialects. Passes might lower a subset of types and
 operations to the target dialect and we need a mechanism to have the lowered
 values be passed around the FIRRTL module hierarchy untouched alongside the
 FIRRTL ops that are yet to be lowered.
+
 
 ### Const Types
 

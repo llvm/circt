@@ -1551,6 +1551,12 @@ LogicalResult FModuleOp::verify() {
           "block argument locations should match signature locations");
   }
 
+  for (auto arg : body->getArguments())
+    if (!isa<FIRRTLType>(arg.getType()) &&
+        getPortDirection(arg.getArgNumber()) == Direction::Out &&
+        !arg.hasOneUse())
+      return emitOpError("output foreign port should have exactly one use");
+
   return success();
 }
 
@@ -3662,6 +3668,10 @@ LogicalResult ForeignOutputOp::verify() {
   if (!isa<BlockArgument>(getDest()) &&
       !isa<InstanceOp>(getDest().getDefiningOp()))
     return emitError("foreign output destination must be an instance or port");
+
+  if (!getDest().hasOneUse())
+    return emitError(
+        "foreign value in instance or module must have only one user");
 
   return success();
 }

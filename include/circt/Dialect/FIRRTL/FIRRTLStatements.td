@@ -53,14 +53,14 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 }
 
 def ForeignOutputOp : FIRRTLOp<"foreign_output", [HasParent<"FModuleOp">, AllTypesMatch<["dest", "src"]>]> {
-  let summary = "Outputs a foreign value to an output port";
+  let summary = "Outputs a foreign value to an output port or instance port";
   let description = [{
-    Output Operation of Foreign Value:
+    Transport Foreign Values at module boundaries:
     ```
       firrtl.foreign_output %dest, %src : t1
     ```
-    Dest must be an output port.  Only one foreign_output can be connected to
-    each output port.
+    Dest must be an output port of a module or an input port of an instance.  
+    Only one foreign_output can be connected to each of these types of values.
     }];
 
   let arguments = (ins ForeignType:$dest, ForeignType:$src);
