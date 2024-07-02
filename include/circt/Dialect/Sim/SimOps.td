@@ -16,6 +16,7 @@
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -145,5 +146,158 @@ def DPICallOp : SimOp<"func.dpi.call",
   }];
 
 }
+
+def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
+  let summary = "Literal string token";
+  let description = [{
+    Creates a constant, raw ASCII string literal for formatted printing.
+    The given string attribute will be outputted as is,
+    including non-printable characters. The literal may be empty or contain
+    null characters ('\0') which must not be interpreted as string
+    terminators by backends.
+  }];
+
+  let assemblyFormat = "$literal attr-dict";
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+}
+
+def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
+  let summary = "Hexadecimal format specifier";
+  let description = [{
+    Format the given integer value as lower-case hexadecimal string.
+
+    The printed value will be left-padded with '0' up to the
+    length required to print the maximum value of the argument's
+    type. Zero width values will produce the empty string.
+    No further prefix will be added.
+  }];
+
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
+  let summary = "Binary format specifier";
+  let description = [{
+    Format the given integer value as binary (base two) string.
+
+    The printed value will be left-padded with '0' up to the number
+    of bits of the argument's type. Zero width values will produce
+    the empty string. No further prefix will be added.
+  }];
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+
+def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
+  let summary = "Decimal format specifier";
+  let description = [{
+    Format the given integer value as signed or unsigned decimal string.
+
+    Leading zeros are omitted. Non-negative or unsigned values will
+    _not_ be prefixed with a '+'.
+
+    For unsigned formatting, the printed value will
+    be left-padded with spaces up to _at least_ the length required to print
+    the maximum unsigned value of the argument's type.
+    For signed formatting, the printed value will be
+    left-padded with spaces up to _at least_ the length required
+    to print the minimum signed value of the argument's type
+    including the '-' character.
+    E.g., a zero value of type `i1` requires no padding for unsigned
+    formatting and one leading space for signed formatting.
+    Format specifiers of same argument type and signedness must be
+    padded to the same width. Zero width values will produce
+    a single '0'.
+
+    Backends are recommended to not exceed the required amount of padding.
+  }];
+
+  let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "(`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))";
+
+  let extraClassDeclaration = [{
+      static inline unsigned getDecimalWidth(unsigned bits, bool isSigned) {
+        if (bits == 0)
+          return 1;
+        if (bits == 1)
+          return isSigned ? 2 : 1;
+
+        if (isSigned)
+          bits--;
+
+        // Should be precise up until bits = 13301
+        const double baseConversionFactor = 0.30103; // log(2) / log(10) + epsilon
+        unsigned digits = std::ceil(bits * baseConversionFactor);
+
+        return isSigned ? digits + 1 : digits;
+      }
+  }];
+}
+
+def FormatCharOp : SimOp<"fmt.char", [Pure]> {
+  let summary = "Character format specifier";
+  let description = [{
+    Format the given integer value as a single character.
+
+    For integer values up to 127, ASCII compatible encoding is assumed.
+    For larger values, the encoding is unspecified.
+
+    If the argument's type width is less than eight bits, the value is
+    zero extended.
+    If the width is greater than eight bits, the resulting formatted string
+    is undefined.
+  }];
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
+  let summary = "Concatenate format strings";
+
+  let description = [{
+    Concatenates an arbitrary number of format strings from
+    left to right. If the argument list is empty, the empty string
+    literal is produced.
+
+    Concatenations must not be recursive. I.e., a concatenated string should
+    not contain itself directly or indirectly.
+  }];
+
+
+  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = true;
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+}
+
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
