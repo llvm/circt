@@ -137,6 +137,25 @@ circuit invalid_add :
    input c : Clock
    ; expected-error @+1 {{second operand must be an integer type, not '!firrtl.clock'}}
    node n = add(in, c)
+;// -----
+
+FIRRTL version 4.0.0
+circuit trailing_comma :
+  public module trailing_comma :
+   input in0 : SInt<8>
+   input in1 : SInt<8>
+   ; expected-error @+1 {{expected expression in primitive operand}}
+   node n = add(in0, in1,)
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit no_commas :
+  public module no_commas :
+   input in0 : SInt<8>
+   input in1 : SInt<8>
+   ; expected-error @+1 {{expected ','}}
+   node n = add(in0 in1)
 
 ;// -----
 
@@ -363,6 +382,27 @@ circuit NestedProbes:
     output p : Probe<Probe<UInt>> ; expected-error {{invalid probe inner type, must be base-type}}
 
 ;// -----
+
+FIRRTL version 4.0.0
+circuit BadCommas:
+  public module BadCommas:
+    output p : Probe<UInt<1>,> ; expected-error {{expected layer name}}
+    wire w : UInt<1>
+    invalidate w
+    define p = probe(w)
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit BadCommas2:
+  public module BadCommas2:
+    output p : Probe<UInt<1>, A,> ; expected-error {{expected '>' to end reference type}}
+    wire w : UInt<1>
+    invalidate w
+    define p = probe(w)
+
+;// -----
+
 FIRRTL version 3.1.0
 
 circuit ProbeOfProp:

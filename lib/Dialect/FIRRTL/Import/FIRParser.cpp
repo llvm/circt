@@ -248,7 +248,8 @@ struct FIRParser {
   /// output a diagnostic and return failure.
   ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
 
-  /// Parse a list of elements, terminated with an arbitrary token.
+  //// Parse a comma-separated list of elements, terminated with an arbitrary
+  /// token.
   ParseResult parseListUntil(FIRToken::Kind rightToken,
                              const std::function<ParseResult()> &parseElement);
 
@@ -337,14 +338,25 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
   return emitError(message);
 }
 
-/// Parse a list of elements, terminated with an arbitrary token.
+/// Parse a comma-separated list of zero or more elements, terminated with an
+/// arbitrary token.
 ParseResult
 FIRParser::parseListUntil(FIRToken::Kind rightToken,
                           const std::function<ParseResult()> &parseElement) {
+  if (consumeIf(rightToken)) {
+    return success();
+  }
 
-  while (!consumeIf(rightToken)) {
+  if (parseElement())
+    return failure();
+
+  while (consumeIf(FIRToken::comma)) {
     if (parseElement())
       return failure();
+  }
+
+  if (parseToken(rightToken, "expected ','")) {
+    return failure();
   }
   return success();
 }
@@ -791,13 +803,7 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
                  "expected leading '{|' in enumeration type"))
     return failure();
   SmallVector<FEnumType::EnumElement> elements;
-  bool first = true;
   if (parseListUntil(FIRToken::r_brace_bar, [&]() -> ParseResult {
-        if (!first) {
-          if (parseToken(FIRToken::comma, "expected ','")) {
-            return failure();
-          }
-        }
         auto fieldLoc = getToken().getLoc();
 
         // Parse the name of the tag.
@@ -819,7 +825,6 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
           type = UIntType::get(getContext(), 0);
         }
         elements.emplace_back(StringAttr::get(getContext(), name), type);
-        first = false;
         return success();
       }))
     return failure();
@@ -964,18 +969,16 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     SmallVector<StringRef> layers;
     if (consumeIf(FIRToken::comma)) {
+      if (requireFeature({3, 2, 0}, "colored probes"))
+        return failure();
       // Probe Color
-      if (getToken().getKind() == FIRToken::identifier) {
-        if (requireFeature({3, 2, 0}, "colored probes"))
+      do {
+        StringRef layer;
+        loc = getToken().getLoc();
+        if (parseId(layer, "expected layer name"))
           return failure();
-        do {
-          StringRef layer;
-          loc = getToken().getLoc();
-          if (parseId(layer, "expected layer name"))
-            return failure();
-          layers.push_back(layer);
-        } while (consumeIf(FIRToken::period));
-      }
+        layers.push_back(layer);
+      } while (consumeIf(FIRToken::period));
     }
 
     if (!consumeIf(FIRToken::greater))
@@ -1012,14 +1015,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
 
     SmallVector<OpenBundleType::BundleElement, 4> elements;
     bool bundleCompatible = true;
-    bool first = true;
     if (parseListUntil(FIRToken::r_brace, [&]() -> ParseResult {
-          if (!first) {
-            if (parseToken(FIRToken::comma, "expected ','")) {
-              return failure();
-            }
-          }
-
           bool isFlipped = consumeIf(FIRToken::kw_flip);
 
           StringRef fieldName;
@@ -1034,7 +1030,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
               {StringAttr::get(getContext(), fieldName), isFlipped, type});
           bundleCompatible &= isa<BundleType::ElementType>(type);
 
-          first = false;
           return success();
         }))
       return failure();
@@ -2251,15 +2246,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 3> operands;
   SmallVector<int64_t, 3> integers;
-  bool first = true;
 
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        if (!first) {
-          if (parseToken(FIRToken::comma, "expected ','")) {
-            return failure();
-          }
-        }
-
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
                              FIRToken::string)) {
@@ -2279,8 +2267,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
         locationProcessor.setLoc(loc);
 
         operands.push_back(operand);
-
-        first = false;
 
         return success();
       }))
@@ -2445,14 +2431,7 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
     return failure();
 
   SmallVector<Value, 3> operands;
-  bool first = true;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        if (!first) {
-          if (parseToken(FIRToken::comma, "expected ','")) {
-            return failure();
-          }
-        }
-
         Value operand;
         locationProcessor.setLoc(loc);
         if (parseExp(operand, "expected expression in List expression"))
@@ -2468,7 +2447,6 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
         }
 
         operands.push_back(operand);
-        first = false;
         return success();
       }))
     return failure();
@@ -3427,24 +3405,21 @@ ParseResult FIRStmtParser::parseIntrinsic(Value &result, bool isStatement) {
     return emitError("expected ':' in intrinsic expression");
 
   SmallVector<Value> operands;
-  bool first = true;
   auto loc = startTok.getLoc();
-  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
-        if (first) {
-          if (parseToken(FIRToken::comma, "expected ','")) {
+  if (consumeIf(FIRToken::comma)) {
+    if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          Value operand;
+          if (parseExp(operand, "expected operand in intrinsic"))
             return failure();
-          }
-        }
-
-        Value operand;
-        if (parseExp(operand, "expected operand in intrinsic"))
-          return failure();
-        operands.push_back(operand);
-        locationProcessor.setLoc(loc);
-        return success();
-        first = false;
-      }))
-    return failure();
+          operands.push_back(operand);
+          locationProcessor.setLoc(loc);
+          return success();
+        }))
+      return failure();
+  } else {
+    if (parseToken(FIRToken::r_paren, "expected ')' in intrinsic"))
+      return failure();
+  }
 
   if (isStatement)
     if (parseOptionalInfo())
@@ -3466,14 +3441,7 @@ ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
 
   SmallVector<Attribute, 8> parameters;
   SmallPtrSet<StringAttr, 8> seen;
-  bool first = true;
   if (parseListUntil(FIRToken::greater, [&]() -> ParseResult {
-        if (!first) {
-          if (parseToken(FIRToken::comma, "expected ','")) {
-            return failure();
-          }
-        }
-
         StringAttr name;
         TypedAttr value;
         SMLoc loc;
@@ -3483,7 +3451,6 @@ ParseResult FIRStmtParser::parseOptionalParams(ArrayAttr &resultParameters) {
           return emitError(loc, "redefinition of parameter '" +
                                     name.getValue() + "'");
         parameters.push_back(ParamDeclAttr::get(name, value));
-        first = false;
         return success();
       }))
     return failure();
