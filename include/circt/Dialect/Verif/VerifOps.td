@@ -169,6 +169,46 @@ def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
 // Logical Equivalence Checking and Model Checking
 //===----------------------------------------------------------------------===//
 
+def BMCOp : VerifOp<"bmc", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+]> {
+  let summary = "Perform a bounded model check";
+  let description = [{
+    This operation represents a bounded model checking problem explicitly in
+    the IR. The `circuit` region contains the circuit (alongside the `verif`
+    property checking operations) to be checked.
+
+    The `init` region contains the logic to initialize the clock signals, and
+    will be executed once before any other region - it cannot take any
+    arguments, and should return as many `!seq.clock` values as the `circuit`
+    region has `!seq.clock` arguments, followed by any initial arguments of
+    'state' arguments to be fed to the `loop` region (see below).
+
+    The `loop` region contains the logic to advance the clock signals, and will
+    be executed after each execution of the `circuit` region. It must have all
+    the arguments that the `circuit` region has, but these can be followed by
+    additional 'state' arguments to represent e.g. which clock should be
+    toggled next. The `loop` region should yield as many `!seq.clock` values as
+    the `circuit` region has `!seq.clock` arguments, followed by the updated
+    values of all 'state' arguments.
+  }];
+
+  let arguments = (ins I32Attr:$bound, I32Attr:$num_regs);
+  let regions = (region SizedRegion<1>:$init,
+                        SizedRegion<1>:$loop,
+                        SizedRegion<1>:$circuit);
+
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    `bound` $bound `num_regs` $num_regs attr-dict-with-keyword `init` $init `loop` $loop `circuit`
+    $circuit
+  }];
+
+  let hasRegionVerifier = true;
+}
+
 def LogicEquivalenceCheckingOp : VerifOp<"lec", [
   IsolatedFromAbove,
   SingleBlockImplicitTerminator<"verif::YieldOp">,
@@ -200,7 +240,7 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp"]>
+  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BMCOp"]>
 ]> {
   let summary = "yields values from a region";
 
