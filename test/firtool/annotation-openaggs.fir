@@ -17,7 +17,7 @@ circuit OpenAgg : %[[
   ; CHECK-SAME: , out %out_p: !firrtl.probe<uint<1>>)
   public module OpenAgg:
     output out : {a : UInt<1>,
-                  p : Probe<UInt<1>>
+                  p : Probe<UInt<1>>,
                   b : UInt<1>}
 
     out.a <= UInt<1>(1)

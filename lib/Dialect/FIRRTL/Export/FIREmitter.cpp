@@ -1003,7 +1003,7 @@ void Emitter::emitStatement(SeqMemOp op) {
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
-    ps << PP::space;
+    ps << "," << PP::space;
     emitAttribute(op.getRuw());
   });
   emitLocationAndNewLine(op);

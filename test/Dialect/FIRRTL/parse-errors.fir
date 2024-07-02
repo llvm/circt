@@ -1371,14 +1371,14 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     output a: Probe<
     ; expected-error @below {{expected probe data type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '<' in reference type}}
     output a: Probe X
@@ -1386,14 +1386,14 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     output a: Probe
     ; expected-error @below {{expected '<' in reference type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected probe data type}}
     output a: Probe<>
@@ -1401,25 +1401,25 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
     output a: Probe<UInt<1>
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
-    output a: Probe<UInt<1> A
+    output a: Probe<UInt<1>, A
 
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected layer name}}
-    output a: Probe<UInt<1> A.>
+    output a: Probe<UInt<1>, A.>
 
 ;// -----
 FIRRTL version 4.0.0

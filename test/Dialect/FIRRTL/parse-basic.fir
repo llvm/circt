@@ -25,7 +25,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-NOT: {
   extmodule MyExtModule :
     input in: UInt
-    output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
+    output out : UInt<8>
     defname = myextmodule
 
   ; CHECK-LABEL: firrtl.extmodule private @MyParameterizedExtModule
@@ -383,7 +383,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %base_table_0 = chirrtl.seqmem interesting_name Undefined : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
     ; CHECK: %base_table_1 = chirrtl.seqmem interesting_name Old : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
-    smem base_table_1 : UInt<1>[9] [256] old
+    smem base_table_1 : UInt<1>[9] [256], old
 
     ; CHECK: %tableValue_data, %tableValue_port = chirrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
     ; CHECK: chirrtl.memoryport.access %tableValue_port[%i8], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock

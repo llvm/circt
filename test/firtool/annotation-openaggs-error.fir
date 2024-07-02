@@ -10,7 +10,7 @@ circuit OpenAgg : %[[
   ; expected-error @below {{cannot resolve field 'p'}}
   public module OpenAgg:
     output out : {a : UInt<1>,
-                  p : Probe<UInt<1>>
+                  p : Probe<UInt<1>>,
                   b : UInt<1>}
 
     out.a <= UInt<1>(1)

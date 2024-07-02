@@ -8,7 +8,7 @@ FIRRTL version 4.0.0
 
 circuit TestHarness:
 
-  layer Verification bind:
+  layer Verification, bind:
 
   ; CHECK: module DUT_Verification(
   ; CHECK:   input        clock,

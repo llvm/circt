@@ -791,10 +791,10 @@ circuit Top15 : %[[
   ; CHECK-SAME:   [@Top15::@[[topaSym:[_a-zA-Z0-9]+]], @a]
   ; CHECK: firrtl.module @Top15
   public module Top15:
-    input ia: {z: {y: {x: UInt<1>}}, a: UInt<1> un: UInt<2>}
-    input ib: {a: {b: {c: UInt<1>}}, z: UInt<1> un: UInt<2>}
-    output oa: {z: {y: {x: UInt<1>}}, a: UInt<1> un: UInt<2>}
-    output ob: {a: {b: {c: UInt<1>}}, z: UInt<1> un: UInt<2>}
+    input ia: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
+    input ib: {a: {b: {c: UInt<1>}}, z: UInt<1>, un: UInt<2>}
+    output oa: {z: {y: {x: UInt<1>}}, a: UInt<1>, un: UInt<2>}
+    output ob: {a: {b: {c: UInt<1>}}, z: UInt<1>, un: UInt<2>}
     ; CHECK:      firrtl.instance a sym @[[topaSym]]
     inst a of a
     a.i.z.y.x <= ia.z.y.x

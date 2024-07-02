@@ -31,7 +31,8 @@ circuit Issue794: %[[{
       data-type => UInt<8>
       depth => 4
       reader => r
-      writer => w0,w1
+      writer => w0
+      writer => w1
       read-latency => 0
       write-latency => 1
       read-under-write => undefined

@@ -18,7 +18,7 @@ circuit TestHarness:
 
     ; CHECK: fwrite
     ; CHECK-SAME: "%x", TestHarness.dut.`ref_DUT_read)
-    printf(clock, UInt<1>(1) "%x", read(dut.read))
+    printf(clock, UInt<1>(1), "%x", read(dut.read))
     ; CHECK: initial
     ; CHECK: force TestHarness.dut.`ref_DUT_write = 32'hDEADBEEF;
     force_initial(dut.write, UInt<32>(0hdeadbeef))
