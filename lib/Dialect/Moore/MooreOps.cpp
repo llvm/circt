@@ -305,12 +305,9 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   SmallVector<Value> inputs;
 
   for (Attribute usedIndex : usedIndices) {
-    auto elemType =
-        cast<UnpackedType>(destructurable.getTypeAtIndex(usedIndex));
-    auto elemRefType = RefType::get(elemType);
+    auto elemType = cast<RefType>(destructurable.getTypeAtIndex(usedIndex));
     auto name = cast<StringAttr>(usedIndex).getValue();
-    auto varOp =
-        builder.create<VariableOp>(getLoc(), elemRefType, name, Value());
+    auto varOp = builder.create<VariableOp>(getLoc(), elemType, name, Value());
     inputs.push_back(varOp);
     newAllocators.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
