@@ -4167,8 +4167,12 @@ ParseResult FIRStmtParser::parseSeqMem() {
     return failure();
 
   if (consumeIf(FIRToken::comma)) {
-    if (parseRUW(ruw) || parseOptionalInfo())
+    if (parseRUW(ruw))
       return failure();
+  }
+
+  if (parseOptionalInfo()) {
+    return failure();
   }
 
   locationProcessor.setLoc(startTok.getLoc());

@@ -657,6 +657,18 @@ circuit ProbeSMem:
     infer mport read = mem[io.addr], clock
     io.dataOut <= read
     define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
+;// -----
+
+FIRRTL version 3.0.0
+circuit SmemNoRuwInfo:
+  module SmemNoRuwInfo:
+    input clock : Clock
+    input reset : Reset
+    output io : { flip addr : UInt<3>, dataOut : UInt<8>}
+
+    smem mem : UInt<8> [8] @[foo.fir 1:1]
+    infer mport read = mem[io.addr], clock
+    io.dataOut <= read
 
 
 ;// -----
