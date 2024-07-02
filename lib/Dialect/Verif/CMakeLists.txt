@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTVerif
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTLTL
+  CIRCTSeq
   MLIRIR
   MLIRTransforms
 )
