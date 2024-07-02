@@ -18,6 +18,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Types.h"
+#include "mlir/Interfaces/MemorySlotInterfaces.h"
 #include <variant>
 
 namespace circt {

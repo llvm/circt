@@ -16,6 +16,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::moore;
@@ -241,7 +242,7 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
-  return {MemorySlot{getResult(), getType()}};
+  return llvm::SmallVector<MemorySlot>{MemorySlot{getResult(), getType()}};
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
@@ -261,6 +262,51 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
                                     OpBuilder &builder) {
   if (defaultValue.use_empty())
     defaultValue.getDefiningOp()->erase();
+  this->erase();
+  return std::nullopt;
+}
+
+SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
+  auto refType = getType();
+  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
+  if (!destructurable)
+    return {};
+
+  auto destructuredType = destructurable.getSubelementIndexMap();
+  if (!destructuredType)
+    return {};
+
+  return {DestructurableMemorySlot{{getResult(), refType}, *destructuredType}};
+}
+
+DenseMap<Attribute, MemorySlot> VariableOp::destructure(
+    const DestructurableMemorySlot &slot,
+    const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
+    SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
+  assert(slot.ptr == getResult());
+  builder.setInsertionPointAfter(*this);
+
+  auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
+  DenseMap<Attribute, MemorySlot> slotMap;
+  SmallVector<Value> inputs;
+
+  for (Attribute usedIndex : usedIndices) {
+    auto elemType = cast<RefType>(destructurable.getTypeAtIndex(usedIndex));
+    auto name = cast<StringAttr>(usedIndex).getValue();
+    auto varOp = builder.create<VariableOp>(getLoc(), elemType, name, Value());
+    inputs.push_back(varOp);
+    newAllocators.push_back(varOp);
+    slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
+  }
+  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
+
+  return slotMap;
+}
+
+std::optional<DestructurableAllocationOpInterface>
+VariableOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
+                                        OpBuilder &builder) {
+  assert(slot.ptr == getResult());
   this->erase();
   return std::nullopt;
 }
@@ -402,6 +448,242 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// StructCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructCreateOp::verify() {
+  /// checks if the types of the inputs are exactly equal to the types of the
+  /// result struct fields
+  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto inputs = getInput();
+        if (inputs.size() != members.size())
+          return failure();
+        for (size_t i = 0; i < members.size(); i++) {
+          auto memberType = cast<UnpackedType>(members[i].type);
+          auto inputType = cast<RefType>(inputs[i].getType()).getNestedType();
+          if (inputType != memberType) {
+            emitOpError("input types must match struct field types and orders");
+            return failure();
+          }
+        }
+        return success();
+      })
+      .Default([this](auto &) {
+        emitOpError("Result type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
+                                SmallPtrSetImpl<Attribute> &usedIndices,
+                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  auto index = getFieldNameAttr();
+  if (!index)
+    return false;
+  usedIndices.insert(index);
+  return true;
+}
+
+DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
+                                     DenseMap<Attribute, MemorySlot> &subslots,
+                                     OpBuilder &builder,
+                                     const DataLayout &dataLayout) {
+  auto index = getFieldNameAttr();
+  const auto &memorySlot = subslots.at(index);
+  auto readOp = builder.create<moore::ReadOp>(getLoc(), memorySlot.elemType,
+                                              memorySlot.ptr);
+  replaceAllUsesWith(readOp.getResult());
+  getInputMutable().drop();
+  return DeletionKind::Keep;
+}
+//===----------------------------------------------------------------------===//
+// StructExtractRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractRefOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getType().getNestedType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be refrence of StructType or "
+                    "UnpackedStructType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// StructInjectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructInjectOp::verify() {
+  /// checks if the type of the new value match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto newValueType = getNewValue().getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == newValueType) {
+            return success();
+          }
+        }
+        emitOpError("new value type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+bool StructInjectOp::canRewire(const DestructurableMemorySlot &slot,
+                               SmallPtrSetImpl<Attribute> &usedIndices,
+                               SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                               const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>(
+          [this, &slot, &usedIndices](auto &type) {
+            if (slot.ptr != getInput())
+              return false;
+            auto index = getFieldNameAttr();
+            if (!index || !slot.elementPtrs.contains(index))
+              return false;
+            usedIndices.insert(index);
+            return true;
+          })
+      .Default([](auto) { return false; });
+}
+
+DeletionKind StructInjectOp::rewire(const DestructurableMemorySlot &slot,
+                                    DenseMap<Attribute, MemorySlot> &subslots,
+                                    OpBuilder &builder,
+                                    const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
+        auto index = getFieldNameAttr();
+        if (!index)
+          return DeletionKind::Keep;
+        const auto &memorySlot = subslots.at(index);
+        setOperand(0, memorySlot.ptr);
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionCreateOp::verify() {
+  /// checks if the types of the input is exactly equal to the union field
+  /// type
+  return TypeSwitch<Type, LogicalResult>(getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto resultType = getType();
+        auto fieldName = getFieldName();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("input type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractOp::verify() {
+  /// checks if the types of the input is exactly equal to the one of the
+  /// types of the result union fields
+  return TypeSwitch<Type, LogicalResult>(getInput().getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractRefOp::verify() {
+  /// checks if the types of the result is exactly equal to the type of the
+  /// refe union field
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getType().getNestedType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
 // YieldOp
 //===----------------------------------------------------------------------===//
 
@@ -481,6 +763,40 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
     OpBuilder &builder, Value reachingDefinition,
     const DataLayout &dataLayout) {
   return DeletionKind::Delete;
+}
+
+bool BlockingAssignOp::canRewire(const DestructurableMemorySlot &slot,
+                                 SmallPtrSetImpl<Attribute> &usedIndices,
+                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                 const DataLayout &dataLayout) {
+  return TypeSwitch<Type, bool>(getDst().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &slot, &usedIndices](auto) {
+        if (slot.ptr != getDst() || getSrc() == slot.ptr)
+          return false;
+        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
+        auto index = refOp.getFieldNameAttr();
+        if (!index || !slot.elementPtrs.contains(index))
+          return false;
+        usedIndices.insert(index);
+        return true;
+      })
+      .Default([](auto) { return false; });
+}
+
+DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
+                                      DenseMap<Attribute, MemorySlot> &subslots,
+                                      OpBuilder &builder,
+                                      const DataLayout &dataLayout) {
+  return TypeSwitch<Type, DeletionKind>(getDst().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this, &subslots](auto) {
+        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
+        auto index = refOp.getFieldNameAttr();
+        const auto &memorySlot = subslots.at(index);
+        setOperand(0, memorySlot.ptr);
+        getDstMutable().drop();
+        return DeletionKind::Keep;
+      })
+      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//

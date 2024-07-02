@@ -29,6 +29,16 @@ static void printMembers(AsmPrinter &printer,
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
 
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index);
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index);
+
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
@@ -196,6 +206,82 @@ LogicalResult StructType::verify(function_ref<InFlightDiagnostic()> emitError,
 LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 ArrayRef<StructLikeMember> members) {
   return verifyAllMembersPacked(emitError, members);
+}
+
+//===----------------------------------------------------------------------===//
+// Interfaces for destructurable
+//===----------------------------------------------------------------------===//
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
+  DenseMap<Attribute, Type> destructured;
+  for (const auto &member : members)
+    destructured.insert({member.name, RefType::get(member.type)});
+  return destructured;
+}
+
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index) {
+  auto indexAttr = cast<StringAttr>(index);
+  if (!indexAttr)
+    return {};
+  for (const auto &member : members) {
+    if (member.name == indexAttr) {
+      return RefType::get(member.type);
+    }
+  }
+  return Type();
+}
+
+std::optional<DenseMap<Attribute, Type>> StructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type StructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedStructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedStructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>> UnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedUnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedUnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<DenseMap<Attribute, Type>> RefType::getSubelementIndexMap() {
+  return TypeSwitch<Type, std::optional<DenseMap<Attribute, Type>>>(
+             getNestedType())
+      .Case<StructType, UnpackedStructType>([](auto &type) {
+        return getAllSubelementIndexMap(type.getMembers());
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
+Type RefType::getTypeAtIndex(Attribute index) {
+  return TypeSwitch<Type, Type>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&index](auto &type) {
+        return getTypeAtAllIndex(type.getMembers(), index);
+      })
+      .Default([](auto) { return Type(); });
 }
 
 //===----------------------------------------------------------------------===//
