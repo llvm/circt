@@ -582,7 +582,7 @@ The expected solution to bag-of-bits foreign types which behave in a
 firrtl-compatible way and are wanted to be stored in firrtl declaration
 operations is to provide a firrtl wrapper type which fills in the necessary
 properties to make a foreign type usable in firrtl declarations.  This does not
-currently exist and this description is not perscriptive.
+currently exist and this description is not prescriptive.
 
 
 The reason we provide this foreign type support is to allow for partial lowering
