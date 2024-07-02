@@ -1,5 +1,0 @@
-../massive_reachability_rtl/subset_for_testing
-../massive_reachability_rtl/subset_for_testing
-../massive_reachability_rtl/subset_for_testing
-../massive_reachability_rtl/subset_for_testing
-../massive_reachability_rtl/subset_for_testing/fsm_1var_100states_50loop_lowered_w_prop.mlir

@@ -38,7 +38,12 @@ struct transition{
  * @brief Prints solver assertions
  
 */
-void printSolverAssertions(z3::solver &solver) {
+void printSolverAssertions(z3::solver &solver, string output) {
+
+	ofstream outfile;
+	outfile.open(output, ios::app);
+
+
 
   if(V){
     llvm::outs()<<"---------------------------- SOLVER ----------------------------"<<"\n";
@@ -46,25 +51,20 @@ void printSolverAssertions(z3::solver &solver) {
     llvm::outs()<<"------------------------ SOLVER RETURNS ------------------------"<<"\n";
     // llvm::outs()<<solver.check()<<"\n";4
   }
-  const auto start{std::chrono::steady_clock::now()};
-  int sat = solver.check();
-  const auto end{std::chrono::steady_clock::now()};
-  if(!V)
-    llvm::outs()<<sat<<"\n";
-
-
-  const std::chrono::duration<double> elapsed_seconds{end - start};
-
-  if(V){
-    llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
-    llvm::outs()<<solver.get_model().to_string()<<"\n";
-    llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
-    llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
-  }
-
-	ofstream outfile;
-	outfile.open("output.txt", ios::app);
-	outfile << elapsed_seconds.count()<<","<<sat << endl;
+  // const auto start{std::chrono::steady_clock::now()};
+  // int sat = solver.check();
+  // const auto end{std::chrono::steady_clock::now()};
+  outfile <<solver.to_smt2();
+  // if(!V)
+  //   llvm::outs()<<sat<<"\n";
+  // const std::chrono::duration<double> elapsed_seconds{end - start};
+  // if(V){
+  //   llvm::outs()<<"--------------------------- INVARIANT --------------------------"<<"\n";
+  //   llvm::outs()<<solver.get_model().to_string()<<"\n";
+  //   llvm::outs()<<"-------------------------- END -------------------------------"<<"\n";
+  //   llvm::outs()<<"Time taken: "<<elapsed_seconds.count()<<"s\n";
+  // }
+	// outfile << elapsed_seconds.count()<<","<<sat << endl;
 	outfile.close();
 }
 
@@ -737,7 +737,7 @@ expr getInvariant(int id, vector<expr> &solverVars, vector<func_decl> &invFun){
 /**
  * @brief Parse FSM and build SMT model 
 */
-void parse_fsm(string input, string property, int time){
+void parse_fsm(string input, string property, string output, int time){
 
   DialectRegistry registry;
 
@@ -919,27 +919,27 @@ void parse_fsm(string input, string property, int time){
 
   s.add(r);
 
-  printSolverAssertions(s);
+  printSolverAssertions(s, output);
 
 }
 
 
 int main(int argc, char **argv){
-
   string input = argv[1];
-  string prop = argv[2];
-
-  int time = stoi(argv[3]);
-
-
-
   cout << "input file: " << input << endl;
 
-  ofstream outfile;
-  outfile.open("output.txt", ios::app);
-	outfile << input << endl;
-	outfile.close();
+  string prop = argv[2];
+  cout << "property file: " << prop << endl;
 
-  parse_fsm(input, prop, time);
+  string output = argv[3];
+  cout << "output file: " << output << endl;
 
+  int time = stoi(argv[4]);
+
+  parse_fsm(input, prop, output, time);
+
+  cout << "time bound: " << time << endl;
+
+
+  return 0;
 }
