@@ -5,6 +5,7 @@ set(CIRCT_FIRRTL_Sources
   FIRRTLAnnotationHelper.cpp
   FIRRTLAnnotations.cpp
   FIRRTLAttributes.cpp
+  FIRRTLConnectionGraph.cpp
   FIRRTLDialect.cpp
   FIRRTLFieldSource.cpp
   FIRRTLFolds.cpp
