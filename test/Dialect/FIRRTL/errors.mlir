@@ -751,8 +751,18 @@ firrtl.circuit "SubfieldOpInputTypeMismatch" {
 firrtl.circuit "SubfieldOpNonBundleInputType" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.subfield' input must be bundle type, got '!firrtl.uint<1>'}}
+    // expected-error @+1 {{'firrtl.subfield' input must be bundle or lhs of bundle type, got '!firrtl.uint<1>'}}
     %w_a = firrtl.subfield %w[a] : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpNonBundleInputType" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w, %w_write = firrtl.strictwire : !firrtl.uint<1>
+    // expected-error @+1 {{'firrtl.subfield' input must be bundle or lhs of bundle type, got '!firrtl.lhs<uint<1>>'}}
+    %w_a = firrtl.subfield %w_write[a] : !firrtl.lhs<uint<1>>
   }
 }
 

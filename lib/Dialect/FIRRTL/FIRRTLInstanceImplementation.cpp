@@ -99,6 +99,9 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = instanceOp->getResult(i).getType();
     auto expectedType = referencedModule.getPortType(i);
+    if (direction::get(portDirections[i]) == Direction::In &&
+        isa<LHSType>(resultType))
+      resultType = cast<LHSType>(resultType).getType();
     if (resultType != expectedType) {
       return emitNote(instanceOp->emitOpError()
                       << "result type for " << portNames[i] << " must be "
