@@ -225,23 +225,6 @@ static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
   auto indexAttr = cast<StringAttr>(index);
   if (!indexAttr)
     return {};
-//===----------------------------------------------------------------------===//
-// Interfaces for destructurable
-//===----------------------------------------------------------------------===//
-
-static std::optional<DenseMap<Attribute, Type>>
-getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
-  DenseMap<Attribute, Type> destructured;
-  for (const auto &member : members)
-    destructured.insert({member.name, member.type});
-  return destructured;
-}
-
-static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
-                              Attribute index) {
-  auto indexAttr = cast<StringAttr>(index);
-  if (!indexAttr)
-    return {};
   for (const auto &member : members) {
     if (member.name == indexAttr) {
       return member.type;
