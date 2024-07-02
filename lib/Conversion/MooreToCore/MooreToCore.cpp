@@ -511,6 +511,41 @@ struct AShrOpConversion : public OpConversionPattern<AShrOp> {
   }
 };
 
+struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ProcedureOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    switch (adaptor.getKind()) {
+    case ProcedureKind::AlwaysComb:
+    case ProcedureKind::Always:
+    case ProcedureKind::AlwaysFF:
+    case ProcedureKind::AlwaysLatch:
+    case ProcedureKind::Final:
+      return emitError(op->getLoc(), "Unsupported procedure operation");
+      return failure();
+    case ProcedureKind::Initial:
+
+      // Insert new Op to the builtin.module
+      // rewriter.setInsertionPointToEnd(
+      //   op->getParentOfType<mlir::ModuleOp>()->getBlock());
+      auto procOp = rewriter.create<llhd::ProcOp>(
+          op->getLoc(),
+          mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
+                                  std::nullopt),
+          uint64_t(0), mlir::ArrayAttr(), mlir::ArrayAttr());
+      procOp->setAttr("sym_name", rewriter.getStringAttr("initial"));
+      procOp.getBody().emplaceBlock();
+
+      // detach the moore.procedure's body block and attach it to llhd.proc
+      rewriter.mergeBlocks(op->getBlock(), procOp->getBlock(),
+                           procOp->getBlock()->getArguments());
+      rewriter.eraseOp(op);
+      return success();
+    };
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -649,6 +684,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     // Patterns of other operations outside Moore dialect.
     HWOutputOpConversion, HWInstanceOpConversion, ReturnOpConversion,
     CallOpConversion, UnrealizedConversionCastConversion
+     ,ProcedureOpConversion
   >(typeConverter, context);
   // clang-format on
   mlir::populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
