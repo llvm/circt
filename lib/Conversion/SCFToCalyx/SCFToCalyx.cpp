@@ -799,12 +799,21 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      arith::ConstantOp constOp) const {
-  /// Move constant operations to the compOp body as hw::ConstantOp's.
-  APInt value;
-  calyx::matchConstantOp(constOp, value);
-  auto hwConstOp = rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, value);
-  hwConstOp->moveAfter(getComponent().getBodyBlock(),
-                       getComponent().getBodyBlock()->begin());
+  if (isa<IntegerType>(constOp.getType())) {
+    /// Move constant operations to the compOp body as hw::ConstantOp's.
+    APInt value;
+    calyx::matchConstantOp(constOp, value);
+    auto hwConstOp =
+        rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, value);
+    hwConstOp->moveAfter(getComponent().getBodyBlock(),
+                         getComponent().getBodyBlock()->begin());
+  } else {
+    auto calyxConstOp = rewriter.replaceOpWithNewOp<calyx::ConstantOp>(
+        constOp, constOp.getType(), constOp.getValueAttr());
+    calyxConstOp->moveAfter(getComponent().getBodyBlock(),
+                            getComponent().getBodyBlock()->begin());
+  }
+
   return success();
 }
 
