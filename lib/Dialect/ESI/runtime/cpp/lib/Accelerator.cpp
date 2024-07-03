@@ -82,6 +82,9 @@ static std::filesystem::path getLibPath() {
 #endif
 }
 
+/// Load a backend plugin dynamically. Plugins are expected to be named
+/// lib<BackendName>Backend.so and located in one of 1) CWD, 2) in the same
+/// directory as the application, or 3) in the same directory as this library.
 static void loadBackend(std::string backend) {
   backend[0] = toupper(backend[0]);
 
