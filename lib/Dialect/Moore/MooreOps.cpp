@@ -242,7 +242,7 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
-  return llvm::SmallVector<MemorySlot>{MemorySlot{getResult(), getType()}};
+  return {MemorySlot{getResult(), getType()}};
 }
 
 Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
@@ -295,14 +295,20 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
               [](auto &type) { return type.getMembers(); })
           .Default([](auto) { return ArrayRef<StructLikeMember>(); });
   for (const auto &member : members) {
-    auto elemType = RefType::get(member.type);
-    auto name = member.name;
-    auto varOp = builder.create<VariableOp>(getLoc(), elemType, name, Value());
-    inputs.push_back(varOp);
-    newAllocators.push_back(varOp);
-    slotMap.try_emplace<MemorySlot>(member.name, {varOp, elemType});
+    auto type = cast<IntType>(member.type);
+    if (!type)
+      continue;
+    auto input = builder.create<ConstantOp>(getLoc(), type, 0);
+    inputs.push_back(input);
+    if (usedIndices.contains(member.name)) {
+      auto varOp = builder.create<VariableOp>(
+          getLoc(), RefType::get(member.type), member.name, input.getResult());
+      slotMap.try_emplace<MemorySlot>(member.name,
+                                      {varOp, RefType::get(member.type)});
+      newAllocators.push_back(varOp);
+    }
   }
-  builder.create<StructCreateOp>(getLoc(), getType(), inputs);
+  builder.create<StructCreateOp>(getLoc(), getType().getNestedType(), inputs);
 
   return slotMap;
 }
@@ -458,7 +464,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 LogicalResult StructCreateOp::verify() {
   /// checks if the types of the inputs are exactly equal to the types of the
   /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
+  return TypeSwitch<Type, LogicalResult>(getType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto inputs = getInput();
@@ -466,7 +472,7 @@ LogicalResult StructCreateOp::verify() {
           return failure();
         for (size_t i = 0; i < members.size(); i++) {
           auto memberType = cast<UnpackedType>(members[i].type);
-          auto inputType = cast<RefType>(inputs[i].getType()).getNestedType();
+          auto inputType = inputs[i].getType();
           if (inputType != memberType) {
             emitOpError("input types must match struct field types and orders");
             return failure();
@@ -509,6 +515,7 @@ bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
                                 SmallPtrSetImpl<Attribute> &usedIndices,
                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                 const DataLayout &dataLayout) {
+  usedIndices.insert(getFieldNameAttr());
   return slot.ptr == getInput();
 }
 
@@ -599,6 +606,7 @@ bool StructInjectOp::canRewire(const DestructurableMemorySlot &slot,
                                const DataLayout &dataLayout) {
   if (slot.ptr != getInput() || getNewValue() == slot.ptr)
     return false;
+  usedIndices.insert(getFieldNameAttr());
   return slot.elementPtrs.contains(getFieldNameAttr());
 }
 
