@@ -96,8 +96,8 @@ CosimAccelerator::connect(Context &ctxt, std::string connectionString) {
     else
       throw std::runtime_error("ESI_COSIM_PORT environment variable not set");
   } else {
-    throw std::runtime_error("Invalid connection string '" + connectionString +
-                             "'");
+    throw std::runtime_error("Invalid connection std::string '" +
+                             connectionString + "'");
   }
   uint16_t port = stoul(portStr);
   return make_unique<CosimAccelerator>(ctxt, host, port);
@@ -381,7 +381,7 @@ Service *CosimAccelerator::createService(Service::Type svcType,
     for (auto client : clients) {
       AppIDPath fullClientPath = prefix + client.relPath;
       std::map<std::string, std::string> channelAssignments;
-      for (auto assignment : any_cast<std::map<std::string, std::any>>(
+      for (auto assignment : std::any_cast<std::map<std::string, std::any>>(
                client.implOptions.at("channel_assignments")))
         channelAssignments[assignment.first] =
             std::any_cast<std::string>(assignment.second);

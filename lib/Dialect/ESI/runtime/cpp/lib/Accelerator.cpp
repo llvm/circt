@@ -27,21 +27,19 @@
 // TODO: this.
 #endif
 
-using namespace std;
-
 using namespace esi;
 using namespace esi::services;
 
 namespace esi {
 AcceleratorConnection::AcceleratorConnection(Context &ctxt)
-    : ctxt(ctxt), serviceThread(make_unique<AcceleratorServiceThread>()) {}
+    : ctxt(ctxt), serviceThread(std::make_unique<AcceleratorServiceThread>()) {}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
                                                      std::string implName,
                                                      ServiceImplDetails details,
                                                      HWClientDetails clients) {
-  unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
+  std::unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
   if (cacheEntry == nullptr) {
     Service *svc = createService(svcType, id, implName, details, clients);
     if (!svc)
@@ -49,7 +47,7 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                            clients);
     if (!svc)
       return nullptr;
-    cacheEntry = unique_ptr<Service>(svc);
+    cacheEntry = std::unique_ptr<Service>(svc);
   }
   return cacheEntry.get();
 }
@@ -60,7 +58,7 @@ static std::filesystem::path getExePath() {
   char result[PATH_MAX];
   ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
   if (count == -1)
-    throw runtime_error("Could not get executable path");
+    throw std::runtime_error("Could not get executable path");
   return std::filesystem::path(std::string(result, count));
 #elif _WIN32
   // TODO: this.
@@ -131,23 +129,23 @@ static void loadBackend(std::string backend) {
 namespace registry {
 namespace internal {
 
-static map<string, BackendCreate> backendRegistry;
-void registerBackend(string name, BackendCreate create) {
+static std::map<std::string, BackendCreate> backendRegistry;
+void registerBackend(std::string name, BackendCreate create) {
   if (backendRegistry.count(name))
-    throw runtime_error("Backend already exists in registry");
+    throw std::runtime_error("Backend already exists in registry");
   backendRegistry[name] = create;
 }
 } // namespace internal
 
-unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
-                                          string connection) {
+std::unique_ptr<AcceleratorConnection>
+connect(Context &ctxt, std::string backend, std::string connection) {
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end()) {
     // If it's not already found in the registry, try to load it dynamically.
     loadBackend(backend);
     f = internal::backendRegistry.find(backend);
     if (f == internal::backendRegistry.end())
-      throw runtime_error("Backend not found");
+      throw std::runtime_error("Backend not found");
   }
   return f->second(ctxt, connection);
 }
@@ -172,7 +170,7 @@ private:
   volatile bool shutdown = false;
   std::thread me;
 
-  // Protect the listeners map.
+  // Protect the listeners std::map.
   std::mutex listenerMutex;
   // Map of read ports to callbacks.
   std::map<ReadChannelPort *,
@@ -225,7 +223,7 @@ void AcceleratorServiceThread::Impl::addListener(
   std::lock_guard<std::mutex> g(listenerMutex);
   for (auto port : listenPorts) {
     if (listeners.count(port))
-      throw runtime_error("Port already has a listener");
+      throw std::runtime_error("Port already has a listener");
     listeners[port] = std::make_pair(callback, port->readAsync());
   }
 }
@@ -245,9 +243,9 @@ void AcceleratorServiceThread::stop() {
   }
 }
 
-// When there's data on any of the listenPorts, call the callback. This is kinda
-// silly now that we have callback port support, especially given the polling
-// loop. Keep the functionality for now.
+// When there's data on any of the listenPorts, call the callback. This is
+// kinda silly now that we have callback port support, especially given the
+// polling loop. Keep the functionality for now.
 void AcceleratorServiceThread::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
     std::function<void(ReadChannelPort *, MessageData)> callback) {
