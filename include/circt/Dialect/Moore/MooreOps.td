@@ -295,7 +295,6 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
 }
 
 def BlockingAssignOp : AssignOpBase<"blocking_assign", [
-  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
   DeclareOpInterfaceMethods<PromotableMemOpInterface>
 ]> {
   let summary = "Blocking procedural assignment";
@@ -1018,7 +1017,9 @@ def StructExtractOp : MooreOp<"struct_extract", [
   let hasVerifier = 1;
 }
 
-def StructExtractRefOp : MooreOp<"struct_extract_ref", [Pure]> {
+def StructExtractRefOp : MooreOp<"struct_extract_ref", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+]> {
   let summary = "Struct Extract operation";
   let arguments = (ins StrAttr:$fieldName, RefType:$input);
   let results = (outs RefType:$result);
@@ -1057,10 +1058,9 @@ def StructInjectOp : MooreOp<"struct_inject", [
   }];
   let arguments = (ins  Arg<RefType, "", [MemWrite]>:$input, StrAttr:$fieldName,
   UnpackedType:$newValue);
-  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input `,` $fieldName `,` $newValue
-    attr-dict `:` type($input) type($newValue) `->` type($result)
+    attr-dict `:` type($input) type($newValue)
   }];
   let hasVerifier = 1;
 }

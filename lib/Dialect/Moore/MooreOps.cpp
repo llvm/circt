@@ -286,17 +286,21 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   assert(slot.ptr == getResult());
   builder.setInsertionPointAfter(*this);
 
-  auto destructurable = llvm::cast<DestructurableTypeInterface>(getType());
   DenseMap<Attribute, MemorySlot> slotMap;
   SmallVector<Value> inputs;
 
-  for (Attribute usedIndex : usedIndices) {
-    auto elemType = cast<RefType>(destructurable.getTypeAtIndex(usedIndex));
-    auto name = cast<StringAttr>(usedIndex).getValue();
+  auto members =
+      TypeSwitch<Type, ArrayRef<StructLikeMember>>(getType().getNestedType())
+          .Case<StructType, UnpackedStructType>(
+              [](auto &type) { return type.getMembers(); })
+          .Default([](auto) { return ArrayRef<StructLikeMember>(); });
+  for (const auto &member : members) {
+    auto elemType = RefType::get(member.type);
+    auto name = member.name;
     auto varOp = builder.create<VariableOp>(getLoc(), elemType, name, Value());
     inputs.push_back(varOp);
     newAllocators.push_back(varOp);
-    slotMap.try_emplace<MemorySlot>(usedIndex, {varOp, elemType});
+    slotMap.try_emplace<MemorySlot>(member.name, {varOp, elemType});
   }
   builder.create<StructCreateOp>(getLoc(), getType(), inputs);
 
@@ -505,13 +509,7 @@ bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
                                 SmallPtrSetImpl<Attribute> &usedIndices,
                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                 const DataLayout &dataLayout) {
-  if (slot.ptr != getInput())
-    return false;
-  auto index = getFieldNameAttr();
-  if (!index)
-    return false;
-  usedIndices.insert(index);
-  return true;
+  return slot.ptr == getInput();
 }
 
 DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
@@ -520,10 +518,12 @@ DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
                                      const DataLayout &dataLayout) {
   auto index = getFieldNameAttr();
   const auto &memorySlot = subslots.at(index);
-  auto readOp = builder.create<moore::ReadOp>(getLoc(), memorySlot.elemType,
-                                              memorySlot.ptr);
+  auto readOp = builder.create<moore::ReadOp>(
+      getLoc(), cast<RefType>(memorySlot.elemType).getNestedType(),
+      memorySlot.ptr);
   replaceAllUsesWith(readOp.getResult());
   getInputMutable().drop();
+  erase();
   return DeletionKind::Keep;
 }
 //===----------------------------------------------------------------------===//
@@ -550,6 +550,22 @@ LogicalResult StructExtractRefOp::verify() {
                     "UnpackedStructType");
         return failure();
       });
+}
+
+bool StructExtractRefOp::canRewire(
+    const DestructurableMemorySlot &slot,
+    SmallPtrSetImpl<Attribute> &usedIndices,
+    SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return slot.ptr == getInput();
+}
+
+DeletionKind
+StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  getInputMutable().drop();
+  return DeletionKind::Delete;
 }
 
 //===----------------------------------------------------------------------===//
@@ -581,34 +597,20 @@ bool StructInjectOp::canRewire(const DestructurableMemorySlot &slot,
                                SmallPtrSetImpl<Attribute> &usedIndices,
                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                const DataLayout &dataLayout) {
-  return TypeSwitch<Type, bool>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>(
-          [this, &slot, &usedIndices](auto &type) {
-            if (slot.ptr != getInput())
-              return false;
-            auto index = getFieldNameAttr();
-            if (!index || !slot.elementPtrs.contains(index))
-              return false;
-            usedIndices.insert(index);
-            return true;
-          })
-      .Default([](auto) { return false; });
+  if (slot.ptr != getInput() || getNewValue() == slot.ptr)
+    return false;
+  return slot.elementPtrs.contains(getFieldNameAttr());
 }
 
 DeletionKind StructInjectOp::rewire(const DestructurableMemorySlot &slot,
                                     DenseMap<Attribute, MemorySlot> &subslots,
                                     OpBuilder &builder,
                                     const DataLayout &dataLayout) {
-  return TypeSwitch<Type, DeletionKind>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this, &subslots](auto &type) {
-        auto index = getFieldNameAttr();
-        if (!index)
-          return DeletionKind::Keep;
-        const auto &memorySlot = subslots.at(index);
-        setOperand(0, memorySlot.ptr);
-        return DeletionKind::Keep;
-      })
-      .Default([](auto) { return DeletionKind::Keep; });
+  auto index = getFieldNameAttr();
+  const auto &memorySlot = subslots.at(index);
+  builder.create<BlockingAssignOp>(getLoc(), memorySlot.ptr, getNewValue());
+  getInputMutable().drop();
+  return DeletionKind::Delete;
 }
 
 //===----------------------------------------------------------------------===//
@@ -763,40 +765,6 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
     OpBuilder &builder, Value reachingDefinition,
     const DataLayout &dataLayout) {
   return DeletionKind::Delete;
-}
-
-bool BlockingAssignOp::canRewire(const DestructurableMemorySlot &slot,
-                                 SmallPtrSetImpl<Attribute> &usedIndices,
-                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                                 const DataLayout &dataLayout) {
-  return TypeSwitch<Type, bool>(getDst().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this, &slot, &usedIndices](auto) {
-        if (slot.ptr != getDst() || getSrc() == slot.ptr)
-          return false;
-        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
-        auto index = refOp.getFieldNameAttr();
-        if (!index || !slot.elementPtrs.contains(index))
-          return false;
-        usedIndices.insert(index);
-        return true;
-      })
-      .Default([](auto) { return false; });
-}
-
-DeletionKind BlockingAssignOp::rewire(const DestructurableMemorySlot &slot,
-                                      DenseMap<Attribute, MemorySlot> &subslots,
-                                      OpBuilder &builder,
-                                      const DataLayout &dataLayout) {
-  return TypeSwitch<Type, DeletionKind>(getDst().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this, &subslots](auto) {
-        auto refOp = cast<moore::StructExtractRefOp>(getDst().getDefiningOp());
-        auto index = refOp.getFieldNameAttr();
-        const auto &memorySlot = subslots.at(index);
-        setOperand(0, memorySlot.ptr);
-        getDstMutable().drop();
-        return DeletionKind::Keep;
-      })
-      .Default([](auto) { return DeletionKind::Keep; });
 }
 
 //===----------------------------------------------------------------------===//

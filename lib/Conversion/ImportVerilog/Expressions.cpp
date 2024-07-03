@@ -99,7 +99,10 @@ struct RvalueExprVisitor {
       return {};
     }
 
-    if (expr.isNonBlocking())
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>())
+      builder.create<moore::StructInjectOp>(loc, refOp->getOperand(0),
+                                            refOp.getFieldNameAttr(), rhs);
+    else if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
       builder.create<moore::BlockingAssignOp>(loc, lhs, rhs);
