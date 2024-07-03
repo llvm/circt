@@ -132,7 +132,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 # Global variable for the path to the ESI runtime for use by tests.
-set(ESICppRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
+set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
   CACHE INTERNAL "Path to ESI runtime" FORCE)
 
 
