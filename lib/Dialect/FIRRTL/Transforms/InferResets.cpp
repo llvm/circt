@@ -1714,14 +1714,22 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
       if (nodeOp && !dom.dominates(nodeOp.getInput(), opsToUpdate[0])) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
-        ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(nodeOp.getLoc(),
+                                                          nodeOp->getBlock());
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
             nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
-        emitConnect(builder, wireOp.getResult(), nodeOp.getInput());
+        // Don't delete the node, since it might be in use in worklists.
         nodeOp->replaceAllUsesWith(wireOp);
-        nodeOp.erase();
+        nodeOp->removeAttr(nodeOp.getInnerSymAttrName());
+        nodeOp.setName("");
+        // Leave forcable alone, since we cannot remove a result.  It will be
+        // cleaned up in canonicalization since it is dead.  As will this node.
+        nodeOp.setNameKind(NameKindEnum::DroppableName);
+        nodeOp.setAnnotationsAttr(ArrayAttr::get(builder.getContext(), {}));
+        builder.setInsertionPointAfter(nodeOp);
+        emitConnect(builder, wireOp.getResult(), nodeOp.getResult());
         resetOp = wireOp;
         actualReset = wireOp.getResult();
         domain.existingValue = wireOp.getResult();
