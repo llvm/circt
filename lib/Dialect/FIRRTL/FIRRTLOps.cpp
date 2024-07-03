@@ -3323,7 +3323,14 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -3349,7 +3356,14 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+void StrictWireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getWrite(), (getName() + "_write").str());
+  return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
+
+std::optional<size_t> StrictWireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto refType = type_dyn_cast<RefType>(getType(0));
@@ -3360,6 +3374,21 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+LogicalResult
+StrictWireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto refType = type_dyn_cast<RefType>(getType(0));
+  if (!refType)
+    return success();
+
+  return verifyProbeType(
+      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+      symbolTable, Twine("'") + getOperationName() + "' op is");
+}
+
+Value StrictWireOp::getResult() { return getRead(); }
+
+Value StrictRegOp::getResult() { return getRead(); }
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
@@ -6287,6 +6316,40 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("invalid symbol reference");
   }
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Printer/Parser Helpers.
+//===----------------------------------------------------------------------===//
+
+/// Elide the lhs wrapper and the lhs if the inside is the rhs.
+static void printOptionalLHSOpTypes(OpAsmPrinter &p, Operation *op, Type lhs,
+                                    Type rhs) {
+  // If operand types are the same, print a rhs type.
+  auto lhsCast = dyn_cast<LHSType>(lhs);
+  if (!lhsCast || lhsCast.getType() != rhs)
+    p << lhs << ", " << rhs;
+  else
+    p << rhs;
+}
+
+static ParseResult parseOptionalLHSOpTypes(OpAsmParser &parser, Type &lhs,
+                                           Type &rhs) {
+  if (parser.parseType(rhs))
+    return failure();
+
+  // Parse an optional rhs type.
+  if (parser.parseOptionalComma()) {
+    auto cRhs = dyn_cast<FIRRTLBaseType>(rhs);
+    if (!cRhs)
+      return failure();
+    lhs = LHSType::get(parser.getContext(), cRhs);
+  } else {
+    lhs = rhs;
+    if (parser.parseType(rhs))
+      return failure();
+  }
   return success();
 }
 
