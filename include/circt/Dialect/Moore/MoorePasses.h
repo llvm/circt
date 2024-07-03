@@ -23,6 +23,7 @@ namespace moore {
 #include "circt/Dialect/Moore/MoorePasses.h.inc"
 
 std::unique_ptr<mlir::Pass> createSimplifyProceduresPass();
+std::unique_ptr<mlir::Pass> createLowerConcatRefPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

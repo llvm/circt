@@ -34,7 +34,7 @@ struct GenericIntrinsic {
   // Input checking
   //===--------------------------------------------------------------------===//
 
-  ParseResult hasNInputs(unsigned n, unsigned c);
+  ParseResult hasNInputs(unsigned n, unsigned c = 0);
   unsigned getNumInputs();
 
   template <typename C>

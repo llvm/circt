@@ -14,6 +14,7 @@
 
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Conversion/MooreToCore.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/PassManager.h"
@@ -219,6 +220,9 @@ static CLOptions opts;
 /// that simplify these files like deleting local variables, and then emit the
 /// resulting Moore dialect IR .
 static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
+  auto &modulePM = pm.nest<moore::SVModuleOp>();
+  modulePM.addPass(moore::createLowerConcatRefPass());
+  modulePM.addPass(moore::createSimplifyProceduresPass());
   pm.addPass(mlir::createMem2Reg());
   // TODO: like dedup pass.
 

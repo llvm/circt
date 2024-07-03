@@ -2919,8 +2919,12 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (!resultType)
     return failure();
 
-  if (resultType.isInteger(0))
+  if (resultType.isInteger(0)) {
+    if (op.getInnerSym())
+      return op.emitError("zero width wire is referenced by name [")
+             << *op.getInnerSym() << "] (e.g. in an XMR) but must be removed";
     return setLowering(op.getResult(), Value());
+  }
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto innerSym = lowerInnerSymbol(op);
@@ -2962,8 +2966,14 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.getInput());
   if (!operand)
-    return handleZeroBit(
-        op.getInput(), [&]() { return setLowering(op.getResult(), Value()); });
+    return handleZeroBit(op.getInput(), [&]() -> LogicalResult {
+      if (op.getInnerSym())
+        return op.emitError("zero width node is referenced by name [")
+               << *op.getInnerSym()
+               << "] (e.g. in an XMR) but must be "
+                  "removed";
+      return setLowering(op.getResult(), Value());
+    });
 
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
