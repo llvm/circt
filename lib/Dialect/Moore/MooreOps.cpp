@@ -27,17 +27,28 @@ using namespace mlir;
 
 void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
   p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
   hw::module_like_impl::printModuleSignatureNew(p, getBodyRegion(),
                                                 getModuleType(), {}, {});
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
   p << " ";
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
+
+  SmallVector<StringRef, 4> omittedAttrs = {"sym_name", "module_type",
+                                            visibilityAttrName};
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
 }
 
 ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the module name.
   StringAttr nameAttr;
   if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
