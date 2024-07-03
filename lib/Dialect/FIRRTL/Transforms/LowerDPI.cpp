@@ -175,6 +175,9 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   builder.setInsertionPointToStart(circuitOp.getBodyBlock());
   auto inputTypes = op.getInputs().getTypes();
   auto outputTypes = op.getResultTypes();
+  ArrayAttr inputNames = op.getInputNamesAttr();
+  StringAttr outputName = op.getOutputNameAttr();
+  assert(outputTypes.size() <= 1);
 
   SmallVector<hw::ModulePort> ports;
   ports.reserve(inputTypes.size() + outputTypes.size());
@@ -183,7 +186,8 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   for (auto [idx, inType] : llvm::enumerate(inputTypes)) {
     hw::ModulePort port;
     port.dir = hw::ModulePort::Direction::Input;
-    port.name = builder.getStringAttr(Twine("in_") + Twine(idx));
+    port.name = inputNames ? cast<StringAttr>(inputNames[idx])
+                           : builder.getStringAttr(Twine("in_") + Twine(idx));
     port.type = lowerType(inType);
     ports.push_back(port);
   }
@@ -192,7 +196,8 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   for (auto [idx, outType] : llvm::enumerate(outputTypes)) {
     hw::ModulePort port;
     port.dir = hw::ModulePort::Direction::Output;
-    port.name = builder.getStringAttr(Twine("out_") + Twine(idx));
+    port.name = outputName ? outputName
+                           : builder.getStringAttr(Twine("out_") + Twine(idx));
     port.type = lowerType(outType);
     ports.push_back(port);
   }

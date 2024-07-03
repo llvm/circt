@@ -4,7 +4,7 @@
 firrtl.circuit "DPI" {
   // CHECK-NEXT: sim.func.dpi private @unclocked_result(in %in_0 : i8, in %in_1 : i8, out out_0 : i8) attributes {verilogName = "unclocked_result"}
   // CHECK-NEXT: sim.func.dpi private @clocked_void(in %in_0 : i8, in %in_1 : i8) attributes {verilogName = "clocked_void"}
-  // CHECK-NEXT: sim.func.dpi private @clocked_result(in %in_0 : i8, in %in_1 : i8, out out_0 : i8) attributes {verilogName = "clocked_result"}
+  // CHECK-NEXT: sim.func.dpi private @clocked_result(in %foo : i8, in %bar : i8, out baz : i8) attributes {verilogName = "clocked_result"}
   // CHECK-LABEL: firrtl.module @DPI
   firrtl.module @DPI(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint<8>, out %out_0: !firrtl.uint<8>, out %out_1: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
     // CHECK-NEXT: %0 = builtin.unrealized_conversion_cast %clock : !firrtl.clock to !seq.clock
@@ -25,7 +25,7 @@ firrtl.circuit "DPI" {
     // CHECK-NEXT: %14 = builtin.unrealized_conversion_cast %13 : i8 to !firrtl.uint<8>
     // CHECK-NEXT: firrtl.matchingconnect %out_0, %5 : !firrtl.uint<8>
     // CHECK-NEXT: firrtl.matchingconnect %out_1, %14 : !firrtl.uint<8>
-    %0 = firrtl.int.dpi.call "clocked_result"(%in_0, %in_1) clock %clock enable %enable {name = "result1"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0, %in_1) clock %clock enable %enable {inputNames = ["foo", "bar"], outputName = "baz"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.int.dpi.call "clocked_void"(%in_0, %in_1) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
     %1 = firrtl.int.dpi.call "unclocked_result"(%in_0, %in_1) enable %enable {name = "result2"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.matchingconnect %out_0, %0 : !firrtl.uint<8>
