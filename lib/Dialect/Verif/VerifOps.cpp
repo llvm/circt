@@ -143,11 +143,6 @@ LogicalResult BMCOp::verifyRegions() {
                 "there are clock arguments in the circuit region "
                 "before any other values";
   }
-  // Any model with no Assert or Cover ops is trivially satisfiable
-  if (getCircuit().getOps<AssertOp>().empty() &&
-      getCircuit().getOps<CoverOp>().empty())
-    return emitOpError() << "no property checked in circuit region, so model "
-                            "will be trivially satisfiable";
   return success();
 }
 

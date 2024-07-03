@@ -120,11 +120,3 @@ verif.bmc bound 10 num_regs 0 init {
   verif.assert %true : i1
   verif.yield %arg0 : i32
 }
-
-// -----
-
-// expected-error @below {{no property checked in circuit region, so model will be trivially satisfiable}}
-verif.bmc bound 10 num_regs 0 init {
-} loop {
-} circuit {
-}
