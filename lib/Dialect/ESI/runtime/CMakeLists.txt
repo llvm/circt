@@ -25,7 +25,6 @@
 
 cmake_minimum_required(VERSION 3.20)
 project(ESIRuntime LANGUAGES CXX)
-include(FetchContent)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
@@ -35,16 +34,22 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 # We need zlib to uncompress the manifest.
 find_package(ZLIB REQUIRED)
 
-# JSON parser for the manifest.
-if (NOT TARGET nlohmann_json)
-  message("-- ESI runtime pulling down json")
-  FetchContent_Declare(json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
-  )
-  FetchContent_MakeAvailable(json)
-endif()
+option(ESI_USE_FETCHCONTENT "Use FetchContent to pull in dependencies." ON)
+if(ESI_USE_FETCHCONTENT)
+  include(FetchContent)
 
+  # JSON parser for the manifest.
+  if (NOT TARGET nlohmann_json)
+    message("-- ESI runtime pulling down json")
+    FetchContent_Declare(json
+      GIT_REPOSITORY https://github.com/nlohmann/json.git
+      GIT_TAG        v3.11.3
+    )
+    FetchContent_MakeAvailable(json)
+  endif()
+else()
+  find_package(nlohmann_json REQUIRED)
+endif()
 
 set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
