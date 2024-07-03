@@ -45,6 +45,14 @@ if (NOT TARGET nlohmann_json)
   FetchContent_MakeAvailable(json)
 endif()
 
+##===----------------------------------------------------------------------===//
+## Overall target to build everything.
+##===----------------------------------------------------------------------===//
+add_custom_target(ESIRuntime)
+
+##===----------------------------------------------------------------------===//
+## Core ESI runtime.
+##===----------------------------------------------------------------------===//
 
 set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
@@ -71,10 +79,6 @@ set(ESICppRuntimeHeaders
 set(ESICppRuntimeBackendHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
 )
-set(ESICppRuntimeLinkLibraries
-  ZLIB::ZLIB
-  nlohmann_json::nlohmann_json
-)
 set(ESIPythonRuntimeSources
   python/esiaccel/__init__.py
   python/esiaccel/accelerator.py
@@ -82,96 +86,33 @@ set(ESIPythonRuntimeSources
   python/esiaccel/utils.py
   python/esiaccel/esiCppAccel.pyi
 )
-set(ESICppRuntimeIncludeDirs)
-set(ESICppRuntimeCxxFlags)
-set(ESICppRuntimeLinkFlags)
-set(ESICppRuntimeLibDirs)
 
 IF(MSVC)
     set(CMAKE_CXX_FLAGS "/EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-option(ESI_COSIM "Enable ESI cosimulation." ON)
-if(ESI_COSIM)
-  # gRPC for cosimulation. Local install required.
-  option(GRPC_PATH "Location of gRPC install.")
-  if (${GRPC_PATH})
-    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
-    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
-  else()
-    find_package(Protobuf REQUIRED CONFIG)
-    find_package(gRPC REQUIRED CONFIG)
-  endif()
-
-  add_subdirectory(cosim_dpi_server)
-  # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
-  # backends should only need to be linked in.
-  # TODO: Once the hack in the python bindings is remidied, remove this.
-  add_compile_definitions(ESI_COSIM)
-  set(ESICppRuntimeSources
-    ${ESICppRuntimeSources}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
-  )
-  set(ESICppRuntimeBackendHeaders
-    ${ESICppRuntimeBackendHeaders}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
-  )
-else()
-  message("-- ESI cosim disabled")
-endif()
-
-option(XRT_PATH "Path to XRT lib.")
-if (XRT_PATH)
-  message("-- XRT enabled with path ${XRT_PATH}")
-
-  set(ESICppRuntimeSources
-    ${ESICppRuntimeSources}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
-  )
-  set(ESICppRuntimeBackendHeaders
-    ${ESICppRuntimeBackendHeaders}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
-  )
-  set(ESICppRuntimeIncludeDirs
-    ${ESICppRuntimeIncludeDirs}
-    ${XRT_PATH}/include
-  )
-  set(ESICppRuntimeCxxFlags
-    ${ESICppRuntimeCxxFlags}
-    -fmessage-length=0
-    -Wno-nested-anon-types
-    -Wno-c++98-compat-extra-semi
-  )
-  set(ESICppRuntimeLinkLibraries
-    ${ESICppRuntimeLinkLibraries}
-    xrt_coreutil
-  )
-  set(ESICppRuntimeLinkFlags
-    ${ESICppRuntimeLinkFlags}
-    -pthread
-  )
-  set(ESICppRuntimeLibDirs
-    ${ESICppRuntimeLibDirs}
-    ${XRT_PATH}/lib
-  )
-endif()
-
 # The core API. For now, compile the backends into it directly.
-# TODO: make this a plugin architecture.
 add_library(ESICppRuntime SHARED
   ${ESICppRuntimeSources}
 )
 target_include_directories(ESICppRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-target_link_libraries(ESICppRuntime PRIVATE ${ESICppRuntimeLinkLibraries})
-target_include_directories(ESICppRuntime PRIVATE ${ESICppRuntimeIncludeDirs})
-target_compile_options(ESICppRuntime PRIVATE ${ESICppRuntimeCxxFlags})
-target_link_directories(ESICppRuntime PRIVATE ${ESICppRuntimeLibDirs})
-target_link_options(ESICppRuntime PRIVATE ${ESICppRuntimeLinkFlags})
+target_link_libraries(ESICppRuntime PRIVATE
+  ZLIB::ZLIB
+  nlohmann_json::nlohmann_json
+)
+if(MSVC)
+  # TODO: does Windows need libraries for dynamic loading?
+else()
+  target_link_libraries(ESICppRuntime PRIVATE
+    dl
+  )
+  target_link_options(ESICppRuntime PRIVATE
+    -pthread
+  )
+endif()
+add_dependencies(ESIRuntime ESICppRuntime)
 install(TARGETS ESICppRuntime
   DESTINATION lib
   COMPONENT ESIRuntime
@@ -180,10 +121,7 @@ install(FILES ${ESICppRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
 )
-install(FILES ${ESICppRuntimeBackendHeaders}
-  DESTINATION include/esi/backends
-  COMPONENT ESIRuntime-dev
-)
+
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
   DESTINATION cmake
   COMPONENT ESIRuntime-dev
@@ -193,41 +131,39 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   target_compile_options(ESICppRuntime PRIVATE -Wno-covered-switch-default)
 endif()
 
-if(ESI_COSIM)
-  target_link_libraries(ESICppRuntime PUBLIC protobuf::libprotobuf gRPC::grpc++)
-  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-  target_include_directories(ESICppRuntime PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
-  protobuf_generate(
-      TARGET ESICppRuntime
-      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
-  protobuf_generate(
-      TARGET ESICppRuntime
-      LANGUAGE grpc
-      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
-      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
-      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
-endif()
+# Global variable for the path to the ESI runtime for use by tests.
+set(ESICppRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
+  CACHE INTERNAL "Path to ESI runtime" FORCE)
 
-# The esiquery tool is a simple wrapper around the SysInfo API.
+
+##===----------------------------------------------------------------------===//
+## The esiquery tool is a simple wrapper around the SysInfo API.
+##===----------------------------------------------------------------------===//
+
 add_executable(esiquery
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
 target_link_libraries(esiquery PRIVATE ESICppRuntime)
+add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
   DESTINATION bin
   COMPONENT ESIRuntime
 )
 
-# The esitester tool is both an example and test driver. As it is not intended
-# for production use, it is not installed.
+##===----------------------------------------------------------------------===//
+## The esitester tool is both an example and test driver. As it is not intended
+## for production use, it is not installed.
+##===----------------------------------------------------------------------===//
+
 add_executable(esitester
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
 )
 target_link_libraries(esitester PRIVATE ESICppRuntime)
+add_dependencies(ESIRuntime esitester)
 
-# Global variable for the path to the ESI runtime for use by tests.
-set(ESICppRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
-  CACHE INTERNAL "Path to ESI runtime" FORCE)
+##===----------------------------------------------------------------------===//
+## Python bindings for the ESI runtime.
+##===----------------------------------------------------------------------===//
 
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
 if (WHEEL_BUILD)
@@ -339,18 +275,99 @@ if(Python3_FOUND)
         esiCppAccel
     )
 
-    # Overall target to build everything.
-    add_custom_target(ESIRuntime
-      DEPENDS
-        ESICppRuntime
-        ESIPythonRuntime
-        EsiCosimDpiServer
-        esiquery
-        esi-cosim
-    )
+    add_dependencies(ESIRuntime ESIPythonRuntime)
   endif()
 else() # Python not found.
   if (WHEEL_BUILD)
     message (FATAL_ERROR "python-dev is required for a wheel build.")
   endif()
 endif()
+
+
+
+##===----------------------------------------------------------------------===//
+## Backends are loaded dynamically as plugins.
+##===----------------------------------------------------------------------===//
+
+option(ESI_COSIM "Enable ESI cosimulation." ON)
+if(ESI_COSIM)
+  # gRPC for cosimulation. Local install required.
+  option(GRPC_PATH "Location of gRPC install.")
+  if (${GRPC_PATH})
+    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
+    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
+  else()
+    find_package(Protobuf REQUIRED CONFIG)
+    find_package(gRPC REQUIRED CONFIG)
+  endif()
+
+  add_library(CosimBackend SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
+  )
+  set(ESICppRuntimeBackendHeaders
+    ${ESICppRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
+  )
+
+  target_link_libraries(CosimBackend PUBLIC
+    ESICppRuntime
+    protobuf::libprotobuf
+    gRPC::grpc++
+  )
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_include_directories(CosimBackend PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+  protobuf_generate(
+      TARGET CosimBackend
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+  protobuf_generate(
+      TARGET CosimBackend
+      LANGUAGE grpc
+      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
+  add_dependencies(ESIRuntime CosimBackend)
+
+  # Build the RTL DPI cosim server.
+  add_subdirectory(cosim_dpi_server)
+else()
+  message("-- ESI cosim disabled")
+endif()
+
+option(XRT_PATH "Path to XRT lib.")
+if (XRT_PATH)
+  message("-- XRT enabled with path ${XRT_PATH}")
+
+  add_library(XrtBackend SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
+  )
+  set(ESICppRuntimeBackendHeaders
+    ${ESICppRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
+  )
+  target_include_directories(XrtBackend PRIVATE
+    ${XRT_PATH}/include
+  )
+  target_compile_options(XrtBackend PRIVATE
+    -fmessage-length=0
+    -Wno-nested-anon-types
+    -Wno-c++98-compat-extra-semi
+  )
+  target_link_libraries(XrtBackend PRIVATE
+    ESICppRuntime
+    xrt_coreutil
+  )
+  target_link_options(XrtBackend PRIVATE
+    -pthread
+    -L${XRT_PATH}/lib
+  )
+  add_dependencies(ESIRuntime XrtBackend)
+endif()
+
+install(FILES ${ESICppRuntimeBackendHeaders}
+  DESTINATION include/esi/backends
+  COMPONENT ESIRuntime-dev
+)

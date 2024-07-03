@@ -15,8 +15,17 @@
 #include "esi/Accelerator.h"
 
 #include <cassert>
+#include <filesystem>
 #include <map>
 #include <stdexcept>
+
+#include <iostream>
+
+#ifdef __linux__
+#include <dlfcn.h>
+#elif _WIN32
+// TODO: this.
+#endif
 
 using namespace std;
 
@@ -45,6 +54,80 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
   return cacheEntry.get();
 }
 
+/// Get the path to the currently running executable.
+static std::filesystem::path getExePath() {
+#ifdef __linux__
+  char result[PATH_MAX];
+  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+  if (count == -1)
+    throw runtime_error("Could not get executable path");
+  return std::filesystem::path(std::string(result, count));
+#elif _WIN32
+  // TODO: this.
+#else
+#eror "Unsupported platform"
+#endif
+}
+
+/// Get the path to the currently running shared library.
+static std::filesystem::path getLibPath() {
+#ifdef __linux__
+  Dl_info dl_info;
+  dladdr((void *)getLibPath, &dl_info);
+  return std::filesystem::path(std::string(dl_info.dli_fname));
+#elif _WIN32
+  // TODO: this.
+#else
+#eror "Unsupported platform"
+#endif
+}
+
+/// Load a backend plugin dynamically. Plugins are expected to be named
+/// lib<BackendName>Backend.so and located in one of 1) CWD, 2) in the same
+/// directory as the application, or 3) in the same directory as this library.
+static void loadBackend(std::string backend) {
+  backend[0] = toupper(backend[0]);
+
+  // Get the file name we are looking for.
+#ifdef __linux__
+  std::string backendFileName = "lib" + backend + "Backend.so";
+#elif _WIN32
+  // TODO: this.
+  return;
+#else
+#eror "Unsupported platform"
+#endif
+
+  // Look for library using the C++ std API.
+  // TODO: once the runtime has a logging framework, log the paths we are
+  // trying.
+
+  // First, try the current directory.
+  std::filesystem::path backendPath = backendFileName;
+  if (!std::filesystem::exists(backendPath)) {
+    // Next, try the directory of the executable.
+    backendPath = getExePath().parent_path().append(backendFileName);
+    if (!std::filesystem::exists(backendPath)) {
+      // Finally, try
+      backendPath = getLibPath().parent_path().append(backendFileName);
+      if (!std::filesystem::exists(backendPath))
+        throw std::runtime_error("Backend library not found");
+    }
+  }
+
+  // Attempt to load it.
+#ifdef __linux__
+  void *handle = dlopen(backendPath.c_str(), RTLD_NOW | RTLD_GLOBAL);
+  if (!handle)
+    throw std::runtime_error("While attempting to load backend plugin: " +
+                             std::string(dlerror()));
+#elif _WIN32
+  // TODO: this.
+#else
+#eror "Unsupported platform"
+#endif
+}
+
 namespace registry {
 namespace internal {
 
@@ -59,8 +142,13 @@ void registerBackend(string name, BackendCreate create) {
 unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
                                           string connection) {
   auto f = internal::backendRegistry.find(backend);
-  if (f == internal::backendRegistry.end())
-    throw runtime_error("Backend not found");
+  if (f == internal::backendRegistry.end()) {
+    // If it's not already found in the registry, try to load it dynamically.
+    loadBackend(backend);
+    f = internal::backendRegistry.find(backend);
+    if (f == internal::backendRegistry.end())
+      throw runtime_error("Backend not found");
+  }
   return f->second(ctxt, connection);
 }
 
