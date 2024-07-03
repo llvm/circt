@@ -82,7 +82,7 @@ static std::filesystem::path getLibPath() {
 #endif
 }
 
-static void loadDynamic(string backend) {
+static void loadBackend(std::string backend) {
   backend[0] = toupper(backend[0]);
 
   // Get the file name we are looking for.
@@ -96,6 +96,9 @@ static void loadDynamic(string backend) {
 #endif
 
   // Look for library using the C++ std API.
+  // TODO: once the runtime has a logging framework, log the paths we are
+  // trying.
+
   // First, try the current directory.
   std::filesystem::path backendPath = backendFileName;
   if (!std::filesystem::exists(backendPath)) {
@@ -138,7 +141,7 @@ unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
   auto f = internal::backendRegistry.find(backend);
   if (f == internal::backendRegistry.end()) {
     // If it's not already found in the registry, try to load it dynamically.
-    loadDynamic(backend);
+    loadBackend(backend);
     f = internal::backendRegistry.find(backend);
     if (f == internal::backendRegistry.end())
       throw runtime_error("Backend not found");

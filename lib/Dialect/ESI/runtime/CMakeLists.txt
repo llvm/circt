@@ -101,11 +101,17 @@ target_include_directories(ESICppRuntime PUBLIC
 target_link_libraries(ESICppRuntime PRIVATE
   ZLIB::ZLIB
   nlohmann_json::nlohmann_json
-  dl
 )
-target_link_options(ESICppRuntime PRIVATE
-  -pthread
-)
+if(MSVC)
+  # TODO: does Windows need libraries for dynamic loading?
+else()
+  target_link_libraries(ESICppRuntime PRIVATE
+    dl
+  )
+  target_link_options(ESICppRuntime PRIVATE
+    -pthread
+  )
+endif()
 add_dependencies(ESIRuntime ESICppRuntime)
 install(TARGETS ESICppRuntime
   DESTINATION lib
