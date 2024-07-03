@@ -430,3 +430,24 @@ firrtl.circuit "NonRootedPath" {
     %foo = firrtl.wire sym @wire {annotations = [{circt.nonlocal = @nla, class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "OwningModulePrefix"
+firrtl.circuit "OwningModulePrefix" {
+  // COM: Ensure the hierpath used in the path op starts at the owning module.
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@OwningModule::{{.+}}]
+  hw.hierpath private @nla [@OwningModulePrefix::@sym0, @OwningModule::@sym1, @OwningModuleChild::@sym2]
+  firrtl.module @OwningModulePrefix() {
+    firrtl.instance owning_module sym @sym0 @OwningModule()
+  }
+  firrtl.module @OwningModule() {
+    firrtl.instance owning_module_child sym @sym1 @OwningModuleChild()
+    firrtl.object @OwningModuleClass()
+  }
+  firrtl.module @OwningModuleChild() {
+    %w = firrtl.wire sym @sym2 {annotations = [{class = "circt.tracker", id = distinct[0]<>, circt.nonlocal = @nla}]} : !firrtl.uint<0>
+  }
+  firrtl.class @OwningModuleClass() {
+    // CHECK: om.path_create reference %basepath [[NLA]]
+    firrtl.path reference distinct[0]<>
+  }
+}
