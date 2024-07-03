@@ -192,12 +192,12 @@ def BMCOp : VerifOp<"bmc", [
     'state' arguments to be fed to the `loop` region (see below).
 
     The `loop` region contains the logic to advance the clock signals, and will
-    be executed after each execution of the `circuit` region. It must have all
-    the arguments that the `circuit` region has, but these can be followed by
-    additional 'state' arguments to represent e.g. which clock should be
-    toggled next. The `loop` region should yield as many `!seq.clock` values as
-    the `circuit` region has `!seq.clock` arguments, followed by the updated
-    values of all 'state' arguments.
+    be executed after each execution of the `circuit` region. It should take as
+    arguments as many `!seq.clock` values as the `circuit` region has, and
+    these can be followed by additional 'state' arguments to represent e.g.
+    which clock should be toggled next. The types yielded should be the same,
+    as this region yields the updated clock and state values (this should also
+    match the types yielded by the `init` region).
   }];
 
   let arguments = (ins I32Attr:$bound, I32Attr:$num_regs);

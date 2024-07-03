@@ -96,7 +96,6 @@ verif.lec {verif.some_attr} first {
 // CHECK: }
 verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
 } loop {
-^bb0(%arg0: i32):
 } circuit {
 ^bb0(%arg0: i32):
   %false = hw.constant false
@@ -112,7 +111,7 @@ verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
 //CHECK:   verif.yield %{{.*}}, %{{.*}} : !seq.clock, i1
 //CHECK: }
 //CHECK: loop {
-//CHECK:   ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i1):
+//CHECK:   ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i1):
 //CHECK:   %{{.*}} = seq.from_clock %{{.*}}
 //CHECK:   %{{.*}} = hw.constant true
 //CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i1
@@ -134,7 +133,7 @@ init {
   verif.yield %clk, %c0_i1 : !seq.clock, i1
 }
 loop {
-  ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32, %stateArg: i1):
+  ^bb0(%clk: !seq.clock, %stateArg: i1):
   %from_clock = seq.from_clock %clk
   %c-1_i1 = hw.constant -1 : i1
   %neg_clock = comb.xor %from_clock, %c-1_i1 : i1

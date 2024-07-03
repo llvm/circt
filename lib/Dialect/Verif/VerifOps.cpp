@@ -121,6 +121,10 @@ LogicalResult BMCOp::verifyRegions() {
   if (initYieldOp->getOperandTypes() != loopYieldOp->getOperandTypes())
     return emitOpError()
            << "init and loop regions must yield the same types of values";
+  if (initYieldOp->getOperandTypes() != getLoop().front().getArgumentTypes())
+    return emitOpError()
+           << "loop region arguments must match the types of the values "
+              "yielded by the init and loop regions";
   size_t totalClocks = 0;
   auto circuitArgTy = getCircuit().getArgumentTypes();
   for (auto input : circuitArgTy)
@@ -139,22 +143,6 @@ LogicalResult BMCOp::verifyRegions() {
                 "there are clock arguments in the circuit region "
                 "before any other values";
   }
-  auto loopArgTy = getLoop().getArgumentTypes();
-  if (circuitArgTy.size() > loopArgTy.size())
-    return emitOpError()
-           << "loop region must have at least as many arguments as the circuit "
-              "region";
-  for (size_t i = 0; i < circuitArgTy.size(); i++)
-    if (circuitArgTy[i] != loopArgTy[i])
-      return emitOpError()
-             << "loop region must have the same arguments as the circuit "
-                "region before any state arguments";
-  auto loopYieldTy = loopYieldOp->getOperandTypes();
-  for (size_t i = 0; i < loopArgTy.size() - circuitArgTy.size(); i++)
-    if (loopArgTy[i + circuitArgTy.size()] != loopYieldTy[totalClocks + i])
-      return emitOpError() << "additional loop region arguments must match the "
-                              "types of the non-clock "
-                              "values yielded by the init and loop regions";
   // Any model with no Assert or Cover ops is trivially satisfiable
   if (getCircuit().getOps<AssertOp>().empty() &&
       getCircuit().getOps<CoverOp>().empty())
