@@ -36,6 +36,7 @@ struct PortLowering {
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  DenseMap<const slang::syntax::SyntaxNode*, const slang::ast::PortSymbol*> portsBySyntaxNode;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -82,11 +83,6 @@ struct Context {
   // Convert a slang timing control into an MLIR timing control.
   LogicalResult
   convertTimingControl(const slang::ast::TimingControl &timingControl);
-
-  // Update duplicate port symbol
-  const slang::ast::PortSymbol *
-  updatePortsSymbol(ModuleLowering *moduleLowering,
-                    const slang::ast::PortSymbol *port);
 
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;

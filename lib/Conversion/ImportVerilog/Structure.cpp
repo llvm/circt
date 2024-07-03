@@ -130,7 +130,13 @@ struct MemberVisitor {
       // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
-        port = context.updatePortsSymbol(moduleLowering, port);
+        for (const auto &existPort : moduleLowering->ports)
+          if (port->name == existPort.ast.name) {
+            moduleLowering->portsBySyntaxNode.insert(
+                {con->port.getSyntax(), &existPort.ast});
+            port = &existPort.ast;
+          }
+
         switch (port->direction) {
         case slang::ast::ArgumentDirection::In: {
           auto refType = moore::RefType::get(
@@ -189,7 +195,10 @@ struct MemberVisitor {
                          : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
-        port = context.updatePortsSymbol(moduleLowering, port);
+        port = moduleLowering->portsBySyntaxNode.contains(con->port.getSyntax())
+                   ? moduleLowering->portsBySyntaxNode.lookup(
+                         con->port.getSyntax())
+                   : port;
         portValues.insert({port, value});
         continue;
       }
@@ -205,7 +214,11 @@ struct MemberVisitor {
         unsigned offset = 0;
         auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
-          port = context.updatePortsSymbol(moduleLowering, port);
+          port =
+              moduleLowering->portsBySyntaxNode.contains(con->port.getSyntax())
+                  ? moduleLowering->portsBySyntaxNode.lookup(
+                        con->port.getSyntax())
+                  : port;
           unsigned width = port->getType().getBitWidth();
           auto index = builder.create<moore::ConstantOp>(loc, i32, offset);
           auto sliceType = context.convertType(port->getType());
@@ -654,17 +667,4 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
 
   return success();
-}
-
-/// Let duplicate port symbol be existing port symbol
-const slang::ast::PortSymbol *
-Context::updatePortsSymbol(ModuleLowering *moduleLowering,
-                           const slang::ast::PortSymbol *port) {
-  if (!moduleLowering || !port)
-    return port;
-  for (const auto &existPort : moduleLowering->ports) {
-    if (existPort.ast.name == port->name)
-      return &existPort.ast;
-  }
-  return port;
 }
