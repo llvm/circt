@@ -17,6 +17,7 @@
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <optional>
 
 using namespace circt;
 using namespace circt::moore;
@@ -267,6 +268,9 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
+  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+    return {};
+
   auto refType = getType();
   auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
   if (!destructurable)
