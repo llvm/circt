@@ -35,30 +35,6 @@ using namespace verif;
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
-  using OpConversionPattern<PrintOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(PrintOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std 1800-2012).
-    Value fdStdout = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), APInt(32, 0x80000001, false));
-
-    auto fstrOp =
-        dyn_cast_or_null<FormatVerilogStringOp>(op.getString().getDefiningOp());
-    if (!fstrOp)
-      return op->emitOpError() << "expected FormatVerilogStringOp as the "
-                                  "source of the formatted string";
-
-    rewriter.replaceOpWithNewOp<sv::FWriteOp>(
-        op, fdStdout, fstrOp.getFormatString(), fstrOp.getSubstitutions());
-    return success();
-  }
-};
-
 struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
   using OpConversionPattern<HasBeenResetOp>::OpConversionPattern;
 
@@ -147,9 +123,9 @@ void VerifToSVPass::runOnOperation() {
   ConversionTarget target(context);
   RewritePatternSet patterns(&context);
 
-  target.addIllegalOp<PrintOp, HasBeenResetOp>();
+  target.addIllegalOp<HasBeenResetOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
-  patterns.add<PrintOpConversionPattern, HasBeenResetConversion>(&context);
+  patterns.add<HasBeenResetConversion>(&context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
