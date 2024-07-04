@@ -265,11 +265,41 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
   return std::nullopt;
 }
 
+LogicalResult VariableOp::canonicalize(VariableOp op,
+                                       ::mlir::PatternRewriter &rewriter) {
+  Value initial;
+  for (auto *user : op->getUsers())
+    if (isa<ContinuousAssignOp>(user) &&
+        (user->getOperand(0) == op.getResult())) {
+      // Don't canonicalize the multiple continuous assignment to the same
+      // variable.
+      if (initial)
+        return failure();
+      initial = user->getOperand(1);
+    }
+
+  if (initial) {
+    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(), op.getName(),
+                                               initial);
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // NetOp
 //===----------------------------------------------------------------------===//
 
 void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getName());
+}
+
+//===----------------------------------------------------------------------===//
+// AssignedVarOp
+//===----------------------------------------------------------------------===//
+
+void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
 
