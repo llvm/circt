@@ -73,7 +73,6 @@ void ExternalizeRegistersPass::runOnOperation() {
               regOp.getInput().getType());
 
           OpBuilder builder(regOp);
-          builder.create<seq::FromClockOp>(op->getLoc(), regOp.getClk());
           regOp.getResult().replaceAllUsesWith(
               module.appendInput("", regOp.getType()).second);
           module.appendOutput("", regOp.getInput());
