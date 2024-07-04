@@ -115,9 +115,9 @@ def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">]> {
     fields.
   }];
 
-  let arguments = (ins Variadic<AnyType>:$outputs);
+  let arguments = (ins Variadic<AnyType>:$fields);
 
-  let assemblyFormat = "attr-dict ($outputs^ `:` qualified(type($outputs)))?";
+  let assemblyFormat = "attr-dict ($fields^ `:` qualified(type($fields)))?";
 }
 
 //===----------------------------------------------------------------------===//

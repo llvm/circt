@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: om.class @Thingy
-// CHECK-SAME: (%blue_1: i8, %blue_2: i32) attributes {fields = ["widget", "gadget", "blue_1", "blue_2"]}
-om.class @Thingy(%blue_1: i8, %blue_2: i32) attributes {fields = ["widget", "gadget", "blue_1", "blue_2"]} {
+// CHECK-SAME: (%blue_1: i8, %blue_2: i32)
+om.class @Thingy(%blue_1: i8, %blue_2: i32) {
   // CHECK: %[[c5:.+]] = om.constant 5 : i8
   %0 = om.constant 5 : i8
   // CHECK: %[[c6:.+]] = om.constant 6 : i32
@@ -29,8 +29,8 @@ om.class @Thingy(%blue_1: i8, %blue_2: i32) attributes {fields = ["widget", "gad
   // CHECK: om.class.field @blue_2, %[[widget_field]] : i8
   om.class.field @blue_2, %6 : i8
 
-  // CHECK: om.class.fields %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8
-  om.class.fields %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8
+  // CHECK: om.class.fields {field_names = ["widget", "gadget", "blue_1", "blue_2"]} %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8
+  om.class.fields {field_names = ["widget", "gadget", "blue_1", "blue_2"]} %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8
 }
 
 // CHECK-LABEL: om.class @Widget
