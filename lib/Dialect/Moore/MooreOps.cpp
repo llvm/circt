@@ -267,6 +267,9 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
+  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+    return {};
+
   auto refType = getType();
   auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
   if (!destructurable)
