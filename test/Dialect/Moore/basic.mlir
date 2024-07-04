@@ -271,3 +271,15 @@ func.func @Expressions(
   }
   return
 }
+
+// CHECK-LABEL: moore.module @GraphRegion
+moore.module @GraphRegion() {
+  // CHECK: [[B_READ:%.+]] = moore.read %b : i32
+  %0 = moore.read %b : i32
+  // CHECK: [[A:%.+]] = moore.variable [[B_READ]] : <i32>
+  %a = moore.variable %0 : <i32>
+  // CHECK: [[B:%.+]] = moore.variable %1 : <i32>
+  %b = moore.variable %1 : <i32>
+  // CHECK: [[CONST_0:%.+]] = moore.constant 0 : i32
+  %1 = moore.constant 0 : i32
+}

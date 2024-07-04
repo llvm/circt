@@ -665,8 +665,10 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    if (gi.hasNParam(2) || gi.namedIntParam("isClocked") ||
-        gi.namedParam("functionName"))
+    if (gi.hasNParam(2, 2) || gi.namedIntParam("isClocked") ||
+        gi.namedParam("functionName") ||
+        gi.namedParam("inputNames", /*optional=*/true) ||
+        gi.namedParam("outputName", /*optional=*/true))
       return true;
     auto isClocked = getIsClocked(gi);
     // If clocked, the first operand must be a clock.
@@ -683,6 +685,14 @@ public:
                PatternRewriter &rewriter) override {
     auto isClocked = getIsClocked(gi);
     auto functionName = gi.getParamValue<StringAttr>("functionName");
+    ArrayAttr inputNamesStrArray;
+    StringAttr outputStr = gi.getParamValue<StringAttr>("outputName");
+    if (auto inputNames = gi.getParamValue<StringAttr>("inputNames")) {
+      SmallVector<StringRef> inputNamesTemporary;
+      inputNames.strref().split(inputNamesTemporary, ';', /*MaxSplit=*/-1,
+                                /*KeepEmpty=*/false);
+      inputNamesStrArray = rewriter.getStrArrayAttr(inputNamesTemporary);
+    }
     // Clock and enable are optional.
     Value clock = isClocked ? adaptor.getOperands()[0] : Value();
     Value enable = adaptor.getOperands()[static_cast<size_t>(isClocked)];
@@ -691,7 +701,8 @@ public:
         adaptor.getOperands().drop_front(static_cast<size_t>(isClocked) + 1);
 
     rewriter.replaceOpWithNewOp<DPICallIntrinsicOp>(
-        gi.op, gi.op.getResultTypes(), functionName, clock, enable, inputs);
+        gi.op, gi.op.getResultTypes(), functionName, inputNamesStrArray,
+        outputStr, clock, enable, inputs);
   }
 };
 
