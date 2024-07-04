@@ -17,6 +17,7 @@
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <optional>
 
 using namespace circt;
 using namespace circt::moore;
