@@ -41,6 +41,7 @@ class ResultIsSingleBitMatchingInputDomain<string result, string input> :
 
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
+  RegionKindInterface,
   Symbol,
   SingleBlockImplicitTerminator<"OutputOp">,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
@@ -49,9 +50,7 @@ def SVModuleOp : MooreOp<"module", [
   let description = [{
     The `moore.module` operation represents a SystemVerilog module, including
     its name, port list, and the constituent parts that make up its body. The
-    module's body is an SSACFG region, since declarations within SystemVerilog
-    modules generally have to appear before their uses, and dedicated assignment
-    operators are used to make connections after declarations.
+    module's body is a graph region.
 
     See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
   }];
@@ -68,6 +67,10 @@ def SVModuleOp : MooreOp<"module", [
     OutputOp getOutputOp();
     /// Return the list of values assigned to output ports.
     OperandRange getOutputs();
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
   }];
 }
 

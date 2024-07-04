@@ -3,9 +3,9 @@
 FIRRTL version 4.0.0
 circuit DPI:
 ; CHECK-LABEL: import "DPI-C" function void clocked_result(
-; CHECK-NEXT:   input  byte in_0,
-; CHECK-NEXT:                    in_1,
-; CHECK-NEXT:   output byte out_0
+; CHECK-NEXT:   input  byte foo,
+; CHECK-NEXT:               bar,
+; CHECK-NEXT:   output byte baz
 ; CHECK-NEXT: );
 
 ; CHECK-LABEL: import "DPI-C" function void clocked_void(
@@ -46,7 +46,7 @@ circuit DPI:
     input in: UInt<8>[2]
     output out : UInt<8>[2]
 
-    node result1 = intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_result"> : UInt<8>, clock, enable, in[0], in[1])
+    node result1 = intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_result", inputNames="foo;bar", outputName="baz"> : UInt<8>, clock, enable, in[0], in[1])
     intrinsic(circt_dpi_call<isClocked = 1, functionName="clocked_void">, clock, enable, in[0], in[1])
     node result2 = intrinsic(circt_dpi_call<isClocked = 0, functionName="unclocked_result"> : UInt<8>,  enable, in[0], in[1])
 
