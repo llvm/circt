@@ -93,8 +93,8 @@ public:
 class MMIO : public Service {
 public:
   virtual ~MMIO() = default;
-  virtual uint32_t read(uint32_t addr) const = 0;
-  virtual void write(uint32_t addr, uint32_t data) = 0;
+  virtual uint64_t read(uint32_t addr) const = 0;
+  virtual void write(uint32_t addr, uint64_t data) = 0;
   virtual std::string getServiceSymbol() const override;
 };
 

@@ -11,8 +11,7 @@ from ..types import Array, Bits, Channel, ChannelDirection
 
 from typing import Dict, Tuple
 
-MagicNumberLo = 0xE5100E51  # ESI__ESI
-MagicNumberHi = 0x207D98E5  # Random
+MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
 VersionNumber = 0  # Version 0: format subject to change
 
 
@@ -23,33 +22,30 @@ class ESI_Manifest_ROM(Module):
   module_name = "__ESI_Manifest_ROM"
 
   clk = Clock()
-  address = Input(Bits(30))
+  address = Input(Bits(29))
   # Data is two cycles delayed after address changes.
-  data = Output(Bits(32))
+  data = Output(Bits(64))
 
 
 class ChannelMMIO(esi.ServiceImplementation):
-  """MMIO service implementation with an AXI-lite protocol. This assumes a 20
-  bit address bus for 1MB of addressable MMIO space. Which should be fine for
-  now, though nothing should assume this limit. It also only supports 32-bit
-  aligned accesses and just throws away the lower two bits of address.
+  """MMIO service implementation with an AXI-lite protocol. This assumes a 32
+  bit address bus. It also only supports 64-bit aligned accesses and just throws
+  away the lower three bits of address.
 
   Only allows for one outstanding request at a time. If a client doesn't return
   a response, the MMIO service will hang. TODO: add some kind of timeout.
 
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
-    - 0x4: 0 constant
-    - 0x8: Magic number low (0xE5100E51)
-    - 0xC: Magic number high (random constant: 0x207D98E5)
-    - 0x10: ESI version number (0)
-    - 0x14: Location of the manifest ROM (absolute address)
+    - 0x8: Magic number (0x207D98E5_E5100E51)
+    - 0x12: ESI version number (0)
+    - 0x18: Location of the manifest ROM (absolute address)
 
     - 0x100: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
-    - addr(Manifest ROM) + 4: Start of compressed manifest
+    - addr(Manifest ROM) + 8: Start of compressed manifest
 
   This layout _should_ be pretty standard, but different BSPs may have various
   different restrictions.
@@ -81,10 +77,10 @@ class ChannelMMIO(esi.ServiceImplementation):
     for bundle in bundles.to_client_reqs:
       if bundle.direction == ChannelDirection.Input:
         read_table[offset] = bundle
-        offset += 4
+        offset += 8
       elif bundle.direction == ChannelDirection.Output:
         write_table[offset] = bundle
-        offset += 4
+        offset += 8
 
     manifest_loc = 1 << offset.bit_length()
     return read_table, write_table, manifest_loc
@@ -95,7 +91,7 @@ class ChannelMMIO(esi.ServiceImplementation):
     # Currently just exposes the header and manifest. Not any of the possible
     # service requests.
 
-    i32 = Bits(32)
+    i64 = Bits(64)
     i2 = Bits(2)
     i1 = Bits(1)
 
@@ -121,12 +117,12 @@ class ChannelMMIO(esi.ServiceImplementation):
     address_written.assign(arvalid & ~req_outstanding)
     address = araddr.reg(self.clk, ce=address_written, name="address")
     address_valid = address_written.reg(name="address_valid")
-    address_words = address[2:]  # Lop off the lower two bits.
+    address_words = address[3:]  # Lop off the lower three bits.
 
     # Set up the output of the data response pipeline. `data_pipeline*` are to
     # be connected below.
     data_pipeline_valid = NamedWire(i1, "data_pipeline_valid")
-    data_pipeline = NamedWire(i32, "data_pipeline")
+    data_pipeline = NamedWire(i64, "data_pipeline")
     data_pipeline_rresp = NamedWire(i2, "data_pipeline_rresp")
     data_out_valid = ControlReg(self.clk,
                                 self.rst, [data_pipeline_valid],
@@ -148,17 +144,16 @@ class ChannelMMIO(esi.ServiceImplementation):
     header_sel = (header_upper == header_upper.type(0))
     header_sel.name = "header_sel"
     # Layout the header as an array.
-    header = Array(Bits(32), 6)(
-        [0, 0, MagicNumberLo, MagicNumberHi, VersionNumber, manifest_loc])
+    header = Array(Bits(64), 4)([0, MagicNumber, VersionNumber, manifest_loc])
     header.name = "header"
     header_response_valid = address_valid  # Zero latency read.
-    header_out = header[address[2:5]]
+    header_out = header[address_words[:2]]
     header_out.name = "header_out"
     header_rresp = i2(0)
 
     # Handle reads from the manifest.
     rom_address = NamedWire(
-        (address_words.as_uint() - (manifest_loc >> 2)).as_bits(30),
+        (address_words.as_uint() - (manifest_loc >> 3)).as_bits(29),
         "rom_address")
     mani_rom = ESI_Manifest_ROM(clk=self.clk, address=rom_address)
     mani_valid = address_valid.reg(
@@ -168,10 +163,10 @@ class ChannelMMIO(esi.ServiceImplementation):
         cycles=2,  # Two cycle read to match the ROM latency.
         name="mani_valid_reg")
     mani_rresp = i2(0)
-    # mani_sel = (address.as_uint() >= manifest_loc)
+    mani_sel = (address.as_uint() >= manifest_loc).as_bits(1)
 
     # Mux the output depending on whether or not the address is in the header.
-    sel = NamedWire(~header_sel, "sel")
+    sel = NamedWire(mani_sel, "sel")
     data_mux_inputs = [header_out, mani_rom.data]
     data_pipeline.assign(Mux(sel, *data_mux_inputs))
     data_valid_mux_inputs = [header_response_valid, mani_valid]

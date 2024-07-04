@@ -443,7 +443,7 @@ class PureModule(Module):
     esi.ESIPureModuleParamOp(name, type_attr)
 
 
-MMIOReadDataResponse = Bits(32)
+MMIOReadDataResponse = Bits(64)
 
 
 @ServiceDecl
