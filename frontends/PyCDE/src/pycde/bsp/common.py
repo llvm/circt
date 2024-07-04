@@ -7,7 +7,7 @@ from ..constructs import ControlReg, Mux, NamedWire, Wire
 from .. import esi
 from ..module import Module, generator
 from ..signals import BundleSignal
-from ..types import Array, Bits, ChannelDirection
+from ..types import Array, Bits, Channel, ChannelDirection
 
 from typing import Dict, Tuple
 
@@ -28,18 +28,18 @@ class ESI_Manifest_ROM(Module):
   data = Output(Bits(32))
 
 
-class AxiMMIO(esi.ServiceImplementation):
+class ChannelMMIO(esi.ServiceImplementation):
   """MMIO service implementation with an AXI-lite protocol. This assumes a 20
   bit address bus for 1MB of addressable MMIO space. Which should be fine for
   now, though nothing should assume this limit. It also only supports 32-bit
-  aligned accesses and just throws awary the lower two bits of address.
+  aligned accesses and just throws away the lower two bits of address.
 
   Only allows for one outstanding request at a time. If a client doesn't return
   a response, the MMIO service will hang. TODO: add some kind of timeout.
 
   Implementation-defined MMIO layout:
-    - 0x0: 0 constanst
-    - 0x4: 0 constanst
+    - 0x0: 0 constant
+    - 0x4: 0 constant
     - 0x8: Magic number low (0xE5100E51)
     - 0xC: Magic number high (random constant: 0x207D98E5)
     - 0x10: ESI version number (0)
@@ -58,47 +58,24 @@ class AxiMMIO(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(Bits(1))
 
-  # MMIO read: address channel.
-  arvalid = Input(Bits(1))
-  arready = Output(Bits(1))
-  araddr = Input(Bits(20))
-
-  # MMIO read: data response channel.
-  rvalid = Output(Bits(1))
-  rready = Input(Bits(1))
-  rdata = Output(Bits(32))
-  rresp = Output(Bits(2))
-
-  # MMIO write: address channel.
-  awvalid = Input(Bits(1))
-  awready = Output(Bits(1))
-  awaddr = Input(Bits(20))
-
-  # MMIO write: data channel.
-  wvalid = Input(Bits(1))
-  wready = Output(Bits(1))
-  wdata = Input(Bits(32))
-
-  # MMIO write: write response channel.
-  bvalid = Output(Bits(1))
-  bready = Input(Bits(1))
-  bresp = Output(Bits(2))
+  read = Input(esi.MMIO.read.type)
 
   # Start at this address for assigning MMIO addresses to service requests.
   initial_offset: int = 0x100
 
   @generator
   def generate(self, bundles: esi._ServiceGeneratorBundles):
-    read_table, write_table, manifest_loc = AxiMMIO.build_table(self, bundles)
-    AxiMMIO.build_read(self, manifest_loc, read_table)
-    AxiMMIO.build_write(self, write_table)
+    read_table, write_table, manifest_loc = ChannelMMIO.build_table(
+        self, bundles)
+    ChannelMMIO.build_read(self, manifest_loc, read_table)
+    ChannelMMIO.build_write(self, write_table)
     return True
 
   def build_table(
       self,
       bundles) -> Tuple[Dict[int, BundleSignal], Dict[int, BundleSignal], int]:
     """Build a table of read and write addresses to BundleSignals."""
-    offset = AxiMMIO.initial_offset
+    offset = ChannelMMIO.initial_offset
     read_table = {}
     write_table = {}
     for bundle in bundles.to_client_reqs:
@@ -122,6 +99,12 @@ class AxiMMIO(esi.ServiceImplementation):
     i2 = Bits(2)
     i1 = Bits(1)
 
+    read_data_channel = Wire(Channel(esi.MMIOReadDataResponse),
+                             "resp_data_channel")
+    read_addr_channel = self.read.unpack(data=read_data_channel)["offset"]
+    arready = Wire(i1)
+    (araddr, arvalid) = read_addr_channel.unwrap(arready)
+
     address_written = NamedWire(i1, "address_written")
     response_written = NamedWire(i1, "response_written")
 
@@ -132,11 +115,11 @@ class AxiMMIO(esi.ServiceImplementation):
                                  self.rst, [address_written],
                                  [response_written],
                                  name="req_outstanding")
-    self.arready = ~req_outstanding
+    arready.assign(~req_outstanding)
 
     # Capture the address if a the bus transaction occured.
-    address_written.assign(self.arvalid & ~req_outstanding)
-    address = self.araddr.reg(self.clk, ce=address_written, name="address")
+    address_written.assign(arvalid & ~req_outstanding)
+    address = araddr.reg(self.clk, ce=address_written, name="address")
     address_valid = address_written.reg(name="address_valid")
     address_words = address[2:]  # Lop off the lower two bits.
 
@@ -149,20 +132,18 @@ class AxiMMIO(esi.ServiceImplementation):
                                 self.rst, [data_pipeline_valid],
                                 [response_written],
                                 name="data_out_valid")
-    self.rvalid = data_out_valid
-    self.rdata = data_pipeline.reg(self.clk,
-                                   self.rst,
-                                   ce=data_pipeline_valid,
-                                   name="data_pipeline_reg")
-    self.rresp = data_pipeline_rresp.reg(self.clk,
-                                         self.rst,
-                                         ce=data_pipeline_valid,
-                                         name="data_pipeline_rresp_reg")
+    rvalid = data_out_valid
+    rdata = data_pipeline.reg(self.clk,
+                              self.rst,
+                              ce=data_pipeline_valid,
+                              name="data_pipeline_reg")
+    read_resp_ch, rready = Channel(esi.MMIOReadDataResponse).wrap(rdata, rvalid)
+    read_data_channel.assign(read_resp_ch)
     # Clear the `req_outstanding` flag when the response has been transmitted.
-    response_written.assign(data_out_valid & self.rready)
+    response_written.assign(data_out_valid & rready)
 
     # Handle reads from the header (< 0x100).
-    header_upper = address_words[AxiMMIO.initial_offset.bit_length() - 2:]
+    header_upper = address_words[ChannelMMIO.initial_offset.bit_length() - 2:]
     # Is the address in the header?
     header_sel = (header_upper == header_upper.type(0))
     header_sel.name = "header_sel"
@@ -200,15 +181,4 @@ class AxiMMIO(esi.ServiceImplementation):
 
   def build_write(self, bundles):
     # TODO: this.
-
-    # So that we don't wedge the AXI-lite for writes, just ack all of them.
-    write_happened = Wire(Bits(1))
-    latched_aw = ControlReg(self.clk, self.rst, [self.awvalid],
-                            [write_happened])
-    latched_w = ControlReg(self.clk, self.rst, [self.wvalid], [write_happened])
-    write_happened.assign(latched_aw & latched_w)
-
-    self.awready = 1
-    self.wready = 1
-    self.bvalid = write_happened
-    self.bresp = 0
+    pass

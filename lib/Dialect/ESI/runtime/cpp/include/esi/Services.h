@@ -131,6 +131,9 @@ public:
     Function(AppID id, const std::map<std::string, ChannelPort &> &channels);
 
   public:
+    static Function *get(AppID id, WriteChannelPort &arg,
+                         ReadChannelPort &result);
+
     void connect();
     std::future<MessageData> call(const MessageData &arg);
 

@@ -106,6 +106,12 @@ FuncService::Function::Function(
   assert(channels.size() == 2 && "FuncService must have exactly two channels");
 }
 
+FuncService::Function *FuncService::Function::get(AppID id,
+                                                  WriteChannelPort &arg,
+                                                  ReadChannelPort &result) {
+  return new Function(id, {{"arg", arg}, {"result", result}});
+}
+
 void FuncService::Function::connect() {
   arg.connect();
   result.connect();
