@@ -37,7 +37,11 @@ def ClassLike : OpInterface<"ClassLike"> {
       "mlir::Region &", "getBody", (ins)>,
     InterfaceMethod<"Get the class-like body block",
       "mlir::Block *", "getBodyBlock", (ins),
-      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>
+      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
+    InterfaceMethod<"Add field to class",
+      "void", "addField",
+      (ins "mlir::OpBuilder &":$builder, "mlir::Location":$loc,
+           "mlir::StringRef":$name, "mlir::Value":$src)>
   ];
 }
 

@@ -225,6 +225,11 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
+void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
+                                  StringRef name, Value src) {
+    builder.create<ClassFieldOp>(loc, name, src);
+}
+
 //===----------------------------------------------------------------------===//
 // ClassFieldOp
 //===----------------------------------------------------------------------===//
@@ -273,6 +278,11 @@ LogicalResult circt::om::ClassExternOp::verify() {
 void circt::om::ClassExternOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
+}
+
+void circt::om::ClassExternOp::addField(OpBuilder &builder, Location loc,
+                                  StringRef name, Value src) {
+    builder.create<ClassFieldOp>(loc, name, src);
 }
 
 //===----------------------------------------------------------------------===//
