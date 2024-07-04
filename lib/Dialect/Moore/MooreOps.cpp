@@ -515,8 +515,11 @@ bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
                                 SmallPtrSetImpl<Attribute> &usedIndices,
                                 SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
                                 const DataLayout &dataLayout) {
-  usedIndices.insert(getFieldNameAttr());
-  return slot.ptr == getInput() && use_empty();
+  if (slot.ptr == getInput()) {
+    usedIndices.insert(getFieldNameAttr());
+    return true;
+  }
+  return false;
 }
 
 DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
