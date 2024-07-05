@@ -105,7 +105,15 @@ CosimAccelerator::connect(Context &ctxt, std::string connectionString) {
                              connectionString + "'");
   }
   uint16_t port = stoul(portStr);
-  return make_unique<CosimAccelerator>(ctxt, host, port);
+  auto conn = make_unique<CosimAccelerator>(ctxt, host, port);
+
+  // Using the MMIO manifest method is really only for internal debugging, so it
+  // doesn't need to be part of the connection string.
+  char *manifestMethod = getenv("ESI_COSIM_MANIFEST_MMIO");
+  if (manifestMethod != nullptr)
+    conn->setManifestMethod(ManifestMethod::MMIO);
+
+  return conn;
 }
 
 /// Construct and connect to a cosim server.
@@ -346,29 +354,28 @@ public:
         !rpcClient->getChannelDesc("__cosim_mmio_read.result", readResp))
       throw std::runtime_error("Could not find MMIO channels");
 
-    const esi::Type *uint32Type =
-        getType(ctxt, new UIntType(readArg.type(), 32));
+    const esi::Type *i32Type = getType(ctxt, new UIntType(readArg.type(), 32));
+    const esi::Type *i64Type = getType(ctxt, new UIntType(readResp.type(), 64));
 
     // Get ports, create the function, then connect to it.
     readArgPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), readArg, uint32Type, "__cosim_mmio_read.arg");
+        rpcClient->stub.get(), readArg, i32Type, "__cosim_mmio_read.arg");
     readRespPort = std::make_unique<ReadCosimChannelPort>(
-        rpcClient->stub.get(), readResp, uint32Type,
-        "__cosim_mmio_read.result");
+        rpcClient->stub.get(), readResp, i64Type, "__cosim_mmio_read.result");
     readMMIO.reset(FuncService::Function::get(AppID("__cosim_mmio_read"),
                                               *readArgPort, *readRespPort));
     readMMIO->connect();
   }
 
   // Call the read function and wait for a response.
-  uint32_t read(uint32_t addr) const override {
+  uint64_t read(uint32_t addr) const override {
     auto arg = MessageData::from(addr);
     std::future<MessageData> result = readMMIO->call(arg);
     result.wait();
-    return *result.get().as<uint32_t>();
+    return *result.get().as<uint64_t>();
   }
 
-  void write(uint32_t addr, uint32_t data) override {
+  void write(uint32_t addr, uint64_t data) override {
     // TODO: this.
     throw std::runtime_error("Cosim MMIO write not implemented");
   }

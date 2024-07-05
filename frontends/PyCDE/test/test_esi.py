@@ -181,20 +181,20 @@ class RecvBundleTest(Module):
 
 
 # CHECK-LABEL:  hw.module @MMIOReq()
-# CHECK-NEXT:     %c0_i32 = hw.constant 0 : i32
+# CHECK-NEXT:     %c0_i64 = hw.constant 0 : i64
 # CHECK-NEXT:     %false = hw.constant false
-# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i32, %false : i32
-# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %false : i64
+# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
 @unittestmodule(esi_sys=True)
 class MMIOReq(Module):
 
   @generator
   def build(ports):
-    c32 = Bits(32)(0)
+    c64 = Bits(64)(0)
     c1 = Bits(1)(0)
 
     read_bundle = MMIO.read(AppID("mmio_req"))
 
-    data, _ = Channel(Bits(32)).wrap(c32, c1)
+    data, _ = Channel(Bits(64)).wrap(c64, c1)
     _ = read_bundle.unpack(data=data)

@@ -46,26 +46,28 @@ std::string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 
 uint32_t MMIOSysInfo::getEsiVersion() const {
-  uint32_t reg;
-  if ((reg = mmio->read(MetadataOffset)) != MagicNumberLo)
-    throw std::runtime_error("Invalid magic number low bits: " + toHex(reg));
-  if ((reg = mmio->read(MetadataOffset + 4)) != MagicNumberHi)
-    throw std::runtime_error("Invalid magic number high bits: " + toHex(reg));
+  uint64_t reg;
+  if ((reg = mmio->read(MetadataOffset)) != MagicNumber)
+    throw std::runtime_error("Invalid magic number: " + toHex(reg));
   return mmio->read(MetadataOffset + 8);
 }
 
 std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
-  uint32_t manifestPtr = mmio->read(MetadataOffset + 12);
-  uint32_t size = mmio->read(manifestPtr);
-  uint32_t numWords = (size + 3) / 4;
-  std::vector<uint32_t> manifestWords(numWords);
+  uint64_t version = getEsiVersion();
+  if (version != 0)
+    throw std::runtime_error("Unsupported ESI header version: " +
+                             std::to_string(version));
+  uint64_t manifestPtr = mmio->read(MetadataOffset + 0x10);
+  uint64_t size = mmio->read(manifestPtr);
+  uint64_t numWords = (size + 7) / 8;
+  std::vector<uint64_t> manifestWords(numWords);
   for (size_t i = 0; i < numWords; ++i)
-    manifestWords[i] = mmio->read(manifestPtr + 4 + (i * 4));
+    manifestWords[i] = mmio->read(manifestPtr + 8 + (i * 8));
 
   std::vector<uint8_t> manifest;
   for (size_t i = 0; i < size; ++i) {
-    uint32_t word = manifestWords[i / 4];
-    manifest.push_back(word >> (8 * (i % 4)));
+    uint64_t word = manifestWords[i / 8];
+    manifest.push_back(word >> (8 * (i % 8)));
   }
   return manifest;
 }
