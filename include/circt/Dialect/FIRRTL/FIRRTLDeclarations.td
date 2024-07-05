@@ -239,7 +239,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 }
 
 
-def MemOp : HardwareDeclOp<"mem", [CombDataflow]> {
+def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new mem";
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -333,8 +333,6 @@ def MemOp : HardwareDeclOp<"mem", [CombDataflow]> {
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
-
-    SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> computeDataFlow();
   }];
 }
 
@@ -394,7 +392,7 @@ def NodeOp : HardwareDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : HardwareDeclOp<"reg", [Forceable, CombDataflow]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -486,7 +484,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, CombDataflow]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : HardwareDeclOp<"regreset", [Forceable, CombDataflow]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
