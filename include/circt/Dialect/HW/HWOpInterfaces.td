@@ -561,12 +561,9 @@ def CombDataflow : OpInterface<"CombDataFlow"> {
      This returns a pair of ground type fieldrefs. The first element is the destination
      and the second is the source of the dependence. The default implementation returns
      an empty list, which implies that the operation is not combinational.}],
-     "void", "computeDataFlow",
-     (ins "llvm::function_ref<void(circt::FieldRef, circt::FieldRef)>":$callback)>,
+     "SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
+     (ins)>,
   ];
-  let extraSharedClassDeclaration = [{
-    using CombDataFlowCallbackTy = llvm::function_ref<void(circt::FieldRef, circt::FieldRef)>;
-  }];
 }
 
 #endif
