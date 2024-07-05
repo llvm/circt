@@ -34,3 +34,5 @@ add_circt_dialect_library(CIRCTSim
   MLIRPass
   MLIRTransforms
 )
+
+add_subdirectory(Transforms)
