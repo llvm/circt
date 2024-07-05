@@ -20,8 +20,7 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   let summary = "Removes registers and adds corresponding input and output ports";
 
   let dependentDialects = [
-    "mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect",
-    "circt::verif::VerifDialect"
+    "circt::seq::SeqDialect"
   ];
 }
 
