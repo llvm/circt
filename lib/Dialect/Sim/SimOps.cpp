@@ -12,6 +12,9 @@
 
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/SV/SVOps.h"
+
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 
@@ -275,6 +278,38 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
     rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
 
   return success();
+}
+
+LogicalResult PrintFormattedOp::canonicalize(PrintFormattedOp op,
+                                             PatternRewriter &rewriter) {
+  // Remove ops with constant false condition.
+  if (auto cstCond = op.getCondition().getDefiningOp<hw::ConstantOp>()) {
+    if (cstCond.getValue().isZero()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+  return failure();
+}
+
+LogicalResult PrintFormattedProcOp::verify() {
+  if (!getOperation()->getParentOfType<hw::TriggeredOp>() &&
+      !getOperation()->getParentWithTrait<sv::ProceduralRegion>() &&
+      !getOperation()->getParentOfType<func::FuncOp>()) {
+    return emitOpError("must be within a procedural region.");
+  }
+  return success();
+}
+
+LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
+                                                 PatternRewriter &rewriter) {
+  // Remove print without operands.
+  if (op.getNumOperands() == 0) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
