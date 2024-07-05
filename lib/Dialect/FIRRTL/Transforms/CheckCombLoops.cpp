@@ -98,7 +98,7 @@ public:
           .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
             // computeDataFlow returns a pair of FieldRefs, first element is the
             // destination and the second is the source.
-            for(auto [dest, source] : df.computeDataFlow())
+            for (auto [dest, source] : df.computeDataFlow())
               addDrivenBy(dest, source);
 
           })
