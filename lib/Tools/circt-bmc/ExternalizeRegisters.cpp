@@ -30,7 +30,7 @@ namespace circt {
 } // namespace circt
 
 //===----------------------------------------------------------------------===//
-// Convert Lower To BMC pass
+// Externalize Registers Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -69,6 +69,18 @@ void ExternalizeRegistersPass::runOnOperation() {
       unsigned numRegs = 0;
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
+          if (numRegs == 0)
+            firstClock = regOp.getClk();
+          else if (firstClock != regOp.getClk()) {
+            regOp->emitError(
+                "multiple clocks not yet supported - all registers will be "
+                "assumed to be clocked together");
+            return signalPassFailure();
+          }
+          if (regOp.getReset()) {
+            regOp.emitError("registers with reset signals not yet supported");
+            return signalPassFailure();
+          }
           addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
           addedOutputs[module.getSymNameAttr()].push_back(
               regOp.getInput().getType());
@@ -76,12 +88,6 @@ void ExternalizeRegistersPass::runOnOperation() {
           regOp.getResult().replaceAllUsesWith(
               module.appendInput("", regOp.getType()).second);
           module.appendOutput("", regOp.getInput());
-          if (numRegs == 0)
-            firstClock = regOp.getClk();
-          else if (firstClock != regOp.getClk())
-            regOp->emitWarning(
-                "multiple clocks not yet supported - all registers will be "
-                "assumed to be clocked together");
           regOp->erase();
           ++numRegs;
           return;

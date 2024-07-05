@@ -2,7 +2,14 @@
 
 hw.module @two_clks(in %clk0: !seq.clock, in %clk1: !seq.clock, in %in: i32, out out: i32) {
   %1 = seq.compreg %in, %clk0 : i32
-  // expected-warning @below {{multiple clocks not yet supported - all registers will be assumed to be clocked together}}
+  // expected-error @below {{multiple clocks not yet supported - all registers will be assumed to be clocked together}}
   %2 = seq.compreg %1, %clk1 : i32
   hw.output %2 : i32
+}
+
+hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
+  %c0_i32 = hw.constant 0 : i32
+  // expected-error @below {{registers with reset signals not yet supported}}
+  %1 = seq.compreg %in, %clk reset %rst, %c0_i32 : i32
+  hw.output %1 : i32
 }
