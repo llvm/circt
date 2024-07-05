@@ -17,7 +17,6 @@
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <optional>
 
 using namespace circt;
 using namespace circt::moore;
@@ -311,29 +310,16 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   assert(slot.ptr == getResult());
   builder.setInsertionPointAfter(*this);
 
+  auto destructurableType = cast<DestructurableTypeInterface>(getType());
   DenseMap<Attribute, MemorySlot> slotMap;
-  SmallVector<Value> inputs;
-
-  auto members =
-      TypeSwitch<Type, ArrayRef<StructLikeMember>>(getType().getNestedType())
-          .Case<StructType, UnpackedStructType>(
-              [](auto &type) { return type.getMembers(); })
-          .Default([](auto) { return ArrayRef<StructLikeMember>(); });
-  for (const auto &member : members) {
-    auto type = cast<IntType>(member.type);
-    if (!type)
-      continue;
-    auto input = builder.create<ConstantOp>(getLoc(), type, 0);
-    inputs.push_back(input);
-    if (usedIndices.contains(member.name)) {
-      auto varOp = builder.create<VariableOp>(
-          getLoc(), RefType::get(member.type), member.name, input.getResult());
-      slotMap.try_emplace<MemorySlot>(member.name,
-                                      {varOp, RefType::get(member.type)});
-      newAllocators.push_back(varOp);
-    }
+  for (Attribute index : usedIndices) {
+    auto elemType = cast<RefType>(destructurableType.getTypeAtIndex(index));
+    assert(elemType && "used index must exist");
+    auto varOp = builder.create<VariableOp>(getLoc(), elemType,
+                                            cast<StringAttr>(index), Value());
+    newAllocators.push_back(varOp);
+    slotMap.try_emplace<MemorySlot>(index, {varOp.getResult(), elemType});
   }
-  builder.create<StructCreateOp>(getLoc(), getType().getNestedType(), inputs);
 
   return slotMap;
 }
@@ -599,15 +585,25 @@ bool StructExtractRefOp::canRewire(
     SmallPtrSetImpl<Attribute> &usedIndices,
     SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
     const DataLayout &dataLayout) {
-  return slot.ptr == getInput() && use_empty();
+  if (slot.ptr != getInput())
+    return false;
+  auto index = getFieldNameAttr();
+  if (!index || !slot.elementPtrs.contains(index))
+    return false;
+  usedIndices.insert(index);
+  return true;
 }
 
 DeletionKind
 StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
                            DenseMap<Attribute, MemorySlot> &subslots,
                            OpBuilder &builder, const DataLayout &dataLayout) {
+  auto index = getFieldNameAttr();
+  const MemorySlot &memorySlot = subslots.at(index);
+  replaceAllUsesWith(memorySlot.ptr);
   getInputMutable().drop();
-  return DeletionKind::Delete;
+  erase();
+  return DeletionKind::Keep;
 }
 
 //===----------------------------------------------------------------------===//
