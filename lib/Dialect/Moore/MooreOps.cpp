@@ -265,6 +265,7 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
   this->erase();
   return std::nullopt;
 }
+
 LogicalResult VariableOp::canonicalize(VariableOp op,
                                        ::mlir::PatternRewriter &rewriter) {
   Value initial;
