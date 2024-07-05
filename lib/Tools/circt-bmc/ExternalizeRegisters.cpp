@@ -81,6 +81,10 @@ void ExternalizeRegistersPass::runOnOperation() {
             regOp.emitError("registers with reset signals not yet supported");
             return signalPassFailure();
           }
+          if (regOp.getPowerOnValue()) {
+            regOp.emitError("registers with power-on values not yet supported");
+            return signalPassFailure();
+          }
           addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
           addedOutputs[module.getSymNameAttr()].push_back(
               regOp.getInput().getType());
