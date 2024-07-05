@@ -29,7 +29,7 @@ moore.procedure always_comb {
     // CHECK: moore.blocking_assign %a, %10 : i32
     // CHECK: %11 = moore.read %a : i32
     // CHECK: moore.blocking_assign %z, %11 : i32
-   %ii = moore.variable : <struct<{a: i32, b: i32}>>
+    %ii = moore.variable : <struct<{a: i32, b: i32}>>
     %0 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
     %1 = moore.constant 1 : i32
     %2 = moore.conversion %1 : !moore.i32 -> !moore.i32
