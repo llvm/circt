@@ -29,3 +29,14 @@ hw.module @two_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32
   %2 = seq.compreg %1, %clk : i32
   hw.output %2 : i32
 }
+
+// CHECK:  hw.module @named_regs(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {num_regs = 2 : i32} {
+// CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    hw.output [[OLD_REG1]], [[ADD]], [[OLD_REG0]]
+// CHECK:  }
+hw.module @named_regs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
+  %0 = comb.add %in0, %in1 : i32
+  %1 = seq.compreg sym @reg1 %0, %clk : i32
+  %2 = seq.compreg sym @reg2 %1, %clk : i32
+  hw.output %2 : i32
+}

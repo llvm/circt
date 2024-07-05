@@ -65,17 +65,23 @@ void ExternalizeRegistersPass::runOnOperation() {
       if (!module)
         continue;
 
+      mlir::Value firstClock;
       unsigned numRegs = 0;
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
           addedInputs[module.getSymNameAttr()].push_back(regOp.getType());
           addedOutputs[module.getSymNameAttr()].push_back(
               regOp.getInput().getType());
-
           OpBuilder builder(regOp);
           regOp.getResult().replaceAllUsesWith(
               module.appendInput("", regOp.getType()).second);
           module.appendOutput("", regOp.getInput());
+          if (numRegs == 0)
+            firstClock = regOp.getClk();
+          else if (firstClock != regOp.getClk())
+            regOp->emitWarning(
+                "multiple clocks not yet supported - all registers will be "
+                "assumed to be clocked together");
           regOp->erase();
           ++numRegs;
           return;
