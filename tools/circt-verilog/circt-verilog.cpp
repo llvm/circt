@@ -226,6 +226,7 @@ static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
 
   pm.addPass(mlir::createSROA());
   pm.addPass(mlir::createMem2Reg());
+
   // TODO: like dedup pass.
 
   return success();
