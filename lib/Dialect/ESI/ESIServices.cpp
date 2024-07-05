@@ -501,7 +501,7 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
 
   // Try to generate the service provider.
   if (failed(genDispatcher.generate(implOp, decl)))
-    return instOp.emitOpError("failed to generate server");
+    return implOp.emitOpError("failed to generate server");
 
   return success();
 }
