@@ -9,28 +9,26 @@ moore.module @LocalVar() {
 %y = moore.variable : <i32>
 %z = moore.variable : <i32>
 moore.procedure always_comb {
-    // CHECK: %0 = moore.constant 0 : i32
-    // CHECK: %a = moore.variable %0 : <i32>
-    // CHECK: %1 = moore.constant 0 : i32
-    // CHECK: %b = moore.variable %1 : <i32>
-    // CHECK: %2 = moore.struct_create %0, %1 : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
-    // CHECK: %3 = moore.constant 1 : i32
-    // CHECK: %4 = moore.conversion %3 : !moore.i32 -> !moore.i32
-    // CHECK: moore.blocking_assign %a, %4 : i32
-    // CHECK: %5 = moore.constant 4 : i32
-    // CHECK: %6 = moore.conversion %5 : !moore.i32 -> !moore.i32
-    // CHECK: moore.blocking_assign %b, %6 : i32
-    // CHECK: %7 = moore.read %x : i32
-    // CHECK: %8 = moore.constant 1 : i3
-    // CHECK: %9 = moore.add %7, %8 : i32
-    // CHECK: %10 = moore.read %a : i32
-    // CHECK: moore.blocking_assign %y, %10 : i32
+    // CHECK: %a = moore.variable : <i32>
+    // CHECK: %b = moore.variable : <i32>
+    // CHECK: %0 = moore.constant 1 : i32
+    // CHECK: %1 = moore.conversion %0 : !moore.i32 -> !moore.i32
+    // CHECK: moore.blocking_assign %a, %1 : i32
+    // CHECK: %2 = moore.constant 4 : i32
+    // CHECK: %3 = moore.conversion %2 : !moore.i32 -> !moore.i32
+    // CHECK: moore.blocking_assign %b, %3 : i32
+    // CHECK: %4 = moore.read %x : i32
+    // CHECK: %5 = moore.constant 1 : i32
+    // CHECK: %6 = moore.add %4, %5 : i32
+    // CHECK: moore.blocking_assign %a, %6 : i32
+    // CHECK: %7 = moore.read %a : i32
+    // CHECK: moore.blocking_assign %y, %7 : i32
+    // CHECK: %8 = moore.read %a : i32
+    // CHECK: %9 = moore.constant 1 : i32
+    // CHECK: %10 = moore.add %8, %9 : i32
+    // CHECK: moore.blocking_assign %a, %10 : i32
     // CHECK: %11 = moore.read %a : i32
-    // CHECK: %12 = moore.constant 1 : i32
-    // CHECK: %13 = moore.add %11, %12 : i32
-    // CHECK: moore.blocking_assign %a, %13 : i32
-    // CHECK: %14 = moore.read %a : i32
-    // CHECK: moore.blocking_assign %z, %14 : i32
+    // CHECK: moore.blocking_assign %z, %11 : i32
    %ii = moore.variable : <struct<{a: i32, b: i32}>>
     %0 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
     %1 = moore.constant 1 : i32
