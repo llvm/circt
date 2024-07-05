@@ -145,7 +145,7 @@ connect(Context &ctxt, std::string backend, std::string connection) {
     loadBackend(backend);
     f = internal::backendRegistry.find(backend);
     if (f == internal::backendRegistry.end())
-      throw std::runtime_error("Backend not found");
+      throw std::runtime_error("Backend '" + backend + "' not found");
   }
   return f->second(ctxt, connection);
 }

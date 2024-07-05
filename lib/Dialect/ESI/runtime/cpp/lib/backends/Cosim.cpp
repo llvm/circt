@@ -53,7 +53,12 @@ struct esi::backends::cosim::CosimAccelerator::StubContainer {
   StubContainer(std::unique_ptr<ChannelServer::Stub> stub)
       : stub(std::move(stub)) {}
   std::unique_ptr<ChannelServer::Stub> stub;
+
+  /// Get the type ID for a channel name.
+  bool getChannelDesc(const std::string &channelName,
+                      esi::cosim::ChannelDesc &desc);
 };
+using StubContainer = esi::backends::cosim::CosimAccelerator::StubContainer;
 
 /// Parse the connection std::string and instantiate the accelerator. Support
 /// the traditional 'host:port' syntax and a path to 'cosim.cfg' which is output
@@ -117,43 +122,6 @@ CosimAccelerator::~CosimAccelerator() {
     delete rpcClient;
   channels.clear();
 }
-
-// TODO: Fix MMIO!
-// namespace {
-// class CosimMMIO : public MMIO {
-// public:
-//   CosimMMIO(esi::cosim::LowLevel *lowLevel) : lowLevel(lowLevel) {}
-
-//   // Push the read request into the LowLevel capnp bridge and wait for the
-//   // response.
-//   uint32_t read(uint32_t addr) const override {
-//     lowLevel->readReqs.push(addr);
-
-//     std::optional<std::pair<uint64_t, uint8_t>> resp;
-//     while (resp = lowLevel->readResps.pop(), !resp.has_value())
-//       std::this_thread::sleep_for(std::chrono::microseconds(10));
-//     if (resp->second != 0)
-//       throw runtime_error("MMIO read error" + to_string(resp->second));
-//     return resp->first;
-//   }
-
-//   // Push the write request into the LowLevel capnp bridge and wait for the
-//   ack
-//   // or error.
-//   void write(uint32_t addr, uint32_t data) override {
-//     lowLevel->writeReqs.push(make_pair(addr, data));
-
-//     std::optional<uint8_t> resp;
-//     while (resp = lowLevel->writeResps.pop(), !resp.has_value())
-//       std::this_thread::sleep_for(std::chrono::microseconds(10));
-//     if (*resp != 0)
-//       throw runtime_error("MMIO write error" + to_string(*resp));
-//   }
-
-// private:
-//   esi::cosim::LowLevel *lowLevel;
-// };
-// } // namespace
 
 namespace {
 class CosimSysInfo : public SysInfo {
@@ -331,7 +299,7 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
     // Get the endpoint, which may or may not exist. Construct the port.
     // Everything is validated when the client calls 'connect()' on the port.
     ChannelDesc chDesc;
-    if (!getChannelDesc(channelName, chDesc))
+    if (!rpcClient->getChannelDesc(channelName, chDesc))
       throw std::runtime_error("Could not find channel '" + channelName +
                                "' in cosimulation");
 
@@ -352,12 +320,12 @@ CosimAccelerator::requestChannelsFor(AppIDPath idPath,
 /// Get the channel description for a channel name. Iterate through the list
 /// each time. Since this will only be called a small number of times on a small
 /// list, it's not worth doing anything fancy.
-bool CosimAccelerator::getChannelDesc(const std::string &channelName,
-                                      ChannelDesc &desc) {
+bool StubContainer::getChannelDesc(const std::string &channelName,
+                                   ChannelDesc &desc) {
   ClientContext context;
   VoidMessage arg;
   ListOfChannels response;
-  Status s = rpcClient->stub->ListChannels(&context, arg, &response);
+  Status s = stub->ListChannels(&context, arg, &response);
   checkStatus(s, "Failed to list channels");
   for (const auto &channel : response.channels())
     if (channel.name() == channelName) {
@@ -366,6 +334,60 @@ bool CosimAccelerator::getChannelDesc(const std::string &channelName,
     }
   return false;
 }
+
+namespace {
+class CosimMMIO : public MMIO {
+public:
+  CosimMMIO(Context &ctxt, StubContainer *rpcClient) {
+    // We have to locate the channels ourselves since this service might be used
+    // to retrieve the manifest.
+    ChannelDesc readArg, readResp;
+    if (!rpcClient->getChannelDesc("__cosim_mmio_read.arg", readArg) ||
+        !rpcClient->getChannelDesc("__cosim_mmio_read.result", readResp))
+      throw std::runtime_error("Could not find MMIO channels");
+
+    const esi::Type *uint32Type =
+        getType(ctxt, new UIntType(readArg.type(), 32));
+
+    // Get ports, create the function, then connect to it.
+    readArgPort = std::make_unique<WriteCosimChannelPort>(
+        rpcClient->stub.get(), readArg, uint32Type, "__cosim_mmio_read.arg");
+    readRespPort = std::make_unique<ReadCosimChannelPort>(
+        rpcClient->stub.get(), readResp, uint32Type,
+        "__cosim_mmio_read.result");
+    readMMIO.reset(FuncService::Function::get(AppID("__cosim_mmio_read"),
+                                              *readArgPort, *readRespPort));
+    readMMIO->connect();
+  }
+
+  // Call the read function and wait for a response.
+  uint32_t read(uint32_t addr) const override {
+    auto arg = MessageData::from(addr);
+    std::future<MessageData> result = readMMIO->call(arg);
+    result.wait();
+    return *result.get().as<uint32_t>();
+  }
+
+  void write(uint32_t addr, uint32_t data) override {
+    // TODO: this.
+    throw std::runtime_error("Cosim MMIO write not implemented");
+  }
+
+private:
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
+    }
+    ctxt.registerType(type);
+    return type;
+  }
+  std::unique_ptr<WriteCosimChannelPort> readArgPort;
+  std::unique_ptr<ReadCosimChannelPort> readRespPort;
+  std::unique_ptr<FuncService::Function> readMMIO;
+};
+
+} // namespace
 
 Service *CosimAccelerator::createService(Service::Type svcType,
                                          AppIDPath idPath, std::string implName,
@@ -390,7 +412,7 @@ Service *CosimAccelerator::createService(Service::Type svcType,
   }
 
   if (svcType == typeid(services::MMIO)) {
-    // return new CosimMMIO(rpcClient->getLowLevel());
+    return new CosimMMIO(getCtxt(), rpcClient);
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:
