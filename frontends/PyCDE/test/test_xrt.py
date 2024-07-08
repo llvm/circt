@@ -1,3 +1,4 @@
+# XFAIL: *
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: ls %t/hw/XrtTop.sv

@@ -556,16 +556,13 @@ def CombDataflow : OpInterface<"CombDataFlow"> {
     combinational dependence from each operand to each result.
   }];
   let methods = [
-    InterfaceMethod<"Get the combinational dataflow relations between the"
-     "operands and the results. This returns a pair of ground type fieldrefs."
-     "The first element is the destination and the second is the source of"
-     "the dependence."
-     "The default implementation returns an empty list, which implies that the"
-     "operation is not combinational.",
-     "SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>",
-     "computeDataFlow", (ins), [{}], /*defaultImplementation=*/[{
-      return {};
-    }]>,
+    InterfaceMethod<[{
+     Get the combinational dataflow relations between the operands and the results.
+     This returns a pair of ground type fieldrefs. The first element is the destination
+     and the second is the source of the dependence. The default implementation returns
+     an empty list, which implies that the operation is not combinational.}],
+     "SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
+     (ins)>,
   ];
 }
 

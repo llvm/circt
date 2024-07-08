@@ -87,6 +87,10 @@ class Type:
   def bitwidth(self):
     return hw.get_bitwidth(self._type)
 
+  @property
+  def is_hw_type(self) -> bool:
+    assert False, "Subclass must override this method"
+
   def __call__(self, obj, name: str = None) -> "Signal":
     """Create a Value of this type from a python object."""
     assert not isinstance(
@@ -175,6 +179,10 @@ class InOut(Type):
   def element_type(self) -> Type:
     return _FromCirctType(self._type.element_type)
 
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
   def _get_value_class(self):
     from .signals import InOutSignal
     return InOutSignal
@@ -204,6 +212,10 @@ class TypeAlias(Type):
       TypeAlias.RegisteredAliases[name] = alias
 
     return super(TypeAlias, cls).__new__(cls, alias, incl_cls_in_key=False)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return self.inner_type.is_hw_type
 
   @staticmethod
   def declare_aliases(mod):
@@ -292,6 +304,10 @@ class Array(Type):
     return _FromCirctType(self._type.element_type)
 
   @property
+  def is_hw_type(self) -> bool:
+    return True
+
+  @property
   def size(self):
     return self._type.size
 
@@ -344,6 +360,10 @@ class StructType(Type):
       raise TypeError("Expected either list or dict.")
     return super(StructType, cls).__new__(
         cls, hw.StructType.get([(n, t._type) for (n, t) in fields]))
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
 
   @property
   def fields(self):
@@ -408,12 +428,20 @@ class RegisteredStruct(TypeAlias):
   def _get_value_class(self):
     return self._value_class
 
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
 
 class BitVectorType(Type):
 
   @property
   def width(self):
     return self._type.width
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
 
   def _from_obj_check(self, x):
     """This functionality can be shared by all the int types."""
@@ -498,6 +526,10 @@ class ClockType(Type):
   def __new__(cls):
     return super(ClockType, cls).__new__(cls, seq.ClockType.get())
 
+  @property
+  def is_hw_type(self) -> bool:
+    return False
+
   def _get_value_class(self):
     from .signals import ClockSignal
     return ClockSignal
@@ -510,6 +542,10 @@ class Any(Type):
 
   def __new__(cls):
     return super(Any, cls).__new__(cls, esi.AnyType.get())
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
 
 class Channel(Type):
@@ -530,6 +566,10 @@ class Channel(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
   @property
   def signaling(self):
@@ -603,6 +643,10 @@ class Bundle(Type):
   def _get_value_class(self):
     from .signals import BundleSignal
     return BundleSignal
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
   @property
   def channels(self):
@@ -719,6 +763,10 @@ class List(Type):
   @property
   def element_type(self):
     return _FromCirctType(self._type.element_type)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
   @property
   def _get_value_class(self):

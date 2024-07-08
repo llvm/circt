@@ -198,6 +198,7 @@ def VariableOp : MooreOp<"variable", [
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
@@ -249,8 +250,21 @@ def NetOp : MooreOp<"net", [
   );
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    ``custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
+    `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
+  }];
+}
+
+def AssignedVarOp : MooreOp<"assigned_variable", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  TypesMatchWith<"initial value and variable types match",
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
+]> {
+  let summary = "The copy of variable must have the initial value";
+  let arguments = (ins StrAttr:$name, UnpackedType:$initial);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
   }];
 }
 

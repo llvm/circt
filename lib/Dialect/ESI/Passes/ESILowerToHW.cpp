@@ -496,9 +496,9 @@ LogicalResult ManifestRomLowering::createRomModule(
   PortInfo ports[] = {
       {{rewriter.getStringAttr("clk"), rewriter.getType<seq::ClockType>(),
         ModulePort::Direction::Input}},
-      {{rewriter.getStringAttr("address"), rewriter.getIntegerType(30),
+      {{rewriter.getStringAttr("address"), rewriter.getIntegerType(29),
         ModulePort::Direction::Input}},
-      {{rewriter.getStringAttr("data"), rewriter.getI32Type(),
+      {{rewriter.getStringAttr("data"), rewriter.getI64Type(),
         ModulePort::Direction::Output}},
   };
   auto rom = rewriter.create<HWModuleOp>(
@@ -508,19 +508,20 @@ LogicalResult ManifestRomLowering::createRomModule(
   Value clk = romBody->getArgument(0);
   Value inputAddress = romBody->getArgument(1);
 
-  // Manifest the compressed manifest into 32-bit words.
+  // Manifest the compressed manifest into 64-bit words.
   ArrayRef<uint8_t> maniBytes = op.getCompressedManifest().getData();
-  SmallVector<uint32_t> words;
+  SmallVector<uint64_t> words;
   words.push_back(maniBytes.size());
 
-  for (size_t i = 0; i < maniBytes.size() - 3; i += 4) {
-    uint32_t word = maniBytes[i] | (maniBytes[i + 1] << 8) |
-                    (maniBytes[i + 2] << 16) | (maniBytes[i + 3] << 24);
+  for (size_t i = 0; i < maniBytes.size() - 7; i += 8) {
+    uint64_t word = 0;
+    for (size_t b = 0; b < 8; ++b)
+      word |= static_cast<uint64_t>(maniBytes[i + b]) << (8 * b);
     words.push_back(word);
   }
-  size_t overHang = maniBytes.size() % 4;
+  size_t overHang = maniBytes.size() % 8;
   if (overHang != 0) {
-    uint32_t word = 0;
+    uint64_t word = 0;
     for (size_t i = 0; i < overHang; ++i)
       word |= maniBytes[maniBytes.size() - overHang + i] << (i * 8);
     words.push_back(word);
@@ -529,10 +530,10 @@ LogicalResult ManifestRomLowering::createRomModule(
   // From the words, create an the register which will hold the manifest (and
   // hopefully synthized to a ROM).
   SmallVector<Attribute> wordAttrs;
-  for (uint32_t word : words)
-    wordAttrs.push_back(rewriter.getI32IntegerAttr(word));
+  for (uint64_t word : words)
+    wordAttrs.push_back(rewriter.getI64IntegerAttr(word));
   auto manifestConstant = rewriter.create<hw::AggregateConstantOp>(
-      loc, hw::UnpackedArrayType::get(rewriter.getI32Type(), words.size()),
+      loc, hw::UnpackedArrayType::get(rewriter.getI64Type(), words.size()),
       rewriter.getArrayAttr(wordAttrs));
   auto manifestReg =
       rewriter.create<sv::RegOp>(loc, manifestConstant.getType());

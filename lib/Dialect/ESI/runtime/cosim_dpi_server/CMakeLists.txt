@@ -40,7 +40,6 @@ set(cosim_collateral
   Cosim_DpiPkg.sv
   Cosim_Endpoint.sv
   Cosim_Manifest.sv
-  Cosim_MMIO.sv
 
   driver.sv
   driver.cpp
@@ -55,12 +54,12 @@ install(FILES
 add_custom_target(esi-cosim
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
           ${CMAKE_CURRENT_SOURCE_DIR}/esi-cosim.py
-          ${CMAKE_BINARY_DIR}/esi-cosim.py)
+          ${CMAKE_BINARY_DIR}/bin/esi-cosim.py)
 foreach (cf ${cosim_collateral})
   add_custom_command(TARGET esi-cosim POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               ${CMAKE_CURRENT_SOURCE_DIR}/${cf}
-              ${CMAKE_BINARY_DIR}/../cosim/${cf}
+              ${CMAKE_BINARY_DIR}/cosim/${cf}
   )
 endforeach()
 
