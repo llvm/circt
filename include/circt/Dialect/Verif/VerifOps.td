@@ -276,7 +276,7 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
 }
 
 def ConcreteValOp : VerifOp<"concrete_val", [
-  Pure, AllTypesMatch<["init", "update", "result"]>
+  AllTypesMatch<["init", "update", "result"], HasParent<"verif::FormalOp">>
 ]> {
   let summary = "declare a concrete value for formal verification";
   let description = [{
