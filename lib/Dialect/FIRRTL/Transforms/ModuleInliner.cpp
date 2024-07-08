@@ -675,8 +675,7 @@ bool Inliner::rename(StringRef prefix, Operation *op, InliningLevel &il) {
   if (auto scopeOp = dyn_cast<debug::ScopeOp>(op))
     return updateDebugScope(scopeOp), false;
 
-  // Add a prefix to things that has a "name" attribute.  We don't prefix
-  // memories since it will affect the name of the generated module.
+  // Add a prefix to things that has a "name" attribute.
   if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
     op->setAttr("name", StringAttr::get(op->getContext(),
                                         (prefix + nameAttr.getValue())));
