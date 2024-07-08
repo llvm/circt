@@ -37,7 +37,7 @@ module Cosim_Endpoint_ToHost
     rc = cosim_ep_register(ENDPOINT_ID, "", 0,
                             TO_HOST_TYPE_ID, TO_HOST_SIZE_BYTES);
     if (rc != 0)
-      $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
+      $error("Cosim endpoint (%s) register failed: %d", ENDPOINT_ID, rc);
   end
 
   /// **********************
@@ -60,7 +60,7 @@ module Cosim_Endpoint_ToHost
         int rc;
         rc = cosim_ep_tryput(ENDPOINT_ID, DataInBuffer, TO_HOST_SIZE_BYTES);
         if (rc != 0)
-          $error("cosim_ep_tryput(%d, *, %d) = %d Error! (Data lost)",
+          $error("cosim_ep_tryput(%s, *, %d) = %d Error! (Data lost)",
             ENDPOINT_ID, TO_HOST_SIZE_BYTES, rc);
       end
     end
@@ -115,7 +115,7 @@ module Cosim_Endpoint_FromHost
     rc = cosim_ep_register(ENDPOINT_ID, FROM_HOST_TYPE_ID, FROM_HOST_SIZE_BYTES,
                             "", 0);
     if (rc != 0)
-      $error("Cosim endpoint (%d) register failed: %d", ENDPOINT_ID, rc);
+      $error("Cosim endpoint (%s) register failed: %d", ENDPOINT_ID, rc);
   end
 
   /// *******************
@@ -142,10 +142,10 @@ module Cosim_Endpoint_FromHost
         data_limit = FROM_HOST_SIZE_BYTES;
         rc = cosim_ep_tryget(ENDPOINT_ID, DataOutBuffer, data_limit);
         if (rc < 0) begin
-          $error("cosim_ep_tryget(%d, *, %d -> %d) returned an error (%d)",
+          $error("cosim_ep_tryget(%s, *, %d -> %d) returned an error (%d)",
             ENDPOINT_ID, FROM_HOST_SIZE_BYTES, data_limit, rc);
         end else if (rc > 0) begin
-          $error("cosim_ep_tryget(%d, *, %d -> %d) had data left over! (%d)",
+          $error("cosim_ep_tryget(%s, *, %d -> %d) had data left over! (%d)",
             ENDPOINT_ID, FROM_HOST_SIZE_BYTES, data_limit, rc);
         end else if (rc == 0) begin
           if (data_limit == FROM_HOST_SIZE_BYTES)
@@ -154,7 +154,7 @@ module Cosim_Endpoint_FromHost
             begin end // No message.
           else
             $error(
-              "cosim_ep_tryget(%d, *, %d -> %d) did not load entire buffer!",
+              "cosim_ep_tryget(%s, *, %d -> %d) did not load entire buffer!",
               ENDPOINT_ID, FROM_HOST_SIZE_BYTES, data_limit);
         end
       end
