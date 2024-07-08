@@ -351,5 +351,4 @@ def EnsureOp : VerifOp<"ensure", [HasParent<"verif::ContractOp">]>{
   }];
 }
 
-
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
