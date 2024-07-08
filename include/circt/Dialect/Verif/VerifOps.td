@@ -296,4 +296,60 @@ def ConcreteValOp : VerifOp<"concrete_val", [
   let hasVerifier = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// Formal Contract Ops
+//===----------------------------------------------------------------------===//
+
+def ContractOp : VerifOp<"contract", [Pure]>{
+  let summary = "declare formal contract";
+  let description = [{
+    This operation declares a sformal contract that is used to create precondition 
+    and postconditions on a parent module. These are used as an abstraction to 
+    better modularize formal verification such that each module containing a contract 
+    is checked exactly once.
+  }];
+  let regions = (region SizedRegion<1>:$contract_region);
+
+  let assemblyFormat = [{
+    attr-dict $contract_region
+  }];
+}
+
+def RequireOp : VerifOp<"require", [HasParent<"verif::ContractOp">]>{
+  let summary = "define a precondition for the given contract";
+  let description = [{
+    This operation defines a precondition for the parent contract. 
+    Preconditions are assumed during the verification of a module and 
+    asserted during the verification of an instance of a module.
+  }];
+  let arguments = (ins LTLAnyPropertyType:$property,
+                      ClockEdgeAttr:$edge, I1:$clock,
+                      Optional<I1>:$enable,
+                      OptionalAttr<StrAttr>:$label);
+
+  let assemblyFormat = [{
+    $property (`if` $enable^)? `,` $edge $clock 
+    (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+def EnsureOp : VerifOp<"ensure", [HasParent<"verif::ContractOp">]>{
+  let summary = "define a postcondition for the given contract";
+  let description = [{
+    This operation defines a postcondition for the parent contract. 
+    Postconditions are asserted during the verification of a module and 
+    assumed during the verification of an instance of a module.
+  }];
+  let arguments = (ins LTLAnyPropertyType:$property,
+                      ClockEdgeAttr:$edge, I1:$clock,
+                      Optional<I1>:$enable,
+                      OptionalAttr<StrAttr>:$label);
+
+  let assemblyFormat = [{
+    $property (`if` $enable^)? `,` $edge $clock 
+    (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
