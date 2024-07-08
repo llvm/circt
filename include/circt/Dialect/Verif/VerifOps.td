@@ -221,10 +221,10 @@ def YieldOp : VerifOp<"yield", [
 /// BMC -- short for bounded model check.
 def BMC : I32EnumAttrCase<"BMC", 0, "bmc">;
 /// KIP -- short for k-Inductive-Proof.
-def KIP : I32EnumAttrCase<"KIP", 0, "induction">;
+def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 0, "k inductive proof">;
 
 def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
-                                [BMC, KIP]> {
+                                [BMC, KInductiveProof]> {
   let cppNamespace = "circt::verif";
 }
 
@@ -235,7 +235,8 @@ def FormalOp : VerifOp<"formal"> {
     assertions and assumptions. This should be written by declaring symbolic 
     values that are then connected to a hardware instance. These symbols can then
     be reasoned about in additional assertions. The region will then be converted 
-    into btor2, SMTLib, or SystemVerilog and ignored during regular SystemVerilog 
+    into btor2, SystemVerilog, or used for verification directly in circt-bmc. 
+    The operations in this regiion are ignored during regular SystemVerilog 
     emission.   
       
     Additional information about how the test should be conducted can be passed 
@@ -260,12 +261,12 @@ def FormalOp : VerifOp<"formal"> {
 // Formal Verification Ops
 //===----------------------------------------------------------------------===//
 
-def SymbolicValOp : VerifOp<"symbolic_val", [Pure]> {
-  let summary = "declare a sybolic value for formal verification";
+def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+  let summary = "declare a symbolic value for formal verification";
   let description = [{
     This operation declares a symbolic value that can then be used to reason 
-    about hw.instance inputs in a symbolic manner in future assertions and 
-    assumptions. The type result must be explicitly marked.  
+    about `hw.instance` inputs in a symbolic manner in future assertions and 
+    assumptions. The result type must be explicitly marked.  
   }];
   let results = (outs AnyType:$result);
 
@@ -277,11 +278,11 @@ def SymbolicValOp : VerifOp<"symbolic_val", [Pure]> {
 def ConcreteValOp : VerifOp<"concrete_val", [
   Pure, AllTypesMatch<["init", "update", "result"]>
 ]> {
-  let summary = "declare a concrete value for formatl verification";
+  let summary = "declare a concrete value for formal verification";
   let description = [{
-    This opertaion declares a concrete value that can then be used in the 
+    This operation declares a concrete value that can then be used in the 
     reasoning surrounding symbolic values, allowing for a form of concolic 
-    reasoning to take place in a verif.formal block. Concrete values are 
+    reasoning to take place in a `verif.formal` block. Concrete values are 
     defined by an initial value and an update function.
   }];
 
