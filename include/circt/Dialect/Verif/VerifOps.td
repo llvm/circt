@@ -169,7 +169,7 @@ def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
 // Logical Equivalence Checking and Model Checking
 //===----------------------------------------------------------------------===//
 
-def BMCOp : VerifOp<"bmc", [
+def BoundedModelCheckingOp : VerifOp<"bmc", [
   IsolatedFromAbove,
   SingleBlockImplicitTerminator<"verif::YieldOp">,
 ]> {
@@ -246,7 +246,7 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BMCOp"]>
+  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp"]>
 ]> {
   let summary = "yields values from a region";
 

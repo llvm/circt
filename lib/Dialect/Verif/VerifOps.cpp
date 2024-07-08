@@ -110,10 +110,10 @@ LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
-// BMCOp
+// BoundedModelCheckingOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult BMCOp::verifyRegions() {
+LogicalResult BoundedModelCheckingOp::verifyRegions() {
   if (!getInit().getArgumentTypes().empty())
     return emitOpError() << "init region must have no arguments";
   auto *initYieldOp = getInit().front().getTerminator();
