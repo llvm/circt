@@ -25,6 +25,14 @@ using namespace mlir;
 // SVModuleOp
 //===----------------------------------------------------------------------===//
 
+void SVModuleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                       llvm::StringRef name, hw::ModuleType type) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(name));
+  state.addAttribute(getModuleTypeAttrName(state.name), TypeAttr::get(type));
+  state.addRegion();
+}
+
 void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
 
