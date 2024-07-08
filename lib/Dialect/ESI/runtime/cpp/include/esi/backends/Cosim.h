@@ -70,10 +70,6 @@ protected:
 private:
   StubContainer *rpcClient;
 
-  /// Get the type ID for a channel name.
-  bool getChannelDesc(const std::string &channelName,
-                      esi::cosim::ChannelDesc &desc);
-
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
   std::set<std::unique_ptr<ChannelPort>> channels;

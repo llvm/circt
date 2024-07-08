@@ -84,9 +84,14 @@ class XrtMMIO : public MMIO {
 public:
   XrtMMIO(::xrt::ip &ip) : ip(ip) {}
 
-  uint32_t read(uint32_t addr) const override { return ip.read_register(addr); }
-  void write(uint32_t addr, uint32_t data) override {
+  uint64_t read(uint32_t addr) const override {
+    auto lo = static_cast<uint64_t>(ip.read_register(addr));
+    auto hi = static_cast<uint64_t>(ip.read_register(addr + 0x4));
+    return (hi << 32) | lo;
+  }
+  void write(uint32_t addr, uint64_t data) override {
     ip.write_register(addr, data);
+    ip.write_register(addr + 0x4, data >> 32);
   }
 
 private:

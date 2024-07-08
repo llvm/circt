@@ -42,8 +42,9 @@ class AcceleratorServiceThread;
 //===----------------------------------------------------------------------===//
 
 constexpr uint32_t MetadataOffset = 8;
-constexpr uint32_t MagicNumberLo = 0xE5100E51;
-constexpr uint32_t MagicNumberHi = 0x207D98E5;
+constexpr uint64_t MagicNumberLo = 0xE5100E51;
+constexpr uint64_t MagicNumberHi = 0x207D98E5;
+constexpr uint64_t MagicNumber = MagicNumberLo | (MagicNumberHi << 32);
 constexpr uint32_t ExpectedVersionNumber = 0;
 
 //===----------------------------------------------------------------------===//

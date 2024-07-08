@@ -119,7 +119,6 @@ MemOp::computeDataFlow() {
   // exists.
   if (getReadLatency() > 0)
     return {};
-
   SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
   // Add a dependency from the enable and address fields to the data field.
   for (auto memPort : getResults())
@@ -127,10 +126,12 @@ MemOp::computeDataFlow() {
       auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
       auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
       auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-      deps.push_back({FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
-                      FieldRef(memPort, static_cast<unsigned>(enableFieldId))});
-      deps.push_back({{memPort, static_cast<unsigned>(dataFieldId)},
-                      {memPort, static_cast<unsigned>(addressFieldId)}});
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(enableFieldId)));
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(addressFieldId)));
     }
   return deps;
 }
@@ -3325,6 +3326,12 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3347,6 +3354,12 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegResetOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
@@ -5550,6 +5563,33 @@ LogicalResult DPICallIntrinsicOp::verify() {
   };
   return success(llvm::all_of(this->getResultTypes(), checkType) &&
                  llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+DPICallIntrinsicOp::computeDataFlow() {
+  if (getClock())
+    return {};
+
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+
+  for (auto operand : getOperands()) {
+    auto type = type_cast<FIRRTLBaseType>(operand.getType());
+    auto baseFieldRef = getFieldRefFromValue(operand);
+    SmallVector<circt::FieldRef> operandFields;
+    walkGroundTypes(
+        type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+          operandFields.push_back(baseFieldRef.getSubField(dstIndex));
+        });
+
+    // Record operand -> result dependency.
+    for (auto result : getResults())
+      walkGroundTypes(
+          type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+            for (auto field : operandFields)
+              deps.emplace_back(circt::FieldRef(result, dstIndex), field);
+          });
+  }
+  return deps;
 }
 
 //===----------------------------------------------------------------------===//
