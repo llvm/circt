@@ -10,11 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -25,6 +25,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -32,6 +33,13 @@
 #include <variant>
 
 #define DEBUG_TYPE "gct"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_GRANDCENTRAL
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -582,7 +590,8 @@ struct InterfaceElemsBuilder {
 /// 3. The circuit-level Grand Central annotation is walked to both generate and
 ///    instantiate interfaces and to generate the "mappings" file that produces
 ///    cross-module references (XMRs) to drive the interface.
-struct GrandCentralPass : public GrandCentralBase<GrandCentralPass> {
+struct GrandCentralPass
+    : public circt::firrtl::impl::GrandCentralBase<GrandCentralPass> {
   using GrandCentralBase::companionMode;
 
   void runOnOperation() override;
@@ -1069,7 +1078,13 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                                     state.symTbl, state.targetCaches)
                             ->ref.getOp());
     builder.setInsertionPointToEnd(companionMod.getBodyBlock());
-    auto sink = builder.create<WireOp>(source->getType(), name);
+    // Sink type must be passive.  It's required to be converted to a NodeOp by
+    // the wiring problem solving, and later checked to be a Node.
+    // This also ensures passive sink so works equally well w/ or w/o probes.
+    auto sinkType = source->getType();
+    if (auto baseSinkType = type_dyn_cast<FIRRTLBaseType>(sinkType))
+      sinkType = baseSinkType.getPassiveType();
+    auto sink = builder.create<WireOp>(sinkType, name);
     state.targetCaches.insertOp(sink);
     AnnotationSet annotations(context);
     annotations.addAnnotations(
@@ -1741,7 +1756,8 @@ void GrandCentralPass::runOnOperation() {
         }
         auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
         if (dutModules.contains(mod) ||
-            AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
+            AnnotationSet::hasAnnotation(mod->getModule(),
+                                         companionAnnoClass) ||
             (instOp && instOp.getLowerToBind()))
           continue;
         modules.push_back(mod);

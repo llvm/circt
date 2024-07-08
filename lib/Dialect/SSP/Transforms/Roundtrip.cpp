@@ -10,7 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
+#include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/SSPPasses.h"
+#include "circt/Dialect/SSP/Utilities.h"
+#include "circt/Scheduling/Problems.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace ssp {
+#define GEN_PASS_DEF_ROUNDTRIP
+#include "circt/Dialect/SSP/SSPPasses.h.inc"
+} // namespace ssp
+} // namespace circt
 
 using namespace circt;
 using namespace scheduling;
@@ -51,7 +64,7 @@ static InstanceOp roundtrip(InstanceOp instOp, bool check, bool verify,
 }
 
 namespace {
-struct RoundtripPass : public RoundtripBase<RoundtripPass> {
+struct RoundtripPass : public circt::ssp::impl::RoundtripBase<RoundtripPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

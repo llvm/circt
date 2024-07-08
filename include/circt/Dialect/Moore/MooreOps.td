@@ -41,6 +41,7 @@ class ResultIsSingleBitMatchingInputDomain<string result, string input> :
 
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
+  RegionKindInterface,
   Symbol,
   SingleBlockImplicitTerminator<"OutputOp">,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
@@ -49,9 +50,7 @@ def SVModuleOp : MooreOp<"module", [
   let description = [{
     The `moore.module` operation represents a SystemVerilog module, including
     its name, port list, and the constituent parts that make up its body. The
-    module's body is an SSACFG region, since declarations within SystemVerilog
-    modules generally have to appear before their uses, and dedicated assignment
-    operators are used to make connections after declarations.
+    module's body is a graph region.
 
     See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
   }];
@@ -68,6 +67,10 @@ def SVModuleOp : MooreOp<"module", [
     OutputOp getOutputOp();
     /// Return the list of values assigned to output ports.
     OperandRange getOutputs();
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
   }];
 }
 
@@ -180,6 +183,7 @@ def ProcedureOp : MooreOp<"procedure", [
 //===----------------------------------------------------------------------===//
 
 def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<PromotableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
     "result", "initial", "cast<RefType>($_self).getNestedType()">
@@ -194,6 +198,7 @@ def VariableOp : MooreOp<"variable", [
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
@@ -223,7 +228,7 @@ def NetOp : MooreOp<"net", [
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different
+    The `moore.net` operation is a net declaration. Net types defines different
     types of net connection in SV. There are twelve built-in net types defined
     in the official standard construct of the operation:
     `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
@@ -245,12 +250,26 @@ def NetOp : MooreOp<"net", [
   );
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    ``custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
+    `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
 }
 
+def AssignedVarOp : MooreOp<"assigned_variable", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  TypesMatchWith<"initial value and variable types match",
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
+]> {
+  let summary = "The copy of variable must have the initial value";
+  let arguments = (ins StrAttr:$name, UnpackedType:$initial);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
+  }];
+}
+
 def ReadOp : MooreOp<"read", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
     "result", "input", "RefType::get(cast<UnpackedType>($_self))">
 ]> {
@@ -291,7 +310,9 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   }];
 }
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
+def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>
+]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A blocking procedural assignment in a sequential block, such as `x = y`. The
@@ -316,6 +337,65 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
     in a subsequent time step as dictated by the delay or event control.
 
     See IEEE 1800-2017 § 10.4.2 "Nonblocking procedural assignments".
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def None: I32EnumAttrCase<"None", 0, "none">;
+/// Transit from 0 to x/z/1, and from x/z to 1.
+def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
+/// Transit from 1 to x/z/0, and from x/z to 0.
+def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
+/// Include the negedge and posedge.
+def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
+
+def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
+                          [None, PosEdge, NegEdge, BothEdges]>{
+  let cppNamespace = "circt::moore";
+}
+
+def EventOp : MooreOp<"wait_event", [
+  HasParent<"ProcedureOp">
+]> {
+  let summary = "Detecting posedge and negedge";
+  let description = [{
+    It is introduced by the symbol `@`, and it allows statement execution to
+    be delayed until the occurrence of some simulation event occurring in a
+    procedure executing concurrently with this procedure.
+
+    For the implicit event control(`@(*)`), there are two situations that are
+    not automatically added to event expression:
+      1. Identifiers that only appear in wait or event expressions.
+         ```
+          always @(*) begin    // equivalent to @(b)
+            @(n) kid = b;      // n is not added to @(*)
+          end
+         ```
+      2. Identifiers that only appear as a hierarchical_variable_identifier
+         in the variable_lvalue of the left-hand side of assignments.
+         ```
+          always @(*) begin
+            a = b + c;         // a is not added to @(*)
+          end
+         ```
+
+    Example:
+    ```
+      @(a, b, c)        // none
+      @(posedge clk)    // positive edge
+      @(negedge clk)    // negative edge
+      @(edge clk)       // both edge
+      @(*)              // implicit event control
+    ```
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
+  let results = (outs);
+  let assemblyFormat = [{
+    $edge $input attr-dict `:` type($input)
   }];
 }
 
@@ -350,18 +430,19 @@ def NamedConstantOp : MooreOp<"named_constant", [
 ]>{
   let summary = "An elaboration time constant expression";
   let description = [{
-    Constants are named data objects that never change. SystemVerilog provides 
+    Constants are named data objects that never change. SystemVerilog provides
     three elaboration-time constants: parameter, localparam, and specparam.
 
     See IEEE 1800-2017 § 6.20 "Constants".
   }];
-  let arguments = (ins StrAttr:$name, 
-                       NamedConstAttr:$kind, 
-                       UnpackedType:$value);
-  let results = (outs UnpackedType:$result);
+  let arguments = (ins StrAttr:$name,
+                       NamedConstAttr:$kind,
+                       IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $kind $value attr-dict
-    `:` type($result)
+    $kind
+    ``custom<ImplicitSSAName>($name)
+    $value `:` type($result) attr-dict
   }];
 }
 

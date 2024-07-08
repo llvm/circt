@@ -24,7 +24,7 @@
 ##===----------------------------------------------------------------------===//
 
 cmake_minimum_required(VERSION 3.20)
-project(ESIRuntime)
+project(ESIRuntime LANGUAGES CXX)
 include(FetchContent)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -37,7 +37,7 @@ find_package(ZLIB REQUIRED)
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
-  message("  -- ESI runtime pulling down json")
+  message("-- ESI runtime pulling down json")
   FetchContent_Declare(json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG        v3.11.3
@@ -45,8 +45,16 @@ if (NOT TARGET nlohmann_json)
   FetchContent_MakeAvailable(json)
 endif()
 
+##===----------------------------------------------------------------------===//
+## Overall target to build everything.
+##===----------------------------------------------------------------------===//
+add_custom_target(ESIRuntime)
 
-set(ESIRuntimeSources
+##===----------------------------------------------------------------------===//
+## Core ESI runtime.
+##===----------------------------------------------------------------------===//
+
+set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Accelerator.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Context.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Common.cpp
@@ -57,7 +65,7 @@ set(ESIRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Trace.cpp
 )
-set(ESIRuntimeHeaders
+set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
@@ -68,12 +76,8 @@ set(ESIRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
 )
-set(ESIRuntimeBackendHeaders
+set(ESICppRuntimeBackendHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
-)
-set(ESIRuntimeLinkLibraries
-  ZLIB::ZLIB
-  nlohmann_json::nlohmann_json
 )
 set(ESIPythonRuntimeSources
   python/esiaccel/__init__.py
@@ -82,165 +86,91 @@ set(ESIPythonRuntimeSources
   python/esiaccel/utils.py
   python/esiaccel/esiCppAccel.pyi
 )
-set(ESIRuntimeIncludeDirs)
-set(ESIRuntimeCxxFlags)
-set(ESIRuntimeLinkFlags)
-set(ESIRuntimeLibDirs)
 
 IF(MSVC)
     set(CMAKE_CXX_FLAGS "/EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-option(ESI_COSIM "Enable ESI cosimulation." ON)
-if(ESI_COSIM)
-  # Inform the runtime code that Cosimulation is enabled. Kinda hacky since all
-  # backends should only need to be linked in.
-  # TODO: Once the hack in the python bindings is remidied, remove this.
-  add_compile_definitions(ESI_COSIM)
-
-  # Try to find Cap'nProto. If the user has set CAPNP_PATH, use that.
-  if(DEFINED CAPNP_PATH)
-    set(ENV{PKG_CONFIG_PATH}
-      "${CAPNP_PATH}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS ${CAPNP_PATH})
-  else()
-    set(ENV{PKG_CONFIG_PATH}
-      "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
-  endif()
-
-  # If Cap'nProto has been found, generate the headers and definitions.
-  if(CapnProto_FOUND)
-    message("-- ESI cosim enabled")
-
-    message(STATUS "Found Cap'nProto at ${CapnProto_DIR}.")
-    add_subdirectory(cosim)
-
-    set(ESIRuntimeSources
-      ${ESIRuntimeSources}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
-    )
-    set(ESIRuntimeBackendHeaders
-      ${ESIRuntimeBackendHeaders}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
-    )
-    set(ESIRuntimeLinkLibraries
-      ${ESIRuntimeLinkLibraries}
-      EsiCosimCapnp
-    )
-    set(ESIRuntimeIncludeDirs
-      ${ESIRuntimeIncludeDirs}
-      ${CMAKE_CURRENT_SOURCE_DIR}/cosim/include
-    )
-  else()
-    message(FATAL_ERROR "ESI cosimulation requires Cap'nProto. Either install
-                        Cap'nProto or disable ESI cosim with -DESI_COSIM=OFF.")
-  endif()
+# The core API. For now, compile the backends into it directly.
+add_library(ESICppRuntime SHARED
+  ${ESICppRuntimeSources}
+)
+target_include_directories(ESICppRuntime PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
+target_link_libraries(ESICppRuntime PRIVATE
+  ZLIB::ZLIB
+  nlohmann_json::nlohmann_json
+)
+if(MSVC)
+  # TODO: does Windows need libraries for dynamic loading?
 else()
-  message("-- ESI cosim disabled")
-endif()
-
-option(XRT_PATH "Path to XRT lib.")
-if (XRT_PATH)
-  message("-- XRT enabled with path ${XRT_PATH}")
-
-  set(ESIRuntimeSources
-    ${ESIRuntimeSources}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
+  target_link_libraries(ESICppRuntime PRIVATE
+    dl
   )
-  set(ESIRuntimeBackendHeaders
-    ${ESIRuntimeBackendHeaders}
-    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
-  )
-  set(ESIRuntimeIncludeDirs
-    ${ESIRuntimeIncludeDirs}
-    ${XRT_PATH}/include
-  )
-  set(ESIRuntimeCxxFlags
-    ${ESIRuntimeCxxFlags}
-    -fmessage-length=0
-    -Wno-nested-anon-types
-    -Wno-c++98-compat-extra-semi
-  )
-  set(ESIRuntimeLinkLibraries
-    ${ESIRuntimeLinkLibraries}
-    xrt_coreutil
-  )
-  set(ESIRuntimeLinkFlags
-    ${ESIRuntimeLinkFlags}
+  target_link_options(ESICppRuntime PRIVATE
     -pthread
   )
-  set(ESIRuntimeLibDirs
-    ${ESIRuntimeLibDirs}
-    ${XRT_PATH}/lib
-  )
 endif()
-
-# The core API. For now, compile the backends into it directly.
-# TODO: make this a plugin architecture.
-add_library(ESIRuntime SHARED
-  ${ESIRuntimeSources}
-)
-target_include_directories(ESIRuntime PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-target_link_libraries(ESIRuntime PRIVATE ${ESIRuntimeLinkLibraries})
-target_include_directories(ESIRuntime PRIVATE ${ESIRuntimeIncludeDirs})
-target_compile_options(ESIRuntime PRIVATE ${ESIRuntimeCxxFlags})
-target_link_directories(ESIRuntime PRIVATE ${ESIRuntimeLibDirs})
-target_link_options(ESIRuntime PRIVATE ${ESIRuntimeLinkFlags})
-install(TARGETS ESIRuntime
+add_dependencies(ESIRuntime ESICppRuntime)
+install(TARGETS ESICppRuntime
   DESTINATION lib
   COMPONENT ESIRuntime
 )
-install(IMPORTED_RUNTIME_ARTIFACTS ESIRuntime
-  RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  COMPONENT ESIRuntime
-)
-install(RUNTIME_DEPENDENCY_SET ESIRuntime_RUNTIME_DEPS
-  DESTINATION lib
-  PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES capnp kj
-  COMPONENT ESIRuntime
-)
-install(FILES ${ESIRuntimeHeaders}
+install(FILES ${ESICppRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
 )
-install(FILES ${ESIRuntimeBackendHeaders}
-  DESTINATION include/esi/backends
-  COMPONENT ESIRuntime-dev
-)
+
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cpp/cmake/esiaccel.cmake
   DESTINATION cmake
   COMPONENT ESIRuntime-dev
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  target_compile_options(ESIRuntime PRIVATE -Wno-covered-switch-default)
+  target_compile_options(ESICppRuntime PRIVATE -Wno-covered-switch-default)
 endif()
 
-# The esiquery tool is a simple wrapper around the SysInfo API.
+# Global variable for the path to the ESI runtime for use by tests.
+set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
+  CACHE INTERNAL "Path to ESI runtime" FORCE)
+
+
+##===----------------------------------------------------------------------===//
+## The esiquery tool is a simple wrapper around the SysInfo API.
+##===----------------------------------------------------------------------===//
+
 add_executable(esiquery
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
-target_link_libraries(esiquery PRIVATE ESIRuntime)
+target_link_libraries(esiquery PRIVATE ESICppRuntime)
+add_dependencies(ESIRuntime esiquery)
 install(TARGETS esiquery
   DESTINATION bin
   COMPONENT ESIRuntime
 )
 
-# Global variable for the path to the ESI runtime for use by tests.
-set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
-  CACHE INTERNAL "Path to ESI runtime" FORCE)
+##===----------------------------------------------------------------------===//
+## The esitester tool is both an example and test driver. As it is not intended
+## for production use, it is not installed.
+##===----------------------------------------------------------------------===//
+
+add_executable(esitester
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
+)
+target_link_libraries(esitester PRIVATE ESICppRuntime)
+add_dependencies(ESIRuntime esitester)
+
+##===----------------------------------------------------------------------===//
+## Python bindings for the ESI runtime.
+##===----------------------------------------------------------------------===//
 
 option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
 if (WHEEL_BUILD)
   message(STATUS "Setting up for a Python wheel build.")
 endif()
 
-# Pybind11 is used to wrap the ESIRuntime APIs.
+# Pybind11 is used to wrap the ESICppRuntime APIs.
 if(NOT DEFINED Python3_FOUND)
   find_package(Python3 COMPONENTS Interpreter Development)
 endif()
@@ -280,7 +210,7 @@ if(Python3_FOUND)
     # Compile Pybind11 module and copy to the correct python directory.
     pybind11_add_module(esiCppAccel
       ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
-    target_link_libraries(esiCppAccel PRIVATE ESIRuntime)
+    target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
 
     if (WHEEL_BUILD)
       set_target_properties(esiCppAccel PROPERTIES
@@ -344,9 +274,100 @@ if(Python3_FOUND)
         ${ESIPythonRuntimeSources}
         esiCppAccel
     )
+
+    add_dependencies(ESIRuntime ESIPythonRuntime)
   endif()
 else() # Python not found.
   if (WHEEL_BUILD)
     message (FATAL_ERROR "python-dev is required for a wheel build.")
   endif()
 endif()
+
+
+
+##===----------------------------------------------------------------------===//
+## Backends are loaded dynamically as plugins.
+##===----------------------------------------------------------------------===//
+
+option(ESI_COSIM "Enable ESI cosimulation." ON)
+if(ESI_COSIM)
+  # gRPC for cosimulation. Local install required.
+  option(GRPC_PATH "Location of gRPC install.")
+  if (${GRPC_PATH})
+    find_package(Protobuf REQUIRED CONFIG HINTS ${GRPC_PATH})
+    find_package(gRPC REQUIRED CONFIG HINTS ${GRPC_PATH})
+  else()
+    find_package(Protobuf REQUIRED CONFIG)
+    find_package(gRPC REQUIRED CONFIG)
+  endif()
+
+  add_library(CosimBackend SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
+  )
+  set(ESICppRuntimeBackendHeaders
+    ${ESICppRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
+  )
+
+  target_link_libraries(CosimBackend PUBLIC
+    ESICppRuntime
+    protobuf::libprotobuf
+    gRPC::grpc++
+  )
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_include_directories(CosimBackend PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+  protobuf_generate(
+      TARGET CosimBackend
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+  protobuf_generate(
+      TARGET CosimBackend
+      LANGUAGE grpc
+      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
+  add_dependencies(ESIRuntime CosimBackend)
+
+  # Build the RTL DPI cosim server.
+  add_subdirectory(cosim_dpi_server)
+else()
+  message("-- ESI cosim disabled")
+endif()
+
+option(XRT_PATH "Path to XRT lib.")
+if (XRT_PATH)
+  message("-- XRT enabled with path ${XRT_PATH}")
+
+  add_library(XrtBackend SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Xrt.cpp
+  )
+  set(ESICppRuntimeBackendHeaders
+    ${ESICppRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Xrt.h
+  )
+  target_include_directories(XrtBackend PRIVATE
+    ${XRT_PATH}/include
+  )
+  target_compile_options(XrtBackend PRIVATE
+    -fmessage-length=0
+    -Wno-nested-anon-types
+    -Wno-c++98-compat-extra-semi
+  )
+  target_link_libraries(XrtBackend PRIVATE
+    ESICppRuntime
+    xrt_coreutil
+  )
+  target_link_options(XrtBackend PRIVATE
+    -pthread
+    -L${XRT_PATH}/lib
+  )
+  add_dependencies(ESIRuntime XrtBackend)
+endif()
+
+install(FILES ${ESICppRuntimeBackendHeaders}
+  DESTINATION include/esi/backends
+  COMPONENT ESIRuntime-dev
+)

@@ -1,5 +1,6 @@
 ; RUN: firtool -parse-only %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit OpenAgg : %[[
  { "class": "circt.test",
    "target": "~OpenAgg|OpenAgg>out.a"
@@ -14,7 +15,7 @@ circuit OpenAgg : %[[
   ; CHECK-LABEL: module @OpenAgg
   ; CHECK-SAME: (out %out: !firrtl.bundle<a: uint<1>, b: uint<1>> [{circt.fieldID = 1 : i32, class = "circt.test"}, {circt.fieldID = 2 : i32, class = "circt.test"}, {class = "circt.test"}]
   ; CHECK-SAME: , out %out_p: !firrtl.probe<uint<1>>)
-  module OpenAgg:
+  public module OpenAgg:
     output out : {a : UInt<1>,
                   p : Probe<UInt<1>>
                   b : UInt<1>}

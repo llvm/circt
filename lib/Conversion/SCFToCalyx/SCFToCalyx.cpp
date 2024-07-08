@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/SCFToCalyx.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
@@ -26,18 +25,23 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
 
+namespace circt {
+#define GEN_PASS_DEF_SCFTOCALYX
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
+
 using namespace llvm;
 using namespace mlir;
 using namespace mlir::arith;
 using namespace mlir::cf;
 using namespace mlir::func;
-
 namespace circt {
 class ComponentLoweringStateInterface;
 namespace scftocalyx {
@@ -1584,10 +1588,16 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
   }
 };
 
+} // namespace scftocalyx
+
+namespace {
+
+using namespace circt::scftocalyx;
+
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
-class SCFToCalyxPass : public SCFToCalyxBase<SCFToCalyxPass> {
+class SCFToCalyxPass : public circt::impl::SCFToCalyxBase<SCFToCalyxPass> {
 public:
   SCFToCalyxPass()
       : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
@@ -1697,7 +1707,8 @@ public:
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
     GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification =
+        mlir::GreedySimplifyRegionLevel::Disabled;
     if (runOnce)
       config.maxIterations = 1;
 
@@ -1856,15 +1867,14 @@ void SCFToCalyxPass::runOnOperation() {
                             ArrayAttr::get(context, sourceLocations));
   }
 }
-
-} // namespace scftocalyx
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass() {
-  return std::make_unique<scftocalyx::SCFToCalyxPass>();
+  return std::make_unique<SCFToCalyxPass>();
 }
 
 } // namespace circt

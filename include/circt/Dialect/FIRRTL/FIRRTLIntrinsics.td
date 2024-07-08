@@ -205,4 +205,26 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
 }
 
 
+def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
+    [AttrSizedOperandSegments, DeclareOpInterfaceMethods<CombDataflow>]> {
+  let summary = "Import and call DPI function";
+  let description = [{
+    The `int.dpi.call` intrinsic calls an external function.
+    See Sim dialect DPI call op.
+    }];
+
+  let arguments = (ins StrAttr:$functionName,
+                       OptionalAttr<StrArrayAttr>:$inputNames,
+                       OptionalAttr<StrAttr>:$outputName,
+                       Optional<NonConstClockType>:$clock,
+                       Optional<NonConstUInt1Type>:$enable,
+                       Variadic<PassiveType>:$inputs);
+  let results = (outs Optional<PassiveType>:$result);
+  let assemblyFormat = [{
+    $functionName `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
+    attr-dict `:` functional-type($inputs, results)
+  }];
+  let hasVerifier = 1;
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

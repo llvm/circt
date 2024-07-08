@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/Pass.h"
 #include <memory>
 
 namespace circt {

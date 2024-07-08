@@ -2,20 +2,20 @@
 
 ibis.design @D {
 
-ibis.container @C {
+ibis.container sym @C {
   %this = ibis.this <@D::@C>
   %in = ibis.port.input "in" sym @in : i1
   %out = ibis.port.output "out" sym @out : i1
 }
 
-// CHECK-LABEL:   ibis.container @AccessChild {
+// CHECK-LABEL:   ibis.container sym @AccessChild {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@AccessChild>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @c, <@D::@C>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
 // CHECK:           %[[VAL_3:.*]] = ibis.get_port %[[VAL_1]], @in : !ibis.scoperef<@D::@C> -> !ibis.portref<in i1>
 // CHECK-NEXT:         }
 
-ibis.container @AccessChild {
+ibis.container sym @AccessChild {
   %this = ibis.this <@D::@AccessChild>
   %c = ibis.container.instance @c, <@D::@C>
   %c_ref = ibis.path [
@@ -31,20 +31,20 @@ ibis.container @AccessChild {
 // CHECK-LABEL: // -----
 
 ibis.design @D {
-ibis.container @C {
+ibis.container sym @C {
   %this = ibis.this <@D::@C>
   %in = ibis.port.input "in" sym @in : i1
   %out = ibis.port.output "out" sym @out : i1
 }
 
-// CHECK-LABEL:   ibis.container @AccessSibling {
+// CHECK-LABEL:   ibis.container sym @AccessSibling {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@AccessSibling>
 // CHECK:           %[[VAL_1:.*]] = ibis.port.input "[[VAL_1]]" sym @[[VAL_1]] : !ibis.portref<out i1>
 // CHECK:           %[[VAL_2:.*]] = ibis.port.read %[[VAL_1]] : !ibis.portref<in !ibis.portref<out i1>>
 // CHECK:           %[[VAL_3:.*]] = ibis.port.input "[[VAL_3]]" sym @[[VAL_3]] : !ibis.portref<in i1>
 // CHECK:           %[[VAL_4:.*]] = ibis.port.read %[[VAL_3]] : !ibis.portref<in !ibis.portref<in i1>>
 // CHECK:         }
-ibis.container @AccessSibling {
+ibis.container sym @AccessSibling {
   %this = ibis.this <@D::@AccessSibling>
   %sibling = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,
@@ -54,7 +54,7 @@ ibis.container @AccessSibling {
   %c_out = ibis.get_port %sibling, @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
 }
 
-// CHECK-LABEL:   ibis.container @Parent {
+// CHECK-LABEL:   ibis.container sym @Parent {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@Parent>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @a, <@D::@AccessSibling>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @p_b_out.rd : !ibis.scoperef<@D::@AccessSibling> -> !ibis.portref<in !ibis.portref<out i1>>
@@ -65,7 +65,7 @@ ibis.container @AccessSibling {
 // CHECK:           %[[VAL_3]] = ibis.get_port %[[VAL_6]], @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
 // CHECK:           %[[VAL_5]] = ibis.get_port %[[VAL_6]], @in : !ibis.scoperef<@D::@C> -> !ibis.portref<in i1>
 // CHECK:         }
-ibis.container @Parent {
+ibis.container sym @Parent {
   %this = ibis.this <@D::@Parent>
   %a = ibis.container.instance @a, <@D::@AccessSibling>
   %b = ibis.container.instance @b, <@D::@C>
@@ -80,14 +80,14 @@ ibis.container @Parent {
 // C1 child -> P1 parent -> P2 parent -> C2 child -> C3 child
 
 ibis.design @D {
-// CHECK-LABEL:   ibis.container @C1 {
+// CHECK-LABEL:   ibis.container sym @C1 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@C1>
 // CHECK:           %[[VAL_1:.*]] = ibis.port.input "p_p_c2_c3_out.rd" sym @p_p_c2_c3_out.rd : !ibis.portref<out i1>
 // CHECK:           %[[VAL_2:.*]] = ibis.port.read %[[VAL_1]] : !ibis.portref<in !ibis.portref<out i1>>
 // CHECK:           %[[VAL_3:.*]] = ibis.port.input "p_p_c2_c3_in.wr" sym @p_p_c2_c3_in.wr : !ibis.portref<in i1>
 // CHECK:           %[[VAL_4:.*]] = ibis.port.read %[[VAL_3]] : !ibis.portref<in !ibis.portref<in i1>>
 // CHECK:         }
-ibis.container @C1 {
+ibis.container sym @C1 {
   %this = ibis.this <@D::@C1>
   %c3 = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,
@@ -99,7 +99,7 @@ ibis.container @C1 {
   %c_out = ibis.get_port %c3, @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
 }
 
-// CHECK-LABEL:   ibis.container @C2 {
+// CHECK-LABEL:   ibis.container sym @C2 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@C2>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @c3, <@D::@C>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @out : !ibis.scoperef<@D::@C> -> !ibis.portref<out i1>
@@ -109,18 +109,18 @@ ibis.container @C1 {
 // CHECK:           ibis.port.write %[[VAL_4]], %[[VAL_2]] : !ibis.portref<out !ibis.portref<out i1>>
 // CHECK:           ibis.port.write %[[VAL_5]], %[[VAL_3]] : !ibis.portref<out !ibis.portref<in i1>>
 // CHECK:         }
-ibis.container @C2 {
+ibis.container sym @C2 {
   %this = ibis.this <@D::@C2>
   %c3 = ibis.container.instance @c3, <@D::@C>
 }
 
-ibis.container @C {
+ibis.container sym @C {
   %this = ibis.this <@D::@C>
   %in = ibis.port.input "in" sym @in : i1
   %out = ibis.port.output "out" sym @out : i1
 }
 
-// CHECK-LABEL:   ibis.container @P1 {
+// CHECK-LABEL:   ibis.container sym @P1 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@P1>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @c1, <@D::@C1>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @p_p_c2_c3_out.rd : !ibis.scoperef<@D::@C1> -> !ibis.portref<in !ibis.portref<out i1>>
@@ -132,12 +132,12 @@ ibis.container @C {
 // CHECK:           %[[VAL_7:.*]] = ibis.port.input "p_p_c2_c3_in.wr" sym @p_p_c2_c3_in.wr : !ibis.portref<in i1>
 // CHECK:           %[[VAL_5]] = ibis.port.read %[[VAL_7]] : !ibis.portref<in !ibis.portref<in i1>>
 // CHECK:         }
-ibis.container @P1 {
+ibis.container sym @P1 {
   %this = ibis.this <@D::@P1>
   %c1 = ibis.container.instance @c1, <@D::@C1>
 }
 
-// CHECK-LABEL:   ibis.container @P2 {
+// CHECK-LABEL:   ibis.container sym @P2 {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@P2>
 // CHECK:           %[[VAL_1:.*]] = ibis.container.instance @p1, <@D::@P1>
 // CHECK:           %[[VAL_2:.*]] = ibis.get_port %[[VAL_1]], @p_p_c2_c3_out.rd : !ibis.scoperef<@D::@P1> -> !ibis.portref<in !ibis.portref<out i1>>
@@ -150,7 +150,7 @@ ibis.container @P1 {
 // CHECK:           %[[VAL_8:.*]] = ibis.get_port %[[VAL_6]], @p_p_c2_c3_out.rd : !ibis.scoperef<@D::@C2> -> !ibis.portref<out !ibis.portref<out i1>>
 // CHECK:           %[[VAL_3]] = ibis.port.read %[[VAL_8]] : !ibis.portref<out !ibis.portref<out i1>>
 // CHECK:         }
-ibis.container @P2 {
+ibis.container sym @P2 {
   %this = ibis.this <@D::@P2>
   %p1 = ibis.container.instance @p1, <@D::@P1>
   %c2 = ibis.container.instance @c2, <@D::@C2>
@@ -162,14 +162,14 @@ ibis.container @P2 {
 // CHECK-LABEL: // -----
 
 ibis.design @D {
-// CHECK-LABEL:   ibis.container @AccessParent {
+// CHECK-LABEL:   ibis.container sym @AccessParent {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@AccessParent>
 // CHECK:           %[[VAL_1:.*]] = ibis.port.input "p_out.wr" sym @p_out.wr : !ibis.portref<in i1>
 // CHECK:           %[[VAL_2:.*]] = ibis.port.read %[[VAL_1]] : !ibis.portref<in !ibis.portref<in i1>>
 // CHECK:           %[[VAL_3:.*]] = ibis.port.input "p_in.rd" sym @p_in.rd : !ibis.portref<out i1>
 // CHECK:           %[[VAL_4:.*]] = ibis.port.read %[[VAL_3]] : !ibis.portref<in !ibis.portref<out i1>>
 // CHECK:         }
-ibis.container @AccessParent {
+ibis.container sym @AccessParent {
   %this = ibis.this <@D::@AccessParent>
   %p = ibis.path [
     #ibis.step<parent : !ibis.scoperef<@D::@Parent>>
@@ -183,7 +183,7 @@ ibis.container @AccessParent {
   %p_out_ref = ibis.get_port %p, @out : !ibis.scoperef<@D::@Parent> -> !ibis.portref<in i1>
 }
 
-// CHECK-LABEL:   ibis.container @Parent {
+// CHECK-LABEL:   ibis.container sym @Parent {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@D::@Parent>
 // CHECK:           %[[VAL_1:.*]] = ibis.port.input "in" sym @in : i1
 // CHECK:           %[[VAL_2:.*]] = ibis.port.read %[[VAL_1]] : !ibis.portref<in i1>
@@ -197,7 +197,7 @@ ibis.container @AccessParent {
 // CHECK:           %[[VAL_9:.*]] = ibis.get_port %[[VAL_7]], @p_in.rd : !ibis.scoperef<@D::@AccessParent> -> !ibis.portref<in !ibis.portref<out i1>>
 // CHECK:           ibis.port.write %[[VAL_9]], %[[VAL_3]] : !ibis.portref<in !ibis.portref<out i1>>
 // CHECK:         }
-ibis.container @Parent {
+ibis.container sym @Parent {
   %this = ibis.this <@D::@Parent>
   %in = ibis.port.input "in" sym @in : i1
   %out = ibis.port.output "out" sym @out : i1
@@ -211,7 +211,7 @@ ibis.container @Parent {
 
 ibis.design @D {
 
-ibis.container @C {
+ibis.container sym @C {
   %this = ibis.this <@D::@C>
   %in = ibis.port.input "in" sym @in : i1
   %out = ibis.port.output "out" sym @out : i1
@@ -248,7 +248,7 @@ ibis.design @D {
 // and downwards tunneling, we are sure test all the possible combinations of
 // tunneling.
 
-ibis.container @D_up {
+ibis.container sym @D_up {
   %this = ibis.this <@D::@D_up>
   %d = ibis.path [
     #ibis.step<parent : !ibis.scoperef>,
@@ -272,39 +272,39 @@ ibis.container @D_up {
   %clk_out_ref = ibis.get_port %d, @clk_out : !ibis.scoperef<@D::@D_down> -> !ibis.portref<out i1>
   %clk_out_val = ibis.port.read %clk_out_ref : !ibis.portref<out i1>
 }
-ibis.container @C_up {
+ibis.container sym @C_up {
   %this = ibis.this <@D::@C_up>
   %d = ibis.container.instance @d, <@D::@D_up>
 }
-ibis.container @B_up {
+ibis.container sym @B_up {
   %this = ibis.this <@D::@B_up>
   %c = ibis.container.instance @c, <@D::@C_up>
   
 }
 
-ibis.container @A_up {
+ibis.container sym @A_up {
   %this = ibis.this <@D::@A_up>
   %b = ibis.container.instance @b, <@D::@B_up>
 }
 
-ibis.container @Top {
+ibis.container sym @Top {
   %this = ibis.this <@D::@Top>
   %a_down = ibis.container.instance @a_down, <@D::@A_down>
   %a_up = ibis.container.instance @a_up, <@D::@A_up>
 }
-ibis.container @A_down {
+ibis.container sym @A_down {
   %this = ibis.this <@D::@A_down>
   %b = ibis.container.instance @b, <@D::@B_down>
 }
-ibis.container @B_down {
+ibis.container sym @B_down {
   %this = ibis.this <@D::@B_down>
   %c = ibis.container.instance @c, <@D::@C_down>
 }
-ibis.container @C_down {
+ibis.container sym @C_down {
   %this = ibis.this <@D::@C_down>
   %d = ibis.container.instance @d, <@D::@D_down>
 }
-ibis.container @D_down {
+ibis.container sym @D_down {
   %this = ibis.this <@D::@D_down>
   %clk = ibis.port.input "clk_in" sym @clk_in : i1
   %clk_out = ibis.port.output "clk_out" sym @clk_out : i1

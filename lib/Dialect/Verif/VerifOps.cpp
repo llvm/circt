@@ -23,6 +23,18 @@ using namespace circt;
 using namespace verif;
 using namespace mlir;
 
+static ClockEdge ltlToVerifClockEdge(ltl::ClockEdge ce) {
+  switch (ce) {
+  case ltl::ClockEdge::Pos:
+    return ClockEdge::Pos;
+  case ltl::ClockEdge::Neg:
+    return ClockEdge::Neg;
+  case ltl::ClockEdge::Both:
+    return ClockEdge::Both;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
 //===----------------------------------------------------------------------===//
 // HasBeenResetOp
 //===----------------------------------------------------------------------===//
@@ -40,6 +52,43 @@ OpFoldResult HasBeenResetOp::fold(FoldAdaptor adaptor) {
     return BoolAttr::get(getContext(), false);
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// AssertLikeOps Canonicalizations
+//===----------------------------------------------------------------------===//
+
+namespace AssertLikeOp {
+// assertlike(ltl.clock(prop, clk), en) -> clocked_assertlike(prop, en, clk)
+template <typename TargetOp, typename Op>
+static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
+  // If the property is a block argument, then no canonicalization is possible
+  Value property = op.getProperty();
+  auto clockOp = property.getDefiningOp<ltl::ClockOp>();
+  if (!clockOp)
+    return failure();
+
+  // Check for clock operand
+  // If it exists, fold it into a clocked assertlike
+  rewriter.replaceOpWithNewOp<TargetOp>(
+      op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
+      clockOp.getClock(), op.getEnable(), op.getLabelAttr());
+
+  return success();
+}
+
+} // namespace AssertLikeOp
+
+LogicalResult AssertOp::canonicalize(AssertOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedAssertOp>(op, rewriter);
+}
+
+LogicalResult AssumeOp::canonicalize(AssumeOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedAssumeOp>(op, rewriter);
+}
+
+LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
+  return AssertLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//

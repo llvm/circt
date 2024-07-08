@@ -346,6 +346,13 @@ def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
       return $_get(nestedType.getContext(), nestedType);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    Domain getDomain() { return getNestedType().getDomain(); }
+    std::optional<unsigned> getBitSize() {
+      return getNestedType().getBitSize();
+    };
+  }];
 }
 
 //===----------------------------------------------------------------------===//

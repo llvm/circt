@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM.h"
-#include "../PassDetail.h"
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
@@ -31,6 +30,11 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTLLHDTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -619,7 +623,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
         std::array<Type, 3>({voidPtrTy, voidPtrTy, voidPtrTy}));
     for (size_t i = 0, e = entityOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&entityOp.getBody(), intermediate,
+    rewriter.applySignatureConversion(entityOp.getBodyBlock(), intermediate,
                                       typeConverter);
 
     OpBuilder bodyBuilder =
@@ -642,7 +646,7 @@ struct EntityOpConversion : public ConvertToLLVMPattern {
       final.remapInput(i + 3, gep.getResult());
     }
 
-    rewriter.applySignatureConversion(&entityOp.getBody(), final,
+    rewriter.applySignatureConversion(entityOp.getBodyBlock(), final,
                                       typeConverter);
 
     // Get the converted entity signature.
@@ -714,7 +718,7 @@ struct ProcOpConversion : public ConvertToLLVMPattern {
     intermediate.addInputs(procArgTys);
     for (size_t i = 0, e = procOp.getNumArguments(); i < e; ++i)
       intermediate.addInputs(i, voidTy);
-    rewriter.applySignatureConversion(&procOp.getBody(), intermediate,
+    rewriter.applySignatureConversion(&procOp.getBlocks().front(), intermediate,
                                       typeConverter);
 
     // Get the final signature conversion.
@@ -1812,7 +1816,7 @@ using LoadOpConversion =
 
 namespace {
 struct LLHDToLLVMLoweringPass
-    : public ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
+    : public circt::impl::ConvertLLHDToLLVMBase<LLHDToLLVMLoweringPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -1880,14 +1884,13 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
-  target.addLegalOp<UnrealizedConversionCastOp>();
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
   // Apply the partial conversion.
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
+    return signalPassFailure();
   patterns.clear();
 
   // Setup the full conversion.
@@ -1903,21 +1906,10 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   populateCombToArithConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
 
-  target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
 
-  // Apply a full conversion to remove unrealized conversion casts.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
-
-  patterns.clear();
-
-  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
-  target.addIllegalOp<UnrealizedConversionCastOp>();
-
-  // Apply the full conversion.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
+    return signalPassFailure();
 }
 
 /// Create an LLHD to LLVM conversion pass.

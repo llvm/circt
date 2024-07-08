@@ -15,8 +15,6 @@ module {
 
     // CHECK:   [[NID5:[0-9]+]] constd [[NID3]] -1
     %true = hw.constant true
-    %.pred.output = hw.wire %4  : i1
-    %b = hw.wire %3  : i32
 
     // CHECK:   [[NID6:[0-9]+]] sort bitvec 33
     // CHECK:   [[NID7:[0-9]+]] concat [[NID6]] [[NID4]] [[NID1]]
@@ -32,17 +30,17 @@ module {
     %3 = comb.extract %2 from 0 : (i33) -> i32
 
     // CHECK:   [[NID11:[0-9]+]] ugt [[NID3]] [[NID10]] 2
-    %4 = comb.icmp bin ugt %b, %a : i32
+    %4 = comb.icmp bin ugt %3, %a : i32
 
     // CHECK:   [[NID12:[0-9]+]] implies [[NID3]] [[NID5]] [[NID11]]
     // CHECK:   [[NID13:[0-9]+]] not [[NID3]] [[NID12]]
     // CHECK:   [[NID14:[0-9]+]] bad [[NID13:[0-9]+]]
     sv.always posedge %0 {
       sv.if %true {
-        sv.assert %.pred.output, immediate message "a + 1 should be greater than a"
+        sv.assert %4, immediate message "a + 1 should be greater than a"
       }
     }
-    hw.output %.pred.output : i1
+    hw.output %4 : i1
   }
 }
 

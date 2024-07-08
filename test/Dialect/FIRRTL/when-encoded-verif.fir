@@ -1,8 +1,9 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics %s
+FIRRTL version 4.0.0
 circuit WhenEncodedVerification:
   ; expected-error @below {{module contains 23 printf-encoded verification operation(s), which are no longer supported.}}
   ; expected-note @below {{For more information, see https://github.com/llvm/circt/issues/6970}}
-  module WhenEncodedVerification:
+  public module WhenEncodedVerification:
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>

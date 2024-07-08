@@ -10,18 +10,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace llhd {
+#define GEN_PASS_DEF_FUNCTIONELIMINATION
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+} // namespace llhd
+} // namespace circt
 
 using namespace circt;
-
 namespace {
 
 struct FunctionEliminationPass
-    : public llhd::FunctionEliminationBase<FunctionEliminationPass> {
+    : public circt::llhd::impl::FunctionEliminationBase<
+          FunctionEliminationPass> {
   void runOnOperation() override;
 };
 

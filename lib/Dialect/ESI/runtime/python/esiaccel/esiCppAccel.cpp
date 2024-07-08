@@ -150,14 +150,14 @@ PYBIND11_MODULE(esiCppAccel, m) {
         p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read",
-           [](ReadChannelPort &p) -> py::object {
-             MessageData data;
-             if (!p.read(data))
-               return py::none();
-             return py::bytearray((const char *)data.getBytes(),
-                                  data.getSize());
-           })
+      .def(
+          "read",
+          [](ReadChannelPort &p) -> py::bytearray {
+            MessageData data;
+            p.read(data);
+            return py::bytearray((const char *)data.getBytes(), data.getSize());
+          },
+          "Read data from the channel. Blocking.")
       .def("read_async", &ReadChannelPort::readAsync);
 
   py::class_<BundlePort>(m, "BundlePort")
@@ -217,30 +217,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
                            return acc.getService<services::MMIO>({});
                          },
                          py::return_value_policy::reference);
-
-// Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
-// to test both styles of manifest retrieval for cosim. Come up with a more
-// generic way to set accelerator-specific properties/configurations.
-#ifdef ESI_COSIM
-  py::enum_<backends::cosim::CosimAccelerator::ManifestMethod>(
-      m, "CosimManifestMethod")
-      .value("ManifestCosim",
-             backends::cosim::CosimAccelerator::ManifestMethod::Cosim)
-      .value("ManifestMMIO",
-             backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
-      .export_values();
-
-  accConn.def(
-      "set_manifest_method",
-      [](AcceleratorConnection &acc,
-         backends::cosim::CosimAccelerator::ManifestMethod method) {
-        auto cosim = dynamic_cast<backends::cosim::CosimAccelerator *>(&acc);
-        if (!cosim)
-          throw std::runtime_error(
-              "set_manifest_method only supported for cosim connections");
-        cosim->setManifestMethod(method);
-      });
-#endif // ESI_COSIM
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())

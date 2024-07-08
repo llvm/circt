@@ -21,7 +21,7 @@ using namespace ibis;
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
   config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
+  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
   return mlir::createCanonicalizerPass(config);
 }
 

@@ -10,13 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -24,11 +24,19 @@
 
 #define DEBUG_TYPE "firrtl-infer-read-write"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERREADWRITE
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
+struct InferReadWritePass
+    : public circt::firrtl::impl::InferReadWriteBase<InferReadWritePass> {
 
   /// This pass performs two memory transformations:
   ///  1. If the multi-bit enable port is connected to a constant 1,

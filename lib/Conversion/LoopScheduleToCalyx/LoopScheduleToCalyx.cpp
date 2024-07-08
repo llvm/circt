@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LoopScheduleToCalyx.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
@@ -26,10 +25,16 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
+
+namespace circt {
+#define GEN_PASS_DEF_LOOPSCHEDULETOCALYX
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace llvm;
 using namespace mlir;
@@ -1387,7 +1392,7 @@ class CleanupFuncOps : public calyx::FuncOpPartialLoweringPattern {
 // Pass driver
 //===----------------------------------------------------------------------===//
 class LoopScheduleToCalyxPass
-    : public LoopScheduleToCalyxBase<LoopScheduleToCalyxPass> {
+    : public circt::impl::LoopScheduleToCalyxBase<LoopScheduleToCalyxPass> {
 public:
   LoopScheduleToCalyxPass()
       : LoopScheduleToCalyxBase<LoopScheduleToCalyxPass>(),
@@ -1500,7 +1505,8 @@ public:
     // will only be established later in the conversion process, so ensure
     // that rewriter optimizations (especially DCE) are disabled.
     GreedyRewriteConfig config;
-    config.enableRegionSimplification = false;
+    config.enableRegionSimplification =
+        mlir::GreedySimplifyRegionLevel::Disabled;
     if (runOnce)
       config.maxIterations = 1;
 

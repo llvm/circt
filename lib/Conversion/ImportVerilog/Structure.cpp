@@ -98,6 +98,11 @@ struct MemberVisitor {
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
 
+  // Skip genvars.
+  LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
+    return success();
+  }
+
   // Handle instances.
   LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
     using slang::ast::ArgumentDirection;
@@ -120,9 +125,53 @@ struct MemberVisitor {
 
     for (const auto *con : instNode.getPortConnections()) {
       const auto *expr = con->getExpression();
-      if (!expr)
-        return mlir::emitError(loc)
-               << "unconnected port `" << con->port.name << "` not supported";
+
+      // Handle unconnected behavior. The expression is null if it have no
+      // connection for the port.
+      if (!expr) {
+        auto *port = con->port.as_if<PortSymbol>();
+        switch (port->direction) {
+        case slang::ast::ArgumentDirection::In: {
+          auto refType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+
+          if (const auto *net =
+                  port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netOp = builder.create<moore::NetOp>(
+                loc, refType, StringAttr::get(builder.getContext(), net->name),
+                convertNetKind(net->netType.netKind), nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), netOp);
+            portValues.insert({port, readOp});
+          } else if (const auto *var =
+                         port->internalSymbol
+                             ->as_if<slang::ast::VariableSymbol>()) {
+            auto varOp = builder.create<moore::VariableOp>(
+                loc, refType, StringAttr::get(builder.getContext(), var->name),
+                nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), varOp);
+            portValues.insert({port, readOp});
+          } else {
+            return mlir::emitError(loc)
+                   << "unsupported internal symbol for unconnected port `"
+                   << port->name << "`";
+          }
+          continue;
+        }
+
+        // No need to express unconnected behavior for output port, skip to the
+        // next iteration of the loop.
+        case slang::ast::ArgumentDirection::Out:
+          continue;
+
+        // TODO: Mark Inout port as unsupported and it will be supported later.
+        default:
+          return mlir::emitError(loc)
+                 << "unsupported port `" << port->name << "` ("
+                 << slang::ast::toString(port->kind) << ")";
+        }
+      }
 
       // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for
       // output and inout ports.
@@ -185,7 +234,6 @@ struct MemberVisitor {
 
     for (auto &port : moduleLowering->ports) {
       auto value = portValues.lookup(&port.ast);
-      assert(value && "no prepared value for port");
       if (port.ast.direction == ArgumentDirection::Out)
         outputValues.push_back(value);
       else
@@ -202,7 +250,8 @@ struct MemberVisitor {
 
     // Assign output values from the instance to the connected expression.
     for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs()))
-      builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
+      if (lvalue)
+        builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
 
     return success();
   }
@@ -287,17 +336,12 @@ struct MemberVisitor {
 
   // Handle parameters.
   LogicalResult visit(const slang::ast::ParameterSymbol &paramNode) {
-    auto type = context.convertType(*paramNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(paramNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = paramNode.getInitializer();
-    // skip parameters without value.
-    if (!init)
-      return success();
-    Value initial = context.convertRvalueExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = paramNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(paramNode.name),
@@ -306,31 +350,46 @@ struct MemberVisitor {
                                          moore::NamedConst::LocalParameter)
             : moore::NamedConstAttr::get(context.getContext(),
                                          moore::NamedConst::Parameter),
-        initial);
+        value);
     context.valueSymbols.insert(&paramNode, namedConstantOp);
     return success();
   }
 
   // Handle specparam.
   LogicalResult visit(const slang::ast::SpecparamSymbol &spNode) {
-    auto type = context.convertType(*spNode.getDeclaredType());
+    auto type = cast<moore::IntType>(context.convertType(spNode.getType()));
     if (!type)
       return failure();
 
-    const auto *init = spNode.getInitializer();
-    // skip specparam without value.
-    if (!init)
-      return success();
-    Value initial = context.convertRvalueExpression(*init);
-    if (!initial)
-      return failure();
+    auto valueInt = spNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
 
     auto namedConstantOp = builder.create<moore::NamedConstantOp>(
         loc, type, builder.getStringAttr(spNode.name),
         moore::NamedConstAttr::get(context.getContext(),
                                    moore::NamedConst::SpecParameter),
-        initial);
+        value);
     context.valueSymbols.insert(&spNode, namedConstantOp);
+    return success();
+  }
+
+  // Handle generate block.
+  LogicalResult visit(const slang::ast::GenerateBlockSymbol &genNode) {
+    if (!genNode.isUninstantiated) {
+      for (auto &member : genNode.members()) {
+        if (failed(member.visit(MemberVisitor(context, loc))))
+          return failure();
+      }
+    }
+    return success();
+  }
+
+  // Handle generate block array.
+  LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
+    for (const auto *member : genArrNode.entries) {
+      if (failed(member->asSymbol().visit(MemberVisitor(context, loc))))
+        return failure();
+    }
     return success();
   }
 

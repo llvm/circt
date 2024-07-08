@@ -30,18 +30,25 @@
 // and continue the analysis through the instance graph.
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
 
 #define DEBUG_TYPE "check-comb-loops"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_CHECKCOMBLOOPS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -86,10 +93,15 @@ public:
                       });
     }
 
-    bool foreignOps = false;
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
-          .Case<RegOp, RegResetOp>([&](auto) {})
+          .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
+            // computeDataFlow returns a pair of FieldRefs, first element is the
+            // destination and the second is the source.
+            for (auto [dest, source] : df.computeDataFlow())
+              addDrivenBy(dest, source);
+
+          })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
             if (auto node = dyn_cast<NodeOp>(op))
@@ -103,7 +115,6 @@ public:
             recordDataflow(ref, data);
             recordProbe(data, ref);
           })
-          .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
           })
@@ -165,33 +176,12 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
-          .Case<mlir::UnrealizedConversionCastOp>([&](auto) {
-            // Casts are cast-like regardless of source.
-            // UnrealizedConversionCastOp doesn't implement CastOpInterace,
-            // otherwise we would use it here.
+          .Default([&](Operation *op) {
+            // All other expressions are assumed to be combinational, so record
+            // the dataflow between all inputs to outputs.
             for (auto res : op->getResults())
               for (auto src : op->getOperands())
                 recordDataflow(res, src);
-          })
-          .Default([&](Operation *op) {
-            // Non FIRRTL ops are not checked
-            if (!op->getDialect() ||
-                !isa<FIRRTLDialect, chirrtl::CHIRRTLDialect>(
-                    op->getDialect())) {
-              if (!foreignOps && op->getNumResults() > 0 &&
-                  op->getNumOperands() > 0) {
-                op->emitRemark("Non-firrtl operations detected, combinatorial "
-                               "loop checking may miss some loops.");
-                foreignOps = true;
-              }
-              return;
-            }
-            // All other expressions.
-            if (op->getNumResults() == 1) {
-              auto res = op->getResult(0);
-              for (auto src : op->getOperands())
-                recordDataflow(res, src);
-            }
           });
     });
   }
@@ -468,23 +458,6 @@ public:
     valToFieldRefs[result].emplace_back(base, fieldID);
   }
 
-  void handleMemory(MemOp mem) {
-    if (mem.getReadLatency() > 0)
-      return;
-    // Add the enable and address fields as the drivers of the data field.
-    for (auto memPort : mem.getResults())
-      // TODO: Can reftype ports create cycle ?
-      if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
-        auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
-        auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
-        auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(enableFieldId)});
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(addressFieldId)});
-      }
-  }
-
   // Perform an iterative DFS traversal of the given graph. Record paths between
   // the ports and detect and report any cycles in the graph.
   LogicalResult dfsTraverse(const DrivenByGraphType &graph) {
@@ -729,7 +702,8 @@ private:
 /// combinational cycles. To capture the cross-module combinational cycles,
 /// this pass inlines the combinational paths between IOs of its
 /// subinstances into a subgraph and encodes them in `modulePortPaths`.
-class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
+class CheckCombLoopsPass
+    : public circt::firrtl::impl::CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();

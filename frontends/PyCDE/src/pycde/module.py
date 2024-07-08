@@ -159,12 +159,13 @@ class PortProxyBase:
       self._set_output(idx, signal)
 
   def _check_unconnected_outputs(self):
-    unconnected_ports = []
+    unconnected_port_names = []
+    assert self._builder is not None
     for idx, value in enumerate(self._output_values):
       if value is None:
-        unconnected_ports.append(self._builder.outputs[idx][0])
-    if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self._name, unconnected_ports)
+        unconnected_port_names.append(self._builder.outputs[idx].name)
+    if len(unconnected_port_names) > 0:
+      raise support.UnconnectedSignalError(self._name, unconnected_port_names)
 
   def _clear(self):
     """TL;DR: Downgrade a shotgun to a handgun.
@@ -400,7 +401,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     def __init__(self, builder: ModuleLikeBuilderBase, ports: PortProxyBase, ip,
                  loc: ir.Location) -> None:
       self.bc = _BlockContext()
-      self.bb = BackedgeBuilder()
+      self.bb = BackedgeBuilder(builder.name)
       self.ip = ir.InsertionPoint(ip)
       self.loc = loc
       self.clk = None
@@ -732,12 +733,14 @@ def import_hw_module(hw_module: hw.HWModuleOp):
 
   # Get the module name to use in the generated class and as the external name.
   name = ir.StringAttr(hw_module.name).value
+  mod_type = hw_module.type
 
   # Collect input and output ports as named Inputs and Outputs.
   modattrs = {}
-  for input_name, block_arg in hw_module.inputs().items():
-    modattrs[input_name] = Input(_FromCirctType(block_arg.type), input_name)
-  for output_name, output_type in hw_module.outputs().items():
+  for input_name, input_type in zip(mod_type.input_names, mod_type.input_types):
+    modattrs[input_name] = Input(_FromCirctType(input_type), input_name)
+  for output_name, output_type in zip(mod_type.output_names,
+                                      mod_type.output_types):
     modattrs[output_name] = Output(_FromCirctType(output_type), output_name)
   modattrs["BuilderType"] = ImportedModSpec
   modattrs["hw_module"] = hw_module

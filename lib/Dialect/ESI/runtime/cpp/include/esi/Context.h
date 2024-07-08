@@ -37,8 +37,7 @@ public:
     return std::nullopt;
   }
 
-  /// Register a type with the context. Takes ownership of the type and returns
-  /// the pointer which users should use.
+  /// Register a type with the context. Takes ownership of the pointer type.
   void registerType(Type *type);
 
   /// Connect to an accelerator backend.

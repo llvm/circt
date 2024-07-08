@@ -8,8 +8,8 @@ circuit Test : %[[
   "modules": ["~Test|CPU_1", "~Test|CPU_2"]
 }
 ]]
-  ; CHECK: hw.hierpath private [[NLA1:@.+]] [@Test::@sym, @CPU_1::[[SYM1:@.+]]]
-  ; CHECK: hw.hierpath private [[NLA2:@.+]] [@Test::@sym, @CPU_1::[[SYM2:@.+]], @Fetch_1::[[SYM3:@.+]]]
+  ; CHECK: hw.hierpath private [[NLA1:@.+]] [@CPU_1::[[SYM1:@.+]]]
+  ; CHECK: hw.hierpath private [[NLA2:@.+]] [@CPU_1::[[SYM2:@.+]], @Fetch_1::[[SYM3:@.+]]]
   module Test :
     input in : UInt<1>
     output out_1 : UInt<1>

@@ -9,7 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWModuleGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -23,6 +22,13 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+namespace circt {
+namespace verif {
+#define GEN_PASS_DEF_VERIFYCLOCKEDASSERTLIKE
+#include "circt/Dialect/Verif/Passes.h.inc"
+} // namespace verif
+} // namespace circt
+
 using namespace circt;
 using namespace verif;
 
@@ -32,7 +38,8 @@ namespace {
 // Clocked assertlike ops are a simple form of assertions that only
 // contain one clock and one disable condition.
 struct VerifyClockedAssertLikePass
-    : VerifyClockedAssertLikeBase<VerifyClockedAssertLikePass> {
+    : circt::verif::impl::VerifyClockedAssertLikeBase<
+          VerifyClockedAssertLikePass> {
 private:
   // Used to perform a DFS search through the module to visit all operands
   // before they are used
@@ -58,7 +65,7 @@ private:
 
       if (operandIt == op->operand_end()) {
         // Check that our property doesn't contain any illegal ops
-        if (isa<ltl::ClockOp, ltl::DisableOp>(op)) {
+        if (isa<ltl::ClockOp>(op)) {
           op->emitError("Nested clock or disable operations are not "
                         "allowed for clock_assertlike operations.");
           return;
@@ -79,12 +86,7 @@ private:
       if (!defOp || handledOps.contains(defOp))
         continue;
 
-      // This is triggered if our operand is already in the worklist and
-      // wasn't handled
-      if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
-        op->emitError("dependency cycle");
-        return;
-      }
+      worklist.insert({defOp, defOp->operand_begin()});
     }
 
     // Clear worklist and such

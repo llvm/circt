@@ -20,6 +20,9 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_LOOPSCHEDULETOCALYX
+#include "circt/Conversion/Passes.h.inc"
+
 /// Create a LoopSchedule to Calyx conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> createLoopScheduleToCalyxPass();
 

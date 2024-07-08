@@ -625,7 +625,8 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT: firrtl.matchingconnect %localReset, %0
+    // CHECK-NEXT: %1 = firrtl.node %0 :
+    // CHECK-NEXT: firrtl.matchingconnect %localReset, %1 :
   }
 }
 
@@ -642,7 +643,8 @@ firrtl.circuit "UnmovableForceableNodeShouldDominate" {
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT: firrtl.matchingconnect %localReset, %0
+    // CHECK-NEXT: %1:2 = firrtl.node %0 forceable
+    // CHECK-NEXT: firrtl.matchingconnect %localReset, %1#0
   }
 }
 
@@ -667,7 +669,8 @@ firrtl.circuit "MoveAcrossBlocks1" {
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = firrtl.node [[TMP]] : !firrtl.asyncreset
+    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP2]]
     // CHECK-NEXT: }
   }
 }
@@ -688,7 +691,8 @@ firrtl.circuit "MoveAcrossBlocks2" {
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = firrtl.node [[TMP]] : !firrtl.asyncreset 
+    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP2]]
     // CHECK-NEXT: }
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[RV:%.+]] = firrtl.constant 0
@@ -713,7 +717,8 @@ firrtl.circuit "MoveAcrossBlocks3" {
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: firrtl.when %ui1 : !firrtl.uint<1> {
     // CHECK-NEXT:   [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP]]
+    // CHECK-NEXT:   [[TMP2:%.+]] = firrtl.node [[TMP]] : !firrtl.asyncreset 
+    // CHECK-NEXT:   firrtl.matchingconnect %localReset, [[TMP2]]
     // CHECK-NEXT: }
   }
 }
@@ -735,7 +740,8 @@ firrtl.circuit "MoveAcrossBlocks4" {
     // CHECK-NEXT:   %reg = firrtl.regreset %clock, %localReset, [[RV]]
     // CHECK-NEXT: }
     // CHECK-NEXT: [[TMP:%.+]] = firrtl.asAsyncReset %ui1
-    // CHECK-NEXT: firrtl.matchingconnect %localReset, [[TMP]]
+    // CHECK-NEXT: [[TMP2:%.+]] = firrtl.node [[TMP]] : !firrtl.asyncreset
+    // CHECK-NEXT: firrtl.matchingconnect %localReset, [[TMP2]]
   }
 }
 
@@ -1090,5 +1096,59 @@ firrtl.circuit "TraceThroughNodes" {
 
     // CHECK: %node2 = firrtl.node %localReset2 : !firrtl.asyncreset
     %node2 = firrtl.node %localReset2 : !firrtl.reset
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "RWProbeOp"
+firrtl.circuit "RWProbeOp" {
+  // CHECK: %out: !firrtl.bundle<a: asyncreset, b: asyncreset>
+  // CHECK-SAME: %out2: !firrtl.asyncreset
+  firrtl.module @RWProbeOp(in %driver: !firrtl.asyncreset, out %out: !firrtl.bundle<a: reset, b: reset>, out %out2: !firrtl.reset) {
+    %r = firrtl.wire sym [<@r,0,public>,<@r_a,1,public>,<@r_b,2,public>] : !firrtl.bundle<a: reset, b flip: reset>
+
+    // CHECK-COUNT-2: <a: asyncreset, b flip: asyncreset>
+    %r_a = firrtl.subfield %r[a] : !firrtl.bundle<a: reset, b flip: reset>
+    %r_b = firrtl.subfield %r[b] : !firrtl.bundle<a: reset, b flip: reset>
+    // CHECK-COUNT-2: %driver : !firrtl.asyncreset
+    firrtl.connect %r_a, %driver : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %r_b, %driver : !firrtl.reset, !firrtl.asyncreset
+
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_a_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_a> : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_b_rw = firrtl.ref.rwprobe <@RWProbeOp::@r_b> : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<bundle<a: asyncreset, b: asyncreset>>
+    %r_rw = firrtl.ref.rwprobe <@RWProbeOp::@r> : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    // CHECK-NEXT: rwprobe<asyncreset>
+    %r_b_read = firrtl.ref.resolve %r_b_rw : !firrtl.rwprobe<reset>
+    // CHECK-NEXT: rwprobe<bundle<a: asyncreset, b: asyncreset>>
+    %r_read = firrtl.ref.resolve %r_rw : !firrtl.rwprobe<bundle<a: reset, b: reset>>
+
+    // CHECK-NEXT: firrtl.asyncreset
+    firrtl.matchingconnect %out2, %r_b_read : !firrtl.reset
+    // CHECK-NEXT: bundle<a: asyncreset, b: asyncreset>
+    firrtl.matchingconnect %out, %r_read : !firrtl.bundle<a: reset, b: reset>
+  }
+}
+
+// -----
+
+// CHECK-LABEL: "MovableNodeShouldDominateInstance"
+firrtl.circuit "MovableNodeShouldDominateInstance" {
+  firrtl.module @MovableNodeShouldDominateInstance(in %clock: !firrtl.clock) {
+    %child_clock = firrtl.instance child @Child(in clock: !firrtl.clock)
+    firrtl.connect %child_clock, %clock : !firrtl.clock
+    %ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %localReset = firrtl.node %0 {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK:       %localReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
+    // CHECK:       %child_localReset, %child_clock = firrtl.instance child @Child(in localReset: !firrtl.asyncreset, in clock: !firrtl.clock
+  }
+  firrtl.module @Child(in %clock: !firrtl.clock) {
+    // CHECK: firrtl.regreset %clock, %localReset, %c0_ui8
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
   }
 }

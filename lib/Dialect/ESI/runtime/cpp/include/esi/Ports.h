@@ -18,7 +18,9 @@
 
 #include "esi/Common.h"
 #include "esi/Types.h"
+#include "esi/Utils.h"
 
+#include <cassert>
 #include <future>
 
 namespace esi {
@@ -31,15 +33,19 @@ namespace esi {
 class ChannelPort {
 public:
   ChannelPort(const Type *type) : type(type) {}
-  virtual ~ChannelPort() = default;
+  virtual ~ChannelPort() { disconnect(); }
 
-  virtual void connect() {}
+  virtual void connect() { connectImpl(); }
   virtual void disconnect() {}
 
   const Type *getType() const { return type; }
 
 private:
   const Type *type;
+
+  /// Called by all connect methods to let backends initiate the underlying
+  /// connections.
+  virtual void connectImpl() {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -51,21 +57,78 @@ public:
   virtual void write(const MessageData &) = 0;
 };
 
-/// A ChannelPort which reads data from the accelerator.
+/// A ChannelPort which reads data from the accelerator. It has two modes:
+/// Callback and Polling which cannot be used at the same time. The mode is set
+/// at connect() time. To change the mode, disconnect() and then connect()
+/// again.
 class ReadChannelPort : public ChannelPort {
+
 public:
-  using ChannelPort::ChannelPort;
+  ReadChannelPort(const Type *type)
+      : ChannelPort(type), mode(Mode::Disconnected) {}
+  virtual void disconnect() override { mode = Mode::Disconnected; }
 
-  /// Specify a buffer to read into. Non-blocking. Returns true if message
-  /// successfully recieved. Basic API, will likely change for performance
-  /// and functionality reasons.
-  virtual bool read(MessageData &) = 0;
+  //===--------------------------------------------------------------------===//
+  // Callback mode: To use a callback, connect with a callback function which
+  // will get called with incoming data. This function can be called from any
+  // thread. It shall return true to indicate that the data was consumed. False
+  // if it could not accept the data and should be tried again at some point in
+  // the future. Callback is not allowed to block and needs to execute quickly.
+  //
+  // TODO: Have the callback return something upon which the caller can check,
+  // wait, and be notified.
+  //===--------------------------------------------------------------------===//
 
-  /// Asynchronous read. Returns a future which will be set when the message is
-  /// recieved. Could this subsume the synchronous read API?
-  /// The default implementation of this is really bad and should be overridden.
-  /// It simply polls `read` in a loop.
+  virtual void connect(std::function<bool(MessageData)> callback);
+
+  //===--------------------------------------------------------------------===//
+  // Polling mode methods: To use futures or blocking reads, connect without any
+  // arguments. You will then be able to use readAsync() or read().
+  //===--------------------------------------------------------------------===//
+
+  /// Default max data queue size set at connect time.
+  static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
+
+  /// Connect to the channel in polling mode.
+  virtual void connect() override;
+
+  /// Asynchronous read.
   virtual std::future<MessageData> readAsync();
+
+  /// Specify a buffer to read into. Blocking. Basic API, will likely change
+  /// for performance and functionality reasons.
+  virtual void read(MessageData &outData) {
+    std::future<MessageData> f = readAsync();
+    f.wait();
+    outData = std::move(f.get());
+  }
+
+  /// Set maximum number of messages to store in the dataQueue. 0 means no
+  /// limit. This is only used in polling mode and is set to default of 32 upon
+  /// connect.
+  void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
+
+protected:
+  /// Indicates the current mode of the channel.
+  enum Mode { Disconnected, Callback, Polling };
+  Mode mode;
+
+  /// Backends call this callback when new data is available.
+  std::function<bool(MessageData)> callback;
+
+  //===--------------------------------------------------------------------===//
+  // Polling mode members.
+  //===--------------------------------------------------------------------===//
+
+  /// Mutex to protect the two queues used for polling.
+  std::mutex pollingM;
+  /// Store incoming data here if there are no outstanding promises to be
+  /// fulfilled.
+  std::queue<MessageData> dataQueue;
+  /// Maximum number of messages to store in dataQueue. 0 means no limit.
+  uint64_t maxDataQueueMsgs;
+  /// Promises to be fulfilled when data is available.
+  std::queue<std::promise<MessageData>> promiseQueue;
 };
 
 /// Services provide connections to 'bundles' -- collections of named,
@@ -94,6 +157,15 @@ public:
   ReadChannelPort &getRawRead(const std::string &name) const;
   const std::map<std::string, ChannelPort &> &getChannels() const {
     return channels;
+  }
+
+  /// Cast this Bundle port to a subclass which is actually useful. Returns
+  /// nullptr if the cast fails.
+  // TODO: this probably shouldn't be 'const', but bundle ports' user access are
+  // const. Change that.
+  template <typename T>
+  T *getAs() const {
+    return const_cast<T *>(dynamic_cast<const T *>(this));
   }
 
 private:

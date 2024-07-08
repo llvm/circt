@@ -30,8 +30,7 @@ llvm_canonicalize_cmake_booleans(ESI_RUNTIME)
 if (ESI_RUNTIME)
   list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS
     ESIRuntime
-    ESIPythonRuntime
-    esiquery
+    esitester
   )
 
   # If ESI Cosim is available to build then enable its tests.

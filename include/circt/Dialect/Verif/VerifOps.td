@@ -28,11 +28,13 @@ class VerifOp<string mnemonic, list<Trait> traits = []> :
 
 class AssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property,
+  let arguments = (ins LTLAnyPropertyType:$property, Optional<I1>:$enable,
                        OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property (`label` $label^)? attr-dict `:` type($property)
+    $property (`if` $enable^)? (`label` $label^)? attr-dict `:` type($property)
   }];
+
+  let hasCanonicalizeMethod = true;
 }
 
 def AssertOp : AssertLikeOp<"assert"> {
@@ -64,11 +66,11 @@ def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
 class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
   VerifOp<mnemonic, traits> {
   let arguments = (ins LTLAnyPropertyType:$property,
-                      I1:$disable,
                       ClockEdgeAttr:$edge, I1:$clock,
+                      Optional<I1>:$enable,
                       OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
-    $property `disable` $disable `clock` $edge $clock 
+    $property (`if` $enable^)? `,` $edge $clock 
     (`label` $label^)? attr-dict `:` type($property)
   }];
 }
@@ -76,7 +78,7 @@ class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
 def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
   let summary = [{ 
     Assert that a property holds, checked on a given clock's 
-    ticks and disabled if a given condition holds. Only supports
+    ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
 }
@@ -84,7 +86,7 @@ def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
 def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
   let summary = [{ 
     Assume that a property holds, checked on a given clock's 
-    ticks and disabled if a given condition holds. Only supports
+    ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
 }
@@ -92,7 +94,7 @@ def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
 def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
   let summary = [{ 
     Cover on the holding of a property, checked on a given clock's 
-    ticks and disabled if a given condition holds. Only supports
+    ticks and enabled if a given condition holds. Only supports
     a single clock and a single disable.
   }];
 }

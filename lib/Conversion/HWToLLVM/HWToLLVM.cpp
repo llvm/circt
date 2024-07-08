@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HWToLLVM.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
@@ -21,6 +20,11 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTHWTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -623,7 +627,8 @@ static Type convertStructType(hw::StructType type,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct HWToLLVMLoweringPass : public ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
+struct HWToLLVMLoweringPass
+    : public circt::impl::ConvertHWToLLVMBase<HWToLLVMLoweringPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -670,9 +675,6 @@ void HWToLLVMLoweringPass::runOnOperation() {
   populateHWToLLVMTypeConversions(converter);
 
   LLVMConversionTarget target(getContext());
-  target.addLegalOp<UnrealizedConversionCastOp>();
-  target.addLegalOp<ModuleOp>();
-  target.addLegalDialect<LLVM::LLVMDialect>();
   target.addIllegalDialect<hw::HWDialect>();
 
   // Setup the conversion.

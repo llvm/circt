@@ -34,14 +34,17 @@
 #include <typeinfo>
 
 namespace esi {
+// Forward declarations.
+class AcceleratorServiceThread;
 
 //===----------------------------------------------------------------------===//
 // Constants used by low-level APIs.
 //===----------------------------------------------------------------------===//
 
 constexpr uint32_t MetadataOffset = 8;
-constexpr uint32_t MagicNumberLo = 0xE5100E51;
-constexpr uint32_t MagicNumberHi = 0x207D98E5;
+constexpr uint64_t MagicNumberLo = 0xE5100E51;
+constexpr uint64_t MagicNumberHi = 0x207D98E5;
+constexpr uint64_t MagicNumber = MagicNumberLo | (MagicNumberHi << 32);
 constexpr uint32_t ExpectedVersionNumber = 0;
 
 //===----------------------------------------------------------------------===//
@@ -74,15 +77,19 @@ public:
 /// subclasses.
 class AcceleratorConnection {
 public:
-  AcceleratorConnection(Context &ctxt) : ctxt(ctxt) {}
-
+  AcceleratorConnection(Context &ctxt);
   virtual ~AcceleratorConnection() = default;
   Context &getCtxt() const { return ctxt; }
+
+  /// Disconnect from the accelerator cleanly.
+  void disconnect();
 
   /// Request the host side channel ports for a particular instance (identified
   /// by the AppID path). For convenience, provide the bundle type.
   virtual std::map<std::string, ChannelPort &>
   requestChannelsFor(AppIDPath, const BundleType *) = 0;
+
+  AcceleratorServiceThread *getServiceThread() { return serviceThread.get(); }
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -112,13 +119,15 @@ protected:
                                  const HWClientDetails &clients) = 0;
 
 private:
+  /// ESI accelerator context.
+  Context &ctxt;
+
   /// Cache services via a unique_ptr so they get free'd automatically when
   /// Accelerator objects get deconstructed.
   using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
   std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
 
-  /// ESI accelerator context.
-  Context &ctxt;
+  std::unique_ptr<AcceleratorServiceThread> serviceThread;
 };
 
 namespace registry {
@@ -149,6 +158,27 @@ struct RegisterAccelerator {
 
 } // namespace internal
 } // namespace registry
+
+/// Background thread which services various requests. Currently, it listens on
+/// ports and calls callbacks for incoming messages on said ports.
+class AcceleratorServiceThread {
+public:
+  AcceleratorServiceThread();
+  ~AcceleratorServiceThread();
+
+  /// When there's data on any of the listenPorts, call the callback. Callable
+  /// from any thread.
+  void
+  addListener(std::initializer_list<ReadChannelPort *> listenPorts,
+              std::function<void(ReadChannelPort *, MessageData)> callback);
+
+  /// Instruct the service thread to stop running.
+  void stop();
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl;
+};
 } // namespace esi
 
 #endif // ESI_ACCELERATOR_H

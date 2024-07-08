@@ -34,6 +34,9 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
 
   class NamedWire(type._get_value_class()):
 
+    if not type.is_hw_type:
+      raise TypeError(f"NamedWire must have a hardware type, not {type}")
+
     def __init__(self):
       self.assigned_value = None
       # TODO: We assume here that names are unique within a module, which isn't
@@ -148,11 +151,14 @@ def ControlReg(clk: Signal,
                rst: Signal,
                asserts: List[Signal],
                resets: List[Signal],
-               name: Optional[str] = None) -> BitVectorSignal:
+               name: Optional[str] = None) -> BitsSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
   assert takes priority."""
+
+  assert len(asserts) > 0
+  assert len(resets) > 0
 
   @modparams
   def ControlReg(num_asserts: int, num_resets: int):

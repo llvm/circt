@@ -214,3 +214,76 @@ ifdef USE_FORMAL_ONLY_CONSTRAINTS
  `endif // USE_UNR_ONLY_CONSTRAINTS
 endif // USE_FORMAL_ONLY_CONSTRAINTS
 ```
+
+### circt_dpi_call
+
+Call a DPI function. `clock` is optional and if `clock` is not provided,
+the callee is invoked when input values are changed.
+If provided, the dpi function is called at clock's posedge. The result values behave
+like registers and the DPI function is used as a state transfer function of them.
+
+`enable` operand is used to conditionally call the DPI since DPI call could be quite
+more expensive than native constructs. When `enable` is low, results of unclocked
+calls are undefined and evaluated into `X`. Users are expected to gate result values
+by another `enable` to model a default value of results.
+
+For clocked calls, a low enable means that its register state transfer function is
+not called. Hence their values will not be modify in that clock.
+
+| Parameter     | Type   | Description                                         |
+| ------------- | ------ | --------------------------------------------------- |
+| isClocked     | int    | Set 1 if the dpi call is clocked.                   |
+| functionName  | string | Specify the function name.                          |
+| inputNames    | string | Semicolon-delimited list of input names.  Optional. |
+| outputName    | string | Output name. Optional.                              |
+
+
+| Port              | Direction | Type     | Description                     |
+| ----------------- | --------- | -------- | ------------------------------- |
+| clock (optional)  | input     | Clock    | Optional clock operand          |
+| enable            | input     | UInt<1>  | Enable signal                   |
+| ...               | input     | Signals  | Arguments to DPI function call  |
+| result (optional) | output    | Signal   | Optional result of the dpi call |
+
+##### DPI Intrinsic ABI
+Function Declaration:
+* Imported DPI function must be a void function that has input arguments which correspond to operand types, and an output argument which correspond to a result type.
+* Output argument must be a last argument.
+
+Types:
+* Operand and result types must be passive.
+* Aggregate types are lowered into corresponding verilog aggregate.
+* Integer types are lowered into into 2-state types.
+* Small integer types (< 64 bit) must be compatible to C-types and arguments are passed by values. Users are required to use specific integer types for small integers shown in the table below. Large integers are lowered to `bit` and passed by a reference.
+
+| Width | Verilog Type | Argument Passing Modes |
+| ----- | ------------ | ---------------------- |
+| 1     | bit          | value                  |
+| 8     | byte         | value                  |
+| 16    | shortint     | value                  |
+| 32    | int          | value                  |
+| 64    | longint      | value                  |
+| > 64  | bit [w-1:0]  | reference              |
+
+Example SV output:
+```firrtl
+node result = intrinsic(circt_dpi_call<isClocked = 1, functionName="dpi_func"> : UInt<64>, clock, enable, uint_8_value, uint_32_value)
+```
+```verilog
+import "DPI-C" function void dpi_func(
+  input  byte    in_0,
+         int     in_1,
+  output longint out_0
+);
+
+...
+
+logic [63:0] _dpi_func_0;
+reg   [63:0] _GEN;
+always @(posedge clock) begin
+  if (enable) begin
+    dpi_func(in1, in2, _dpi_func_0);
+    _GEN <= _dpi_func_0;
+  end
+end
+```

@@ -9,18 +9,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_FOOWIRES
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
 
 namespace {
 // A test pass that simply replaces all wire names with foo_<n>
-struct FooWiresPass : FooWiresBase<FooWiresPass> {
+struct FooWiresPass : circt::hw::impl::FooWiresBase<FooWiresPass> {
   void runOnOperation() override;
 };
 } // namespace

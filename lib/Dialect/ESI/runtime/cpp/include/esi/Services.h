@@ -93,8 +93,8 @@ public:
 class MMIO : public Service {
 public:
   virtual ~MMIO() = default;
-  virtual uint32_t read(uint32_t addr) const = 0;
-  virtual void write(uint32_t addr, uint32_t data) = 0;
+  virtual uint64_t read(uint32_t addr) const = 0;
+  virtual void write(uint32_t addr, uint64_t data) = 0;
   virtual std::string getServiceSymbol() const override;
 };
 
@@ -116,8 +116,9 @@ private:
 /// Service for calling functions.
 class FuncService : public Service {
 public:
-  FuncService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
-              ServiceImplDetails details, HWClientDetails clients);
+  FuncService(AcceleratorConnection *acc, AppIDPath id,
+              const std::string &implName, ServiceImplDetails details,
+              HWClientDetails clients);
 
   virtual std::string getServiceSymbol() const override;
   virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
@@ -130,12 +131,51 @@ public:
     Function(AppID id, const std::map<std::string, ChannelPort &> &channels);
 
   public:
+    static Function *get(AppID id, WriteChannelPort &arg,
+                         ReadChannelPort &result);
+
     void connect();
     std::future<MessageData> call(const MessageData &arg);
 
   private:
+    std::mutex callMutex;
     WriteChannelPort &arg;
     ReadChannelPort &result;
+  };
+
+private:
+  std::string symbol;
+};
+
+/// Service for servicing function calls from the accelerator.
+class CallService : public Service {
+public:
+  CallService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
+              ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const override;
+
+  /// A function call which gets attached to a service port.
+  class Callback : public ServicePort {
+    friend class CallService;
+    Callback(AcceleratorConnection &acc, AppID id,
+             const std::map<std::string, ChannelPort &> &channels);
+
+  public:
+    /// Connect a callback to code which will be executed when the accelerator
+    /// invokes the callback. The 'quick' flag indicates that the callback is
+    /// sufficiently fast that it could be called in the same thread as the
+    /// port callback.
+    void connect(std::function<MessageData(const MessageData &)> callback,
+                 bool quick = false);
+
+  private:
+    ReadChannelPort &arg;
+    WriteChannelPort &result;
+    AcceleratorConnection &acc;
   };
 
 private:

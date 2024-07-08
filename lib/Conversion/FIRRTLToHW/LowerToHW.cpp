@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
@@ -47,6 +46,11 @@
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "lower-to-hw"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERFIRRTLTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -544,7 +548,8 @@ void CircuitLoweringState::processRemainingAnnotations(
 } // end anonymous namespace
 
 namespace {
-struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
+struct FIRRTLModuleLowering
+    : public circt::impl::LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
@@ -1627,7 +1632,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
-  LogicalResult visitExpr(LTLDisableIntrinsicOp op);
+
+  template <typename TargetOp, typename IntrinsicOp>
+  LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
   LogicalResult visitStmt(VerifAssertIntrinsicOp op);
   LogicalResult visitStmt(VerifAssumeIntrinsicOp op);
   LogicalResult visitStmt(VerifCoverIntrinsicOp op);
@@ -2912,8 +2919,12 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (!resultType)
     return failure();
 
-  if (resultType.isInteger(0))
+  if (resultType.isInteger(0)) {
+    if (op.getInnerSym())
+      return op.emitError("zero width wire is referenced by name [")
+             << *op.getInnerSym() << "] (e.g. in an XMR) but must be removed";
     return setLowering(op.getResult(), Value());
+  }
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto innerSym = lowerInnerSymbol(op);
@@ -2955,8 +2966,14 @@ LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto operand = getLoweredValue(op.getInput());
   if (!operand)
-    return handleZeroBit(
-        op.getInput(), [&]() { return setLowering(op.getResult(), Value()); });
+    return handleZeroBit(op.getInput(), [&]() -> LogicalResult {
+      if (op.getInnerSym())
+        return op.emitError("zero width node is referenced by name [")
+               << *op.getInnerSym()
+               << "] (e.g. in an XMR) but must be "
+                  "removed";
+      return setLowering(op.getResult(), Value());
+    });
 
   // Node operations are logical noops, but may carry annotations or be
   // referred to through an inner name. If a don't touch is present, ensure
@@ -3786,28 +3803,24 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
                                         getLoweredNonClockValue(op.getClock()));
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLDisableIntrinsicOp op) {
-  return setLoweringToLTL<ltl::DisableOp>(
-      op,
-      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+template <typename TargetOp, typename IntrinsicOp>
+LogicalResult FIRRTLLowering::lowerVerifIntrinsicOp(IntrinsicOp op) {
+  auto property = getLoweredValue(op.getProperty());
+  auto enable = op.getEnable() ? getLoweredValue(op.getEnable()) : Value();
+  builder.create<TargetOp>(property, enable, op.getLabelAttr());
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssertIntrinsicOp op) {
-  builder.create<verif::AssertOp>(getLoweredValue(op.getProperty()),
-                                  op.getLabelAttr());
-  return success();
+  return lowerVerifIntrinsicOp<verif::AssertOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifAssumeIntrinsicOp op) {
-  builder.create<verif::AssumeOp>(getLoweredValue(op.getProperty()),
-                                  op.getLabelAttr());
-  return success();
+  return lowerVerifIntrinsicOp<verif::AssumeOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(VerifCoverIntrinsicOp op) {
-  builder.create<verif::CoverOp>(getLoweredValue(op.getProperty()),
-                                 op.getLabelAttr());
-  return success();
+  return lowerVerifIntrinsicOp<verif::CoverOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {

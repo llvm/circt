@@ -23,6 +23,10 @@ class ModuleOp;
 } // namespace mlir
 
 namespace circt {
+
+#define GEN_PASS_DECL_CONVERTHWTOLLHD
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createConvertHWToLLHDPass();
 } // namespace circt

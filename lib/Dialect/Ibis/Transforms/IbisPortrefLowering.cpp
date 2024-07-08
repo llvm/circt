@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/Ibis/IbisOps.h"
+#include "circt/Dialect/Ibis/IbisPasses.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/Ibis/IbisDialect.h"
 #include "circt/Dialect/Ibis/IbisOps.h"
@@ -19,6 +21,13 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "ibis-lower-portrefs"
+
+namespace circt {
+namespace ibis {
+#define GEN_PASS_DEF_IBISPORTREFLOWERING
+#include "circt/Dialect/Ibis/IbisPasses.h.inc"
+} // namespace ibis
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -66,7 +75,7 @@ public:
     if (d == Direction::Input) {
       // references to inputs becomes outputs (write from this container)
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
 
       // Replace writes to the unwrapped port with writes to the new port.
       for (auto *unwrappedPortUser :
@@ -82,7 +91,7 @@ public:
     } else {
       // References to outputs becomes inputs (read from this container)
       auto rawInput = rewriter.create<InputPortOp>(
-          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
       // TODO: RewriterBase::replaceAllUsesWith is not currently supported by
       // DialectConversion. Using it may lead to assertions about mutating
       // replaced/erased ops. For now, do this RAUW directly, until
@@ -147,7 +156,7 @@ public:
       // Create the raw input port and write the input port reference with a
       // read of the raw input port.
       auto rawInput = rewriter.create<InputPortOp>(
-          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
       rewriter.create<PortWriteOp>(
           op.getLoc(), portWrapper.getValue(),
           rewriter.create<PortReadOp>(op.getLoc(), rawInput));
@@ -155,7 +164,7 @@ public:
       // Outputs of outputs are outputs (external driver out of this container).
       // Create the raw output port and do a read of the input port reference.
       auto rawOutput = rewriter.create<OutputPortOp>(
-          op.getLoc(), op.getNameAttr(), op.getInnerSym(), innerType);
+          op.getLoc(), op.getInnerSym(), innerType, op.getNameAttr());
       rewriter.create<PortWriteOp>(
           op.getLoc(), rawOutput,
           rewriter.create<PortReadOp>(op.getLoc(), portWrapper.getValue()));
@@ -298,8 +307,8 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
           // inputs.
           auto fwPortName = rewriter.getStringAttr(portName.strref() + "_fw");
           auto forwardedInputPort = rewriter.create<InputPortOp>(
-              op.getLoc(), fwPortName, hw::InnerSymAttr::get(fwPortName),
-              innerType);
+              op.getLoc(), hw::InnerSymAttr::get(fwPortName), innerType,
+              fwPortName);
 
           // TODO: RewriterBase::replaceAllUsesWith is not currently supported
           // by DialectConversion. Using it may lead to assertions about
@@ -357,7 +366,7 @@ class GetPortConversionPattern : public OpConversionPattern<GetPortOp> {
 };
 
 struct PortrefLoweringPass
-    : public IbisPortrefLoweringBase<PortrefLoweringPass> {
+    : public circt::ibis::impl::IbisPortrefLoweringBase<PortrefLoweringPass> {
   void runOnOperation() override;
 };
 

@@ -2,8 +2,9 @@
 ; RUN: firtool %s -annotation-file %s.inline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_INLINE
 ; RUN: firtool %s -annotation-file %s.outline.anno.json -disable-all-randomization -lowering-options=emitBindComments | FileCheck %s --check-prefixes=CHECK,INIT_OUTLINE
 
+FIRRTL version 4.0.0
 circuit Foo :
-  module Foo :
+  public module Foo :
     input clock : Clock
     input reset : UInt<1>
     output read : { flip en : UInt<1>, data : UInt<8>, flip addr : UInt<5>}

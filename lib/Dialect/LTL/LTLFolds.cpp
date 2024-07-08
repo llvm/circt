@@ -15,15 +15,6 @@ using namespace circt;
 using namespace ltl;
 using namespace mlir;
 
-/// Check if an attribute is an integer zero.
-static bool isConstantZero(Attribute attr) {
-  if (!attr)
-    return false;
-  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
-    return intAttr.getValue().isZero();
-  return false;
-}
-
 /// Concatenate two value ranges into a larger range. Useful for declarative
 /// rewrites.
 static SmallVector<Value> concatValues(ValueRange a, ValueRange b) {
@@ -120,16 +111,4 @@ OpFoldResult GoToRepeatOp::fold(FoldAdaptor adaptor) {
 
 OpFoldResult NonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
   return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
-}
-
-//===----------------------------------------------------------------------===//
-// DisableOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult DisableOp::fold(FoldAdaptor adaptor) {
-  // disable(p, false) -> p
-  if (isConstantZero(adaptor.getCondition()))
-    return getInput();
-
-  return {};
 }

@@ -10,13 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/OwningModuleCache.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
@@ -24,11 +24,19 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERCLASSES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -189,7 +197,8 @@ struct LoweringState {
   DenseMap<om::ClassLike, ClassLoweringState> classLoweringStateTable;
 };
 
-struct LowerClassesPass : public LowerClassesBase<LowerClassesPass> {
+struct LowerClassesPass
+    : public circt::firrtl::impl::LowerClassesBase<LowerClassesPass> {
   void runOnOperation() override;
 
 private:
@@ -293,27 +302,15 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
   SmallVector<PathTracker> trackers;
 
-  // First allocate module namespaces. Don't capture a namespace reference at
-  // this point since they could be invalidated when DenseMap grows.
   for (auto *node : instanceGraph)
-    if (auto module = node->getModule<FModuleLike>())
-      (void)namespaces.get(module);
-
-  // Prepare workers.
-  for (auto *node : instanceGraph)
-    if (auto module = node->getModule<FModuleLike>())
-      trackers.emplace_back(module, namespaces, instanceGraph, symbolTable,
-                            owningModules);
-
-  if (failed(failableParallelForEach(
-          circuit.getContext(), trackers,
-          [](PathTracker &tracker) { return tracker.runOnModule(); })))
-    return failure();
-
-  // Update the pathInfoTable sequentially.
-  for (const auto &tracker : trackers)
-    if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
-      return failure();
+    if (auto module = node->getModule<FModuleLike>()) {
+      PathTracker tracker(module, namespaces, instanceGraph, symbolTable,
+                          owningModules);
+      if (failed(tracker.runOnModule()))
+        return failure();
+      if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
+        return failure();
+    }
 
   return success();
 }
@@ -475,29 +472,42 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
 
     // Copy the middle part from the annotation's NLA.
     if (hierPathOp) {
-      // Copy the old path, dropping the module name.
+      // Get the original path.
       auto oldPath = hierPathOp.getNamepath().getValue();
-      llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
 
-      // Set the moduleName based on the hierarchical path. If the
-      // owningModule is in the hierarichal path, set the moduleName to the
-      // owning module. Otherwise use the top of the hierarchical path.
-      bool pathContainsOwningModule =
-          llvm::any_of(oldPath, [&](auto pathFragment) {
-            return llvm::TypeSwitch<Attribute, bool>(pathFragment)
-                .Case([&](hw::InnerRefAttr innerRef) {
-                  return innerRef.getModule() ==
-                         owningModule.getModuleNameAttr();
-                })
-                .Case([&](FlatSymbolRefAttr symRef) {
-                  return symRef.getAttr() == owningModule.getModuleNameAttr();
-                })
-                .Default([](auto attr) { return false; });
-          });
+      // Set the moduleName and path based on the hierarchical path. If the
+      // owningModule is in the hierarichal path, start the hierarchical path
+      // there. Otherwise use the top of the hierarchical path.
+      bool pathContainsOwningModule = false;
+      size_t owningModuleIndex = 0;
+      for (auto [idx, pathFramgent] : llvm::enumerate(oldPath)) {
+        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(pathFramgent)) {
+          if (innerRef.getModule() == owningModule.getModuleNameAttr()) {
+            pathContainsOwningModule = true;
+            owningModuleIndex = idx;
+          }
+        } else if (auto symRef = dyn_cast<FlatSymbolRefAttr>(pathFramgent)) {
+          if (symRef.getAttr() == owningModule.getModuleNameAttr()) {
+            pathContainsOwningModule = true;
+            owningModuleIndex = idx;
+          }
+        }
+      }
+
       if (pathContainsOwningModule) {
+        // Set the path root module name to the owning module.
         moduleName = owningModule.getModuleNameAttr();
+
+        // Copy the old path, dropping the module name and the prefix to the
+        // owning module.
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back().drop_front(
+                                     owningModuleIndex)));
       } else {
+        // Set the path root module name to the start of the path.
         moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
+
+        // Copy the old path, dropping the module name.
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
       }
     }
 

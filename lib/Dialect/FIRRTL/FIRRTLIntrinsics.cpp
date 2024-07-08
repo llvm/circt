@@ -18,12 +18,24 @@ using namespace firrtl;
 // GenericIntrinsic
 //===----------------------------------------------------------------------===//
 
-ParseResult GenericIntrinsic::hasNInputs(unsigned n) {
-  if (op.getNumOperands() != n)
-    return emitError() << " has " << op.getNumOperands()
-                       << " inputs instead of " << n;
+// Checks for a number of operands between n and n+c (allows for c optional
+// inputs)
+ParseResult GenericIntrinsic::hasNInputs(unsigned n, unsigned c) {
+  auto numOps = op.getNumOperands();
+  unsigned m = n + c;
+  if (numOps < n || numOps > m) {
+    auto err = emitError() << " has " << numOps << " inputs instead of ";
+    if (c == 0)
+      err << n;
+    else
+      err << " between " << n << " and " << m;
+    return failure();
+  }
   return success();
 }
+
+// Accessor method for the number of inputs
+unsigned GenericIntrinsic::getNumInputs() { return op.getNumOperands(); }
 
 ParseResult GenericIntrinsic::hasNOutputElements(unsigned n) {
   auto b = getOutputBundle();
@@ -447,7 +459,7 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(1) || gi.sizedInput<UIntType>(0, 1) ||
+    return gi.hasNInputs(1, 2) || gi.sizedInput<UIntType>(0, 1) ||
            gi.namedParam("label", true) || gi.hasNParam(0, 1) ||
            gi.hasNoOutput();
   }
@@ -455,8 +467,14 @@ public:
   void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                PatternRewriter &rewriter) override {
     auto label = gi.getParamValue<StringAttr>("label");
+    auto operands = adaptor.getOperands();
 
-    rewriter.replaceOpWithNewOp<Op>(gi.op, adaptor.getOperands()[0], label);
+    // Check if an enable was provided
+    Value enable;
+    if (gi.getNumInputs() == 2)
+      enable = operands[1];
+
+    rewriter.replaceOpWithNewOp<Op>(gi.op, operands[0], enable, label);
   }
 };
 
@@ -638,6 +656,56 @@ public:
   }
 };
 
+class CirctDPICallConverter : public IntrinsicConverter {
+  static bool getIsClocked(GenericIntrinsic gi) {
+    return !gi.getParamValue<IntegerAttr>("isClocked").getValue().isZero();
+  }
+
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    if (gi.hasNParam(2, 2) || gi.namedIntParam("isClocked") ||
+        gi.namedParam("functionName") ||
+        gi.namedParam("inputNames", /*optional=*/true) ||
+        gi.namedParam("outputName", /*optional=*/true))
+      return true;
+    auto isClocked = getIsClocked(gi);
+    // If clocked, the first operand must be a clock.
+    if (isClocked && gi.typedInput<ClockType>(0))
+      return true;
+    // Enable must be UInt<1>.
+    if (gi.sizedInput<UIntType>(isClocked, 1))
+      return true;
+
+    return false;
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto isClocked = getIsClocked(gi);
+    auto functionName = gi.getParamValue<StringAttr>("functionName");
+    ArrayAttr inputNamesStrArray;
+    StringAttr outputStr = gi.getParamValue<StringAttr>("outputName");
+    if (auto inputNames = gi.getParamValue<StringAttr>("inputNames")) {
+      SmallVector<StringRef> inputNamesTemporary;
+      inputNames.strref().split(inputNamesTemporary, ';', /*MaxSplit=*/-1,
+                                /*KeepEmpty=*/false);
+      inputNamesStrArray = rewriter.getStrArrayAttr(inputNamesTemporary);
+    }
+    // Clock and enable are optional.
+    Value clock = isClocked ? adaptor.getOperands()[0] : Value();
+    Value enable = adaptor.getOperands()[static_cast<size_t>(isClocked)];
+
+    auto inputs =
+        adaptor.getOperands().drop_front(static_cast<size_t>(isClocked) + 1);
+
+    rewriter.replaceOpWithNewOp<DPICallIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), functionName, inputNamesStrArray,
+        outputStr, clock, enable, inputs);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -669,8 +737,6 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
       "circt.ltl.implication", "circt_ltl_implication");
   lowering.add<CirctLTLBinaryConverter<LTLUntilIntrinsicOp>>("circt.ltl.until",
                                                              "circt_ltl_until");
-  lowering.add<CirctLTLBinaryConverter<LTLDisableIntrinsicOp>>(
-      "circt.ltl.disable", "circt_ltl_disable");
   lowering.add<CirctLTLUnaryConverter<LTLNotIntrinsicOp>>("circt.ltl.not",
                                                           "circt_ltl_not");
   lowering.add<CirctLTLUnaryConverter<LTLEventuallyIntrinsicOp>>(
@@ -704,4 +770,5 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctCoverConverter>("circt.chisel_cover", "circt_chisel_cover");
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
+  lowering.add<CirctDPICallConverter>("circt.dpi_call", "circt_dpi_call");
 }

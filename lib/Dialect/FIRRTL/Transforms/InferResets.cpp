@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -24,6 +23,7 @@
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -31,6 +31,13 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "infer-resets"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERRESETS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using circt::igraph::InstanceOpInterface;
 using circt::igraph::InstancePath;
@@ -400,7 +407,8 @@ namespace {
 ///    module's instantiations have that port connected to the desired signal
 ///    already.
 ///
-struct InferResetsPass : public InferResetsBase<InferResetsPass> {
+struct InferResetsPass
+    : public circt::firrtl::impl::InferResetsBase<InferResetsPass> {
   void runOnOperation() override;
   void runOnOperationInner();
 
@@ -735,6 +743,9 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
   for (auto module : circuit.getOps<FModuleOp>())
     moduleToOps.push_back({module, {}});
 
+  hw::InnerRefNamespace irn{getAnalysis<SymbolTable>(),
+                            getAnalysis<hw::InnerSymbolTableCollection>()};
+
   mlir::parallelForEach(circuit.getContext(), moduleToOps, [](auto &e) {
     e.first.walk([&](Operation *op) {
       // We are only interested in operations which are related to abstract
@@ -773,6 +784,14 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             if (op.isForceable())
               traceResets(op.getDataType(), op.getData(), 0, op.getDataType(),
                           op.getDataRef(), 0, op.getLoc());
+          })
+          .Case<RWProbeOp>([&](RWProbeOp op) {
+            auto ist = irn.lookup(op.getTarget());
+            assert(ist);
+            auto ref = getFieldRefForTarget(ist);
+            auto baseType = op.getType().getType();
+            traceResets(baseType, op.getResult(), 0, baseType.getPassiveType(),
+                        ref.getValue(), ref.getFieldID(), op.getLoc());
           })
           .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
             traceResets(op.getResult(), op.getInput(), op.getLoc());
@@ -1098,8 +1117,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         ConstCastOp, RefCastOp, UninferredResetCastOp>(
-            value.getDefiningOp()))
+                         ConstCastOp, RefCastOp, UninferredResetCastOp,
+                         RWProbeOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
@@ -1273,24 +1292,20 @@ InferResetsPass::collectAnnos(FModuleOp module) {
   // Consume a possible "ignore" annotation on the module itself, which
   // explicitly assigns it no reset domain.
   bool ignore = false;
-  AnnotationSet moduleAnnos(module);
-  if (!moduleAnnos.empty()) {
-    moduleAnnos.removeAnnotations([&](Annotation anno) {
-      if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
-        ignore = true;
-        conflictingAnnos.insert({anno, module.getLoc()});
-        return true;
-      }
-      if (anno.isClass(fullAsyncResetAnnoClass)) {
-        anyFailed = true;
-        module.emitError("'FullAsyncResetAnnotation' cannot target module; "
-                         "must target port or wire/node instead");
-        return true;
-      }
-      return false;
-    });
-    moduleAnnos.applyToOperation(module);
-  }
+  AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
+    if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
+      ignore = true;
+      conflictingAnnos.insert({anno, module.getLoc()});
+      return true;
+    }
+    if (anno.isClass(fullAsyncResetAnnoClass)) {
+      anyFailed = true;
+      module.emitError("'FullAsyncResetAnnotation' cannot target module; "
+                       "must target port or wire/node instead");
+      return true;
+    }
+    return false;
+  });
   if (anyFailed)
     return failure();
 
@@ -1325,24 +1340,23 @@ InferResetsPass::collectAnnos(FModuleOp module) {
     return failure();
 
   // Consume any reset annotations on wires in the module body.
-  module.walk([&](Operation *op) {
-    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-      // Reset annotations must target wire/node ops.
-      if (!isa<WireOp, NodeOp>(op)) {
-        if (anno.isClass(fullAsyncResetAnnoClass,
-                         ignoreFullAsyncResetAnnoClass)) {
-          anyFailed = true;
-          op->emitError(
-              "reset annotations must target module, port, or wire/node");
-          return true;
-        }
-        return false;
+  module.getBody().walk([&](Operation *op) {
+    // Reset annotations must target wire/node ops.
+    if (!isa<WireOp, NodeOp>(op)) {
+      if (AnnotationSet::hasAnnotation(op, fullAsyncResetAnnoClass,
+                                       ignoreFullAsyncResetAnnoClass)) {
+        anyFailed = true;
+        op->emitError(
+            "reset annotations must target module, port, or wire/node");
       }
+      return;
+    }
 
-      // At this point we know that we have a WireOp/NodeOp. Process the reset
-      // annotations.
-      auto resultType = op->getResult(0).getType();
+    // At this point we know that we have a WireOp/NodeOp. Process the reset
+    // annotations.
+    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       if (anno.isClass(fullAsyncResetAnnoClass)) {
+        auto resultType = op->getResult(0).getType();
         if (!isa<AsyncResetType>(resultType)) {
           mlir::emitError(op->getLoc(), "'FullAsyncResetAnnotation' must "
                                         "target async reset, but targets ")
@@ -1700,14 +1714,22 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
       if (nodeOp && !dom.dominates(nodeOp.getInput(), opsToUpdate[0])) {
         LLVM_DEBUG(llvm::dbgs()
                    << "- Promoting node to wire for move: " << nodeOp << "\n");
-        ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(nodeOp.getLoc(),
+                                                          nodeOp->getBlock());
         auto wireOp = builder.create<WireOp>(
             nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
             nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
-        emitConnect(builder, wireOp.getResult(), nodeOp.getInput());
+        // Don't delete the node, since it might be in use in worklists.
         nodeOp->replaceAllUsesWith(wireOp);
-        nodeOp.erase();
+        nodeOp->removeAttr(nodeOp.getInnerSymAttrName());
+        nodeOp.setName("");
+        // Leave forcable alone, since we cannot remove a result.  It will be
+        // cleaned up in canonicalization since it is dead.  As will this node.
+        nodeOp.setNameKind(NameKindEnum::DroppableName);
+        nodeOp.setAnnotationsAttr(ArrayAttr::get(builder.getContext(), {}));
+        builder.setInsertionPointAfter(nodeOp);
+        emitConnect(builder, wireOp.getResult(), nodeOp.getResult());
         resetOp = wireOp;
         actualReset = wireOp.getResult();
         domain.existingValue = wireOp.getResult();

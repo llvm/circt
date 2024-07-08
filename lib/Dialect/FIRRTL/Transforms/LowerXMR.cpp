@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
@@ -27,6 +28,13 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-xmr"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERXMR
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -71,7 +79,7 @@ struct XMRNode {
 }
 } // end anonymous namespace
 
-class LowerXMRPass : public LowerXMRBase<LowerXMRPass> {
+class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
 
   void runOnOperation() override {
     // Populate a CircuitNamespace that can be used to generate unique

@@ -1,10 +1,14 @@
 import esiaccel as esi
 
 import sys
-from typing import Optional
 
 platform = sys.argv[1]
 acc = esi.AcceleratorConnection(platform, sys.argv[2])
+
+mmio = acc.get_service_mmio()
+data = mmio.read(8)
+print(f"mmio data@8: {data:X}")
+assert data == 0x207D98E5E5100E51
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
@@ -22,10 +26,7 @@ send.connect()
 data = 10234
 send.write(data)
 got_data = False
-resp: Optional[int] = None
-# Reads are non-blocking, so we need to poll.
-while not got_data:
-  (got_data, resp) = recv.read()
+resp = recv.read()
 
 print(f"data: {data}")
 print(f"resp: {resp}")

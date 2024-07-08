@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-verif-to-smt -allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s --convert-verif-to-smt --reconcile-unrealized-casts -allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: func @test
 // CHECK-SAME:  ([[ARG0:%.+]]: !smt.bv<1>)
@@ -10,8 +10,6 @@ func.func @test(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
   verif.assert %0 : i1
 
   // CHECK: [[EQ:%.+]] = smt.solver() : () -> i1
-  // CHECK: [[TRUE:%.+]] = arith.constant true
-  // CHECK: [[FALSE:%.+]] = arith.constant false
   // CHECK: [[IN0:%.+]] = smt.declare_fun : !smt.bv<32>
   // CHECK: [[V0:%.+]] = builtin.unrealized_conversion_cast [[IN0]] : !smt.bv<32> to i32
   // CHECK: [[IN1:%.+]] = smt.declare_fun : !smt.bv<32>
@@ -23,6 +21,8 @@ func.func @test(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
   // CHECK: [[V6:%.+]] = smt.distinct [[IN1]], [[V5]] : !smt.bv<32>
   // CHECK: [[V7:%.+]] = smt.or [[V4]], [[V6]]
   // CHECK: smt.assert [[V7]]
+  // CHECK: [[FALSE:%.+]] = arith.constant false
+  // CHECK: [[TRUE:%.+]] = arith.constant true
   // CHECK: [[V8:%.+]] = smt.check
   // CHECK: smt.yield [[FALSE]]
   // CHECK: smt.yield [[FALSE]]

@@ -10,15 +10,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_EXPANDWHENS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -509,6 +516,7 @@ public:
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
   using LastConnectResolver<WhenOpVisitor>::visitStmt;
+  using LastConnectResolver<WhenOpVisitor>::visitStmtExpr;
 
   /// Process a block, recording each declaration, and expanding all whens.
   void process(Block &block);
@@ -525,10 +533,12 @@ public:
   void visitStmt(PrintFOp op);
   void visitStmt(StopOp op);
   void visitStmt(WhenOp op);
+  void visitStmt(LayerBlockOp op);
   void visitStmt(RefForceOp op);
   void visitStmt(RefForceInitialOp op);
   void visitStmt(RefReleaseOp op);
   void visitStmt(RefReleaseInitialOp op);
+  void visitStmtExpr(DPICallIntrinsicOp op);
 
 private:
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -539,15 +549,21 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
-  // Create an implication from the condition to the given value
-  // This is implemented as (or (not condition) value) to avoid
-  // the corner case where value is an implication.
-  Value impliesLTLCondition(Operation *op, Value value) {
-    OpBuilder builder = OpBuilder(op);
-    Value notCond = builder.createOrFold<LTLNotIntrinsicOp>(
-        condition.getLoc(), condition.getType(), condition);
-    return builder.createOrFold<LTLOrIntrinsicOp>(
-        condition.getLoc(), condition.getType(), notCond, value);
+  /// Concurrent and of a property with the current condition.  If we are in
+  /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
+  Value ltlAndWithCondition(Operation *op, Value value) {
+    // 'ltl.and' the value with the current condition.
+    return OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
+        condition.getLoc(), condition.getType(), condition, value);
+  }
+
+  /// Overlapping implication with the condition as its antecedent and a given
+  /// property as the consequent.  If we are in the outer scope, i.e. not in a
+  /// WhenOp region, then there is no condition.
+  Value ltlImplicationWithCondition(Operation *op, Value value) {
+    // 'and' the value with the current condition.
+    return OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+        condition.getLoc(), condition.getType(), condition, value);
   }
 
 private:
@@ -571,15 +587,17 @@ void WhenOpVisitor::visitStmt(StopOp op) {
 }
 
 void WhenOpVisitor::visitStmt(VerifAssertIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(
+      ltlImplicationWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(VerifAssumeIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(
+      ltlImplicationWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(VerifCoverIntrinsicOp op) {
-  op.getPropertyMutable().assign(impliesLTLCondition(op, op.getProperty()));
+  op.getPropertyMutable().assign(ltlAndWithCondition(op, op.getProperty()));
 }
 
 void WhenOpVisitor::visitStmt(AssertOp op) {
@@ -602,6 +620,11 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
   processWhenOp(whenOp, condition);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
+void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
+  process(*layerBlockOp.getBody());
+}
+
 void WhenOpVisitor::visitStmt(RefForceOp op) {
   op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
 }
@@ -616,6 +639,13 @@ void WhenOpVisitor::visitStmt(RefReleaseOp op) {
 
 void WhenOpVisitor::visitStmt(RefReleaseInitialOp op) {
   op.getPredicateMutable().assign(andWithCondition(op, op.getPredicate()));
+}
+
+void WhenOpVisitor::visitStmtExpr(DPICallIntrinsicOp op) {
+  if (op.getEnable())
+    op.getEnableMutable().assign(andWithCondition(op, op.getEnable()));
+  else
+    op.getEnableMutable().assign(condition);
 }
 
 /// This is a common helper that is dispatched to by the concrete visitors.
@@ -783,7 +813,8 @@ LogicalResult ModuleVisitor::checkInitialization() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class ExpandWhensPass : public ExpandWhensBase<ExpandWhensPass> {
+class ExpandWhensPass
+    : public circt::firrtl::impl::ExpandWhensBase<ExpandWhensPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

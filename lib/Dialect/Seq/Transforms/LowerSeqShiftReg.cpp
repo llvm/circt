@@ -6,14 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace seq {
+#define GEN_PASS_DEF_LOWERSEQSHIFTREG
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+} // namespace seq
+} // namespace circt
 
 using namespace circt;
 using namespace seq;
@@ -45,11 +52,8 @@ public:
   }
 };
 
-#define GEN_PASS_DEF_LOWERSEQSHIFTREG
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-
 struct LowerSeqShiftRegPass
-    : public impl::LowerSeqShiftRegBase<LowerSeqShiftRegPass> {
+    : public circt::seq::impl::LowerSeqShiftRegBase<LowerSeqShiftRegPass> {
   void runOnOperation() override;
 };
 

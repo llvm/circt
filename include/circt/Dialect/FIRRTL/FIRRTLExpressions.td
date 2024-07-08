@@ -1372,7 +1372,7 @@ def RWProbeOp : FIRRTLOp<"ref.rwprobe",
   }];
 
   let arguments = (ins InnerRefAttr:$target);
-  let results = (outs RWProbeConcreteReset:$result);
+  let results = (outs RWProbe:$result);
   let assemblyFormat = "$target attr-dict `:` type($result)";
 }
 
@@ -1474,6 +1474,5 @@ def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
     $input `,` $clock attr-dict `:` functional-type(operands, results)
   }];
 }
-def LTLDisableIntrinsicOp : BinaryLTLIntrinsicOp<"disable">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

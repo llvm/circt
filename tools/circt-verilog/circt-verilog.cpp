@@ -13,10 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ImportVerilog.h"
+#include "circt/Conversion/MooreToCore.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
@@ -31,7 +34,14 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
-enum class LoweringMode { OnlyPreprocess, OnlyLint, OnlyParse, Full };
+enum class LoweringMode {
+  OnlyPreprocess,
+  OnlyLint,
+  OnlyParse,
+  OutputIRMoore,
+  OutputIRHW,
+  Full
+};
 
 struct CLOptions {
   cl::OptionCategory cat{"Verilog Frontend Options"};
@@ -60,7 +70,13 @@ struct CLOptions {
                      "CIRCT IR"),
           clEnumValN(LoweringMode::OnlyParse, "parse-only",
                      "Only parse and elaborate the input, without mapping to "
-                     "CIRCT IR")),
+                     "CIRCT IR"),
+          clEnumValN(LoweringMode::OutputIRMoore, "ir-moore",
+                     "Run the entire pass manager to just before MooreToCore "
+                     "conversion, and emit the resulting Moore dialect IR"),
+          clEnumValN(LoweringMode::OutputIRHW, "ir-hw",
+                     "Run the MooreToCore conversion and emit the resulting "
+                     "core dialect IR")),
       cl::init(LoweringMode::Full), cl::cat(cat)};
 
   //===--------------------------------------------------------------------===//
@@ -200,6 +216,27 @@ struct CLOptions {
 
 static CLOptions opts;
 
+/// Parse specified files that had been translated into Moore dialect IR. After
+/// that simplify these files like deleting local variables, and then emit the
+/// resulting Moore dialect IR .
+static LogicalResult populateMooreTransforms(mlir::PassManager &pm) {
+  auto &modulePM = pm.nest<moore::SVModuleOp>();
+  modulePM.addPass(moore::createLowerConcatRefPass());
+  modulePM.addPass(moore::createSimplifyProceduresPass());
+  pm.addPass(mlir::createMem2Reg());
+
+  // TODO: like dedup pass.
+
+  return success();
+}
+
+/// Convert Moore dialect IR into core dialect IR
+static LogicalResult populateMooreToCoreLowering(mlir::PassManager &pm) {
+  pm.addPass(createConvertMooreToCorePass());
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Implementation
 //===----------------------------------------------------------------------===//
@@ -267,6 +304,23 @@ static LogicalResult executeWithSources(MLIRContext *context,
   // Parse the Verilog input into an MLIR module.
   OwningOpRef<ModuleOp> module(ModuleOp::create(UnknownLoc::get(context)));
   if (failed(importVerilog(sourceMgr, context, ts, module.get(), &options)))
+    return failure();
+
+  PassManager pm(context);
+  if (opts.loweringMode == LoweringMode::OutputIRMoore ||
+      opts.loweringMode == LoweringMode::OutputIRHW) {
+
+    // Simplify the Moore dialect IR.
+    if (failed(populateMooreTransforms(pm)))
+      return failure();
+
+    if (opts.loweringMode == LoweringMode::OutputIRHW)
+      // Convert Moore IR into core IR.
+      if (failed(populateMooreToCoreLowering(pm)))
+        return failure();
+  }
+
+  if (failed(pm.run(module.get())))
     return failure();
 
   // Print the final MLIR.

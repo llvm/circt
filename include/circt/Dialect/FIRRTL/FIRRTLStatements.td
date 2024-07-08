@@ -357,7 +357,7 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<"int.verif." # mnemonic, traits> {
   let summary = "FIRRTL variant of `verif." # mnemonic # "`";
   let description = "See `verif." # mnemonic # "` op in the Verif dialect.";
-  let arguments = (ins UInt1Type:$property, OptionalAttr<StrAttr>:$label);
+  let arguments = (ins UInt1Type:$property, Optional<UInt1Type>:$enable, OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
@@ -374,7 +374,9 @@ def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
 def LayerBlockOp : FIRRTLOp<
   "layerblock",
   [SingleBlock, NoTerminator, NoRegionArguments,
-   ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
+   ParentOneOf<[
+     "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+     "firrtl::WhenOp", "firrtl::MatchOp"]>,
    DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";

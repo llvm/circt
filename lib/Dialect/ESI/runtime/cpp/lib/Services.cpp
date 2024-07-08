@@ -21,52 +21,53 @@
 #include <cassert>
 #include <stdexcept>
 
-using namespace std;
-
 using namespace esi;
 using namespace esi::services;
 
-string SysInfo::getServiceSymbol() const { return "__builtin_SysInfo"; }
+std::string SysInfo::getServiceSymbol() const { return "__builtin_SysInfo"; }
 
 // Allocate 10MB for the uncompressed manifest. This should be plenty.
 constexpr uint32_t MAX_MANIFEST_SIZE = 10 << 20;
 /// Get the compressed manifest, uncompress, and return it.
-string SysInfo::getJsonManifest() const {
-  vector<uint8_t> compressed = getCompressedManifest();
-  vector<Bytef> dst(MAX_MANIFEST_SIZE);
+std::string SysInfo::getJsonManifest() const {
+  std::vector<uint8_t> compressed = getCompressedManifest();
+  std::vector<Bytef> dst(MAX_MANIFEST_SIZE);
   uLongf dstSize = MAX_MANIFEST_SIZE;
   int rc =
       uncompress(dst.data(), &dstSize, compressed.data(), compressed.size());
   if (rc != Z_OK)
-    throw runtime_error("zlib uncompress failed with rc=" + to_string(rc));
-  return string(reinterpret_cast<char *>(dst.data()), dstSize);
+    throw std::runtime_error("zlib uncompress failed with rc=" +
+                             std::to_string(rc));
+  return std::string(reinterpret_cast<char *>(dst.data()), dstSize);
 }
 
-string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
+std::string MMIO::getServiceSymbol() const { return "__builtin_MMIO"; }
 
 MMIOSysInfo::MMIOSysInfo(const MMIO *mmio) : mmio(mmio) {}
 
 uint32_t MMIOSysInfo::getEsiVersion() const {
-  uint32_t reg;
-  if ((reg = mmio->read(MetadataOffset)) != MagicNumberLo)
-    throw runtime_error("Invalid magic number low bits: " + toHex(reg));
-  if ((reg = mmio->read(MetadataOffset + 4)) != MagicNumberHi)
-    throw runtime_error("Invalid magic number high bits: " + toHex(reg));
+  uint64_t reg;
+  if ((reg = mmio->read(MetadataOffset)) != MagicNumber)
+    throw std::runtime_error("Invalid magic number: " + toHex(reg));
   return mmio->read(MetadataOffset + 8);
 }
 
-vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
-  uint32_t manifestPtr = mmio->read(MetadataOffset + 12);
-  uint32_t size = mmio->read(manifestPtr);
-  uint32_t numWords = (size + 3) / 4;
-  vector<uint32_t> manifestWords(numWords);
+std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
+  uint64_t version = getEsiVersion();
+  if (version != 0)
+    throw std::runtime_error("Unsupported ESI header version: " +
+                             std::to_string(version));
+  uint64_t manifestPtr = mmio->read(MetadataOffset + 0x10);
+  uint64_t size = mmio->read(manifestPtr);
+  uint64_t numWords = (size + 7) / 8;
+  std::vector<uint64_t> manifestWords(numWords);
   for (size_t i = 0; i < numWords; ++i)
-    manifestWords[i] = mmio->read(manifestPtr + 4 + (i * 4));
+    manifestWords[i] = mmio->read(manifestPtr + 8 + (i * 8));
 
-  vector<uint8_t> manifest;
+  std::vector<uint8_t> manifest;
   for (size_t i = 0; i < size; ++i) {
-    uint32_t word = manifestWords[i / 4];
-    manifest.push_back(word >> (8 * (i % 4)));
+    uint64_t word = manifestWords[i / 8];
+    manifest.push_back(word >> (8 * (i % 8)));
   }
   return manifest;
 }
@@ -76,18 +77,18 @@ CustomService::CustomService(AppIDPath idPath,
                              const HWClientDetails &clients)
     : id(idPath) {
   if (auto f = details.find("service"); f != details.end()) {
-    serviceSymbol = any_cast<string>(f->second);
+    serviceSymbol = std::any_cast<std::string>(f->second);
     // Strip off initial '@'.
     serviceSymbol = serviceSymbol.substr(1);
   }
 }
 
 FuncService::FuncService(AcceleratorConnection *acc, AppIDPath idPath,
-                         std::string implName, ServiceImplDetails details,
-                         HWClientDetails clients) {
+                         const std::string &implName,
+                         ServiceImplDetails details, HWClientDetails clients) {
   if (auto f = details.find("service"); f != details.end())
     // Strip off initial '@'.
-    symbol = any_cast<string>(f->second).substr(1);
+    symbol = std::any_cast<std::string>(f->second).substr(1);
 }
 
 std::string FuncService::getServiceSymbol() const { return symbol; }
@@ -104,8 +105,13 @@ FuncService::Function::Function(
     : ServicePort(id, channels),
       arg(dynamic_cast<WriteChannelPort &>(channels.at("arg"))),
       result(dynamic_cast<ReadChannelPort &>(channels.at("result"))) {
-  if (channels.size() != 2)
-    throw runtime_error("FuncService must have exactly two channels");
+  assert(channels.size() == 2 && "FuncService must have exactly two channels");
+}
+
+FuncService::Function *FuncService::Function::get(AppID id,
+                                                  WriteChannelPort &arg,
+                                                  ReadChannelPort &result) {
+  return new Function(id, {{"arg", arg}, {"result", result}});
 }
 
 void FuncService::Function::connect() {
@@ -115,8 +121,59 @@ void FuncService::Function::connect() {
 
 std::future<MessageData>
 FuncService::Function::call(const MessageData &argData) {
+  std::scoped_lock<std::mutex> lock(callMutex);
   arg.write(argData);
   return result.readAsync();
+}
+
+CallService::CallService(AcceleratorConnection *acc, AppIDPath idPath,
+                         std::string implName, ServiceImplDetails details,
+                         HWClientDetails clients) {
+  if (auto f = details.find("service"); f != details.end())
+    // Strip off initial '@'.
+    symbol = std::any_cast<std::string>(f->second).substr(1);
+}
+
+std::string CallService::getServiceSymbol() const { return symbol; }
+
+ServicePort *
+CallService::getPort(AppIDPath id, const BundleType *type,
+                     const std::map<std::string, ChannelPort &> &channels,
+                     AcceleratorConnection &acc) const {
+  return new Callback(acc, id.back(), channels);
+}
+
+CallService::Callback::Callback(
+    AcceleratorConnection &acc, AppID id,
+    const std::map<std::string, ChannelPort &> &channels)
+    : ServicePort(id, channels),
+      arg(dynamic_cast<ReadChannelPort &>(channels.at("arg"))),
+      result(dynamic_cast<WriteChannelPort &>(channels.at("result"))),
+      acc(acc) {
+  if (channels.size() != 2)
+    throw std::runtime_error("CallService must have exactly two channels");
+}
+
+void CallService::Callback::connect(
+    std::function<MessageData(const MessageData &)> callback, bool quick) {
+  result.connect();
+  if (quick) {
+    // If it's quick, we can just call the callback directly.
+    arg.connect([this, callback](MessageData argMsg) -> bool {
+      MessageData resultMsg = callback(std::move(argMsg));
+      this->result.write(std::move(resultMsg));
+      return true;
+    });
+  } else {
+    // If it's not quick, we need to use the service thread.
+    arg.connect();
+    acc.getServiceThread()->addListener(
+        {&arg},
+        [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
+          MessageData resultMsg = callback(std::move(argMsg));
+          this->result.write(std::move(resultMsg));
+        });
+  }
 }
 
 Service *ServiceRegistry::createService(AcceleratorConnection *acc,
@@ -127,6 +184,8 @@ Service *ServiceRegistry::createService(AcceleratorConnection *acc,
   // TODO: Add a proper registration mechanism.
   if (svcType == typeid(FuncService))
     return new FuncService(acc, id, implName, details, clients);
+  if (svcType == typeid(CallService))
+    return new CallService(acc, id, implName, details, clients);
   return nullptr;
 }
 
@@ -134,5 +193,7 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
   // TODO: Add a proper registration mechanism.
   if (svcName == "esi.service.std.func")
     return typeid(FuncService);
+  if (svcName == "esi.service.std.call")
+    return typeid(CallService);
   return typeid(CustomService);
 }

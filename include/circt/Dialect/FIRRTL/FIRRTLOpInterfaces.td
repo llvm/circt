@@ -522,5 +522,4 @@ def Forceable : OpInterface<"Forceable"> {
     return detail::verifyForceableOp(cast<::circt::firrtl::Forceable>($_op));
   }];
 }
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLOPINTERFACES_TD

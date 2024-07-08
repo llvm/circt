@@ -443,13 +443,16 @@ class PureModule(Module):
     esi.ESIPureModuleParamOp(name, type_attr)
 
 
+MMIOReadDataResponse = Bits(64)
+
+
 @ServiceDecl
 class MMIO:
   """ESI standard service to request access to an MMIO region."""
 
   read = Bundle([
       BundledChannel("offset", ChannelDirection.TO, Bits(32)),
-      BundledChannel("data", ChannelDirection.FROM, Bits(32))
+      BundledChannel("data", ChannelDirection.FROM, MMIOReadDataResponse)
   ])
 
   @staticmethod
@@ -462,6 +465,39 @@ class _FuncService(ServiceDecl):
 
   def __init__(self):
     super().__init__(self.__class__)
+
+  def get_coerced(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
+    """Treat any bi-directional bundle as a function by getting a proper
+    function bundle with the appropriate types, then renaming the channels to
+    match the 'bundle_type'. Returns a bundle signal of type 'bundle_type'."""
+
+    from .constructs import Wire
+    bundle_channels = bundle_type.channels
+    if len(bundle_channels) != 2:
+      raise ValueError("Bundle must have exactly two channels.")
+
+    # Find the FROM and TO channels.
+    to_channel_bc: Optional[BundledChannel] = None
+    from_channel_bc: Optional[BundledChannel] = None
+    if bundle_channels[0].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[0]
+    else:
+      from_channel_bc = bundle_channels[0]
+    if bundle_channels[1].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[1]
+    else:
+      from_channel_bc = bundle_channels[1]
+    if to_channel_bc is None or from_channel_bc is None:
+      raise ValueError("Bundle must have one channel in each direction.")
+
+    # Get the function channels and wire them up to create the non-function
+    # bundle 'bundle_type'.
+    from_channel = Wire(from_channel_bc.channel)
+    arg_channel = self.get_call_chans(name, to_channel_bc.channel, from_channel)
+    ret_bundle, from_chans = bundle_type.pack(
+        **{to_channel_bc.name: arg_channel})
+    from_channel.assign(from_chans[from_channel_bc.name])
+    return ret_bundle
 
   def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
     """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
@@ -505,6 +541,45 @@ class _FuncService(ServiceDecl):
 
 
 FuncService = _FuncService()
+
+
+class _CallService(ServiceDecl):
+  """ESI standard service to request execution of a function."""
+
+  def __init__(self):
+    super().__init__(self.__class__)
+
+  def call(self, name: AppID, arg: ChannelSignal,
+           result_type: Type) -> ChannelSignal:
+    """Call a function with the given argument. 'arg' must be a ChannelSignal
+    with the argument value."""
+    func_bundle = Bundle([
+        BundledChannel("arg", ChannelDirection.FROM, arg.type),
+        BundledChannel("result", ChannelDirection.TO, result_type)
+    ])
+    call_bundle = self.get(name, func_bundle)
+    bundle_rets = call_bundle.unpack(arg=arg)
+    return bundle_rets['result']
+
+  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
+    """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
+    'result' channels going FROM the server and TO the server, respectively."""
+    self._materialize_service_decl()
+
+    func_call = _FromCirctValue(
+        raw_esi.RequestConnectionOp(
+            func_type._type,
+            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+            name._appid).toClient)
+    assert isinstance(func_call, BundleSignal)
+    return func_call
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.CallServiceDeclOp(sym_name)
+
+
+CallService = _CallService()
 
 
 def package(sys: System):
