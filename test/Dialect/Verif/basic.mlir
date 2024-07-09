@@ -39,9 +39,16 @@ verif.cover %p : !ltl.property
 // Formal
 //===----------------------------------------------------------------------===//
 
-// CHECK: verif.formal (k : ) {
-verif.formal (k : 20, ) {
-   
+// CHECK: verif.formal @formal1(k : 20, type: bmc) {
+verif.formal @formal1(k : 20, type : bmc) {
+  // CHECK: %[[SYM:.*]] = verif.symbolic_input : i1
+  %sym = verif.symbolic_input : i1
+  // CHECK: %[[CLK_I:.*]] = seq.from_clock %clk : i1
+  %clk_i = seq.from_clock %clk : i1
+  // CHECK: %[[CLK_U:.*]] = comb.xor %[[CLK_I]], %true : i1
+  %clk_update = comb.xor %clk_i, %true : i1
+  // CHECK: %[[CLK:.*]] = verif.concrete_input %true, %[[CLK_U]] : !seq.clock
+  %clk = verif.concrete_input %true, %clk_update : !seq.clock
 }
 
 //===----------------------------------------------------------------------===//
