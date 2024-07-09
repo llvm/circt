@@ -49,7 +49,6 @@ class SourceFiles:
         CosimCollateralDir / "Cosim_DpiPkg.sv",
         CosimCollateralDir / "Cosim_Endpoint.sv",
         CosimCollateralDir / "Cosim_Manifest.sv",
-        CosimCollateralDir / "Cosim_MMIO.sv",
     ]
     # Name of the top module.
     self.top = top

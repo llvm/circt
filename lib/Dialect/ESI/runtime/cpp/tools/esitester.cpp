@@ -27,8 +27,6 @@
 #include <map>
 #include <stdexcept>
 
-using namespace std;
-
 using namespace esi;
 
 static void registerCallbacks(Accelerator *);
@@ -36,20 +34,20 @@ static void registerCallbacks(Accelerator *);
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
   if (argc < 3) {
-    cerr << "Expected usage: " << argv[0]
-         << " <backend> <connection specifier> [command]" << endl;
+    std::cerr << "Expected usage: " << argv[0]
+              << " <backend> <connection specifier> [command]" << std::endl;
     return -1;
   }
 
   const char *backend = argv[1];
   const char *conn = argv[2];
-  string cmd;
+  std::string cmd;
   if (argc > 3)
     cmd = argv[3];
 
   try {
     Context ctxt;
-    unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
+    std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
     Manifest manifest(ctxt, info.getJsonManifest());
     std::unique_ptr<Accelerator> accel = manifest.buildAccelerator(*acc);
@@ -58,18 +56,18 @@ int main(int argc, const char *argv[]) {
 
     if (cmd == "loop") {
       while (true) {
-        this_thread::sleep_for(chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     } else if (cmd == "wait") {
-      this_thread::sleep_for(chrono::seconds(1));
+      std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     acc->disconnect();
-    cerr << "Exiting successfully\n";
+    std::cerr << "Exiting successfully\n";
     return 0;
 
-  } catch (exception &e) {
-    cerr << "Error: " << e.what() << endl;
+  } catch (std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
     return -1;
   }
 }
@@ -82,7 +80,7 @@ void registerCallbacks(Accelerator *accel) {
     if (callPort)
       callPort->connect(
           [](const MessageData &data) -> MessageData {
-            cout << "PrintfExample: " << *data.as<uint32_t>() << endl;
+            std::cout << "PrintfExample: " << *data.as<uint32_t>() << std::endl;
             return MessageData();
           },
           true);

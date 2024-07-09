@@ -34,6 +34,9 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
 
   class NamedWire(type._get_value_class()):
 
+    if not type.is_hw_type:
+      raise TypeError(f"NamedWire must have a hardware type, not {type}")
+
     def __init__(self):
       self.assigned_value = None
       # TODO: We assume here that names are unique within a module, which isn't

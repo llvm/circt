@@ -206,7 +206,7 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
 
 
 def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
-    [AttrSizedOperandSegments]> {
+    [AttrSizedOperandSegments, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Import and call DPI function";
   let description = [{
     The `int.dpi.call` intrinsic calls an external function.
@@ -214,6 +214,8 @@ def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
     }];
 
   let arguments = (ins StrAttr:$functionName,
+                       OptionalAttr<StrArrayAttr>:$inputNames,
+                       OptionalAttr<StrAttr>:$outputName,
                        Optional<NonConstClockType>:$clock,
                        Optional<NonConstUInt1Type>:$enable,
                        Variadic<PassiveType>:$inputs);

@@ -159,12 +159,13 @@ class PortProxyBase:
       self._set_output(idx, signal)
 
   def _check_unconnected_outputs(self):
-    unconnected_ports = []
+    unconnected_port_names = []
+    assert self._builder is not None
     for idx, value in enumerate(self._output_values):
       if value is None:
-        unconnected_ports.append(self._builder.outputs[idx][0])
-    if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self._name, unconnected_ports)
+        unconnected_port_names.append(self._builder.outputs[idx].name)
+    if len(unconnected_port_names) > 0:
+      raise support.UnconnectedSignalError(self._name, unconnected_port_names)
 
   def _clear(self):
     """TL;DR: Downgrade a shotgun to a handgun.

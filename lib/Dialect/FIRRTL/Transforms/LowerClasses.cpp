@@ -472,29 +472,42 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
 
     // Copy the middle part from the annotation's NLA.
     if (hierPathOp) {
-      // Copy the old path, dropping the module name.
+      // Get the original path.
       auto oldPath = hierPathOp.getNamepath().getValue();
-      llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
 
-      // Set the moduleName based on the hierarchical path. If the
-      // owningModule is in the hierarichal path, set the moduleName to the
-      // owning module. Otherwise use the top of the hierarchical path.
-      bool pathContainsOwningModule =
-          llvm::any_of(oldPath, [&](auto pathFragment) {
-            return llvm::TypeSwitch<Attribute, bool>(pathFragment)
-                .Case([&](hw::InnerRefAttr innerRef) {
-                  return innerRef.getModule() ==
-                         owningModule.getModuleNameAttr();
-                })
-                .Case([&](FlatSymbolRefAttr symRef) {
-                  return symRef.getAttr() == owningModule.getModuleNameAttr();
-                })
-                .Default([](auto attr) { return false; });
-          });
+      // Set the moduleName and path based on the hierarchical path. If the
+      // owningModule is in the hierarichal path, start the hierarchical path
+      // there. Otherwise use the top of the hierarchical path.
+      bool pathContainsOwningModule = false;
+      size_t owningModuleIndex = 0;
+      for (auto [idx, pathFramgent] : llvm::enumerate(oldPath)) {
+        if (auto innerRef = dyn_cast<hw::InnerRefAttr>(pathFramgent)) {
+          if (innerRef.getModule() == owningModule.getModuleNameAttr()) {
+            pathContainsOwningModule = true;
+            owningModuleIndex = idx;
+          }
+        } else if (auto symRef = dyn_cast<FlatSymbolRefAttr>(pathFramgent)) {
+          if (symRef.getAttr() == owningModule.getModuleNameAttr()) {
+            pathContainsOwningModule = true;
+            owningModuleIndex = idx;
+          }
+        }
+      }
+
       if (pathContainsOwningModule) {
+        // Set the path root module name to the owning module.
         moduleName = owningModule.getModuleNameAttr();
+
+        // Copy the old path, dropping the module name and the prefix to the
+        // owning module.
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back().drop_front(
+                                     owningModuleIndex)));
       } else {
+        // Set the path root module name to the start of the path.
         moduleName = cast<hw::InnerRefAttr>(oldPath.front()).getModule();
+
+        // Copy the old path, dropping the module name.
+        llvm::append_range(path, llvm::reverse(oldPath.drop_back()));
       }
     }
 

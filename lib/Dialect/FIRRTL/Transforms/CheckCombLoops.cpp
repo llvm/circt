@@ -98,8 +98,9 @@ public:
           .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
             // computeDataFlow returns a pair of FieldRefs, first element is the
             // destination and the second is the source.
-            for (auto &dep : df.computeDataFlow())
-              addDrivenBy(dep.first, dep.second);
+            for (auto [dest, source] : df.computeDataFlow())
+              addDrivenBy(dest, source);
+
           })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.

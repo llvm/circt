@@ -64,7 +64,8 @@ public:
 class ReadChannelPort : public ChannelPort {
 
 public:
-  ReadChannelPort(const Type *type) : ChannelPort(type) {}
+  ReadChannelPort(const Type *type)
+      : ChannelPort(type), mode(Mode::Disconnected) {}
   virtual void disconnect() override { mode = Mode::Disconnected; }
 
   //===--------------------------------------------------------------------===//

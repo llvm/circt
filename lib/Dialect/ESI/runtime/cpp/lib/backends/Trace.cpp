@@ -24,8 +24,6 @@
 #include <regex>
 #include <sstream>
 
-using namespace std;
-
 using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::trace;
@@ -38,18 +36,19 @@ class TraceChannelPort;
 }
 
 struct esi::backends::trace::TraceAccelerator::Impl {
-  Impl(Mode mode, filesystem::path manifestJson, filesystem::path traceFile)
+  Impl(Mode mode, std::filesystem::path manifestJson,
+       std::filesystem::path traceFile)
       : manifestJson(manifestJson), traceFile(traceFile) {
-    if (!filesystem::exists(manifestJson))
-      throw runtime_error("manifest file '" + manifestJson.string() +
-                          "' does not exist");
+    if (!std::filesystem::exists(manifestJson))
+      throw std::runtime_error("manifest file '" + manifestJson.string() +
+                               "' does not exist");
 
     if (mode == Write) {
       // Open the trace file for writing.
-      traceWrite = new ofstream(traceFile);
+      traceWrite = new std::ofstream(traceFile);
       if (!traceWrite->is_open())
-        throw runtime_error("failed to open trace file '" + traceFile.string() +
-                            "'");
+        throw std::runtime_error("failed to open trace file '" +
+                                 traceFile.string() + "'");
     } else {
       assert(false && "not implemented");
     }
@@ -74,42 +73,44 @@ struct esi::backends::trace::TraceAccelerator::Impl {
 
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
-  void write(const AppIDPath &id, const string &portName, const void *data,
+  void write(const AppIDPath &id, const std::string &portName, const void *data,
              size_t size);
 
 private:
-  ofstream *traceWrite;
-  filesystem::path manifestJson;
-  filesystem::path traceFile;
-  vector<unique_ptr<ChannelPort>> channels;
+  std::ofstream *traceWrite;
+  std::filesystem::path manifestJson;
+  std::filesystem::path traceFile;
+  std::vector<std::unique_ptr<ChannelPort>> channels;
 };
 
-void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
+void TraceAccelerator::Impl::write(const AppIDPath &id,
+                                   const std::string &portName,
                                    const void *data, size_t size) {
-  string b64data;
+  std::string b64data;
   utils::encodeBase64(data, size, b64data);
 
-  *traceWrite << "write " << id << '.' << portName << ": " << b64data << endl;
+  *traceWrite << "write " << id << '.' << portName << ": " << b64data
+              << std::endl;
 }
 
-unique_ptr<AcceleratorConnection>
-TraceAccelerator::connect(Context &ctxt, string connectionString) {
-  string modeStr;
-  string manifestPath;
-  string traceFile = "trace.log";
+std::unique_ptr<AcceleratorConnection>
+TraceAccelerator::connect(Context &ctxt, std::string connectionString) {
+  std::string modeStr;
+  std::string manifestPath;
+  std::string traceFile = "trace.log";
 
-  // Parse the connection string.
+  // Parse the connection std::string.
   // <mode>:<manifest path>[:<traceFile>]
-  regex connPattern("(\\w):([^:]+)(:(\\w+))?");
-  smatch match;
+  std::regex connPattern("(\\w):([^:]+)(:(\\w+))?");
+  std::smatch match;
   if (regex_search(connectionString, match, connPattern)) {
     modeStr = match[1];
     manifestPath = match[2];
     if (match[3].matched)
       traceFile = match[3];
   } else {
-    throw runtime_error("connection string must be of the form "
-                        "'<mode>:<manifest path>[:<traceFile>]'");
+    throw std::runtime_error("connection std::string must be of the form "
+                             "'<mode>:<manifest path>[:<traceFile>]'");
   }
 
   // Parse the mode.
@@ -117,17 +118,18 @@ TraceAccelerator::connect(Context &ctxt, string connectionString) {
   if (modeStr == "w")
     mode = Write;
   else
-    throw runtime_error("unknown mode '" + modeStr + "'");
+    throw std::runtime_error("unknown mode '" + modeStr + "'");
 
-  return make_unique<TraceAccelerator>(
-      ctxt, mode, filesystem::path(manifestPath), filesystem::path(traceFile));
+  return std::make_unique<TraceAccelerator>(ctxt, mode,
+                                            std::filesystem::path(manifestPath),
+                                            std::filesystem::path(traceFile));
 }
 
 TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
-                                   filesystem::path manifestJson,
-                                   filesystem::path traceFile)
+                                   std::filesystem::path manifestJson,
+                                   std::filesystem::path traceFile)
     : AcceleratorConnection(ctxt) {
-  impl = make_unique<Impl>(mode, manifestJson, traceFile);
+  impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
 }
 
 Service *TraceAccelerator::createService(Service::Type svcType,
@@ -139,28 +141,30 @@ Service *TraceAccelerator::createService(Service::Type svcType,
 namespace {
 class TraceSysInfo : public SysInfo {
 public:
-  TraceSysInfo(filesystem::path manifestJson) : manifestJson(manifestJson) {}
+  TraceSysInfo(std::filesystem::path manifestJson)
+      : manifestJson(manifestJson) {}
 
   uint32_t getEsiVersion() const override { return ESIVersion; }
 
-  string getJsonManifest() const override {
+  std::string getJsonManifest() const override {
     // Read in the whole json file and return it.
-    ifstream manifest(manifestJson);
+    std::ifstream manifest(manifestJson);
     if (!manifest.is_open())
-      throw runtime_error("failed to open manifest file '" +
-                          manifestJson.string() + "'");
-    stringstream buffer;
+      throw std::runtime_error("failed to open manifest file '" +
+                               manifestJson.string() + "'");
+    std::stringstream buffer;
     buffer << manifest.rdbuf();
     manifest.close();
     return buffer.str();
   }
 
-  vector<uint8_t> getCompressedManifest() const override {
-    throw runtime_error("compressed manifest not supported by trace backend");
+  std::vector<uint8_t> getCompressedManifest() const override {
+    throw std::runtime_error(
+        "compressed manifest not supported by trace backend");
   }
 
 private:
-  filesystem::path manifestJson;
+  std::filesystem::path manifestJson;
 };
 } // namespace
 
@@ -168,7 +172,7 @@ namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
   WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
-                        const AppIDPath &id, const string &portName)
+                        const AppIDPath &id, const std::string &portName)
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
   virtual void write(const MessageData &data) override {
@@ -178,7 +182,7 @@ public:
 protected:
   TraceAccelerator::Impl &impl;
   AppIDPath id;
-  string portName;
+  std::string portName;
 };
 } // namespace
 
@@ -209,7 +213,8 @@ private:
     std::ptrdiff_t numBits = getType()->getBitWidth();
     if (numBits < 0)
       // TODO: support other types.
-      throw runtime_error("unsupported type for read: " + getType()->getID());
+      throw std::runtime_error("unsupported type for read: " +
+                               getType()->getID());
 
     std::ptrdiff_t size = (numBits + 7) / 8;
     std::vector<uint8_t> bytes(size);
@@ -244,10 +249,10 @@ public:
 };
 } // namespace
 
-map<string, ChannelPort &>
+std::map<std::string, ChannelPort &>
 TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
                                            const BundleType *bundleType) {
-  map<string, ChannelPort &> channels;
+  std::map<std::string, ChannelPort &> channels;
   for (auto [name, dir, type] : bundleType->getChannels()) {
     ChannelPort *port;
     if (BundlePort::isWrite(dir))
@@ -260,7 +265,7 @@ TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
   return channels;
 }
 
-map<string, ChannelPort &>
+std::map<std::string, ChannelPort &>
 TraceAccelerator::requestChannelsFor(AppIDPath idPath,
                                      const BundleType *bundleType) {
   return impl->requestChannelsFor(idPath, bundleType);

@@ -3,6 +3,7 @@
 // CHECK-LABEL: moore.module @Foo()
 moore.module @Foo() {
   %a = moore.variable : <i32>
+  %u = moore.variable : <i32>
   %x = moore.variable : <i32>
   %y = moore.variable : <i32>
   %z = moore.variable : <i32>
@@ -47,6 +48,16 @@ moore.module @Foo() {
     %9 = moore.read %a : i32
     // CHECK: moore.blocking_assign %z, %13 : i32
     moore.blocking_assign %z, %9 : i32
+  }
+
+  moore.procedure always_comb {
+    //CHECK: %0 = moore.read %a : i32
+    %0 = moore.read %a : i32
+    //CHECK: %local_a = moore.variable %0 : <i32>
+    //CHECK: %1 = moore.read %local_a : i32
+    //CHECK: moore.blocking_assign %u, %1 : i32
+    moore.blocking_assign %u, %0 : i32
+
   }
   // CHECK: moore.output
   moore.output

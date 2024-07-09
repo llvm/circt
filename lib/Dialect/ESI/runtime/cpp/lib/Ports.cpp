@@ -17,29 +17,28 @@
 #include <chrono>
 #include <stdexcept>
 
-using namespace std;
 using namespace esi;
 
-BundlePort::BundlePort(AppID id, map<string, ChannelPort &> channels)
+BundlePort::BundlePort(AppID id, std::map<std::string, ChannelPort &> channels)
     : id(id), channels(channels) {}
 
-WriteChannelPort &BundlePort::getRawWrite(const string &name) const {
+WriteChannelPort &BundlePort::getRawWrite(const std::string &name) const {
   auto f = channels.find(name);
   if (f == channels.end())
-    throw runtime_error("Channel '" + name + "' not found");
+    throw std::runtime_error("Channel '" + name + "' not found");
   auto *write = dynamic_cast<WriteChannelPort *>(&f->second);
   if (!write)
-    throw runtime_error("Channel '" + name + "' is not a write channel");
+    throw std::runtime_error("Channel '" + name + "' is not a write channel");
   return *write;
 }
 
-ReadChannelPort &BundlePort::getRawRead(const string &name) const {
+ReadChannelPort &BundlePort::getRawRead(const std::string &name) const {
   auto f = channels.find(name);
   if (f == channels.end())
-    throw runtime_error("Channel '" + name + "' not found");
+    throw std::runtime_error("Channel '" + name + "' not found");
   auto *read = dynamic_cast<ReadChannelPort *>(&f->second);
   if (!read)
-    throw runtime_error("Channel '" + name + "' is not a read channel");
+    throw std::runtime_error("Channel '" + name + "' is not a read channel");
   return *read;
 }
 void ReadChannelPort::connect(std::function<bool(MessageData)> callback) {
