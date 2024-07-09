@@ -180,12 +180,18 @@ void addClassLikeField(OpBuilder &builder, Location loc, StringRef name,
 }
 
 template <typename ClassT, typename ClassFieldT>
-std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> getClassLikeFields(ClassT classLike) {
+std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+getClassLikeFields(ClassT classLike) {
   std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> fields;
   for (auto field : classLike.template getOps<ClassFieldT>()) {
     StringAttr name = field.getNameAttr();
     Value value;
     if constexpr(std::is_same_v<ClassT, ClassOp>) {
+      // TODO(lenny): Should we standardize this API to either only work with
+      // ClassField (not extern) or some alternative way to handle the lack of
+      // Value for ClassExternField?
+      // This probably depends on how we decide to handle the return value type
+      // (e.g. object instead of tuple)
       value = field.getValue();
     }
     Location loc = field.getLoc();

@@ -42,6 +42,7 @@ def ClassLike : OpInterface<"ClassLike"> {
       "void", "addField",
       (ins "mlir::OpBuilder &":$builder, "mlir::Location":$loc,
            "mlir::StringRef":$name, "mlir::Value":$src)>,
+    // TODO(lenny): Return an object instead of tuple?
     InterfaceMethod<"Get fields from class",
       "std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>",
       "getFields", (ins)>
