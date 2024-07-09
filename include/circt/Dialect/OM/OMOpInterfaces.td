@@ -41,7 +41,10 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Add field to class",
       "void", "addField",
       (ins "mlir::OpBuilder &":$builder, "mlir::Location":$loc,
-           "mlir::StringRef":$name, "mlir::Value":$src)>
+           "mlir::StringRef":$name, "mlir::Value":$src)>,
+    InterfaceMethod<"Get fields from class",
+      "std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>",
+      "getFields", (ins)>
   ];
 }
 

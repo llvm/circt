@@ -174,6 +174,26 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
     setNameFn(args[i], argNames[i]);
 }
 
+void addClassLikeField(OpBuilder &builder, Location loc, StringRef name,
+                       Value src) {
+  builder.create<ClassFieldOp>(loc, name, src);
+}
+
+template <typename ClassT, typename ClassFieldT>
+std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> getClassLikeFields(ClassT classLike) {
+  std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> fields;
+  for (auto field : classLike.template getOps<ClassFieldT>()) {
+    StringAttr name = field.getNameAttr();
+    Value value;
+    if constexpr(std::is_same_v<ClassT, ClassOp>) {
+      value = field.getValue();
+    }
+    Location loc = field.getLoc();
+    fields.emplace_back(name, value, loc);
+  }
+  return fields;
+}
+
 //===----------------------------------------------------------------------===//
 // ClassOp
 //===----------------------------------------------------------------------===//
@@ -227,7 +247,12 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 
 void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
                                   StringRef name, Value src) {
-    builder.create<ClassFieldOp>(loc, name, src);
+  addClassLikeField(builder, loc, name, src);
+}
+
+std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+circt::om::ClassOp::getFields() {
+  return getClassLikeFields<ClassOp, ClassFieldOp>(*this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -283,6 +308,11 @@ void circt::om::ClassExternOp::getAsmBlockArgumentNames(
 void circt::om::ClassExternOp::addField(OpBuilder &builder, Location loc,
                                   StringRef name, Value src) {
     builder.create<ClassFieldOp>(loc, name, src);
+}
+
+std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+circt::om::ClassExternOp::getFields() {
+  return getClassLikeFields<ClassExternOp, ClassExternFieldOp>(*this);
 }
 
 //===----------------------------------------------------------------------===//
