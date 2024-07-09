@@ -63,7 +63,7 @@ ProceduralizeSimPass::getPrintTokens(PrintFormattedOp op) {
   SmallMapVector<FormatStringConcatOp, unsigned, 4> concatStack;
   SmallVector<Operation *> tokens;
 
-  auto defOp = op.getInput().getDefiningOp();
+  auto *defOp = op.getInput().getDefiningOp();
 
   if (!defOp) {
     op.emitError("Format string token must not be a block argument.");
@@ -85,7 +85,7 @@ ProceduralizeSimPass::getPrintTokens(PrintFormattedOp op) {
 
     // Iterate over concatenated operands
     while (operandIndex < currentConcat.getNumOperands()) {
-      auto nextDefOp = currentConcat.getOperand(operandIndex).getDefiningOp();
+      auto *nextDefOp = currentConcat.getOperand(operandIndex).getDefiningOp();
       if (!nextDefOp) {
         currentConcat.emitError(
             "Format string token must not be a block argument.");
@@ -211,7 +211,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     auto tokens = tokenMap[printOp];
     SmallVector<Value> clonedOperands;
     builder.setInsertionPointToStart(trigOp.getBodyBlock());
-    for (auto token : tokens) {
+    for (auto *token : tokens) {
       auto &fmtCloned = cloneMap[token];
       if (!fmtCloned)
         fmtCloned = builder.clone(*token, argumentMapper);
@@ -221,7 +221,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Check if we can reuse the previous conditional block.
     if (condArg != prevCondition.first)
       prevCondition.second = nullptr;
-    auto condBlock = prevCondition.second;
+    auto *condBlock = prevCondition.second;
 
     // If not, create a new scf::IfOp for the condition.
     if (!condBlock) {
@@ -262,7 +262,7 @@ void ProceduralizeSimPass::cleanup() {
       noChange = true;
     }
 
-    auto opToErase = cleanupList.pop_back_val();
+    auto *opToErase = cleanupList.pop_back_val();
     if (erasedOps.contains(opToErase))
       continue;
 
