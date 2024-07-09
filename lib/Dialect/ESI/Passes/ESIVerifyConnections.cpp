@@ -31,7 +31,7 @@ struct ESIVerifyConnectionsPass
 
 void ESIVerifyConnectionsPass::runOnOperation() {
   // Walk the tree and look for ops which produce ESI types. Check each one.
-  getOperation().walk([this](Operation *op) {
+  getOperation()->walk([this](Operation *op) {
     for (const OpResult &v : op->getResults())
       if (isa<ChannelBundleType>(v.getType())) {
         if (v.hasOneUse())
@@ -54,7 +54,6 @@ void ESIVerifyConnectionsPass::runOnOperation() {
   });
 }
 
-std::unique_ptr<OperationPass<ModuleOp>>
-circt::esi::createESIVerifyConnectionsPass() {
+std::unique_ptr<OperationPass<>> circt::esi::createESIVerifyConnectionsPass() {
   return std::make_unique<ESIVerifyConnectionsPass>();
 }
