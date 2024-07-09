@@ -321,6 +321,18 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
   state.addAttribute("sym_name", builder.getStringAttr(stateName));
 }
 
+void StateOp::build(OpBuilder &builder, OperationState &state,
+                    StringRef stateName, ValueRange outputs) {
+  OpBuilder::InsertionGuard guard(builder);
+  Region *output = state.addRegion();
+  output->push_back(new Block());
+  builder.setInsertionPointToEnd(&output->back());
+  builder.create<fsm::OutputOp>(state.location, outputs);
+  Region *transitions = state.addRegion();
+  transitions->push_back(new Block());
+  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+}
+
 SetVector<StateOp> StateOp::getNextStates() {
   SmallVector<StateOp> nextStates;
   llvm::transform(
@@ -402,16 +414,29 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StringRef nextState) {
-  state.addRegion(); // guard
-  state.addRegion(); // action
-  state.addAttribute("nextState",
-                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
+                         StateOp nextState) {
+  build(builder, state, nextState.getName());
 }
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StateOp nextState) {
-  build(builder, state, nextState.getName());
+                         StringRef nextState,
+                         llvm::function_ref<void()> guardCtor,
+                         llvm::function_ref<void()> actionCtor) {
+  state.addAttribute("nextState",
+                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
+  OpBuilder::InsertionGuard guard(builder);
+
+  Region *guardRegion = state.addRegion(); // guard
+  if (guardCtor) {
+    builder.createBlock(guardRegion);
+    guardCtor();
+  }
+
+  Region *actionRegion = state.addRegion(); // action
+  if (actionCtor) {
+    builder.createBlock(actionRegion);
+    actionCtor();
+  }
 }
 
 Block *TransitionOp::ensureGuard(OpBuilder &builder) {
