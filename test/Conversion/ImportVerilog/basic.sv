@@ -13,10 +13,10 @@ endmodule
 // CHECK-LABEL: moore.module @NestedA() {
 // CHECK:         moore.instance "NestedB" @NestedB
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedB() {
+// CHECK-LABEL: moore.module private @NestedB() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedC() {
+// CHECK-LABEL: moore.module private @NestedC() {
 // CHECK:       }
 module NestedA;
   module NestedB;
@@ -25,7 +25,7 @@ module NestedA;
   endmodule
 endmodule
 
-// CHECK-LABEL: moore.module @Child() {
+// CHECK-LABEL: moore.module private @Child() {
 // CHECK:       }
 module Child;
 endmodule
@@ -1073,7 +1073,7 @@ module PortsTop;
   PortsUnconnected p4(.a(), .b(x4), .c(), .d(y4), .e());
 endmodule
 
-// CHECK-LABEL: moore.module @PortsAnsi
+// CHECK-LABEL: moore.module private @PortsAnsi
 module PortsAnsi(
   // CHECK-SAME: in %a : !moore.l1
   input a,
@@ -1100,7 +1100,7 @@ module PortsAnsi(
   // CHECK: moore.output [[B_READ]] : !moore.l1
 endmodule
 
-// CHECK-LABEL: moore.module @PortsNonAnsi
+// CHECK-LABEL: moore.module private @PortsNonAnsi
 module PortsNonAnsi(a, b, c, d);
   // CHECK-SAME: in %a : !moore.l1
   input a;
@@ -1112,7 +1112,7 @@ module PortsNonAnsi(a, b, c, d);
   ref logic d;
 endmodule
 
-// CHECK-LABEL: moore.module @PortsExplicit
+// CHECK-LABEL: moore.module private @PortsExplicit
 module PortsExplicit(
   // CHECK-SAME: in %a0 : !moore.l1
   input .a0(x),
@@ -1141,7 +1141,7 @@ module PortsExplicit(
   // CHECK: moore.output [[B0]], [[X_READ]], [[B2]]
 endmodule
 
-// CHECK-LABEL: moore.module @MultiPorts
+// CHECK-LABEL: moore.module private @MultiPorts
 module MultiPorts(
   // CHECK-SAME: in %a0 : !moore.l1
   .a0(u[0]),
@@ -1184,7 +1184,7 @@ module MultiPorts(
   // CHECK: moore.output [[V1_READ]], [[C1_READ]]
 endmodule
 
-// CHECK-LABEL: moore.module @PortsUnconnected
+// CHECK-LABEL: moore.module private @PortsUnconnected
 module PortsUnconnected(
   // CHECK-SAME: in %a : !moore.l1
   input a,

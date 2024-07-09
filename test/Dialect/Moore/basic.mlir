@@ -103,36 +103,36 @@ moore.module @Module() {
   }
 }
 
-// CHECK-LABEL: func.func @Expressions
-func.func @Expressions(
-  // CHECK-SAME: [[A:%[^:]+]]: !moore.i32
-  // CHECK-SAME: [[B:%[^:]+]]: !moore.i32
-  %a: !moore.i32,
-  %b: !moore.i32,
-  // CHECK-SAME: [[C:%[^:]+]]: !moore.l32
-  // CHECK-SAME: [[D:%[^:]+]]: !moore.l3
-  %c: !moore.l32,
-  %d: !moore.l32,
-  // CHECK-SAME: [[X:%[^:]+]]: !moore.i1
-  %x: !moore.i1,
+// CHECK-LABEL: moore.module @Expressions
+moore.module @Expressions(
+  // CHECK-SAME: in [[A:%[^:]+]] : !moore.i32
+  // CHECK-SAME: in [[B:%[^:]+]] : !moore.i32
+  in %a: !moore.i32,
+  in %b: !moore.i32,
+  // CHECK-SAME: in [[C:%[^:]+]] : !moore.l32
+  // CHECK-SAME: in [[D:%[^:]+]] : !moore.l3
+  in %c: !moore.l32,
+  in %d: !moore.l32,
+  // CHECK-SAME: in [[X:%[^:]+]] : !moore.i1
+  in %x: !moore.i1,
 
-  // CHECK-SAME: [[ARRAY1:%[^:]+]]: !moore.uarray<4 x i8>
-  %array1: !moore.uarray<4 x i8>,
-  // CHECK-SAME: [[ARRAY2:%[^:]+]]: !moore.uarray<2 x uarray<4 x i8>>
-  %array2: !moore.uarray<2 x uarray<4 x i8>>,
+  // CHECK-SAME: in [[ARRAY1:%[^:]+]] : !moore.uarray<4 x i8>
+  in %array1: !moore.uarray<4 x i8>,
+  // CHECK-SAME: in [[ARRAY2:%[^:]+]] : !moore.uarray<2 x uarray<4 x i8>>
+  in %array2: !moore.uarray<2 x uarray<4 x i8>>,
 
-  // CHECK-SAME: [[REF_A:%[^:]+]]: !moore.ref<i32>
-  %refA: !moore.ref<i32>,
-  // CHECK-SAME: [[REF_B:%[^:]+]]: !moore.ref<i32>
-  %refB: !moore.ref<i32>,
-  // CHECK-SAME: [[REF_C:%[^:]+]]: !moore.ref<l32>
-  %refC: !moore.ref<l32>,
-  // CHECK-SAME: [[REF_D:%[^:]+]]: !moore.ref<l32>
-  %refD: !moore.ref<l32>,
-  // CHECK-SAME: [[REF_ARRAY1:%[^:]+]]: !moore.ref<uarray<4 x i8>>
-  %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
-  // CHECK-SAME: [[REF_ARRAY2:%[^:]+]]: !moore.ref<uarray<2 x uarray<4 x i8>>>
-  %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
+  // CHECK-SAME: in [[REF_A:%[^:]+]] : !moore.ref<i32>
+  in %refA: !moore.ref<i32>,
+  // CHECK-SAME: in [[REF_B:%[^:]+]] : !moore.ref<i32>
+  in %refB: !moore.ref<i32>,
+  // CHECK-SAME: in [[REF_C:%[^:]+]] : !moore.ref<l32>
+  in %refC: !moore.ref<l32>,
+  // CHECK-SAME: in [[REF_D:%[^:]+]] : !moore.ref<l32>
+  in %refD: !moore.ref<l32>,
+  // CHECK-SAME: in [[REF_ARRAY1:%[^:]+]] : !moore.ref<uarray<4 x i8>>
+  in %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
+  // CHECK-SAME: in [[REF_ARRAY2:%[^:]+]] : !moore.ref<uarray<2 x uarray<4 x i8>>>
+  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
 ) {
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
@@ -269,7 +269,7 @@ func.func @Expressions(
   } {
     moore.yield %b : i32
   }
-  return
+  moore.output
 }
 
 // CHECK-LABEL: moore.module @GraphRegion
