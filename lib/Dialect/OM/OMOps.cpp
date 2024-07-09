@@ -174,30 +174,14 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
     setNameFn(args[i], argNames[i]);
 }
 
+template <typename ClassFieldT>
 void addClassLikeField(OpBuilder &builder, Location loc, StringRef name,
                        Value src) {
-  builder.create<ClassFieldOp>(loc, name, src);
 }
 
 template <typename ClassT, typename ClassFieldT>
 std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
 getClassLikeFields(ClassT classLike) {
-  std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> fields;
-  for (auto field : classLike.template getOps<ClassFieldT>()) {
-    StringAttr name = field.getNameAttr();
-    Value value;
-    if constexpr(std::is_same_v<ClassT, ClassOp>) {
-      // TODO(lenny): Should we standardize this API to either only work with
-      // ClassField (not extern) or some alternative way to handle the lack of
-      // Value for ClassExternField?
-      // This probably depends on how we decide to handle the return value type
-      // (e.g. object instead of tuple)
-      value = field.getValue();
-    }
-    Location loc = field.getLoc();
-    fields.emplace_back(name, value, loc);
-  }
-  return fields;
 }
 
 //===----------------------------------------------------------------------===//
@@ -253,12 +237,19 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 
 void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
                                   StringRef name, Value src) {
-  addClassLikeField(builder, loc, name, src);
+  builder.create<ClassFieldOp>(loc, name, src);
 }
 
 std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
 circt::om::ClassOp::getFields() {
-  return getClassLikeFields<ClassOp, ClassFieldOp>(*this);
+  std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> fields;
+  for (auto field : this->getOps<ClassFieldOp>()) {
+    StringAttr name = field.getNameAttr();
+    Value value = field.getValue();
+    Location loc = field.getLoc();
+    fields.emplace_back(name, value, loc);
+  }
+  return fields;
 }
 
 //===----------------------------------------------------------------------===//
@@ -309,16 +300,6 @@ LogicalResult circt::om::ClassExternOp::verify() {
 void circt::om::ClassExternOp::getAsmBlockArgumentNames(
     Region &region, OpAsmSetValueNameFn setNameFn) {
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
-}
-
-void circt::om::ClassExternOp::addField(OpBuilder &builder, Location loc,
-                                  StringRef name, Value src) {
-    builder.create<ClassFieldOp>(loc, name, src);
-}
-
-std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
-circt::om::ClassExternOp::getFields() {
-  return getClassLikeFields<ClassExternOp, ClassExternFieldOp>(*this);
 }
 
 //===----------------------------------------------------------------------===//

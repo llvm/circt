@@ -82,6 +82,11 @@ def ClassOp : OMClassLike<"class"> {
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
     }
+
+    void addField(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef name, mlir::Value src);
+    std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+    getFields();
   }];
 }
 
