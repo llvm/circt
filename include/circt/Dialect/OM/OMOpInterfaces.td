@@ -38,6 +38,9 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Get the class-like body block",
       "mlir::Block *", "getBodyBlock", (ins),
       /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
+    // TODO(lenny): We may need to add a "terminator" function that's called at 
+    // the end to emit the terminator op, or is there a way to run "exit hook" logic
+    // on the builder
     InterfaceMethod<"Add field to class",
       "void", "addField",
       (ins "mlir::OpBuilder &":$builder, "mlir::Location":$loc,
