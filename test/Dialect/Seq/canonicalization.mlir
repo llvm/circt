@@ -42,7 +42,7 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // value.
   %reg0 = seq.firreg %reg0 clock %clk reset sync %r, %v : i32
   hw.instance "reg0" @Observe(x: %reg0: i32) -> ()
-  // CHECK: hw.instance "reg0" @Observe(x: %v: i32) -> ()
+  // CHECK: hw.instance "reg0" @Observe(x: %reg0: i32) -> ()
 
   // Registers that never reset should drop their reset value.
   %reg1 = seq.firreg %in clock %clk reset sync %false, %v : i32

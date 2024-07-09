@@ -577,9 +577,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   };
 
   if (isConstant()) {
-    if (auto resetValue = op.getResetValue()) {
-      // If the register has a reset value, we can replace it with that.
-      rewriter.replaceOp(op, resetValue);
+    if (op.getResetValue()) {
+      // This is handled by a folder.
     } else {
       if (isa<seq::ClockType>(op.getType())) {
         rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
@@ -590,8 +589,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
             op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
         rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
       }
+      return success();
     }
-    return success();
   }
 
   // For reset-less 1d array registers, replace an uninitialized element with
