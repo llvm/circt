@@ -93,7 +93,7 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = {{.+}}>(compressed_manifest: %{{.+}}: !hw.array<{{.+}}xi8>) -> ()
 
 // CHECK:       {
-// CHECK-LABEL:   "api_version": 1,
+// CHECK-LABEL:   "api_version": 0,
 
 // CHECK-LABEL:   "symbols": [
 // CHECK-NEXT:      {
