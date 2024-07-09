@@ -89,6 +89,10 @@ def ClassOp : OMClassLike<"class"> {
     void addField(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::Value src);
 
+    // TODO(lenny): We could just return the ClassFieldOp, but if we move to storing
+    // this information in a terminator, we may be fetching the data from a
+    // different type, so for now we introduce an "abstract" intermediate
+    // object
     std::vector<circt::om::Field> getFields();
   }];
 }
