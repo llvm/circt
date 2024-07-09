@@ -714,7 +714,7 @@ def TriggeredOp : HWOp<"triggered", [
   let results = (outs);
 
   let assemblyFormat = [{
-    $event $trigger  `(` $inputs `)` `:` type($inputs) $body attr-dict
+    $event $trigger  (`(` $inputs^ `)` `:` type($inputs))? $body attr-dict
   }];
 
   let extraClassDeclaration = [{
