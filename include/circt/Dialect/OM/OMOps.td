@@ -83,8 +83,13 @@ def ClassOp : OMClassLike<"class"> {
       return mlir::RegionKind::Graph;
     }
 
+    // TODO(lenny): We may need to add a "terminator" function that's called at
+    // the end to emit the terminator op, or is there a way to run "exit hook"
+    // logic	on the builder
     void addField(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::Value src);
+    // TODO(lenny): should we return a more principled object data structure
+    // instead of a tuple?
     std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
     getFields();
   }];
