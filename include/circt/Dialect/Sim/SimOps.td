@@ -333,9 +333,8 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-  
+
   let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
 }
-
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
