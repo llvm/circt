@@ -9,7 +9,7 @@ firrtl.circuit "TywavesTop" attributes {
   rawAnnotations = [
     {
       // Annotation of a module
-      class = "chisel3.tywaves.TywavesAnnotation",
+      class = "chisel3.tywavesinternal.TywavesAnnotation",
       target = "~TywavesTop|DUT",
       typeName = "TywavesDut",
       params=[
@@ -21,7 +21,7 @@ firrtl.circuit "TywavesTop" attributes {
     // CHECK_DBG:  firrtl.module private @DUT() attributes
     // CHECK_NO_DBG:  firrtl.module private @DUT() {
     // CHECK_DBG:        annotations = [{
-    // CHECK_DBG:           class = "chisel3.tywaves.TywavesAnnotation"
+    // CHECK_DBG:           class = "chisel3.tywavesinternal.TywavesAnnotation"
     // CHECK_DBG:           params = [{name = "size", typeName = "Int", value = "10"}, {name = "n", typeName = "Int"}
     // CHECK_DBG:           target = "~TywavesTop|DUT"
     // CHECK_DBG:           typeName = "TywavesDut"
@@ -36,27 +36,27 @@ firrtl.circuit "TywavesTop" attributes {
 // CHECK_DBG: firrtl.circuit "Foo"
 firrtl.circuit "Foo" attributes {rawAnnotations = [
     {
-        class = "chisel3.tywaves.TywavesAnnotation",
+        class = "chisel3.tywavesinternal.TywavesAnnotation",
         target = "~Foo|Foo>bar.a",
         typeName = "UInt<1>"
     },
     {
-        class = "chisel3.tywaves.TywavesAnnotation",
+        class = "chisel3.tywavesinternal.TywavesAnnotation",
         target = "~Foo|Foo>bar.b.baz",
         typeName = "UInt<1>"
     },
     {
-        class = "chisel3.tywaves.TywavesAnnotation",
+        class = "chisel3.tywavesinternal.TywavesAnnotation",
         target = "~Foo|Foo/bar:Bar>b.qux",
         typeName = "UInt<1>"
     },
     {
-        class = "chisel3.tywaves.TywavesAnnotation",
+        class = "chisel3.tywavesinternal.TywavesAnnotation",
         target = "~Foo|Foo/bar:Bar>d.qux",
         typeName = "UInt<1>"
     },
     {
-        class = "chisel3.tywaves.TywavesAnnotation",
+        class = "chisel3.tywavesinternal.TywavesAnnotation",
         target = "~Foo|Foo>bar.c",
         typeName = "Bool"
     }
@@ -64,12 +64,12 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
   // CHECK-LABEL:    firrtl.module @Bar
   // CHECK_NO_DBG: in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>
   // CHECK-SAME:   in %a
-  // CHECK_DBG:     {class = "chisel3.tywaves.TywavesAnnotation", target = "~Foo|Foo>bar.a", typeName = "UInt<1>"}
+  // CHECK_DBG:     {class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Foo|Foo>bar.a", typeName = "UInt<1>"}
   // CHECK-SAME:   out %b
-  // CHECK_DBG:     {circt.fieldID = 1 : i32, class = "chisel3.tywaves.TywavesAnnotation", target = "~Foo|Foo>bar.b.baz", typeName = "UInt<1>"}
-  // CHECK_DBG:     {circt.fieldID = 2 : i32, class = "chisel3.tywaves.TywavesAnnotation", target = "~Foo|Foo/bar:Bar>b.qux", typeName = "UInt<1>"}
+  // CHECK_DBG:     {circt.fieldID = 1 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Foo|Foo>bar.b.baz", typeName = "UInt<1>"}
+  // CHECK_DBG:     {circt.fieldID = 2 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Foo|Foo/bar:Bar>b.qux", typeName = "UInt<1>"}
   // CHECK-SAME:   out %c
-  // CHECK_DBG:     {class = "chisel3.tywaves.TywavesAnnotation", target = "~Foo|Foo>bar.c", typeName = "Bool"}
+  // CHECK_DBG:     {class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Foo|Foo>bar.c", typeName = "Bool"}
 
   firrtl.module @Bar(
     in %a: !firrtl.uint<1>,
@@ -77,7 +77,7 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
     out %c: !firrtl.uint<1>
   ) {
     // CHECK-NEXT: %d = firrtl.wire
-    // CHECK_DBG:   {circt.fieldID = 2 : i32, class = "chisel3.tywaves.TywavesAnnotation", target = "~Foo|Foo/bar:Bar>d.qux", typeName = "UInt<1>"}
+    // CHECK_DBG:   {circt.fieldID = 2 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Foo|Foo/bar:Bar>d.qux", typeName = "UInt<1>"}
     %d = firrtl.wire : !firrtl.bundle<baz: uint<1>, qux: uint<1>>
   }
   // CHECK: firrtl.module @Foo

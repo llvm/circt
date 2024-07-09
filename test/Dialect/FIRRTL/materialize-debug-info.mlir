@@ -13,16 +13,16 @@ firrtl.module @Ports(
   //===----------------------------------------------------------------------===//
   // Type annotation for the ports
   //===----------------------------------------------------------------------===//
-  in %inTypedA: !firrtl.uint<42> [{class = "chisel3.tywaves.TywavesAnnotation", target = "~Ports|Ports>inTypedA", typeName = "IO[UInt<42>]"}],
-  in %inTypedB: !firrtl.bundle<a: sint<19>, b: clock> [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "IO[MyBundle]"},  // Target is not required anymore in this pass
-                                                       {circt.fieldID = 1 : i32, class = "chisel3.tywaves.TywavesAnnotation", typeName = "IO[AinMyBundle]"},
-                                                       {circt.fieldID = 2 : i32, class = "chisel3.tywaves.TywavesAnnotation", typeName = "IO[ClockInMyBundle]"}],
-  in %inTypedC: !firrtl.vector<asyncreset, 2> [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "IO[Vec<AsyncReset>]"},
-                                               {circt.fieldID = 1 : i32, class = "chisel3.tywaves.TywavesAnnotation", typeName = "IO[AsyncReset]"}],
-  in %inTypedD: !firrtl.bundle<clocks: vector<clock, 4>> [{class = "chisel3.tywaves.TywavesAnnotation", target = "~Ports|Ports>inTypedD", typeName = "IO[BundleVecClock]"},
-                                                          {circt.fieldID = 1 : i32, class = "chisel3.tywaves.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks", typeName = "IO[Clock[4]]"},
-                                                          {circt.fieldID = 2 : i32, class = "chisel3.tywaves.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks[0]", typeName = "IO[Clock]"}],
-  out %outTypedA: !firrtl.uint<42> [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Any Custom string"}]
+  in %inTypedA: !firrtl.uint<42> [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedA", typeName = "IO[UInt<42>]"}],
+  in %inTypedB: !firrtl.bundle<a: sint<19>, b: clock> [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "IO[MyBundle]"},  // Target is not required anymore in this pass
+                                                       {circt.fieldID = 1 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "IO[AinMyBundle]"},
+                                                       {circt.fieldID = 2 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "IO[ClockInMyBundle]"}],
+  in %inTypedC: !firrtl.vector<asyncreset, 2> [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "IO[Vec<AsyncReset>]"},
+                                               {circt.fieldID = 1 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "IO[AsyncReset]"}],
+  in %inTypedD: !firrtl.bundle<clocks: vector<clock, 4>> [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD", typeName = "IO[BundleVecClock]"},
+                                                          {circt.fieldID = 1 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks", typeName = "IO[Clock[4]]"},
+                                                          {circt.fieldID = 2 : i32, class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~Ports|Ports>inTypedD.clocks[0]", typeName = "IO[Clock]"}],
+  out %outTypedA: !firrtl.uint<42> [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Any Custom string"}]
 ) {
   // CHECK-NEXT: dbg.variable "inA", %inA
 
@@ -105,28 +105,28 @@ firrtl.module @Decls() {
   // CHECK-NEXT: firrtl.wire
   // CHECK-NEXT: dbg.variable "someTypedWire", %someTypedWire {typeName = "Wire[SInt<17>]"}
   %someWire = firrtl.wire : !firrtl.uint<17>
-  %someTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Wire[SInt<17>]"}]} : !firrtl.uint<17>
+  %someTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Wire[SInt<17>]"}]} : !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.node
   // CHECK-NEXT: dbg.variable "someNode", %someNode
   // CHECK-NEXT: firrtl.node
   // CHECK-NEXT: dbg.variable "someTypedNode", %someTypedNode {typeName = "UInt<17>"}
   %someNode = firrtl.node %c0_ui17 : !firrtl.uint<17>
-  %someTypedNode = firrtl.node %c0_ui17 {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "UInt<17>"}]} : !firrtl.uint<17>
+  %someTypedNode = firrtl.node %c0_ui17 {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "UInt<17>"}]} : !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.reg
   // CHECK-NEXT: dbg.variable "someReg1", %someReg1
   // CHECK-NEXT: firrtl.reg
   // CHECK-NEXT: dbg.variable "someTypedReg1", %someTypedReg1 {typeName = "Reg[SInt<17>]"}
   %someReg1 = firrtl.reg %c0_clock : !firrtl.clock, !firrtl.uint<17>
-  %someTypedReg1 = firrtl.reg %c0_clock {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Reg[SInt<17>]"}]} : !firrtl.clock, !firrtl.uint<17>
+  %someTypedReg1 = firrtl.reg %c0_clock {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Reg[SInt<17>]"}]} : !firrtl.clock, !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.regreset
   // CHECK-NEXT: dbg.variable "someReg2", %someReg2
   // CHECK-NEXT: firrtl.regreset
   // CHECK-NEXT: dbg.variable "someTypedReg2", %someTypedReg2 {typeName = "Reg[SInt<17>]"}
   %someReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
-  %someTypedReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Reg[SInt<17>]"}]} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
+  %someTypedReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Reg[SInt<17>]"}]} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.strictconnect
   firrtl.strictconnect %someWire, %c0_ui17 : !firrtl.uint<17>  
@@ -142,11 +142,11 @@ firrtl.module @ConstructorParams() {
 
   // CHECK-NEXT: firrtl.wire
   // CHECK-NEXT: dbg.variable "someTypedWire", %someTypedWire {params = [{name = "size", typeName = "int", value = "17"}], typeName = "Wire[SInt<17>]"}
-  %someTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Wire[SInt<17>]", params = [{name="size", typeName="int", value="17"}]}]} : !firrtl.uint<17>
+  %someTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Wire[SInt<17>]", params = [{name="size", typeName="int", value="17"}]}]} : !firrtl.uint<17>
   
   // CHECK-NEXT: firrtl.wire
   // CHECK-NEXT: dbg.variable "anotherTypedWire", %anotherTypedWire {params = [{name = "p", typeName = "char"}], typeName = "Wire[SInt<17>]"}
-  %anotherTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", typeName = "Wire[SInt<17>]", params = [{name="p", typeName="char"}]}]} : !firrtl.uint<17>
+  %anotherTypedWire = firrtl.wire {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", typeName = "Wire[SInt<17>]", params = [{name="p", typeName="char"}]}]} : !firrtl.uint<17>
   
   // CHECK-NEXT: firrtl.strictconnect
   firrtl.strictconnect %someTypedWire, %c0_ui17 : !firrtl.uint<17>  
@@ -156,25 +156,25 @@ firrtl.module @ConstructorParams() {
 firrtl.circuit "TopCircuitMultiModule" {
     // CHECK-LABEL: firrtl.module private @MyModule()
     // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
-    firrtl.module private @MyModule() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule", typeName = "MyModule"}]} {
+    firrtl.module private @MyModule() attributes {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule", typeName = "MyModule"}]} {
       firrtl.skip
     }
     // CHECK-LABEL: firrtl.module private @MyModule_1()
     // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
-    firrtl.module private @MyModule_1() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_1", typeName = "MyModule"}]} {
+    firrtl.module private @MyModule_1() attributes {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_1", typeName = "MyModule"}]} {
       firrtl.skip
     }
     // CHECK-LABEL: firrtl.module private @MyModule_2()
     // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
-    firrtl.module private @MyModule_2() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_2", typeName = "MyModule"}]} {
+    firrtl.module private @MyModule_2() attributes {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_2", typeName = "MyModule"}]} {
       firrtl.skip
     }
     // CHECK-LABEL: firrtl.module private @MyModule_3()
     // CHECK-NEXT: dbg.moduleinfo {typeName = "MyModule"}
-    firrtl.module private @MyModule_3() attributes {annotations = [{class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_3", typeName = "MyModule"}]} {
+    firrtl.module private @MyModule_3() attributes {annotations = [{class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~TopCircuitMultiModule|MyModule_3", typeName = "MyModule"}]} {
       firrtl.skip
     }
-    firrtl.module @TopCircuitMultiModule() attributes {annotations = [{class = "firrtl.transforms.DedupGroupAnnotation", group = "TopCircuitMultiModule"}, {class = "chisel3.tywaves.TywavesAnnotation", target = "~TopCircuitMultiModule|TopCircuitMultiModule", typeName = "TopCircuitMultiModule"}], convention = #firrtl<convention scalarized>} {
+    firrtl.module @TopCircuitMultiModule() attributes {annotations = [{class = "firrtl.transforms.DedupGroupAnnotation", group = "TopCircuitMultiModule"}, {class = "chisel3.tywavesinternal.TywavesAnnotation", target = "~TopCircuitMultiModule|TopCircuitMultiModule", typeName = "TopCircuitMultiModule"}], convention = #firrtl<convention scalarized>} {
       firrtl.instance mod    interesting_name @MyModule()
       firrtl.instance mod1   interesting_name @MyModule()
       firrtl.instance mod2   interesting_name @MyModule_1()

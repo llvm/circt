@@ -202,7 +202,7 @@ constexpr const char *wiringSourceAnnoClass =
 constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
 
 // Tywaves Annotation: contains info about source level chisel extra information
-constexpr const char *tywavesAnnoClass = "chisel3.tywaves.TywavesAnnotation";
+constexpr const char *tywavesAnnoClass = "chisel3.tywavesinternal.TywavesAnnotation";
 
 } // namespace firrtl
 } // namespace circt
