@@ -1,3 +1,16 @@
+//===- ProceduralizeSim.cpp - Conversion to procedural operations ---------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Transform non-procedural simulation operations with clock and enable to
+// procedural operations wrapped in a procedural region.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
