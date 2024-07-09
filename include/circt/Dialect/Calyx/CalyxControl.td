@@ -450,7 +450,7 @@ def InvokeOp : CalyxOp<"invoke", [
   let arguments = (ins FlatSymbolRefAttr:$callee,
                    Variadic<AnyType>:$ports,
                    Variadic<AnyType>:$inputs,
-                   DictionaryAttr:$refCellsMap,
+                   ArrayAttr:$refCellsMap,
                    ArrayAttr:$portNames,
                    ArrayAttr:$inputNames);
   let results = (outs);

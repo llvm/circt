@@ -2685,26 +2685,28 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
   FlatSymbolRefAttr callee = FlatSymbolRefAttr::get(componentName);
   SMLoc loc = parser.getCurrentLocation();
 
-  SmallVector<NamedAttribute, 4> refCellSymbols;
+  SmallVector<Attribute, 4> refCells;
   if (succeeded(parser.parseOptionalLSquare())) {
     if (parser.parseCommaSeparatedList([&]() -> ParseResult {
           std::string refCellName;
           std::string externalMem;
+          NamedAttrList refCellAttr;
           if (parser.parseKeywordOrString(&refCellName) ||
               parser.parseEqual() || parser.parseKeywordOrString(&externalMem))
             return failure();
           auto externalMemAttr =
               SymbolRefAttr::get(parser.getContext(), externalMem);
-          refCellSymbols.push_back(
-              NamedAttribute(StringAttr::get(parser.getContext(), refCellName),
-                             externalMemAttr));
+          refCellAttr.append(StringAttr::get(parser.getContext(), refCellName),
+                             externalMemAttr);
+          refCells.push_back(
+              DictionaryAttr::get(parser.getContext(), refCellAttr));
           return success();
         }) ||
         parser.parseRSquare())
       return failure();
   }
   result.addAttribute("refCellsMap",
-                      DictionaryAttr::get(parser.getContext(), refCellSymbols));
+                      ArrayAttr::get(parser.getContext(), refCells));
 
   result.addAttribute("callee", callee);
   if (parseParameterList(parser, result, ports, inputs, portNames, inputNames,
@@ -2724,10 +2726,14 @@ ParseResult InvokeOp::parse(OpAsmParser &parser, OperationState &result) {
 void InvokeOp::print(OpAsmPrinter &p) {
   p << " @" << getCallee() << "[";
   auto refCellNamesMap = getRefCellsMap();
-  llvm::interleaveComma(refCellNamesMap, p, [&](auto arg) {
-    auto refCellName = arg.getName().str();
-    auto externalMem = cast<FlatSymbolRefAttr>(arg.getValue()).getValue();
-    p << refCellName << " = " << externalMem;
+  llvm::interleaveComma(refCellNamesMap, p, [&](Attribute attr) {
+    auto dictAttr = cast<DictionaryAttr>(attr);
+    llvm::interleaveComma(dictAttr, p, [&](NamedAttribute namedAttr) {
+      auto refCellName = namedAttr.getName().str();
+      auto externalMem =
+          cast<FlatSymbolRefAttr>(namedAttr.getValue()).getValue();
+      p << refCellName << " = " << externalMem;
+    });
   });
   p << "](";
 

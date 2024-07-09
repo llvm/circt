@@ -875,10 +875,14 @@ void Emitter::emitInvoke(InvokeOp invoke) {
   auto refCellsMap = invoke.getRefCellsMap();
   if (!refCellsMap.empty()) {
     os << "[";
-    llvm::interleaveComma(refCellsMap, os, [&](auto refCell) {
-      auto refCellName = refCell.getName().str();
-      auto externalMem = cast<FlatSymbolRefAttr>(refCell.getValue()).getValue();
-      os << refCellName << " = " << externalMem;
+    llvm::interleaveComma(refCellsMap, os, [&](Attribute attr) {
+      auto dictAttr = cast<DictionaryAttr>(attr);
+      llvm::interleaveComma(dictAttr, os, [&](NamedAttribute namedAttr) {
+        auto refCellName = namedAttr.getName().str();
+        auto externalMem =
+            cast<FlatSymbolRefAttr>(namedAttr.getValue()).getValue();
+        os << refCellName << " = " << externalMem;
+      });
     });
     os << "]";
   }

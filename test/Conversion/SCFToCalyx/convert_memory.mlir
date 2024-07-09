@@ -833,7 +833,7 @@ module {
 // CHECK:           calyx.control {
 // CHECK:             calyx.seq {
 // CHECK:               calyx.enable @init_main_instance
-// CHECK:               calyx.invoke @main_instance[arg_mem_0 = mem_1, arg_mem_1 = mem_0]() -> ()
+// CHECK:               calyx.invoke @main_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1]() -> ()
 // CHECK:             }
 // CHECK:           }
 // CHECK:         } {toplevel}

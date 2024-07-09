@@ -1644,7 +1644,7 @@ private:
 
         SmallVector<Value, 4> instancePorts;
         SmallVector<Value, 4> inputPorts;
-        NamedAttrList refCells;
+        SmallVector<Attribute, 4> refCells;
         for (auto operandEnum : enumerate(callSchedPtr->callOp.getOperands())) {
           auto operand = operandEnum.value();
           auto index = operandEnum.index();
@@ -1655,12 +1655,16 @@ private:
             auto memOpNameAttr =
                 SymbolRefAttr::get(rewriter.getContext(), memOpName);
             Value argI = calleeFunc.getArgument(index);
-            if (isa<MemRefType>(argI.getType()))
-              refCells.append(NamedAttribute(
+            if (isa<MemRefType>(argI.getType())) {
+              NamedAttrList namedAttrList;
+              namedAttrList.append(
                   rewriter.getStringAttr(
                       instanceOpLoweringState->getMemoryInterface(argI)
                           .memName()),
-                  memOpNameAttr));
+                  memOpNameAttr);
+              refCells.push_back(
+                  DictionaryAttr::get(rewriter.getContext(), namedAttrList));
+            }
           } else {
             inputPorts.push_back(operand);
           }
@@ -1668,8 +1672,8 @@ private:
         llvm::copy(instanceOp.getResults().take_front(inputPorts.size()),
                    std::back_inserter(instancePorts));
 
-        DictionaryAttr refCellsAttr =
-            refCells.getDictionary(rewriter.getContext());
+        ArrayAttr refCellsAttr =
+            ArrayAttr::get(rewriter.getContext(), refCells);
 
         rewriter.create<calyx::InvokeOp>(
             instanceOp.getLoc(), instanceOp.getSymName(), instancePorts,
@@ -2058,7 +2062,8 @@ private:
     }
 
     FunctionType callerFnType = caller.getFunctionType();
-    SmallVector<Type, 4> updatedCallerArgTypes(callerFnType.getInputs());
+    SmallVector<Type, 4> updatedCallerArgTypes(
+        caller.getFunctionType().getInputs());
     updatedCallerArgTypes.append(nonMemRefCalleeArgTypes.begin(),
                                  nonMemRefCalleeArgTypes.end());
     caller.setType(FunctionType::get(caller.getContext(), updatedCallerArgTypes,
@@ -2071,12 +2076,10 @@ private:
     SmallVector<Type, 4> extraMemRefArgTypes;
     SmallVector<Value, 4> extraMemRefOperands;
     SmallVector<Operation *, 4> opsToModify;
-    for (auto &block : callee.getBody()) {
-      for (auto &op : block) {
-        if (isa<memref::AllocaOp>(op) || isa<memref::AllocOp>(op) ||
-            isa<memref::GetGlobalOp>(op))
-          opsToModify.push_back(&op);
-      }
+    for (auto &op : callee.getBody().getOps()) {
+      if (isa<memref::AllocaOp>(op) || isa<memref::AllocOp>(op) ||
+          isa<memref::GetGlobalOp>(op))
+        opsToModify.push_back(&op);
     }
 
     // Replace `alloc`/`getGlobal` in the original top-level with new
@@ -2113,6 +2116,7 @@ private:
 
     unsigned otherArgsCount = 0;
     SmallVector<Value, 4> calleeArgFnOperands;
+    builder.setInsertionPointToStart(callerEntryBlock);
     for (auto arg : callee.getArguments().take_front(originalCalleeArgNum)) {
       if (isa<MemRefType>(arg.getType())) {
         auto memrefType = cast<MemRefType>(arg.getType());
@@ -2132,6 +2136,7 @@ private:
         SymbolRefAttr::get(builder.getContext(), callee.getSymName());
     auto resultTypes = callee.getResultTypes();
 
+    builder.setInsertionPointToEnd(callerEntryBlock);
     builder.create<CallOp>(caller.getLoc(), calleeName, resultTypes,
                            fnOperands);
   }
