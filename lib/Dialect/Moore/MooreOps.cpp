@@ -48,9 +48,8 @@ void SVModuleOp::print(OpAsmPrinter &p) {
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
 
-  SmallVector<StringRef, 4> omittedAttrs = {"sym_name", "module_type",
-                                            visibilityAttrName};
-  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
 }
 
 ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
