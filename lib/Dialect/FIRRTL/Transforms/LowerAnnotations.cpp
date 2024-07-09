@@ -424,6 +424,8 @@ static LogicalResult applyTywaves(const AnnoPathValue &target,
 //===----------------------------------------------------------------------===//
 
 namespace circt::firrtl {
+// TODO: this is important for the thesis: Annotations were useful mainly for
+// the SFC
 /// Resolution and application of a "firrtl.annotations.NoTargetAnnotation".
 /// This should be used for any Annotation which does not apply to anything in
 /// the FIRRTL Circuit, i.e., an Annotation which has no target.  Historically,
@@ -487,8 +489,14 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {excludeMemToRegAnnoClass,
      {stdResolve, applyWithoutTarget<true, MemOp, CombMemOp>}},
     {sitestBlackBoxAnnoClass, NoTargetAnnotation},
-    {enumComponentAnnoClass, {noResolve, drop}},
-    {enumDefAnnoClass, {noResolve, drop}},
+    // TODO: check other operations
+    {enumComponentAnnoClass,
+     {stdResolve,
+      applyWithoutTarget<true, true, WireOp, NodeOp, RegOp, RegResetOp, MemOp,
+                         CombMemOp, MemoryPortOp, SeqMemOp>}},
+    {enumDefAnnoClass, NoTargetAnnotation},
+    // TODO: same as one of the other but
+    // for a vector of enums (Check it)
     {enumVecAnnoClass, {noResolve, drop}},
     {forceNameAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp, FExtModuleOp>}},

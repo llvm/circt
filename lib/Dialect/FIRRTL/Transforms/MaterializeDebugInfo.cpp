@@ -32,6 +32,8 @@ struct TywavesAnnotation {
   StringAttr typeName;
   ArrayAttr params;
 
+  debug::EnumDefOp enumDef;
+
   TywavesAnnotation(StringAttr typeName)
       : TywavesAnnotation(typeName, ArrayAttr()) {}
 
@@ -65,6 +67,9 @@ struct MaterializeDebugInfoPass
                            const mlir::ArrayAttr &annoList,
                            const mlir::ArrayAttr &inputFilteredAnnoList,
                            unsigned int circtSubFieldId = 0);
+
+  // Create a private cache map for the enum definitions
+  llvm::StringMap<debug::EnumDefOp> enumDefCache;
 };
 
 //===----------------------------------------------------------------------===//
@@ -157,10 +162,11 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
 
   auto foundOneTywavesAnnoClass = false;
   std::optional<TywavesAnnotation> result = std::nullopt;
+  debug::EnumDefOp const *enumDef = nullptr;
 
   // 1. Filter tywaves annotations
   for (const auto &annoAttr : annoList)
-    if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr))
+    if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr)) {
       if (annoDict.template getAs<mlir::StringAttr>("class") ==
           tywavesAnnoClass) {
 
@@ -217,6 +223,22 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
           result = TywavesAnnotation(typeName);
         }
       }
+      // Add the enum def if any
+      if (annoDict.getAs<mlir::StringAttr>("class") == enumComponentAnnoClass) {
+        if (enumDef != nullptr) {
+          mlir::emitWarning(loc) << "Multiple enumComponent annotations "
+                                    "found for the same variable\n";
+        }
+
+        auto enumTypeName = annoDict.getAs<mlir::StringAttr>("enumTypeName");
+        auto _enumDef = this->enumDefCache.lookup(enumTypeName);
+        enumDef = &_enumDef;
+        LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict);
+      }
+    }
+
+  if (enumDef)
+    result->enumDef = *enumDef;
   // TODO: use this control outside the function
   // if (!result) {
   //   mlir::emitError(loc) << "Missing expected tywaves annotation for "
@@ -236,6 +258,32 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
 void MaterializeDebugInfoPass::runOnOperation() {
   auto module = getOperation();
   auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
+
+  // Create enum operations
+  // Get the enum definition annotation
+  if (auto topCircuit = module->getParentOfType<CircuitOp>())
+    if (auto annoListArray = annohelper::getAnnotationList(topCircuit)) {
+      LLVM_DEBUG(llvm::dbgs() << "- Annotations: " << annoListArray << "\n");
+      for (const auto &annoAttr : annoListArray)
+        if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr))
+          if (annoDict.template getAs<mlir::StringAttr>("class") ==
+              enumDefAnnoClass) {
+            // Print the enum definition
+            LLVM_DEBUG(llvm::dbgs()
+                       << " - Enum definition: " << annoDict << "\n");
+            auto typeName = annoDict.getAs<mlir::StringAttr>("typeName");
+            auto variantsMap =
+                annoDict.getAs<mlir::DictionaryAttr>("definition");
+            // Materialize in hw.enum
+            auto enumDefOp =
+                builder.create<debug::EnumDefOp>(module.getLoc(),
+                                                 /*typeName=*/typeName,
+                                                 /*variantsMap=*/variantsMap,
+                                                 /*scope=*/Value{});
+
+            this->enumDefCache.insert({enumDefOp.getEnumTypeName(), enumDefOp});
+          }
+    }
 
   // Create DI variables for each port.
   for (const auto &[port, value] :
@@ -300,9 +348,13 @@ void MaterializeDebugInfoPass::materializeVariable(
 
     auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
     auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr{};
+    auto enumDef = tywavesAnno
+                       ? (tywavesAnno->enumDef ? tywavesAnno->enumDef : Value{})
+                       : Value{};
     builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue,
                                       /*typeName=*/typeName,
                                       /*params=*/params,
+                                      /*enumDef=*/enumDef,
                                       /*scope=*/Value{});
   }
 }
@@ -352,6 +404,9 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   // 2. Extract the source language type information
   const auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
   const auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr();
+  const auto enumDef =
+      tywavesAnno ? (tywavesAnno->enumDef ? tywavesAnno->enumDef : Value{})
+                  : Value{};
   // This enables the creation of a SubFieldOp for the current value (only if
   // child of an aggregate and tywavesAnno is not null/none)
   auto isChildOfAggregate = circtSubFieldId && tywavesAnno;
@@ -360,13 +415,14 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
 
   // Lambda function to generate the result or create a SubFieldOp if it is a
   // subfield of an aggregate.
-  auto generateResult = [&builder, &typeName,
-                         &params](bool buildSubFieldOp, const Value &result,
-                                  const Location &loc, const StringAttr &name) {
+  auto generateResult = [&builder, &typeName, &params, &enumDef](
+                            bool buildSubFieldOp, const Value &result,
+                            const Location &loc, const StringAttr &name) {
     if (buildSubFieldOp) {
       Value x = builder.create<debug::SubFieldOp>(loc, name, result,
                                                   /*typeName=*/typeName,
-                                                  /*params=*/params);
+                                                  /*params=*/params,
+                                                  /*enumDef=*/enumDef);
       return x;
     }
     return result;

@@ -38,4 +38,10 @@ def SubFieldType : DebugTypeDef<"SubField"> {
   let description = "The result of a `dbg.subfield` operation.";
 }
 
+def EnumDefType : DebugTypeDef<"EnumDef"> {
+  let mnemonic = "enumdef";
+  let summary = "debug enum definition";
+  let description = "The result of a `dbg.enumdef` operation.";
+}
+
 #endif // CIRCT_DIALECT_DEBUG_DEBUGTYPES_TD

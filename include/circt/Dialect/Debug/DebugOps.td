@@ -50,7 +50,7 @@ def ScopeOp : DebugOp<"scope"> {
 }
 
 
-def VariableOp : DebugOp<"variable"> {
+def VariableOp : DebugOp<"variable", [AttrSizedOperandSegments]> {
   let summary = "A named value to be captured in debug info";
   let description = [{
     Marks a value to be tracked in DI under the given name. The `dbg.variable`
@@ -76,11 +76,12 @@ def VariableOp : DebugOp<"variable"> {
     AnyType:$value,
     OptionalAttr<StrAttr>:$typeName,
     OptionalAttr<ArrayAttr>:$params,
+    Optional<EnumDefType>:$enumDef,
     Optional<ScopeType>:$scope
   );
   // let results = (outs VariableType:$result);
   let assemblyFormat = [{
-    $name `,` $value (`scope` $scope^)? attr-dict `:` type($value)
+    $name `,` $value (`scope` $scope^)? attr-dict (`enumDef` $enumDef^)? `:` type($value)
   }];
 }
 
@@ -105,11 +106,12 @@ def SubFieldOp : DebugOp<"subfield"> {
     StrAttr:$name,
     AnyType:$value,
     OptionalAttr<StrAttr>:$typeName,
-    OptionalAttr<ArrayAttr>:$params
+    OptionalAttr<ArrayAttr>:$params,
+    Optional<EnumDefType>:$enumDef
   );
   let results = (outs SubFieldType:$result);
   let assemblyFormat = [{
-    $name `,` $value attr-dict `:` type($value)
+    $name `,` $value (`enumDef` $enumDef^)? attr-dict `:` type($value)
   }];
 }
 
@@ -165,6 +167,35 @@ def ModuleInfoOp : DebugOp<"moduleinfo"> {
   );
 
   let assemblyFormat = [{ attr-dict }];
+}
+
+def EnumDefOp : DebugOp<"enumdef"> {
+  let summary = "Define the value variants of an enumeration";
+  let description = [{
+    Creates a definition of an enumeration type.
+    It is useful to reconstruct the named variants of an enum from a raw value.
+    Variants can be internally represented as a map (Int -> String).
+    It might be possible that the user select the order and single raw values 
+    of the variants. Therefore, it is not possible to use an array to map the
+    named variants with the integer value.
+
+    This operation is declared once per enum present in a scope.
+
+    The result of this operation is used as operand in `dbg.variable` and
+    `dbg.subfield` operations if they originate from an enum type.
+  }];
+
+  let arguments = (ins
+    StrAttr:$enumTypeName,
+    DictionaryAttr:$variantsMap,
+    Optional<ScopeType>:$scope
+  );
+
+  let results = (outs EnumDefType:$result);
+
+  let assemblyFormat = [{
+    $enumTypeName `,` $variantsMap (`scope` $scope^)? attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_DEBUG_DEBUGOPS_TD
