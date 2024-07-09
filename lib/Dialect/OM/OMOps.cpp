@@ -174,16 +174,6 @@ void getClassLikeAsmBlockArgumentNames(ClassLike classLike, Region &region,
     setNameFn(args[i], argNames[i]);
 }
 
-template <typename ClassFieldT>
-void addClassLikeField(OpBuilder &builder, Location loc, StringRef name,
-                       Value src) {
-}
-
-template <typename ClassT, typename ClassFieldT>
-std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
-getClassLikeFields(ClassT classLike) {
-}
-
 //===----------------------------------------------------------------------===//
 // ClassOp
 //===----------------------------------------------------------------------===//
