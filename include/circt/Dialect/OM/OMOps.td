@@ -89,8 +89,7 @@ def ClassOp : OMClassLike<"class"> {
     void addField(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::Value src);
 
-    std::vector<circt::om::Field>
-    getFields();
+    std::vector<circt::om::Field> getFields();
   }];
 }
 
