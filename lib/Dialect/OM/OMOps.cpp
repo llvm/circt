@@ -230,14 +230,11 @@ void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
   builder.create<ClassFieldOp>(loc, name, src);
 }
 
-std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+std::vector<circt::om::Field>
 circt::om::ClassOp::getFields() {
-  std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>> fields;
+  std::vector<circt::om::Field> fields;
   for (auto field : this->getOps<ClassFieldOp>()) {
-    StringAttr name = field.getNameAttr();
-    Value value = field.getValue();
-    Location loc = field.getLoc();
-    fields.emplace_back(name, value, loc);
+    fields.push_back({field.getNameAttr(), field.getValue(), field.getLoc()});
   }
   return fields;
 }

@@ -258,9 +258,9 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     }
 
   for (auto field : cls.getFields()) {
-    StringAttr name = std::get<0>(field);
-    Value value = std::get<1>(field);
-    Location loc = std::get<2>(field);
+    StringAttr name = field.name;
+    Value value = field.value;
+    Location loc = field.loc;
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, loc);
     if (failed(result))

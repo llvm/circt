@@ -89,9 +89,7 @@ def ClassOp : OMClassLike<"class"> {
     void addField(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::Value src);
 
-    // TODO(lenny): should we return a more principled object data structure
-    // instead of a tuple?
-    std::vector<std::tuple<mlir::StringAttr, mlir::Value, mlir::Location>>
+    std::vector<circt::om::Field>
     getFields();
   }];
 }
