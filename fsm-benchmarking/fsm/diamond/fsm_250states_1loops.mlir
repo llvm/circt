@@ -1,6 +1,6 @@
 fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
-	%c304 = hw.constant 304 : i16
+	%c178 = hw.constant 178 : i16
 	%c1 = hw.constant 1 : i16
 
 
@@ -1429,7 +1429,18 @@ fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 	fsm.state @_158 output {
 	} transitions {
 		fsm.transition @_159
-		action {
+			guard {
+				%tmp = comb.icmp ne %x0, %c178 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+		fsm.transition @_160
+			guard {
+				%tmp = comb.icmp eq %x0, %c178 : i16
+				fsm.return %tmp
+			} action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -1437,7 +1448,7 @@ fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_159 output {
 	} transitions {
-		fsm.transition @_160
+		fsm.transition @_161
 		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
@@ -1627,18 +1638,7 @@ fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 	fsm.state @_180 output {
 	} transitions {
 		fsm.transition @_181
-			guard {
-				%tmp = comb.icmp ne %x0, %c304 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @_182
-			guard {
-				%tmp = comb.icmp eq %x0, %c304 : i16
-				fsm.return %tmp
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -1646,11 +1646,6 @@ fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_181 output {
 	} transitions {
-		fsm.transition @_183
-		action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
 		fsm.transition @_182
 		action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -1660,11 +1655,6 @@ fsm.machine @fsm250() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_182 output {
 	} transitions {
-		fsm.transition @_183
-		action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
 		fsm.transition @_183
 		action {
 				%tmp = comb.add %x0, %c1 : i16

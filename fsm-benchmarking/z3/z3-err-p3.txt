@@ -1,0 +1,4350 @@
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.16
+ :total-time                4.18)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.19
+ :total-time                4.22)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.28
+ :total-time                4.31)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.02
+ :total-time                4.04)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      3.94
+ :total-time                3.96)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.15
+ :total-time                4.17)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.05
+ :total-time                4.07)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      3.98
+ :total-time                4.00)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      3.97
+ :total-time                4.00)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_100states_0loops.smtsat
+(:added-eqs                 7
+ :arith-num-rows            22
+ :arith-row-summations      21
+ :arith-tableau-max-columns 30
+ :arith-tableau-max-rows    22
+ :binary-propagations       14
+ :decisions                 67
+ :del-clause                24
+ :final-checks              7
+ :max-generation            9
+ :max-memory                24.49
+ :memory                    20.29
+ :mk-bool-var               3263
+ :mk-clause                 30
+ :num-allocs                358334282
+ :num-checks                1
+ :propagations              46
+ :quant-instantiations      3032
+ :restarts                  6
+ :rlimit-count              505808
+ :time                      4.07
+ :total-time                4.09)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.02)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.02)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.02)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.01
+ :total-time           0.03)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_10states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           20.03
+ :memory               19.09
+ :mk-bool-var          45
+ :num-allocs           830196
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 22
+ :rlimit-count         18817
+ :time                 0.02
+ :total-time           0.04)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.56
+ :total-time           3.59)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.17
+ :total-time           3.19)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.20
+ :total-time           3.23)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.24
+ :total-time           3.26)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.19
+ :total-time           3.21)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.50
+ :total-time           3.53)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.45
+ :total-time           3.47)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.17
+ :total-time           3.19)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.05
+ :total-time           3.07)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_110states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  4
+ :decisions            40
+ :del-clause           16
+ :final-checks         4
+ :max-generation       10
+ :max-memory           24.83
+ :memory               20.40
+ :mk-bool-var          2464
+ :mk-clause            20
+ :num-allocs           220374156
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 2221
+ :restarts             3
+ :rlimit-count         409352
+ :time                 3.06
+ :total-time           3.08)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.15
+ :total-time           2.18)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.19
+ :total-time           2.21)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.21
+ :total-time           2.23)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.13
+ :total-time           2.15)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.13
+ :total-time           2.15)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.13
+ :total-time           2.15)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.21
+ :total-time           2.22)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.21
+ :total-time           2.23)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.21
+ :total-time           2.23)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_120states_0loops.smtsat
+(:added-eqs            4
+ :binary-propagations  8
+ :decisions            26
+ :del-clause           6
+ :final-checks         4
+ :max-generation       4
+ :max-memory           23.20
+ :memory               19.99
+ :mk-bool-var          1467
+ :mk-clause            11
+ :num-allocs           145936038
+ :num-checks           1
+ :propagations         18
+ :quant-instantiations 1213
+ :restarts             3
+ :rlimit-count         356837
+ :time                 2.21
+ :total-time           2.23)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.43
+ :total-time           0.46)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.42
+ :total-time           0.44)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.43
+ :total-time           0.46)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.43
+ :total-time           0.46)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.43
+ :total-time           0.45)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.42
+ :total-time           0.45)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.43
+ :total-time           0.45)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.42
+ :total-time           0.44)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.42
+ :total-time           0.44)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_130states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.42
+ :memory               19.80
+ :mk-bool-var          525
+ :num-allocs           27917810
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 262
+ :rlimit-count         238296
+ :time                 0.41
+ :total-time           0.44)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.67
+ :total-time           1.69)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.75
+ :total-time           1.78)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.67
+ :total-time           1.70)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.64
+ :total-time           1.66)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.71
+ :total-time           1.73)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.71
+ :total-time           1.74)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.66
+ :total-time           1.68)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.69
+ :total-time           1.72)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.66
+ :total-time           1.68)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_140states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           25.19
+ :memory               20.54
+ :mk-bool-var          1417
+ :mk-clause            6
+ :num-allocs           100564922
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 1128
+ :rlimit-count         316301
+ :time                 1.71
+ :total-time           1.73)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.62
+ :total-time           0.65)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.63
+ :total-time           0.65)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.64
+ :total-time           0.66)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.63
+ :total-time           0.66)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.61
+ :total-time           0.63)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.60
+ :total-time           0.62)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.61
+ :total-time           0.63)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.62
+ :total-time           0.64)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.64
+ :total-time           0.66)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_150states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           22.71
+ :memory               19.96
+ :mk-bool-var          605
+ :num-allocs           35959502
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 302
+ :rlimit-count         274885
+ :time                 0.65
+ :total-time           0.67)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.44
+ :total-time           2.47)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.46
+ :total-time           2.48)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.40
+ :total-time           2.42)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.45
+ :total-time           2.47)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.50
+ :total-time           2.52)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.46
+ :total-time           2.49)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.41
+ :total-time           2.43)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.39
+ :total-time           2.41)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.37
+ :total-time           2.39)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_160states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.56
+ :memory               20.68
+ :mk-bool-var          1617
+ :mk-clause            6
+ :num-allocs           140494896
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1288
+ :rlimit-count         360699
+ :time                 2.46
+ :total-time           2.49)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.98
+ :total-time           3.00)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.87
+ :total-time           2.89)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.96
+ :total-time           2.98)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 3.00
+ :total-time           3.02)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.97
+ :total-time           2.99)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.96
+ :total-time           2.98)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.89
+ :total-time           2.91)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.87
+ :total-time           2.89)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 2.95
+ :total-time           2.97)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_170states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           26.90
+ :memory               20.82
+ :mk-bool-var          1717
+ :mk-clause            6
+ :num-allocs           159443547
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1368
+ :rlimit-count         382911
+ :time                 3.10
+ :total-time           3.12)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      15.42
+ :total-time                15.44)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      15.35
+ :total-time                15.37)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      16.08
+ :total-time                16.10)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      16.90
+ :total-time                16.93)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      15.60
+ :total-time                15.62)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      16.73
+ :total-time                16.75)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      15.10
+ :total-time                15.13)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      14.75
+ :total-time                14.77)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      14.71
+ :total-time                14.73)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_180states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 61
+ :del-clause                16
+ :final-checks              6
+ :max-generation            6
+ :max-memory                26.31
+ :memory                    20.63
+ :mk-bool-var               4371
+ :mk-clause                 24
+ :num-allocs                1059767921
+ :num-checks                1
+ :propagations              28
+ :quant-instantiations      3987
+ :restarts                  5
+ :rlimit-count              750575
+ :time                      14.84
+ :total-time                14.86)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 3.97
+ :total-time           3.99)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 3.94
+ :total-time           3.96)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 3.91
+ :total-time           3.93)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 3.99
+ :total-time           4.01)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 3.85
+ :total-time           3.87)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 4.01
+ :total-time           4.03)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 4.21
+ :total-time           4.24)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 4.14
+ :total-time           4.16)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 4.17
+ :total-time           4.19)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_190states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            11
+ :final-checks         1
+ :max-generation       8
+ :max-memory           27.11
+ :memory               20.97
+ :mk-bool-var          1917
+ :mk-clause            6
+ :num-allocs           207458650
+ :num-checks           1
+ :propagations         5
+ :quant-instantiations 1528
+ :rlimit-count         427306
+ :time                 4.13
+ :total-time           4.16)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.95
+ :total-time                16.97)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.80
+ :total-time                16.83)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.61
+ :total-time                16.64)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.61
+ :total-time                16.63)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.61
+ :total-time                16.64)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.00
+ :total-time                16.02)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.24
+ :total-time                16.26)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.49
+ :total-time                16.50)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.31
+ :total-time                16.33)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_200states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 363
+ :arith-tableau-max-rows    357
+ :binary-propagations       4
+ :decisions                 44
+ :del-clause                16
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.18
+ :memory                    21.37
+ :mk-bool-var               4445
+ :mk-clause                 20
+ :num-allocs                1132199399
+ :num-checks                1
+ :propagations              16
+ :quant-instantiations      4023
+ :restarts                  3
+ :rlimit-count              730952
+ :time                      16.74
+ :total-time                16.76)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.08
+ :total-time                0.09)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.09
+ :total-time                0.10)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.08
+ :total-time                0.09)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.07
+ :total-time                0.09)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.08
+ :total-time                0.09)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.07
+ :total-time                0.09)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.08
+ :total-time                0.09)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.08
+ :total-time                0.10)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.07
+ :total-time                0.09)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_20states_0loops.smtsat
+(:added-eqs                 5
+ :arith-num-rows            1
+ :arith-tableau-max-columns 8
+ :arith-tableau-max-rows    1
+ :binary-propagations       5
+ :decisions                 57
+ :del-clause                22
+ :final-checks              6
+ :lazy-quant-instantiations 2
+ :max-generation            11
+ :max-memory                21.05
+ :memory                    19.33
+ :mk-bool-var               618
+ :mk-clause                 26
+ :num-allocs                5876930
+ :num-checks                1
+ :propagations              25
+ :quant-instantiations      550
+ :restarts                  4
+ :rlimit-count              111014
+ :time                      0.09
+ :total-time                0.10)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      18.14
+ :total-time                18.16)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      19.69
+ :total-time                19.72)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      18.31
+ :total-time                18.33)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      17.77
+ :total-time                17.79)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      17.25
+ :total-time                17.27)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      17.76
+ :total-time                17.79)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      16.97
+ :total-time                16.99)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      18.07
+ :total-time                18.09)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      17.05
+ :total-time                17.07)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_210states_0loops.smtsat
+(:added-eqs                 4
+ :arith-num-rows            357
+ :arith-row-summations      356
+ :arith-tableau-max-columns 364
+ :arith-tableau-max-rows    357
+ :binary-propagations       8
+ :decisions                 36
+ :del-clause                14
+ :final-checks              4
+ :max-generation            10
+ :max-memory                29.30
+ :memory                    21.57
+ :mk-bool-var               4242
+ :mk-clause                 18
+ :num-allocs                1262501295
+ :num-checks                1
+ :propagations              22
+ :quant-instantiations      3801
+ :restarts                  3
+ :rlimit-count              737441
+ :time                      17.91
+ :total-time                17.93)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.50
+ :total-time           6.52)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.28
+ :total-time           6.31)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.24
+ :total-time           6.26)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 7.06
+ :total-time           7.09)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.75
+ :total-time           6.78)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.41
+ :total-time           6.44)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.13
+ :total-time           6.16)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.32
+ :total-time           6.35)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.11
+ :total-time           6.13)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_220states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           28.18
+ :memory               21.28
+ :mk-bool-var          2217
+ :mk-clause            6
+ :num-allocs           294705383
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 1768
+ :rlimit-count         493839
+ :time                 6.25
+ :total-time           6.28)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      43.75
+ :total-time                43.77)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      45.94
+ :total-time                45.96)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      47.94
+ :total-time                47.96)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      44.79
+ :total-time                44.81)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      44.53
+ :total-time                44.55)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      44.66
+ :total-time                44.68)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      47.80
+ :total-time                47.81)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      51.09
+ :total-time                51.10)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      53.21
+ :total-time                53.23)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_230states_0loops.smtsat
+(:added-eqs                 5
+ :binary-propagations       5
+ :decisions                 64
+ :del-clause                28
+ :final-checks              10
+ :lazy-quant-instantiations 926
+ :max-generation            15
+ :max-memory                49.26
+ :memory                    30.95
+ :mk-bool-var               8351
+ :mk-clause                 33
+ :num-allocs                3682429642
+ :num-checks                1
+ :propagations              33
+ :quant-instantiations      7854
+ :restarts                  4
+ :rlimit-count              1111939
+ :time                      52.05
+ :total-time                52.09)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.76
+ :total-time                42.78)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      43.43
+ :total-time                43.46)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.08
+ :total-time                42.11)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.59
+ :total-time                42.63)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      43.66
+ :total-time                43.68)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      44.55
+ :total-time                44.57)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.50
+ :total-time                42.52)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.57
+ :total-time                42.59)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      42.27
+ :total-time                42.29)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_240states_0loops.smtsat
+(:added-eqs                 6
+ :arith-num-rows            2
+ :arith-row-summations      1
+ :arith-tableau-max-columns 10
+ :arith-tableau-max-rows    2
+ :binary-propagations       6
+ :decisions                 62
+ :del-clause                20
+ :final-checks              6
+ :max-generation            10
+ :max-memory                30.69
+ :memory                    21.85
+ :mk-bool-var               6294
+ :mk-clause                 25
+ :num-allocs                2704299746
+ :num-checks                1
+ :propagations              26
+ :quant-instantiations      5787
+ :restarts                  5
+ :rlimit-count              1027510
+ :time                      43.04
+ :total-time                43.07)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.18
+ :total-time           10.21)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.04
+ :total-time           10.06)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 11.08
+ :total-time           11.12)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 15.72
+ :total-time           15.77)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.21
+ :total-time           10.24)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.01
+ :total-time           10.04)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 11.07
+ :total-time           11.09)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 11.55
+ :total-time           11.58)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.71
+ :total-time           10.73)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_250states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            10
+ :final-checks         1
+ :max-generation       8
+ :max-memory           29.31
+ :memory               21.62
+ :mk-bool-var          2517
+ :mk-clause            6
+ :num-allocs           407613711
+ :num-checks           1
+ :propagations         6
+ :quant-instantiations 2008
+ :rlimit-count         560441
+ :time                 10.28
+ :total-time           10.30)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.37
+ :total-time           3.42)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.07
+ :total-time           3.09)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.21
+ :total-time           3.23)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.50
+ :total-time           3.54)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.07
+ :total-time           3.10)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.14
+ :total-time           3.17)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.07
+ :total-time           3.10)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.17
+ :total-time           3.20)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.65
+ :total-time           3.69)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_260states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           24.95
+ :memory               20.51
+ :mk-bool-var          1045
+ :num-allocs           140863622
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 522
+ :rlimit-count         476087
+ :time                 3.13
+ :total-time           3.18)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.39
+ :total-time           13.42)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 12.67
+ :total-time           12.70)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.54
+ :total-time           13.59)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.06
+ :total-time           13.11)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.61
+ :total-time           13.64)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 12.46
+ :total-time           12.48)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.40
+ :total-time           13.42)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 12.44
+ :total-time           12.47)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 13.79
+ :total-time           13.83)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_270states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           30.23
+ :memory               21.87
+ :mk-bool-var          2717
+ :mk-clause            6
+ :num-allocs           507411163
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2168
+ :rlimit-count         604813
+ :time                 12.88
+ :total-time           12.93)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 4.22
+ :total-time           4.25)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 4.02
+ :total-time           4.05)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 3.98
+ :total-time           4.03)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 4.14
+ :total-time           4.19)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 5.55
+ :total-time           5.58)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 3.99
+ :total-time           4.03)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 3.82
+ :total-time           3.87)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 4.03
+ :total-time           4.06)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 4.22
+ :total-time           4.27)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_280states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            2
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.19
+ :memory               20.60
+ :mk-bool-var          1125
+ :num-allocs           167052107
+ :num-checks           1
+ :propagations         2
+ :quant-instantiations 562
+ :rlimit-count         512658
+ :time                 3.82
+ :total-time           3.85)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.75
+ :total-time           4.80)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.54
+ :total-time           4.58)
+
+rep 2 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.54
+ :total-time           4.56)
+
+rep 3 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.61
+ :total-time           4.64)
+
+rep 4 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.88
+ :total-time           4.91)
+
+rep 5 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.39
+ :total-time           4.42)
+
+rep 6 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.24
+ :total-time           4.27)
+
+rep 7 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.50
+ :total-time           4.53)
+
+rep 8 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.30
+ :total-time           4.33)
+
+rep 9 file ../smtlib-fsm/err-p3/fsm_290states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  1
+ :decisions            3
+ :final-checks         1
+ :max-generation       2
+ :max-memory           25.30
+ :memory               20.66
+ :mk-bool-var          1165
+ :num-allocs           177376208
+ :num-checks           1
+ :propagations         1
+ :quant-instantiations 582
+ :rlimit-count         530957
+ :time                 4.40
+ :total-time           4.43)
+
+rep 0 file ../smtlib-fsm/err-p3/fsm_300states_0loops.smtsat
+(:added-eqs            1
+ :binary-propagations  2
+ :decisions            9
+ :final-checks         1
+ :max-generation       8
+ :max-memory           45.21
+ :memory               30.28
+ :mk-bool-var          3017
+ :mk-clause            6
+ :num-allocs           668040907
+ :num-checks           1
+ :propagations         7
+ :quant-instantiations 2408
+ :rlimit-count         671393
+ :time                 18.25
+ :total-time           18.28)
+
+rep 1 file ../smtlib-fsm/err-p3/fsm_300states_0loops.smt

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-num_fsm = range(10, 11, 10)
+num_fsm = range(10, 500, 10)
 
 guard_type = ["comb.icmp eq %", "comb.icmp ne %"]
 
@@ -39,9 +39,13 @@ for n in num_fsm:
 
     var = "x0"
 
+    skip = 0 
+
     for s in range(n):
 
-        if(s in loops):
+        if skip>0:
+            skip = skip-1
+        elif(s in loops):
             g = np.random.randint(s, s*2)
             while g in guard_vals:
                 g = np.random.randint(s, s*2)
@@ -82,7 +86,7 @@ for n in num_fsm:
 
 
             # transition with guard 
-            s=s+4
+            skip = 2
 
         else:
             rows.append(s)
@@ -94,6 +98,8 @@ for n in num_fsm:
             print("a from "+str(s)+" to "+str(s+1))
 
     print(rows)
+    print(cols)
+
 
     print("transitions: "+str(len(rows)))
     print("guards: "+str(len(guards)))

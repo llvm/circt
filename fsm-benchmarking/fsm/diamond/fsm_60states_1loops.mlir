@@ -1,6 +1,6 @@
 fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
-	%c30 = hw.constant 30 : i16
+	%c9 = hw.constant 9 : i16
 	%c1 = hw.constant 1 : i16
 
 
@@ -52,7 +52,18 @@ fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 	fsm.state @_5 output {
 	} transitions {
 		fsm.transition @_6
-		action {
+			guard {
+				%tmp = comb.icmp ne %x0, %c9 : i16
+				fsm.return %tmp
+			} action {
+				%tmp = comb.add %x0, %c1 : i16
+				fsm.update %x0, %tmp : i16
+			}
+		fsm.transition @_7
+			guard {
+				%tmp = comb.icmp eq %x0, %c9 : i16
+				fsm.return %tmp
+			} action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -60,7 +71,7 @@ fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_6 output {
 	} transitions {
-		fsm.transition @_7
+		fsm.transition @_8
 		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
@@ -178,18 +189,7 @@ fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 	fsm.state @_19 output {
 	} transitions {
 		fsm.transition @_20
-			guard {
-				%tmp = comb.icmp ne %x0, %c30 : i16
-				fsm.return %tmp
-			} action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @_21
-			guard {
-				%tmp = comb.icmp eq %x0, %c30 : i16
-				fsm.return %tmp
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
 			}
@@ -197,11 +197,6 @@ fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_20 output {
 	} transitions {
-		fsm.transition @_22
-		action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
 		fsm.transition @_21
 		action {
 				%tmp = comb.add %x0, %c1 : i16
@@ -211,11 +206,6 @@ fsm.machine @fsm60() -> () attributes {initialState = "_0"} {
 
 	fsm.state @_21 output {
 	} transitions {
-		fsm.transition @_22
-		action {
-				%tmp = comb.add %x0, %c1 : i16
-				fsm.update %x0, %tmp : i16
-			}
 		fsm.transition @_22
 		action {
 				%tmp = comb.add %x0, %c1 : i16
