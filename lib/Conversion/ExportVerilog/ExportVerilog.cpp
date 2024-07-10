@@ -779,7 +779,7 @@ static bool isExpressionUnableToInline(Operation *op,
       // Helper to determine if the use will be part of "event control",
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
-        // LTL Clock up's clock operand must be a name.
+        // LTL Clock op's clock operand must be a name.
         if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
           return clockOp.getClock() == use.get();
         // Always blocks must have a name in their sensitivity list.

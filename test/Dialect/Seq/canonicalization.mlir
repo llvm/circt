@@ -39,10 +39,13 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   %true = hw.constant true
 
   // Registers that update to themselves should be replaced with their reset
-  // value.
-  %reg0 = seq.firreg %reg0 clock %clk reset sync %r, %v : i32
-  hw.instance "reg0" @Observe(x: %reg0: i32) -> ()
-  // CHECK: hw.instance "reg0" @Observe(x: %v: i32) -> ()
+  // value only when a reset value is constant.
+  %reg0a = seq.firreg %reg0a clock %clk reset sync %r, %v : i32
+  %reg0b = seq.firreg %reg0b clock %clk reset sync %r, %c0_i32 : i32
+  hw.instance "reg0a" @Observe(x: %reg0a: i32) -> ()
+  hw.instance "reg0b" @Observe(x: %reg0b: i32) -> ()
+  // CHECK: hw.instance "reg0a" @Observe(x: %reg0a: i32) -> ()
+  // CHECK-NEXT: hw.instance "reg0b" @Observe(x: %c0_i32: i32) -> ()
 
   // Registers that never reset should drop their reset value.
   %reg1 = seq.firreg %in clock %clk reset sync %false, %v : i32
@@ -72,6 +75,10 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // CHECK: hw.instance "reg3a" @Observe(x: %reg3a: i32) -> ()
   // CHECK: hw.instance "reg3b" @Observe(x: %reg3b: i32) -> ()
   // CHECK: hw.instance "reg3c" @Observe(x: %c0_i32: i32) -> ()
+
+  // A register with preset value is not folded right now
+  // CHECK: %reg_preset = seq.firreg
+  %reg_preset = seq.firreg %reg_preset clock %clk reset sync %r, %c0_i32 preset 3: i32
 }
 
 // CHECK-LABEL: @FirRegAggregate

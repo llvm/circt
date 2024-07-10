@@ -523,7 +523,8 @@ LogicalResult ManifestRomLowering::createRomModule(
   if (overHang != 0) {
     uint64_t word = 0;
     for (size_t i = 0; i < overHang; ++i)
-      word |= maniBytes[maniBytes.size() - overHang + i] << (i * 8);
+      word |= static_cast<uint64_t>(maniBytes[maniBytes.size() - overHang + i])
+              << (i * 8);
     words.push_back(word);
   }
 

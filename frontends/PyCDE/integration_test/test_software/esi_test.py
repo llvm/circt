@@ -12,7 +12,7 @@ assert data == 0x207D98E5E5100E51
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
-assert m.api_version == 1
+assert m.api_version == 0
 print(m.type_table)
 
 d = acc.build_accelerator()

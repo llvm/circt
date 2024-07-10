@@ -25,19 +25,37 @@ using namespace mlir;
 // SVModuleOp
 //===----------------------------------------------------------------------===//
 
+void SVModuleOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                       llvm::StringRef name, hw::ModuleType type) {
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(name));
+  state.addAttribute(getModuleTypeAttrName(state.name), TypeAttr::get(type));
+  state.addRegion();
+}
+
 void SVModuleOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
   p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
   hw::module_like_impl::printModuleSignatureNew(p, getBodyRegion(),
                                                 getModuleType(), {}, {});
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                     getAttributeNames());
   p << " ";
   p.printRegion(getBodyRegion(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
+
+  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                     getAttributeNames());
 }
 
 ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
   // Parse the module name.
   StringAttr nameAttr;
   if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),

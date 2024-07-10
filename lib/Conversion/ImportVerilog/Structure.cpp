@@ -116,6 +116,9 @@ struct MemberVisitor {
     auto module = moduleLowering->op;
     auto moduleType = module.getModuleType();
 
+    // Set visibility attribute for instantiated module.
+    SymbolTable::setSymbolVisibility(module, SymbolTable::Visibility::Private);
+
     // Prepare the values that are involved in port connections. This creates
     // rvalues for input ports and appropriate lvalues for output, inout, and
     // ref ports. We also separate multi-ports into the individual underlying
