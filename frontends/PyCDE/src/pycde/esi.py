@@ -5,6 +5,7 @@
 from .common import (AppID, Input, Output, _PyProxy, PortError)
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .support import get_user_loc
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
                     _FromCirctType)
@@ -128,10 +129,34 @@ class _OutputBundleSetter:
   have implemented for this request."""
 
   def __init__(self, req: raw_esi.ServiceImplementConnReqOp,
+               rec: raw_esi.ServiceImplRecordOp,
                old_value_to_replace: ir.OpResult):
+    self.req = req
+    self.rec = rec
     self.type: Bundle = _FromCirctType(req.toClient.type)
-    self.client_name = req.relativeAppIDPath
+    self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
+
+  def add_record(self, details: Dict[str, str]):
+    """Add a record to the manifest for this client request. Generally used to
+    give the runtime necessary information about how to connect to the client
+    through the generated service. For instance, offsets into an MMIO space."""
+
+    ir_details: Dict[str, ir.StringAttr] = {}
+    for k, v in details.items():
+      ir_details[k] = ir.StringAttr.get(str(v))
+    with get_user_loc(), ir.InsertionPoint.at_block_begin(
+        self.rec.reqDetails.blocks[0]):
+      raw_esi.ServiceImplClientRecordOp(
+          self.req.relativeAppIDPath,
+          self.req.servicePort,
+          ir.TypeAttr.get(self.req.toClient.type),
+          ir_details,
+      )
+
+  @property
+  def client_name(self):
+    return self.req.relativeAppIDPath
 
   def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
@@ -150,8 +175,10 @@ class _ServiceGeneratorBundles:
   for connecting up."""
 
   def __init__(self, mod: ModuleLikeBuilderBase,
-               req: raw_esi.ServiceImplementReqOp):
+               req: raw_esi.ServiceImplementReqOp,
+               rec: raw_esi.ServiceImplRecordOp):
     self._req = req
+    self._rec = rec
     portReqsBlock = req.portReqs.blocks[0]
 
     # Find the output channel requests and store the settable proxies.
@@ -161,16 +188,10 @@ class _ServiceGeneratorBundles:
         if isinstance(req, raw_esi.ServiceImplementConnReqOp)
     ]
     self._output_reqs = [
-        _OutputBundleSetter(req, self._req.results[num_output_ports + idx])
+        _OutputBundleSetter(req, rec, self._req.results[num_output_ports + idx])
         for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
-
-  @property
-  def reqs(self) -> List[NamedChannelValue]:
-    """Get the list of incoming channels from the 'to server' connection
-    requests."""
-    return self._input_reqs
 
   @property
   def to_client_reqs(self) -> List[_OutputBundleSetter]:
@@ -179,7 +200,7 @@ class _ServiceGeneratorBundles:
   def check_unconnected_outputs(self):
     for req in self._output_reqs:
       if req._bundle_to_replace is not None:
-        name_str = ".".join(req.client_name)
+        name_str = str(req.client_name)
         raise ValueError(f"{name_str} has not been connected.")
 
 
@@ -206,8 +227,8 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
         impl_opts=opts,
         loc=self.loc)
 
-  def generate_svc_impl(self,
-                        serviceReq: raw_esi.ServiceImplementReqOp) -> bool:
+  def generate_svc_impl(self, serviceReq: raw_esi.ServiceImplementReqOp,
+                        record_op: raw_esi.ServiceImplRecordOp) -> bool:
     """"Generate the service inline and replace the `ServiceInstanceOp` which is
     being implemented."""
 
@@ -217,7 +238,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
 
       # Run the generator.
-      bundles = _ServiceGeneratorBundles(self, serviceReq)
+      bundles = _ServiceGeneratorBundles(self, serviceReq, record_op)
       rc = generator.gen_func(ports, bundles=bundles)
       if rc is None:
         rc = True
@@ -292,7 +313,8 @@ class _ServiceGeneratorRegistry:
     self._registry[name_attr] = (service_implementation, System.current())
     return ir.DictAttr.get({"name": name_attr})
 
-  def _implement_service(self, req: ir.Operation):
+  def _implement_service(self, req: ir.Operation, decl: ir.Operation,
+                         rec: ir.Operation):
     """This is the callback which the ESI connect-services pass calls. Dispatch
     to the op-specified generator."""
     assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
@@ -302,7 +324,8 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
+      ret = impl._builder.generate_svc_impl(serviceReq=req.opview,
+                                            record_op=rec.opview)
     # The service implementation generator could have instantiated new modules,
     # so we need to generate them. Don't run the appID indexer since during a
     # pass, the IR can be invalid and the indexers assumes it is valid.
