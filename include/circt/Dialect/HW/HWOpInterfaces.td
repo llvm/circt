@@ -561,7 +561,7 @@ def CombDataflow : OpInterface<"CombDataFlow"> {
      This returns a pair of ground type fieldrefs. The first element is the destination
      and the second is the source of the dependence. The default implementation returns
      an empty list, which implies that the operation is not combinational.}],
-     "SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
+     "llvm::SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
      (ins)>,
   ];
 }

@@ -9,7 +9,7 @@ acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
 
 assert acc.sysinfo().esi_version() == 1
 m = acc.manifest()
-assert m.api_version == 1
+assert m.api_version == 0
 
 for esiType in m.type_table:
   print(f"{esiType}")

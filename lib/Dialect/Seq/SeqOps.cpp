@@ -250,18 +250,16 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  if (threshold) {
+  if (threshold)
     p << "almost_full"
       << " " << threshold.getInt();
-  }
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  if (threshold) {
+  if (threshold)
     p << "almost_empty"
       << " " << threshold.getInt();
-  }
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -547,6 +545,11 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
+  // Don't canonicalize if there is a preset value for now.
+  // TODO: Handle a preset value.
+  if (op.getPresetAttr())
+    return failure();
+
   // If the register has a constant zero reset, drop the reset and reset value
   // altogether.
   if (auto reset = op.getReset()) {
@@ -576,20 +579,14 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     return false;
   };
 
-  if (isConstant()) {
-    if (auto resetValue = op.getResetValue()) {
-      // If the register has a reset value, we can replace it with that.
-      rewriter.replaceOp(op, resetValue);
+  if (isConstant() && !op.getResetValue()) {
+    if (isa<seq::ClockType>(op.getType())) {
+      rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
+          op, seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
     } else {
-      if (isa<seq::ClockType>(op.getType())) {
-        rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
-            op,
-            seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
-      } else {
-        auto constant = rewriter.create<hw::ConstantOp>(
-            op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
-        rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
-      }
+      auto constant = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
     }
     return success();
   }
@@ -652,8 +649,9 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
-  // If the register has a symbol, we can't optimize it away.
-  if (getInnerSymAttr())
+  // If the register has a symbol or preset value, we can't optimize it away.
+  // TODO: Handle a preset value.
+  if (getInnerSymAttr() || getPresetAttr())
     return {};
 
   // If the register is held in permanent reset, replace it with its reset
