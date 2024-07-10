@@ -36,19 +36,6 @@ using namespace verif;
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
-  switch (ce) {
-  case verif::ClockEdge::Pos:
-    return sv::EventControl::AtPosEdge;
-  case verif::ClockEdge::Neg:
-    return sv::EventControl::AtNegEdge;
-  case verif::ClockEdge::Both:
-    return sv::EventControl::AtEdge;
-  }
-  llvm_unreachable("Unknown event control kind");
-}
-
 struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
   using OpConversionPattern<PrintOp>::OpConversionPattern;
 
@@ -142,10 +129,23 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
 };
 
 namespace VerifAssertLikeOp {
+
+static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
+  switch (ce) {
+  case verif::ClockEdge::Pos:
+    return sv::EventControl::AtPosEdge;
+  case verif::ClockEdge::Neg:
+    return sv::EventControl::AtNegEdge;
+  case verif::ClockEdge::Both:
+    return sv::EventControl::AtEdge;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
 // Convert the verif.assert like op that uses an enable, into an equivalent
 // sv.assert_property op that has the negated enable as its disable.
-template <typename TargetOp, typename Op, typename Conversion>
-static LogicalResult convert(Op op, Conversion::OpAdaptor operands,
+template <typename TargetOp, typename Op, typename Adaptor>
+static LogicalResult convert(Op op, Adaptor operands,
                              ConversionPatternRewriter &rewriter) {
   // negate the enable if it exists
   Value enable, wdisable;
@@ -159,8 +159,8 @@ static LogicalResult convert(Op op, Conversion::OpAdaptor operands,
   return success();
 }
 
-template <typename TargetOp, typename Op, typename Conversion>
-static LogicalResult convertClocked(Op op, Conversion::OpAdaptor operands,
+template <typename TargetOp, typename Op, typename Adaptor>
+static LogicalResult convertClocked(Op op, Adaptor operands,
                                     ConversionPatternRewriter &rewriter) {
   // negate the enable if it exists
   Value enable, wdisable;
@@ -168,47 +168,46 @@ static LogicalResult convertClocked(Op op, Conversion::OpAdaptor operands,
     Value disable = rewriter.create<comb::XorOp>(op.getLoc(), enable, enable);
     wdisable = rewriter.create<hw::WireOp>(op.getLoc(), disable);
   }
+  auto eventattr = sv::EventControlAttr::get(
+      op.getContext(), verifToSVEventControl(operands.getEdge()));
 
-  rewriter.replaceOpWithNewOp<TargetOp>(
-      op, operands.getProperty(), verifToSVEventControl(operands.getEvent()),
-      operands.getClock(), wdisable, operands.getLabelAttr());
+  rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), eventattr,
+                                        operands.getClock(), wdisable,
+                                        operands.getLabelAttr());
   return success();
 }
 } // namespace VerifAssertLikeOp
 
-struct VerifAssertConversion : public OpConversionPattern<AssertOp> {
-  using OpConversionPattern<AssertOp>::OpConversionPattern;
+struct VerifAssertConversion : public OpConversionPattern<verif::AssertOp> {
+  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AssertOp op, OpAdaptor operands,
+  matchAndRewrite(verif::AssertOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssertPropertyOp, AssertOp,
-                                      VerifAssertConversion>(op, operands,
-                                                             rewriter);
+    return VerifAssertLikeOp::convert<sv::AssertPropertyOp, verif::AssertOp,
+                                      OpAdaptor>(op, operands, rewriter);
   }
 };
 
-struct VerifAssumeConversion : public OpConversionPattern<AssumeOp> {
-  using OpConversionPattern<AssumeOp>::OpConversionPattern;
+struct VerifAssumeConversion : public OpConversionPattern<verif::AssumeOp> {
+  using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AssumeOp op, OpAdaptor operands,
+  matchAndRewrite(verif::AssumeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssumePropertyOp, AssumeOp,
-                                      VerifAssumeConversion>(op, operands,
-                                                             rewriter);
+    return VerifAssertLikeOp::convert<sv::AssumePropertyOp, verif::AssumeOp,
+                                      OpAdaptor>(op, operands, rewriter);
   }
 };
 
-struct VerifCoverConversion : public OpConversionPattern<CoverOp> {
-  using OpConversionPattern<CoverOp>::OpConversionPattern;
+struct VerifCoverConversion : public OpConversionPattern<verif::CoverOp> {
+  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CoverOp op, OpAdaptor operands,
+  matchAndRewrite(verif::CoverOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::CoverPropertyOp, CoverOp,
-                                      VerifCoverConversion>(op, operands,
-                                                            rewriter);
+    return VerifAssertLikeOp::convert<sv::CoverPropertyOp, verif::CoverOp,
+                                      OpAdaptor>(op, operands, rewriter);
   }
 };
 
@@ -220,8 +219,8 @@ struct VerifClockedAssertConversion
   LogicalResult
   matchAndRewrite(ClockedAssertOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<
-        sv::AssertPropertyOp, ClockedAssertOp, VerifClockedAssertConversion>(
+    return VerifAssertLikeOp::convertClocked<sv::AssertPropertyOp,
+                                             ClockedAssertOp, OpAdaptor>(
         op, operands, rewriter);
   }
 };
@@ -233,20 +232,21 @@ struct VerifClockedAssumeConversion
   LogicalResult
   matchAndRewrite(ClockedAssumeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<
-        sv::AssumePropertyOp, ClockedAssumeOp, VerifClockedAssumeConversion>(
+    return VerifAssertLikeOp::convertClocked<sv::AssumePropertyOp,
+                                             ClockedAssumeOp, OpAdaptor>(
         op, operands, rewriter);
   }
 };
 
-struct VerifClockedCoverConversion : public OpConversionPattern<CoverOp> {
+struct VerifClockedCoverConversion
+    : public OpConversionPattern<ClockedCoverOp> {
   using OpConversionPattern<ClockedCoverOp>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CoverOp op, OpAdaptor operands,
+  matchAndRewrite(ClockedCoverOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<
-        sv::CoverPropertyOp, ClockedCoverOp, VerifClockedCoverConversion>(
+    return VerifAssertLikeOp::convertClocked<sv::CoverPropertyOp,
+                                             ClockedCoverOp, OpAdaptor>(
         op, operands, rewriter);
   }
 };

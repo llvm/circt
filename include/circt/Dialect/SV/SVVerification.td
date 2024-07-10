@@ -162,7 +162,7 @@ def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
 
 
 /// Concurrent verification operations defined by the SV standard.
-class PropertyVerifOp<string mnemonic, list<Trait> traits = []> :
+class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSegments]> :
     SVOp<mnemonic, traits> {
   let arguments = (ins
     I1:$property,
@@ -171,7 +171,7 @@ class PropertyVerifOp<string mnemonic, list<Trait> traits = []> :
     OptionalAttr<StrAttr>:$label);
 
   let assemblyFormat = [{
-    $property (`on` $event^)? ($clock^?) (`disable_iff` $disable^)?
+    $property (`on` $event^)? ($clock^)? (`disable_iff` $disable^)?
     (`label` $label^)? attr-dict
   }];
 
