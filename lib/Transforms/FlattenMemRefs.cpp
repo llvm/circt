@@ -65,7 +65,8 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
     int64_t indexMulFactor = 1;
 
     // Calculate the product of the i'th index and the [0:i-1] shape dims.
-    for (unsigned i = 0; i <= memIdx.index(); ++i) {
+    for (unsigned i = memIdx.index() + 1; i < memrefType.getShape().size();
+         ++i) {
       int64_t dimSize = memrefType.getShape()[i];
       indexMulFactor *= dimSize;
     }
@@ -77,15 +78,15 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
               .create<arith::ConstantOp>(
                   loc, rewriter.getIndexAttr(llvm::Log2_64(indexMulFactor)))
               .getResult();
-      partialIdx =
-          rewriter.create<arith::ShLIOp>(loc, partialIdx, constant).getResult();
+      finalIdx =
+          rewriter.create<arith::ShLIOp>(loc, finalIdx, constant).getResult();
     } else {
       auto constant = rewriter
                           .create<arith::ConstantOp>(
                               loc, rewriter.getIndexAttr(indexMulFactor))
                           .getResult();
-      partialIdx =
-          rewriter.create<arith::MulIOp>(loc, partialIdx, constant).getResult();
+      finalIdx =
+          rewriter.create<arith::MulIOp>(loc, finalIdx, constant).getResult();
     }
 
     // Sum up with the prior lower dimension accessors.
