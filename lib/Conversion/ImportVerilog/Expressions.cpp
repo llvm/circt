@@ -434,7 +434,23 @@ struct RvalueExprVisitor {
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
         return {};
       }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      auto minuend = context.convertRvalueExpression(expr.left());
+      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
+      auto intType = moore::IntType::get(context.getContext(),
+                                         minuendType.getBitSize().value(),
+                                         minuendType.getDomain());
+      auto sliceWidth =
+          expr.right().constant->integer().as<uint64_t>().value() - 1;
+      auto subtraction =
+          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
     } else
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
       lowBit = context.convertRvalueExpression(expr.left());
 
     if (!type || !value || !lowBit)
@@ -653,7 +669,23 @@ struct LvalueExprVisitor {
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
         return {};
       }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      auto minuend = context.convertRvalueExpression(expr.left());
+      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
+      auto intType = moore::IntType::get(context.getContext(),
+                                         minuendType.getBitSize().value(),
+                                         minuendType.getDomain());
+      auto sliceWidth =
+          expr.right().constant->integer().as<uint64_t>().value() - 1;
+      auto subtraction =
+          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
     } else
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
       lowBit = context.convertRvalueExpression(expr.left());
 
     if (!type || !value || !lowBit)
