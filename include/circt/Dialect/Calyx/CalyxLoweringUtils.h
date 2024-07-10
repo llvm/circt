@@ -33,6 +33,8 @@
 namespace circt {
 namespace calyx {
 
+using json = nlohmann::ordered_json;
+
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
                                   SmallVectorImpl<calyx::PortInfo> &inPorts,
