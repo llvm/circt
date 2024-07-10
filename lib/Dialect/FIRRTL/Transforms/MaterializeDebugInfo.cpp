@@ -32,15 +32,14 @@ struct TywavesAnnotation {
   StringAttr typeName;
   ArrayAttr params;
 
-  debug::EnumDefOp enumDef;
-  ArrayAttr fieldsOfEnumType;
+  SmallVector<debug::EnumDefOp> enumDef;
+  SmallVector<ArrayAttr> fieldsOfEnumType;
 
   TywavesAnnotation(StringAttr typeName)
       : TywavesAnnotation(typeName, ArrayAttr()) {}
 
   TywavesAnnotation(StringAttr typeName, ArrayAttr params)
-      : typeName(typeName), params(params), enumDef(debug::EnumDefOp{}),
-        fieldsOfEnumType(ArrayAttr()) {}
+      : typeName(typeName), params(params), enumDef(), fieldsOfEnumType() {}
 
   // Return a reference to the enum def only if the field is present in the
   // fieldsOfEnumType array
@@ -51,12 +50,14 @@ struct TywavesAnnotation {
     // https://github.com/chipsalliance/chisel/blob/95873123328e9e7358f4fd82261875851441f83a/core/src/main/scala/chisel3/experimental/EnumAnnotations.scala#L23-L46
 
     // Case 1: no enumDef
-    if (!enumDef)
+    if (enumDef.empty())
       return debug::EnumDefOp{};
 
     // Case 2: enumDef without fields. Return the definition
-    if (!fieldsOfEnumType || fieldsOfEnumType.size() < 1)
-      return enumDef;
+    // Two subcases: 2.1) The vector is empty; 2.2) the vector has elements but
+    // the element is an empty ArrayAttr
+    if (fieldsOfEnumType.empty() || fieldsOfEnumType[0].empty())
+      return enumDef[0];
 
     // Create path of field from the dots and then remove eventual brackets from
     // each path node
@@ -69,19 +70,21 @@ struct TywavesAnnotation {
     }
 
     // Case 3: enumDef with fields. Find the match with "field"
-    for (const auto &fieldAttr : fieldsOfEnumType)
-      if (const auto &fieldArr = dyn_cast<mlir::ArrayAttr>(fieldAttr)) {
-        auto all_match = fieldArr.size() > 0;
-        for (const auto &[ref, field] : llvm::zip(fieldArr, field_path)) {
-          if (auto currField = dyn_cast<StringAttr>(ref);
-              !field.equals(currField)) {
-            all_match = false;
-            break;
+    for (auto [enumDef, fieldsOfEnumType] :
+         llvm::zip(enumDef, fieldsOfEnumType))
+      for (const auto &fieldAttr : fieldsOfEnumType)
+        if (const auto &fieldArr = dyn_cast<mlir::ArrayAttr>(fieldAttr)) {
+          auto all_match = fieldArr.size() > 0;
+          for (const auto &[ref, field] : llvm::zip(fieldArr, field_path)) {
+            if (auto currField = dyn_cast<StringAttr>(ref);
+                !field.equals(currField)) {
+              all_match = false;
+              break;
+            }
           }
+          if (all_match)
+            return enumDef;
         }
-        if (all_match)
-          return enumDef;
-      }
 
     // No field found
     return debug::EnumDefOp{};
@@ -90,11 +93,14 @@ struct TywavesAnnotation {
   friend llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                        const TywavesAnnotation &tywavesAnno) {
     os << "  TywavesAnnotation { " << "\n\ttypeName: " << tywavesAnno.typeName
-       << "\n\tparams  : " << tywavesAnno.params << "\n\tenumDef  : ";
-    if (tywavesAnno.enumDef)
-      os << tywavesAnno.enumDef << "\n  }";
-    else
-      os << "NULL" << "\n }";
+       << "\n\tparams  : " << tywavesAnno.params << "\n\tenumDef : ";
+
+    for (auto enumDef : tywavesAnno.enumDef)
+      if (enumDef)
+        os << enumDef << "\n\t\t";
+      else
+        os << "NULL" << "\n\t";
+    os << "\n }";
     return os;
   }
 };
@@ -211,8 +217,8 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
 
   auto foundOneTywavesAnnoClass = false;
   std::optional<TywavesAnnotation> result = std::nullopt;
-  auto enumDef = debug::EnumDefOp{};
-  auto fieldsOfEnumType = ArrayAttr{};
+  SmallVector<debug::EnumDefOp> enumDef;
+  SmallVector<ArrayAttr> fieldsOfEnumType;
   // 1. Filter tywaves annotations
   for (const auto &annoAttr : annoList)
     if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr)) {
@@ -276,30 +282,29 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
       if (isGround) {
         if (annoDict.getAs<mlir::StringAttr>("class") ==
             enumComponentAnnoClass) {
-          if (enumDef) {
+          if (!enumDef.empty()) {
             mlir::emitWarning(loc) << "Multiple enumComponent annotations "
                                       "found for the same variable\n";
           }
 
           auto enumTypeName = annoDict.getAs<mlir::StringAttr>("enumTypeName");
-          enumDef = this->enumDefCache.lookup(enumTypeName);
+          enumDef.push_back(this->enumDefCache.lookup(enumTypeName));
           LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict << "\n");
         } else if (annoDict.getAs<mlir::StringAttr>("class") ==
                    enumVecAnnoClass) {
-          if (enumDef) {
-            mlir::emitWarning(loc) << "Multiple enumVec annotations "
-                                      "found for the same variable\n";
-          }
+          // An element may have multiple enum vec anno classes
           auto enumTypeName = annoDict.getAs<mlir::StringAttr>("typeName");
-          fieldsOfEnumType = annoDict.getAs<mlir::ArrayAttr>("fields");
-          enumDef = this->enumDefCache.lookup(enumTypeName);
+          enumDef.push_back(this->enumDefCache.lookup(enumTypeName));
+          auto fieldArr = annoDict.getAs<mlir::ArrayAttr>("fields");
+          if (!fieldArr.empty())
+            fieldsOfEnumType.push_back(fieldArr);
           LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict << "\n");
         }
       }
     }
 
   // Add the enumDefinition to the result
-  if (enumDef) {
+  if (!enumDef.empty() && enumDef[0]) {
     if (!result)
       result = TywavesAnnotation(StringAttr{});
     result->enumDef = enumDef;
