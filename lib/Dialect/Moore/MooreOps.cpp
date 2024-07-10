@@ -653,7 +653,7 @@ LogicalResult StructInjectOp::verify() {
 void StructInjectOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printOperand(getInput());
-  p << " , " << getFieldNameAttr() << " , ";
+  p << ", " << getFieldNameAttr() << ", ";
   p.printOperand(getNewValue());
   p << " : " << getInput().getType();
 }
