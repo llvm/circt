@@ -163,11 +163,11 @@ def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
 
 /// Concurrent verification operations defined by the SV standard.
 class PropertyVerifOp<string mnemonic, list<Trait> traits = []> :
-    SVOp<mnemonic, [NoSubstitutionsIfNoMessage] # traits> {
+    SVOp<mnemonic, traits> {
   let arguments = (ins
     I1:$property,
     OptionalAttr<EventControlAttr>:$event, Optional<I1>:$clock, 
-    Optional<I1>:$disable
+    Optional<I1>:$disable,
     OptionalAttr<StrAttr>:$label);
 
   let assemblyFormat = [{
