@@ -944,9 +944,8 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
 
-    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %struct0, "a" : <struct<{a: i32, b: i32}>> -> <i32>
-    // CHECK: [[TMP2:%.+]] = moore.read %a : i32
-    // CHECK: moore.blocking_assign [[TMP1]], [[TMP2]] : i32
+    // CHECK: [[TMP1:%.+]] = moore.read %a : i32
+    // CHECK: moore.struct_inject %struct0, "a", [[TMP1]] : <struct<{a: i32, b: i32}>> i32
     struct0.a = a;
 
     // CHECK: [[TMP2:%.+]]  = moore.struct_extract %struct0, "b" : <struct<{a: i32, b: i32}>> -> i32

@@ -1050,9 +1050,7 @@ def StructExtractRefOp : MooreOp<"struct_extract_ref", [
   let hasVerifier = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject", [
-  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
-]> {
+def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
   let summary = "Struct Field operation";
   let description = [{
     A structure can be assigned as a whole and passed to
@@ -1076,7 +1074,7 @@ def StructInjectOp : MooreOp<"struct_inject", [
     ```
     See IEEE 1800-2017 § 7.2. "Assigning to structures".
   }];
-  let arguments = (ins  Arg<RefType, "", [MemWrite]>:$input, StrAttr:$fieldName,
+  let arguments = (ins  RefType:$input, StrAttr:$fieldName,
   UnpackedType:$newValue);
   let assemblyFormat = [{
     $input `,` $fieldName `,` $newValue

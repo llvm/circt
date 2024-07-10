@@ -33,23 +33,23 @@ moore.procedure always_comb {
     %0 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
     %1 = moore.constant 1 : i32
     %2 = moore.conversion %1 : !moore.i32 -> !moore.i32
-    moore.struct_inject %ii, "a", %2 : <struct<{a: i32, b: i32}>> i32
+    moore.blocking_assign %0, %2 : i32
     %3 = moore.struct_extract_ref %ii, "b" : <struct<{a: i32, b: i32}>> -> <i32>
     %4 = moore.constant 4 : i32
     %5 = moore.conversion %4 : !moore.i32 -> !moore.i32
-    moore.struct_inject %ii, "b", %5 : <struct<{a: i32, b: i32}>> i32
+    moore.blocking_assign %3, %5 : i32
     %6 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
     %7 = moore.read %x : i32
     %8 = moore.constant 1 : i32
     %9 = moore.add %7, %8 : i32
-    moore.struct_inject %ii, "a", %9 : <struct<{a: i32, b: i32}>> i32
+    moore.blocking_assign %6, %9 : i32
     %10 = moore.struct_extract %ii, "a" : <struct<{a: i32, b: i32}>> -> i32
     moore.blocking_assign %y, %10 : i32
     %11 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
     %12 = moore.struct_extract %ii, "a" : <struct<{a: i32, b: i32}>> -> i32
     %13 = moore.constant 1 : i32
     %14 = moore.add %12, %13 : i32
-    moore.struct_inject %ii, "a", %14 : <struct<{a: i32, b: i32}>> i32
+    moore.blocking_assign %11, %14 : i32
     %15 = moore.struct_extract %ii, "a" : <struct<{a: i32, b: i32}>> -> i32
     moore.blocking_assign %z, %15 : i32
 }

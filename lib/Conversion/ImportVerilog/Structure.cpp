@@ -322,6 +322,17 @@ struct MemberVisitor {
     if (!lhs || !rhs)
       return failure();
 
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
+      if (isa<moore::SVModuleOp>(
+              refOp->getOperand(0).getDefiningOp()->getParentOp())) {
+        refOp.getInputMutable();
+        refOp->erase();
+        builder.create<moore::StructInjectOp>(loc, refOp->getOperand(0),
+                                              refOp.getFieldNameAttr(), rhs);
+        return success();
+      }
+    }
+
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
   }

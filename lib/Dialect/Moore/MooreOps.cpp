@@ -650,27 +650,6 @@ LogicalResult StructInjectOp::verify() {
       });
 }
 
-bool StructInjectOp::canRewire(const DestructurableMemorySlot &slot,
-                               SmallPtrSetImpl<Attribute> &usedIndices,
-                               SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                               const DataLayout &dataLayout) {
-  if (slot.ptr != getInput() || getNewValue() == slot.ptr)
-    return false;
-  usedIndices.insert(getFieldNameAttr());
-  return slot.elementPtrs.contains(getFieldNameAttr());
-}
-
-DeletionKind StructInjectOp::rewire(const DestructurableMemorySlot &slot,
-                                    DenseMap<Attribute, MemorySlot> &subslots,
-                                    OpBuilder &builder,
-                                    const DataLayout &dataLayout) {
-  auto index = getFieldNameAttr();
-  const auto &memorySlot = subslots.at(index);
-  builder.create<BlockingAssignOp>(getLoc(), memorySlot.ptr, getNewValue());
-  getInputMutable().drop();
-  return DeletionKind::Delete;
-}
-
 //===----------------------------------------------------------------------===//
 // UnionCreateOp
 //===----------------------------------------------------------------------===//
