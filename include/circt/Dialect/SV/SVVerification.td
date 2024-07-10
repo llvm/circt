@@ -180,11 +180,11 @@ class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSeg
     OpBuilder<(ins "mlir::Value":$property,
       "mlir::Value":$disable,
       StrAttr.storageType:$label),
-      [{ build(odsBuilder, odsState, property, EventControllAttr{}, Value(), disable, label); }]>,
+      [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, label); }]>,
     // no clock or event or label
     OpBuilder<(ins "mlir::Value":$property,
       "mlir::Value":$disable),
-      [{ build(odsBuilder, odsState, property, EventControllAttr{}, Value(), disable, StringAttr{}); }]>
+      [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, StringAttr{}); }]>
   ];
 }
 

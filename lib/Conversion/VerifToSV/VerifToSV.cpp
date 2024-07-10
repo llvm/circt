@@ -184,8 +184,8 @@ struct VerifAssertConversion : public OpConversionPattern<verif::AssertOp> {
   LogicalResult
   matchAndRewrite(verif::AssertOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssertPropertyOp, verif::AssertOp,
-                                      OpAdaptor>(op, operands, rewriter);
+    return VerifAssertLikeOp::convert<sv::AssertPropertyOp>(op, operands,
+                                                            rewriter);
   }
 };
 
@@ -195,8 +195,8 @@ struct VerifAssumeConversion : public OpConversionPattern<verif::AssumeOp> {
   LogicalResult
   matchAndRewrite(verif::AssumeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssumePropertyOp, verif::AssumeOp,
-                                      OpAdaptor>(op, operands, rewriter);
+    return VerifAssertLikeOp::convert<sv::AssumePropertyOp>(op, operands,
+                                                            rewriter);
   }
 };
 
@@ -206,8 +206,8 @@ struct VerifCoverConversion : public OpConversionPattern<verif::CoverOp> {
   LogicalResult
   matchAndRewrite(verif::CoverOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::CoverPropertyOp, verif::CoverOp,
-                                      OpAdaptor>(op, operands, rewriter);
+    return VerifAssertLikeOp::convert<sv::CoverPropertyOp>(op, operands,
+                                                           rewriter);
   }
 };
 
@@ -219,9 +219,8 @@ struct VerifClockedAssertConversion
   LogicalResult
   matchAndRewrite(ClockedAssertOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::AssertPropertyOp,
-                                             ClockedAssertOp, OpAdaptor>(
-        op, operands, rewriter);
+    return VerifAssertLikeOp::convertClocked<sv::AssertPropertyOp>(op, operands,
+                                                                   rewriter);
   }
 };
 
@@ -232,9 +231,8 @@ struct VerifClockedAssumeConversion
   LogicalResult
   matchAndRewrite(ClockedAssumeOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::AssumePropertyOp,
-                                             ClockedAssumeOp, OpAdaptor>(
-        op, operands, rewriter);
+    return VerifAssertLikeOp::convertClocked<sv::AssumePropertyOp>(op, operands,
+                                                                   rewriter);
   }
 };
 
@@ -245,9 +243,8 @@ struct VerifClockedCoverConversion
   LogicalResult
   matchAndRewrite(ClockedCoverOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::CoverPropertyOp,
-                                             ClockedCoverOp, OpAdaptor>(
-        op, operands, rewriter);
+    return VerifAssertLikeOp::convertClocked<sv::CoverPropertyOp>(op, operands,
+                                                                  rewriter);
   }
 };
 
