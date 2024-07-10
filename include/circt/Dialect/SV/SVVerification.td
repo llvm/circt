@@ -159,3 +159,58 @@ def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
     section 16.5 of the SystemVerilog 2017 specification.
   }];
 }
+
+
+/// Concurrent verification operations defined by the SV standard.
+class PropertyVerifOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, [NoSubstitutionsIfNoMessage] # traits> {
+  let arguments = (ins
+    I1:$property,
+    OptionalAttr<EventControlAttr>:$event, Optional<I1>:$clock, 
+    Optional<I1>:$disable
+    OptionalAttr<StrAttr>:$label);
+
+  let assemblyFormat = [{
+    $property (`on` $event^)? ($clock^?) (`disable_iff` $disable^)?
+    (`label` $label^)? attr-dict
+  }];
+
+  let builders = [
+    // no clock or event
+    OpBuilder<(ins "mlir::Value":$property,
+      "mlir::Value":$disable,
+      StrAttr.storageType:$label),
+      [{ build(odsBuilder, odsState, property, EventControllAttr{}, Value(), disable, label); }]>,
+    // no clock or event or label
+    OpBuilder<(ins "mlir::Value":$property,
+      "mlir::Value":$disable),
+      [{ build(odsBuilder, odsState, property, EventControllAttr{}, Value(), disable, StringAttr{}); }]>
+  ];
+}
+
+def AssertPropertyOp : PropertyVerifOp<"assert_property"> {
+  let summary = "property assertion -- can be disbled and clocked";
+  let description = [{
+    Assert that a given SVA-style property holds. This is only checked when 
+    the disable signal is low and a clock event occurs. This is analogous to 
+    the verif.assert operation, but with a flipped enable polarity.
+  }];
+}
+
+def AssumePropertyOp : PropertyVerifOp<"assume_property"> {
+  let summary = "property assumption -- can be disbled and clocked";
+  let description = [{
+    Assume that a given SVA-style property holds. This is only considered when 
+    the disable signal is low and a clock event occurs. This is analogous to 
+    the verif.assume operation, but with a flipped enable polarity.
+  }];
+}
+
+def CoverPropertyOp : PropertyVerifOp<"cover_property"> {
+  let summary = "property cover point -- can be disbled and clocked";
+  let description = [{
+    Cover when a given SVA-style property holds. This is only checked when 
+    the disable signal is low and a clock event occurs. This is analogous to 
+    the verif.cover operation, but with a flipped enable polarity.
+  }];
+}
