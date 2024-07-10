@@ -1467,11 +1467,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getNonClockValue(Value v);
 
   void addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                        ::ResetType resetStyle, sv::EventControl resetEdge,
+                        sv::ResetType resetStyle, sv::EventControl resetEdge,
                         Value reset, std::function<void(void)> body = {},
                         std::function<void(void)> resetBody = {});
   void addToAlwaysBlock(Value clock, std::function<void(void)> body = {}) {
-    addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, ::ResetType(),
+    addToAlwaysBlock(sv::EventControl::AtPosEdge, clock, sv::ResetType(),
                      sv::EventControl(), Value(), body,
                      std::function<void(void)>());
   }
@@ -1736,7 +1736,7 @@ private:
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
-                                   ::ResetType, sv::EventControl, Value>;
+                                   sv::ResetType, sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
@@ -2511,7 +2511,7 @@ Value FIRRTLLowering::getNonClockValue(Value v) {
 }
 
 void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
-                                      ::ResetType resetStyle,
+                                      sv::ResetType resetStyle,
                                       sv::EventControl resetEdge, Value reset,
                                       std::function<void(void)> body,
                                       std::function<void(void)> resetBody) {
@@ -2523,7 +2523,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
 
   if (!alwaysOp) {
     if (reset) {
-      assert(resetStyle != ::ResetType::NoReset);
+      assert(resetStyle != sv::ResetType::NoReset);
       // Here, we want to create the folloing structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
@@ -2542,7 +2542,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
-      if (resetStyle == ::ResetType::AsyncReset) {
+      if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
 
