@@ -33,18 +33,68 @@ struct TywavesAnnotation {
   ArrayAttr params;
 
   debug::EnumDefOp enumDef;
+  ArrayAttr fieldsOfEnumType;
 
   TywavesAnnotation(StringAttr typeName)
       : TywavesAnnotation(typeName, ArrayAttr()) {}
 
   TywavesAnnotation(StringAttr typeName, ArrayAttr params)
-      : typeName(typeName), params(params) {}
+      : typeName(typeName), params(params), enumDef(debug::EnumDefOp{}),
+        fieldsOfEnumType(ArrayAttr()) {}
 
+  // Return a reference to the enum def only if the field is present in the
+  // fieldsOfEnumType array
+  debug::EnumDefOp getEnumDef(const StringRef field,
+                              bool checkField = false) const {
+
+    // The fields attribute is non-empty when the vector contains a bundle:
+    // https://github.com/chipsalliance/chisel/blob/95873123328e9e7358f4fd82261875851441f83a/core/src/main/scala/chisel3/experimental/EnumAnnotations.scala#L23-L46
+
+    // Case 1: no enumDef
+    if (!enumDef)
+      return debug::EnumDefOp{};
+
+    // Case 2: enumDef without fields. Return the definition
+    if (!fieldsOfEnumType || fieldsOfEnumType.size() < 1)
+      return enumDef;
+
+    // Create path of field from the dots and then remove eventual brackets from
+    // each path node
+    SmallVector<StringRef> field_path;
+    auto nodes = field.split(".").second.split(".");
+    while (nodes.first != "") {
+      auto node = nodes.first;
+      nodes = nodes.second.split(".");
+      field_path.push_back(node.split("[").first);
+    }
+
+    // Case 3: enumDef with fields. Find the match with "field"
+    for (const auto &fieldAttr : fieldsOfEnumType)
+      if (const auto &fieldArr = dyn_cast<mlir::ArrayAttr>(fieldAttr)) {
+        auto all_match = fieldArr.size() > 0;
+        for (const auto &[ref, field] : llvm::zip(fieldArr, field_path)) {
+          if (auto currField = dyn_cast<StringAttr>(ref);
+              !field.equals(currField)) {
+            all_match = false;
+            break;
+          }
+        }
+        if (all_match)
+          return enumDef;
+      }
+
+    // No field found
+    return debug::EnumDefOp{};
+  }
   // Define the << operator (debug)
   friend llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                        const TywavesAnnotation &tywavesAnno) {
     os << "  TywavesAnnotation { " << "\n\ttypeName: " << tywavesAnno.typeName
-       << "\n\tparams  : " << tywavesAnno.params << "\n  }";
+       << "\n\tparams  : " << tywavesAnno.params << "\n\tenumDef  : ";
+    if (tywavesAnno.enumDef)
+      os << tywavesAnno.enumDef << "\n  }";
+    else
+      os << "NULL" << "\n }";
     return os;
   }
 };
@@ -60,7 +110,8 @@ struct MaterializeDebugInfoPass
   std::optional<TywavesAnnotation> getTywavesInfo(Operation *op);
 
   std::optional<TywavesAnnotation>
-  getTywavesInfo(const mlir::ArrayAttr &annoList, const mlir::Location &loc);
+  getTywavesInfo(const mlir::ArrayAttr &annoList, const mlir::Location &loc,
+                 const bool isGround);
 
   std::pair<Value, std::optional<TywavesAnnotation>>
   convertToDebugAggregates(OpBuilder &builder, Value value, StringAttr name,
@@ -86,7 +137,7 @@ mlir::ArrayAttr getAnnotationList(Operation *op) {
 /// function returns the annotation (if any) from the input list that has the
 /// same fieldID passed as argument.
 /// This helps to find the annotation associated to a subfield target.
-mlir::ArrayAttr
+SmallVector<Attribute>
 filterAnnotationsByCirctFieldID(OpBuilder &builder, int fieldId,
                                 const mlir::ArrayAttr &annoList) {
 
@@ -103,15 +154,12 @@ filterAnnotationsByCirctFieldID(OpBuilder &builder, int fieldId,
           filtered.push_back(annoAttr);
         }
 
-  auto result = builder.getArrayAttr(filtered);
-
   // Debug
   LLVM_DEBUG(llvm::dbgs() << " ============================================\n");
   LLVM_DEBUG(llvm::dbgs() << "  - Filtering fieldId: " << fieldId << "\n");
-  LLVM_DEBUG(llvm::dbgs() << "  - Filtered anno list: " << result << "\n");
   LLVM_DEBUG(llvm::dbgs() << " ============================================\n");
 
-  return result;
+  return filtered;
 }
 
 /// Return the total numer of subfields nested into a FIRRTL type.
@@ -141,7 +189,7 @@ int getNumSubFields(const FIRRTLBaseType &type) {
 std::optional<TywavesAnnotation>
 MaterializeDebugInfoPass::getTywavesInfo(Operation *op) {
   if (auto annoListArray = annohelper::getAnnotationList(op))
-    return getTywavesInfo(annoListArray, op->getLoc());
+    return getTywavesInfo(annoListArray, op->getLoc(), false);
 
   // No annotation found
   return std::nullopt;
@@ -158,12 +206,13 @@ MaterializeDebugInfoPass::getTywavesInfo(Operation *op) {
 /// @param loc The location of the target operation. For error report.
 std::optional<TywavesAnnotation>
 MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
-                                         const mlir::Location &loc) {
+                                         const mlir::Location &loc,
+                                         const bool isGround) {
 
   auto foundOneTywavesAnnoClass = false;
   std::optional<TywavesAnnotation> result = std::nullopt;
-  debug::EnumDefOp const *enumDef = nullptr;
-
+  auto enumDef = debug::EnumDefOp{};
+  auto fieldsOfEnumType = ArrayAttr{};
   // 1. Filter tywaves annotations
   for (const auto &annoAttr : annoList)
     if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr)) {
@@ -224,21 +273,38 @@ MaterializeDebugInfoPass::getTywavesInfo(const mlir::ArrayAttr &annoList,
         }
       }
       // Add the enum def if any
-      if (annoDict.getAs<mlir::StringAttr>("class") == enumComponentAnnoClass) {
-        if (enumDef != nullptr) {
-          mlir::emitWarning(loc) << "Multiple enumComponent annotations "
-                                    "found for the same variable\n";
-        }
+      if (isGround) {
+        if (annoDict.getAs<mlir::StringAttr>("class") ==
+            enumComponentAnnoClass) {
+          if (enumDef) {
+            mlir::emitWarning(loc) << "Multiple enumComponent annotations "
+                                      "found for the same variable\n";
+          }
 
-        auto enumTypeName = annoDict.getAs<mlir::StringAttr>("enumTypeName");
-        auto _enumDef = this->enumDefCache.lookup(enumTypeName);
-        enumDef = &_enumDef;
-        LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict);
+          auto enumTypeName = annoDict.getAs<mlir::StringAttr>("enumTypeName");
+          enumDef = this->enumDefCache.lookup(enumTypeName);
+          LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict << "\n");
+        } else if (annoDict.getAs<mlir::StringAttr>("class") ==
+                   enumVecAnnoClass) {
+          if (enumDef) {
+            mlir::emitWarning(loc) << "Multiple enumVec annotations "
+                                      "found for the same variable\n";
+          }
+          auto enumTypeName = annoDict.getAs<mlir::StringAttr>("typeName");
+          fieldsOfEnumType = annoDict.getAs<mlir::ArrayAttr>("fields");
+          enumDef = this->enumDefCache.lookup(enumTypeName);
+          LLVM_DEBUG(llvm::dbgs() << "  - Lookup: " << annoDict << "\n");
+        }
       }
     }
 
-  if (enumDef)
-    result->enumDef = *enumDef;
+  // Add the enumDefinition to the result
+  if (enumDef) {
+    if (!result)
+      result = TywavesAnnotation(StringAttr{});
+    result->enumDef = enumDef;
+    result->fieldsOfEnumType = fieldsOfEnumType;
+  }
   // TODO: use this control outside the function
   // if (!result) {
   //   mlir::emitError(loc) << "Missing expected tywaves annotation for "
@@ -296,7 +362,10 @@ void MaterializeDebugInfoPass::runOnOperation() {
     // LowerSignatures transfomation
     port.annotations.removePortAnnotations(
         module, [&](int portId, Annotation anno) -> bool {
-          return anno.getClass().equals(tywavesAnnoClass);
+          auto classAnno = anno.getClass();
+          return classAnno.equals(tywavesAnnoClass) ||
+                 classAnno.equals(enumComponentAnnoClass) ||
+                 classAnno.equals(enumVecAnnoClass);
         });
   }
 
@@ -324,7 +393,7 @@ void MaterializeDebugInfoPass::materializeModuleInfo(
     const mlir::ArrayAttr &annoList) {
 
   // Get the tywaves annotation for the module
-  if (auto tywavesAnno = getTywavesInfo(annoList, loc)) {
+  if (auto tywavesAnno = getTywavesInfo(annoList, loc, false)) {
     // Create the module info
     builder.create<debug::ModuleInfoOp>(loc, tywavesAnno->typeName,
                                         /*params=*/tywavesAnno->params);
@@ -348,9 +417,11 @@ void MaterializeDebugInfoPass::materializeVariable(
 
     auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
     auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr{};
-    auto enumDef = tywavesAnno
-                       ? (tywavesAnno->enumDef ? tywavesAnno->enumDef : Value{})
-                       : Value{};
+    auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
+                                      ? tywavesAnno->getEnumDef(name)
+                                      : Value{})
+                               : Value{};
+
     builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue,
                                       /*typeName=*/typeName,
                                       /*params=*/params,
@@ -373,13 +444,21 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
     const mlir::ArrayAttr &annoList, const mlir::ArrayAttr &maybeSingleAnno,
     unsigned int circtSubFieldId) {
 
+  // Establish if the variable is ground or not
+  auto isGround =
+      FIRRTLTypeSwitch<Type, bool>(value.getType())
+          .Case<BundleType, FVectorType>([](auto type) { return false; })
+          .Case<FIRRTLBaseType>([](auto type) { return true; })
+          .Default([](auto type) { return false; });
+
   // 1. Extract the tywaves annotation from the current value
   std::optional<TywavesAnnotation> tywavesAnno = std::nullopt;
   if (maybeSingleAnno && !maybeSingleAnno.empty()) {
     // If maybeSingleAnno is not empty, it means that the current value may be
     // part of an aggregate, and maybeSingleAnno has been filtered during a
     // previous recursive call.
-    tywavesAnno = getTywavesInfo(maybeSingleAnno, value.getLoc());
+    tywavesAnno = getTywavesInfo(maybeSingleAnno, value.getLoc(), isGround);
+
   } else {
     // If maybeSingleAnno is empty or not defined, it means that the current
     // value is either a ground type or the aggregate itself, for example:
@@ -393,8 +472,8 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
           filteredAnnoList.push_back(annoAttr);
       }
 
-    tywavesAnno =
-        getTywavesInfo(builder.getArrayAttr(filteredAnnoList), value.getLoc());
+    tywavesAnno = getTywavesInfo(builder.getArrayAttr(filteredAnnoList),
+                                 value.getLoc(), isGround);
   }
 
   LLVM_DEBUG(llvm::dbgs() << "  - CURRENT VALUE: " << value << "\n");
@@ -404,9 +483,10 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
   // 2. Extract the source language type information
   const auto typeName = tywavesAnno ? tywavesAnno->typeName : StringAttr{};
   const auto params = tywavesAnno ? tywavesAnno->params : ArrayAttr();
-  const auto enumDef =
-      tywavesAnno ? (tywavesAnno->enumDef ? tywavesAnno->enumDef : Value{})
-                  : Value{};
+  const auto enumDef = tywavesAnno ? (tywavesAnno->getEnumDef(name)
+                                          ? tywavesAnno->getEnumDef(name)
+                                          : Value{})
+                                   : Value{};
   // This enables the creation of a SubFieldOp for the current value (only if
   // child of an aggregate and tywavesAnno is not null/none)
   auto isChildOfAggregate = circtSubFieldId && tywavesAnno;
@@ -428,6 +508,33 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
     return result;
   };
 
+  SmallVector<Attribute> enumVecAnno;
+  // Eventually process the enumVecAnnotation: it is defined only for
+  // the declaration of the vector and not for each subfield
+  for (const auto &annoAttr : annoList)
+    if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr);
+        annoDict.getAs<mlir::StringAttr>("class") == enumVecAnnoClass) {
+
+      if (const auto &idx = annoDict.getAs<IntegerAttr>("circt.fieldID")) {
+        if (idx && idx.getInt() == circtSubFieldId)
+          enumVecAnno.push_back(annoAttr);
+      } else {
+        enumVecAnno.push_back(annoAttr);
+      }
+    }
+
+  auto generateFinalFilteredAnno =
+      [&builder, &enumVecAnno](const unsigned int circtFieldId,
+                               const ArrayAttr &annoList) {
+        auto _filteredAnnoList = annohelper::filterAnnotationsByCirctFieldID(
+            builder, circtFieldId, annoList);
+        // Aggregate enum anno and tywaves anno for the subfield
+        for (const auto e : enumVecAnno) {
+          _filteredAnnoList.push_back(e);
+        }
+        return builder.getArrayAttr(_filteredAnnoList);
+      };
+
   auto result =
       FIRRTLTypeSwitch<Type, Value>(value.getType())
           .Case<BundleType>([&](auto type) {
@@ -443,8 +550,8 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
               // Filter the annotation list through the index:
               // circtSubFieldId == index
               auto filteredAnnoList =
-                  annohelper::filterAnnotationsByCirctFieldID(
-                      builder, circtSubFieldId + 1, annoList);
+                  generateFinalFilteredAnno(circtSubFieldId + 1, annoList);
+
               // TODO: Now I'm using the full name, I may want just the
               // variable name, since I can build it while inspecting the
               // hierarchy of the elements
@@ -485,12 +592,12 @@ MaterializeDebugInfoPass::convertToDebugAggregates(
               // circtSubFieldId == index
               if (index == 0)
                 circtSubFieldId++;
+
               auto filteredAnnoList =
-                  annohelper::filterAnnotationsByCirctFieldID(
-                      builder, circtSubFieldId, annoList);
+                  generateFinalFilteredAnno(circtSubFieldId, annoList);
+
               auto completeName =
                   name.getValue() + "[" + std::to_string(index) + "]";
-
               if (auto dbgValue =
                       convertToDebugAggregates(
                           builder, subOp, builder.getStringAttr(completeName),

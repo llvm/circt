@@ -490,14 +490,15 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
      {stdResolve, applyWithoutTarget<true, MemOp, CombMemOp>}},
     {sitestBlackBoxAnnoClass, NoTargetAnnotation},
     // TODO: check other operations
-    {enumComponentAnnoClass,
-     {stdResolve,
-      applyWithoutTarget<true, true, WireOp, NodeOp, RegOp, RegResetOp, MemOp,
-                         CombMemOp, MemoryPortOp, SeqMemOp>}},
+    {enumComponentAnnoClass, {stdResolve, applyTywaves}},
+    // applyWithoutTarget<true, true, WireOp, NodeOp, RegOp, RegResetOp, MemOp,
+    //                    CombMemOp, MemoryPortOp, SeqMemOp>}},
     {enumDefAnnoClass, NoTargetAnnotation},
     // TODO: same as one of the other but
     // for a vector of enums (Check it)
-    {enumVecAnnoClass, {noResolve, drop}},
+    {enumVecAnnoClass, {stdResolve, applyTywaves}},
+    // applyWithoutTarget<true, true, WireOp, NodeOp, RegOp, RegResetOp, MemOp,
+    //                    CombMemOp, MemoryPortOp, SeqMemOp>}},
     {forceNameAnnoClass,
      {stdResolve, applyWithoutTarget<true, FModuleOp, FExtModuleOp>}},
     {flattenAnnoClass, {stdResolve, applyWithoutTarget<false, FModuleOp>}},

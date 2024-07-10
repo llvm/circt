@@ -111,7 +111,7 @@ def SubFieldOp : DebugOp<"subfield"> {
   );
   let results = (outs SubFieldType:$result);
   let assemblyFormat = [{
-    $name `,` $value (`enumDef` $enumDef^)? attr-dict `:` type($value)
+    $name `,` $value attr-dict (`enumDef` $enumDef^)? `:` type($value)
   }];
 }
 
