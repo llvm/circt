@@ -34,15 +34,15 @@ module Dedup;
   NestedB insD(.a(a), .b(b), .c(c));
   // CHECK-LABEL: moore.instance "insE" @NestedB_1
   NestedB #(8) insE(.c(c));
-  // CHECK-LABEL: moore.module @NestedA_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-  // CHECK-LABEL: moore.module @NestedB_1(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-  // CHECK-LABEL: moore.module @NestedB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module private @NestedA_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module private @NestedB_1(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.module private @NestedB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA() {
 // CHECK:         moore.instance "NestedB" @NestedB_2
 // CHECK:       }
-// CHECK-LABEL: moore.module private @NestedB_2(){
+// CHECK-LABEL: moore.module private @NestedB_2() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
 // CHECK-LABEL: moore.module private @NestedC() {
