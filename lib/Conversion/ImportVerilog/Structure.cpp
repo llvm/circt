@@ -198,10 +198,9 @@ struct MemberVisitor {
                          : context.convertLvalueExpression(*expr);
         if (!value)
           return failure();
-        port = moduleLowering->portsBySyntaxNode.contains(con->port.getSyntax())
-                   ? moduleLowering->portsBySyntaxNode.lookup(
-                         con->port.getSyntax())
-                   : port;
+        if (auto *existingPort =
+                moduleLowering->portsBySyntaxNode.lookup(con->port.getSyntax()))
+          port = existingPort;
         portValues.insert({port, value});
         continue;
       }
@@ -217,11 +216,9 @@ struct MemberVisitor {
         unsigned offset = 0;
         auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
-          port =
-              moduleLowering->portsBySyntaxNode.contains(con->port.getSyntax())
-                  ? moduleLowering->portsBySyntaxNode.lookup(
-                        con->port.getSyntax())
-                  : port;
+          if (auto *existingPort = moduleLowering->portsBySyntaxNode.lookup(
+                  con->port.getSyntax()))
+            port = existingPort;
           unsigned width = port->getType().getBitWidth();
           auto index = builder.create<moore::ConstantOp>(loc, i32, offset);
           auto sliceType = context.convertType(port->getType());
