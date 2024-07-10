@@ -723,9 +723,13 @@ void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
   if (!sourceLangTypeInfo.empty())
     json.attribute("source_lang_type_info", std::move(sourceLangTypeInfo));
 
-  // Emit the reference to the enum if any
+  // Emit the reference to the enum if any, either from the emitted type (for
+  // vectors the enum def is in the fields, so in the emitted but for other it
+  // is present in the variable itself) or in the variable definition itself
   if (variable->enumDefRef)
     json.attribute("enum_def_ref", *variable->enumDefRef);
+  else if (emitted.type.enumDefRef)
+    json.attribute("enum_def_ref", emitted.type.enumDefRef.value());
 
   json.objectEnd();
 }
