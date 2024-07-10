@@ -70,8 +70,10 @@ struct Context {
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation(slang::ast::Compilation &compilation);
-  ModuleLowering *
-  convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
+  ModuleLowering *convertModuleHeader(
+      const slang::ast::InstanceBodySymbol *module,
+      std::optional<slang::span<const slang::ast::PortConnection *const>>
+          portConnections = std::nullopt);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
 
   // Convert a statement AST node to MLIR ops.

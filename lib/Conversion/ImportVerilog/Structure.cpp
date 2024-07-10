@@ -110,7 +110,8 @@ struct MemberVisitor {
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
 
-    auto *moduleLowering = context.convertModuleHeader(&instNode.body);
+    auto *moduleLowering = context.convertModuleHeader(
+        &instNode.body, instNode.getPortConnections());
     if (!moduleLowering)
       return failure();
     auto module = moduleLowering->op;
@@ -133,12 +134,9 @@ struct MemberVisitor {
       // connection for the port.
       if (!expr) {
         auto *port = con->port.as_if<PortSymbol>();
-        for (const auto &existPort : moduleLowering->ports)
-          if (port->name == existPort.ast.name) {
-            moduleLowering->portsBySyntaxNode.insert(
-                {con->port.getSyntax(), &existPort.ast});
-            port = &existPort.ast;
-          }
+        if (auto *existingPort =
+                moduleLowering->portsBySyntaxNode.lookup(port->getSyntax()))
+          port = existingPort;
 
         switch (port->direction) {
         case slang::ast::ArgumentDirection::In: {
@@ -472,8 +470,10 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
 /// the op to the worklist of module bodies to be lowered. This acts like a
 /// module "declaration", allowing instances to already refer to a module even
 /// before its body has been lowered.
-ModuleLowering *
-Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
+ModuleLowering *Context::convertModuleHeader(
+    const slang::ast::InstanceBodySymbol *module,
+    std::optional<slang::span<const slang::ast::PortConnection *const>>
+        portConnections) {
   using slang::ast::ArgumentDirection;
   using slang::ast::MultiPortSymbol;
   using slang::ast::ParameterSymbol;
@@ -485,10 +485,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // If there is already exist a module that has the same name with this
   // module ,has the same parent scope and has the same parameters we can
   // define this module is a duplicate module
-  for (auto const &existModule : modules) {
+  for (auto const &existingModule : modules) {
     if (module->getDeclaringDefinition() ==
-        existModule.getFirst()->getDeclaringDefinition()) {
-      auto moduleParameters = existModule.getFirst()->parameters;
+        existingModule.getFirst()->getDeclaringDefinition()) {
+      auto moduleParameters = existingModule.getFirst()->parameters;
       hasModuleSame = true;
       for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
            it1 != parameters.end() && it2 != moduleParameters.end();
@@ -521,15 +521,25 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           break;
       }
       if (hasModuleSame) {
-        module = existModule.first;
+        module = existingModule.first;
         break;
       }
     }
   }
 
   auto &slot = modules[module];
-  if (slot)
+  if (slot) {
+    if (portConnections) {
+      for (const auto *con : *portConnections) {
+        auto *port = con->port.as_if<PortSymbol>();
+        for (const auto &existingPort : slot->ports)
+          if (port->name == existingPort.ast.name)
+            slot->portsBySyntaxNode.insert({port->getSyntax(), &existingPort.ast});
+      }
+    }
     return slot.get();
+  }
+
   slot = std::make_unique<ModuleLowering>();
   auto &lowering = *slot;
 
