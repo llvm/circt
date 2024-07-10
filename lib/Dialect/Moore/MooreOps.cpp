@@ -650,6 +650,57 @@ LogicalResult StructInjectOp::verify() {
       });
 }
 
+void StructInjectOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperand(getInput());
+  p << " , " << getFieldNameAttr() << " , ";
+  p.printOperand(getNewValue());
+  p << " : " << getInput().getType();
+}
+
+ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+  OpAsmParser::UnresolvedOperand operand, val;
+  StringAttr fieldName;
+  Type declType;
+
+  if (parser.parseOperand(operand) || parser.parseComma() ||
+      parser.parseAttribute(fieldName) || parser.parseComma() ||
+      parser.parseOperand(val) || parser.parseColonType(declType))
+    return failure();
+
+  return TypeSwitch<Type, ParseResult>(cast<RefType>(declType).getNestedType())
+      .Case<StructType, UnpackedStructType>([&parser, &result, &declType,
+                                             &fieldName, &operand, &val,
+                                             &inputOperandsLoc](auto &type) {
+        auto members = type.getMembers();
+        Type fieldType;
+        for (const auto &member : members)
+          if (member.name == fieldName)
+            fieldType = member.type;
+        if (!fieldType) {
+          parser.emitError(parser.getNameLoc(),
+                           "field name '" + fieldName.getValue() +
+                               "' not found in struct type");
+          return failure();
+        }
+
+        auto fieldNameAttr =
+            StringAttr::get(parser.getContext(), Twine(fieldName));
+        result.addAttribute("fieldName", fieldNameAttr);
+        result.addTypes(declType);
+        if (parser.resolveOperands({operand, val}, {declType, fieldType},
+                                   inputOperandsLoc, result.operands))
+          return failure();
+
+        return success();
+      })
+      .Default([&parser, &inputOperandsLoc](auto &) {
+        return parser.emitError(inputOperandsLoc,
+                                "invalid kind of type specified");
+      });
+}
+
 //===----------------------------------------------------------------------===//
 // UnionCreateOp
 //===----------------------------------------------------------------------===//

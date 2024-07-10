@@ -1050,7 +1050,7 @@ def StructExtractRefOp : MooreOp<"struct_extract_ref", [
   let hasVerifier = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
+def StructInjectOp : MooreOp<"struct_inject", [Pure]>  {
   let summary = "Struct Field operation";
   let description = [{
     A structure can be assigned as a whole and passed to
@@ -1076,10 +1076,8 @@ def StructInjectOp : MooreOp<"struct_inject", [Pure]> {
   }];
   let arguments = (ins  RefType:$input, StrAttr:$fieldName,
   UnpackedType:$newValue);
-  let assemblyFormat = [{
-    $input `,` $fieldName `,` $newValue
-    attr-dict `:` type($input) type($newValue)
-  }];
+  let results = (outs RefType:$result);
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 

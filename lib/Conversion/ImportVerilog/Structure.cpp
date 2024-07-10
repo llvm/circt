@@ -323,11 +323,11 @@ struct MemberVisitor {
       return failure();
 
     if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      if (isa<moore::SVModuleOp>(
-              refOp->getOperand(0).getDefiningOp()->getParentOp())) {
+      auto input = refOp->getOperand(0);
+      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
         refOp.getInputMutable();
         refOp->erase();
-        builder.create<moore::StructInjectOp>(loc, refOp->getOperand(0),
+        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
                                               refOp.getFieldNameAttr(), rhs);
         return success();
       }
