@@ -334,6 +334,7 @@ void MaterializeDebugInfoPass::runOnOperation() {
   // Get the enum definition annotation
   if (auto topCircuit = module->getParentOfType<CircuitOp>())
     if (auto annoListArray = annohelper::getAnnotationList(topCircuit)) {
+      auto idEnum = 0;
       LLVM_DEBUG(llvm::dbgs() << "- Annotations: " << annoListArray << "\n");
       for (const auto &annoAttr : annoListArray)
         if (const auto &annoDict = dyn_cast<mlir::DictionaryAttr>(annoAttr))
@@ -345,10 +346,12 @@ void MaterializeDebugInfoPass::runOnOperation() {
             auto typeName = annoDict.getAs<mlir::StringAttr>("typeName");
             auto variantsMap =
                 annoDict.getAs<mlir::DictionaryAttr>("definition");
+            auto idAttr = builder.getI16IntegerAttr(idEnum++);
             // Materialize in hw.enum
             auto enumDefOp =
                 builder.create<debug::EnumDefOp>(module.getLoc(),
                                                  /*typeName=*/typeName,
+                                                 /*id=*/idAttr,
                                                  /*variantsMap=*/variantsMap,
                                                  /*scope=*/Value{});
 

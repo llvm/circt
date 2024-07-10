@@ -212,6 +212,7 @@ struct EmittedType {
   SmallVector<int64_t, 1> unpackedDims;
 
   DISourceLang sourceLangType;
+  std::optional<DIEnumDefId> enumDefRef = std::nullopt;
 
   EmittedType() = default;
   EmittedType(StringRef name) : name(name) {}
@@ -294,6 +295,7 @@ struct FileEmitter {
   void emit(JOStream &json);
   JValue emitLoc(FileLineColLoc loc, FileLineColLoc endLoc, bool emitted);
   JObject emitSourceLangTypeInfo(const DISourceLang &sourceLangType);
+  JObject emitEnumDefs(const DIEnumDefMap &enumDefinitions);
   void emitModule(JOStream &json, DIModule *module);
   void emitModuleBody(JOStream &json, DIModule *module);
   void emitInstance(JOStream &json, DIInstance *instance);
@@ -579,6 +581,18 @@ FileEmitter::emitSourceLangTypeInfo(const DISourceLang &sourceLangType) {
   return obj;
 }
 
+JObject FileEmitter::emitEnumDefs(const DIEnumDefMap &enumDefinitions) {
+  JObject obj;
+  for (auto [id, mapValues] : enumDefinitions) {
+    JObject map;
+    for (auto [value, name] : mapValues)
+      map[std::to_string(value)] = name.getValue();
+    obj[std::to_string(id)] = std::move(map);
+  }
+
+  return obj;
+}
+
 StringAttr getVerilogModuleName(DIModule &module) {
   if (auto *op = module.op)
     if (auto attr = op->getAttrOfType<StringAttr>("verilogName"))
@@ -608,11 +622,16 @@ void FileEmitter::emitModule(JOStream &json, DIModule *module) {
     findAndEmitLocOrGuess(json, "hgl_loc", op, false);
     findAndEmitLoc(json, "hdl_loc", op->getLoc(), true);
   }
-  
+
   // Emit source language type information for a module
   auto sourceLangTypeInfo = emitSourceLangTypeInfo(module->sourceLangType);
   if (!sourceLangTypeInfo.empty())
     json.attribute("source_lang_type_info", std::move(sourceLangTypeInfo));
+
+  // Emit enum definitions if any
+  auto enumDefs = emitEnumDefs(module->enumDefinitions);
+  if (!enumDefs.empty())
+    json.attribute("enum_defs", std::move(enumDefs));
 
   emitModuleBody(json, module);
   json.objectEnd();
@@ -703,6 +722,10 @@ void FileEmitter::emitVariable(JOStream &json, DIVariable *variable) {
   auto sourceLangTypeInfo = emitSourceLangTypeInfo(variable->sourceLangType);
   if (!sourceLangTypeInfo.empty())
     json.attribute("source_lang_type_info", std::move(sourceLangTypeInfo));
+
+  // Emit the reference to the enum if any
+  if (variable->enumDefRef)
+    json.attribute("enum_def_ref", *variable->enumDefRef);
 
   json.objectEnd();
 }
@@ -816,6 +839,9 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
       auto sourceLangTypeInfo = emitSourceLangTypeInfo(type.sourceLangType);
       if (!sourceLangTypeInfo.empty())
         fieldDef["source_lang_type_info"] = std::move(sourceLangTypeInfo);
+      // Emit the reference to the enum if any
+      if (type.enumDefRef)
+        fieldDef["enum_def_ref"] = *type.enumDefRef;
 
       findAndSetLocs(fieldDef, loc);
       fieldDefs.push_back(std::move(fieldDef));
@@ -867,6 +893,11 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
         // Return the emitted expression with the source lang type information
         emittedExpr.type.sourceLangType =
             DISourceLang{subField.getTypeNameAttr(), subField.getParamsAttr()};
+
+        // Add the enum type ref if any
+        if (auto e = subField.getEnumDef())
+          emittedExpr.type.enumDefRef =
+              e.getDefiningOp<debug::EnumDefOp>().getId();
 
         return {emittedExpr.expr, emittedExpr.type};
       }

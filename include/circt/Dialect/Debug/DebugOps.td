@@ -187,6 +187,7 @@ def EnumDefOp : DebugOp<"enumdef"> {
 
   let arguments = (ins
     StrAttr:$enumTypeName,
+    I16Attr:$id,
     DictionaryAttr:$variantsMap,
     Optional<ScopeType>:$scope
   );
@@ -194,7 +195,7 @@ def EnumDefOp : DebugOp<"enumdef"> {
   let results = (outs EnumDefType:$result);
 
   let assemblyFormat = [{
-    $enumTypeName `,` $variantsMap (`scope` $scope^)? attr-dict
+    $enumTypeName `,` `id` $id `,` $variantsMap (`scope` $scope^)? attr-dict
   }];
 }
 

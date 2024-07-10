@@ -113,6 +113,19 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
       module.sourceLangType.typeName = sourceLangType.getTypeNameAttr();
       module.sourceLangType.params = sourceLangType.getParamsAttr();
     }
+
+    // Add enum definitions to the module if any
+    if (auto e = dyn_cast<debug::EnumDefOp>(op)) {
+      SmallDenseMap<int64_t, StringAttr> enumMap;
+
+      // Collect the enum map
+      for (auto na : e.getVariantsMapAttr()) {
+        auto key = na.getValue().cast<IntegerAttr>().getInt();
+        auto value = na.getName().cast<StringAttr>();
+        enumMap.insert({key, value});
+      }
+      module.enumDefinitions.insert({e.getId(), enumMap});
+    }
   });
 
   // Helper function to resolve a `scope` operand on a variable to the
@@ -156,6 +169,12 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
       var->sourceLangType.params = varOp.getParamsAttr();
 
       getScope(varOp.getScope()).variables.push_back(var);
+
+      // Add enum definition to the variable if any
+      if (auto e = varOp.getEnumDef())
+        if (auto enumDef = e.getDefiningOp<debug::EnumDefOp>()) {
+          var->enumDefRef = enumDef.getId();
+        }
       return;
     }
 

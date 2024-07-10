@@ -16,6 +16,10 @@
 
 namespace circt {
 
+using DIEnumDefId = uint16_t;
+using DIEnumValMap = SmallDenseMap<int64_t, StringAttr>;
+using DIEnumDefMap = SmallDenseMap<DIEnumDefId, DIEnumValMap>;
+
 struct DIInstance;
 struct DIVariable;
 
@@ -46,6 +50,12 @@ struct DIModule {
 
   /// The source language type of this module.
   DISourceLang sourceLangType;
+
+  /// The enum definitions of this module.
+  /// An optional map between the raw value of a bit to a string representation
+  /// `(e.g. 0 -> "A", 1 -> "B", 2 -> "Hello")`. This applies for example for
+  /// enums.
+  DIEnumDefMap enumDefinitions;
 };
 
 struct DIInstance {
@@ -67,6 +77,9 @@ struct DIVariable {
 
   /// The source language type of this module.
   DISourceLang sourceLangType;
+
+  /// An optional reference to the enum definition
+  std::optional<DIEnumDefId> enumDefRef = std::nullopt;
 };
 
 /// Debug information attached to an operation and the operations nested within.
