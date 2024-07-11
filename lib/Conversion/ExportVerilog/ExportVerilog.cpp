@@ -3440,7 +3440,8 @@ public:
 
   void emitAssertPropertyBody(
       Value property, Value disable,
-      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest,
+      bool ignoreNonEmptyTokens = false);
 
   void emitAssertPropertyBody(
       Value property, sv::EventControl event, Value clock, Value disable,
@@ -3490,21 +3491,22 @@ private:
 };
 } // end anonymous namespace
 
+// Emits a disable signal and its containing property.
+// This function can be called from withing another emission process in which
+// case we don't need to check that the local tokens are empty.
 void PropertyEmitter::emitAssertPropertyBody(
-    Value property, Value disable,
-    PropertyPrecedence parenthesizeIfLooserThan) {
-  assert(localTokens.empty());
+    Value property, Value disable, PropertyPrecedence parenthesizeIfLooserThan,
+    bool ignoreNonEmptyTokens) {
+  assert(localTokens.empty() || ignoreNonEmptyTokens);
   // If the property is tied to a disable, emit that.
   if (disable) {
-    ps << PP::space;
     ps << "disable iff" << PP::nbsp << "(";
     ps.scopedBox(PP::ibox2, [&] {
       emitNestedProperty(disable, PropertyPrecedence::Lowest);
-      ps << ")";
+      ps << ")" << PP::space;
     });
   }
 
-  ps << PP::space;
   ps.scopedBox(PP::ibox0,
                [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
   // If we are not using an external token buffer provided through the
@@ -3523,11 +3525,11 @@ void PropertyEmitter::emitAssertPropertyBody(
   ps.scopedBox(PP::ibox2, [&] {
     ps << PPExtString(stringifyEventControl(event)) << PP::space;
     emitNestedProperty(clock, PropertyPrecedence::Lowest);
-    ps << ")";
+    ps << ")" << PP::space;
   });
 
   // Emit the rest of the body
-  emitAssertPropertyBody(property, disable, parenthesizeIfLooserThan);
+  emitAssertPropertyBody(property, disable, parenthesizeIfLooserThan, true);
 }
 
 EmittedProperty PropertyEmitter::emitNestedProperty(
@@ -4871,18 +4873,20 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
         ps << opName << "(";
       else
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
-      ps.scopedBox(PP::ibox2, [&]() {
-        // Event only exists if the clock exists
-        Value clock = op.getClock();
-        auto event = op.getEvent();
-        if (clock)
+      // Event only exists if the clock exists
+      Value clock = op.getClock();
+      auto event = op.getEvent();
+      if (clock)
+        ps.scopedBox(PP::ibox2, [&]() {
           PropertyEmitter(emitter, ops)
               .emitAssertPropertyBody(property, *event, clock, op.getDisable());
-        else
+        });
+      else
+        ps.scopedBox(PP::ibox2, [&]() {
           PropertyEmitter(emitter, ops)
               .emitAssertPropertyBody(property, op.getDisable());
-        ps << ");";
-      });
+        });
+      ps << ");";
     });
   });
   ps.addCallback({op, false});
