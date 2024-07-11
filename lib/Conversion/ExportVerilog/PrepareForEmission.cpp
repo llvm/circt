@@ -1318,15 +1318,19 @@ static LogicalResult legalizeHWModule(Block &block,
 // Adds a wire to disable signals to allow for the polarity flip of the
 // enable signal to happen legally (diable iff must not contain ~).
 static void wireDisableSignals(hw::HWEmittableModuleLike module) {
-  OpBuilder builder(module);
 
   module.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<sv::AssertPropertyOp, sv::AssumePropertyOp, sv::CoverPropertyOp>(
             [&](auto assertLike) {
+              OpBuilder builder(assertLike);
               if (auto disable = assertLike.getDisable()) {
-                Value wdisable =
-                    builder.create<hw::WireOp>(assertLike.getLoc(), disable);
+                Value wdisable = builder.create<sv::WireOp>(
+                    assertLike.getLoc(),
+                    IntegerType::get(assertLike.getContext(), 1));
+                // Assign the wire to the disable
+                builder.create<sv::AssignOp>(assertLike.getLoc(), wdisable,
+                                             disable);
                 assertLike.getDisableMutable().assign(wdisable);
               }
             })
