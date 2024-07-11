@@ -230,7 +230,6 @@ void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
   builder.create<ClassFieldOp>(loc, name, src);
 }
 
-
 static circt::om::Field convertFieldOpToField(circt::om::ClassFieldOp field) {
   return {field.getNameAttr(), field.getValue(), field.getLoc()};
 }
