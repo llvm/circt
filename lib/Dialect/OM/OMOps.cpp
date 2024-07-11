@@ -230,14 +230,17 @@ void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
   builder.create<ClassFieldOp>(loc, name, src);
 }
 
-std::vector<circt::om::Field> circt::om::ClassOp::getFields() {
-  // TODO(lenny): We could optimize this by constructing an iterator over the
-  // existing getOps iterator and pass a Field one at a time
-  std::vector<circt::om::Field> fields;
-  for (auto field : this->getOps<ClassFieldOp>()) {
-    fields.push_back({field.getNameAttr(), field.getValue(), field.getLoc()});
-  }
-  return fields;
+
+static circt::om::Field convertFieldOpToField(circt::om::ClassFieldOp field) {
+  return {field.getNameAttr(), field.getValue(), field.getLoc()};
+}
+
+llvm::iterator_range<
+    llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
+                                                    mlir::Region::OpIterator>,
+                          circt::om::Field (*)(circt::om::ClassFieldOp)>>
+circt::om::ClassOp::getFields() {
+  return llvm::map_range(this->getOps<ClassFieldOp>(), &convertFieldOpToField);
 }
 
 //===----------------------------------------------------------------------===//

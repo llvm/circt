@@ -89,11 +89,29 @@ def ClassOp : OMClassLike<"class"> {
     void addField(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::StringRef name, mlir::Value src);
 
+
+    class fields_iter : public llvm::mapped_iterator<
+                       mlir::Region::op_iterator<circt::om::ClassFieldOp>,
+                       circt::om::Field (*)(circt::om::ClassFieldOp)> {
+      static circt::om::Field unwrap(circt::om::ClassFieldOp field) {
+        return {field.getNameAttr(), field.getValue(), field.getLoc()};
+      }
+
+    public:
+      fields_iter(mlir::Region::op_iterator<circt::om::ClassFieldOp> it)
+          : llvm::mapped_iterator<
+                mlir::Region::op_iterator<circt::om::ClassFieldOp>,
+                circt::om::Field (*)(circt::om::ClassFieldOp)>(it, &unwrap) {}
+    };
     // TODO(lenny): We could just return the ClassFieldOp, but if we move to storing
     // this information in a terminator, we may be fetching the data from a
     // different type, so for now we introduce an "abstract" intermediate
     // object
-    std::vector<circt::om::Field> getFields();
+    llvm::iterator_range<
+        llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
+                                                        mlir::Region::OpIterator>,
+                              circt::om::Field (*)(circt::om::ClassFieldOp)>>
+    getFields();
   }];
 }
 
