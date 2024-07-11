@@ -183,6 +183,8 @@ class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSeg
        CArg<"StringAttr","StringAttr()">: $label),
       [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, label); }]>
   ];
+
+  let hasVerifier = true;
 }
 
 def AssertPropertyOp : PropertyVerifOp<"assert_property"> {

@@ -3438,12 +3438,19 @@ public:
     assert(state.pp.getListener() == &state.saver);
   }
 
+  void emitAssertPropertyBody(
+      Value property, Value disable,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+
+  void emitAssertPropertyBody(
+      Value property, sv::EventControl event, Value clock, Value disable,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+
+private:
   /// Emit the specified value as an SVA property or sequence.
   EmittedProperty
   emitNestedProperty(Value property,
                      PropertyPrecedence parenthesizeIfLooserThan);
-
-private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
@@ -3482,6 +3489,46 @@ private:
   TokenStreamWithCallback<OpLocMap, CallbackDataTy, BufferingPP> ps;
 };
 } // end anonymous namespace
+
+void PropertyEmitter::emitAssertPropertyBody(
+    Value property, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(localTokens.empty());
+  // If the property is tied to a disable, emit that.
+  if (disable) {
+    ps << PP::space;
+    ps << "disable iff" << PP::nbsp << "(";
+    ps.scopedBox(PP::ibox2, [&] {
+      emitNestedProperty(disable, PropertyPrecedence::Lowest);
+      ps << ")";
+    });
+  }
+
+  ps << PP::space;
+  ps.scopedBox(PP::ibox0,
+               [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
+  // If we are not using an external token buffer provided through the
+  // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
+  // flush it.
+  if (&buffer.tokens == &localTokens)
+    buffer.flush(state.pp);
+}
+
+void PropertyEmitter::emitAssertPropertyBody(
+    Value property, sv::EventControl event, Value clock, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(localTokens.empty());
+  // Wrap to this column.
+  ps << "@(";
+  ps.scopedBox(PP::ibox2, [&] {
+    ps << PPExtString(stringifyEventControl(event)) << PP::space;
+    emitNestedProperty(clock, PropertyPrecedence::Lowest);
+    ps << ")";
+  });
+
+  // Emit the rest of the body
+  emitAssertPropertyBody(property, disable, parenthesizeIfLooserThan);
+}
 
 EmittedProperty PropertyEmitter::emitNestedProperty(
     Value property, PropertyPrecedence parenthesizeIfLooserThan) {
@@ -4825,28 +4872,15 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
       else
         ps << opName << PP::nbsp << "property" << PP::nbsp << "(";
       ps.scopedBox(PP::ibox2, [&]() {
-        // Check if the optional clock was given
-        auto clock = op.getClock();
+        // Event only exists if the clock exists
+        Value clock = op.getClock();
         auto event = op.getEvent();
-        if (clock && event) {
-          ps << "@(" << PPExtString(stringifyEventControl(*event)) << PP::nbsp;
-          emitExpression(op.getClock(), ops);
-          ps << ")" << PP::space;
-        }
-
-        // Check for a disable
-        if (auto disable = op.getDisable()) {
-          ps << PP::space;
-          ps << "disable iff" << PP::nbsp << "(";
-          ps.scopedBox(PP::ibox2, [&] {
-            emitExpression(disable, ops);
-            ps << ")";
-          });
-          ps << PP::space;
-        }
-        // Emit the property as an LTL property
-        PropertyEmitter(emitter, ops)
-            .emitNestedProperty(op.getProperty(), PropertyPrecedence::Lowest);
+        if (clock)
+          PropertyEmitter(emitter, ops)
+              .emitAssertPropertyBody(property, *event, clock, op.getDisable());
+        else
+          PropertyEmitter(emitter, ops)
+              .emitAssertPropertyBody(property, op.getDisable());
         ps << ");";
       });
     });
