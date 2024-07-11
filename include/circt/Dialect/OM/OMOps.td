@@ -85,17 +85,18 @@ def ClassOp : OMClassLike<"class"> {
 
     // TODO(lenny): We may need to add a "terminator" function that's called at
     // the end to emit the terminator op, or is there a way to run "exit hook"
-    // logic	on the builder
-    void addField(mlir::OpBuilder &builder, mlir::Location loc, llvm::StringRef
-                  name, mlir::Value src);
+    // logic on the builder
+    void addField(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef name, mlir::Value src);
 
-    // TODO(lenny): We could just return the ClassFieldOp, but if we move to
-    // storing this information in a terminator, we may be fetching the data
-    // from a different type, so for now we introduce an "abstract"
-    // intermediate object
+    // TODO(lenny): We could just return the ClassFieldOp, but if we move to storing
+    // this information in a terminator, we may be fetching the data from a
+    // different type, so for now we introduce an "abstract" intermediate
+    // object
     llvm::iterator_range<
-    llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
-    mlir::Region::OpIterator>, circt::om::Field (*)(circt::om::ClassFieldOp)>>
+        llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
+                                                        mlir::Region::OpIterator>,
+                              circt::om::Field (*)(circt::om::ClassFieldOp)>>
     getFields();
   }];
 }
