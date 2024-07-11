@@ -260,7 +260,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
-          SystemFunctionOp>(op))
+          SystemFunctionOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -292,6 +292,9 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
+  if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
+    return getTypeDims(dims, uarray.getElementType(), loc);
+
   if (hw::type_isa<InterfaceType, StructType, EnumType>(type))
     return;
 
@@ -344,7 +347,7 @@ static Type stripUnpackedTypes(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return stripUnpackedTypes(inoutType.getElementType());
       })
-      .Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
+      .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
         return stripUnpackedTypes(arrayType.getElementType());
       })
       .Default([](Type type) { return type; });
@@ -740,7 +743,7 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog
-  if (isa<StructCreateOp, UnionCreateOp>(op))
+  if (isa<StructCreateOp, UnionCreateOp, UnpackedArrayCreateOp>(op))
     return true;
 
   // Aggregate literal syntax only works in an assignment expression, where
@@ -1786,8 +1789,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
             os << " struct packed {";
             if (element.offset) {
               os << (emitAsTwoStateType ? "bit" : "logic") << " ["
-                 << element.offset - 1 << ":0] "
-                 << "__pre_padding_" << element.name.getValue() << "; ";
+                 << element.offset - 1 << ":0] " << "__pre_padding_"
+                 << element.name.getValue() << "; ";
             }
           }
 
@@ -1879,6 +1882,10 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
                                    : state.designOp->getLoc();
         emitDim(arrayType.getSizeAttr(), os, loc, *this,
                 /*downTo=*/false);
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
+      })
+      .Case<sv::UnpackedOpenArrayType>([&](auto arrayType) {
+        os << "[]";
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
@@ -2277,8 +2284,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -2314,6 +2320,11 @@ private:
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
   SubExprInfo visitSV(ConstantStrOp op);
+
+  SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
+  SubExprInfo visitSV(sv::UnpackedOpenArrayCastOp op) {
+    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+  }
 
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
@@ -3102,6 +3113,16 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
         },
         [&]() { ps << "}"; });
   }
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(UnpackedArrayCreateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  emitBracedList(
+      llvm::reverse(op.getInputs()), [&]() { ps << "'{"; },
+      [&](Value v) { emitSubExprIBox2(v); }, [&]() { ps << "}"; });
   return {Unary, IsUnsigned};
 }
 

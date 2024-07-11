@@ -5565,6 +5565,22 @@ LogicalResult DPICallIntrinsicOp::verify() {
                  llvm::all_of(this->getOperandTypes(), checkType));
 }
 
+LogicalResult DPIUnpackedOpenArrayCastOp::verify() {
+  if (!type_isa<FVectorType>(getInput().getType()))
+    return failure();
+
+  auto checkUser = [this](Operation *user) {
+    if (isa<DPICallIntrinsicOp>(user))
+      return true;
+    emitOpError("must be used by DPI call intrinsic op")
+            .attachNote(user->getLoc())
+        << "user is here";
+
+    return false;
+  };
+  return success(llvm::all_of(getResult().getUsers(), checkUser));
+}
+
 SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
 DPICallIntrinsicOp::computeDataFlow() {
   if (getClock())

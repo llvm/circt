@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
@@ -59,6 +60,8 @@ private:
 
   MapVector<StringAttr, SmallVector<DPICallIntrinsicOp>> funcNameToCallSites;
 
+  llvm::SetVector<Operation *> opsToErase;
+
   // A map stores DPI func op for its function name and type.
   llvm::DenseMap<std::pair<StringAttr, Type>, sim::DPIFuncOp>
       functionSignatureToDPIFuncOp;
@@ -91,6 +94,48 @@ void LowerDPI::collectIntrinsics() {
       funcNameToCallSites[dpi.getFunctionNameAttr()].push_back(dpi);
 }
 
+static Value getLowered(ImplicitLocOpBuilder &builder, Value value,
+                        llvm::SetVector<Operation *> &opsToErase) {
+  // Insert an unrealized conversion to cast FIRRTL type to HW type.
+  if (!value)
+    return value;
+
+  if (auto openArrayOp = value.getDefiningOp<DPIUnpackedOpenArrayCastOp>()) {
+    auto loweredValue = getLowered(builder, openArrayOp.getInput(), opsToErase);
+
+    // Type must be a packed array.
+    assert(type_isa<hw::ArrayType>(loweredValue.getType()));
+    auto length =
+        type_cast<hw::ArrayType>(loweredValue.getType()).getNumElements();
+
+    unsigned width = llvm::Log2_64_Ceil(length);
+
+    SmallVector<Value> values;
+    // Create an unpacked array.
+    for (int i = length - 1; i >= 0; --i) {
+      auto index = builder.create<hw::ConstantOp>(APInt(width, i));
+      values.push_back(builder.create<hw::ArrayGetOp>(loweredValue, index));
+    }
+
+    auto unpackedArray = builder.create<sv::UnpackedArrayCreateOp>(
+        hw::UnpackedArrayType::get(
+            type_cast<hw::ArrayType>(loweredValue.getType()).getElementType(),
+            length),
+        values);
+    auto openArray = builder.create<sv::UnpackedOpenArrayCastOp>(
+        sv::UnpackedOpenArrayType::get(
+            type_cast<hw::ArrayType>(loweredValue.getType()).getElementType()),
+        unpackedArray);
+
+    opsToErase.insert(openArrayOp);
+    return openArray;
+  }
+
+  auto type = lowerType(value.getType());
+  return builder.create<mlir::UnrealizedConversionCastOp>(type, value)
+      ->getResult(0);
+}
+
 LogicalResult LowerDPI::lower() {
   for (auto [name, calls] : funcNameToCallSites) {
     auto firstDPICallop = calls.front();
@@ -103,21 +148,13 @@ LogicalResult LowerDPI::lower() {
     ImplicitLocOpBuilder builder(firstDPICallop.getLoc(),
                                  circuitOp.getOperation());
     auto lowerCall = [&](DPICallIntrinsicOp dpiOp) {
-      auto getLowered = [&](Value value) -> Value {
-        // Insert an unrealized conversion to cast FIRRTL type to HW type.
-        if (!value)
-          return value;
-        auto type = lowerType(value.getType());
-        return builder.create<mlir::UnrealizedConversionCastOp>(type, value)
-            ->getResult(0);
-      };
       builder.setInsertionPoint(dpiOp);
-      auto clock = getLowered(dpiOp.getClock());
-      auto enable = getLowered(dpiOp.getEnable());
+      auto clock = getLowered(builder, dpiOp.getClock(), opsToErase);
+      auto enable = getLowered(builder, dpiOp.getEnable(), opsToErase);
       SmallVector<Value, 4> inputs;
       inputs.reserve(dpiOp.getInputs().size());
       for (auto input : dpiOp.getInputs())
-        inputs.push_back(getLowered(input));
+        inputs.push_back(getLowered(builder, input, opsToErase));
 
       SmallVector<Type> outputTypes;
       if (dpiOp.getResult())
@@ -163,10 +200,14 @@ LogicalResult LowerDPI::lower() {
         return failure();
     }
 
-    for (auto callOp : calls)
-      callOp.erase();
+    for (auto call : calls)
+      call.erase();
   }
 
+  for (auto *op : opsToErase.takeVector()) {
+    assert(op->use_empty());
+    op->erase();
+  }
   return success();
 }
 
@@ -188,7 +229,11 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
     port.dir = hw::ModulePort::Direction::Input;
     port.name = inputNames ? cast<StringAttr>(inputNames[idx])
                            : builder.getStringAttr(Twine("in_") + Twine(idx));
+    auto value = op.getInputs()[idx];
     port.type = lowerType(inType);
+    if (value.getDefiningOp<DPIUnpackedOpenArrayCastOp>())
+      port.type = sv::UnpackedOpenArrayType::get(
+          type_cast<hw::ArrayType>(port.type).getElementType());
     ports.push_back(port);
   }
 

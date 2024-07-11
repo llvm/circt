@@ -656,6 +656,35 @@ public:
   }
 };
 
+class CirctDPIUnpackedOpenArrayCastOp : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(1) || gi.typedInput<FVectorType>(0) ||
+           gi.typedOutput<FVectorType>();
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+
+    // DPI unpacked open array op must be used by DPI call op. Remove
+    // intermidiate nodes otherwise it causes verification error.
+    SmallVector<Operation *> users(gi.op.getResult().getUsers());
+    while (!users.empty()) {
+      auto node = dyn_cast<NodeOp>(users.pop_back_val());
+      if (!node || hasDontTouch(node) || node.getNumResults() != 1)
+        continue;
+
+      users.append(node.getResult().getUsers().begin(),
+                   node.getResult().getUsers().end());
+      rewriter.replaceOp(node, node.getInput());
+    }
+    rewriter.replaceOpWithNewOp<DPIUnpackedOpenArrayCastOp>(
+        gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0]);
+  }
+};
+
 class CirctDPICallConverter : public IntrinsicConverter {
   static bool getIsClocked(GenericIntrinsic gi) {
     return !gi.getParamValue<IntegerAttr>("isClocked").getValue().isZero();
@@ -771,4 +800,7 @@ void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
   lowering.add<CirctUnclockedAssumeConverter>("circt.unclocked_assume",
                                               "circt_unclocked_assume");
   lowering.add<CirctDPICallConverter>("circt.dpi_call", "circt_dpi_call");
+  lowering.add<CirctDPIUnpackedOpenArrayCastOp>(
+      "circt.dpi_unpacked_open_array_cast",
+      "circt_dpi_unpacked_open_array_cast");
 }

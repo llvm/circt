@@ -227,4 +227,19 @@ def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
   let hasVerifier = 1;
 }
 
+def DPIUnpackedOpenArrayCastOp : FIRRTLOp<"int.dpi.open_uarray_cast",
+                              [Pure, SameOperandsAndResultType]> {
+  let summary = "Use a FIRRTL vector value as a SV open unpacked array in DPI call site";
+
+  let description = [{
+  }];
+
+  let hasVerifier = 1;
+  let arguments = (ins PassiveType:$input);
+  let results = (outs PassiveType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
