@@ -195,8 +195,8 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
   // CHECK: assert property (@(posedge clk) a |-> b);
   // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
-  // CHECK: assert property (disable iff (~(b)) not a);
-  // CHECK: assert property (disable iff (~(b)) @(posedge clk) not a);
+  // CHECK: assert property (disable iff (b) not a);
+  // CHECK: assert property (disable iff (b) @(posedge clk) not a);
   %k0 = ltl.clock %i0, posedge %clk : !ltl.property
   %k1 = ltl.clock %n0, negedge %b : !ltl.property
   %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
@@ -204,8 +204,8 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %k6 = ltl.clock %n0, posedge %clk : !ltl.property
   sv.assert_property %k0 : !ltl.property
   sv.assert_property %k3 : !ltl.property
-  sv.assert_property %n0 if %b : !ltl.property
-  sv.assert_property %k6 if %b : !ltl.property
+  sv.assert_property %n0 disable_iff %b : !ltl.property
+  sv.assert_property %k6 disable_iff %b : !ltl.property
 }
 
 // CHECK-LABEL: module Precedence
@@ -263,11 +263,11 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   %b3 = ltl.clock %b2, posedge %clk : !ltl.property
   sv.assert_property %b3 : !ltl.property
 
-  // CHECK: assert property (disable iff (~(e)) @(posedge clk) a |-> not b ##1 c ##1 d);
+  // CHECK: assert property (disable iff (e) @(posedge clk) a |-> not b ##1 c ##1 d);
   %c0 = ltl.not %b1 : !ltl.sequence
   %c1 = ltl.implication %a, %c0 : i1, !ltl.property
   %c3 = ltl.clock %c1, posedge %clk : !ltl.property
-  sv.assert_property %c3 if %e : !ltl.property
+  sv.assert_property %c3 disable_iff %e : !ltl.property
 
   // CHECK: assert property (##1 a |-> b);
   %d0 = ltl.delay %a, 1, 0 : i1
