@@ -281,3 +281,10 @@ def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperand
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
 }
 
+def UnpackedOpenArrayCastOp : SVOp<"unpacked_open_array_cast"> {
+  let summary = "Cast an unpacked array into an unpacked open array";
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs UnpackedOpenArrayType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+}
