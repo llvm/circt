@@ -128,8 +128,7 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
   }
 };
 
-namespace VerifAssertLikeOp {
-
+// Conversion from one event control enum to another
 static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
   switch (ce) {
   case verif::ClockEdge::Pos:
@@ -142,111 +141,46 @@ static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
   llvm_unreachable("Unknown event control kind");
 }
 
-// Convert the verif.assert like op that uses an enable, into an equivalent
-// sv.assert_property op that has the negated enable as its disable.
-template <typename TargetOp, typename Op, typename Adaptor>
-static LogicalResult convert(Op op, Adaptor operands,
-                             ConversionPatternRewriter &rewriter) {
-  // negate the enable if it exists
-  Value wdisable;
-  if (auto enable = operands.getEnable()) {
-    Value disable =
-        rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, enable);
-    wdisable = rewriter.createOrFold<hw::WireOp>(op.getLoc(), disable);
-  }
+template <typename Op, typename TargetOp>
+struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
 
-  rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), wdisable,
-                                        operands.getLabelAttr());
-  return success();
-}
-
-template <typename TargetOp, typename Op, typename Adaptor>
-static LogicalResult convertClocked(Op op, Adaptor operands,
-                                    ConversionPatternRewriter &rewriter) {
-  // negate the enable if it exists
-  Value wdisable;
-  if (auto enable = operands.getEnable()) {
-    Value disable =
-        rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, enable);
-    wdisable = rewriter.createOrFold<hw::WireOp>(op.getLoc(), disable);
-  }
-  auto eventattr = sv::EventControlAttr::get(
-      op.getContext(), verifToSVEventControl(operands.getEdge()));
-
-  rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), eventattr,
-                                        operands.getClock(), wdisable,
-                                        operands.getLabelAttr());
-  return success();
-}
-} // namespace VerifAssertLikeOp
-
-struct VerifAssertConversion : public OpConversionPattern<verif::AssertOp> {
-  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
-
+  // Convert the verif.assert like op that uses an enable, into an equivalent
+  // sv.assert_property op that has the negated enable as its disable.
   LogicalResult
-  matchAndRewrite(verif::AssertOp op, OpAdaptor operands,
+  matchAndRewrite(Op op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssertPropertyOp>(op, operands,
-                                                            rewriter);
-  }
-};
+    // Negate the enable if it exists
+    Value disable;
+    if (auto enable = operands.getEnable()) {
+      Value constOne = rewriter.createOrFold<hw::ConstantOp>(
+          op.getLoc(), rewriter.getI1Type(), 1);
+      disable =
+          rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
+    }
 
-struct VerifAssumeConversion : public OpConversionPattern<verif::AssumeOp> {
-  using OpConversionPattern<verif::AssumeOp>::OpConversionPattern;
+    // Check for a clock operand
+    if (auto clock = operands.getClock()) {
+      if (auto edge = operands.getEdge()) {
+        auto eventattr = sv::EventControlAttr::get(
+            op.getContext(), verifToSVEventControl(operands.getEdge()));
 
-  LogicalResult
-  matchAndRewrite(verif::AssumeOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::AssumePropertyOp>(op, operands,
-                                                            rewriter);
-  }
-};
+        rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(),
+                                              eventattr, operands.getClock(),
+                                              disable, operands.getLabelAttr());
+      } else {
+        // Make sure that a clock is never given without an event signal
+        op->emitError("A clock must be tied to an event control attribute, but "
+                      "none was given!");
+        return failure();
+      }
+    } else {
+      // If no clock is given then only use the disable
+      rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), disable,
+                                            operands.getLabelAttr());
+    }
 
-struct VerifCoverConversion : public OpConversionPattern<verif::CoverOp> {
-  using OpConversionPattern<verif::CoverOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(verif::CoverOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convert<sv::CoverPropertyOp>(op, operands,
-                                                           rewriter);
-  }
-};
-
-// Clocked assert like
-struct VerifClockedAssertConversion
-    : public OpConversionPattern<ClockedAssertOp> {
-  using OpConversionPattern<ClockedAssertOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClockedAssertOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::AssertPropertyOp>(op, operands,
-                                                                   rewriter);
-  }
-};
-
-struct VerifClockedAssumeConversion
-    : public OpConversionPattern<ClockedAssumeOp> {
-  using OpConversionPattern<ClockedAssumeOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClockedAssumeOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::AssumePropertyOp>(op, operands,
-                                                                   rewriter);
-  }
-};
-
-struct VerifClockedCoverConversion
-    : public OpConversionPattern<ClockedCoverOp> {
-  using OpConversionPattern<ClockedCoverOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClockedCoverOp op, OpAdaptor operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    return VerifAssertLikeOp::convertClocked<sv::CoverPropertyOp>(op, operands,
-                                                                  rewriter);
+    return success();
   }
 };
 
@@ -273,11 +207,15 @@ void VerifToSVPass::runOnOperation() {
                       verif::CoverOp, ClockedAssertOp, ClockedAssumeOp,
                       ClockedCoverOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
-  patterns.add<PrintOpConversionPattern, HasBeenResetConversion,
-               VerifAssertConversion, VerifAssumeConversion,
-               VerifCoverConversion, VerifClockedAssertConversion,
-               VerifClockedAssumeConversion, VerifClockedCoverConversion>(
-      &context);
+  patterns
+      .add<PrintOpConversionPattern, HasBeenResetConversion,
+           VerifAssertLikeConversion<verif::AssertOp, AssertPropertyOp>,
+           VerifAssertLikeConversion<verif::AssumeOp, AssumePropertyOp>,
+           VerifAssertLikeConversion<verif::CoverOp, CoverPropertyOp>,
+           VerifAssertLikeConversion<verif::ClockedAssertOp, AssertPropertyOp>,
+           VerifAssertLikeConversion<verif::ClockedAssumeOp, AssumePropertyOp>,
+           VerifAssertLikeConversion<verif::ClockedCoverOp, CoverPropertyOp>>(
+          &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();

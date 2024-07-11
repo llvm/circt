@@ -10,7 +10,6 @@
 // declarations.
 //
 //===----------------------------------------------------------------------===//
-include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 
 /// Immediate assertions, like `assert`.
@@ -181,12 +180,8 @@ class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSeg
     // no clock or event
     OpBuilder<(ins "mlir::Value":$property,
       "mlir::Value":$disable,
-      StrAttr.storageType:$label),
-      [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, label); }]>,
-    // no clock or event or label
-    OpBuilder<(ins "mlir::Value":$property,
-      "mlir::Value":$disable),
-      [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, StringAttr{}); }]>
+       CArg<"StringAttr","StringAttr()">: $label),
+      [{ build(odsBuilder, odsState, property, EventControlAttr{}, Value(), disable, label); }]>
   ];
 }
 
