@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
+from .constructs import AssignableSignal
 from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
 from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
 from .support import get_user_loc
@@ -123,7 +124,7 @@ class NamedChannelValue(ChannelSignal):
     super().__init__(input_chan, _FromCirctType(input_chan.type))
 
 
-class _OutputBundleSetter:
+class _OutputBundleSetter(AssignableSignal):
   """Return a list of these as a proxy for a 'request to client connection'.
   Users should call the 'assign' method with the `ChannelValue` which they
   have implemented for this request."""
