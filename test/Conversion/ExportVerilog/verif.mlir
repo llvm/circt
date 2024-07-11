@@ -195,17 +195,14 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
   // CHECK: assert property (@(posedge clk) a |-> b);
   // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
-  // CHECK: assert property (disable iff (b) not a);
-  // CHECK: assert property (disable iff (b) @(posedge clk) not a);
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
   %k0 = ltl.clock %i0, posedge %clk : !ltl.property
   %k1 = ltl.clock %n0, negedge %b : !ltl.property
   %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
   %k3 = ltl.clock %k2, posedge %clk : !ltl.property
-  %k6 = ltl.clock %n0, posedge %clk : !ltl.property
   sv.assert_property %k0 : !ltl.property
   sv.assert_property %k3 : !ltl.property
-  sv.assert_property %n0 disable_iff %b : !ltl.property
-  sv.assert_property %k6 disable_iff %b : !ltl.property
+  sv.assert_property %n0 on posedge %clk disable_iff %b: !ltl.property
 }
 
 // CHECK-LABEL: module Precedence
