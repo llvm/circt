@@ -1315,6 +1315,25 @@ static LogicalResult legalizeHWModule(Block &block,
   return success();
 }
 
+// Adds a wire to disable signals to allow for the polarity flip of the
+// enable signal to happen legally (diable iff must not contain ~).
+static void wireDisableSignals(hw::HWEmittableModuleLike module) {
+  OpBuilder builder(module);
+
+  module.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<sv::AssertPropertyOp, sv::AssumePropertyOp, sv::CoverPropertyOp>(
+            [&](auto assertLike) {
+              if (auto disable = assertLike.getDisable()) {
+                Value wdisable =
+                    builder.create<hw::WireOp>(assertLike.getLoc(), disable);
+                assertLike.getDisableMutable().assign(wdisable);
+              }
+            })
+        .Default([&](auto) {});
+  });
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
@@ -1332,6 +1351,9 @@ LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.
   prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
+
+  // Make sure that assertions have their disable signals spilled to wires
+  wireDisableSignals(module);
   return success();
 }
 
