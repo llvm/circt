@@ -569,8 +569,15 @@ FileEmitter::emitSourceLangTypeInfo(const DISourceLang &sourceLangType) {
 
         auto paramObj = JObject{};
         for (const auto &entry : cast<DictionaryAttr>(param))
-          paramObj[entry.getName().getValue()] =
-              cast<StringAttr>(entry.getValue()).getValue();
+          if (auto e = dyn_cast<StringAttr>(entry.getValue()))
+            paramObj[entry.getName().getValue()] = e.getValue();
+          // Fix issue: error with Boolean parameters
+          else if (auto e = dyn_cast<BoolAttr>(entry.getValue())) {
+            if (e.getValue())
+              paramObj[entry.getName().getValue()] = "true";
+            else
+              paramObj[entry.getName().getValue()] = "false";
+          }
 
         paramsArray.push_back(std::move(paramObj));
       }
