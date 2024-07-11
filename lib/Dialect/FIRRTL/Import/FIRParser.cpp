@@ -248,7 +248,7 @@ struct FIRParser {
   /// output a diagnostic and return failure.
   ParseResult parseToken(FIRToken::Kind expectedToken, const Twine &message);
 
-  //// Parse a comma-separated list of elements, terminated with an arbitrary
+  /// Parse a comma-separated list of elements, terminated with an arbitrary
   /// token.
   ParseResult parseListUntil(FIRToken::Kind rightToken,
                              const std::function<ParseResult()> &parseElement);
@@ -343,9 +343,8 @@ ParseResult FIRParser::parseToken(FIRToken::Kind expectedToken,
 ParseResult
 FIRParser::parseListUntil(FIRToken::Kind rightToken,
                           const std::function<ParseResult()> &parseElement) {
-  if (consumeIf(rightToken)) {
+  if (consumeIf(rightToken))
     return success();
-  }
 
   if (parseElement())
     return failure();
@@ -355,9 +354,9 @@ FIRParser::parseListUntil(FIRToken::Kind rightToken,
       return failure();
   }
 
-  if (parseToken(rightToken, "expected ','")) {
+  if (parseToken(rightToken, "expected ','"))
     return failure();
-  }
+
   return success();
 }
 
