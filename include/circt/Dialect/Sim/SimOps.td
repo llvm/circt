@@ -297,7 +297,34 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let hasVerifier = true;
 
   let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
-}
 
+  let extraClassDeclaration = [{
+    /// Returns true iff all of the input strings are primitive
+    /// (i.e. non-concatenated) tokens or block arguments.
+    bool isFlat() {
+      return llvm::none_of(getInputs(), [](Value operand) {
+        return !!operand.getDefiningOp<circt::sim::FormatStringConcatOp>();
+      });
+    };
+
+    /// Attempts to flatten this operation's input strings as much as possible.
+    ///
+    /// The flattened values are pushed into the passed vector.
+    /// If the concatenation is acyclic, the function will return 'success'
+    /// and all the flattened values are guaranteed to _not_ be the result of
+    /// a format string concatenation.
+    /// If a cycle is encountered, the function will return 'failure'.
+    /// On encountering a cycle, the result of the concat operation
+    /// forming the cycle is pushed into the list of flattened values
+    /// and flattening continues without recursing into the cycle.
+    LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::ValueRange":$inputs), [{
+      return build($_builder, $_state, circt::sim::FormatStringType::get($_builder.getContext()), inputs);
+    }]>
+  ];
+}
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
