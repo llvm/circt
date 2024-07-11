@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -65,6 +66,9 @@ void ExternalizeRegistersPass::runOnOperation() {
       if (!module)
         continue;
 
+      // TODO: this won't work if the same clock is passed between hw.modules.
+      // Maybe store a map from module names to arg indexes, and use that to
+      // check the clocks are equivalent
       mlir::Value firstClock;
       unsigned numRegs = 0;
       module->walk([&](Operation *op) {
@@ -97,26 +101,39 @@ void ExternalizeRegistersPass::runOnOperation() {
           return;
         }
         if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
+          OpBuilder builder(instanceOp);
           auto newInputs =
               addedInputs[instanceOp.getModuleNameAttr().getAttr()];
           auto newOutputs =
               addedOutputs[instanceOp.getModuleNameAttr().getAttr()];
           addedInputs[module.getSymNameAttr()].append(newInputs);
           addedOutputs[module.getSymNameAttr()].append(newOutputs);
-          for (auto input : newInputs)
+          SmallVector<Attribute> argNames(instanceOp.getArgNamesAttr().begin(),
+                                          instanceOp.getArgNamesAttr().end());
+          SmallVector<Attribute> resultNames(
+              instanceOp.getResultNamesAttr().begin(),
+              instanceOp.getResultNamesAttr().end());
+          for (auto [i, input] : enumerate(newInputs)) {
             instanceOp.getInputsMutable().append(
                 module.appendInput("", input).second);
-          OpBuilder builder(instanceOp);
+            argNames.push_back(builder.getStringAttr("_" + std::to_string(i)));
+          }
+          for (auto output : enumerate(newOutputs)) {
+            resultNames.push_back(builder.getStringAttr(""));
+          }
           SmallVector<Type> resTypes(instanceOp->getResultTypes());
           resTypes.append(newOutputs);
           auto newInst = builder.create<InstanceOp>(
               instanceOp.getLoc(), resTypes, instanceOp.getInstanceNameAttr(),
               instanceOp.getModuleNameAttr(), instanceOp.getInputs(),
-              instanceOp.getArgNamesAttr(), instanceOp.getResultNamesAttr(),
+              builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
               instanceOp.getParametersAttr(), instanceOp.getInnerSymAttr());
           for (auto output : newInst->getResults().take_back(newOutputs.size()))
             module.appendOutput("", output);
-          instanceOp.erase();
+          numRegs += newInputs.size();
+          instanceOp.replaceAllUsesWith(
+              newInst.getResults().take_front(instanceOp->getNumResults()));
+          instanceOp->erase();
           return;
         }
       });
