@@ -3438,14 +3438,14 @@ public:
     assert(state.pp.getListener() == &state.saver);
   }
 
-private:
-  using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
-  friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
-
   /// Emit the specified value as an SVA property or sequence.
   EmittedProperty
   emitNestedProperty(Value property,
                      PropertyPrecedence parenthesizeIfLooserThan);
+
+private:
+  using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
+  friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
   EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::AndOp op);
@@ -4792,6 +4792,8 @@ LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
   return emitConcurrentAssertion(op, PPExtString("cover"));
 }
 
+// Property assertions are what gets emitted if the user want to combine
+// concurrent assertions with a disable signal, a clock and an ltl property.
 template <typename Op>
 LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
   if (hasSVAttributes(op))
@@ -4842,7 +4844,9 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
           });
           ps << PP::space;
         }
-        emitExpression(op.getProperty(), ops);
+        // Emit the property as an LTL property
+        PropertyEmitter(emitter, ops)
+            .emitNestedProperty(op.getProperty(), PropertyPrecedence::Lowest);
         ps << ");";
       });
     });

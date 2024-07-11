@@ -10,6 +10,8 @@
 // declarations.
 //
 //===----------------------------------------------------------------------===//
+include "circt/Dialect/LTL/LTLDialect.td"
+include "circt/Dialect/LTL/LTLTypes.td"
 
 /// Immediate assertions, like `assert`.
 def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
@@ -161,18 +163,18 @@ def CoverConcurrentOp : ConcurrentVerifOp<"cover.concurrent",
 }
 
 
-/// Concurrent verification operations defined by the SV standard.
+/// Property Assertions/Assumptions/Cover analogous to SVA property verification ops.
 class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSegments]> :
     SVOp<mnemonic, traits> {
   let arguments = (ins
-    I1:$property,
+    LTLAnyPropertyType:$property,
     OptionalAttr<EventControlAttr>:$event, Optional<I1>:$clock, 
     Optional<I1>:$disable,
     OptionalAttr<StrAttr>:$label);
 
   let assemblyFormat = [{
     $property (`on` $event^)? ($clock^)? (`disable_iff` $disable^)?
-    (`label` $label^)? attr-dict
+    (`label` $label^)? attr-dict `:` type($property)
   }];
 
   let builders = [
@@ -189,7 +191,7 @@ class PropertyVerifOp<string mnemonic, list<Trait> traits = [AttrSizedOperandSeg
 }
 
 def AssertPropertyOp : PropertyVerifOp<"assert_property"> {
-  let summary = "property assertion -- can be disbled and clocked";
+  let summary = "property assertion -- can be disabled and clocked";
   let description = [{
     Assert that a given SVA-style property holds. This is only checked when 
     the disable signal is low and a clock event occurs. This is analogous to 
@@ -198,7 +200,7 @@ def AssertPropertyOp : PropertyVerifOp<"assert_property"> {
 }
 
 def AssumePropertyOp : PropertyVerifOp<"assume_property"> {
-  let summary = "property assumption -- can be disbled and clocked";
+  let summary = "property assumption -- can be disabled and clocked";
   let description = [{
     Assume that a given SVA-style property holds. This is only considered when 
     the disable signal is low and a clock event occurs. This is analogous to 
@@ -207,7 +209,7 @@ def AssumePropertyOp : PropertyVerifOp<"assume_property"> {
 }
 
 def CoverPropertyOp : PropertyVerifOp<"cover_property"> {
-  let summary = "property cover point -- can be disbled and clocked";
+  let summary = "property cover point -- can be disabled and clocked";
   let description = [{
     Cover when a given SVA-style property holds. This is only checked when 
     the disable signal is low and a clock event occurs. This is analogous to 

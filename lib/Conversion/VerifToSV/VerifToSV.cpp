@@ -148,10 +148,11 @@ template <typename TargetOp, typename Op, typename Adaptor>
 static LogicalResult convert(Op op, Adaptor operands,
                              ConversionPatternRewriter &rewriter) {
   // negate the enable if it exists
-  Value enable, wdisable;
-  if ((enable = operands.getEnable())) {
-    Value disable = rewriter.create<comb::XorOp>(op.getLoc(), enable, enable);
-    wdisable = rewriter.create<hw::WireOp>(op.getLoc(), disable);
+  Value wdisable;
+  if (auto enable = operands.getEnable()) {
+    Value disable =
+        rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, enable);
+    wdisable = rewriter.createOrFold<hw::WireOp>(op.getLoc(), disable);
   }
 
   rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), wdisable,
@@ -163,10 +164,11 @@ template <typename TargetOp, typename Op, typename Adaptor>
 static LogicalResult convertClocked(Op op, Adaptor operands,
                                     ConversionPatternRewriter &rewriter) {
   // negate the enable if it exists
-  Value enable, wdisable;
-  if ((enable = operands.getEnable())) {
-    Value disable = rewriter.create<comb::XorOp>(op.getLoc(), enable, enable);
-    wdisable = rewriter.create<hw::WireOp>(op.getLoc(), disable);
+  Value wdisable;
+  if (auto enable = operands.getEnable()) {
+    Value disable =
+        rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, enable);
+    wdisable = rewriter.createOrFold<hw::WireOp>(op.getLoc(), disable);
   }
   auto eventattr = sv::EventControlAttr::get(
       op.getContext(), verifToSVEventControl(operands.getEdge()));
@@ -267,9 +269,15 @@ void VerifToSVPass::runOnOperation() {
   ConversionTarget target(context);
   RewritePatternSet patterns(&context);
 
-  target.addIllegalOp<PrintOp, HasBeenResetOp>();
+  target.addIllegalOp<PrintOp, HasBeenResetOp, verif::AssertOp, verif::AssumeOp,
+                      verif::CoverOp, ClockedAssertOp, ClockedAssumeOp,
+                      ClockedCoverOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
-  patterns.add<PrintOpConversionPattern, HasBeenResetConversion>(&context);
+  patterns.add<PrintOpConversionPattern, HasBeenResetConversion,
+               VerifAssertConversion, VerifAssumeConversion,
+               VerifCoverConversion, VerifClockedAssertConversion,
+               VerifClockedAssumeConversion, VerifClockedCoverConversion>(
+      &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
