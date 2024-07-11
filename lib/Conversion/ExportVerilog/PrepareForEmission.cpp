@@ -1325,13 +1325,13 @@ static void wireDisableSignals(hw::HWEmittableModuleLike module) {
             [&](auto assertLike) {
               OpBuilder builder(assertLike);
               if (auto disable = assertLike.getDisable()) {
-                Value wdisable = builder.create<sv::WireOp>(
+                Value wdisable = builder.createOrFold<sv::WireOp>(
                     assertLike.getLoc(),
                     IntegerType::get(assertLike.getContext(), 1));
                 // Assign the wire to the disable and read its value
-                builder.create<sv::AssignOp>(assertLike.getLoc(), wdisable,
-                                             disable);
-                Value read = builder.create<sv::ReadInOutOp>(
+                builder.createOrFold<sv::AssignOp>(assertLike.getLoc(),
+                                                   wdisable, disable);
+                Value read = builder.createOrFold<sv::ReadInOutOp>(
                     assertLike.getLoc(), wdisable);
                 assertLike.getDisableMutable().assign(read);
               }

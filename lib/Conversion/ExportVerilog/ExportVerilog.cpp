@@ -4867,7 +4867,11 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
   ops.insert(op);
   ps.addCallback({op, true});
   ps.scopedBox(PP::ibox2, [&]() {
-    emitAssertionLabel(op);
+    // Check for a label and emit it if necessary
+    auto label = op.getLabel();
+    if (label.has_value())
+      ps << PPExtString(*label) << ":" << PP::space;
+
     ps.scopedBox(PP::cbox0, [&]() {
       if (emitAsImmediate)
         ps << opName << "(";

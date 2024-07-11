@@ -5,14 +5,14 @@ hw.module @Labels(in %a: i1) {
   // CHECK: foo1: assert property (a);
   // CHECK: foo2: assume property (a);
   // CHECK: foo3: cover property (a);
-  sv.assert_property %a {label = "foo1"} : i1
-  sv.assume_property %a {label = "foo2"} : i1
-  sv.cover_property %a {label = "foo3"} : i1
+  sv.assert_property %a label "foo1" : i1
+  sv.assume_property %a label "foo2" : i1
+  sv.cover_property %a label "foo3" : i1
 
   // CHECK: bar: assert property (a);
   // CHECK: bar_0: assert property (a);
-  sv.assert_property %a {label = "bar"} : i1
-  sv.assert_property %a {label = "bar"} : i1
+  sv.assert_property %a label "bar" : i1
+  sv.assert_property %a label "bar" : i1
 }
 
 // CHECK-LABEL: module BasicEmissionNonTemporal
