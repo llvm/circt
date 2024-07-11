@@ -1,8 +1,8 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, Module, generator,
-                   types)
+from pycde import (Clock, Input, InputChannel, OutputChannel, Module, Reset,
+                   generator, types)
 from pycde import esi
 from pycde.common import AppID, RecvBundle, SendBundle
 from pycde.constructs import Wire
@@ -150,18 +150,22 @@ print(Bundle1)
 print(Bundle1.resp)
 
 
-# CHECK-LABEL:  hw.module @SendBundleTest(in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
-# CHECK-NEXT:     %bundle, %resp = esi.bundle.pack %s1_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
+# CHECK-LABEL:  hw.module @SendBundleTest(in %clk : !seq.clock, in %rst : i1, in %s1_in : !esi.channel<i32>, out b_send : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, out i1_out : !esi.channel<i1>) attributes {output_file = #hw.output_file<"SendBundleTest.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     [[B0:%.+]] = esi.buffer %clk, %rst, %s1_in {stages = 4 : i64} : i32
+# CHECK-NEXT:     %bundle, %resp = esi.bundle.pack [[B0]] : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>
 # CHECK-NEXT:     hw.output %bundle, %resp : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i1> from "resp"]>, !esi.channel<i1>
 @unittestmodule()
 class SendBundleTest(Module):
+  clk = Clock()
+  rst = Reset()
   b_send = SendBundle(Bundle1)
   s1_in = InputChannel(types.i32)
   i1_out = OutputChannel(types.i1)
 
   @generator
   def build(self):
-    self.b_send, from_chans = Bundle1.pack(req=self.s1_in)
+    s1_buffered = self.s1_in.buffer(self.clk, self.rst, 4)
+    self.b_send, from_chans = Bundle1.pack(req=s1_buffered)
     self.i1_out = from_chans.resp
 
 

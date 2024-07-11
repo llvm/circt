@@ -721,6 +721,21 @@ class ChannelSignal(Signal):
     else:
       raise TypeError("Unknown signaling standard")
 
+  def buffer(self, clk: ClockSignal, reset: BitsSignal,
+             stages: int) -> ChannelSignal:
+    """Insert a channel buffer with `stages` stages on the channel. Return the
+    output of that buffer."""
+
+    from .dialects import esi
+    return ChannelSignal(
+        esi.ChannelBufferOp(
+            self.type,
+            clk,
+            reset,
+            self.value,
+            stages=stages,
+        ), self.type)
+
 
 class BundleSignal(Signal):
   """Signal for types.Bundle."""

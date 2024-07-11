@@ -16,6 +16,8 @@ import sys
 
 class LoopbackInOutAdd7(Module):
   """Loopback the request from the host, adding 7 to the first 15 bits."""
+  clk = Clock()
+  rst = Reset()
 
   @generator
   def construct(ports):
@@ -28,8 +30,9 @@ class LoopbackInOutAdd7(Module):
     data, valid = args.unwrap(ready)
     plus7 = data + 7
     data_chan, data_ready = loopback.type.wrap(plus7.as_uint(16), valid)
+    data_chan_buffered = data_chan.buffer(ports.clk, ports.rst, 5)
     ready.assign(data_ready)
-    loopback.assign(data_chan)
+    loopback.assign(data_chan_buffered)
 
 
 @modparams
@@ -61,7 +64,7 @@ class Top(Module):
 
   @generator
   def construct(ports):
-    LoopbackInOutAdd7()
+    LoopbackInOutAdd7(clk=ports.clk, rst=ports.rst)
     for i in range(4, 18, 5):
       MMIOClient(i)()
 
