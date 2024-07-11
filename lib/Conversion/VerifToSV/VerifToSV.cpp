@@ -141,9 +141,11 @@ static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
   llvm_unreachable("Unknown event control kind");
 }
 
+// Generic conversion for verif.assert, verif.assume and verif.cover
 template <typename Op, typename TargetOp>
 struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
   using OpConversionPattern<Op>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
 
   // Convert the verif.assert like op that uses an enable, into an equivalent
   // sv.assert_property op that has the negated enable as its disable.
@@ -159,26 +161,40 @@ struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
           rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
     }
 
-    // Check for a clock operand
-    if (auto clock = operands.getClock()) {
-      if (auto edge = operands.getEdge()) {
-        auto eventattr = sv::EventControlAttr::get(
-            op.getContext(), verifToSVEventControl(operands.getEdge()));
+    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), disable,
+                                          operands.getLabelAttr());
 
-        rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(),
-                                              eventattr, operands.getClock(),
-                                              disable, operands.getLabelAttr());
-      } else {
-        // Make sure that a clock is never given without an event signal
-        op->emitError("A clock must be tied to an event control attribute, but "
-                      "none was given!");
-        return failure();
-      }
-    } else {
-      // If no clock is given then only use the disable
-      rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), disable,
-                                            operands.getLabelAttr());
+    return success();
+  }
+};
+
+// Generic conversion for verif.clocked_assert, verif.clocked_assume and
+// verif.clocked_cover
+template <typename Op, typename TargetOp>
+struct VerifClockedAssertLikeConversion : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
+
+  // Convert the verif.assert like op that uses an enable, into an equivalent
+  // sv.assert_property op that has the negated enable as its disable.
+  LogicalResult
+  matchAndRewrite(Op op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Negate the enable if it exists
+    Value disable;
+    if (auto enable = operands.getEnable()) {
+      Value constOne = rewriter.createOrFold<hw::ConstantOp>(
+          op.getLoc(), rewriter.getI1Type(), 1);
+      disable =
+          rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
     }
+    // Convert a verif clock edge into an sv event control
+    auto eventattr = sv::EventControlAttr::get(
+        op.getContext(), verifToSVEventControl(operands.getEdge()));
+
+    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), eventattr,
+                                          operands.getClock(), disable,
+                                          operands.getLabelAttr());
 
     return success();
   }
@@ -207,15 +223,17 @@ void VerifToSVPass::runOnOperation() {
                       verif::CoverOp, ClockedAssertOp, ClockedAssumeOp,
                       ClockedCoverOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
-  patterns
-      .add<PrintOpConversionPattern, HasBeenResetConversion,
-           VerifAssertLikeConversion<verif::AssertOp, AssertPropertyOp>,
-           VerifAssertLikeConversion<verif::AssumeOp, AssumePropertyOp>,
-           VerifAssertLikeConversion<verif::CoverOp, CoverPropertyOp>,
-           VerifAssertLikeConversion<verif::ClockedAssertOp, AssertPropertyOp>,
-           VerifAssertLikeConversion<verif::ClockedAssumeOp, AssumePropertyOp>,
-           VerifAssertLikeConversion<verif::ClockedCoverOp, CoverPropertyOp>>(
-          &context);
+  patterns.add<
+      PrintOpConversionPattern, HasBeenResetConversion,
+      VerifAssertLikeConversion<verif::AssertOp, AssertPropertyOp>,
+      VerifAssertLikeConversion<verif::AssumeOp, AssumePropertyOp>,
+      VerifAssertLikeConversion<verif::CoverOp, CoverPropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedAssertOp,
+                                       AssertPropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedAssumeOp,
+                                       AssumePropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedCoverOp, CoverPropertyOp>>(
+      &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
