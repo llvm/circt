@@ -23,6 +23,8 @@
 
 #ifdef __linux__
 #include <dlfcn.h>
+#include <linux/limits.h>
+#include <unistd.h>
 #elif _WIN32
 // TODO: this.
 #endif

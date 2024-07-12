@@ -28,8 +28,8 @@ using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::trace;
 
-// We only support v1.
-constexpr uint32_t ESIVersion = 1;
+// We only support v0.
+constexpr uint32_t ESIVersion = 0;
 
 namespace {
 class TraceChannelPort;

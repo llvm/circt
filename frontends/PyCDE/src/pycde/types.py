@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from functools import singledispatchmethod
 
-from .support import get_user_loc
+from .support import clog2, get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, seq, sv
@@ -84,7 +84,7 @@ class Type:
     return self
 
   @property
-  def bitwidth(self):
+  def bitwidth(self) -> int:
     return hw.get_bitwidth(self._type)
 
   @property
@@ -310,6 +310,10 @@ class Array(Type):
   @property
   def size(self):
     return self._type.size
+
+  @property
+  def select_bits(self) -> int:
+    return clog2(self.size)
 
   @property
   def shape(self):

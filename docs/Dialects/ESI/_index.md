@@ -2,6 +2,9 @@
 
 The Elastic Silicon Interconnect dialect aims to aid in accelerator system construction.
 
+**WARNING**: The ESI dialect has evolved significantly since its inception while
+these documents have not. As such, large parts are significantly out-of-date.
+
 [TOC]
 
 ## Application channels
