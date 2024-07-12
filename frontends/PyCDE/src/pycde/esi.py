@@ -613,20 +613,7 @@ def package(sys: System):
   """Package all ESI collateral."""
 
   import shutil
-  __root_dir__ = Path(__file__).parent
-
-  # When pycde is installed through a proper install, all of the collateral
-  # files are under a dir called "collateral".
-  collateral_dir = __root_dir__ / "collateral"
-  if collateral_dir.exists():
-    esi_lib_dir = collateral_dir
-  else:
-    # Build we also want to allow pycde to work in-tree for developers. The
-    # necessary files are screwn around the build tree.
-    build_dir = __root_dir__.parents[4]
-    circt_lib_dir = build_dir / "tools" / "circt" / "lib"
-    esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
-  # shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
+  shutil.copy(__dir__ / "ESIPrimitives.sv", sys.hw_output_dir)
 
 
 def ChannelDemux2(data_type: Type):
