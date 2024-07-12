@@ -501,7 +501,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 LogicalResult StructCreateOp::verify() {
   /// checks if the types of the inputs are exactly equal to the types of the
   /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(getType())
+  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto inputs = getInput();
@@ -699,6 +699,75 @@ ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
         return parser.emitError(inputOperandsLoc,
                                 "invalid kind of type specified");
       });
+}
+
+OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
+  auto input = adaptor.getInput();
+  auto newValue = adaptor.getNewValue();
+  if (!input || !newValue)
+    return {};
+  SmallVector<NamedAttribute> array;
+  llvm::copy(cast<DictionaryAttr>(input), std::back_inserter(array));
+  for (auto &ele : array) {
+    if (ele.getName() == getFieldName())
+      ele.setValue(newValue);
+  }
+  return DictionaryAttr::get(getContext(), array);
+}
+
+LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
+                                           PatternRewriter &rewriter) {
+  // Canonicalize multiple injects into a create op and eliminate overwrites.
+  SmallPtrSet<Operation *, 4> injects;
+  DenseMap<StringAttr, Value> fields;
+
+  // Chase a chain of injects. Bail out if cycles are present.
+  StructInjectOp inject = op;
+  Value input;
+  do {
+    if (!injects.insert(inject).second)
+      return failure();
+
+    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
+    input = inject.getInput();
+    inject = input.getDefiningOp<StructInjectOp>();
+  } while (inject);
+  assert(input && "missing input to inject chain");
+
+  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
+                     cast<RefType>(op.getType()).getNestedType())
+                     .Case<StructType, UnpackedStructType>(
+                         [](auto &type) { return type.getMembers(); })
+                     .Default([](auto) { return std::nullopt; });
+
+  // If the inject chain sets all fields, canonicalize to create.
+  if (fields.size() == members.size()) {
+    SmallVector<Value> createFields;
+    for (const auto &member : members) {
+      auto it = fields.find(member.name);
+      assert(it != fields.end() && "missing field");
+      createFields.push_back(it->second);
+    }
+    op.getInputMutable();
+    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), createFields);
+    return success();
+  }
+
+  // Nothing to canonicalize, only the original inject in the chain.
+  if (injects.size() == fields.size())
+    return failure();
+
+  // Eliminate overwrites. The hash map contains the last write to each field.
+  for (const auto &member : members) {
+    auto it = fields.find(member.name);
+    if (it == fields.end())
+      continue;
+    input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
+                                            member.name, it->second);
+  }
+
+  rewriter.replaceOp(op, input);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

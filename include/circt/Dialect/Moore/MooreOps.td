@@ -992,7 +992,7 @@ def StructCreateOp : MooreOp<"struct_create", [Pure]> {
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
   let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs UnpackedType:$result);
+  let results = (outs RefType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
@@ -1079,6 +1079,8 @@ def StructInjectOp : MooreOp<"struct_inject", [Pure]>  {
   let results = (outs RefType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = true;
 }
 
 def UnionCreateOp : MooreOp<"union_create", [Pure]> {

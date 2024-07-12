@@ -100,7 +100,7 @@ struct RvalueExprVisitor {
     }
 
     if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp->getOperand(0);
+      auto input = refOp.getInput();
       if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
         refOp.getInputMutable();
         refOp->erase();
