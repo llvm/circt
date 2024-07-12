@@ -3503,8 +3503,9 @@ void PropertyEmitter::emitAssertPropertyBody(
     ps << "disable iff" << PP::nbsp << "(";
     ps.scopedBox(PP::ibox2, [&] {
       emitNestedProperty(disable, PropertyPrecedence::Unary);
-      ps << ")" << PP::space;
+      ps << ")";
     });
+    ps << PP::space;
   }
 
   ps.scopedBox(PP::ibox0,
@@ -3525,8 +3526,9 @@ void PropertyEmitter::emitAssertPropertyBody(
   ps.scopedBox(PP::ibox2, [&] {
     ps << PPExtString(stringifyEventControl(event)) << PP::space;
     emitNestedProperty(clock, PropertyPrecedence::Lowest);
-    ps << ")" << PP::space;
+    ps << ")";
   });
+  ps << PP::space;
 
   // Emit the rest of the body
   emitAssertPropertyBody(property, disable, parenthesizeIfLooserThan, true);
