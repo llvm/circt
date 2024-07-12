@@ -7,9 +7,9 @@ prop = 2
 # example command
 # ninja && valgrind bin/fsm-verification ../fsm_examples/input-err-state/errstate-fsm/fsm_5states_0loops.mlir ../fsm_examples/ltl_p3.mlir 4
 
-folder ="fsm/err/"
+folder ="fsm/linear/"
 
-target="smtlib-fsm/err-p2/"
+target="smtlib-fsm/linear-p2/"
 
 
 for filename in os.listdir("../"+target):
@@ -33,7 +33,7 @@ for file in os.listdir("../"+folder):
 
     elif prop == 2:
         ltl.write("%state = unrealized_conversion_cast to !ltl.property\n")
-        ltl.write("%e0 = ltl.not %state {state = \"_"+str(states-1)+"\", var = \"1\", value = \""+str(states-1)+"\"} : !ltl.property")
+        ltl.write("%e0 = ltl.not %state {state = \"_"+str(states-1)+"\", var = \"0\", value = \""+str(states-1)+"\"} : !ltl.property")
 
     elif prop == 3:
         ltl.write("%error = unrealized_conversion_cast to !ltl.sequence\n")

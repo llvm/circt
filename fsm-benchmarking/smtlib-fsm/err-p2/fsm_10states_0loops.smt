@@ -259,9 +259,10 @@
  )
 (assert
  (forall ((time Int) )(let (($x55 (forall ((var1 Int) )(let ((?x62 (input-arg0 time)))
- (let (($x295 (_9 ?x62 var1 time)))
- (= $x295 (and (distinct var1 9) true)))))
+ (let (($x295 (ERR ?x62 var1 time)))
+ (not $x295))))
  ))
  (=> (and (>= time 0) (< time 19)) $x55)))
  )
 (check-sat)
+(get-model)

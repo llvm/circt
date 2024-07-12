@@ -1,5 +1,5 @@
 ; 
-(set-info :status unknown)
+(set-logic HORN)
 (declare-fun _0 (Int Int) Bool)
 (declare-fun _1 (Int Int) Bool)
 (declare-fun _2 (Int Int) Bool)
@@ -102,7 +102,7 @@
 (declare-fun _99 (Int Int) Bool)
 (declare-fun _100 (Int Int) Bool)
 (assert
- (forall ((var0 Int) )(_0 0 0))
+ (_0 0 0)
  )
 (assert
  (forall ((time Int) )(let (($x53 (forall ((var0 Int) )(let (($x51 (_0 var0 time)))

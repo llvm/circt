@@ -14,7 +14,7 @@ for n in num_fsm:
 
     const = []
 
-    nl = 0# np.random.randint(2, n-1)
+    nl = 0
 
     print("num loops: "+str(nl))
 
@@ -72,13 +72,11 @@ for n in num_fsm:
     print("guards: "+str(len(guards)))
     print("actions: "+str(len(actions)))
 
-    f.write("fsm.machine @fsm"+str(n)+"(%err: i16) -> (i16) attributes {initialState = \"_0\"} {\n")
+    f.write("fsm.machine @fsm"+str(n)+"() -> (i16) attributes {initialState = \"_0\"} {\n")
     f.write("\t%x0 = fsm.variable \"x0\" {initValue = 0 : i16} : i16\n")
     for c in const:
         f.write("\t%c"+str(c)+" = hw.constant "+str(c)+" : i16\n")
     f.write("\t%c1 = hw.constant 1 : i16\n")
-    f.write("\t%c0 = hw.constant 0 : i16\n")
-
 
     for st in range(n):
         f.write("\n\n\tfsm.state @_"+str(st)+" output {\n")
@@ -89,30 +87,19 @@ for n in num_fsm:
                 f.write("\n\t\tfsm.transition @_"+str(cols[i]))
                 if guards[i]!="NULL":
                     f.write("\n\t\t\tguard {")
-                    f.write("\n\t\t\t\t%tmp1 = "+guards[i]+" : i16")
-                    f.write("\n\t\t\t\t%tmp2 = comb.icmp ne %err, %c0 : i16")
-                    f.write("\n\t\t\t\t%tmp3 = comb.and %tmp1, %tmp2 : i16")
-                    f.write("\n\t\t\t\tfsm.return %tmp3")
+                    f.write("\n\t\t\t\t%tmp = "+guards[i]+" : i16")
+                    f.write("\n\t\t\t\tfsm.return %tmp")
                     f.write("\n\t\t\t} action {")
-                else: #default guard: not error 
-                    f.write("\n\t\t\tguard {")
-                    f.write("\n\t\t\t\t%tmp1 = comb.icmp ne %err, %c0 : i16")
-                    f.write("\n\t\t\t\tfsm.return %tmp1")
-                    f.write("\n\t\t\t} action {")
-                    f.write("\n\t\t\t\t%tmp = "+actions[i]+" : i16")
-                    f.write("\n\t\t\t\tfsm.update %x0, %tmp : i16")
+                else:
+                    f.write("\n\t\taction {")
+                f.write("\n\t\t\t\t%tmp = "+actions[i]+" : i16")
+                f.write("\n\t\t\t\tfsm.update %x0, %tmp : i16")
                 f.write("\n\t\t\t}")
-        # always add error transition
-        f.write("\n\t\tfsm.transition @ERR")
-        f.write("\n\t\t\tguard {")
-        f.write("\n\t\t\t\t%tmp1 = comb.icmp eq %err, %c1 : i16")
-        f.write("\n\t\t\t\tfsm.return %tmp1")
-        f.write("\n\t\t\t}")
         f.write("\n\t}")
     
     # last state
     f.write("\n\n\tfsm.state @_"+str(n)+" output {\n\t\tfsm.output %x0: i16\n\t} transitions {\n\t}")
-    f.write("\n\n\tfsm.state @ERR output {\n\t\tfsm.output %x0: i16\n\t} transitions {\n\t}")
+
         
     # non reachable state
 

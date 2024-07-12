@@ -487,7 +487,6 @@ void populateST(Operation &mod, context &c, vector<string> &stateInv, vector<tra
                             t.isOutput = true;
                         }
 
-                        llvm::outs()<<"\nwtf2\n";
 
                         transitions.push_back(t);
                       }
@@ -699,7 +698,7 @@ expr parseLTL(string inputFile, vector<expr> &solverVars, vector<string> &stateI
               }
 
               expr body = !(stateInvFun[insertState(state, stateInv)])(solverVarsAfter.size(), solverVarsAfter.data());
-              expr ret = (forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>0 && solverVars[solverVars.size()-1]<time-1 && (solverVars[signal]==input) && (stateInvFun[insertState(state, stateInv)])(solverVars.size(), solverVars.data())), nestedForall(solverVars, body, numArgs, numOutputs))));
+              expr ret = (forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>0 && solverVars[solverVars.size()-1]<time-1 && (solverVars[signal]==input) && (stateInvFun[insertState(state, stateInv)])(solverVars.size(), solverVars.data())), nestedForall(solverVarsAfter, body, numArgs, numOutputs))));
               return ret;
           } else{
             llvm::outs()<<"Error Management Property can not be parsed.";
@@ -849,8 +848,8 @@ void parse_fsm(string input, string property, string output, int time){
   expr body = stateInvFun.at(transitions.at(0).from)(solverVarsInit.size(), solverVarsInit.data());
   // initial condition
 
-  expr nested = nestedForall(solverVars, body, numArgs, numOutputs);
-  s.add(nested);
+  // expr nested = nestedForall(solverVars, body, numArgs, numOutputs);
+  s.add(body);
 
   for(auto t: transitions){
 

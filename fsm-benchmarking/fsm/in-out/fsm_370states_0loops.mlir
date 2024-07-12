@@ -1,24 +1,15 @@
-fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
+fsm.machine @fsm370() -> (i16) attributes {initialState = "_0"} {
 	%x0 = fsm.variable "x0" {initValue = 0 : i16} : i16
 	%c1 = hw.constant 1 : i16
-	%c0 = hw.constant 0 : i16
 
 
 	fsm.state @_0 output {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_1
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -26,17 +17,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_2
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -44,17 +27,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_3
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -62,17 +37,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_4
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -80,17 +47,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_5
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -98,17 +57,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_6
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -116,17 +67,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_7
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -134,17 +77,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_8
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -152,17 +87,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_9
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -170,17 +97,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_10
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -188,17 +107,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_11
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -206,17 +117,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_12
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -224,17 +127,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_13
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -242,17 +137,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_14
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -260,17 +147,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_15
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -278,17 +157,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_16
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -296,17 +167,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_17
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -314,17 +177,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_18
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -332,17 +187,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_19
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -350,17 +197,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_20
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -368,17 +207,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_21
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -386,17 +217,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_22
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -404,17 +227,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_23
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -422,17 +237,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_24
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -440,17 +247,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_25
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -458,17 +257,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_26
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -476,17 +267,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_27
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -494,17 +277,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_28
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -512,17 +287,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_29
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -530,17 +297,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_30
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -548,17 +307,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_31
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -566,17 +317,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_32
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -584,17 +327,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_33
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -602,17 +337,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_34
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -620,17 +347,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_35
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -638,17 +357,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_36
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -656,17 +367,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_37
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -674,17 +377,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_38
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -692,17 +387,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_39
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -710,17 +397,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_40
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -728,17 +407,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_41
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -746,17 +417,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_42
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -764,17 +427,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_43
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -782,17 +437,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_44
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -800,17 +447,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_45
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -818,17 +457,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_46
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -836,17 +467,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_47
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -854,17 +477,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_48
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -872,17 +487,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_49
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -890,17 +497,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_50
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -908,17 +507,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_51
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -926,17 +517,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_52
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -944,17 +527,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_53
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -962,17 +537,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_54
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -980,17 +547,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_55
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -998,17 +557,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_56
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1016,17 +567,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_57
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1034,17 +577,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_58
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1052,17 +587,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_59
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1070,17 +597,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_60
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1088,17 +607,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_61
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1106,17 +617,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_62
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1124,17 +627,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_63
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1142,17 +637,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_64
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1160,17 +647,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_65
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1178,17 +657,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_66
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1196,17 +667,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_67
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1214,17 +677,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_68
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1232,17 +687,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_69
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1250,17 +697,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_70
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1268,17 +707,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_71
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1286,17 +717,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_72
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1304,17 +727,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_73
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1322,17 +737,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_74
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1340,17 +747,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_75
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1358,17 +757,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_76
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1376,17 +767,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_77
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1394,17 +777,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_78
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1412,17 +787,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_79
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1430,17 +797,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_80
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1448,17 +807,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_81
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1466,17 +817,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_82
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1484,17 +827,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_83
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1502,17 +837,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_84
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1520,17 +847,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_85
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1538,17 +857,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_86
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1556,17 +867,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_87
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1574,17 +877,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_88
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1592,17 +887,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_89
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1610,17 +897,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_90
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1628,17 +907,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_91
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1646,17 +917,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_92
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1664,17 +927,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_93
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1682,17 +937,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_94
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1700,17 +947,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_95
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1718,17 +957,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_96
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1736,17 +967,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_97
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1754,17 +977,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_98
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1772,17 +987,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_99
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1790,17 +997,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_100
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1808,17 +1007,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_101
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1826,17 +1017,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_102
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1844,17 +1027,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_103
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1862,17 +1037,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_104
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1880,17 +1047,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_105
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1898,17 +1057,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_106
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1916,17 +1067,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_107
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1934,17 +1077,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_108
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1952,17 +1087,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_109
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1970,17 +1097,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_110
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -1988,17 +1107,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_111
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2006,17 +1117,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_112
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2024,17 +1127,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_113
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2042,17 +1137,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_114
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2060,17 +1147,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_115
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2078,17 +1157,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_116
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2096,17 +1167,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_117
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2114,17 +1177,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_118
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2132,17 +1187,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_119
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2150,17 +1197,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_120
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2168,17 +1207,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_121
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2186,17 +1217,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_122
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2204,17 +1227,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_123
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2222,17 +1237,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_124
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2240,17 +1247,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_125
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2258,17 +1257,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_126
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2276,17 +1267,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_127
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2294,17 +1277,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_128
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2312,17 +1287,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_129
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2330,17 +1297,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_130
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2348,17 +1307,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_131
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2366,17 +1317,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_132
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2384,17 +1327,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_133
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2402,17 +1337,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_134
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2420,17 +1347,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_135
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2438,17 +1357,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_136
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2456,17 +1367,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_137
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2474,17 +1377,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_138
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2492,17 +1387,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_139
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2510,17 +1397,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_140
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2528,17 +1407,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_141
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2546,17 +1417,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_142
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2564,17 +1427,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_143
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2582,17 +1437,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_144
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2600,17 +1447,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_145
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2618,17 +1457,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_146
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2636,17 +1467,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_147
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2654,17 +1477,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_148
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2672,17 +1487,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_149
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2690,17 +1497,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_150
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2708,17 +1507,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_151
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2726,17 +1517,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_152
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2744,17 +1527,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_153
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2762,17 +1537,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_154
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2780,17 +1547,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_155
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2798,17 +1557,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_156
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2816,17 +1567,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_157
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2834,17 +1577,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_158
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2852,17 +1587,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_159
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2870,17 +1597,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_160
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2888,17 +1607,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_161
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2906,17 +1617,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_162
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2924,17 +1627,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_163
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2942,17 +1637,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_164
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2960,17 +1647,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_165
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2978,17 +1657,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_166
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -2996,17 +1667,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_167
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3014,17 +1677,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_168
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3032,17 +1687,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_169
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3050,17 +1697,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_170
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3068,17 +1707,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_171
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3086,17 +1717,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_172
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3104,17 +1727,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_173
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3122,17 +1737,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_174
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3140,17 +1747,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_175
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3158,17 +1757,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_176
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3176,17 +1767,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_177
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3194,17 +1777,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_178
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3212,17 +1787,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_179
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3230,17 +1797,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_180
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3248,17 +1807,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_181
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3266,17 +1817,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_182
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3284,17 +1827,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_183
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3302,17 +1837,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_184
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3320,17 +1847,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_185
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3338,17 +1857,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_186
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3356,17 +1867,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_187
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3374,17 +1877,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_188
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3392,17 +1887,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_189
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3410,17 +1897,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_190
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3428,17 +1907,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_191
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3446,17 +1917,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_192
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3464,17 +1927,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_193
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3482,17 +1937,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_194
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3500,17 +1947,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_195
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3518,17 +1957,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_196
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3536,17 +1967,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_197
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3554,17 +1977,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_198
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3572,17 +1987,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_199
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3590,17 +1997,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_200
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3608,17 +2007,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_201
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3626,17 +2017,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_202
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3644,17 +2027,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_203
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3662,17 +2037,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_204
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3680,17 +2047,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_205
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3698,17 +2057,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_206
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3716,17 +2067,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_207
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3734,17 +2077,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_208
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3752,17 +2087,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_209
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3770,17 +2097,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_210
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3788,17 +2107,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_211
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3806,17 +2117,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_212
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3824,17 +2127,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_213
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3842,17 +2137,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_214
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3860,17 +2147,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_215
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3878,17 +2157,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_216
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3896,17 +2167,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_217
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3914,17 +2177,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_218
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3932,17 +2187,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_219
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3950,17 +2197,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_220
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3968,17 +2207,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_221
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -3986,17 +2217,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_222
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4004,17 +2227,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_223
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4022,17 +2237,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_224
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4040,17 +2247,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_225
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4058,17 +2257,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_226
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4076,17 +2267,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_227
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4094,17 +2277,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_228
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4112,17 +2287,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_229
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4130,17 +2297,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_230
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4148,17 +2307,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_231
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4166,17 +2317,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_232
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4184,17 +2327,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_233
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4202,17 +2337,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_234
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4220,17 +2347,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_235
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4238,17 +2357,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_236
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4256,17 +2367,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_237
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4274,17 +2377,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_238
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4292,17 +2387,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_239
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4310,17 +2397,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_240
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4328,17 +2407,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_241
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4346,17 +2417,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_242
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4364,17 +2427,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_243
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4382,17 +2437,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_244
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4400,17 +2447,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_245
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4418,17 +2457,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_246
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4436,17 +2467,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_247
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4454,17 +2477,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_248
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4472,17 +2487,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_249
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4490,17 +2497,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_250
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4508,17 +2507,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_251
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4526,17 +2517,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_252
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4544,17 +2527,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_253
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4562,17 +2537,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_254
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4580,17 +2547,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_255
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4598,17 +2557,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_256
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4616,17 +2567,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_257
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4634,17 +2577,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_258
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4652,17 +2587,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_259
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4670,17 +2597,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_260
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4688,17 +2607,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_261
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4706,17 +2617,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_262
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4724,17 +2627,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_263
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4742,17 +2637,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_264
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4760,17 +2647,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_265
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4778,17 +2657,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_266
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4796,17 +2667,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_267
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4814,17 +2677,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_268
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4832,17 +2687,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_269
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4850,17 +2697,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_270
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4868,17 +2707,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_271
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4886,17 +2717,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_272
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4904,17 +2727,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_273
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4922,17 +2737,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_274
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4940,17 +2747,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_275
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4958,17 +2757,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_276
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4976,17 +2767,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_277
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -4994,17 +2777,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_278
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5012,17 +2787,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_279
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5030,17 +2797,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_280
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5048,17 +2807,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_281
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5066,17 +2817,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_282
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5084,17 +2827,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_283
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5102,17 +2837,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_284
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5120,17 +2847,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_285
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5138,17 +2857,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_286
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5156,17 +2867,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_287
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5174,17 +2877,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_288
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5192,17 +2887,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_289
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5210,17 +2897,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_290
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5228,17 +2907,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_291
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5246,17 +2917,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_292
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5264,17 +2927,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_293
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5282,17 +2937,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_294
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5300,17 +2947,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_295
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5318,17 +2957,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_296
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5336,17 +2967,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_297
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5354,17 +2977,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_298
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5372,17 +2987,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_299
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5390,17 +2997,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_300
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5408,17 +3007,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_301
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5426,17 +3017,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_302
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5444,17 +3027,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_303
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5462,17 +3037,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_304
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5480,17 +3047,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_305
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5498,17 +3057,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_306
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5516,17 +3067,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_307
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5534,17 +3077,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_308
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5552,17 +3087,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_309
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5570,17 +3097,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_310
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5588,17 +3107,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_311
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5606,17 +3117,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_312
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5624,17 +3127,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_313
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5642,17 +3137,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_314
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5660,17 +3147,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_315
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5678,17 +3157,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_316
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5696,17 +3167,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_317
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5714,17 +3177,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_318
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5732,17 +3187,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_319
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5750,17 +3197,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_320
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5768,17 +3207,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_321
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5786,17 +3217,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_322
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5804,17 +3227,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_323
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5822,17 +3237,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_324
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5840,17 +3247,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_325
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5858,17 +3257,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_326
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5876,17 +3267,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_327
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5894,17 +3277,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_328
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5912,17 +3287,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_329
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5930,17 +3297,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_330
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5948,17 +3307,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_331
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5966,17 +3317,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_332
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -5984,17 +3327,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_333
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6002,17 +3337,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_334
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6020,17 +3347,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_335
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6038,17 +3357,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_336
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6056,17 +3367,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_337
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6074,17 +3377,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_338
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6092,17 +3387,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_339
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6110,17 +3397,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_340
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6128,17 +3407,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_341
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6146,17 +3417,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_342
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6164,17 +3427,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_343
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6182,17 +3437,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_344
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6200,17 +3447,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_345
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6218,17 +3457,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_346
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6236,17 +3467,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_347
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6254,17 +3477,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_348
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6272,17 +3487,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_349
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6290,17 +3497,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_350
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6308,17 +3507,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_351
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6326,17 +3517,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_352
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6344,17 +3527,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_353
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6362,17 +3537,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_354
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6380,17 +3547,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_355
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6398,17 +3557,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_356
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6416,17 +3567,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_357
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6434,17 +3577,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_358
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6452,17 +3587,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_359
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6470,17 +3597,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_360
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6488,17 +3607,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_361
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6506,17 +3617,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_362
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6524,17 +3627,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_363
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6542,17 +3637,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_364
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6560,17 +3647,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_365
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6578,17 +3657,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_366
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6596,17 +3667,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_367
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6614,17 +3677,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_368
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6632,17 +3687,9 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_369
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
@@ -6650,26 +3697,13 @@ fsm.machine @fsm370(%err: i16) -> (i16) attributes {initialState = "_0"} {
 		fsm.output %x0: i16
 	} transitions {
 		fsm.transition @_370
-			guard {
-				%tmp1 = comb.icmp ne %err, %c0 : i16
-				fsm.return %tmp1
-			} action {
+		action {
 				%tmp = comb.add %x0, %c1 : i16
 				fsm.update %x0, %tmp : i16
-			}
-		fsm.transition @ERR
-			guard {
-				%tmp1 = comb.icmp eq %err, %c1 : i16
-				fsm.return %tmp1
 			}
 	}
 
 	fsm.state @_370 output {
-		fsm.output %x0: i16
-	} transitions {
-	}
-
-	fsm.state @ERR output {
 		fsm.output %x0: i16
 	} transitions {
 	}
