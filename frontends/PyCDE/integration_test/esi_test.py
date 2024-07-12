@@ -5,12 +5,11 @@
 # RUN: esi-cosim.py -- %PYTHON% %S/test_software/esi_test.py cosim env
 
 import pycde
-from pycde import (AppID, Clock, Input, Module, generator)
+from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import cosim
 from pycde.constructs import Wire
-from pycde.esi import FuncService
-from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, UInt)
+from pycde.esi import FuncService, MMIO
+from pycde.types import (Bits, Channel, UInt)
 
 import sys
 
@@ -33,13 +32,38 @@ class LoopbackInOutAdd7(Module):
     loopback.assign(data_chan)
 
 
+@modparams
+def MMIOClient(add_amt: int):
+
+  class MMIOClient(Module):
+    """A module which requests an MMIO address space and upon an MMIO read
+    request, returns the <address offset into its space> + add_amt."""
+
+    @generator
+    def build(ports):
+      mmio_read_bundle = MMIO.read(appid=AppID("mmio_client", add_amt))
+
+      address_chan_wire = Wire(Channel(UInt(32)))
+      address, address_valid = address_chan_wire.unwrap(1)
+      response_data = (address.as_uint() + add_amt).as_bits(64)
+      response_chan, response_ready = Channel(Bits(64)).wrap(
+          response_data, address_valid)
+
+      address_chan = mmio_read_bundle.unpack(data=response_chan)['offset']
+      address_chan_wire.assign(address_chan)
+
+  return MMIOClient
+
+
 class Top(Module):
   clk = Clock()
-  rst = Input(Bits(1))
+  rst = Reset()
 
   @generator
   def construct(ports):
     LoopbackInOutAdd7()
+    for i in range(4, 18, 5):
+      MMIOClient(i)()
 
 
 if __name__ == "__main__":

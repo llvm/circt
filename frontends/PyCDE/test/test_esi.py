@@ -183,9 +183,9 @@ class RecvBundleTest(Module):
 # CHECK-LABEL:  hw.module @MMIOReq()
 # CHECK-NEXT:     %c0_i64 = hw.constant 0 : i64
 # CHECK-NEXT:     %false = hw.constant false
-# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+# CHECK-NEXT:     [[B:%.+]] = esi.service.req <@MMIO::@read>(#esi.appid<"mmio_req">) : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %false : i64
-# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+# CHECK-NEXT:     %offset = esi.bundle.unpack %chanOutput from [[B]] : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 @unittestmodule(esi_sys=True)
 class MMIOReq(Module):
 

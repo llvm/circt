@@ -3,13 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
-from .constructs import AssignableSignal
-from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .constructs import AssignableSignal, Mux, Wire
+from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
+                      _FromCirctValue)
 from .support import get_user_loc
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
-                    _FromCirctType)
+from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
+                    Type, UInt, types, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -467,16 +468,18 @@ class PureModule(Module):
     esi.ESIPureModuleParamOp(name, type_attr)
 
 
-MMIOReadDataResponse = Bits(64)
+MMIODataType = Bits(64)
 
 
 @ServiceDecl
 class MMIO:
-  """ESI standard service to request access to an MMIO region."""
+  """ESI standard service to request access to an MMIO region.
+  
+  For now, each client request gets a 1KB region of memory."""
 
   read = Bundle([
-      BundledChannel("offset", ChannelDirection.TO, Bits(32)),
-      BundledChannel("data", ChannelDirection.FROM, MMIOReadDataResponse)
+      BundledChannel("offset", ChannelDirection.TO, UInt(32)),
+      BundledChannel("data", ChannelDirection.FROM, MMIODataType)
   ])
 
   @staticmethod
@@ -624,3 +627,120 @@ def package(sys: System):
     circt_lib_dir = build_dir / "tools" / "circt" / "lib"
     esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
   # shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
+
+
+def ChannelDemux2(data_type: Type):
+
+  class ChannelDemux2(Module):
+    """Combinational 2-way channel demultiplexer for valid/ready signaling."""
+
+    sel = Input(Bits(1))
+    inp = Input(Channel(data_type))
+    output0 = Output(Channel(data_type))
+    output1 = Output(Channel(data_type))
+
+    @generator
+    def generate(ports) -> None:
+      input_ready = Wire(Bits(1))
+      input, input_valid = ports.inp.unwrap(input_ready)
+
+      output0 = input
+      output0_valid = input_valid & (ports.sel == Bits(1)(0))
+      output0_ch, output0_ready = Channel(data_type).wrap(
+          output0, output0_valid)
+      ports.output0 = output0_ch
+
+      output1 = input
+      output1_valid = input_valid & (ports.sel == Bits(1)(1))
+      output1_ch, output1_ready = Channel(data_type).wrap(
+          output1, output1_valid)
+      ports.output1 = output1_ch
+
+      input_ready.assign((output0_ready & (ports.sel == Bits(1)(0))) |
+                         (output1_ready & (ports.sel == Bits(1)(1))))
+
+  return ChannelDemux2
+
+
+def ChannelDemux(input: ChannelSignal, sel: BitsSignal,
+                 num_outs: int) -> List[ChannelSignal]:
+  """Build a demultiplexer of ESI channels. Ideally, this would be a
+  parameterized module with an array of output channels, but the current ESI
+  channel-port lowering doesn't deal with arrays of channels. Independent of the
+  signaling protocol."""
+
+  dmux2 = ChannelDemux2(input.type)
+
+  def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
+                 inter_num_outs: int, path: str) -> List[ChannelSignal]:
+    """Builds a binary tree of demuxes to demux the input channel."""
+    if inter_num_outs == 0:
+      return []
+    if inter_num_outs == 1:
+      return [inter_input]
+
+    demux2 = dmux2(sel=inter_sel[-1].as_bits(),
+                   inp=inter_input,
+                   instance_name=f"demux2_path{path}")
+    next_sel = inter_sel[:-1].as_bits()
+    tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
+                       path + "0")
+    tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
+                       path + "1")
+    return tree0 + tree1
+
+  return build_tree(input, sel, num_outs, "")
+
+
+def ChannelMux2(data_type: Channel):
+
+  class ChannelMux2(Module):
+    """2 channel arbiter with priority given to input0. Valid/ready only.
+    Combinational."""
+    # TODO: implement some fairness.
+
+    input0 = Input(data_type)
+    input1 = Input(data_type)
+    output_channel = Output(data_type)
+
+    @generator
+    def generate(ports):
+      input0_ready = Wire(Bits(1))
+      input0_data, input0_valid = ports.input0.unwrap(input0_ready)
+      input1_ready = Wire(Bits(1))
+      input1_data, input1_valid = ports.input1.unwrap(input1_ready)
+
+      output_idx = ~input0_valid
+      data_mux = Mux(output_idx, input0_data, input1_data)
+      valid_mux = Mux(output_idx, input0_valid, input1_valid)
+      output_channel, output_ready = data_type.wrap(data_mux, valid_mux)
+      ports.output_channel = output_channel
+
+      input0_ready.assign(output_ready & ~output_idx)
+      input1_ready.assign(output_ready & output_idx)
+
+  return ChannelMux2
+
+
+def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
+  """Build a channel multiplexer of ESI channels. Ideally, this would be a
+  parameterized module with an array of output channels, but the current ESI
+  channel-port lowering doesn't deal with arrays of channels. Independent of the
+  signaling protocol."""
+
+  assert len(input_channels) > 0
+  mux2 = ChannelMux2(input_channels[0].type)
+
+  def build_tree(inter_input_channels: List[ChannelSignal]) -> ChannelSignal:
+    assert len(inter_input_channels) > 0
+    if len(inter_input_channels) == 1:
+      return inter_input_channels[0]
+    if len(inter_input_channels) == 2:
+      m = mux2(input0=inter_input_channels[0], input1=inter_input_channels[1])
+      return m.output_channel
+    m0_out = build_tree(inter_input_channels[:len(inter_input_channels) // 2])
+    m1_out = build_tree(inter_input_channels[len(inter_input_channels) // 2:])
+    m = mux2(input0=m0_out, input1=m1_out)
+    return m.output_channel
+
+  return build_tree(input_channels)
