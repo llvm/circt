@@ -229,16 +229,16 @@ LogicalResult FormatStringConcatOp::getFlattenedInputs(
 
       if (auto nextConcat =
               currentOperand.getDefiningOp<FormatStringConcatOp>()) {
+        // Concat of a concat
         if (!concatStack.contains(nextConcat)) {
-          // Concat of a concat: Save the next operand index to visit on the
+          // Save the next operand index to visit on the
           // stack and put the new concat on top.
           top.second = operandIndex + 1;
           concatStack.insert({nextConcat, 0});
           break;
-        } else {
-          // Cyclic concatenation encountered. Don't recurse.
-          isCyclic = true;
         }
+        // Cyclic concatenation encountered. Don't recurse.
+        isCyclic = true;
       }
 
       flatOperands.push_back(currentOperand);
