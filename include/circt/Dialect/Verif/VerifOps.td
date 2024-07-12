@@ -100,40 +100,6 @@ def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Printing Formatted Messages
-//===----------------------------------------------------------------------===//
-
-def FormatVerilogStringOp : VerifOp<"format_verilog_string", [
-    Pure
-  ]> {
-  let summary = "Creates a formatted string.";
-  let description = [{
-    Creates a formatted string suitable for printing via the `verif.print` op.
-    The formatting syntax is expected to be identical to verilog string
-    formatting to keep things simple for emission.
-    If we in the future would like to be less tied to verilog formatting,
-    please ask your friendly neighbourhood compiler engineer to e.g. implement
-    a `FormatStringOp` which itself may lower to a `FormatVerilogStringOp`.
-  }];
-  let arguments = (ins
-    StrAttr:$formatString,
-    Variadic<AnyType>:$substitutions);
-
-  let results = (outs HWStringType:$str);
-  let assemblyFormat = [{
-    $formatString `(` $substitutions `)` `:` type($substitutions) attr-dict
-  }];
-}
-
-def PrintOp : VerifOp<"print", []> {
-  let summary = "Prints a message.";
-  let arguments = (ins HWStringType:$string);
-  let assemblyFormat = [{
-    $string attr-dict
-  }];
-}
-
-//===----------------------------------------------------------------------===//
 // Reset and Power-Cycling Detection
 //===----------------------------------------------------------------------===//
 
