@@ -664,7 +664,7 @@ def ChannelDemux2(data_type: Type):
 
 def ChannelDemux(input: ChannelSignal, sel: BitsSignal,
                  num_outs: int) -> List[ChannelSignal]:
-  """Build a pipelined demultiplexer of ESI channels. Ideally, this would be a
+  """Build a demultiplexer of ESI channels. Ideally, this would be a
   parameterized module with an array of output channels, but the current ESI
   channel-port lowering doesn't deal with arrays of channels. Independent of the
   signaling protocol."""
