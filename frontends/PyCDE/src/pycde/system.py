@@ -251,8 +251,11 @@ class System:
 
   PASS_PHASES = [
       # First, run all the passes with callbacks into pycde.
+      "builtin.module(verify-esi-connections)",
       "builtin.module(esi-connect-services)",
+      "builtin.module(verify-esi-connections)",
       lambda sys: sys.generate(),
+      "builtin.module(verify-esi-connections)",
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
@@ -287,7 +290,8 @@ class System:
 
     self._op_cache.release_ops()
     if debug:
-      open("after_generate.mlir", "w").write(str(self.mod))
+      with open("after_generate.mlir", "w") as agm:
+        self.mod.operation.print(file=agm, enable_debug_info=True)
     for idx, phase in enumerate(self.PASS_PHASES):
       aplog = None
       if debug:
@@ -313,7 +317,7 @@ class System:
         raise err
       finally:
         if aplog is not None:
-          aplog.write(str(self.mod))
+          self.mod.operation.print(file=aplog, enable_debug_info=True)
           aplog.close()
       self._op_cache.release_ops()
 

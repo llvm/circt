@@ -10,7 +10,7 @@ data = mmio.read(8)
 print(f"mmio data@8: {data:X}")
 assert data == 0x207D98E5E5100E51
 
-assert acc.sysinfo().esi_version() == 1
+assert acc.sysinfo().esi_version() == 0
 m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)

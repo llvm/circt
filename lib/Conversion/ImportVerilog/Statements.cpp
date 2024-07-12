@@ -117,6 +117,9 @@ struct StmtVisitor {
   // Handle case statements.
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
+    if (!caseExpr)
+      return failure();
+
     auto items = caseStmt.items;
     // Used to generate the condition of the default case statement.
     SmallVector<Value> defaultConds;
@@ -127,6 +130,9 @@ struct StmtVisitor {
       SmallVector<Value> allConds;
       for (const auto *expr : item.expressions) {
         auto itemExpr = context.convertRvalueExpression(*expr);
+        if (!itemExpr)
+          return failure();
+
         auto newEqOp = builder.create<moore::EqOp>(loc, caseExpr, itemExpr);
         allConds.push_back(newEqOp);
       }

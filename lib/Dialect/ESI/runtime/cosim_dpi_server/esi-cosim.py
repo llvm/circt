@@ -307,9 +307,6 @@ class Questa(Simulator):
       svLib = os.path.splitext(lib)[0]
       cmd.append("-sv_lib")
       cmd.append(svLib)
-    if len(self.sources.dpi_so) > 0:
-      cmd.append("-cpppath")
-      cmd.append("/usr/bin/clang++")
     return cmd
 
   def run(self, inner_command: str, gui: bool = False) -> int:

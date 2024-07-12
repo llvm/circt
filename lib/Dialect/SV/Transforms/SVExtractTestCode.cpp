@@ -562,7 +562,7 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   }
 
   return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
-             verif::AssertOp>(op);
+             verif::AssertOp, verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -572,7 +572,8 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
       if (mod->getAttr("firrtl.extract.cover.extra"))
         return true;
-  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp>(op);
+  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp, verif::ClockedCoverOp>(
+      op);
 }
 
 static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -583,7 +584,8 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
       if (mod->getAttr("firrtl.extract.assume.extra"))
         return true;
 
-  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(op);
+  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp,
+             verif::ClockedAssumeOp>(op);
 }
 
 /// Return true if the operation belongs to the design.
