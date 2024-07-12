@@ -49,3 +49,13 @@ hw.module @nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
   %0 = hw.instance "one_reg" @one_reg(clk: %clk: !seq.clock, in0: %in0: i32, in1: %in1: i32) ->  (out: i32)
   hw.output %0 : i32
 }
+
+// CHECK:  hw.module @nested_nested_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {num_regs = 2 : i32} {
+// CHECK:    [[INSTOUT:%.+]], [[INSTREG:%.+]] = hw.instance "nested_reg" @nested_reg(clk: [[CLK]]: !seq.clock, in0: [[IN0]]: i32, in1: [[IN1]]: i32, _0: [[OLD_REG0]]: i32) -> ({{.+}}: i32, {{.+}}: i32)
+// CHECK:    hw.output [[OLD_REG1]], [[INSTREG]], [[INSTOUT]]
+// CHECK:  }
+hw.module @nested_nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
+  %0 = hw.instance "nested_reg" @nested_reg(clk: %clk: !seq.clock, in0: %in0: i32, in1: %in1: i32) ->  (out: i32)
+  %1 = seq.compreg %0, %clk : i32
+  hw.output %1 : i32
+}

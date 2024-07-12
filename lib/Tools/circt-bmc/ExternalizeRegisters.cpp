@@ -9,6 +9,7 @@
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
@@ -19,6 +20,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include <optional>
 
 using namespace mlir;
 using namespace circt;
@@ -66,19 +68,22 @@ void ExternalizeRegistersPass::runOnOperation() {
       if (!module)
         continue;
 
-      // TODO: this won't work if the same clock is passed between hw.modules.
-      // Maybe store a map from module names to arg indexes, and use that to
-      // check the clocks are equivalent
-      mlir::Value firstClock;
       unsigned numRegs = 0;
+      bool foundClk = false;
+      for (auto ty : module.getInputTypes()) {
+        if (isa<seq::ClockType>(ty)) {
+          if (foundClk) {
+            module.emitError("modules with multiple clocks not yet supported");
+            return signalPassFailure();
+          }
+          foundClk = true;
+        }
+      }
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
-          if (numRegs == 0)
-            firstClock = regOp.getClk();
-          else if (firstClock != regOp.getClk()) {
-            regOp->emitError(
-                "multiple clocks not yet supported - all registers will be "
-                "assumed to be clocked together");
+          if (!isa<BlockArgument>(regOp.getClk())) {
+            regOp.emitError("only clocks directly given as block arguments "
+                            "are supported");
             return signalPassFailure();
           }
           if (regOp.getReset()) {
@@ -118,7 +123,7 @@ void ExternalizeRegistersPass::runOnOperation() {
                 module.appendInput("", input).second);
             argNames.push_back(builder.getStringAttr("_" + std::to_string(i)));
           }
-          for (auto output : enumerate(newOutputs)) {
+          for (auto output : newOutputs) {
             resultNames.push_back(builder.getStringAttr(""));
           }
           SmallVector<Type> resTypes(instanceOp->getResultTypes());
