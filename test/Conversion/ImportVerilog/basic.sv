@@ -476,7 +476,9 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.constant 1 : i32
     // CHECK: [[TMP3:%.+]] = moore.read %a : i32
     // CHECK: [[TMP4:%.+]] = moore.mul [[TMP2]], [[TMP3]] : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP4]] : l32, i32 -> l1
+    // CHECK: [[TMP5:%.+]] = moore.constant 0 : i32
+    // CHECK: [[TMP6:%.+]] = moore.sub [[TMP4]], [[TMP5]] : i32
+    // CHECK: moore.extract [[TMP1]] from [[TMP6]] : l32, i32 -> l1
     c = vec_1[1*a-:1];
     // CHECK: [[TMP1:%.+]] = moore.read %arr : uarray<3 x uarray<6 x i4>>
     // CHECK: [[TMP2:%.+]] = moore.constant 3 : i32
@@ -504,6 +506,12 @@ module Expressions;
     // CHECK: [[X_READ:%.+]] = moore.read %x : i1
     // CHECK: moore.extract_ref %vec_1 from [[X_READ]] : <l32>, i1 -> <l1>
     vec_1[x] = y;
+    
+    // CHECK: [[CONST_15:%.+]] = moore.constant 15 : i32
+    // CHECK: [[CONST_2:%.+]] = moore.constant 2 : i32
+    // CHECK: [[SUB:%.+]] = moore.sub [[CONST_15]], [[CONST_2]] : i32
+    // CHECK: moore.extract_ref %vec_1 from [[SUB]] : <l32>, i32 -> <l3>
+    vec_1[15-:3] = y;
 
     //===------------------------------------------------------------------===//
     // Unary operators

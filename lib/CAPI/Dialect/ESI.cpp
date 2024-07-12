@@ -86,10 +86,11 @@ void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
     void *userData) {
   ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
-      unwrap(impl_type),
-      [genFunc, userData](ServiceImplementReqOp req,
-                          ServiceDeclOpInterface decl, ServiceImplRecordOp) {
-        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
+      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req,
+                                             ServiceDeclOpInterface decl,
+                                             ServiceImplRecordOp record) {
+        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()),
+                              wrap(record.getOperation()), userData));
       });
 }
 //===----------------------------------------------------------------------===//

@@ -226,6 +226,9 @@ def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
 
 def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   if isinstance(idxOrSlice, int):
+    # Deal with negative indices.
+    if idxOrSlice < 0:
+      idxOrSlice = size + idxOrSlice
     s = slice(idxOrSlice, idxOrSlice + 1)
   elif isinstance(idxOrSlice, slice):
     if idxOrSlice.stop and idxOrSlice.stop > size:
@@ -301,9 +304,13 @@ class BitsSignal(BitVectorSignal):
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
-    from .types import types
+
+    from .types import Bits, types
     from .dialects import comb
     ret_type = types.int(hi - lo)
+    # Corner case: empty slice. ExtractOp doesn't support this.
+    if hi - lo == 0:
+      return Bits(0)(0)
 
     with get_user_loc():
       ret = comb.ExtractOp(lo, ret_type, self.value)

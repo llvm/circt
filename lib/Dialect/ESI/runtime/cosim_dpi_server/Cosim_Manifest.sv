@@ -16,7 +16,7 @@ import Cosim_DpiPkg::*;
 module Cosim_Manifest
 #(
   parameter int COMPRESSED_MANIFEST_SIZE = 0,
-  parameter int unsigned ESI_VERSION = 1
+  parameter int unsigned ESI_VERSION = 0
 )(
   input logic [COMPRESSED_MANIFEST_SIZE-1:0][7:0] compressed_manifest
 );
