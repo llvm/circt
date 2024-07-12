@@ -3438,10 +3438,13 @@ public:
     assert(state.pp.getListener() == &state.saver);
   }
 
+  void emitAssertPropertyDisable(
+      Value property, Value disable,
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
+
   void emitAssertPropertyBody(
       Value property, Value disable,
-      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest,
-      bool ignoreNonEmptyTokens = false);
+      PropertyPrecedence parenthesizeIfLooserThan = PropertyPrecedence::Lowest);
 
   void emitAssertPropertyBody(
       Value property, sv::EventControl event, Value clock, Value disable,
@@ -3494,10 +3497,9 @@ private:
 // Emits a disable signal and its containing property.
 // This function can be called from withing another emission process in which
 // case we don't need to check that the local tokens are empty.
-void PropertyEmitter::emitAssertPropertyBody(
-    Value property, Value disable, PropertyPrecedence parenthesizeIfLooserThan,
-    bool ignoreNonEmptyTokens) {
-  assert(localTokens.empty() || ignoreNonEmptyTokens);
+void PropertyEmitter::emitAssertPropertyDisable(
+    Value property, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
   // If the property is tied to a disable, emit that.
   if (disable) {
     ps << "disable iff" << PP::nbsp << "(";
@@ -3510,6 +3512,18 @@ void PropertyEmitter::emitAssertPropertyBody(
 
   ps.scopedBox(PP::ibox0,
                [&] { emitNestedProperty(property, parenthesizeIfLooserThan); });
+}
+
+// Emits a disable signal and its containing property.
+// This function can be called from withing another emission process in which
+// case we don't need to check that the local tokens are empty.
+void PropertyEmitter::emitAssertPropertyBody(
+    Value property, Value disable,
+    PropertyPrecedence parenthesizeIfLooserThan) {
+  assert(localTokens.empty());
+
+  emitAssertPropertyDisable(property, disable, parenthesizeIfLooserThan);
+
   // If we are not using an external token buffer provided through the
   // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
   // flush it.
@@ -3531,7 +3545,13 @@ void PropertyEmitter::emitAssertPropertyBody(
   ps << PP::space;
 
   // Emit the rest of the body
-  emitAssertPropertyBody(property, disable, parenthesizeIfLooserThan, true);
+  emitAssertPropertyDisable(property, disable, parenthesizeIfLooserThan);
+
+  // If we are not using an external token buffer provided through the
+  // constructor, but we're using the default `PropertyEmitter`-scoped buffer,
+  // flush it.
+  if (&buffer.tokens == &localTokens)
+    buffer.flush(state.pp);
 }
 
 EmittedProperty PropertyEmitter::emitNestedProperty(
