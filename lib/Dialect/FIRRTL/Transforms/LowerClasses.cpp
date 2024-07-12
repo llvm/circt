@@ -961,7 +961,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
     // Get the original port name, create a Field, and erase the propassign.
     auto name = moduleLike.getPortName(outputPort.getArgNumber());
-    builder.create<ClassFieldOp>(op.getLoc(), name, op.getSrc());
+    classOp.addField(builder, op.getLoc(), name, op.getSrc());
     op.erase();
   }
 

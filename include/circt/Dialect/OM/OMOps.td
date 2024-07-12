@@ -82,6 +82,15 @@ def ClassOp : OMClassLike<"class"> {
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
     }
+
+    void addField(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef name, mlir::Value src);
+
+    using fields_iterator =
+        llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
+                                                        mlir::Region::OpIterator>,
+                              circt::om::Field (*)(circt::om::ClassFieldOp)>;
+    llvm::iterator_range<fields_iterator> getFields();
   }];
 }
 
