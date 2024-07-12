@@ -280,8 +280,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
 
   // CHECK: wire _GEN = ~isLive;
   // CHECK: wire [[WR0:.+]] = reset;
-  // CHECK: wire [[WR1:.+]] = reset;
   // CHECK: assert property (disable iff ([[WR0]]) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
+  // CHECK: wire [[WR1:.+]] = reset;
   // CHECK: assume property (disable iff ([[WR1]]) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
   %not_isLive = comb.xor %isLive, %true : i1
   %fell_reset = sv.verbatim.expr "$fell({{0}})"(%reset) : (i1) -> i1
@@ -293,8 +293,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   sv.assume_property %liveness_after_reset disable_iff %reset : !ltl.property
 
   // CHECK: wire [[WR2:.+]] = reset;
-  // CHECK: wire [[WR3:.+]] = reset;
   // CHECK: assert property (disable iff ([[WR2]]) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
+  // CHECK: wire [[WR3:.+]] = reset;
   // CHECK: assume property (disable iff ([[WR3]]) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
   %4 = ltl.delay %not_isLive, 1, 0 : i1
   %5 = ltl.concat %isLive, %4 : i1, !ltl.sequence
