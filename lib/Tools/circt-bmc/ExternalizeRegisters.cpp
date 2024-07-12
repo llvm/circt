@@ -20,6 +20,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/Twine.h"
 #include <optional>
 
 using namespace mlir;
@@ -48,7 +49,9 @@ void ExternalizeRegistersPass::runOnOperation() {
   auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
   DenseSet<Operation *> handled;
   DenseMap<StringAttr, SmallVector<Type>> addedInputs;
+  DenseMap<StringAttr, SmallVector<StringAttr>> addedInputNames;
   DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
+  DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
 
   // Iterate over all instances in the instance graph. This ensures we visit
   // every module, even private top modules (private and never instantiated).
@@ -98,9 +101,23 @@ void ExternalizeRegistersPass::runOnOperation() {
           addedOutputs[module.getSymNameAttr()].push_back(
               regOp.getInput().getType());
           OpBuilder builder(regOp);
+          auto regName = regOp.getName();
+          StringAttr newInputName, newOutputName;
+          if (regName && !regName.value().empty()) {
+            newInputName = builder.getStringAttr(regName.value() + "_state");
+            newOutputName = builder.getStringAttr(regName.value() + "_input");
+          } else {
+            newInputName =
+                builder.getStringAttr("reg_" + Twine(numRegs) + "_state");
+            newOutputName =
+                builder.getStringAttr("reg_" + Twine(numRegs) + "_input");
+          }
+          addedInputNames[module.getSymNameAttr()].push_back(newInputName);
+          addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
+
           regOp.getResult().replaceAllUsesWith(
-              module.appendInput("", regOp.getType()).second);
-          module.appendOutput("", regOp.getInput());
+              module.appendInput(newInputName, regOp.getType()).second);
+          module.appendOutput(newOutputName, regOp.getInput());
           regOp->erase();
           ++numRegs;
           return;
@@ -109,22 +126,29 @@ void ExternalizeRegistersPass::runOnOperation() {
           OpBuilder builder(instanceOp);
           auto newInputs =
               addedInputs[instanceOp.getModuleNameAttr().getAttr()];
+          auto newInputNames =
+              addedInputNames[instanceOp.getModuleNameAttr().getAttr()];
           auto newOutputs =
               addedOutputs[instanceOp.getModuleNameAttr().getAttr()];
+          auto newOutputNames =
+              addedOutputNames[instanceOp.getModuleNameAttr().getAttr()];
           addedInputs[module.getSymNameAttr()].append(newInputs);
+          addedInputNames[module.getSymNameAttr()].append(newInputNames);
           addedOutputs[module.getSymNameAttr()].append(newOutputs);
+          addedOutputNames[module.getSymNameAttr()].append(newOutputNames);
           SmallVector<Attribute> argNames(instanceOp.getArgNamesAttr().begin(),
                                           instanceOp.getArgNamesAttr().end());
           SmallVector<Attribute> resultNames(
               instanceOp.getResultNamesAttr().begin(),
               instanceOp.getResultNamesAttr().end());
-          for (auto [i, input] : enumerate(newInputs)) {
+
+          for (auto [input, name] : zip_equal(newInputs, newInputNames)) {
             instanceOp.getInputsMutable().append(
-                module.appendInput("", input).second);
-            argNames.push_back(builder.getStringAttr("_" + std::to_string(i)));
+                module.appendInput(name, input).second);
+            argNames.push_back(name);
           }
-          for (auto output : newOutputs) {
-            resultNames.push_back(builder.getStringAttr(""));
+          for (auto outputName : newOutputNames) {
+            resultNames.push_back(outputName);
           }
           SmallVector<Type> resTypes(instanceOp->getResultTypes());
           resTypes.append(newOutputs);
@@ -133,8 +157,10 @@ void ExternalizeRegistersPass::runOnOperation() {
               instanceOp.getModuleNameAttr(), instanceOp.getInputs(),
               builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
               instanceOp.getParametersAttr(), instanceOp.getInnerSymAttr());
-          for (auto output : newInst->getResults().take_back(newOutputs.size()))
-            module.appendOutput("", output);
+          for (auto [output, name] :
+               zip(newInst->getResults().take_back(newOutputs.size()),
+                   newOutputNames))
+            module.appendOutput(name, output);
           numRegs += newInputs.size();
           instanceOp.replaceAllUsesWith(
               newInst.getResults().take_front(instanceOp->getNumResults()));
