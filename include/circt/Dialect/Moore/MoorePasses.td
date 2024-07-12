@@ -15,6 +15,25 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
+    let summary = "Lower moore.concat_ref ops";
+    let description = [{
+      It's used to disassemble the LHS of assignments that have a form like
+      "{a, b} = c" onto "a = c[9001:42];" and "b = c[41:0]". Aimed at
+      conveniently lowering this kind of assignment.
+    }];
+    let constructor = "circt::moore::createLowerConcatRefPass()";
+}
+
+def PullNonBlockingUp : Pass<"moore-pull-nonblocking-up", "moore::SVModuleOp"> {
+    let summary = "Pull non-blocking assignments upwards";
+    let description = [{
+      Improve the level of non-blocking assignments from the inner region to
+      its parent region, like from "{if(cond) x <= y;}" to "{x <= y if %cond;}"
+    }];
+    let constructor = "circt::moore::createPullNonBlockingUpPass()";
+}
+
 def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> {
     let summary = "Simplify procedures";
     let description = [{
@@ -27,16 +46,6 @@ def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> 
       variable.
     }];
     let constructor = "circt::moore::createSimplifyProceduresPass()";
-}
-
-def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
-    let summary = "Lower moore.concat_ref ops";
-    let description = [{
-      It's used to disassemble the LHS of assignments that have a form like
-      "{a, b} = c" onto "a = c[9001:42];" and "b = c[41:0]". Aimed at
-      conveniently lowering this kind of assignment.
-    }];
-    let constructor = "circt::moore::createLowerConcatRefPass()";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREPASSES_TD

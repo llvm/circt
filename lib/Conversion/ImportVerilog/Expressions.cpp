@@ -100,9 +100,9 @@ struct RvalueExprVisitor {
     }
 
     if (expr.isNonBlocking())
-      builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
+      builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs, Value{});
     else
-      builder.create<moore::BlockingAssignOp>(loc, lhs, rhs);
+      builder.create<moore::BlockingAssignOp>(loc, lhs, rhs, Value{});
     return rhs;
   }
 
@@ -132,7 +132,7 @@ struct RvalueExprVisitor {
     auto postValue =
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
-    builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
+    builder.create<moore::BlockingAssignOp>(loc, arg, postValue, Value{});
     return isPost ? preValue : postValue;
   }
 

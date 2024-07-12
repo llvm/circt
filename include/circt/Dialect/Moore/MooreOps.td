@@ -296,9 +296,13 @@ def ReadOp : MooreOp<"read", [
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
     MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
     "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src);
+  let arguments = (ins
+    RefType:$dst, UnpackedType:$src,
+    Optional<AnySingleBitType>:$enable
+  );
   let assemblyFormat = [{
-    $dst `,` $src attr-dict `:` type($src)
+    $dst `,` $src (`if` $enable^)? attr-dict 
+    `:` type($src) (`,` type($enable)^)?
   }];
 }
 
@@ -326,7 +330,8 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
   }];
   let arguments = (ins
     Arg<RefType, "", [MemWrite]>:$dst,
-    UnpackedType:$src
+    UnpackedType:$src,
+    Optional<AnySingleBitType>:$enable
   );
 }
 
