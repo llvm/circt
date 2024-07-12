@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraph.h"
