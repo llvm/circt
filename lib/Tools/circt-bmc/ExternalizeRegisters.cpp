@@ -138,6 +138,7 @@ void ExternalizeRegistersPass::runOnOperation() {
           numRegs += newInputs.size();
           instanceOp.replaceAllUsesWith(
               newInst.getResults().take_front(instanceOp->getNumResults()));
+          instanceGraph.replaceInstance(instanceOp, newInst);
           instanceOp->erase();
           return;
         }
