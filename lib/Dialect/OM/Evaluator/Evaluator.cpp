@@ -257,11 +257,12 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
       worklist.push({result, actualParams});
     }
 
-  for (auto field : cls.getOps<ClassFieldOp>()) {
-    StringAttr name = field.getNameAttr();
-    Value value = field.getValue();
+  for (auto field : cls.getFields()) {
+    StringAttr name = field.name;
+    Value value = field.value;
+    Location loc = field.loc;
     FailureOr<evaluator::EvaluatorValuePtr> result =
-        evaluateValue(value, actualParams, field.getLoc());
+        evaluateValue(value, actualParams, loc);
     if (failed(result))
       return result;
 

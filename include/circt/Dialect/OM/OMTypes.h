@@ -21,6 +21,12 @@ namespace circt::om {
 // integer.
 bool isMapKeyValuePairType(mlir::Type);
 
+struct Field {
+  mlir::StringAttr name;
+  mlir::Value value;
+  mlir::Location loc;
+};
+
 } // namespace circt::om
 
 #define GET_TYPEDEF_CLASSES
