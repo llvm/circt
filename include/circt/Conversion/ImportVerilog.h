@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace llvm {
 class SourceMgr;
