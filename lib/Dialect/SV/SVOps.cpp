@@ -54,14 +54,16 @@ bool sv::isExpression(Operation *op) {
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>() ||
+      llvm::isa<hw::TriggeredOp>(op->getParentOp()))
     return success();
   op->emitError() << op->getName() << " should be in a procedural region";
   return failure();
 }
 
 LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
-  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>() &&
+      !llvm::isa<hw::TriggeredOp>(op->getParentOp()))
     return success();
   op->emitError() << op->getName() << " should be in a non-procedural region";
   return failure();
