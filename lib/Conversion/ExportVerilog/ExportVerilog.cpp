@@ -3502,7 +3502,7 @@ void PropertyEmitter::emitAssertPropertyBody(
   if (disable) {
     ps << "disable iff" << PP::nbsp << "(";
     ps.scopedBox(PP::ibox2, [&] {
-      emitNestedProperty(disable, PropertyPrecedence::Lowest);
+      emitNestedProperty(disable, PropertyPrecedence::Unary);
       ps << ")" << PP::space;
     });
   }
@@ -4868,10 +4868,8 @@ LogicalResult StmtEmitter::emitPropertyAssertion(Op op, PPExtString opName) {
   ps.addCallback({op, true});
   ps.scopedBox(PP::ibox2, [&]() {
     // Check for a label and emit it if necessary
-    auto label = op.getLabel();
-    if (label.has_value())
-      ps << PPExtString(*label) << ":" << PP::space;
-
+    emitAssertionLabel(op);
+    // Emit the assertion
     ps.scopedBox(PP::cbox0, [&]() {
       if (emitAsImmediate)
         ps << opName << "(";
