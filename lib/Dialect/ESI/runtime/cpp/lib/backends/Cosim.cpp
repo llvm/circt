@@ -1,4 +1,4 @@
-//===- Cosim.cpp - Connection to ESI simulation via capnp RPC -------------===//
+//===- Cosim.cpp - Connection to ESI simulation via GRPC ------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.

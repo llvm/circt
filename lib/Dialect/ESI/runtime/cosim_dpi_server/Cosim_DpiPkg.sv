@@ -32,11 +32,11 @@ import "DPI-C" sv2cCosimserverEpRegister =
   function int cosim_ep_register(
     // The endpoint ID.
     input string endpoint_id,
-    // The capnp type id which the _RPC client_ is sending us.
+    // The ESI type id which the _RPC client_ is sending us.
     input string from_host_type_id,
     // The send types max size, in bytes.
     input int from_host_type_size,
-    // The capnp type id which we are sending to the _RPC client_.
+    // The ESI type id which we are sending to the _RPC client_.
     input string to_host_type_id,
     // The recv types max size, in bytes.
     input int to_host_type_size);
