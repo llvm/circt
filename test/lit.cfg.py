@@ -68,10 +68,6 @@ if config.verilator_path != "":
   tools.append('verilator')
   config.available_features.add('verilator')
 
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
-
 if config.zlib == "1":
   config.available_features.add('zlib')
 
