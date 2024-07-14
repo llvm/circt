@@ -69,7 +69,7 @@ ScheduleLinearPipelinePass::schedulePipeline(UnscheduledPipelineOp pipeline) {
            << opLibAttr << "' not found";
 
   // Load operator info from attribute.
-  auto problem = Problem::get(pipeline);
+  Problem problem(pipeline);
 
   DenseMap<SymbolRefAttr, Problem::OperatorType> operatorTypes;
   SmallDenseMap<StringAttr, unsigned> oprIds;
