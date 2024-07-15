@@ -1734,7 +1734,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
                               "MustDeduplicateAnnotation references module ")
                     << module << " which does not exist";
         failed = true;
-        return 0;
+        return nullptr;
       }
       return it->second;
     };
@@ -1750,7 +1750,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         return false;
       }
       // Empty module list has nothing to process.
-      if (modules.size() == 0)
+      if (modules.empty())
         return true;
       // Get the first element.
       auto firstModule = parseModule(modules[0]);
