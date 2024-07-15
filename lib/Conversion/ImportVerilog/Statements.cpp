@@ -179,32 +179,49 @@ struct StmtVisitor {
       return mlir::emitError(loc,
                              "variables in for loop initializer not supported");
 
-    // Generate the initializers.
-    for (auto *initExpr : stmt.initializers)
-      if (!context.convertRvalueExpression(*initExpr))
-        return failure();
+    // Use to collect the types and locations of initializer.
+    SmallVector<Type> initTypes;
+    SmallVector<Location> locs;
+
+    // Generate the initializers. Initializer may be more than one.
+    auto inits =
+        llvm::to_vector(llvm::map_range(stmt.initializers, [&](auto *initExpr) {
+          return context.convertRvalueExpression(*initExpr);
+        }));
+    if (llvm::any_of(inits, [](auto init) { return !init; }))
+      return failure();
+    for (auto init : inits) {
+      initTypes.push_back(init.getType());
+      locs.push_back(init.getLoc());
+    }
 
     // Create the while op.
-    auto whileOp = builder.create<scf::WhileOp>(loc, TypeRange{}, ValueRange{});
+    auto whileOp = builder.create<scf::WhileOp>(loc, initTypes, inits);
     OpBuilder::InsertionGuard guard(builder);
 
     // In the "before" region, check that the condition holds.
-    builder.createBlock(&whileOp.getBefore());
+    builder.createBlock(&whileOp.getBefore(), {}, initTypes, locs);
     auto cond = context.convertRvalueExpression(*stmt.stopExpr);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
     cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<mlir::scf::ConditionOp>(loc, cond, ValueRange{});
+    builder.create<mlir::scf::ConditionOp>(loc, cond,
+                                           whileOp.getBeforeArguments());
 
     // In the "after" region, generate the loop body and step expressions.
-    builder.createBlock(&whileOp.getAfter());
+    builder.createBlock(&whileOp.getAfter(), {}, initTypes, locs);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
-    for (auto *stepExpr : stmt.steps)
-      if (!context.convertRvalueExpression(*stepExpr))
-        return failure();
-    builder.create<mlir::scf::YieldOp>(loc);
+
+    // Step may be more than one.
+    auto steps = llvm::to_vector(llvm::map_range(stmt.steps, [&](auto step) {
+      return context.convertRvalueExpression(*step);
+    }));
+    if (llvm::any_of(steps, [](auto step) { return !step; }))
+      return failure();
+
+    builder.create<mlir::scf::YieldOp>(loc, steps);
 
     return success();
   }

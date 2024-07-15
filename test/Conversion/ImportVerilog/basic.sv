@@ -299,16 +299,17 @@ module Statements;
 
     // CHECK: [[TMP1:%.+]] = moore.read %x : i1
     // CHECK: moore.blocking_assign %y, [[TMP1]] : i1
-    // CHECK: scf.while : () -> () {
+    // CHECK: [[RESULT:%.+]] = scf.while (%arg0 = [[TMP1]]) : (!moore.i1) -> !moore.i1 {
     // CHECK:   [[TMP2:%.+]] = moore.read %x : i1
     // CHECK:   [[COND:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[COND]])
+    // CHECK:   scf.condition([[COND]]) %arg0 : !moore.i1
     // CHECK: } do {
+    // CHECK: ^bb0(%arg0: !moore.i1):
     // CHECK:   [[TMP3:%.+]] = moore.read %y : i1
     // CHECK:   moore.blocking_assign %x, [[TMP3]] : i1
     // CHECK:   [[TMP4:%.+]] = moore.read %z : i1
     // CHECK:   moore.blocking_assign %x, [[TMP4]] : i1
-    // CHECK:   scf.yield
+    // CHECK:   scf.yield [[TMP4]] : !moore.i1
     // CHECK: }
     for (y = x; x; x = z) x = y;
     
