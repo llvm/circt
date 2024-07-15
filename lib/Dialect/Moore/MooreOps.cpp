@@ -607,7 +607,7 @@ bool StructExtractRefOp::canRewire(
   if (slot.ptr != getInput())
     return false;
   auto index = getFieldNameAttr();
-  if (!index || !slot.elementPtrs.contains(index))
+  if (!index || !slot.subelementTypes.contains(index))
     return false;
   usedIndices.insert(index);
   return true;
