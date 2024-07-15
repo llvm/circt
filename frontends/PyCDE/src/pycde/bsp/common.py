@@ -2,12 +2,13 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ..common import Clock, Input, Output
-from ..constructs import ControlReg, Mux, NamedWire, Wire
+from ..common import Clock, Input, Output, Reset
+from ..constructs import AssignableSignal, NamedWire, Wire
 from .. import esi
-from ..module import Module, generator
-from ..signals import BundleSignal
-from ..types import Array, Bits, Channel, ChannelDirection
+from ..module import Module, generator, modparams
+from ..signals import BitsSignal, ChannelSignal
+from ..support import clog2
+from ..types import Array, Bits, Channel, UInt
 
 from typing import Dict, Tuple
 
@@ -27,10 +28,71 @@ class ESI_Manifest_ROM(Module):
   data = Output(Bits(64))
 
 
+class ESI_Manifest_ROM_Wrapper(Module):
+  """Wrap the manifest ROM with ESI bundle."""
+
+  clk = Clock()
+  read = Input(esi.MMIO.read.type)
+
+  @generator
+  def build(self):
+    data, data_valid = Wire(Bits(64)), Wire(Bits(1))
+    data_chan, data_ready = Channel(Bits(64)).wrap(data, data_valid)
+    address_chan = self.read.unpack(data=data_chan)['offset']
+    address, address_valid = address_chan.unwrap(data_ready)
+    address_words = address.as_bits(32)[3:]  # Lop off the lower three bits.
+
+    rom = ESI_Manifest_ROM(clk=self.clk, address=address_words)
+    data.assign(rom.data)
+    data_valid.assign(address_valid.reg(self.clk, name="data_valid", cycles=2))
+
+
+@modparams
+def HeaderMMIO(manifest_loc: int) -> Module:
+
+  class HeaderMMIO(Module):
+    """Construct the ESI header MMIO adhering to the MMIO layout specified in
+    the ChannelMMIO service implementation."""
+
+    clk = Clock()
+    rst = Reset()
+    read = Input(esi.MMIO.read.type)
+
+    @generator
+    def build(ports):
+      data_chan_wire = Wire(Channel(esi.MMIODataType))
+      input_bundles = ports.read.unpack(data=data_chan_wire)
+      address_chan = input_bundles['offset']
+
+      address_ready = Wire(Bits(1))
+      address, address_valid = address_chan.unwrap(address_ready)
+      address_words = address.as_bits()[3:]  # Lop off the lower three bits.
+
+      # Layout the header as an array.
+      header = Array(Bits(64), 4)([0, MagicNumber, VersionNumber, manifest_loc])
+      header.name = "header"
+      header_response_valid = address_valid  # Zero latency read.
+      # Select the approptiate header index.
+      header_out = header[address_words[:2]]
+      header_out.name = "header_out"
+      # Wrap the response.
+      data_chan, data_chan_ready = Channel(esi.MMIODataType).wrap(
+          header_out, header_response_valid)
+      data_chan_wire.assign(data_chan)
+      address_ready.assign(data_chan_ready)
+
+  return HeaderMMIO
+
+
 class ChannelMMIO(esi.ServiceImplementation):
-  """MMIO service implementation with an AXI-lite protocol. This assumes a 32
-  bit address bus. It also only supports 64-bit aligned accesses and just throws
-  away the lower three bits of address.
+  """MMIO service implementation with MMIO bundle interfaces. Should be
+  relatively easy to adapt to physical interfaces by wrapping the wires to
+  channels then bundles. Allows the implementation to be shared and (hopefully)
+  platform independent.
+  
+  Whether or not to support unaligned accesses is up to the clients. The header
+  and manifest do not support unaligned accesses and throw away the lower three
+  bits.
 
   Only allows for one outstanding request at a time. If a client doesn't return
   a response, the MMIO service will hang. TODO: add some kind of timeout.
@@ -41,14 +103,15 @@ class ChannelMMIO(esi.ServiceImplementation):
     - 0x12: ESI version number (0)
     - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x100: Start of MMIO space for requests. Mapping is contained in the
-             manifest so can be dynamically queried.
+    - 0x10000: Start of MMIO space for requests. Mapping is contained in the
+               manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
     - addr(Manifest ROM) + 8: Start of compressed manifest
 
   This layout _should_ be pretty standard, but different BSPs may have various
-  different restrictions.
+  different restrictions. Any BSP which uses this service implementation will
+  have this layout, possibly with an offset or address window.
   """
 
   clk = Clock()
@@ -56,123 +119,116 @@ class ChannelMMIO(esi.ServiceImplementation):
 
   read = Input(esi.MMIO.read.type)
 
+  # Amount of register space each client gets. This is a GIANT HACK and needs to
+  # be replaced by parameterizable services.
+  # TODO: make the amount of register space each client gets a parameter.
+  # Supporting this will require more address decode logic.
+  #
+  # TODO: if the compressed manifest is larger than 'RegisterSpace', we won't be
+  # allocating enough address space. This should be fixed with the more complex
+  # address decode logic mentioned above.
+  #
+  # TODO: only supports one outstanding transaction at a time. This is NOT
+  # enforced or checked! Enforce this.
+
+  RegisterSpace = 0x10000
+  RegisterSpaceBits = RegisterSpace.bit_length() - 1
+  AddressMask = 0xFFFF
+
   # Start at this address for assigning MMIO addresses to service requests.
-  initial_offset: int = 0x100
+  initial_offset: int = RegisterSpace
 
   @generator
-  def generate(self, bundles: esi._ServiceGeneratorBundles):
+  def generate(ports, bundles: esi._ServiceGeneratorBundles):
     read_table, write_table, manifest_loc = ChannelMMIO.build_table(
-        self, bundles)
-    ChannelMMIO.build_read(self, manifest_loc, read_table)
-    ChannelMMIO.build_write(self, write_table)
+        ports, bundles)
+    ChannelMMIO.build_read(ports, manifest_loc, read_table)
+    ChannelMMIO.build_write(ports, write_table)
     return True
 
+  @staticmethod
   def build_table(
-      self,
-      bundles) -> Tuple[Dict[int, BundleSignal], Dict[int, BundleSignal], int]:
+      ports, bundles
+  ) -> Tuple[Dict[int, AssignableSignal], Dict[int, AssignableSignal], int]:
     """Build a table of read and write addresses to BundleSignals."""
     offset = ChannelMMIO.initial_offset
-    read_table = {}
-    write_table = {}
+    read_table: Dict[int, AssignableSignal] = {}
+    write_table: Dict[int, AssignableSignal] = {}
     for bundle in bundles.to_client_reqs:
-      if bundle.direction == ChannelDirection.Input:
+      if bundle.port == 'read':
         read_table[offset] = bundle
-        offset += 8
-      elif bundle.direction == ChannelDirection.Output:
-        write_table[offset] = bundle
-        offset += 8
+        bundle.add_record({"offset": offset})
+        offset += ChannelMMIO.RegisterSpace
+      else:
+        assert False, "Unrecognized port name."
 
-    manifest_loc = 1 << offset.bit_length()
+    manifest_loc = offset
     return read_table, write_table, manifest_loc
 
-  def build_read(self, manifest_loc: int, bundles):
+  @staticmethod
+  def build_read(ports, manifest_loc: int, read_table: Dict[int,
+                                                            AssignableSignal]):
     """Builds the read side of the MMIO service."""
 
-    # Currently just exposes the header and manifest. Not any of the possible
-    # service requests.
+    # Instantiate the header and manifest ROM. Fill in the read_table with
+    # bundle wires to be assigned identically to the other MMIO clients.
+    header_bundle_wire = Wire(esi.MMIO.read.type)
+    read_table[0] = header_bundle_wire
+    HeaderMMIO(manifest_loc)(clk=ports.clk,
+                             rst=ports.rst,
+                             read=header_bundle_wire)
 
-    i64 = Bits(64)
-    i2 = Bits(2)
-    i1 = Bits(1)
+    mani_bundle_wire = Wire(esi.MMIO.read.type)
+    read_table[manifest_loc] = mani_bundle_wire
+    ESI_Manifest_ROM_Wrapper(clk=ports.clk, read=mani_bundle_wire)
 
-    read_data_channel = Wire(Channel(esi.MMIOReadDataResponse),
-                             "resp_data_channel")
-    read_addr_channel = self.read.unpack(data=read_data_channel)["offset"]
-    arready = Wire(i1)
-    (araddr, arvalid) = read_addr_channel.unwrap(arready)
+    # Unpack the read bundle.
+    data_resp_channel = Wire(Channel(esi.MMIODataType))
+    counted_output = Wire(Channel(esi.MMIODataType))
+    read_addr_channel = ports.read.unpack(data=counted_output)["offset"]
+    counted_output.assign(data_resp_channel)
 
-    address_written = NamedWire(i1, "address_written")
-    response_written = NamedWire(i1, "response_written")
+    # Get the selection index and the address to hand off to the clients.
+    sel_bits, client_address_chan = ChannelMMIO.build_addr_read(
+        read_addr_channel)
 
-    # Only allow one outstanding request at a time. Don't clear it until the
-    # output has been transmitted. This way, we don't have to deal with
-    # backpressure.
-    req_outstanding = ControlReg(self.clk,
-                                 self.rst, [address_written],
-                                 [response_written],
-                                 name="req_outstanding")
-    arready.assign(~req_outstanding)
+    # Build the demux/mux and assign the results of each appropriately.
+    read_clients_clog2 = clog2(len(read_table))
+    client_addr_channels = esi.ChannelDemux(
+        sel=sel_bits.pad_or_truncate(read_clients_clog2),
+        input=client_address_chan,
+        num_outs=len(read_table))
+    client_data_channels = []
+    for (idx, offset) in enumerate(sorted(read_table.keys())):
+      bundle, bundle_froms = esi.MMIO.read.type.pack(
+          offset=client_addr_channels[idx])
+      client_data_channels.append(bundle_froms["data"])
+      read_table[offset].assign(bundle)
+    resp_channel = esi.ChannelMux(client_data_channels)
+    data_resp_channel.assign(resp_channel)
 
-    # Capture the address if a the bus transaction occured.
-    address_written.assign(arvalid & ~req_outstanding)
-    address = araddr.reg(self.clk, ce=address_written, name="address")
-    address_valid = address_written.reg(name="address_valid")
-    address_words = address[3:]  # Lop off the lower three bits.
+  @staticmethod
+  def build_addr_read(
+      read_addr_chan: ChannelSignal) -> Tuple[BitsSignal, ChannelSignal]:
+    """Build a channel for the address read request. Returns the index to select
+    the client and a channel for the masked address to be passed to the
+    clients."""
 
-    # Set up the output of the data response pipeline. `data_pipeline*` are to
-    # be connected below.
-    data_pipeline_valid = NamedWire(i1, "data_pipeline_valid")
-    data_pipeline = NamedWire(i64, "data_pipeline")
-    data_pipeline_rresp = NamedWire(i2, "data_pipeline_rresp")
-    data_out_valid = ControlReg(self.clk,
-                                self.rst, [data_pipeline_valid],
-                                [response_written],
-                                name="data_out_valid")
-    rvalid = data_out_valid
-    rdata = data_pipeline.reg(self.clk,
-                              self.rst,
-                              ce=data_pipeline_valid,
-                              name="data_pipeline_reg")
-    read_resp_ch, rready = Channel(esi.MMIOReadDataResponse).wrap(rdata, rvalid)
-    read_data_channel.assign(read_resp_ch)
-    # Clear the `req_outstanding` flag when the response has been transmitted.
-    response_written.assign(data_out_valid & rready)
+    # Decoding the selection bits is very simple as of now. This might need to
+    # change to support more flexibility in addressing. Not clear if what we're
+    # doing now it sufficient or not.
 
-    # Handle reads from the header (< 0x100).
-    header_upper = address_words[ChannelMMIO.initial_offset.bit_length() - 2:]
-    # Is the address in the header?
-    header_sel = (header_upper == header_upper.type(0))
-    header_sel.name = "header_sel"
-    # Layout the header as an array.
-    header = Array(Bits(64), 4)([0, MagicNumber, VersionNumber, manifest_loc])
-    header.name = "header"
-    header_response_valid = address_valid  # Zero latency read.
-    header_out = header[address_words[:2]]
-    header_out.name = "header_out"
-    header_rresp = i2(0)
-
-    # Handle reads from the manifest.
-    rom_address = NamedWire(
-        (address_words.as_uint() - (manifest_loc >> 3)).as_bits(29),
-        "rom_address")
-    mani_rom = ESI_Manifest_ROM(clk=self.clk, address=rom_address)
-    mani_valid = address_valid.reg(
-        self.clk,
-        self.rst,
-        rst_value=i1(0),
-        cycles=2,  # Two cycle read to match the ROM latency.
-        name="mani_valid_reg")
-    mani_rresp = i2(0)
-    mani_sel = (address.as_uint() >= manifest_loc).as_bits(1)
-
-    # Mux the output depending on whether or not the address is in the header.
-    sel = NamedWire(mani_sel, "sel")
-    data_mux_inputs = [header_out, mani_rom.data]
-    data_pipeline.assign(Mux(sel, *data_mux_inputs))
-    data_valid_mux_inputs = [header_response_valid, mani_valid]
-    data_pipeline_valid.assign(Mux(sel, *data_valid_mux_inputs))
-    rresp_mux_inputs = [header_rresp, mani_rresp]
-    data_pipeline_rresp.assign(Mux(sel, *rresp_mux_inputs))
+    addr_ready_wire = Wire(Bits(1))
+    addr, addr_valid = read_addr_chan.unwrap(addr_ready_wire)
+    addr = addr.as_bits()
+    sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
+    sel_bits.assign(addr[ChannelMMIO.RegisterSpaceBits:])
+    client_addr = NamedWire(Bits(32), "client_addr")
+    client_addr.assign(addr & Bits(32)(ChannelMMIO.AddressMask))
+    client_addr_chan, client_addr_ready = Channel(UInt(32)).wrap(
+        client_addr.as_uint(), addr_valid)
+    addr_ready_wire.assign(client_addr_ready)
+    return sel_bits, client_addr_chan
 
   def build_write(self, bundles):
     # TODO: this.

@@ -4,6 +4,16 @@
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
 
+// Ignore time unit and precision.
+timeunit 100ps;
+timeprecision 10fs;
+timeunit 100ps/10fs;
+`timescale 100ps/10fs;
+
+// Ignore type aliases and enum variant names imported into the parent scope.
+typedef int MyInt;
+typedef enum { VariantA, VariantB } MyEnum;
+
 // CHECK-LABEL: moore.module @Empty() {
 // CHECK:       }
 module Empty;

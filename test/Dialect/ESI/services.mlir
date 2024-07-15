@@ -205,14 +205,14 @@ hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
 }
 
 esi.service.std.mmio @mmio
-!mmioReq = !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+!mmioReq = !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 
-// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>) {
+// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>) {
 // CONN-NEXT:     %true = hw.constant true
 // CONN-NEXT:     %c0_i64 = hw.constant 0 : i64
-// CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+// CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 // CONN-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %true : i64
-// CONN-NEXT:     %offset = esi.bundle.unpack %chanOutput from %manifest : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i64> from "data"]>
+// CONN-NEXT:     %offset = esi.bundle.unpack %chanOutput from %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 hw.module @MMIOManifest(in %clk: !seq.clock, in %rst: i1) {
   %req = esi.service.req <@mmio::@read> (#esi.appid<"manifest">) : !mmioReq
   %data = hw.constant 0 : i64

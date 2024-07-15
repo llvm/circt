@@ -139,7 +139,6 @@ class OpOperand;
 class OpResult;
 template <typename OpTy>
 class OwningOpRef;
-class ParseResult;
 class Pass;
 class PatternRewriter;
 class Region;
@@ -165,7 +164,6 @@ class VectorType;
 class WalkResult;
 enum class RegionKind;
 struct CallInterfaceCallable;
-struct LogicalResult;
 struct OperationState;
 class OperationName;
 
@@ -173,8 +171,6 @@ namespace affine {
 struct MemRefAccess;
 } // namespace affine
 
-template <typename T>
-class FailureOr;
 template <typename SourceOp>
 class OpConversionPattern;
 template <typename T>
