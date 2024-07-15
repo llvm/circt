@@ -110,8 +110,7 @@ struct MemberVisitor {
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
 
-    auto *moduleLowering = context.convertModuleHeader(
-        &instNode.body, instNode.getPortConnections());
+    auto *moduleLowering = context.convertModuleHeader(&instNode.body);
     if (!moduleLowering)
       return failure();
     auto module = moduleLowering->op;
@@ -477,10 +476,8 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
 /// the op to the worklist of module bodies to be lowered. This acts like a
 /// module "declaration", allowing instances to already refer to a module even
 /// before its body has been lowered.
-ModuleLowering *Context::convertModuleHeader(
-    const slang::ast::InstanceBodySymbol *module,
-    std::optional<slang::span<const slang::ast::PortConnection *const>>
-        portConnections) {
+ModuleLowering *
+Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
   using slang::ast::MultiPortSymbol;
   using slang::ast::ParameterSymbol;
