@@ -997,6 +997,7 @@ def StructCreateOp : MooreOp<"struct_create", [Pure]> {
     $input attr-dict `:` type($input) `->` type($result)
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def StructExtractOp : MooreOp<"struct_extract", [

@@ -67,8 +67,8 @@ moore.module @structAssign() {
   moore.output
 }
 
-// CHECK-LABEL: moore.module @structFold
-moore.module @structFold() {
+// CHECK-LABEL: moore.module @structInjectFold
+moore.module @structInjectFold() {
   %x = moore.variable : <i32>
   %y = moore.variable : <i32>
   %z = moore.variable : <i32>

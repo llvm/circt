@@ -523,6 +523,24 @@ LogicalResult StructCreateOp::verify() {
       });
 }
 
+OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInput();
+
+  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
+    return {};
+
+  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
+                     cast<RefType>(getType()).getNestedType())
+                     .Case<StructType, UnpackedStructType>(
+                         [](auto &type) { return type.getMembers(); })
+                     .Default([](auto) { return std::nullopt; });
+  SmallVector<NamedAttribute> namedInputs;
+  for (auto [input, member] : llvm::zip(inputs, members))
+    namedInputs.push_back(NamedAttribute(member.name, input));
+
+  return DictionaryAttr::get(getContext(), namedInputs);
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractOp
 //===----------------------------------------------------------------------===//
