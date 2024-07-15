@@ -107,3 +107,9 @@ install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
   DESTINATION python_packages/pycde/circt/_mlir_libs
   COMPONENT PyCDE
 )
+install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
+  DESTINATION python_packages/pycde/circt/_mlir_libs
+  PRE_EXCLUDE_REGEXES .*
+  PRE_INCLUDE_REGEXES zlib1
+  COMPONENT PyCDE
+)
