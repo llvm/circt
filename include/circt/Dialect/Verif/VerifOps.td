@@ -267,7 +267,7 @@ def YieldOp : VerifOp<"yield", [
 /// BMC -- short for bounded model check.
 def BMC : I32EnumAttrCase<"BMC", 0, "bmc">;
 /// KIP -- short for k-Inductive-Proof.
-def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 0, "k inductive proof">;
+def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 0, "kinduction">;
 
 def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
                                 [BMC, KInductiveProof]> {
@@ -317,12 +317,10 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `:` type($result)";
-
-  let hasVerifier = 1;
 }
 
-def ConcreteValOp : VerifOp<"concrete_val", [
-  AllTypesMatch<["init", "update", "result"], HasParent<"verif::FormalOp">>
+def ConcreteValOp : VerifOp<"concrete_input", [
+  AllTypesMatch<["init", "update", "result"]>, HasParent<"verif::FormalOp">
 ]> {
   let summary = "declare a concrete value for formal verification";
   let description = [{
@@ -338,8 +336,6 @@ def ConcreteValOp : VerifOp<"concrete_val", [
   let assemblyFormat = [{
     $init `,` $update attr-dict `:` type($result)
   }];
-
-  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD
