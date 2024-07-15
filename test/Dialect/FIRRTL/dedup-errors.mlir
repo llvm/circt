@@ -438,7 +438,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test1", "~MustDedup|Test3"]
     }]} {
-  
+
   // expected-note@below {{first operation has attribute 'test' with value "a"}}
   firrtl.module private @Test0() attributes {test = "a"} { }
   firrtl.module private @Test1() attributes {test = "a"} { }
