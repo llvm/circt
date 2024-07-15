@@ -4,6 +4,13 @@ from .circt import ir
 import os
 
 
+def clog2(x: int) -> int:
+  """Return the ceiling log base 2 of x."""
+  if x == 0:
+    return 0
+  return (x - 1).bit_length()
+
+
 # PyCDE needs a custom version of this to support python classes.
 def _obj_to_attribute(obj) -> ir.Attribute:
   """Create an MLIR attribute from a Python object for a few common cases."""

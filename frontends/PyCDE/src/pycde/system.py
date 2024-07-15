@@ -347,6 +347,10 @@ class System:
     assert self.passed, "Must call compile before package"
     for func in self.packaging_funcs:
       func(self)
+    # Since PyCDE is currently being used pretty much exclusively for ESI, it's
+    # fair to just package the ESI collateral always.
+    from .esi import package as esi_package
+    esi_package(self)
 
 
 class _OpCache:

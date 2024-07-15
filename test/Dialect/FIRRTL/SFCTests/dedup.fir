@@ -341,7 +341,7 @@ circuit Top9 : %[[
   ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECK: firrtl.node %c0_ui1 {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
+    ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym]], class = "circt.test"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -381,7 +381,7 @@ circuit Top10 : %[[
   ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECK: firrtl.node %c0_ui1 {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "world"}]}
+    ; CHECK-NEXT: firrtl.wire {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "world"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -886,7 +886,7 @@ circuit Top17 : %[[
   ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECK: firrtl.node %c0_ui1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    ; CHECK-NEXT: firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     wire b: UInt<1>
     b is invalid
     x <= b
@@ -927,7 +927,7 @@ circuit Top18 : %[[
   ; CHECK: module private @A(
   module A :
     output x: UInt<1>
-    ; CHECK: firrtl.node
+    ; CHECK: firrtl.wire
     ; CHECK-SAME: [{class = "firrtl.transforms.DontTouchAnnotation"}]
     wire b: UInt<1>
     b is invalid
