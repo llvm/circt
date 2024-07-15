@@ -31,6 +31,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
 
 # We need zlib to uncompress the manifest.
 find_package(ZLIB REQUIRED)
@@ -43,6 +44,12 @@ if (NOT TARGET nlohmann_json)
     GIT_TAG        v3.11.3
   )
   FetchContent_MakeAvailable(json)
+endif()
+
+# In a Python wheel build, we need to install libraries to different places.
+option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
+if (WHEEL_BUILD)
+  message(STATUS "Setting up for a Python wheel build.")
 endif()
 
 ##===----------------------------------------------------------------------===//
@@ -113,10 +120,17 @@ else()
   )
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
-install(TARGETS ESICppRuntime
-  DESTINATION lib
-  COMPONENT ESIRuntime
-)
+if (WHEEL_BUILD)
+  install(TARGETS ESICppRuntime
+    DESTINATION lib
+    COMPONENT ESIRuntime
+  )
+else()
+  install(TARGETS ESICppRuntime
+    DESTINATION python/esiaccel
+    COMPONENT ESIRuntime
+  )
+endif()
 install(FILES ${ESICppRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
@@ -164,11 +178,6 @@ add_dependencies(ESIRuntime esitester)
 ##===----------------------------------------------------------------------===//
 ## Python bindings for the ESI runtime.
 ##===----------------------------------------------------------------------===//
-
-option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
-if (WHEEL_BUILD)
-  message(STATUS "Setting up for a Python wheel build.")
-endif()
 
 # Pybind11 is used to wrap the ESICppRuntime APIs.
 if(NOT DEFINED Python3_FOUND)
@@ -284,7 +293,6 @@ else() # Python not found.
 endif()
 
 
-
 ##===----------------------------------------------------------------------===//
 ## Backends are loaded dynamically as plugins.
 ##===----------------------------------------------------------------------===//
@@ -331,6 +339,18 @@ if(ESI_COSIM)
 
   add_dependencies(ESIRuntime CosimBackend)
 
+  if (WHEEL_BUILD)
+    install(TARGETS CosimBackend
+      DESTINATION lib
+      COMPONENT ESIRuntime
+    )
+  else()
+    install(TARGETS CosimBackend
+      DESTINATION python/esiaccel
+      COMPONENT ESIRuntime
+    )
+  endif()
+
   # Build the RTL DPI cosim server.
   add_subdirectory(cosim_dpi_server)
 else()
@@ -365,6 +385,17 @@ if (XRT_PATH)
     -L${XRT_PATH}/lib
   )
   add_dependencies(ESIRuntime XrtBackend)
+  if (WHEEL_BUILD)
+    install(TARGETS XrtBackend
+      DESTINATION lib
+      COMPONENT ESIRuntime
+    )
+  else()
+    install(TARGETS XrtBackend
+      DESTINATION python/esiaccel
+      COMPONENT ESIRuntime
+    )
+  endif()
 endif()
 
 install(FILES ${ESICppRuntimeBackendHeaders}

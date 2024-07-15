@@ -111,7 +111,7 @@ jobs:
       - name: Build additional c++ deps
         shell: pwsh
         run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib capnproto
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
 
       - name: Get CIRCT
         uses: actions/checkout@v4

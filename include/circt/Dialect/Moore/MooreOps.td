@@ -57,11 +57,14 @@ def SVModuleOp : MooreOp<"module", [
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    TypeAttrOf<ModuleType>:$module_type
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<StrAttr>:$sym_visibility
   );
   let regions = (region SizedRegion<1>:$bodyRegion);
   let hasCustomAssemblyFormat = 1;
 
+  let builders = [OpBuilder<
+    (ins "StringRef":$name, "hw::ModuleType":$type)>];
   let extraClassDeclaration = [{
     /// Return the `moore.output` op terminator of this module.
     OutputOp getOutputOp();

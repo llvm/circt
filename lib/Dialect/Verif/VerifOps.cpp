@@ -9,12 +9,14 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/MapVector.h"
@@ -104,6 +106,43 @@ LogicalResult LogicEquivalenceCheckingOp::verifyRegions() {
     return emitOpError()
            << "types of the yielded values of both regions must match";
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BoundedModelCheckingOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BoundedModelCheckingOp::verifyRegions() {
+  if (!getInit().getArgumentTypes().empty())
+    return emitOpError() << "init region must have no arguments";
+  auto *initYieldOp = getInit().front().getTerminator();
+  auto *loopYieldOp = getLoop().front().getTerminator();
+  if (initYieldOp->getOperandTypes() != loopYieldOp->getOperandTypes())
+    return emitOpError()
+           << "init and loop regions must yield the same types of values";
+  if (initYieldOp->getOperandTypes() != getLoop().front().getArgumentTypes())
+    return emitOpError()
+           << "loop region arguments must match the types of the values "
+              "yielded by the init and loop regions";
+  size_t totalClocks = 0;
+  auto circuitArgTy = getCircuit().getArgumentTypes();
+  for (auto input : circuitArgTy)
+    if (isa<seq::ClockType>(input))
+      totalClocks++;
+  auto initYields = initYieldOp->getOperands();
+  // We know init and loop yields match, so only need to check one
+  if (initYields.size() < totalClocks)
+    return emitOpError()
+           << "init and loop regions must yield at least as many clock "
+              "values as there are clock arguments to the circuit region";
+  for (size_t i = 0; i < totalClocks; i++) {
+    if (!isa<seq::ClockType>(initYieldOp->getOperand(i).getType()))
+      return emitOpError()
+             << "init and loop regions must yield as many clock values as "
+                "there are clock arguments in the circuit region "
+                "before any other values";
+  }
   return success();
 }
 

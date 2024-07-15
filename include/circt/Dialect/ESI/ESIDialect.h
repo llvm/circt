@@ -29,7 +29,8 @@ namespace esi {
 
 /// Manifest format version number. Increment this whenever the manifest format
 /// changes.
-constexpr uint64_t esiApiVersion = 1;
+/// Version 0 is subject to massive, breaking changes.
+constexpr uint64_t esiApiVersion = 0;
 
 void registerESIPasses();
 

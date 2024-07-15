@@ -32,7 +32,7 @@ class BitsMod(Module):
     # CHECK:  %12 = comb.extract %inp from 0 {sv.namehint = "inp_0upto1"} : (i5) -> i1
     # CHECK:  %13 = comb.extract %inp from 1 {sv.namehint = "inp_1upto2"} : (i5) -> i1
     # CHECK:  %14 = comb.extract %inp from 2 {sv.namehint = "inp_2upto3"} : (i5) -> i1
-    a, b, c = ports.inp[0], ports.inp[1], ports.inp[2]
+    a, b, c = ports.inp[0], ports.inp[1], ports.inp[-3]
 
     # CHECK:  %15 = comb.or bin %12, %13, %14 : i1
     Or(a, b, c)
