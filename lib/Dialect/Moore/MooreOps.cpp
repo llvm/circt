@@ -446,6 +446,11 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
         APInt(type.getWidth(), (uint64_t)value, /*isSigned=*/true));
 }
 
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // NamedConstantOp
 //===----------------------------------------------------------------------===//
@@ -591,6 +596,31 @@ DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
   erase();
   return DeletionKind::Keep;
 }
+
+OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
+  if (auto constOperand = adaptor.getInput()) {
+    auto operandAttr = llvm::cast<DictionaryAttr>(constOperand);
+    for (const auto &ele : operandAttr)
+      if (ele.getName() == getFieldNameAttr())
+        return ele.getValue();
+  }
+
+  if (auto structInject = getInput().getDefiningOp<StructInjectOp>())
+    return structInject.getFieldNameAttr() == getFieldNameAttr()
+               ? structInject.getNewValue()
+               : Value();
+  if (auto structCreate = getInput().getDefiningOp<StructCreateOp>()) {
+    auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
+                   getInput().getType().getNestedType())
+                   .Case<StructType, UnpackedStructType>([this](auto &type) {
+                     return type.getFieldIndex(getFieldNameAttr());
+                   })
+                   .Default([](auto &) { return std::nullopt; });
+    return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+  }
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // StructExtractRefOp
 //===----------------------------------------------------------------------===//

@@ -288,6 +288,7 @@ class StructLikeType<
   let extraClassDeclaration = [{
     std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
     Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
   }];
 }
 
@@ -347,7 +348,7 @@ def RefType : MooreTypeDef<"Ref", [
 >], "moore::UnpackedType">{
   let mnemonic = "ref";
   let description = [{
-  A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
+    A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
     'moore.variable', 'moore.blocking_assign', and 'moore.read', which are
     related to memory, like alloca/write/read.
   }];
@@ -369,6 +370,7 @@ def RefType : MooreTypeDef<"Ref", [
     };
     std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
     Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
   }];
 }
 

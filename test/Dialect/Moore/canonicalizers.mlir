@@ -39,7 +39,7 @@ moore.module @MultiAssign() {
 }
 
 // CHECK-LABEL: moore.module @structAssign
-moore.module @structAssign() {
+moore.module @structAssign(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
   %x = moore.variable : <i32>
   %y = moore.variable : <i32>
   %z = moore.variable : <i32>
@@ -56,19 +56,18 @@ moore.module @structAssign() {
   %4 = moore.constant 1 : i32
   %5 = moore.add %3, %4 : i32
   %6 = moore.struct_inject %2, "a", %5 : !moore.ref<struct<{a: i32, b: i32}>>
-  // CHECK: %5 = moore.struct_extract %4, "a" : <struct<{a: i32, b: i32}>> -> i32
   %7 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %y, %5 : i32
+  // CHECK: moore.assign %y, %3 : i32
   moore.assign %y, %7 : i32
-  // CHECK: %6 = moore.struct_extract %4, "a" : <struct<{a: i32, b: i32}>> -> i32
   %8 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %z, %6 : i32
+  // CHECK: moore.assign %z, %3 : i32
   moore.assign %z, %8 : i32
-  moore.output
+  // CHECK: moore.output %4 : !moore.ref<struct<{a: i32, b: i32}>>
+  moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
 }
 
 // CHECK-LABEL: moore.module @structInjectFold
-moore.module @structInjectFold() {
+moore.module @structInjectFold(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
   %x = moore.variable : <i32>
   %y = moore.variable : <i32>
   %z = moore.variable : <i32>
@@ -84,13 +83,20 @@ moore.module @structInjectFold() {
   %4 = moore.constant 1 : i32
   %5 = moore.add %3, %4 : i32
   %6 = moore.struct_inject %2, "a", %5 : !moore.ref<struct<{a: i32, b: i32}>>
-  // CHECK: %4 = moore.struct_extract %3, "a" : <struct<{a: i32, b: i32}>> -> i32
   %7 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %y, %4 : i32
+  // CHECK: moore.assign %y, %2 : i32
   moore.assign %y, %7 : i32
-  // CHECK: %5 = moore.struct_extract %3, "a" : <struct<{a: i32, b: i32}>> -> i32
   %8 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %z, %5 : i32
+  // CHECK: moore.assign %z, %2 : i32
   moore.assign %z, %8 : i32
-  moore.output
+  // CHECK: moore.output %3 : !moore.ref<struct<{a: i32, b: i32}>>
+  moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
 }
+
+// CHECK-LABEL: moore.module @structCreateFold
+moore.module @structCreateFold(in %a : !moore.i1, out b : !moore.i1) {
+    %0 = moore.struct_create %a : !moore.i1 -> <struct<{a: i1}>>
+    %1 = moore.struct_extract %0, "a" : <struct<{a: i1}>> -> i1
+    // CHECK:  moore.output %a : !moore.i1
+    moore.output %1 : !moore.i1
+  }
