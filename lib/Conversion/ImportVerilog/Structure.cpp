@@ -536,15 +536,8 @@ ModuleLowering *Context::convertModuleHeader(
 
   auto &slot = modules[module];
   if (slot) {
-    if (portConnections) {
-      for (const auto *con : *portConnections) {
-        auto *port = con->port.as_if<PortSymbol>();
-        for (const auto &existingPort : slot->ports)
-          if (port->name == existingPort.ast.name)
-            slot->portsBySyntaxNode.insert(
-                {port->getSyntax(), &existingPort.ast});
-      }
-    }
+    for (const auto &port : slot->ports)
+      slot->portsBySyntaxNode.insert({port.ast.getSyntax(), &port.ast});
     return slot.get();
   }
 
