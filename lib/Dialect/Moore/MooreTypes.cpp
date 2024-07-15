@@ -233,12 +233,24 @@ static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
   return Type();
 }
 
+static std::optional<uint32_t>
+getFieldAllIndex(ArrayRef<StructLikeMember> members, StringAttr nameField) {
+  for (uint32_t fieldIndex = 0; fieldIndex < members.size(); fieldIndex++)
+    if (members[fieldIndex].name == nameField)
+      return fieldIndex;
+  return std::nullopt;
+}
+
 std::optional<DenseMap<Attribute, Type>> StructType::getSubelementIndexMap() {
   return getAllSubelementIndexMap(getMembers());
 }
 
 Type StructType::getTypeAtIndex(Attribute index) {
   return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> StructType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
 }
 
 std::optional<DenseMap<Attribute, Type>>
@@ -250,12 +262,21 @@ Type UnpackedStructType::getTypeAtIndex(Attribute index) {
   return getTypeAtAllIndex(getMembers(), index);
 }
 
+std::optional<uint32_t>
+UnpackedStructType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
+}
+
 std::optional<DenseMap<Attribute, Type>> UnionType::getSubelementIndexMap() {
   return getAllSubelementIndexMap(getMembers());
 }
 
 Type UnionType::getTypeAtIndex(Attribute index) {
   return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> UnionType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
 }
 
 std::optional<DenseMap<Attribute, Type>>
@@ -265,6 +286,10 @@ UnpackedUnionType::getSubelementIndexMap() {
 
 Type UnpackedUnionType::getTypeAtIndex(Attribute index) {
   return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> UnpackedUnionType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
 }
 
 std::optional<DenseMap<Attribute, Type>> RefType::getSubelementIndexMap() {
@@ -282,6 +307,14 @@ Type RefType::getTypeAtIndex(Attribute index) {
         return getTypeAtAllIndex(type.getMembers(), index);
       })
       .Default([](auto) { return Type(); });
+}
+
+std::optional<uint32_t> RefType::getFieldIndex(StringAttr nameField) {
+  return TypeSwitch<Type, std::optional<uint32_t>>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&nameField](auto &type) {
+        return getFieldAllIndex(type.getMembers(), nameField);
+      })
+      .Default([](auto) { return std::nullopt; });
 }
 
 //===----------------------------------------------------------------------===//

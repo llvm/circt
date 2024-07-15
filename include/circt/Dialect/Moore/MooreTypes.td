@@ -288,6 +288,7 @@ class StructLikeType<
   let extraClassDeclaration = [{
     std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
     Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
   }];
 }
 
@@ -369,6 +370,7 @@ def RefType : MooreTypeDef<"Ref", [
     };
     std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
     Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
   }];
 }
 

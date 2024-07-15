@@ -413,6 +413,7 @@ def ConstantOp : MooreOp<"constant", [Pure]> {
   let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasFolder = 1;
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
@@ -1036,6 +1037,7 @@ def StructExtractOp : MooreOp<"struct_extract", [
     $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref", [
