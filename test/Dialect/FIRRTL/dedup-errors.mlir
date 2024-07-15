@@ -20,16 +20,26 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 // -----
 
 // expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+// expected-error@below {{module "Test3" not deduplicated with "Test2"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    },
+    {
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test2", "~MustDedup|Test3"]
     }]} {
   // expected-note@below {{module marked NoDedup}}
   firrtl.module private @Test0() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
-  firrtl.module private @Test1() { }
+  firrtl.module private @Test1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  // expected-note@below {{module marked NoDedup}}
+  firrtl.module private @Test2() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  firrtl.module private @Test3() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
+    firrtl.instance test2 @Test2()
+    firrtl.instance test3 @Test3()
   }
 }
 
