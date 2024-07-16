@@ -16,9 +16,10 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
+include "mlir/IR/RegionKindInterface.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -275,7 +276,7 @@ def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
   let cppNamespace = "circt::verif";
 }
 
-def FormalOp : VerifOp<"formal", [NoTerminator]> {
+def FormalOp : VerifOp<"formal", [NoTerminator, RegionKindInterface]> {
   let summary = "defines a formal verification test";
   let description = [{
     This operation defines a formal verification test with potentially additional
@@ -301,6 +302,13 @@ def FormalOp : VerifOp<"formal", [NoTerminator]> {
   let assemblyFormat = [{
     attr-dict  (`sym` $inner_sym^)? `(` (`k` `:` $k^)? (`type` `:` $test_type^)? `)` 
     $test_region
+  }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
   }];
 }
 
