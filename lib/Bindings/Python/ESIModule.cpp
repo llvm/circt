@@ -35,11 +35,12 @@ using namespace circt::esi;
 // pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
-                                        MlirOperation declOp, void *userData) {
+                                        MlirOperation declOp,
+                                        MlirOperation recOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
   py::handle genFunc(serviceGenFuncLookup[name]);
   py::gil_scoped_acquire();
-  py::object rc = genFunc(reqOp);
+  py::object rc = genFunc(reqOp, declOp, recOp);
   return rc.cast<bool>() ? mlirLogicalResultSuccess()
                          : mlirLogicalResultFailure();
 }

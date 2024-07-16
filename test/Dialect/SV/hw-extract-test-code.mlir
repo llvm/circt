@@ -604,3 +604,18 @@ hw.module @VerifOps(in %a : i1, in %b : i1) {
   verif.cover %true : i1
   hw.output
 }
+
+// -----
+
+// Check that clocked verif ops are also extracted.
+
+// CHECK: hw.module private @ClockedVerifOps_assert
+// CHECK: hw.module private @ClockedVerifOps_assume
+// CHECK: hw.module private @ClockedVerifOps_cover
+hw.module @ClockedVerifOps(in %a : i1, in %en : i1, in %clock: i1) {
+  %true = hw.constant true
+  verif.clocked_assert %a if %en, posedge %clock : i1
+  verif.clocked_assume %a if %en, posedge %clock : i1
+  verif.clocked_cover %a if %en, posedge %clock : i1
+  hw.output
+}

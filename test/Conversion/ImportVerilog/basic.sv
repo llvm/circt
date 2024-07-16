@@ -4,6 +4,16 @@
 // Internal issue in Slang v3 about jump depending on uninitialised value.
 // UNSUPPORTED: valgrind
 
+// Ignore time unit and precision.
+timeunit 100ps;
+timeprecision 10fs;
+timeunit 100ps/10fs;
+`timescale 100ps/10fs;
+
+// Ignore type aliases and enum variant names imported into the parent scope.
+typedef int MyInt;
+typedef enum { VariantA, VariantB } MyEnum;
+
 // CHECK-LABEL: moore.module @Empty() {
 // CHECK:       }
 module Empty;
@@ -13,10 +23,10 @@ endmodule
 // CHECK-LABEL: moore.module @NestedA() {
 // CHECK:         moore.instance "NestedB" @NestedB
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedB() {
+// CHECK-LABEL: moore.module private @NestedB() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
-// CHECK-LABEL: moore.module @NestedC() {
+// CHECK-LABEL: moore.module private @NestedC() {
 // CHECK:       }
 module NestedA;
   module NestedB;
@@ -25,7 +35,7 @@ module NestedA;
   endmodule
 endmodule
 
-// CHECK-LABEL: moore.module @Child() {
+// CHECK-LABEL: moore.module private @Child() {
 // CHECK:       }
 module Child;
 endmodule
@@ -476,7 +486,9 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.constant 1 : i32
     // CHECK: [[TMP3:%.+]] = moore.read %a : i32
     // CHECK: [[TMP4:%.+]] = moore.mul [[TMP2]], [[TMP3]] : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP4]] : l32, i32 -> l1
+    // CHECK: [[TMP5:%.+]] = moore.constant 0 : i32
+    // CHECK: [[TMP6:%.+]] = moore.sub [[TMP4]], [[TMP5]] : i32
+    // CHECK: moore.extract [[TMP1]] from [[TMP6]] : l32, i32 -> l1
     c = vec_1[1*a-:1];
     // CHECK: [[TMP1:%.+]] = moore.read %arr : uarray<3 x uarray<6 x i4>>
     // CHECK: [[TMP2:%.+]] = moore.constant 3 : i32
@@ -504,6 +516,12 @@ module Expressions;
     // CHECK: [[X_READ:%.+]] = moore.read %x : i1
     // CHECK: moore.extract_ref %vec_1 from [[X_READ]] : <l32>, i1 -> <l1>
     vec_1[x] = y;
+    
+    // CHECK: [[CONST_15:%.+]] = moore.constant 15 : i32
+    // CHECK: [[CONST_2:%.+]] = moore.constant 2 : i32
+    // CHECK: [[SUB:%.+]] = moore.sub [[CONST_15]], [[CONST_2]] : i32
+    // CHECK: moore.extract_ref %vec_1 from [[SUB]] : <l32>, i32 -> <l3>
+    vec_1[15-:3] = y;
 
     //===------------------------------------------------------------------===//
     // Unary operators
@@ -1073,7 +1091,7 @@ module PortsTop;
   PortsUnconnected p4(.a(), .b(x4), .c(), .d(y4), .e());
 endmodule
 
-// CHECK-LABEL: moore.module @PortsAnsi
+// CHECK-LABEL: moore.module private @PortsAnsi
 module PortsAnsi(
   // CHECK-SAME: in %a : !moore.l1
   input a,
@@ -1100,7 +1118,7 @@ module PortsAnsi(
   // CHECK: moore.output [[B_READ]] : !moore.l1
 endmodule
 
-// CHECK-LABEL: moore.module @PortsNonAnsi
+// CHECK-LABEL: moore.module private @PortsNonAnsi
 module PortsNonAnsi(a, b, c, d);
   // CHECK-SAME: in %a : !moore.l1
   input a;
@@ -1112,7 +1130,7 @@ module PortsNonAnsi(a, b, c, d);
   ref logic d;
 endmodule
 
-// CHECK-LABEL: moore.module @PortsExplicit
+// CHECK-LABEL: moore.module private @PortsExplicit
 module PortsExplicit(
   // CHECK-SAME: in %a0 : !moore.l1
   input .a0(x),
@@ -1141,7 +1159,7 @@ module PortsExplicit(
   // CHECK: moore.output [[B0]], [[X_READ]], [[B2]]
 endmodule
 
-// CHECK-LABEL: moore.module @MultiPorts
+// CHECK-LABEL: moore.module private @MultiPorts
 module MultiPorts(
   // CHECK-SAME: in %a0 : !moore.l1
   .a0(u[0]),
@@ -1184,7 +1202,7 @@ module MultiPorts(
   // CHECK: moore.output [[V1_READ]], [[C1_READ]]
 endmodule
 
-// CHECK-LABEL: moore.module @PortsUnconnected
+// CHECK-LABEL: moore.module private @PortsUnconnected
 module PortsUnconnected(
   // CHECK-SAME: in %a : !moore.l1
   input a,

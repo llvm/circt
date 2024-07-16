@@ -3816,10 +3816,8 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
     return success();
   }
 
-  auto kind = getToken().getKind();
-  if (getToken().isNot(FIRToken::less_equal))
-    return emitError("expected '<=' in statement");
-  consumeToken();
+  if (parseToken(FIRToken::less_equal, "expected '<=' in statement"))
+    return failure();
 
   Value rhs;
   if (parseExp(rhs, "unexpected token in statement") || parseOptionalInfo())
@@ -3835,7 +3833,6 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   if (lhsType.containsReference() || rhsType.containsReference())
     return emitError(loc, "cannot connect types containing references");
 
-  assert(kind == FIRToken::less_equal && "unexpected kind");
   if (!areTypesEquivalent(lhsType, rhsType))
     return emitError(loc, "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;

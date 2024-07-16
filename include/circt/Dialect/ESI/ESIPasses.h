@@ -32,6 +32,7 @@ struct Platform {
 #define GEN_PASS_DECL
 #include "circt/Dialect/ESI/ESIPasses.h.inc"
 
+std::unique_ptr<OperationPass<>> createESIVerifyConnectionsPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIBundleLoweringPass();
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass();

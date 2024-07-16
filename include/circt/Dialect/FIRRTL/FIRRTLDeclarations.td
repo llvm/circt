@@ -38,7 +38,7 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
       "firrtl::FModuleOp", "firrtl::LayerBlockOp",
-      "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
+      "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,

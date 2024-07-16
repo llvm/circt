@@ -13,7 +13,6 @@
 include "mlir/IR/EnumAttr.td"
 
 def LLHD_SigOp : LLHD_Op<"sig", [
-    ParentOneOf<["llhd::EntityOp", "llhd::ProcOp"]>,
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
       "init", "result", "SigType::get($_self)">

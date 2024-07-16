@@ -116,6 +116,9 @@ struct MemberVisitor {
     auto module = moduleLowering->op;
     auto moduleType = module.getModuleType();
 
+    // Set visibility attribute for instantiated module.
+    SymbolTable::setSymbolVisibility(module, SymbolTable::Visibility::Private);
+
     // Prepare the values that are involved in port connections. This creates
     // rvalues for input ports and appropriate lvalues for output, inout, and
     // ref ports. We also separate multi-ports into the individual underlying
@@ -428,6 +431,13 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
   // which are listed separately as top instances.
   for (auto *unit : root.compilationUnits) {
     for (const auto &member : unit->members()) {
+      // Ignore top-level constructs that are handled by Slang as part of name
+      // resolution and type checking.
+      if (member.as_if<slang::ast::EmptyMemberSymbol>() ||
+          member.as_if<slang::ast::TransparentMemberSymbol>() ||
+          member.as_if<slang::ast::TypeAliasType>())
+        continue;
+
       // Error out on all top-level declarations.
       auto loc = convertLocation(member.location);
       return mlir::emitError(loc, "unsupported construct: ")

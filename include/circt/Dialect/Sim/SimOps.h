@@ -21,6 +21,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/BuilderUtils.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
