@@ -364,7 +364,7 @@ def ContractOp : VerifOp<"contract", [Pure]>{
   let regions = (region SizedRegion<1>:$contract_region);
 
   let assemblyFormat = [{
-    attr-dict $contract_region
+    attr-dict-with-keyword $contract_region
   }];
 }
 
