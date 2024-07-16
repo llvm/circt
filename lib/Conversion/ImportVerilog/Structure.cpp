@@ -532,11 +532,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   }
 
   auto &slot = modules[module];
-  if (slot) {
-    for (const auto &port : slot->ports)
-      slot->portsBySyntaxNode.insert({port.ast.getSyntax(), &port.ast});
+  if (slot)
     return slot.get();
-  }
 
   slot = std::make_unique<ModuleLowering>();
   auto &lowering = *slot;
@@ -616,6 +613,11 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // Schedule the body to be lowered.
   moduleWorklist.push(module);
+
+  // Map duplicate port by Syntax
+  for (const auto &port : lowering.ports)
+    lowering.portsBySyntaxNode.insert({port.ast.getSyntax(), &port.ast});
+
   return &lowering;
 }
 
