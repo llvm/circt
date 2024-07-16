@@ -13,11 +13,13 @@ include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
+include "mlir/IR/RegionKindInterface.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -267,14 +269,14 @@ def YieldOp : VerifOp<"yield", [
 /// BMC -- short for bounded model check.
 def BMC : I32EnumAttrCase<"BMC", 0, "bmc">;
 /// KIP -- short for k-Inductive-Proof.
-def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 0, "k inductive proof">;
+def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 1, "kinduction">;
 
 def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
                                 [BMC, KInductiveProof]> {
   let cppNamespace = "circt::verif";
 }
 
-def FormalOp : VerifOp<"formal"> {
+def FormalOp : VerifOp<"formal", [NoTerminator, RegionKindInterface]> {
   let summary = "defines a formal verification test";
   let description = [{
     This operation defines a formal verification test with potentially additional
@@ -301,6 +303,13 @@ def FormalOp : VerifOp<"formal"> {
     attr-dict  (`sym` $inner_sym^)? `(` (`k` `:` $k^)? (`type` `:` $test_type^)? `)` 
     $test_region
   }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -317,12 +326,10 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `:` type($result)";
-
-  let hasVerifier = 1;
 }
 
-def ConcreteValOp : VerifOp<"concrete_val", [
-  Pure, AllTypesMatch<["init", "update", "result"]>
+def ConcreteValOp : VerifOp<"concrete_input", [
+  AllTypesMatch<["init", "update"]>, HasParent<"verif::FormalOp">
 ]> {
   let summary = "declare a concrete value for formal verification";
   let description = [{
@@ -335,11 +342,11 @@ def ConcreteValOp : VerifOp<"concrete_val", [
   let arguments = (ins AnyType:$init, AnyType:$update);
   let results = (outs AnyType:$result);
 
+  // Manual definition of a functional type is wanted
   let assemblyFormat = [{
-    $init `,` $update attr-dict `:` type($result)
+    $init `,` $update attr-dict `:` 
+    `(` type($init) `,` type($update) `)` `->` type($result)
   }];
-
-  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
