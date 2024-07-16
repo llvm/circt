@@ -207,7 +207,8 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
       } else if (auto forOp = dyn_cast<ForOp>(op)) {
         nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
       } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
-                     AssumeConcurrentOp, CoverConcurrentOp, verif::AssertOp,
+                     AssumeConcurrentOp, CoverConcurrentOp, AssertPropertyOp,
+                     AssumePropertyOp, CoverPropertyOp, verif::AssertOp,
                      verif::CoverOp, verif::AssumeOp>(op)) {
         // Notice and renamify the labels on verification statements.
         if (auto labelAttr = op->getAttrOfType<StringAttr>("label"))
@@ -217,12 +218,12 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
           // name from verificaiton kinds.
           StringRef defaultName =
               llvm::TypeSwitch<Operation *, StringRef>(op)
-                  .Case<AssertOp, AssertConcurrentOp, verif::AssertOp>(
-                      [](auto) { return "assert"; })
-                  .Case<CoverOp, CoverConcurrentOp, verif::CoverOp>(
-                      [](auto) { return "cover"; })
-                  .Case<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(
-                      [](auto) { return "assume"; });
+                  .Case<AssertOp, AssertConcurrentOp, AssertPropertyOp,
+                        verif::AssertOp>([](auto) { return "assert"; })
+                  .Case<CoverOp, CoverConcurrentOp, CoverPropertyOp,
+                        verif::CoverOp>([](auto) { return "cover"; })
+                  .Case<AssumeOp, AssumeConcurrentOp, AssumePropertyOp,
+                        verif::AssumeOp>([](auto) { return "assume"; });
           nameEntries.emplace_back(
               op, StringAttr::get(op->getContext(), defaultName));
         }

@@ -62,7 +62,8 @@ circtESIBundleTypeGetChannel(MlirType bundle, size_t idx);
 //===----------------------------------------------------------------------===//
 
 typedef MlirLogicalResult (*CirctESIServiceGeneratorFunc)(
-    MlirOperation serviceImplementReqOp, MlirOperation declOp, void *userData);
+    MlirOperation serviceImplementReqOp, MlirOperation declOp,
+    MlirOperation recordOp, void *userData);
 MLIR_CAPI_EXPORTED void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc, void *userData);
 

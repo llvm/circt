@@ -171,7 +171,6 @@ def XrtBSP(user_module):
 
       # Copy additional sources
       sys: System = System.current()
-      sys.add_packaging_step(esi.package)
       sys.add_packaging_step(XrtTop.package)
 
     @staticmethod

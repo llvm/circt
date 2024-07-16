@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-`timescale 1ns / 1ps
+`timescale 1ns / 100ps
 
 `ifndef TOP_MODULE
 `define TOP_MODULE ESI_Cosim_Top

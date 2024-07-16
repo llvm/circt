@@ -18,6 +18,9 @@ git_describe_command = "git describe --dirty --tags --long --match ESIRuntime*"
 [tool.cibuildwheel]
 build-frontend = "build"
 
+[tool.cibuildwheel.linux]
+repair-wheel-command = "auditwheel repair --exclude libMtiPli.so -w {dest_dir} {wheel}"
+
 [project]
 name = "esiaccel"
 dynamic = ["version"]

@@ -365,7 +365,7 @@ in %clock: !seq.clock, in %o: i8, in %v: i8, in %q: i8, in %s: i8) {
 
 // CHECK-LABEL: hw.module @Test_2_in_1(in %b : i8, in %e : i8, in %h : i8, in %k : i8, in %c : i8, in %f : i8, in %i : i8, in %l : i8, in %n : i8, in %p : i8, in %r : i8, in %t : i8, in %en : i1, in %clock : !seq.clock, in %o : i8, in %v : i8, in %q : i8, in %s : i8) {
 // CHECK-NEXT:    [[VEC:%.+]]:4 = arc.vectorize (%b, %e, %h, %k), (%c, %f, %i, %l), (%o, %v, %q, %s), (%n, %p, %r, %t) : (i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
-// CHECK-NEXT    ^bb0(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8):
+// CHECK-NEXT    ^[[BLOCK:[[:alnum:]]+]](%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8):
 // CHECK-NEXT      [[AND:%.+]] = comb.and %arg2, %arg3 : i8
 // CHECK-NEXT      [[ADD:%.+]] = comb.add %arg0, %arg1 : i8
 // CHECK-NEXT      [[CALL:%.+]] = arc.call @Just_A_Dummy_Func([[ADD]], [[AND]]) : (i8, i8) -> i8
@@ -398,18 +398,14 @@ in %clock: !seq.clock) {
 }
 
 // CHECK-LABEL: hw.module @More_Than_One_Use(in %b : i8, in %e : i8, in %h : i8, in %k : i8, in %c : i8, in %f : i8, in %i : i8, in %l : i8, in %n : i8, in %p : i8, in %r : i8, in %t : i8, in %en : i1, in %clock : !seq.clock) {
-// CHECK-NEXT:    [[VEC0:%.+]]:4 = arc.vectorize (%b, %e, %h, %k), (%c, %f, %i, %l) : (i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
-// CHECK-NEXT:    ^[[BLOCK:[[:alnum:]]+]](%arg0: i8, %arg1: i8):
-// CHECK-NEXT:      [[ADD:%.+]] = comb.add %arg0, %arg1 : i8
-// CHECK-NEXT:      arc.vectorize.return [[ADD]] : i8
-// CHECK-NEXT:    }
-// CHECK-NEXT:    [[VEC1:%.+]]:4 = arc.vectorize ([[VEC0]]#0, [[VEC0]]#1, [[VEC0]]#2, [[VEC0]]#3), (%n, %p, %r, %t), ([[VEC0]]#0, [[VEC0]]#1, [[VEC0]]#2, [[VEC0]]#3) : (i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
+// CHECK-NEXT:    [[VEC:%.+]]:4 = arc.vectorize (%b, %e, %h, %k), (%c, %f, %i, %l), (%n, %p, %r, %t) : (i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
 // CHECK-NEXT:    ^[[BLOCK:[[:alnum:]]+]](%arg0: i8, %arg1: i8, %arg2: i8):
-// CHECK-NEXT:      [[AND:%.+]] = comb.and %arg0, %arg1 : i8
-// CHECK-NEXT:      [[CALL:%.+]] = arc.call @Just_A_Dummy_Func([[AND]], %arg2) : (i8, i8) -> i8
-// CHECK-NEXT:      arc.vectorize.return [[CALL]] : i8
+// CHECK-NEXT:      [[ADD:%.+]] = comb.add %arg0, %arg1 : i8
+// CHECK-NEXT:      [[AND:%.+]] = comb.and [[ADD]], %arg2 : i8
+// CHECK-NEXT:      [[RET:%.+]] = arc.call @Just_A_Dummy_Func([[AND]], [[ADD]]) : (i8, i8) -> i8
+// CHECK-NEXT:      arc.vectorize.return [[RET]] : i8
 // CHECK-NEXT:    }
-// CHECK-NEXT:    [[STATE:%.+]] = arc.state @FooMux(%en, [[VEC1]]#0, [[STATE]]) clock %clock latency 1 : (i1, i8, i8) -> i8
+// CHECK-NEXT:    [[STATE:%.+]] = arc.state @FooMux(%en, [[VEC]]#0, [[STATE]]) clock %clock latency 1 : (i1, i8, i8) -> i8
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 
@@ -473,5 +469,45 @@ in %clock: !seq.clock, in %o: i8, in %v: i8, in %q: i8, in %s: i8) {
 // CHECK-NEXT:      arc.vectorize.return [[OUT]] : i8
 // CHECK-NEXT:    }
 // CHECK-NEXT:    [[STATE:%.+]] = arc.state @FooMux(%en, [[VEC2]]#0, [[STATE:%.+]]) clock %clock latency 1 : (i1, i8, i8) -> i8
+// CHECK-NEXT:    hw.output
+// CHECK-NEXT:  }
+
+hw.module @Repeated_input(in %b: i8, in %e: i8, in %h: i8, in %k: i8, in %en: i1, in %clock: !seq.clock) {
+  %R:4 = arc.vectorize(%b, %e, %h, %k), (%b, %e, %h, %k) : (i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
+    ^bb0(%arg0: i8, %arg1: i8):
+      %ret = comb.mul %arg0, %arg1: i8
+      arc.vectorize.return %ret: i8
+  }
+  %4 = arc.state @FooMux(%en, %R, %4) clock %clock latency 1 : (i1, i8, i8) -> i8
+}
+
+// CHECK-LABEL: hw.module @Repeated_input(in %b : i8, in %e : i8, in %h : i8, in %k : i8, in %en : i1, in %clock : !seq.clock) {
+// CHECK-NEXT:    [[VEC:%.+]]:4 = arc.vectorize (%b, %e, %h, %k) : (i8, i8, i8, i8) -> (i8, i8, i8, i8) {
+// CHECK-NEXT:    ^[[BLOCK:[[:alnum:]]+]](%arg0: i8):
+// CHECK-NEXT:      [[MUL:%.+]] = comb.mul %arg0, %arg0 : i8
+// CHECK-NEXT:      arc.vectorize.return [[MUL]] : i8
+// CHECK-NEXT:    }
+// CHECK-NEXT:    [[STATE:%.+]] = arc.state @FooMux(%en, [[VEC]]#0, [[STATE]]) clock %clock latency 1 : (i1, i8, i8) -> i8
+// CHECK-NEXT:    hw.output
+// CHECK-NEXT:  }
+
+hw.module @Repeated_input_1(in %b: i8, in %e: i8, in %h: i8, in %k: i8, in %en: i1, in %clock: !seq.clock) {
+  %R:4 = arc.vectorize(%b, %e, %h, %k), (%b, %e, %h, %k): (i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
+    ^bb0(%arg0: i8, %arg1: i8):
+      %ret = comb.add %arg0, %arg1: i8
+      arc.vectorize.return %ret: i8
+  }
+  %4 = arc.state @FooMux(%en, %R, %4) clock %clock latency 1 : (i1, i8, i8) -> i8
+}
+
+// CHECK-LABEL: hw.module @Repeated_input_1(in %b : i8, in %e : i8, in %h : i8, in %k : i8, in %en : i1, in %clock : !seq.clock) {
+// CHECK-NEXT:    [[VEC:%.+]]:4 = arc.vectorize (%b, %e, %h, %k) : (i8, i8, i8, i8) -> (i8, i8, i8, i8) {
+// CHECK-NEXT:    ^[[BLOCK:[[:alnum:]]+]](%arg0: i8):
+// CHECK-NEXT:      [[FALSE:%.+]] = hw.constant false
+// CHECK-NEXT:      [[EXTRACT:%.+]] = comb.extract %arg0 from 0 : (i8) -> i7
+// CHECK-NEXT:      [[CONCAT:%.+]] = comb.concat [[EXTRACT]], [[FALSE]] : i7, i1
+// CHECK-NEXT:      arc.vectorize.return [[CONCAT]] : i8
+// CHECK-NEXT:    }
+// CHECK-NEXT:    [[STATE:%.+]] = arc.state @FooMux(%en, [[VEC]]#0, [[STATE]]) clock %clock latency 1 : (i1, i8, i8) -> i8
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }

@@ -266,6 +266,12 @@ struct MergeVectorizeOps : public OpRewritePattern<VectorizeOp> {
                                 PatternRewriter &rewriter) const final;
 };
 
+struct KeepOneVecOp : public OpRewritePattern<VectorizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(VectorizeOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -283,6 +289,17 @@ LogicalResult canonicalizePassthoughCall(mlir::CallOpInterface callOp,
     return success();
   }
   return failure();
+}
+
+LogicalResult updateInputOperands(VectorizeOp &vecOp,
+                                  const SmallVector<Value> &newOperands) {
+  // Set the new inputOperandSegments value
+  unsigned groupSize = vecOp.getResults().size();
+  unsigned numOfGroups = newOperands.size() / groupSize;
+  SmallVector<int32_t> newAttr(numOfGroups, groupSize);
+  vecOp.setInputOperandSegments(newAttr);
+  vecOp.getOperation()->setOperands(ValueRange(newOperands));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -643,18 +660,70 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
   if (!canBeMerged)
     return failure();
 
-  // Set the new inputOperandSegments value
-  unsigned groupSize = vecOp.getResults().size();
-  unsigned numOfGroups = newOperands.size() / groupSize;
-  SmallVector<int32_t> newAttr(numOfGroups, groupSize);
-  vecOp.setInputOperandSegments(newAttr);
-  vecOp.getOperation()->setOperands(ValueRange(newOperands));
+  (void)updateInputOperands(vecOp, newOperands);
 
   // Erase dead VectorizeOps
   for (auto deadOp : vecOpsToRemove)
     rewriter.eraseOp(deadOp);
 
   return success();
+}
+
+namespace llvm {
+static unsigned hashValue(const SmallVector<Value> &inputs) {
+  unsigned hash = hash_value(inputs.size());
+  for (auto input : inputs)
+    hash = hash_combine(hash, input);
+  return hash;
+}
+
+template <>
+struct DenseMapInfo<SmallVector<Value>> {
+  static inline SmallVector<Value> getEmptyKey() {
+    return SmallVector<Value>();
+  }
+
+  static inline SmallVector<Value> getTombstoneKey() {
+    return SmallVector<Value>();
+  }
+
+  static unsigned getHashValue(const SmallVector<Value> &inputs) {
+    return hashValue(inputs);
+  }
+
+  static bool isEqual(const SmallVector<Value> &lhs,
+                      const SmallVector<Value> &rhs) {
+    return lhs == rhs;
+  }
+};
+} // namespace llvm
+
+LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
+                                            PatternRewriter &rewriter) const {
+  BitVector argsToRemove(vecOp.getInputs().size(), false);
+  DenseMap<SmallVector<Value>, unsigned> inExists;
+  auto &currentBlock = vecOp.getBody().front();
+  SmallVector<Value> newOperands;
+  unsigned shuffledBy = 0;
+  bool changed = false;
+  for (auto [argIdx, inputVec] : llvm::enumerate(vecOp.getInputs())) {
+    auto input = SmallVector<Value>(inputVec.begin(), inputVec.end());
+    if (auto in = inExists.find(input); in != inExists.end()) {
+      argsToRemove.set(argIdx);
+      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx - shuffledBy),
+                                  currentBlock.getArgument(in->second));
+      currentBlock.eraseArgument(argIdx - shuffledBy);
+      ++shuffledBy;
+      changed = true;
+      continue;
+    }
+    inExists[input] = argIdx;
+    newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+  }
+
+  if (!changed)
+    return failure();
+  return updateInputOperands(vecOp, newOperands);
 }
 
 //===----------------------------------------------------------------------===//
@@ -704,8 +773,8 @@ void ArcCanonicalizerPass::runOnOperation() {
     dialect->getCanonicalizationPatterns(patterns);
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
-  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer, MergeVectorizeOps>(
-      &getContext());
+  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer, MergeVectorizeOps,
+               KeepOneVecOp>(&getContext());
 
   // Don't test for convergence since it is often not reached.
   (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),

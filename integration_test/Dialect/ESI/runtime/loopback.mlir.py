@@ -7,7 +7,7 @@ import time
 platform = sys.argv[1]
 acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
 
-assert acc.sysinfo().esi_version() == 1
+assert acc.sysinfo().esi_version() == 0
 m = acc.manifest()
 assert m.api_version == 0
 

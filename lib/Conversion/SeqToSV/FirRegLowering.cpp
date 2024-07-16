@@ -533,7 +533,7 @@ FirRegLowering::RegLowerInfo FirRegLowering::lower(FirRegOp reg) {
           else
             createTree(b, svReg.reg, reg, reg.getNext());
         },
-        reg.getIsAsync() ? ResetType::AsyncReset : ResetType::SyncReset,
+        reg.getIsAsync() ? sv::ResetType::AsyncReset : sv::ResetType::SyncReset,
         sv::EventControl::AtPosEdge, reg.getReset(),
         [&](OpBuilder &builder) {
           builder.create<sv::PAssignOp>(loc, svReg.reg, reg.getResetValue());
@@ -616,7 +616,7 @@ void FirRegLowering::initialize(OpBuilder &builder, RegLowerInfo reg,
 
 void FirRegLowering::addToAlwaysBlock(
     Block *block, sv::EventControl clockEdge, Value clock,
-    const std::function<void(OpBuilder &)> &body, ::ResetType resetStyle,
+    const std::function<void(OpBuilder &)> &body, sv::ResetType resetStyle,
     sv::EventControl resetEdge, Value reset,
     const std::function<void(OpBuilder &)> &resetBody) {
   auto loc = clock.getLoc();
@@ -632,7 +632,7 @@ void FirRegLowering::addToAlwaysBlock(
 
   if (!alwaysOp) {
     if (reset) {
-      assert(resetStyle != ::ResetType::NoReset);
+      assert(resetStyle != sv::ResetType::NoReset);
       // Here, we want to create the following structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
       // list.
@@ -651,7 +651,7 @@ void FirRegLowering::addToAlwaysBlock(
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
-      if (resetStyle == ::ResetType::AsyncReset) {
+      if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
 

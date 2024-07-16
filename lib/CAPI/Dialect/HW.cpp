@@ -331,7 +331,7 @@ MLIR_CAPI_EXPORTED bool hwInstanceGraphNodeEqual(HWInstanceGraphNode lhs,
 
 MLIR_CAPI_EXPORTED MlirModule
 hwInstanceGraphNodeGetModule(HWInstanceGraphNode node) {
-  return wrap(dyn_cast<ModuleOp>(unwrap(node)->getModule()));
+  return wrap(dyn_cast<ModuleOp>(unwrap(node)->getModule().getOperation()));
 }
 
 MLIR_CAPI_EXPORTED MlirOperation

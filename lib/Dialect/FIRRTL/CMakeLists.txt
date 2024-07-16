@@ -45,6 +45,7 @@ add_circt_dialect_library(CIRCTFIRRTL
   CIRCTHW
   CIRCTOM
   CIRCTSeq
+  CIRCTSV
   MLIRIR
   MLIRPass
   )

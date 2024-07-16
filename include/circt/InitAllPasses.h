@@ -37,6 +37,7 @@
 #include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/SystemC/SystemCPasses.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Tools/circt-bmc/Passes.h"
 #include "circt/Tools/circt-lec/Passes.h"
 #include "circt/Transforms/Passes.h"
 
@@ -51,6 +52,9 @@ inline void registerAllPasses() {
 
   // LEC transformation passes
   registerLECTransformsPasses();
+
+  // BMC transformation passes
+  registerBMCTransformsPasses();
 
   // Standard Passes
   arc::registerPasses();
