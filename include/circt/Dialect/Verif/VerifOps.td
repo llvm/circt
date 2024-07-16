@@ -317,9 +317,9 @@ def FormalOp : VerifOp<"formal", [NoTerminator, RegionKindInterface]> {
 //===----------------------------------------------------------------------===//
 
 def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
-  let summary = "declare a symbolic value for formal verification";
+  let summary = "declare a symbolic input for formal verification";
   let description = [{
-    This operation declares a symbolic value that can then be used to reason 
+    This operation declares a symbolic input that can then be used to reason 
     about `hw.instance` inputs in a symbolic manner in future assertions and 
     assumptions. The result type must be explicitly marked.  
   }];
@@ -328,14 +328,14 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
-def ConcreteValOp : VerifOp<"concrete_input", [
+def ConcreteInputOp : VerifOp<"concrete_input", [
   AllTypesMatch<["init", "update"]>, HasParent<"verif::FormalOp">
 ]> {
-  let summary = "declare a concrete value for formal verification";
+  let summary = "declare a concrete input for formal verification";
   let description = [{
-    This operation declares a concrete value that can then be used in the 
-    reasoning surrounding symbolic values, allowing for a form of concolic 
-    reasoning to take place in a `verif.formal` block. Concrete values are 
+    This operation declares a concrete input that can then be used in the 
+    reasoning surrounding symbolic inputs, allowing for a form of concolic 
+    reasoning to take place in a `verif.formal` block. Concrete inputs are 
     defined by an initial value and an update function.
   }];
 
