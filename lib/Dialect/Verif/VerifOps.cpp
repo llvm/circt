@@ -147,26 +147,6 @@ LogicalResult BoundedModelCheckingOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
-// Formal Ops
-//===----------------------------------------------------------------------===//
-
-LogicalResult SymbolicValOp::verify() {
-  if (!isa<FormalOp>(getParentOp()))
-    return emitOpError()
-           << "Symbolic values can only be used in a formal test!";
-
-  return success();
-}
-
-LogicalResult ConcreteValOp::verify() {
-  if (!isa<FormalOp>(getParentOp()))
-    return emitOpError()
-           << "Concrete values can only be used in a formal test!";
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Generated code
 //===----------------------------------------------------------------------===//
 
