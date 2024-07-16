@@ -40,6 +40,8 @@ om.class @Widget(%blue_1: i8, %green_1: i32) {
   om.class.field @blue_1, %blue_1 : i8
   // CHECK: om.class.field @green_1, %green_1 : i32
   om.class.field @green_1, %green_1 : i32
+  // CHECK: om.class.fields {field_names = ["blue_1", "green_1"]} %blue_1, %green_1 : i8, i32
+  om.class.fields {field_names = ["blue_1", "green_1"]} %blue_1, %green_1 : i8, i32
 }
 
 // CHECK-LABEL: om.class @Gadget
@@ -49,6 +51,8 @@ om.class @Gadget(%green_1: i8, %green_2: i32) {
   om.class.field @green_1, %green_1 : i8
   // CHECK: om.class.field @green_2, %green_2 : i32
   om.class.field @green_2, %green_2 : i32
+  // CHECK: om.class.fields {field_names = ["green_1", "green_2"]} %green_1, %green_2 : i8, i32
+  om.class.fields {field_names = ["green_1", "green_2"]} %green_1, %green_2 : i8, i32
 }
 
 // CHECK-LABEL: om.class @Empty
