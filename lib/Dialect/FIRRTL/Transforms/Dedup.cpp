@@ -1734,15 +1734,12 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
                               "MustDeduplicateAnnotation references module ")
                     << module << " which does not exist";
         failed = true;
-        return 0;
+        return nullptr;
       }
       return it->second;
     };
 
     AnnotationSet::removeAnnotations(circuit, [&](Annotation annotation) {
-      // If we have already failed, don't process any more annotations.
-      if (failed)
-        return false;
       if (!annotation.isClass(mustDedupAnnoClass))
         return false;
       auto modules = annotation.getMember<ArrayAttr>("modules");
@@ -1753,18 +1750,18 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         return false;
       }
       // Empty module list has nothing to process.
-      if (modules.size() == 0)
+      if (modules.empty())
         return true;
       // Get the first element.
       auto firstModule = parseModule(modules[0]);
       auto firstLead = getLead(firstModule);
-      if (failed)
+      if (!firstLead)
         return false;
       // Verify that the remaining elements are all the same as the first.
       for (auto attr : modules.getValue().drop_front()) {
         auto nextModule = parseModule(attr);
         auto nextLead = getLead(nextModule);
-        if (failed)
+        if (!nextLead)
           return false;
         if (firstLead != nextLead) {
           auto diag = emitError(circuit.getLoc(), "module ")
