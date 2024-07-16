@@ -29,5 +29,5 @@ hw.module @fmt_infinite_concat_canonicalize(in %val : i8, out res: !sim.fstring)
 hw.module @proc_print() {
   %lit = sim.fmt.lit "Nope"
   // expected-error @below {{must be within a procedural region.}}
-  sim.proc.print (%lit)
+  sim.proc.print %lit
 }

@@ -12,6 +12,7 @@ hw.module @always_disabled(in %clock: !seq.clock) {
 // CHECK-NOT: sim.proc.print
 hw.module @emtpy_proc_print(in %trigger: i1) {
   hw.triggered posedge %trigger {
-    sim.proc.print ()
+    %epsilon = sim.fmt.lit ""
+    sim.proc.print %epsilon
   }
 }

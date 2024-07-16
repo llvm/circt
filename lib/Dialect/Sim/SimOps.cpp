@@ -369,12 +369,13 @@ LogicalResult PrintFormattedProcOp::verify() {
 
 LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
                                                  PatternRewriter &rewriter) {
-  // Remove print without operands.
-  if (op.getNumOperands() == 0) {
-    rewriter.eraseOp(op);
-    return success();
+  // Remove empty prints.
+  if (auto litInput = op.getInput().getDefiningOp<FormatLitOp>()) {
+    if (litInput.getLiteral().empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
   }
-
   return failure();
 }
 

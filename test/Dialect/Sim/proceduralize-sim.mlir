@@ -4,7 +4,7 @@
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %[[TRG]] {
 // CHECK-NEXT:     %[[LIT:.*]] = sim.fmt.lit "Test"
-// CHECK-NEXT:     sim.proc.print (%[[LIT]])
+// CHECK-NEXT:     sim.proc.print %[[LIT]]
 // CHECK-NEXT:   }
 
 hw.module @basic_print1(in %clk : !seq.clock) {
@@ -20,10 +20,10 @@ hw.module @basic_print1(in %clk : !seq.clock) {
 // CHECK-DAG:      %[[LIT1:.*]] = sim.fmt.lit "Not with a bang but a \00"
 // CHECK-DAG:      %[[LIT0:.*]] = sim.fmt.lit "This is the way the world ends\0A"
 // CHECK:          scf.if %[[ARG]] {
-// CHECK-NEXT:       sim.proc.print (%[[LIT0]])
-// CHECK-NEXT:       sim.proc.print (%[[LIT0]])
-// CHECK-NEXT:       sim.proc.print (%[[LIT0]])
-// CHECK-NEXT:       sim.proc.print (%[[LIT1]])
+// CHECK-NEXT:       sim.proc.print %[[LIT0]]
+// CHECK-NEXT:       sim.proc.print %[[LIT0]]
+// CHECK-NEXT:       sim.proc.print %[[LIT0]]
+// CHECK-NEXT:       sim.proc.print %[[LIT1]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:   }
 
@@ -41,14 +41,14 @@ hw.module @basic_print2(in %clk : !seq.clock, in %cond : i1) {
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %[[TRG]](%val) : i32 {
 // CHECK-NEXT:  ^bb0(%[[ARG:.*]]: i32):
-// CHECK-DAG:      %[[COM:.*]] = sim.fmt.lit ", "
 // CHECK-DAG:      %[[LB:.*]] = sim.fmt.lit "Bin: "
-// CHECK-DAG:      %[[LD:.*]] = sim.fmt.lit "Dec: "
-// CHECK-DAG:      %[[LH:.*]] = sim.fmt.lit "Hex: "
+// CHECK-DAG:      %[[LD:.*]] = sim.fmt.lit ", Dec: "
+// CHECK-DAG:      %[[LH:.*]] = sim.fmt.lit ", Hex: "
 // CHECK-DAG:      %[[FB:.*]] = sim.fmt.bin %[[ARG]] : i32
 // CHECK-DAG:      %[[FD:.*]] = sim.fmt.dec %[[ARG]] : i32
 // CHECK-DAG:      %[[FH:.*]] = sim.fmt.hex %[[ARG]] : i32
-// CHECK:          sim.proc.print (%[[LB]], %[[FB]], %[[COM]], %[[LD]], %[[FD]], %[[COM]], %[[LH]], %[[FH]])
+// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[LB]], %[[FB]], %[[LD]], %[[FD]], %[[LH]], %[[FH]])
+// CHECK:          sim.proc.print %[[CAT]]
 // CHECK-NEXT:   }
 
 hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
@@ -83,7 +83,8 @@ hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
 // CHECK-DAG:      %[[H1:.*]] = sim.fmt.hex %[[ARG1]] : i8
 // CHECK-DAG:      %[[B2:.*]] = sim.fmt.bin %[[ARG2]] : i8
 // CHECK-DAG:      %[[H2:.*]] = sim.fmt.hex %[[ARG2]] : i8
-// CHECK:          sim.proc.print (%[[B0]], %[[B1]], %[[B2]], %[[COM]], %[[H0]], %[[H1]], %[[H2]])
+// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[B0]], %[[B1]], %[[B2]], %[[COM]], %[[H0]], %[[H1]], %[[H2]])
+// CHECK:          sim.proc.print %[[CAT]]
 // CHECK-NEXT:   }
 
 hw.module @multi_args(in %clk : !seq.clock, in %a: i8, in %b: i8, in %c: i8) {
@@ -110,7 +111,8 @@ hw.module @multi_args(in %clk : !seq.clock, in %a: i8, in %b: i8, in %c: i8) {
 // CHECK-DAG:      %[[LA0:.*]] = sim.fmt.lit "Val is 0x"
 // CHECK-DAG:      %[[LA1:.*]] = sim.fmt.lit " on A."
 // CHECK-DAG:      %[[FA:.*]] = sim.fmt.hex %[[ARGA]] : i32
-// CHECK:          sim.proc.print (%[[LA0]], %[[FA]], %[[LA1]])
+// CHECK-DAG:      %[[CATA:.*]] = sim.fmt.concat (%[[LA0]], %[[FA]], %[[LA1]])
+// CHECK:          sim.proc.print %[[CATA]]
 // CHECK-NEXT:   }
 // CHECK-NEXT:  %[[TRGB:.*]] = seq.from_clock %clkb
 // CHECK-NEXT:  hw.triggered posedge %[[TRGB]](%val) : i32 {
@@ -118,7 +120,8 @@ hw.module @multi_args(in %clk : !seq.clock, in %a: i8, in %b: i8, in %c: i8) {
 // CHECK-DAG:      %[[LB0:.*]] = sim.fmt.lit "Val is 0x"
 // CHECK-DAG:      %[[LB1:.*]] = sim.fmt.lit " on B."
 // CHECK-DAG:      %[[FB:.*]] = sim.fmt.hex %[[ARGB]] : i32
-// CHECK:          sim.proc.print (%[[LB0]], %[[FB]], %[[LB1]])
+// CHECK-DAG:      %[[CATB:.*]] = sim.fmt.concat (%[[LB0]], %[[FB]], %[[LB1]])
+// CHECK:          sim.proc.print %[[CATB]]
 // CHECK-NEXT:   }
 // CHECK-NEXT:  %[[TRGC:.*]] = seq.from_clock %clkc
 // CHECK-NEXT:  hw.triggered posedge %[[TRGC]](%val) : i32 {
@@ -126,7 +129,8 @@ hw.module @multi_args(in %clk : !seq.clock, in %a: i8, in %b: i8, in %c: i8) {
 // CHECK-DAG:      %[[LC0:.*]] = sim.fmt.lit "Val is 0x"
 // CHECK-DAG:      %[[LC1:.*]] = sim.fmt.lit " on C."
 // CHECK-DAG:      %[[FC:.*]] = sim.fmt.hex %[[ARGC]] : i32
-// CHECK:          sim.proc.print (%[[LC0]], %[[FC]], %[[LC1]])
+// CHECK-DAG:      %[[CATC:.*]] = sim.fmt.concat (%[[LC0]], %[[FC]], %[[LC1]])
+// CHECK:          sim.proc.print %[[CATC]]
 // CHECK-NEXT:   }
 
 hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : !seq.clock, in %val: i32) {
@@ -160,19 +164,19 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 // CHECK-DAG:      %[[L6:.*]] = sim.fmt.lit "#6"
 // CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] : i32
 // CHECK:          scf.if %[[ARG0]] {
-// CHECK-NEXT:       sim.proc.print (%[[L1]])
+// CHECK-NEXT:       sim.proc.print %[[L1]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:     scf.if %[[ARG1]] {
-// CHECK-NEXT:       sim.proc.print (%[[L2]])
-// CHECK-NEXT:       sim.proc.print (%[[L3]])
-// CHECK-NEXT:       sim.proc.print (%[[L4]])
+// CHECK-NEXT:       sim.proc.print %[[L2]]
+// CHECK-NEXT:       sim.proc.print %[[L3]]
+// CHECK-NEXT:       sim.proc.print %[[L4]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:     scf.if %[[ARG0]] {
-// CHECK-NEXT:       sim.proc.print (%[[L5]])
+// CHECK-NEXT:       sim.proc.print %[[L5]]
 // CHECK-NEXT:     }
-// CHECK-NEXT:     sim.proc.print (%[[BIN]])
+// CHECK-NEXT:     sim.proc.print %[[BIN]]
 // CHECK-NEXT:     scf.if %[[ARG0]] {
-// CHECK-NEXT:       sim.proc.print (%[[L6]])
+// CHECK-NEXT:       sim.proc.print %[[L6]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:   }
 
@@ -204,7 +208,7 @@ hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val :
 // CHECK-NEXT:  ^bb0(%[[ARG:.*]]: i1):
 // CHECK-NEXT:    %[[BIN:.*]] = sim.fmt.bin %[[ARG]] : i1
 // CHECK-NEXT:    scf.if %[[ARG]] {
-// CHECK-NEXT:      sim.proc.print (%[[BIN]])
+// CHECK-NEXT:      sim.proc.print %[[BIN]]
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 

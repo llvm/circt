@@ -57,67 +57,6 @@ private:
 };
 } // namespace
 
-// Flatten a conatenated format string value to a list of tokens.
-SmallVector<Operation *>
-ProceduralizeSimPass::getPrintTokens(PrintFormattedOp op) {
-  SmallMapVector<FormatStringConcatOp, unsigned, 4> concatStack;
-  SmallVector<Operation *> tokens;
-
-  auto *defOp = op.getInput().getDefiningOp();
-
-  if (!defOp) {
-    op.emitError("Format string token must not be a block argument.");
-    return {};
-  }
-
-  if (isa<sim::FormatBinOp, sim::FormatHexOp, sim::FormatDecOp,
-          sim::FormatCharOp, sim::FormatLitOp>(defOp)) {
-    // Trivial case: Only a single token.
-    tokens.push_back(defOp);
-    return tokens;
-  }
-
-  concatStack.insert({llvm::cast<FormatStringConcatOp>(defOp), 0});
-  while (!concatStack.empty()) {
-    auto top = concatStack.back();
-    auto currentConcat = top.first;
-    unsigned operandIndex = top.second;
-
-    // Iterate over concatenated operands
-    while (operandIndex < currentConcat.getNumOperands()) {
-      auto *nextDefOp = currentConcat.getOperand(operandIndex).getDefiningOp();
-      if (!nextDefOp) {
-        currentConcat.emitError(
-            "Format string token must not be a block argument.");
-        return {};
-      }
-      if (isa<sim::FormatBinOp, sim::FormatHexOp, sim::FormatDecOp,
-              sim::FormatCharOp, sim::FormatLitOp>(nextDefOp)) {
-        // Found a (leaf) token: Push it into the list, continue with the next
-        // operand
-        tokens.push_back(nextDefOp);
-        operandIndex++;
-      } else {
-        // Concat of a concat: Save the next operand index to visit on the
-        // stack and put the new concat on top.
-        auto nextConcat = llvm::cast<FormatStringConcatOp>(nextDefOp);
-        if (concatStack.contains(nextConcat)) {
-          nextConcat.emitError("Cyclic format string concatenation detected.");
-          return {};
-        }
-        concatStack[currentConcat] = operandIndex + 1;
-        concatStack.insert({nextConcat, 0});
-        break;
-      }
-    }
-    // Pop the concat of the stack if we have visited all operands.
-    if (operandIndex >= currentConcat.getNumOperands())
-      concatStack.pop_back();
-  }
-
-  return tokens;
-}
-
 LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     Value clock, ArrayRef<PrintFormattedOp> printOps) {
 
@@ -125,11 +64,11 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
   SmallSetVector<Value, 4> arguments;
   // Map printf ops -> flattened list of tokens
   SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> tokenMap;
+  // Map printf ops -> flattened list of tokens
   SmallVector<Location> locs;
 
   SmallDenseSet<Value, 1> alwaysEnabledConditions;
 
-  tokenMap.reserve(printOps.size());
   locs.reserve(printOps.size());
 
   for (auto printOp : printOps) {
@@ -147,17 +86,38 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Accumulate locations
     locs.push_back(printOp.getLoc());
 
-    // Get the flat list of formatting tokens and save it.
-    auto substInsert = tokenMap.try_emplace(printOp, getPrintTokens(printOp));
-    assert(substInsert.second && "printf operation visited twice.");
-    if (substInsert.first->second.empty())
-      return failure(); // Flattening of tokens failed.
+    // Get the flat list of formatting tokens and collect leaf tokens
+    SmallVector<Value> flatString;
+    if (auto concatInput =
+            printOp.getInput().getDefiningOp<FormatStringConcatOp>()) {
 
-    // For non-literal tokens, the value to be formatted has to become an
-    // argument.
-    for (auto &token : substInsert.first->second) {
-      if (!isa<FormatLitOp>(token))
-        arguments.insert(token->getOperand(0));
+      auto isAcyclic = concatInput.getFlattenedInputs(flatString);
+      if (failed(isAcyclic)) {
+        printOp.emitError("Cyclic format string cannot be proceduralized.");
+        return failure();
+      }
+    } else {
+      flatString.push_back(printOp.getInput());
+    }
+
+    auto &tokenList = tokenMap[printOp];
+    assert(tokenList.empty() && "printf operation visited twice.");
+
+    for (auto &token : flatString) {
+      auto *fmtOp = token.getDefiningOp();
+      if (!fmtOp) {
+        printOp.emitError("Proceduralization of format strings passed as block "
+                          "argument is unsupported.");
+        return failure();
+      }
+      tokenList.push_back(fmtOp);
+      // For non-literal tokens, the value to be formatted has to become an
+      // argument.
+      if (!llvm::isa<FormatLitOp>(fmtOp)) {
+        auto fmtVal = getFormattedValue(fmtOp);
+        assert(!!fmtVal && "Unexpected foramtting token op.");
+        arguments.insert(fmtVal);
+      }
     }
   }
 
@@ -217,6 +177,13 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
         fmtCloned = builder.clone(*token, argumentMapper);
       clonedOperands.push_back(fmtCloned->getResult(0));
     }
+    // Concatenate tokens to a single value if necessary.
+    Value procPrintInput;
+    if (clonedOperands.size() != 1)
+      procPrintInput = builder.createOrFold<FormatStringConcatOp>(
+          printOp.getLoc(), clonedOperands);
+    else
+      procPrintInput = clonedOperands.front();
 
     // Check if we can reuse the previous conditional block.
     if (condArg != prevCondition.first)
@@ -238,7 +205,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Create the procedural print operation and prune the operations outside of
     // the TriggeredOp.
     builder.setInsertionPoint(condBlock->getTerminator());
-    builder.create<PrintFormattedProcOp>(printOp.getLoc(), clonedOperands);
+    builder.create<PrintFormattedProcOp>(printOp.getLoc(), procPrintInput);
     cleanupList.push_back(printOp.getInput().getDefiningOp());
     printOp.erase();
   }

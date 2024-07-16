@@ -357,12 +357,12 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
     This operation must be within a procedural region.
   }];
 
-  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let arguments = (ins FormatStringType:$input);
 
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
 
-  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+  let assemblyFormat = "$input attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
