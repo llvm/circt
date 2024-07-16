@@ -16,6 +16,7 @@ target_link_libraries(circt-opt
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
+  CIRCTBMCTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxNative
