@@ -38,9 +38,8 @@ verif.cover %p : !ltl.property
 //===----------------------------------------------------------------------===//
 // Formal
 //===----------------------------------------------------------------------===//
-hw.module @Foo(in %0 "0": i1, in %clk "clk": !seq.clock, out "" : i1, out "1" : i1) {
-  %1 = seq.from_clock %clk
-  hw.output %0, %1: i1, i1
+hw.module @Foo(in %0 "0": i1, in %1 "1": i1, out "" : i1, out "1" : i1) {
+  hw.output %0 , %1: i1, i1
  }
 
 // CHECK: verif.formal @formal1(k = 20 : i64) {
@@ -49,14 +48,12 @@ verif.formal @formal1(k = 20) {
   %c1_i1 = hw.constant true
   // CHECK: %[[SYM:.+]] = verif.symbolic_input : i1
   %sym = verif.symbolic_input : i1
-  // CHECK: %[[CLK_I:.+]] = seq.from_clock %9 
-  %clk_i = seq.from_clock %9 
-  // CHECK: %[[CLK_U:.+]] = comb.xor %[[CLK_I]], %[[C1]] : i1
-  %clk_update = comb.xor %clk_i, %c1_i1 : i1
-  // CHECK: %9 = verif.concrete_input %[[C1]], %[[CLK_U]] : (i1, i1) -> !seq.clock
-  %9 = verif.concrete_input %c1_i1, %clk_update : (i1, i1) -> !seq.clock
-  // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, clk: %9: !seq.clock) -> ("": i1, "1": i1)
-  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "clk": %9 : !seq.clock)  -> ("" : i1, "1" : i1)
+  // CHECK: %[[CLK_U:.+]] = comb.xor %8, %[[C1]] : i1
+  %clk_update = comb.xor %8, %c1_i1 : i1
+  // CHECK: %8 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
+  %8 = verif.concrete_input %c1_i1, %clk_update : i1
+  // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %8: i1) -> ("": i1, "1": i1)
+  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1)  -> ("" : i1, "1" : i1)
 }
 
 hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
