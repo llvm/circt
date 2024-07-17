@@ -803,6 +803,47 @@ class BundleSignal(Signal):
     for name, wire in froms:
       wire.assign(unpacked_self[name])
 
+  def coerce(
+      self,
+      new_bundle_type: "Bundle",
+      to_chan_transform: Optional[Callable[[Signal], Signal]] = None,
+      from_chan_transform: Optional[Callable[[Signal], Signal]] = None
+  ) -> BundleSignal:
+    """Coerce a two-channel, bidirectional bundle to a different two-channel,
+    bidirectional bundle type. Transform functions can be provided to transform
+    the individual channels for situations where the types do not match."""
+
+    from .constructs import Wire
+    sig_to_chan, sig_from_chan = self.type.get_to_from()
+    ret_to_chan, ret_from_chan = new_bundle_type.get_to_from()
+
+    # Get the from channel and run the transform if specified.
+    from_channel_wire = Wire(ret_from_chan.channel)
+    if from_chan_transform is not None:
+      from_channel = from_channel_wire.transform(from_chan_transform)
+    else:
+      from_channel = from_channel_wire
+    if from_channel.type != sig_from_chan.channel:
+      raise TypeError(
+          f"Expected channel type {sig_from_chan.channel}, got {from_channel.type} on FROM channel"
+      )
+
+    # Unpack the to channel and run the transform if specified.
+    to_channels = self.unpack(**{sig_from_chan.name: from_channel})
+    to_channel = to_channels[sig_to_chan.name]
+    if to_chan_transform is not None:
+      to_channel = to_channel.transform(to_chan_transform)
+    if to_channel.type != ret_to_chan.channel:
+      raise TypeError(
+          f"Expected channel type {ret_to_chan.channel}, got {to_channel.type} on TO channel"
+      )
+
+    # Pack the new bundle, assign the from channel, and return.
+    ret_bundle, from_chans = new_bundle_type.pack(
+        **{ret_to_chan.name: to_channel})
+    from_channel_wire.assign(from_chans[ret_from_chan.name])
+    return ret_bundle
+
 
 class ListSignal(Signal):
   pass

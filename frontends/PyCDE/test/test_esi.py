@@ -1,8 +1,8 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
 
-from pycde import (Clock, Input, InputChannel, OutputChannel, Module, Reset,
-                   generator, types)
+from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
+                   Reset, generator, types)
 from pycde import esi
 from pycde.common import AppID, RecvBundle, SendBundle
 from pycde.constructs import Wire
@@ -184,7 +184,7 @@ class RecvBundleTest(Module):
     self.s1_out = to_channels['req']
 
 
-# CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>) attributes {output_file = #hw.output_file<"ChannelTransform.sv", includeReplicatedOps>} {
+# CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %s1_in, %ready : i32
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
 # CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
@@ -197,6 +197,57 @@ class ChannelTransform(Module):
   @generator
   def build(self):
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
+
+
+# CHECK-LABEL:  hw.module @CoerceBundle(in %b_in : !esi.bundle<[!esi.channel<i8> from "resp", !esi.channel<i32> to "req"]>, out b_out : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>)
+# CHECK-NEXT:     %req = esi.bundle.unpack %result from %b_in : !esi.bundle<[!esi.channel<i8> from "resp", !esi.channel<i32> to "req"]>
+# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %req : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>
+# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i8> from "result", !esi.channel<i32> to "arg"]>
+@unittestmodule()
+class CoerceBundle(Module):
+  b_in = Input(
+      Bundle([
+          BundledChannel("resp", ChannelDirection.FROM, Channel(Bits(8))),
+          BundledChannel("req", ChannelDirection.TO, Channel(Bits(32))),
+      ]))
+  b_out = Output(
+      Bundle([
+          BundledChannel("result", ChannelDirection.FROM, Channel(Bits(8))),
+          BundledChannel("arg", ChannelDirection.TO, Channel(Bits(32))),
+      ]))
+
+  @generator
+  def build(ports):
+    ports.b_out = ports.b_in.coerce(CoerceBundle.b_out.type)
+
+
+# CHECK-LABEL:  hw.module @CoerceBundleTransform(in %b_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i8> from "resp"]>, out b_out : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>)
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %result, %ready : i16
+# CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i16) -> i8
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
+# CHECK-NEXT:     %req = esi.bundle.unpack %chanOutput from %b_in : !esi.bundle<[!esi.channel<i32> to "req", !esi.channel<i8> from "resp"]>
+# CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %req, %ready_3 : i32
+# CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput_0 from 0 : (i32) -> i24
+# CHECK-NEXT:     %chanOutput_2, %ready_3 = esi.wrap.vr [[R1]], %valid_1 : i24
+# CHECK-NEXT:     %bundle, %result = esi.bundle.pack %chanOutput_2 : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+# CHECK-NEXT:     hw.output %bundle : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16> from "result"]>
+@unittestmodule()
+class CoerceBundleTransform(Module):
+  b_in = Input(
+      Bundle([
+          BundledChannel("req", ChannelDirection.TO, Channel(Bits(32))),
+          BundledChannel("resp", ChannelDirection.FROM, Channel(Bits(8))),
+      ]))
+  b_out = Output(
+      Bundle([
+          BundledChannel("arg", ChannelDirection.TO, Channel(Bits(24))),
+          BundledChannel("result", ChannelDirection.FROM, Channel(Bits(16))),
+      ]))
+
+  @generator
+  def build(ports):
+    ports.b_out = ports.b_in.coerce(CoerceBundleTransform.b_out.type,
+                                    lambda x: x[0:24], lambda x: x[0:8])
 
 
 # CHECK-LABEL:  hw.module @MMIOReq()
