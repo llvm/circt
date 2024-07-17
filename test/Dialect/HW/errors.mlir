@@ -501,3 +501,22 @@ hw.module @Foo () {
   hw.instance_choice "inst" option "foo" @DoesNotExist () -> ()
 }
 
+// -----
+
+hw.module @Nested_Triggered(in %trg1 : i1, in %trg2 : i1) {
+  hw.triggered posedge %trg1(%trg2) : i1 {
+  ^bb0(%arg0: i1):
+    // expected-error @below {{op must not be nested under another TriggeredOp.}}
+    hw.triggered posedge %arg0 {
+    }
+  }
+}
+
+// -----
+
+hw.module @Triggered_Arguments(in %trg1 : i1, in %trg2 : i1) {
+  // expected-error @below {{number of inputs (1) does not match number of body arguments (2).}}
+  hw.triggered posedge %trg1(%trg2) : i1 {
+  ^bb0(%arg0: i1, %arg1: i1):
+  }
+}
