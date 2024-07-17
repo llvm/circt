@@ -13,7 +13,7 @@ from .circt import ir
 
 from contextvars import ContextVar
 from functools import singledispatchmethod
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import re
 import numpy as np
 
@@ -735,6 +735,20 @@ class ChannelSignal(Signal):
             self.value,
             stages=stages,
         ), self.type)
+
+  def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
+    """Transform the data in the channel using the provided function. Said
+    function must be combinational so it is intended for wire and simple type
+    transformations."""
+
+    from .constructs import Wire
+    from .types import Bits, Channel
+    ready_wire = Wire(Bits(1))
+    data, valid = self.unwrap(ready_wire)
+    data = transform(data)
+    ret_chan, ready = Channel(data.type).wrap(data, valid)
+    ready_wire.assign(ready)
+    return ret_chan
 
 
 class BundleSignal(Signal):
