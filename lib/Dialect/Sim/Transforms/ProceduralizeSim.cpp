@@ -64,9 +64,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
   SmallSetVector<Value, 4> arguments;
   // Map printf ops -> flattened list of tokens
   SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> tokenMap;
-  // Map printf ops -> flattened list of tokens
   SmallVector<Location> locs;
-
   SmallDenseSet<Value, 1> alwaysEnabledConditions;
 
   locs.reserve(printOps.size());
@@ -152,7 +150,8 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
   }
 
   SmallDenseMap<Operation *, Operation *> cloneMap;
-  std::pair<Value, Block *> prevCondition{Value(), nullptr};
+  Value prevConditionValue;
+  Block *prevConditionBlock;
 
   for (auto printOp : printOps) {
 
@@ -163,8 +162,6 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
         continue;
       }
     }
-
-    auto condArg = argumentMapper.lookup(printOp.getCondition());
 
     // Create a copy of the required token operations within the TriggeredOp's
     // body.
@@ -186,9 +183,10 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
       procPrintInput = clonedOperands.front();
 
     // Check if we can reuse the previous conditional block.
-    if (condArg != prevCondition.first)
-      prevCondition.second = nullptr;
-    auto *condBlock = prevCondition.second;
+    auto condArg = argumentMapper.lookup(printOp.getCondition());
+    if (condArg != prevConditionValue)
+      prevConditionBlock = nullptr;
+    auto *condBlock = prevConditionBlock;
 
     // If not, create a new scf::IfOp for the condition.
     if (!condBlock) {
@@ -198,8 +196,8 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
       builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
       builder.create<mlir::scf::YieldOp>(printOp.getLoc());
       condBlock = builder.getBlock();
-      prevCondition.first = condArg;
-      prevCondition.second = condBlock;
+      prevConditionValue = condArg;
+      prevConditionBlock = condBlock;
     }
 
     // Create the procedural print operation and prune the operations outside of
