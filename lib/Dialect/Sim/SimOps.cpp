@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 
@@ -190,8 +192,12 @@ static StringAttr concatLiterals(MLIRContext *ctxt, ArrayRef<StringRef> lits) {
 OpFoldResult FormatStringConcatOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 0)
     return StringAttr::get(getContext(), "");
-  if (getNumOperands() == 1)
+  if (getNumOperands() == 1) {
+    // Don't fold to our own result to avoid an infinte loop.
+    if (getResult() == getOperand(0))
+      return {};
     return getOperand(0);
+  }
 
   // Fold if all operands are literals.
   SmallVector<StringRef> lits;
@@ -204,6 +210,49 @@ OpFoldResult FormatStringConcatOp::fold(FoldAdaptor adaptor) {
   return concatLiterals(getContext(), lits);
 }
 
+LogicalResult FormatStringConcatOp::getFlattenedInputs(
+    llvm::SmallVectorImpl<Value> &flatOperands) {
+  llvm::SmallMapVector<FormatStringConcatOp, unsigned, 4> concatStack;
+  bool isCyclic = false;
+
+  // Perform a DFS on this operation's concatenated operands,
+  // collect the leaf format string tokens.
+  concatStack.insert({*this, 0});
+  while (!concatStack.empty()) {
+    auto &top = concatStack.back();
+    auto currentConcat = top.first;
+    unsigned operandIndex = top.second;
+
+    // Iterate over concatenated operands
+    while (operandIndex < currentConcat.getNumOperands()) {
+      auto currentOperand = currentConcat.getOperand(operandIndex);
+
+      if (auto nextConcat =
+              currentOperand.getDefiningOp<FormatStringConcatOp>()) {
+        // Concat of a concat
+        if (!concatStack.contains(nextConcat)) {
+          // Save the next operand index to visit on the
+          // stack and put the new concat on top.
+          top.second = operandIndex + 1;
+          concatStack.insert({nextConcat, 0});
+          break;
+        }
+        // Cyclic concatenation encountered. Don't recurse.
+        isCyclic = true;
+      }
+
+      flatOperands.push_back(currentOperand);
+      operandIndex++;
+    }
+
+    // Pop the concat off of the stack if we have visited all operands.
+    if (operandIndex >= currentConcat.getNumOperands())
+      concatStack.pop_back();
+  }
+
+  return success(!isCyclic);
+}
+
 LogicalResult FormatStringConcatOp::verify() {
   if (llvm::any_of(getOperands(),
                    [&](Value operand) { return operand == getResult(); }))
@@ -213,10 +262,29 @@ LogicalResult FormatStringConcatOp::verify() {
 
 LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
                                                  PatternRewriter &rewriter) {
-  if (op.getNumOperands() < 2)
-    return failure(); // Should be handled by the folder
 
   auto fmtStrType = FormatStringType::get(op.getContext());
+
+  // Check if we can flatten concats of concats
+  bool hasBeenFlattened = false;
+  SmallVector<Value, 0> flatOperands;
+  if (!op.isFlat()) {
+    // Get a new, flattened list of operands
+    flatOperands.reserve(op.getNumOperands() + 4);
+    auto isAcyclic = op.getFlattenedInputs(flatOperands);
+
+    if (failed(isAcyclic)) {
+      // Infinite recursion, but we cannot fail compilation right here (can we?)
+      // so just emit a warning and bail out.
+      op.emitWarning("Cyclic concatenation detected.");
+      return failure();
+    }
+
+    hasBeenFlattened = true;
+  }
+
+  if (!hasBeenFlattened && op.getNumOperands() < 2)
+    return failure(); // Should be handled by the folder
 
   // Check if there are adjacent literals we can merge or empty literals to
   // remove
@@ -225,7 +293,8 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
   newOperands.reserve(op.getNumOperands());
   FormatLitOp prevLitOp;
 
-  for (auto operand : op.getOperands()) {
+  auto oldOperands = hasBeenFlattened ? flatOperands : op.getOperands();
+  for (auto operand : oldOperands) {
     if (auto litOp = operand.getDefiningOp<FormatLitOp>()) {
       if (!litOp.getLiteral().empty()) {
         prevLitOp = litOp;
@@ -263,7 +332,7 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
     }
   }
 
-  if (newOperands.size() == op.getNumOperands())
+  if (!hasBeenFlattened && newOperands.size() == op.getNumOperands())
     return failure(); // Nothing changed
 
   if (newOperands.empty())
