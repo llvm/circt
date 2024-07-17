@@ -13,7 +13,6 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 
