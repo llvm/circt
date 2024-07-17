@@ -20,6 +20,7 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
 include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -266,41 +267,32 @@ def YieldOp : VerifOp<"yield", [
 // Verification intent ops
 //===----------------------------------------------------------------------===//
 
-/// BMC -- short for bounded model check.
-def BMC : I32EnumAttrCase<"BMC", 0, "bmc">;
-/// KIP -- short for k-Inductive-Proof.
-def KInductiveProof : I32EnumAttrCase<"KInductiveProof", 1, "kinduction">;
 
-def FormalTestTypeAttr : I32EnumAttr<"FormalTestType", "formal test type",
-                                [BMC, KInductiveProof]> {
-  let cppNamespace = "circt::verif";
-}
-
-def FormalOp : VerifOp<"formal", [NoTerminator, RegionKindInterface]> {
+def FormalOp : VerifOp<"formal", [
+  NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
+  IsolatedFromAbove, Symbol
+]> {
   let summary = "defines a formal verification test";
   let description = [{
-    This operation defines a formal verification test with potentially additional
-    assertions and assumptions. This should be written by declaring symbolic 
-    values that are then connected to a hardware instance. These symbols can then
-    be reasoned about in additional assertions. The region will then be converted 
-    into btor2, SystemVerilog, or used for verification directly in circt-bmc. 
-    The operations in this regiion are ignored during regular SystemVerilog 
+    This operation defines a formal verification test. This should be written 
+    by declaring symbolic values that are then connected to a hardware instance. 
+    These symbols can then be used in additional assertions that are defined outside 
+    of the instanciated `hw.module` but inside of this region. Assertions/Assumptions 
+    defined within the instanciated module will also be used for verification. 
+    The region will then be converted into btor2, SystemVerilog, or used for verification 
+    directly in circt-bmc. The operations in this region are ignored during regular SystemVerilog 
     emission.   
       
     Additional information about how the test should be conducted can be passed 
-    using the two supported attributes. These attributes are `k`, which defines 
-    the bounds of the test, and `type` which defines the type of formal test 
-    being done, i.e. Bounded Model Checking (BMC) or k-Induction.
+    using the `k` attribute, which defines the bounds of the test.
   }];
 
-  let arguments = (ins OptionalAttr<APIntAttr>:$k,
-                       OptionalAttr<FormalTestTypeAttr>:$test_type,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$k);
 
   let regions = (region SizedRegion<1>:$test_region);
 
   let assemblyFormat = [{
-    attr-dict  (`sym` $inner_sym^)? `(` (`k` `:` $k^)? (`type` `:` $test_type^)? `)` 
+    $sym_name `(``k` `=` $k `)` attr-dict-with-keyword
     $test_region
   }];
 
@@ -317,35 +309,38 @@ def FormalOp : VerifOp<"formal", [NoTerminator, RegionKindInterface]> {
 //===----------------------------------------------------------------------===//
 
 def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
-  let summary = "declare a symbolic value for formal verification";
+  let summary = "declare a symbolic input for formal verification";
   let description = [{
-    This operation declares a symbolic value that can then be used to reason 
+    This operation declares a symbolic input that can then be used to reason 
     about `hw.instance` inputs in a symbolic manner in future assertions and 
-    assumptions. The result type must be explicitly marked.  
+    assumptions. The result type must be explicitly marked. The resulting value 
+    is a new non-deterministic value for every implicit clock cycle. 
   }];
   let results = (outs AnyType:$result);
 
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
-def ConcreteValOp : VerifOp<"concrete_input", [
+def ConcreteInputOp : VerifOp<"concrete_input", [
   AllTypesMatch<["init", "update"]>, HasParent<"verif::FormalOp">
 ]> {
-  let summary = "declare a concrete value for formal verification";
+  let summary = "declare a concrete input for formal verification";
   let description = [{
-    This operation declares a concrete value that can then be used in the 
-    reasoning surrounding symbolic values, allowing for a form of concolic 
-    reasoning to take place in a `verif.formal` block. Concrete values are 
-    defined by an initial value and an update function.
+    This operation declares a concrete input that can then be used in the 
+    reasoning surrounding symbolic inputs, allowing for a form of concolic 
+    reasoning to take place in a `verif.formal` block. Concrete inputs are 
+    defined by an initial value and an update SSA value. This is equivalent 
+    to a register with an implicit clock, which is initialized with the init 
+    value and obtains a new value every implicit clock tick from the update 
+    value.
   }];
 
   let arguments = (ins AnyType:$init, AnyType:$update);
   let results = (outs AnyType:$result);
 
-  // Manual definition of a functional type is wanted
   let assemblyFormat = [{
     $init `,` $update attr-dict `:` 
-    `(` type($init) `,` type($update) `)` `->` type($result)
+    functional-type(operands, results)
   }];
 }
 
