@@ -962,6 +962,18 @@ module Expressions;
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
  
+    //===------------------------------------------------------------------===//
+    // Builtin Functions
+
+    // The following functions are handled by Slang's type checking and don't
+    // convert into any IR operations.
+
+    // CHECK: [[TMP:%.+]] = moore.read %u
+    // CHECK: moore.blocking_assign %a, [[TMP]]
+    a = $signed(u);
+    // CHECK: [[TMP:%.+]] = moore.read %a
+    // CHECK: moore.blocking_assign %u, [[TMP]]
+    u = $unsigned(a);
   end
 endmodule
 
