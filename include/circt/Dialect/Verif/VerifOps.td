@@ -348,13 +348,49 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
 // Formal Contract Ops
 //===----------------------------------------------------------------------===//
 
-def ContractOp : VerifOp<"contract", [Pure]>{
+def ContractOp : VerifOp<"contract", [Pure, HasParent<"hw::HWModuleOp">]>{
   let summary = "declare formal contract";
   let description = [{
-    This operation declares a sformal contract that is used to create precondition 
+    This operation declares a formal contract that is used to create precondition 
     and postconditions on a parent module. These are used as an abstraction to 
     better modularize formal verification such that each module containing a contract 
     is checked exactly once.
+          
+    e.g. 
+    ```
+    hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
+      verif.contract { 
+        %c0_8 = hw.constant 0 : i8 
+        %prec = comb.icmp bin neq %c0_8, %foo : i8
+        verif.require %precond : i1
+
+        %out0, %out1 = verif.result : i8  
+        %post = comb.icmp bin ugt %out0, %foo : i8
+        %post1 = comb.icmp bin ult %out1, %foo : i8
+        verif.ensure %post : i1
+        verif.ensure %post1 : i1
+      }
+      /* ... Module definition ... */
+    }
+    ```
+
+    This later is used to replace any instance of Bar during verification:  
+    ```
+    %bar.0, %bar.1 = hw.instance "bar" @Bar("clk": %clk : !seq.clock, "foo" : %foo : i8)  -> ("" : i8, "1" : i8)
+
+    /* ... After PrepareForFormal Pass becomes ... */
+
+    %c0_8 = hw.constant 0 : i8 
+    %prec = comb.icmp bin neq %c0_8, %bar : i8
+    verif.assert %precond : i1
+
+    %out0 = verif.symbolic_input : i8
+    %out1 = verif.symbolic_input : i8
+    %post = comb.icmp bin ugt %out0, %bar : i8
+    %post1 = comb.icmp bin ult %out1, %bar : i8
+    verif.assume %post : i1
+    verif.assume %post1 : i1
+    ```
   }];
   let regions = (region SizedRegion<1>:$contract_region);
 
@@ -363,7 +399,9 @@ def ContractOp : VerifOp<"contract", [Pure]>{
   }];
 }
 
-def RequireOp : VerifOp<"require", [HasParent<"verif::ContractOp">]>{
+def RequireOp : VerifOp<"require", [
+  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+]>{
   let summary = "define a precondition for the given contract";
   let description = [{
     This operation defines a precondition for the parent contract. 
@@ -371,17 +409,19 @@ def RequireOp : VerifOp<"require", [HasParent<"verif::ContractOp">]>{
     asserted during the verification of an instance of a module.
   }];
   let arguments = (ins LTLAnyPropertyType:$property,
-                      ClockEdgeAttr:$edge, I1:$clock,
+                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
                       Optional<I1>:$enable,
                       OptionalAttr<StrAttr>:$label);
 
   let assemblyFormat = [{
-    $property (`if` $enable^)? `,` $edge $clock 
+    $property (`if` $enable^)? (`,` $edge^ $clock)? 
     (`label` $label^)? attr-dict `:` type($property)
   }];
 }
 
-def EnsureOp : VerifOp<"ensure", [HasParent<"verif::ContractOp">]>{
+def EnsureOp : VerifOp<"ensure", [
+  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+]>{
   let summary = "define a postcondition for the given contract";
   let description = [{
     This operation defines a postcondition for the parent contract. 
@@ -389,14 +429,31 @@ def EnsureOp : VerifOp<"ensure", [HasParent<"verif::ContractOp">]>{
     assumed during the verification of an instance of a module.
   }];
   let arguments = (ins LTLAnyPropertyType:$property,
-                      ClockEdgeAttr:$edge, I1:$clock,
+                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
                       Optional<I1>:$enable,
                       OptionalAttr<StrAttr>:$label);
 
   let assemblyFormat = [{
-    $property (`if` $enable^)? `,` $edge $clock 
+    $property (`if` $enable^)? (`,` $edge^ $clock)? 
     (`label` $label^)? attr-dict `:` type($property)
   }];
+}
+
+def ResultOp : VerifOp<"result", [HasParent<"verif::ResultOp">]>{
+  let summary = "define a symbolic reference to the outputs of the module";
+  let description = [{
+    This operation defines a set of symbolic references to each output of the 
+    module for which this contract is defined. This means that a single reference 
+    of result will result in `#outputs` SSA values which refer to each output of 
+    the module. This is needed for when the instance of the module will be replaced 
+    by its contract, in which case the results will have all of the postconditions 
+    used to assume its behavior. This is a purely symbolic construct and doesn't 
+    carry any meaning outside of a `verif.contract`.  
+  }];
+
+  let results = (outs Variadic<AnyType>:$result);
+
+  let assemblyFormat = "attr-dict `:` type(results)";
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

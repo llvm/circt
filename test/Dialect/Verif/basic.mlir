@@ -40,7 +40,7 @@ verif.cover %p : !ltl.property
 //===----------------------------------------------------------------------===//
 hw.module @Foo(in %0 "0": i1, in %clk "clk": !seq.clock, out "" : i1, out "1" : i1) {
   %1 = seq.from_clock %clk
-  hw.output %0 , %1: i1, i1
+  hw.output %0, %1: i1, i1
  }
 
 // CHECK: verif.formal @formal1(k = 20 : i64) {
@@ -57,6 +57,24 @@ verif.formal @formal1(k = 20) {
   %9 = verif.concrete_input %c1_i1, %clk_update : (i1, i1) -> !seq.clock
   // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, clk: %9: !seq.clock) -> ("": i1, "1": i1)
   %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "clk": %9 : !seq.clock)  -> ("" : i1, "1" : i1)
+}
+
+hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
+  verif.contract { 
+    %c0_8 = hw.constant 0 : i8 
+    %prec = comb.icmp bin ugt %foo, %c0_8 : i8
+    verif.require %precond : i1
+
+    %out0, %out1 = verif.result : i8  
+    %post = comb.icmp bin ugt %out0, %foo : i8
+    %post1 = comb.icmp bin ult %out1, %foo : i8
+    verif.ensure %post : i1
+    verif.ensure %post1 : i1
+  }
+  %c1_8 = hw.constant 1 : i8
+  %o0 = comb.add bin %foo, %c1_8 : i8
+  %o1 = comb.sub bin %foo, %c1_8 : i8
+  hw.output %o0, %o1 : i8, i8
 }
 
 //===----------------------------------------------------------------------===//
