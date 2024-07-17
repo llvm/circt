@@ -1751,7 +1751,7 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 
 // Emit DPI import.
 
-// CHECK-LABEL: import "DPI-C" linkage_name = function void function_declare1(
+// CHECK-LABEL: import "DPI-C" context linkage_name = function void function_declare1(
 // CHECK-NEXT:    input bit [1:0] in_0,
 // CHECK-NEXT:                    out_0,
 // CHECK-NEXT:                    in_1,
@@ -1759,13 +1759,13 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 // CHECK-NEXT: );
 sv.func.dpi.import linkage "linkage_name" @function_declare1
 
-// CHECK-LABEL: import "DPI-C" function bit function_declare2(
+// CHECK-LABEL: import "DPI-C" context function bit function_declare2(
 // CHECK-NEXT:    input bit [1:0] in_0,
 // CHECK-NEXT:                    in_1
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare2
 
-// CHECK-LABEL: import "DPI-C" function void function_declare4(
+// CHECK-LABEL: import "DPI-C" context function void function_declare4(
 // CHECK-NEXT:   input bit         in,
 // CHECK-NEXT:   input byte        in_0,
 // CHECK-NEXT:   input shortint    in_1,
