@@ -267,7 +267,6 @@ def YieldOp : VerifOp<"yield", [
 // Verification intent ops
 //===----------------------------------------------------------------------===//
 
-
 def FormalOp : VerifOp<"formal", [
   NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
   IsolatedFromAbove, Symbol
@@ -276,15 +275,17 @@ def FormalOp : VerifOp<"formal", [
   let description = [{
     This operation defines a formal verification test. This should be written 
     by declaring symbolic values that are then connected to a hardware instance. 
-    These symbols can then be used in additional assertions that are defined outside 
-    of the instanciated `hw.module` but inside of this region. Assertions/Assumptions 
-    defined within the instanciated module will also be used for verification. 
-    The region will then be converted into btor2, SystemVerilog, or used for verification 
-    directly in circt-bmc. The operations in this region are ignored during regular SystemVerilog 
-    emission.   
+    These symbols can then be used in additional assertions that are defined 
+    outside of the instantiated `hw.module` but inside of this region. 
+    Assertions/Assumptions defined within the instantiated module will also be 
+    used for verification. The region can then be converted into btor2, 
+    SystemVerilog, or used for verification directly in circt-bmc. The operations 
+    in this region are ignored during regular SystemVerilog emission. This allows 
+    for verification specific logic to be isolated from the design in a way that 
+    is similar to layers.   
       
-    Additional information about how the test should be conducted can be passed 
-    using the `k` attribute, which defines the bounds of the test.
+    The attribute `k` defines the upper bound of cycles to check for this test 
+    w.r.t. the implicit clock defined by this operation within its region.
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$k);
@@ -312,9 +313,10 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
   let summary = "declare a symbolic input for formal verification";
   let description = [{
     This operation declares a symbolic input that can then be used to reason 
-    about `hw.instance` inputs in a symbolic manner in future assertions and 
+    about `hw.instance` inputs in a symbolic manner in assertions and 
     assumptions. The result type must be explicitly marked. The resulting value 
-    is a new non-deterministic value for every implicit clock cycle. 
+    is a new non-deterministic value for every clock cycle of the implicit clock 
+    defined by the parent `verif.formal`.  
   }];
   let results = (outs AnyType:$result);
 
@@ -322,7 +324,7 @@ def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
 }
 
 def ConcreteInputOp : VerifOp<"concrete_input", [
-  AllTypesMatch<["init", "update"]>, HasParent<"verif::FormalOp">
+  AllTypesMatch<["init", "update", "result"]>, HasParent<"verif::FormalOp">
 ]> {
   let summary = "declare a concrete input for formal verification";
   let description = [{
@@ -330,17 +332,16 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
     reasoning surrounding symbolic inputs, allowing for a form of concolic 
     reasoning to take place in a `verif.formal` block. Concrete inputs are 
     defined by an initial value and an update SSA value. This is equivalent 
-    to a register with an implicit clock, which is initialized with the init 
-    value and obtains a new value every implicit clock tick from the update 
-    value.
+    to a register with the parent `verif.formal`'s implicit clock, which is 
+    initialized with the init value and obtains a new value every implicit 
+    clock tick from the update value.
   }];
 
   let arguments = (ins AnyType:$init, AnyType:$update);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{
-    $init `,` $update attr-dict `:` 
-    functional-type(operands, results)
+    $init `,` $update attr-dict `:` type($result)
   }];
 }
 

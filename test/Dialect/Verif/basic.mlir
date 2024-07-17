@@ -53,8 +53,8 @@ verif.formal @formal1(k = 20) {
   %clk_i = seq.from_clock %9 
   // CHECK: %[[CLK_U:.+]] = comb.xor %[[CLK_I]], %[[C1]] : i1
   %clk_update = comb.xor %clk_i, %c1_i1 : i1
-  // CHECK: %9 = verif.concrete_input %[[C1]], %[[CLK_U]] : (i1, i1) -> !seq.clock
-  %9 = verif.concrete_input %c1_i1, %clk_update : (i1, i1) -> !seq.clock
+  // CHECK: %9 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
+  %9 = verif.concrete_input %c1_i1, %clk_update : i1
   // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, clk: %9: !seq.clock) -> ("": i1, "1": i1)
   %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "clk": %9 : !seq.clock)  -> ("" : i1, "1" : i1)
 }
