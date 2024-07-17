@@ -534,7 +534,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // Pick an insertion point for this module according to the source file
   // location.
-  auto it = orderedRootOps.lower_bound(module->location);
+  auto it = orderedRootOps.upper_bound(module->location);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
