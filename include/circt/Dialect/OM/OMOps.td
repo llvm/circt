@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/OM/OMDialect.td"
 include "circt/Dialect/OM/OMEnums.td"
 include "circt/Dialect/OM/OMOpInterfaces.td"
@@ -33,7 +34,10 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    SingleBlock, NoTerminator, Symbol, RegionKindInterface, IsolatedFromAbove,
+    SingleBlock, NoTerminator,
+    // TODO(lenny): Enable terminator check when ready
+    // SingleBlockImplicitTerminator<"ClassFieldsOp">, 
+    Symbol, RegionKindInterface, IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
@@ -106,7 +110,8 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
   }];
 }
 
-def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">]> {
+def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">, Terminator,
+                                          ReturnLike, Pure]> {
   // TODO(lenny): If we want to use terminator/returnlike/pure, we should update the
   // ClassOp too
   let summary = "Specify the accessible fields of a class";
