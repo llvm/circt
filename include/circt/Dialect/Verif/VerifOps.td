@@ -381,13 +381,13 @@ def ContractOp : VerifOp<"contract", [Pure, HasParent<"hw::HWModuleOp">]>{
     /* ... After PrepareForFormal Pass becomes ... */
 
     %c0_8 = hw.constant 0 : i8 
-    %prec = comb.icmp bin neq %c0_8, %bar : i8
+    %prec = comb.icmp bin neq %c0_8, %foo : i8
     verif.assert %precond : i1
 
     %out0 = verif.symbolic_input : i8
     %out1 = verif.symbolic_input : i8
-    %post = comb.icmp bin ugt %out0, %bar : i8
-    %post1 = comb.icmp bin ult %out1, %bar : i8
+    %post = comb.icmp bin ugt %out0, %foo : i8
+    %post1 = comb.icmp bin ult %out1, %foo : i8
     verif.assume %post : i1
     verif.assume %post1 : i1
     ```
