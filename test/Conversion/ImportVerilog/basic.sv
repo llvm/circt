@@ -158,6 +158,13 @@ module Basic;
   // CHECK: [[TMP1:%.+]] = moore.read %v2 : i32
   // CHECK: moore.assign %v1, [[TMP1]] : i32
   assign v1 = v2;
+
+  // CHECK: [[VARIANT_A:%.+]] = moore.constant 0 :
+  // CHECK: %ev1 = moore.variable [[VARIANT_A]]
+  // CHECK: [[VARIANT_B:%.+]] = moore.constant 1 :
+  // CHECK: %ev2 = moore.variable [[VARIANT_B]]
+  MyEnum ev1 = VariantA;
+  MyEnum ev2 = VariantB;
 endmodule
 
 // CHECK-LABEL: moore.module @Statements

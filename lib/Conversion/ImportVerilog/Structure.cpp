@@ -422,8 +422,7 @@ struct MemberVisitor {
 
 /// Convert an entire Slang compilation to MLIR ops. This is the main entry
 /// point for the conversion.
-LogicalResult
-Context::convertCompilation(slang::ast::Compilation &compilation) {
+LogicalResult Context::convertCompilation() {
   const auto &root = compilation.getRoot();
 
   // Visit all top-level declarations in all compilation units. This does not
