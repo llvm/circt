@@ -7,7 +7,7 @@ sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
 // CHECK-NEXT:    sv.func.dpi.import @dpi
 // CHECK-NEXT:  }
 
-// VERILOG:      import "DPI-C" function void dpi( 
+// VERILOG:      import "DPI-C" context function void dpi(
 // VERILOG-NEXT:   output bit arg0,
 // VERILOG-NEXT:   input  bit arg1,
 // VERILOG-NEXT:   output bit arg2

@@ -4401,7 +4401,7 @@ LogicalResult StmtEmitter::visitSV(ReturnOp op) {
 LogicalResult StmtEmitter::visitSV(FuncDPIImportOp importOp) {
   startStatement();
 
-  ps << "import" << PP::nbsp << "\"DPI-C\"" << PP::nbsp;
+  ps << "import" << PP::nbsp << "\"DPI-C\"" << PP::nbsp << "context" << PP::nbsp;
 
   // Emit a linkage name if provided.
   if (auto linkageName = importOp.getLinkageName())
