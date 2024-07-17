@@ -997,6 +997,12 @@ module Conversion;
   // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.i19
   // CHECK: %e = moore.variable [[TMP2]]
   bit signed [18:0] e = 19'(b);
+
+  // Implicit conversion for literals.
+  // CHECK: [[TMP1:%.+]] = moore.constant 0 : i64
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
+  // CHECK: %f = moore.variable [[TMP2]]
+  struct packed { int a; int b; } f = '0;
 endmodule
 
 // CHECK-LABEL: moore.module @PortsTop
