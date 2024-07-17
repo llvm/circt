@@ -48,12 +48,12 @@ verif.formal @formal1(k = 20) {
   %c1_i1 = hw.constant true
   // CHECK: %[[SYM:.+]] = verif.symbolic_input : i1
   %sym = verif.symbolic_input : i1
-  // CHECK: %[[CLK_U:.+]] = comb.xor %9, %[[C1]] : i1
-  %clk_update = comb.xor %9, %c1_i1 : i1
-  // CHECK: %9 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
-  %9 = verif.concrete_input %c1_i1, %clk_update : i1
-  // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %9: i1) -> ("": i1, "o1": i1)
-  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %9 : i1)  -> ("" : i1, "o1" : i1)
+  // CHECK: %[[CLK_U:.+]] = comb.xor %8, %[[C1]] : i1
+  %clk_update = comb.xor %8, %c1_i1 : i1
+  // CHECK: %8 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
+  %8 = verif.concrete_input %c1_i1, %clk_update : i1
+  // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %8: i1) -> ("": i1, "1": i1)
+  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1)  -> ("" : i1, "1" : i1)
 }
 
 //===----------------------------------------------------------------------===//
