@@ -595,7 +595,7 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
 def ProceduralCoreToSV : Pass<"lower-procedural-core-to-sv", "hw::HWModuleOp"> {
   let summary = "Lower procedural core dialect operations to SV";
   let description = [{
-    This pass lower procedural 'hw.triggered' operations and their body
+    This pass lowers procedural 'hw.triggered' operations and their body
     regions to the SystemVerilog dialect.
   }];
   let dependentDialects = ["sv::SVDialect"];
