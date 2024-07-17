@@ -184,6 +184,21 @@ class RecvBundleTest(Module):
     self.s1_out = to_channels['req']
 
 
+# CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>) attributes {output_file = #hw.output_file<"ChannelTransform.sv", includeReplicatedOps>} {
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %s1_in, %ready : i32
+# CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i8
+# CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8>
+@unittestmodule()
+class ChannelTransform(Module):
+  s1_in = InputChannel(Bits(32))
+  s2_out = OutputChannel(Bits(8))
+
+  @generator
+  def build(self):
+    self.s2_out = self.s1_in.transform(lambda x: x[0:8])
+
+
 # CHECK-LABEL:  hw.module @MMIOReq()
 # CHECK-NEXT:     %c0_i64 = hw.constant 0 : i64
 # CHECK-NEXT:     %false = hw.constant false
