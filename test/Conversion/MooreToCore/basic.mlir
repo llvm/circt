@@ -138,6 +138,10 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: comb.xor %arg2, [[V29]] : i6
   moore.not %arg2 : !moore.i6
 
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i6
+  // CHECK-NEXT: comb.sub [[ZERO]], %arg2 : i6
+  moore.neg %arg2 : !moore.i6
+
   // CHECK-NEXT: comb.add %arg1, %arg1 : i1
   // CHECK-NEXT: comb.sub %arg1, %arg1 : i1
   // CHECK-NEXT: comb.mul %arg1, %arg1 : i1
