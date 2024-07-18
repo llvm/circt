@@ -198,6 +198,13 @@ module Basic;
   PackageType pkgType0;
   // CHECK: %pkgType1 = moore.variable : <l42>
   Package::PackageType pkgType1;
+
+  // CHECK: [[VARIANT_A:%.+]] = moore.constant 0 :
+  // CHECK: %ev1 = moore.variable [[VARIANT_A]]
+  // CHECK: [[VARIANT_B:%.+]] = moore.constant 1 :
+  // CHECK: %ev2 = moore.variable [[VARIANT_B]]
+  MyEnum ev1 = VariantA;
+  MyEnum ev2 = VariantB;
 endmodule
 
 // CHECK-LABEL: moore.module @Statements

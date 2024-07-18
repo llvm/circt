@@ -44,11 +44,11 @@ struct ModuleLowering {
 /// operations. Keeps track of the destination MLIR module, builders, and
 /// various worklists and utilities needed for conversion.
 struct Context {
-  Context(mlir::ModuleOp intoModuleOp,
+  Context(slang::ast::Compilation &compilation, mlir::ModuleOp intoModuleOp,
           const slang::SourceManager &sourceManager,
           SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths)
-      : intoModuleOp(intoModuleOp), sourceManager(sourceManager),
-        bufferFilePaths(bufferFilePaths),
+      : compilation(compilation), intoModuleOp(intoModuleOp),
+        sourceManager(sourceManager), bufferFilePaths(bufferFilePaths),
         builder(OpBuilder::atBlockEnd(intoModuleOp.getBody())),
         symbolTable(intoModuleOp) {}
   Context(const Context &) = delete;
@@ -69,7 +69,7 @@ struct Context {
   Type convertType(const slang::ast::DeclaredType &type);
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
-  LogicalResult convertCompilation(slang::ast::Compilation &compilation);
+  LogicalResult convertCompilation();
   ModuleLowering *
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
@@ -86,6 +86,7 @@ struct Context {
   LogicalResult
   convertTimingControl(const slang::ast::TimingControl &timingControl);
 
+  slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
   SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;

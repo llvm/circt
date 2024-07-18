@@ -61,13 +61,26 @@ struct RvalueExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
-    if (auto value = context.valueSymbols.lookup(&expr.symbol))
-      return isa<moore::NamedConstantOp>(value.getDefiningOp())
-                 ? value
-                 : builder.create<moore::ReadOp>(
-                       loc,
-                       cast<moore::RefType>(value.getType()).getNestedType(),
-                       value);
+    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+      if (auto refType = dyn_cast<moore::RefType>(value.getType()))
+        value =
+            builder.create<moore::ReadOp>(loc, refType.getNestedType(), value);
+      return value;
+    }
+
+    // Try to materialize constant values directly.
+    slang::ast::EvalContext evalContext(context.compilation,
+                                        slang::ast::EvalFlags::CacheResults);
+    auto constant = expr.eval(evalContext);
+    if (constant.isInteger()) {
+      auto type = context.convertType(*expr.type);
+      if (!type)
+        return {};
+      return convertSVInt(constant.integer(), type);
+    }
+
+    // Otherwise some other part of ImportVerilog should have added an MLIR
+    // value for this expression's symbol to the `context.valueSymbols` table.
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no value generated for " << slang::ast::toString(expr.symbol.kind);
