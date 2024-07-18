@@ -309,7 +309,9 @@ def FormalOp : VerifOp<"formal", [
 // Formal Verification Ops
 //===----------------------------------------------------------------------===//
 
-def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+def SymbolicInputOp : VerifOp<"symbolic_input", [
+  ParentOneOf<["verif::FormalOp", "verif::InstanceOp"]>
+]>{
   let summary = "declare a symbolic input for formal verification";
   let description = [{
     This operation declares a symbolic input that can then be used to reason 
@@ -349,8 +351,11 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
 // Formal Contract Ops
 //===----------------------------------------------------------------------===//
 
-def ContractOp : VerifOp<"contract", [Pure, HasParent<"hw::HWModuleOp">]>{
-  let summary = "declare formal contract";
+def ContractOp : VerifOp<"contract", [
+  Pure, HasParent<"hw::HWModuleOp">, NoTerminator, RegionKindInterface, 
+  IsolatedFromAbove
+]>{
+  let summary = "declare a formal contract";
   let description = [{
     This operation declares a formal contract that is used to create precondition 
     and postconditions on a parent module. These are used as an abstraction to 
@@ -398,49 +403,104 @@ def ContractOp : VerifOp<"contract", [Pure, HasParent<"hw::HWModuleOp">]>{
   let assemblyFormat = [{
     attr-dict-with-keyword $contract_region
   }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+  }];
 }
 
-def RequireOp : VerifOp<"require", [
-  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+def InstanceOp : VerifOp<"instance", [
+  HasParent<"hw::HWModuleOp">, IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"verif::YieldOp">, RegionKindInterface, 
+  IsolatedFromAbove
 ]>{
+  let summary = "declare an instance of a formal contract (replace an hw.instance)";
+  let description = [{
+    This operation declares an instance of an `hw.module` that contains a 
+    `verif.contract` definition. The body of this op will be a modified version 
+    of the body of the referenced module's contract body, with `verif.require` 
+    ops being reoplaced with `verif.assert` and `verif.ensure` being replaced 
+    with `verif.assume`. The `verif.result` ops are converted into `verif.symbolic_input` 
+    and are yielded as a result of the region to be used in the rest of the module.
+  }];
+
+  let arguments = (ins StrAttr:$instanceName,
+                       FlatSymbolRefAttr:$moduleName,
+                       Variadic<AnyType>:$inputs,
+                       ParamDeclArrayAttr:$parameters);
+
+  let regions = (region SizedRegion<1>:$body);
+  let results = (outs Variadic<AnyType>:$result);
+
+  // TODO: Make this assembly format look more like the example in basic.mlir, i.e.
+  /*
+    hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
+      %arg1 = hw.constant 42 : i8
+      %bar.0, %bar.1 = verif.instance "bar" @Bar(foo: %arg1 : i8) {
+        %c0_8 = hw.constant 0 : i8 
+        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+        verif.assert %precond : i1
+
+        %bar.0 = verif.symbolic_input : i8  
+        %bar.1 = verif.symbolic_input : i8  
+        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+        verif.assume %post : i1
+        verif.assume %post1 : i1
+        verif.yield %bar.0, %bar.1 : i8, i8
+      } -> (i8, i8)
+      hw.output %bar.0, %bar.1 : i8, i8
+    }
+  */
+  let assemblyFormat = [{
+    $moduleName `,` $inputs`,` $parameters `,` 
+    attr-dict-with-keyword $contract_region `->` type(results)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+  }];
+}
+
+class RequireLikeOp<string mnemonic, list<Trait> traits = [
+  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+]> : VerifOp<mnemonic, traits> {
+  let arguments = (ins LTLAnyPropertyType:$property,
+                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
+                      Optional<I1>:$enable,
+                      OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = [{
+    $property (`if` $enable^)? (`,` $edge^ $clock)? 
+    (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+def RequireOp : RequireLikeOp<"require"> {
   let summary = "define a precondition for the given contract";
   let description = [{
     This operation defines a precondition for the parent contract. 
     Preconditions are assumed during the verification of a module and 
     asserted during the verification of an instance of a module.
   }];
-  let arguments = (ins LTLAnyPropertyType:$property,
-                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
-                      Optional<I1>:$enable,
-                      OptionalAttr<StrAttr>:$label);
-
-  let assemblyFormat = [{
-    $property (`if` $enable^)? (`,` $edge^ $clock)? 
-    (`label` $label^)? attr-dict `:` type($property)
-  }];
 }
 
-def EnsureOp : VerifOp<"ensure", [
-  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
-]>{
+
+def EnsureOp : RequireLikeOp<"ensure">{
   let summary = "define a postcondition for the given contract";
   let description = [{
     This operation defines a postcondition for the parent contract. 
     Postconditions are asserted during the verification of a module and 
     assumed during the verification of an instance of a module.
   }];
-  let arguments = (ins LTLAnyPropertyType:$property,
-                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
-                      Optional<I1>:$enable,
-                      OptionalAttr<StrAttr>:$label);
-
-  let assemblyFormat = [{
-    $property (`if` $enable^)? (`,` $edge^ $clock)? 
-    (`label` $label^)? attr-dict `:` type($property)
-  }];
 }
 
-def ResultOp : VerifOp<"result", [HasParent<"verif::ResultOp">]>{
+def ResultOp : VerifOp<"result", [HasParent<"verif::ContractOp">]>{
   let summary = "define a symbolic reference to the outputs of the module";
   let description = [{
     This operation defines a set of symbolic references to each output of the 

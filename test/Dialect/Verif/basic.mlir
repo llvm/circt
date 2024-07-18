@@ -53,16 +53,16 @@ verif.formal @formal1(k = 20) {
   // CHECK: %8 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
   %8 = verif.concrete_input %c1_i1, %clk_update : i1
   // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %8: i1) -> ("": i1, "1": i1)
-  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1)  -> ("" : i1, "1" : i1)
+  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1) -> ("" : i1, "1" : i1)
 }
 
-hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
-  verif.contract { 
+hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+  verif.contract (foo: %foo : i8) { //isolated region
     %c0_8 = hw.constant 0 : i8 
     %prec = comb.icmp bin ugt %foo, %c0_8 : i8
     verif.require %precond : i1
 
-    %out0, %out1 = verif.result : i8  
+    %bar.0, %bar.1 = verif.result : i8  
     %post = comb.icmp bin ugt %out0, %foo : i8
     %post1 = comb.icmp bin ult %out1, %foo : i8
     verif.ensure %post : i1
@@ -73,6 +73,24 @@ hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) {
   %o1 = comb.sub bin %foo, %c1_8 : i8
   hw.output %o0, %o1 : i8, i8
 }
+
+hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
+  %arg1 = hw.constant 42 : i8
+  %bar.0, %bar.1 = verif.instance "bar" @Bar(foo: %arg1 : i8) {
+    %c0_8 = hw.constant 0 : i8 
+    %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+    verif.assert %precond : i1
+
+    %bar.0 = verif.symbolic_input : i8  
+    %bar.1 = verif.symbolic_input : i8  
+    %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+    %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+    verif.assume %post : i1
+    verif.assume %post1 : i1
+    verif.yield %bar.0, %bar.1 : i8, i8
+  } -> (i8, i8)
+  hw.output %bar.0, %bar.1 : i8, i8
+ }
 
 //===----------------------------------------------------------------------===//
 // Print-related
