@@ -82,11 +82,12 @@ void LowerToBMCPass::runOnOperation() {
   }
 
   // Create necessary function declarations and globals
-  OpBuilder builder(&getContext());
+  auto *ctx = &getContext();
+  OpBuilder builder(ctx);
   Location loc = getOperation()->getLoc();
   builder.setInsertionPointToEnd(getOperation().getBody());
-  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
-  auto voidTy = LLVM::LLVMVoidType::get(builder.getContext());
+  auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+  auto voidTy = LLVM::LLVMVoidType::get(ctx);
 
   // Lookup or declare printf function.
   auto printfFunc =
@@ -114,7 +115,7 @@ void LowerToBMCPass::runOnOperation() {
         loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
   else {
     hwModule->emitOpError(
-        "No num_regs attribute found - please run externalise "
+        "No num_regs attribute found - please run externalize "
         "registers pass first.");
     return signalPassFailure();
   }
@@ -123,7 +124,7 @@ void LowerToBMCPass::runOnOperation() {
   // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
   // toggles just needs to be generated
   bool hasClk;
-  for (auto [i, input] : llvm::enumerate(hwModule.getInputTypes())) {
+  for (auto input : hwModule.getInputTypes()) {
     if (isa<seq::ClockType>(input)) {
       if (hasClk) {
         hwModule.emitError("Designs with multiple clocks not yet supported.");
@@ -150,7 +151,7 @@ void LowerToBMCPass::runOnOperation() {
     auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
     builder.setInsertionPointToStart(loopBlock);
     if (hasClk) {
-      loopBlock->addArgument(seq::ClockType::get(&getContext()), loc);
+      loopBlock->addArgument(seq::ClockType::get(ctx), loc);
       auto fromClk =
           builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
       auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
