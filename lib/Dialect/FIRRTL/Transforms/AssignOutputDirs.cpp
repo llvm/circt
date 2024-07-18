@@ -38,8 +38,12 @@ using hw::OutputFileAttr;
 // interpreting moduleOutputDir as relative to the outputDir.
 static void makeAbsolute(StringRef outputDir,
                          SmallString<64> &moduleOutputDir) {
+  auto sep = llvm::sys::path::get_separator();
+  if (!moduleOutputDir.empty())
+    assert(moduleOutputDir.ends_with(sep));
   fs::make_absolute(outputDir, moduleOutputDir);
   path::remove_dots(moduleOutputDir, true);
+  moduleOutputDir += sep;
 }
 
 // If outputDir is a prefix of moduleOutputDir, then make moduleOutputDir
@@ -69,7 +73,7 @@ static void makeCommonPrefix(SmallString<64> &a, StringRef b) {
 static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
                              OutputFileAttr attr) {
   if (attr) {
-    SmallString<64> b(attr.getFilename());
+    SmallString<64> b(attr.getDirectory());
     makeAbsolute(outputDir, b);
     makeCommonPrefix(a, b);
   } else {
