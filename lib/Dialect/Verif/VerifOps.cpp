@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -91,6 +92,46 @@ LogicalResult AssumeOp::canonicalize(AssumeOp op, PatternRewriter &rewriter) {
 
 LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
   return AssertLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
+}
+
+//===----------------------------------------------------------------------===//
+// Formal contract InstanceOp verifiers
+//===----------------------------------------------------------------------===//
+
+/// Check that the instance arguments match the argument list from the
+/// instatiated module.
+LogicalResult InstanceOp::verify() {
+  auto module = (*this)->getParentOfType<hw::HWModuleOp>();
+  if (!module)
+    return success();
+
+  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  hw::instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        auto diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(module->getLoc()) << "module declared here";
+      };
+  return hw::instance_like_impl::verifyParameterStructure(
+      getParameters(), moduleParameters, emitError);
+  return success();
+}
+
+LogicalResult InstanceOp::verifyRegions() {
+  // Check that verif.yield yielded the expected number of operations
+  auto nRes = getNumResults();
+  auto nYields = getBody().front().getTerminator()->getNumOperands();
+  if (nRes != nYields)
+    return emitOpError() << "region terminator must yield the same number"
+                         << "of operations as there are results! Yields: "
+                         << nYields << " expected: " << nRes;
+
+  // Check that the yielded types match the result types
+  if (getResultTypes() != getBody().front().getTerminator()->getOperandTypes())
+    return emitOpError() << "region terminator must yield the same types"
+                         << "as the result types!";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

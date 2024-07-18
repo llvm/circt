@@ -418,8 +418,7 @@ def ContractOp : VerifOp<"contract", [
 def InstanceOp : VerifOp<"instance", [
   HasParent<"hw::HWModuleOp">, IsolatedFromAbove,
   SingleBlockImplicitTerminator<"verif::YieldOp">, RegionKindInterface, 
-  IsolatedFromAbove
-]>{
+  IsolatedFromAbove]>{
   let summary = "declare an instance of a formal contract (replace an hw.instance)";
   let description = [{
     This operation declares an instance of an `hw.module` that contains a 
@@ -436,7 +435,7 @@ def InstanceOp : VerifOp<"instance", [
                        ParamDeclArrayAttr:$parameters);
 
   let regions = (region SizedRegion<1>:$body);
-  let results = (outs Variadic<AnyType>:$result);
+  let results = (outs Variadic<AnyType>:$results);
 
   // TODO: Make this assembly format look more like the example in basic.mlir, i.e.
   /*
@@ -460,7 +459,7 @@ def InstanceOp : VerifOp<"instance", [
   */
   let assemblyFormat = [{
     $moduleName `,` $inputs`,` $parameters `,` 
-    attr-dict-with-keyword $contract_region `->` type(results)
+    attr-dict-with-keyword `:` functional-type($inputs, $results) $body
   }];
 
   let extraClassDeclaration = [{
@@ -468,7 +467,20 @@ def InstanceOp : VerifOp<"instance", [
     static RegionKind getRegionKind(unsigned index) { 
       return RegionKind::Graph;
     }
+
+    /// Retrieves the region block arguments
+    BlockArgument getRegionArg(unsigned index) {
+      return getBody().getArguments()[index];
+    }
+
+    /// Retrieves the number of block arguments
+    unsigned getNumRegionArgs() {
+      return getBody().getNumArguments();
+    }
   }];
+
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 }
 
 class RequireLikeOp<string mnemonic, list<Trait> traits = [
