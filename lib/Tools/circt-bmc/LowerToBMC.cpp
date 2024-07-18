@@ -123,7 +123,7 @@ void LowerToBMCPass::runOnOperation() {
   // Check that there's only one clock input to the module
   // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
   // toggles just needs to be generated
-  bool hasClk;
+  bool hasClk = false;
   for (auto input : hwModule.getInputTypes()) {
     if (isa<seq::ClockType>(input)) {
       if (hasClk) {
