@@ -244,6 +244,19 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(
+        op, resultType, adaptor.getInput(), adaptor.getLowBit());
+    return success();
+  }
+};
+
+struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
     auto width = typeConverter->convertType(op.getInput().getType())
                      .getIntOrFloatBitWidth();
     Value amount =
@@ -684,8 +697,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
-    ExtractOpConversion, ConversionOpConversion, ReadOpConversion,
-    NamedConstantOpConv,
+    ExtractOpConversion, DynExtractOpConversion, ConversionOpConversion,
+    ReadOpConversion, NamedConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
