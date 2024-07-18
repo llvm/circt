@@ -249,7 +249,10 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp"]>
+  ParentOneOf<[
+    "verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp",
+    "verif::InstanceOp"
+  ]>
 ]> {
   let summary = "yields values from a region";
 
@@ -438,8 +441,8 @@ def InstanceOp : VerifOp<"instance", [
   // TODO: Make this assembly format look more like the example in basic.mlir, i.e.
   /*
     hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
-      %arg1 = hw.constant 42 : i8
-      %bar.0, %bar.1 = verif.instance "bar" @Bar(foo: %arg1 : i8) {
+      %c42_8 = hw.constant 42 : i8
+      %bar.0, %bar.1 = verif.instance "bar" @Bar(foo: %arg1 : i8 as %arg1) {
         %c0_8 = hw.constant 0 : i8 
         %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
         verif.assert %precond : i1
