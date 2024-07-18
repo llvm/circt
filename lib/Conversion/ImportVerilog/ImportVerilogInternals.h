@@ -36,6 +36,8 @@ struct PortLowering {
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
+      portsBySyntaxNode;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
