@@ -2,18 +2,18 @@
 
 FIRRTL version 4.0.0
 circuit DPI:
-; CHECK-LABEL: import "DPI-C" function void clocked_result(
+; CHECK-LABEL: import "DPI-C" context function void clocked_result(
 ; CHECK-NEXT:   input  byte foo,
 ; CHECK-NEXT:               bar,
 ; CHECK-NEXT:   output byte baz
 ; CHECK-NEXT: );
 
-; CHECK-LABEL: import "DPI-C" function void clocked_void(
+; CHECK-LABEL: import "DPI-C" context function void clocked_void(
 ; CHECK-NEXT:   input byte in_0,
 ; CHECK-NEXT:              in_1
 ; CHECK-NEXT: );
 
-; CHECK-LABEL: import "DPI-C" function void unclocked_result(
+; CHECK-LABEL: import "DPI-C" context function void unclocked_result(
 ; CHECK-NEXT:   input  byte in_0,
 ; CHECK-NEXT:                    in_1,
 ; CHECK-NEXT:   output byte out_0

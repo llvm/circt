@@ -361,9 +361,15 @@ struct RvalueExprVisitor {
           << value.getBitWidth() << " bits wide; only 64 supported";
       return {};
     }
+    auto intType =
+        moore::IntType::get(context.getContext(), value.getBitWidth(),
+                            value.hasUnknown() ? moore::Domain::FourValued
+                                               : moore::Domain::TwoValued);
     auto truncValue = value.as<uint64_t>().value();
-    return builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type),
-                                             truncValue);
+    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    if (result.getType() != type)
+      result = builder.create<moore::ConversionOp>(loc, type, result);
+    return result;
   }
 
   // Handle `'0`, `'1`, `'x`, and `'z` literals.
