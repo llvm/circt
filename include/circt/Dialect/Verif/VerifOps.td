@@ -13,11 +13,14 @@ include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -258,6 +261,88 @@ def YieldOp : VerifOp<"yield", [
       build($_builder, $_state, std::nullopt);
     }]>,
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// Verification intent ops
+//===----------------------------------------------------------------------===//
+
+def FormalOp : VerifOp<"formal", [
+  NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
+  IsolatedFromAbove, Symbol
+]> {
+  let summary = "defines a formal verification test";
+  let description = [{
+    This operation defines a formal verification test. This should be written 
+    by declaring symbolic values that are then connected to a hardware instance. 
+    These symbols can then be used in additional assertions that are defined 
+    outside of the instantiated `hw.module` but inside of this region. 
+    Assertions/Assumptions defined within the instantiated module will also be 
+    used for verification. The region can then be converted into btor2, 
+    SystemVerilog, or used for verification directly in circt-bmc. The operations 
+    in this region are ignored during regular SystemVerilog emission. This allows 
+    for verification specific logic to be isolated from the design in a way that 
+    is similar to layers.   
+      
+    The attribute `k` defines the upper bound of cycles to check for this test 
+    w.r.t. the implicit clock defined by this operation within its region.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$k);
+
+  let regions = (region SizedRegion<1>:$test_region);
+
+  let assemblyFormat = [{
+    $sym_name `(``k` `=` $k `)` attr-dict-with-keyword
+    $test_region
+  }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Formal Verification Ops
+//===----------------------------------------------------------------------===//
+
+def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+  let summary = "declare a symbolic input for formal verification";
+  let description = [{
+    This operation declares a symbolic input that can then be used to reason 
+    about `hw.instance` inputs in a symbolic manner in assertions and 
+    assumptions. The result type must be explicitly marked. The resulting value 
+    is a new non-deterministic value for every clock cycle of the implicit clock 
+    defined by the parent `verif.formal`.  
+  }];
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def ConcreteInputOp : VerifOp<"concrete_input", [
+  AllTypesMatch<["init", "update", "result"]>, HasParent<"verif::FormalOp">
+]> {
+  let summary = "declare a concrete input for formal verification";
+  let description = [{
+    This operation declares a concrete input that can then be used in the 
+    reasoning surrounding symbolic inputs, allowing for a form of concolic 
+    reasoning to take place in a `verif.formal` block. Concrete inputs are 
+    defined by an initial value and an update SSA value. This is equivalent 
+    to a register with the parent `verif.formal`'s implicit clock, which is 
+    initialized with the init value and obtains a new value every implicit 
+    clock tick from the update value.
+  }];
+
+  let arguments = (ins AnyType:$init, AnyType:$update);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $init `,` $update attr-dict `:` type($result)
+  }];
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

@@ -16,6 +16,7 @@
 include "circt/Dialect/Moore/MooreDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 class MooreTypeDef<string name, list<Trait> traits = [],
                    string baseCppClass = "::mlir::Type">
@@ -284,9 +285,16 @@ class StructLikeType<
   let assemblyFormat = [{
     `<` custom<Members>($members) `>`
   }];
+  let extraClassDeclaration = [{
+    std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
+    Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
+  }];
 }
 
-def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
+def StructType : StructLikeType<"Struct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::PackedType"> {
   let mnemonic = "struct";
   let summary = "a packed struct type";
   let description = [{
@@ -296,7 +304,9 @@ def StructType : StructLikeType<"Struct", [], "moore::PackedType"> {
 }
 
 def UnpackedStructType : StructLikeType<
-  "UnpackedStruct", [], "moore::UnpackedType"
+  "UnpackedStruct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType"
 > {
   let mnemonic = "ustruct";
   let summary = "an unpacked struct type";
@@ -305,7 +315,9 @@ def UnpackedStructType : StructLikeType<
   }];
 }
 
-def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
+def UnionType : StructLikeType<"Union", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::PackedType"> {
   let mnemonic = "union";
   let summary = "a packed union type";
   let description = [{
@@ -316,7 +328,9 @@ def UnionType : StructLikeType<"Union", [], "moore::PackedType"> {
 
 
 def UnpackedUnionType : StructLikeType<
-  "UnpackedUnion", [], "moore::UnpackedType"
+  "UnpackedUnion", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType"
 > {
   let mnemonic = "uunion";
   let summary = "an unpacked union type";
@@ -329,7 +343,9 @@ def UnpackedUnionType : StructLikeType<
 // Reference type wrapper
 //===----------------------------------------------------------------------===//
 
-def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
+def RefType : MooreTypeDef<"Ref", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface
+>], "moore::UnpackedType">{
   let mnemonic = "ref";
   let description = [{
     A wrapper is used to wrap any SystemVerilog type. It's aimed to work for
@@ -352,6 +368,9 @@ def RefType : MooreTypeDef<"Ref", [], "moore::UnpackedType">{
     std::optional<unsigned> getBitSize() {
       return getNestedType().getBitSize();
     };
+    std::optional<DenseMap<Attribute, Type>> getSubelementIndexMap();
+    Type getTypeAtIndex(Attribute index);
+    std::optional<uint32_t> getFieldIndex(StringAttr nameField);
   }];
 }
 

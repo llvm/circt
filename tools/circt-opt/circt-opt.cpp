@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
+  mlir::registerSROA();
   mlir::registerMem2RegPass();
 
   return mlir::failed(mlir::MlirOptMain(

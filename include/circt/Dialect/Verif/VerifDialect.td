@@ -22,7 +22,7 @@ def VerifDialect : Dialect {
   let usePropertiesForAttributes = 1;
 
   let dependentDialects = [
-    "circt::seq::SeqDialect"
+    "circt::seq::SeqDialect", "circt::hw::HWDialect"
   ];
 }
 

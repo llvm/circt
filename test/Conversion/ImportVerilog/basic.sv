@@ -14,10 +14,45 @@ timeunit 100ps/10fs;
 typedef int MyInt;
 typedef enum { VariantA, VariantB } MyEnum;
 
+// Ignore imports.
+import Package::*;
+
 // CHECK-LABEL: moore.module @Empty() {
 // CHECK:       }
 module Empty;
   ; // empty member
+endmodule
+
+
+module DedupA(input wire a,
+input wire b,
+output wire [3:0] c);
+endmodule
+
+module DedupB #(parameter p = 32)
+(input wire a,
+input wire b,
+output wire [3:0] c);
+endmodule
+
+// CHECK-LABEL: moore.module private @DedupA(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+// CHECK-LABEL: moore.module private @DedupB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+// CHECK-LABEL: moore.module private @DedupB_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+// CHECK-LABEL: moore.module @Dedup
+module Dedup;
+  wire [3:0] a;
+  wire [3:0] b;
+  wire [3:0] c;
+  // CHECK-LABEL: moore.instance "insA" @DedupA
+  DedupA insA(.a(a), .c(c));
+  // CHECK-LABEL: moore.instance "insB" @DedupA
+  DedupA insB(.b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insC" @DedupB
+  DedupB insC(.c(c));
+  // CHECK-LABEL: moore.instance "insD" @DedupB
+  DedupB insD(.a(a), .b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insE" @DedupB_0
+  DedupB #(8) insE(.c(c));
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA() {
@@ -158,6 +193,11 @@ module Basic;
   // CHECK: [[TMP1:%.+]] = moore.read %v2 : i32
   // CHECK: moore.assign %v1, [[TMP1]] : i32
   assign v1 = v2;
+
+  // CHECK: %pkgType0 = moore.variable : <l42>
+  PackageType pkgType0;
+  // CHECK: %pkgType1 = moore.variable : <l42>
+  Package::PackageType pkgType1;
 
   // CHECK: [[VARIANT_A:%.+]] = moore.constant 0 :
   // CHECK: %ev1 = moore.variable [[VARIANT_A]]
@@ -318,7 +358,7 @@ module Statements;
     // CHECK:   scf.yield
     // CHECK: }
     for (y = x; x; x = z) x = y;
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %i : i32
     // CHECK: scf.while (%arg0 = [[TMP1]]) : (!moore.i32) -> !moore.i32 {
     // CHECK:   [[TMP2:%.+]] = moore.bool_cast %arg0 : i32 -> i1
@@ -377,7 +417,7 @@ module Statements;
     // CHECK: moore.blocking_assign %y, [[TMP1]] : i1
     // CHECK: moore.blocking_assign %x, [[TMP1]] : i1
     x = (y = z);
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %y : i1
     // CHECK: moore.nonblocking_assign %x, [[TMP1]] : i1
     x <= y;
@@ -968,7 +1008,27 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
+
+    // CHECK: [[TMP1:%.+]] = moore.read %a : i32
+    // CHECK: [[TMP2:%.+]] = moore.struct_inject %struct0, "a", [[TMP1]] : !moore.ref<struct<{a: i32, b: i32}>>
+    struct0.a = a;
+
+    // CHECK: [[TMP3:%.+]]  = moore.struct_extract %struct0, "b" : <struct<{a: i32, b: i32}>> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
+    b = struct0.b;
  
+    //===------------------------------------------------------------------===//
+    // Builtin Functions
+
+    // The following functions are handled by Slang's type checking and don't
+    // convert into any IR operations.
+
+    // CHECK: [[TMP:%.+]] = moore.read %u
+    // CHECK: moore.blocking_assign %a, [[TMP]]
+    a = $signed(u);
+    // CHECK: [[TMP:%.+]] = moore.read %a
+    // CHECK: moore.blocking_assign %u, [[TMP]]
+    u = $unsigned(a);
   end
 endmodule
 
@@ -1004,6 +1064,12 @@ module Conversion;
   // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.i19
   // CHECK: %e = moore.variable [[TMP2]]
   bit signed [18:0] e = 19'(b);
+
+  // Implicit conversion for literals.
+  // CHECK: [[TMP1:%.+]] = moore.constant 0 : i64
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
+  // CHECK: %f = moore.variable [[TMP2]]
+  struct packed { int a; int b; } f = '0;
 endmodule
 
 // CHECK-LABEL: moore.module @PortsTop
@@ -1323,3 +1389,8 @@ module GenerateConstructs;
     endcase
   endgenerate
 endmodule
+
+// Should accept and ignore empty packages.
+package Package;
+  typedef logic [41:0] PackageType;
+endpackage
