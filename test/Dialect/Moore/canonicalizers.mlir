@@ -100,3 +100,19 @@ moore.module @structCreateFold(in %a : !moore.i1, out b : !moore.i1) {
     // CHECK:  moore.output %a : !moore.i1
     moore.output %1 : !moore.i1
   }
+
+// CHECK-LABEL: moore.module @Conversion
+moore.module @Conversion(out a : !moore.ref<struct<{a: i32, b: i32}>>)  {
+  // CHECK: %0 = moore.constant 0 : i64
+  // CHECK: %1 = moore.conversion %0 : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
+  // CHECK: %2 = moore.constant 0 : i32
+  // CHECK: %3 = moore.extract %1 from %2 : struct<{a: i32, b: i32}>, i32 -> i32
+  // CHECK: %4 = moore.constant 32 : i32
+  // CHECK: %5 = moore.extract %1 from %4 : struct<{a: i32, b: i32}>, i32 -> i32
+  // CHECK: %6 = moore.struct_create %3, %5 : !moore.i32, !moore.i32 -> <struct<{a: i32, b: i32}>>
+  // CHECK: moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
+  %0 = moore.constant 0 : i64
+  %1 = moore.conversion %0 : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
+  %f = moore.variable %1 : <struct<{a: i32, b: i32}>>
+  moore.output %f  : !moore.ref<struct<{a: i32, b: i32}>>
+}
