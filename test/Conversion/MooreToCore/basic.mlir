@@ -265,7 +265,7 @@ moore.module @Variable() {
   %b1 = moore.variable : <i8>
 
   // CHECK: [[PRB:%.+]] = llhd.prb [[B]] : !llhd.sig<i8>
-  %0 = moore.read %b1 : i8
+  %0 = moore.read %b1 : <i8>
   // CHECK: llhd.sig "b2" [[PRB]] : i8
   %b2 = moore.variable %0 : <i8>
 

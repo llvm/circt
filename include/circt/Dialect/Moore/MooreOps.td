@@ -275,7 +275,7 @@ def AssignedVarOp : MooreOp<"assigned_variable", [
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
-    "result", "input", "RefType::get(cast<UnpackedType>($_self))">
+    "input", "result", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -286,7 +286,7 @@ def ReadOp : MooreOp<"read", [
   let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($result)
+    $input attr-dict `:` type($input)
   }];
 }
 
