@@ -29,16 +29,6 @@ static void printMembers(AsmPrinter &printer,
 static ParseResult parseMooreType(AsmParser &parser, Type &type);
 static void printMooreType(Type type, AsmPrinter &printer);
 
-static std::optional<DenseMap<Attribute, Type>>
-getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
-static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
-                              Attribute index);
-
-static std::optional<DenseMap<Attribute, Type>>
-getAllSubelementIndexMap(ArrayRef<StructLikeMember> members);
-static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
-                              Attribute index);
-
 //===----------------------------------------------------------------------===//
 // Unpacked Type
 //===----------------------------------------------------------------------===//
