@@ -108,9 +108,9 @@ void LowerToBMCPass::runOnOperation() {
 
   // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
   // iterations
-  verif::BMCOp bmcOp;
+  verif::BoundedModelCheckingOp bmcOp;
   if (auto numRegs = hwModule->getAttr("num_regs"))
-    bmcOp = builder.create<verif::BMCOp>(
+    bmcOp = builder.create<verif::BoundedModelCheckingOp>(
         loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
   else {
     hwModule->emitOpError(
@@ -122,14 +122,14 @@ void LowerToBMCPass::runOnOperation() {
   // Check that there's only one clock input to the module
   // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
   // toggles just needs to be generated
-  std::optional<unsigned long> clkIndex;
+  bool hasClk;
   for (auto [i, input] : llvm::enumerate(hwModule.getInputTypes())) {
     if (isa<seq::ClockType>(input)) {
-      if (clkIndex) {
+      if (hasClk) {
         hwModule.emitError("Designs with multiple clocks not yet supported.");
         return signalPassFailure();
       }
-      clkIndex = i;
+      hasClk = true;
     }
   }
   {
@@ -137,7 +137,7 @@ void LowerToBMCPass::runOnOperation() {
     // Initialize clock to 0 if it exists, otherwise just yield nothing
     auto *initBlock = builder.createBlock(&bmcOp.getInit());
     builder.setInsertionPointToStart(initBlock);
-    if (clkIndex) {
+    if (hasClk) {
       auto initVal =
           builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 0);
       auto toClk = builder.create<seq::ToClockOp>(loc, initVal);
@@ -149,12 +149,10 @@ void LowerToBMCPass::runOnOperation() {
     // Toggle clock in loop region if it exists, otherwise just yield nothing
     auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
     builder.setInsertionPointToStart(loopBlock);
-    SmallVector<Location> locs(
-        hwModule.getBodyBlock()->getArgumentTypes().size(), loc);
-    loopBlock->addArguments(hwModule.getBodyBlock()->getArgumentTypes(), locs);
-    if (clkIndex) {
-      auto fromClk = builder.create<seq::FromClockOp>(
-          loc, loopBlock->getArgument(clkIndex.value()));
+    if (hasClk) {
+      loopBlock->addArgument(seq::ClockType::get(&getContext()), loc);
+      auto fromClk =
+          builder.create<seq::FromClockOp>(loc, loopBlock->getArgument(0));
       auto cNeg1 = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), -1);
       auto nClk = builder.create<comb::XorOp>(loc, fromClk, cNeg1);
       auto toClk = builder.create<seq::ToClockOp>(loc, nClk);

@@ -4,7 +4,6 @@
 // CHECK:  func.func @comb() {
 // CHECK:    [[BMC:%.+]] = verif.bmc bound 20 num_regs 0 init {
 // CHECK:    } loop {
-// CHECK:    ^bb0({{%.+}}: i32, {{%.+}}: i32):
 // CHECK:    } circuit {
 // CHECK:    ^bb0([[ARG0:%.+]]: i32, [[ARG1:%.+]]: i32):
 // CHECK:      [[OP0:%.+]] = comb.add [[ARG0]], [[ARG1]]
@@ -37,7 +36,7 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
 // CHECK1:      [[INIT_CLK:%.+]] = seq.to_clock [[FALSE]]
 // CHECK1:      verif.yield [[INIT_CLK]]
 // CHECK1:    } loop {
-// CHECK1:    ^bb0([[CLK:%.+]]: !seq.clock, [[ARG1:%.+]]: i32, [[ARG2:%.+]]: i32, [[ARG3:%.+]]: i32):
+// CHECK1:    ^bb0([[CLK:%.+]]: !seq.clock):
 // CHECK1:      [[FROM_CLK:%.+]] = seq.from_clock [[CLK]]
 // CHECK1:      [[TRUE:%.+]] = hw.constant true
 // CHECK1:      [[NCLK:%.+]] = comb.xor [[FROM_CLK]], [[TRUE]]
@@ -46,7 +45,6 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
 // CHECK1:    } circuit {
 // CHECK1:    ^bb0([[CLK:%.+]]: !seq.clock, [[ARG1:%.+]]: i32, [[ARG2:%.+]]: i32, [[ARG3:%.+]]: i32):
 // CHECK1:      [[OP0:%.+]] = comb.add [[ARG1]], [[ARG2]]
-// CHECK1:      [[OP1:%.+]] = seq.from_clock [[CLK]]
 // CHECK1:      [[OP2:%.+]] = comb.icmp eq [[OP0]], [[ARG1]]
 // CHECK1:      verif.assert [[OP2]]
 // CHECK1:      verif.yield [[ARG3]], [[OP0]]
