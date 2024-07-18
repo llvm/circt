@@ -52,6 +52,12 @@ if (WHEEL_BUILD)
   message(STATUS "Setting up for a Python wheel build.")
 endif()
 
+if(WIN32)
+  set(LIB_DIR "bin")
+else()
+  set(LIB_DIR "lib")
+endif()
+
 ##===----------------------------------------------------------------------===//
 ## Overall target to build everything.
 ##===----------------------------------------------------------------------===//
@@ -105,7 +111,7 @@ add_library(ESICppRuntime SHARED
 )
 target_include_directories(ESICppRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-target_link_libraries(ESICppRuntime PRIVATE
+target_link_libraries(ESICppRuntime PUBLIC
   ZLIB::ZLIB
   nlohmann_json::nlohmann_json
 )
@@ -131,6 +137,16 @@ else()
     COMPONENT ESIRuntime
   )
 endif()
+install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
+  RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+  COMPONENT ESIRuntime
+)
+install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+  DESTINATION ${LIB_DIR}
+  PRE_EXCLUDE_REGEXES .*
+  PRE_INCLUDE_REGEXES zlibd1
+  COMPONENT ESIRuntime
+)
 install(FILES ${ESICppRuntimeHeaders}
   DESTINATION include/esi
   COMPONENT ESIRuntime-dev
@@ -239,16 +255,21 @@ if(Python3_FOUND)
             "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel/$<TARGET_FILE_NAME:esiCppAccel>"
     )
     if (WHEEL_BUILD)
-      install(TARGETS esiCppAccel
-        DESTINATION .
-        COMPONENT ESIRuntime
-      )
+      set (ESI_PYTHON_INSTALL_DIR ".")
     else()
-      install(TARGETS esiCppAccel
-        DESTINATION python/esiaccel
-        COMPONENT ESIRuntime
-      )
+      set (ESI_PYTHON_INSTALL_DIR "python/esiaccel")
     endif()
+
+    install(TARGETS esiCppAccel
+      DESTINATION ${ESI_PYTHON_INSTALL_DIR}
+      COMPONENT ESIRuntime
+    )
+    install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+      DESTINATION ${ESI_PYTHON_INSTALL_DIR}
+      PRE_EXCLUDE_REGEXES .*
+      PRE_INCLUDE_REGEXES zlibd1
+      COMPONENT ESIRuntime
+    )
 
     foreach(pysrc ${ESIPythonRuntimeSources})
       # Copy each of the Python sources to the build dir.
@@ -285,6 +306,7 @@ if(Python3_FOUND)
     )
 
     add_dependencies(ESIRuntime ESIPythonRuntime)
+
   endif()
 else() # Python not found.
   if (WHEEL_BUILD)
