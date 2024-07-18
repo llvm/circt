@@ -60,15 +60,13 @@ void SimplifyProceduresPass::runOnOperation() {
         // Because the operand of moore.event_wait is net.
         if (auto varOp = llvm::dyn_cast_or_null<VariableOp>(
                 nestedOp.getOperand(0).getDefiningOp())) {
-          auto varName =
-              builder.getStringAttr(Twine("local_") + varOp.getName());
           auto resultType = varOp.getResult().getType();
           builder.setInsertionPointToStart(procedureOp.getBody());
           auto readOp = builder.create<ReadOp>(
               nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
               varOp.getResult());
           auto newVarOp = builder.create<VariableOp>(
-              nestedOp.getLoc(), resultType, varName, readOp);
+              nestedOp.getLoc(), resultType, StringAttr{}, readOp);
           builder.clearInsertionPoint();
 
           // Replace the users of the global variable with a corresponding

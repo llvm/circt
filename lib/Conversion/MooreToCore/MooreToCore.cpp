@@ -164,7 +164,7 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     if (!init)
       init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
     rewriter.replaceOpWithNewOp<llhd::SigOp>(op, llhd::SigType::get(resultType),
-                                             op.getName(), init);
+                                             op.getNameAttr(), init);
     return success();
   }
 };

@@ -254,7 +254,8 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
 }
 
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
@@ -298,8 +299,8 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
     }
 
   if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(), op.getName(),
-                                               initial);
+    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
+                                               op.getNameAttr(), initial);
     return success();
   }
 
@@ -350,12 +351,14 @@ VariableOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
   this->erase();
   return std::nullopt;
 }
+
 //===----------------------------------------------------------------------===//
 // NetOp
 //===----------------------------------------------------------------------===//
 
 void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
 }
 
 //===----------------------------------------------------------------------===//
@@ -363,7 +366,8 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
+  if (getName() && !getName()->empty())
+    setNameFn(getResult(), *getName());
 }
 
 //===----------------------------------------------------------------------===//
