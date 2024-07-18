@@ -325,6 +325,20 @@ struct NotOpConversion : public OpConversionPattern<NotOp> {
   }
 };
 
+struct NegOpConversion : public OpConversionPattern<NegOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NegOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    Value zero = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, 0);
+
+    rewriter.replaceOpWithNewOp<comb::SubOp>(op, zero, adaptor.getInput());
+    return success();
+  }
+};
+
 template <typename SourceOp, typename TargetOp>
 struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -675,7 +689,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion,
+    BoolCastOpConversion, NotOpConversion, NegOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
