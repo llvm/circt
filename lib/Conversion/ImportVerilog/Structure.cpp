@@ -407,6 +407,17 @@ struct ModuleVisitor : public BaseVisitor {
     if (!lhs || !rhs)
       return failure();
 
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
+      auto input = refOp.getInput();
+      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+        refOp.getInputMutable();
+        refOp->erase();
+        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
+                                              refOp.getFieldNameAttr(), rhs);
+        return success();
+      }
+    }
+
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
   }

@@ -16,6 +16,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::moore;
@@ -305,6 +306,50 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
   return failure();
 }
 
+SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
+  if (isa<SVModuleOp>(getOperation()->getParentOp()))
+    return {};
+
+  auto refType = getType();
+  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
+  if (!destructurable)
+    return {};
+
+  auto destructuredType = destructurable.getSubelementIndexMap();
+  if (!destructuredType)
+    return {};
+
+  return {DestructurableMemorySlot{{getResult(), refType}, *destructuredType}};
+}
+
+DenseMap<Attribute, MemorySlot> VariableOp::destructure(
+    const DestructurableMemorySlot &slot,
+    const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
+    SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
+  assert(slot.ptr == getResult());
+  builder.setInsertionPointAfter(*this);
+
+  auto destructurableType = cast<DestructurableTypeInterface>(getType());
+  DenseMap<Attribute, MemorySlot> slotMap;
+  for (Attribute index : usedIndices) {
+    auto elemType = cast<RefType>(destructurableType.getTypeAtIndex(index));
+    assert(elemType && "used index must exist");
+    auto varOp = builder.create<VariableOp>(getLoc(), elemType,
+                                            cast<StringAttr>(index), Value());
+    newAllocators.push_back(varOp);
+    slotMap.try_emplace<MemorySlot>(index, {varOp.getResult(), elemType});
+  }
+
+  return slotMap;
+}
+
+std::optional<DestructurableAllocationOpInterface>
+VariableOp::handleDestructuringComplete(const DestructurableMemorySlot &slot,
+                                        OpBuilder &builder) {
+  assert(slot.ptr == getResult());
+  this->erase();
+  return std::nullopt;
+}
 //===----------------------------------------------------------------------===//
 // NetOp
 //===----------------------------------------------------------------------===//
@@ -401,6 +446,11 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
         APInt(type.getWidth(), (uint64_t)value, /*isSigned=*/true));
 }
 
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  assert(adaptor.getOperands().empty() && "constant has no operands");
+  return getValueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // NamedConstantOp
 //===----------------------------------------------------------------------===//
@@ -447,6 +497,397 @@ LogicalResult ConcatRefOp::inferReturnTypes(
   }
   results.push_back(RefType::get(IntType::get(context, width, domain)));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StructCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructCreateOp::verify() {
+  /// checks if the types of the inputs are exactly equal to the types of the
+  /// result struct fields
+  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto inputs = getInput();
+        if (inputs.size() != members.size())
+          return failure();
+        for (size_t i = 0; i < members.size(); i++) {
+          auto memberType = cast<UnpackedType>(members[i].type);
+          auto inputType = inputs[i].getType();
+          if (inputType != memberType) {
+            emitOpError("input types must match struct field types and orders");
+            return failure();
+          }
+        }
+        return success();
+      })
+      .Default([this](auto &) {
+        emitOpError("Result type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
+  auto inputs = adaptor.getInput();
+
+  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
+    return {};
+
+  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
+                     cast<RefType>(getType()).getNestedType())
+                     .Case<StructType, UnpackedStructType>(
+                         [](auto &type) { return type.getMembers(); })
+                     .Default([](auto) { return std::nullopt; });
+  SmallVector<NamedAttribute> namedInputs;
+  for (auto [input, member] : llvm::zip(inputs, members))
+    namedInputs.push_back(NamedAttribute(member.name, input));
+
+  return DictionaryAttr::get(getContext(), namedInputs);
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
+                                SmallPtrSetImpl<Attribute> &usedIndices,
+                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                                const DataLayout &dataLayout) {
+  if (slot.ptr == getInput()) {
+    usedIndices.insert(getFieldNameAttr());
+    return true;
+  }
+  return false;
+}
+
+DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
+                                     DenseMap<Attribute, MemorySlot> &subslots,
+                                     OpBuilder &builder,
+                                     const DataLayout &dataLayout) {
+  auto index = getFieldNameAttr();
+  const auto &memorySlot = subslots.at(index);
+  auto readOp = builder.create<moore::ReadOp>(
+      getLoc(), cast<RefType>(memorySlot.elemType).getNestedType(),
+      memorySlot.ptr);
+  replaceAllUsesWith(readOp.getResult());
+  getInputMutable().drop();
+  erase();
+  return DeletionKind::Keep;
+}
+
+OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
+  if (auto constOperand = adaptor.getInput()) {
+    auto operandAttr = llvm::cast<DictionaryAttr>(constOperand);
+    for (const auto &ele : operandAttr)
+      if (ele.getName() == getFieldNameAttr())
+        return ele.getValue();
+  }
+
+  if (auto structInject = getInput().getDefiningOp<StructInjectOp>())
+    return structInject.getFieldNameAttr() == getFieldNameAttr()
+               ? structInject.getNewValue()
+               : Value();
+  if (auto structCreate = getInput().getDefiningOp<StructCreateOp>()) {
+    auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
+                   getInput().getType().getNestedType())
+                   .Case<StructType, UnpackedStructType>([this](auto &type) {
+                     return type.getFieldIndex(getFieldNameAttr());
+                   })
+                   .Default([](auto &) { return std::nullopt; });
+    return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+  }
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// StructExtractRefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructExtractRefOp::verify() {
+  /// checks if the type of the result match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto resultType = getType().getNestedType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == resultType) {
+            return success();
+          }
+        }
+        emitOpError("result type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be refrence of StructType or "
+                    "UnpackedStructType");
+        return failure();
+      });
+}
+
+bool StructExtractRefOp::canRewire(
+    const DestructurableMemorySlot &slot,
+    SmallPtrSetImpl<Attribute> &usedIndices,
+    SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  auto index = getFieldNameAttr();
+  if (!index || !slot.subelementTypes.contains(index))
+    return false;
+  usedIndices.insert(index);
+  return true;
+}
+
+DeletionKind
+StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
+                           DenseMap<Attribute, MemorySlot> &subslots,
+                           OpBuilder &builder, const DataLayout &dataLayout) {
+  auto index = getFieldNameAttr();
+  const MemorySlot &memorySlot = subslots.at(index);
+  replaceAllUsesWith(memorySlot.ptr);
+  getInputMutable().drop();
+  erase();
+  return DeletionKind::Keep;
+}
+
+//===----------------------------------------------------------------------===//
+// StructInjectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StructInjectOp::verify() {
+  /// checks if the type of the new value match field type in this struct
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto filedName = getFieldName();
+        auto newValueType = getNewValue().getType();
+        for (const auto &member : members) {
+          if (member.name == filedName && member.type == newValueType) {
+            return success();
+          }
+        }
+        emitOpError("new value type must match struct field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be StructType or UnpackedStructType");
+        return failure();
+      });
+}
+
+void StructInjectOp::print(OpAsmPrinter &p) {
+  p << " ";
+  p.printOperand(getInput());
+  p << ", " << getFieldNameAttr() << ", ";
+  p.printOperand(getNewValue());
+  p << " : " << getInput().getType();
+}
+
+ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+  OpAsmParser::UnresolvedOperand operand, val;
+  StringAttr fieldName;
+  Type declType;
+
+  if (parser.parseOperand(operand) || parser.parseComma() ||
+      parser.parseAttribute(fieldName) || parser.parseComma() ||
+      parser.parseOperand(val) || parser.parseColonType(declType))
+    return failure();
+
+  return TypeSwitch<Type, ParseResult>(cast<RefType>(declType).getNestedType())
+      .Case<StructType, UnpackedStructType>([&parser, &result, &declType,
+                                             &fieldName, &operand, &val,
+                                             &inputOperandsLoc](auto &type) {
+        auto members = type.getMembers();
+        Type fieldType;
+        for (const auto &member : members)
+          if (member.name == fieldName)
+            fieldType = member.type;
+        if (!fieldType) {
+          parser.emitError(parser.getNameLoc(),
+                           "field name '" + fieldName.getValue() +
+                               "' not found in struct type");
+          return failure();
+        }
+
+        auto fieldNameAttr =
+            StringAttr::get(parser.getContext(), Twine(fieldName));
+        result.addAttribute("fieldName", fieldNameAttr);
+        result.addTypes(declType);
+        if (parser.resolveOperands({operand, val}, {declType, fieldType},
+                                   inputOperandsLoc, result.operands))
+          return failure();
+
+        return success();
+      })
+      .Default([&parser, &inputOperandsLoc](auto &) {
+        return parser.emitError(inputOperandsLoc,
+                                "invalid kind of type specified");
+      });
+}
+
+OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
+  auto input = adaptor.getInput();
+  auto newValue = adaptor.getNewValue();
+  if (!input || !newValue)
+    return {};
+  SmallVector<NamedAttribute> array;
+  llvm::copy(cast<DictionaryAttr>(input), std::back_inserter(array));
+  for (auto &ele : array) {
+    if (ele.getName() == getFieldName())
+      ele.setValue(newValue);
+  }
+  return DictionaryAttr::get(getContext(), array);
+}
+
+LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
+                                           PatternRewriter &rewriter) {
+  // Canonicalize multiple injects into a create op and eliminate overwrites.
+  SmallPtrSet<Operation *, 4> injects;
+  DenseMap<StringAttr, Value> fields;
+
+  // Chase a chain of injects. Bail out if cycles are present.
+  StructInjectOp inject = op;
+  Value input;
+  do {
+    if (!injects.insert(inject).second)
+      return failure();
+
+    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
+    input = inject.getInput();
+    inject = input.getDefiningOp<StructInjectOp>();
+  } while (inject);
+  assert(input && "missing input to inject chain");
+
+  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
+                     cast<RefType>(op.getType()).getNestedType())
+                     .Case<StructType, UnpackedStructType>(
+                         [](auto &type) { return type.getMembers(); })
+                     .Default([](auto) { return std::nullopt; });
+
+  // If the inject chain sets all fields, canonicalize to create.
+  if (fields.size() == members.size()) {
+    SmallVector<Value> createFields;
+    for (const auto &member : members) {
+      auto it = fields.find(member.name);
+      assert(it != fields.end() && "missing field");
+      createFields.push_back(it->second);
+    }
+    op.getInputMutable();
+    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), createFields);
+    return success();
+  }
+
+  // Nothing to canonicalize, only the original inject in the chain.
+  if (injects.size() == fields.size())
+    return failure();
+
+  // Eliminate overwrites. The hash map contains the last write to each field.
+  for (const auto &member : members) {
+    auto it = fields.find(member.name);
+    if (it == fields.end())
+      continue;
+    input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
+                                            member.name, it->second);
+  }
+
+  rewriter.replaceOp(op, input);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// UnionCreateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionCreateOp::verify() {
+  /// checks if the types of the input is exactly equal to the union field
+  /// type
+  return TypeSwitch<Type, LogicalResult>(getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto resultType = getType();
+        auto fieldName = getFieldName();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("input type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractOp::verify() {
+  /// checks if the types of the input is exactly equal to the one of the
+  /// types of the result union fields
+  return TypeSwitch<Type, LogicalResult>(getInput().getType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnionExtractRefOp::verify() {
+  /// checks if the types of the result is exactly equal to the type of the
+  /// refe union field
+  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
+      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
+        auto members = type.getMembers();
+        auto fieldName = getFieldName();
+        auto resultType = getType().getNestedType();
+        for (const auto &member : members)
+          if (member.name == fieldName && member.type == resultType)
+            return success();
+        emitOpError("result type must match the union field type");
+        return failure();
+      })
+      .Default([this](auto &) {
+        emitOpError("input type must be UnionType or UnpackedUnionType");
+        return failure();
+      });
 }
 
 //===----------------------------------------------------------------------===//

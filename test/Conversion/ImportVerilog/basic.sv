@@ -351,7 +351,7 @@ module Statements;
     // CHECK:   scf.yield
     // CHECK: }
     for (y = x; x; x = z) x = y;
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %i : i32
     // CHECK: scf.while (%arg0 = [[TMP1]]) : (!moore.i32) -> !moore.i32 {
     // CHECK:   [[TMP2:%.+]] = moore.bool_cast %arg0 : i32 -> i1
@@ -410,7 +410,7 @@ module Statements;
     // CHECK: moore.blocking_assign %y, [[TMP1]] : i1
     // CHECK: moore.blocking_assign %x, [[TMP1]] : i1
     x = (y = z);
-    
+
     // CHECK: [[TMP1:%.+]] = moore.read %y : i1
     // CHECK: moore.nonblocking_assign %x, [[TMP1]] : i1
     x <= y;
@@ -1001,7 +1001,14 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.add [[A_ADD]], [[TMP1]]
     // CHECK: moore.blocking_assign %a, [[TMP2]]
     a += (a *= a--);
- 
+
+    // CHECK: [[TMP1:%.+]] = moore.read %a : i32
+    // CHECK: [[TMP2:%.+]] = moore.struct_inject %struct0, "a", [[TMP1]] : !moore.ref<struct<{a: i32, b: i32}>>
+    struct0.a = a;
+
+    // CHECK: [[TMP3:%.+]]  = moore.struct_extract %struct0, "b" : <struct<{a: i32, b: i32}>> -> i32
+    // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
+    b = struct0.b;
   end
 endmodule
 

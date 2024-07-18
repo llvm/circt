@@ -99,6 +99,16 @@ struct RvalueExprVisitor {
       return {};
     }
 
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
+      auto input = refOp.getInput();
+      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+        refOp.getInputMutable();
+        refOp->erase();
+        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
+                                              refOp.getFieldNameAttr(), rhs);
+        return rhs;
+      }
+    }
     if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
@@ -467,7 +477,7 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertRvalueExpression(expr.value());
+    auto value = context.convertLvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
@@ -478,7 +488,9 @@ struct RvalueExprVisitor {
       return builder.create<moore::UnionExtractOp>(
           loc, type, builder.getStringAttr(expr.member.name), value);
     }
-    llvm_unreachable("unsupported symbol kind");
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
   }
 
   // Handle set membership operator.
@@ -657,6 +669,27 @@ struct LvalueExprVisitor {
     return builder.create<moore::ExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
         lowBit);
+  }
+
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto valueType = expr.value().type;
+    auto value = context.convertLvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+    if (valueType->isStruct()) {
+      return builder.create<moore::StructExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          builder.getStringAttr(expr.member.name), value);
+    }
+    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      return builder.create<moore::UnionExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          builder.getStringAttr(expr.member.name), value);
+    }
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
   }
 
   // Handle range bits selections.
