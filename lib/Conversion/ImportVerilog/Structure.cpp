@@ -13,7 +13,94 @@ using namespace circt;
 using namespace ImportVerilog;
 
 //===----------------------------------------------------------------------===//
-// Module Member Conversion
+// Base Visitor
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Base visitor which ignores AST nodes that are handled by Slang's name
+/// resolution and type checking.
+struct BaseVisitor {
+  // Skip semicolons.
+  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+    return success();
+  }
+
+  // Skip members that are implicitly imported from some other scope for the
+  // sake of name resolution, such as enum variant names.
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Skip typedefs.
+  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
+  // Skip imports. The AST already has its names resolved.
+  LogicalResult visit(const slang::ast::ExplicitImportSymbol &) {
+    return success();
+  }
+  LogicalResult visit(const slang::ast::WildcardImportSymbol &) {
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Top-Level Item Conversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct RootVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  RootVisitor(Context &context, Location loc)
+      : context(context), loc(loc), builder(context.builder) {}
+
+  // Handle packages.
+  LogicalResult visit(const slang::ast::PackageSymbol &package) {
+    return context.convertPackage(package);
+  }
+
+  // Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    mlir::emitError(loc, "unsupported construct: ")
+        << slang::ast::toString(node.kind);
+    return failure();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Package Conversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct PackageVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  PackageVisitor(Context &context, Location loc)
+      : context(context), loc(loc), builder(context.builder) {}
+
+  /// Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    mlir::emitError(loc, "unsupported construct: ")
+        << slang::ast::toString(node.kind);
+    return failure();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Module Conversion
 //===----------------------------------------------------------------------===//
 
 static moore::ProcedureKind
@@ -72,27 +159,15 @@ static moore::NetKind convertNetKind(slang::ast::NetType::NetKind kind) {
 }
 
 namespace {
-struct MemberVisitor {
+struct ModuleVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
   Context &context;
   Location loc;
   OpBuilder &builder;
 
-  MemberVisitor(Context &context, Location loc)
+  ModuleVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
-
-  // Skip empty members (stray semicolons).
-  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
-    return success();
-  }
-
-  // Skip members that are implicitly imported from some other scope for the
-  // sake of name resolution, such as enum variant names.
-  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
-    return success();
-  }
-
-  // Skip typedefs.
-  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
 
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
@@ -390,7 +465,7 @@ struct MemberVisitor {
   LogicalResult visit(const slang::ast::GenerateBlockSymbol &genNode) {
     if (!genNode.isUninstantiated) {
       for (auto &member : genNode.members()) {
-        if (failed(member.visit(MemberVisitor(context, loc))))
+        if (failed(member.visit(ModuleVisitor(context, loc))))
           return failure();
       }
     }
@@ -400,7 +475,7 @@ struct MemberVisitor {
   // Handle generate block array.
   LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
     for (const auto *member : genArrNode.entries) {
-      if (failed(member->asSymbol().visit(MemberVisitor(context, loc))))
+      if (failed(member->asSymbol().visit(ModuleVisitor(context, loc))))
         return failure();
     }
     return success();
@@ -441,17 +516,9 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
   // which are listed separately as top instances.
   for (auto *unit : root.compilationUnits) {
     for (const auto &member : unit->members()) {
-      // Ignore top-level constructs that are handled by Slang as part of name
-      // resolution and type checking.
-      if (member.as_if<slang::ast::EmptyMemberSymbol>() ||
-          member.as_if<slang::ast::TransparentMemberSymbol>() ||
-          member.as_if<slang::ast::TypeAliasType>())
-        continue;
-
-      // Error out on all top-level declarations.
       auto loc = convertLocation(member.location);
-      return mlir::emitError(loc, "unsupported construct: ")
-             << slang::ast::toString(member.kind);
+      if (failed(member.visit(RootVisitor(*this, loc))))
+        return failure();
     }
   }
 
@@ -632,7 +699,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   ValueSymbolScope scope(valueSymbols);
   for (auto &member : module->members()) {
     auto loc = convertLocation(member.location);
-    if (failed(member.visit(MemberVisitor(*this, loc))))
+    if (failed(member.visit(ModuleVisitor(*this, loc))))
       return failure();
   }
 
@@ -675,5 +742,19 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   }
   builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
 
+  return success();
+}
+
+/// Convert a package and its contents.
+LogicalResult
+Context::convertPackage(const slang::ast::PackageSymbol &package) {
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  ValueSymbolScope scope(valueSymbols);
+  for (auto &member : package.members()) {
+    auto loc = convertLocation(member.location);
+    if (failed(member.visit(PackageVisitor(*this, loc))))
+      return failure();
+  }
   return success();
 }

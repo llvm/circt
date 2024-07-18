@@ -73,6 +73,7 @@ struct Context {
   ModuleLowering *
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
+  LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
 
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);

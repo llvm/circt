@@ -14,6 +14,9 @@ timeunit 100ps/10fs;
 typedef int MyInt;
 typedef enum { VariantA, VariantB } MyEnum;
 
+// Ignore imports.
+import Package::*;
+
 // CHECK-LABEL: moore.module @Empty() {
 // CHECK:       }
 module Empty;
@@ -190,6 +193,11 @@ module Basic;
   // CHECK: [[TMP1:%.+]] = moore.read %v2 : i32
   // CHECK: moore.assign %v1, [[TMP1]] : i32
   assign v1 = v2;
+
+  // CHECK: %pkgType0 = moore.variable : <l42>
+  PackageType pkgType0;
+  // CHECK: %pkgType1 = moore.variable : <l42>
+  Package::PackageType pkgType1;
 endmodule
 
 // CHECK-LABEL: moore.module @Statements
@@ -1354,3 +1362,8 @@ module GenerateConstructs;
     endcase
   endgenerate
 endmodule
+
+// Should accept and ignore empty packages.
+package Package;
+  typedef logic [41:0] PackageType;
+endpackage
