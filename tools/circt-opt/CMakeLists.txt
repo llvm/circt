@@ -16,6 +16,7 @@ target_link_libraries(circt-opt
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
+  CIRCTBMCTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxNative
@@ -76,6 +77,7 @@ target_link_libraries(circt-opt
   CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSimToSV
+  CIRCTSimTransforms
   CIRCTSSP
   CIRCTSSPTransforms
   CIRCTCFToHandshake

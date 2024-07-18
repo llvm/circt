@@ -12,3 +12,8 @@
 add_circt_dialect(Sim sim)
 add_circt_dialect_doc(Sim sim)
 add_dependencies(circt-headers MLIRSimIncGen)
+
+set(LLVM_TARGET_DEFINITIONS SimPasses.td)
+mlir_tablegen(SimPasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTSimTransformsIncGen)
+add_dependencies(circt-headers CIRCTSimTransformsIncGen)

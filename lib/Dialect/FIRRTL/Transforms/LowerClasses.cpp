@@ -302,6 +302,12 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
   SmallVector<PathTracker> trackers;
 
+  // First allocate module namespaces. Don't capture a namespace reference at
+  // this point since they could be invalidated when DenseMap grows.
+  for (auto *node : instanceGraph)
+    if (auto module = node->getModule<FModuleLike>())
+      (void)namespaces.get(module);
+
   for (auto *node : instanceGraph)
     if (auto module = node->getModule<FModuleLike>()) {
       PathTracker tracker(module, namespaces, instanceGraph, symbolTable,

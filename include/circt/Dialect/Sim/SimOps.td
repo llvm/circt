@@ -297,7 +297,72 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let hasVerifier = true;
 
   let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let extraClassDeclaration = [{
+    /// Returns true iff all of the input strings are primitive
+    /// (i.e. non-concatenated) tokens or block arguments.
+    bool isFlat() {
+      return llvm::none_of(getInputs(), [](Value operand) {
+        return !!operand.getDefiningOp<circt::sim::FormatStringConcatOp>();
+      });
+    };
+
+    /// Attempts to flatten this operation's input strings as much as possible.
+    ///
+    /// The flattened values are pushed into the passed vector.
+    /// If the concatenation is acyclic, the function will return 'success'
+    /// and all the flattened values are guaranteed to _not_ be the result of
+    /// a format string concatenation.
+    /// If a cycle is encountered, the function will return 'failure'.
+    /// On encountering a cycle, the result of the concat operation
+    /// forming the cycle is pushed into the list of flattened values
+    /// and flattening continues without recursing into the cycle.
+    LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::ValueRange":$inputs), [{
+      return build($_builder, $_state, circt::sim::FormatStringType::get($_builder.getContext()), inputs);
+    }]>
+  ];
 }
 
+def PrintFormattedOp : SimOp<"print"> {
+  let summary = "Print a formatted string on a given clock and condition";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console on the
+    rising edge of the given clock, if, and only if, the condition argument
+    is 'true'.
+
+    Multiple print operations in the same module and on the same clock edge
+    are performed according to their order of occurence in the IR. The order
+    of printing for operations in different modules, instances or on different
+    clocks is undefined.
+  }];
+
+
+  let arguments = (ins FormatStringType:$input, ClockType:$clock, I1:$condition);
+
+  let hasCanonicalizeMethod = true;
+  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+}
+
+def PrintFormattedProcOp : SimOp<"proc.print"> {
+  let summary = "Print a formatted string within a procedural region";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console.
+
+    This operation must be within a procedural region.
+  }];
+
+  let arguments = (ins FormatStringType:$input);
+
+  let hasVerifier = true;
+  let hasCanonicalizeMethod = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD
