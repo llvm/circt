@@ -6,13 +6,12 @@ add_circt_library(CIRCTBMCTransforms
   CIRCTBMCTransformsIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTSMT
   CIRCTHW
   CIRCTSeq
   CIRCTComb
   CIRCTVerif
-  CIRCTCombToSMT
 
+  MLIRFuncDialect
   MLIRIR
   MLIRSupport
   MLIRSCFDialect
