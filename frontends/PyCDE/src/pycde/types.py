@@ -668,6 +668,35 @@ class Bundle(Type):
             _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
     ])
 
+  def get_to_from(self) -> typing.Tuple[BundledChannel, BundledChannel]:
+    """In a bidirectional, two-channel bundle, it is often desirable to easily
+    have access to the from and to channels."""
+
+    bundle_channels = self.channels
+    if len(bundle_channels) != 2:
+      raise ValueError("Bundle must have exactly two channels.")
+
+    # Return vars.
+    to_channel_bc: typing.Optional[BundledChannel] = None
+    from_channel_bc: typing.Optional[BundledChannel] = None
+
+    # Look at the first channel.
+    if bundle_channels[0].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[0]
+    else:
+      from_channel_bc = bundle_channels[0]
+
+    # Look at the second channel.
+    if bundle_channels[1].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[1]
+    else:
+      from_channel_bc = bundle_channels[1]
+
+    # Check and return.
+    if to_channel_bc is None or from_channel_bc is None:
+      raise ValueError("Bundle must have one channel in each direction.")
+    return to_channel_bc, from_channel_bc
+
   # Easy accessor for channel types by name.
   def __getattr__(self, attrname: str):
     for channel in self.channels:

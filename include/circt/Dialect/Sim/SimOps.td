@@ -327,4 +327,42 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   ];
 }
 
+def PrintFormattedOp : SimOp<"print"> {
+  let summary = "Print a formatted string on a given clock and condition";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console on the
+    rising edge of the given clock, if, and only if, the condition argument
+    is 'true'.
+
+    Multiple print operations in the same module and on the same clock edge
+    are performed according to their order of occurence in the IR. The order
+    of printing for operations in different modules, instances or on different
+    clocks is undefined.
+  }];
+
+
+  let arguments = (ins FormatStringType:$input, ClockType:$clock, I1:$condition);
+
+  let hasCanonicalizeMethod = true;
+  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+}
+
+def PrintFormattedProcOp : SimOp<"proc.print"> {
+  let summary = "Print a formatted string within a procedural region";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console.
+
+    This operation must be within a procedural region.
+  }];
+
+  let arguments = (ins FormatStringType:$input);
+
+  let hasVerifier = true;
+  let hasCanonicalizeMethod = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

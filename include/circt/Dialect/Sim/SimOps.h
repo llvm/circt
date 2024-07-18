@@ -29,4 +29,24 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/Sim/Sim.h.inc"
 
+namespace circt {
+namespace sim {
+
+/// Returns the value operand of a value formatting operation.
+/// Returns a null value for all other operations.
+static inline mlir::Value getFormattedValue(mlir::Operation *fmtOp) {
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatBinOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatDecOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatHexOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatCharOp>(fmtOp))
+    return fmt.getValue();
+  return {};
+}
+
+} // namespace sim
+} // namespace circt
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_H

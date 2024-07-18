@@ -13,7 +13,6 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 
@@ -344,6 +343,53 @@ LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
     rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
 
   return success();
+}
+
+LogicalResult PrintFormattedOp::canonicalize(PrintFormattedOp op,
+                                             PatternRewriter &rewriter) {
+  // Remove ops with constant false condition.
+  if (auto cstCond = op.getCondition().getDefiningOp<hw::ConstantOp>()) {
+    if (cstCond.getValue().isZero()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+  return failure();
+}
+
+LogicalResult PrintFormattedProcOp::verify() {
+  // Check if we know for sure that the parent is not procedural.
+  auto *parentOp = getOperation()->getParentOp();
+
+  if (!parentOp)
+    return emitOpError("must be within a procedural region.");
+
+  if (isa<hw::HWDialect>(parentOp->getDialect())) {
+    if (!isa<hw::TriggeredOp>(parentOp))
+      return emitOpError("must be within a procedural region.");
+    return success();
+  }
+
+  if (isa<sv::SVDialect>(parentOp->getDialect())) {
+    if (!parentOp->hasTrait<sv::ProceduralRegion>())
+      return emitOpError("must be within a procedural region.");
+    return success();
+  }
+
+  // Don't fail for dialects that are not explicitly handled.
+  return success();
+}
+
+LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
+                                                 PatternRewriter &rewriter) {
+  // Remove empty prints.
+  if (auto litInput = op.getInput().getDefiningOp<FormatLitOp>()) {
+    if (litInput.getLiteral().empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
