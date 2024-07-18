@@ -1009,6 +1009,19 @@ module Expressions;
     // CHECK: [[TMP3:%.+]]  = moore.struct_extract %struct0, "b" : <struct<{a: i32, b: i32}>> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP3]] : i32
     b = struct0.b;
+ 
+    //===------------------------------------------------------------------===//
+    // Builtin Functions
+
+    // The following functions are handled by Slang's type checking and don't
+    // convert into any IR operations.
+
+    // CHECK: [[TMP:%.+]] = moore.read %u
+    // CHECK: moore.blocking_assign %a, [[TMP]]
+    a = $signed(u);
+    // CHECK: [[TMP:%.+]] = moore.read %a
+    // CHECK: moore.blocking_assign %u, [[TMP]]
+    u = $unsigned(a);
   end
 endmodule
 

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
@@ -596,6 +597,38 @@ struct RvalueExprVisitor {
     builder.create<moore::YieldOp>(loc, falseValue);
 
     return conditionalOp.getResult();
+  }
+
+  /// Handle calls.
+  Value visit(const slang::ast::CallExpression &expr) {
+    // Class method calls are currently not supported.
+    if (expr.thisClass()) {
+      mlir::emitError(loc, "unsupported class method call");
+      return {};
+    }
+    return std::visit(
+        [&](auto &subroutine) { return visitCall(expr, subroutine); },
+        expr.subroutine);
+  }
+
+  /// Handle subroutine calls.
+  Value visitCall(const slang::ast::CallExpression &expr,
+                  const slang::ast::SubroutineSymbol *subroutine) {
+    mlir::emitError(loc, "unsupported subroutine call");
+    return {};
+  }
+
+  /// Handle system calls.
+  Value visitCall(const slang::ast::CallExpression &expr,
+                  const slang::ast::CallExpression::SystemCallInfo &info) {
+    const auto &subroutine = *info.subroutine;
+
+    if (subroutine.name == "$signed" || subroutine.name == "$unsigned")
+      return context.convertRvalueExpression(*expr.arguments()[0]);
+
+    mlir::emitError(loc) << "unsupported system call `" << subroutine.name
+                         << "`";
+    return {};
   }
 
   /// Emit an error for all other expressions.
