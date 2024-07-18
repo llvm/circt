@@ -26,7 +26,7 @@
 #include <linux/limits.h>
 #include <unistd.h>
 #elif _WIN32
-// TODO: this.
+#include <windows.h>
 #endif
 
 using namespace esi;
@@ -63,7 +63,11 @@ static std::filesystem::path getExePath() {
     throw std::runtime_error("Could not get executable path");
   return std::filesystem::path(std::string(result, count));
 #elif _WIN32
-  // TODO: this.
+  char buffer[MAX_PATH];
+  DWORD length = GetModuleFileNameA(NULL, buffer, MAX_PATH);
+  if (length == 0)
+    throw std::runtime_error("Could not get executable path");
+  return std::filesystem::path(std::string(buffer, length));
 #else
 #eror "Unsupported platform"
 #endif
@@ -76,7 +80,20 @@ static std::filesystem::path getLibPath() {
   dladdr((void *)getLibPath, &dl_info);
   return std::filesystem::path(std::string(dl_info.dli_fname));
 #elif _WIN32
-  // TODO: this.
+  HMODULE hModule = NULL;
+  if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCSTR>(&getLibPath), &hModule)) {
+    // Handle error
+    return std::filesystem::path();
+  }
+
+  char buffer[MAX_PATH];
+  DWORD length = GetModuleFileNameA(hModule, buffer, MAX_PATH);
+  if (length == 0)
+    throw std::runtime_error("Could not get library path");
+
+  return std::filesystem::path(std::string(buffer, length));
 #else
 #eror "Unsupported platform"
 #endif
@@ -92,8 +109,7 @@ static void loadBackend(std::string backend) {
 #ifdef __linux__
   std::string backendFileName = "lib" + backend + "Backend.so";
 #elif _WIN32
-  // TODO: this.
-  return;
+  std::string backendFileName = backend + "Backend.dll";
 #else
 #eror "Unsupported platform"
 #endif
@@ -122,7 +138,17 @@ static void loadBackend(std::string backend) {
     throw std::runtime_error("While attempting to load backend plugin: " +
                              std::string(dlerror()));
 #elif _WIN32
-  // TODO: this.
+  // Set the DLL directory to the same directory as the backend DLL in case it
+  // has transitive dependencies.
+  std::filesystem::path backendPathParent = backendPath.parent_path();
+  if (SetDllDirectoryA(backendPathParent.string().c_str()) == 0)
+    throw std::runtime_error("While setting DLL directory: " +
+                             std::to_string(GetLastError()));
+  // Load the backend plugin.
+  HMODULE handle = LoadLibraryA(backendPath.string().c_str());
+  if (!handle)
+    throw std::runtime_error("While attempting to load backend plugin: " +
+                             std::to_string(GetLastError()));
 #else
 #eror "Unsupported platform"
 #endif
