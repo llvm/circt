@@ -20,39 +20,42 @@ module Empty;
   ; // empty member
 endmodule
 
+
+module DedupA(input wire a,
+input wire b,
+output wire [3:0] c);
+endmodule
+
+module DedupB #(parameter p = 32)
+(input wire a,
+input wire b,
+output wire [3:0] c);
+endmodule
+
+// CHECK-LABEL: moore.module private @DedupA(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+// CHECK-LABEL: moore.module private @DedupB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+// CHECK-LABEL: moore.module private @DedupB_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
 // CHECK-LABEL: moore.module @Dedup
 module Dedup;
-  module NestedA(input wire a,
-  input wire b,
-  output wire [3:0] c);
-  endmodule
-  module NestedB #(parameter p = 32)
-  (input wire a,
-  input wire b,
-  output wire [3:0] c);
-  endmodule
   wire [3:0] a;
   wire [3:0] b;
   wire [3:0] c;
-  // CHECK-LABEL: moore.instance "insA" @NestedA_0
-  NestedA insA(.a(a), .c(c));
-  // CHECK-LABEL: moore.instance "insB" @NestedA_0
-  NestedA insB(.b(b), .c(c));
-  // CHECK-LABEL: moore.instance "insC" @NestedB
-  NestedB insC(.c(c));
-  // CHECK-LABEL: moore.instance "insD" @NestedB
-  NestedB insD(.a(a), .b(b), .c(c));
-  // CHECK-LABEL: moore.instance "insE" @NestedB_1
-  NestedB #(8) insE(.c(c));
-  // CHECK-LABEL: moore.module private @NestedA_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-  // CHECK-LABEL: moore.module private @NestedB_1(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-  // CHECK-LABEL: moore.module private @NestedB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
+  // CHECK-LABEL: moore.instance "insA" @DedupA
+  DedupA insA(.a(a), .c(c));
+  // CHECK-LABEL: moore.instance "insB" @DedupA
+  DedupA insB(.b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insC" @DedupB
+  DedupB insC(.c(c));
+  // CHECK-LABEL: moore.instance "insD" @DedupB
+  DedupB insD(.a(a), .b(b), .c(c));
+  // CHECK-LABEL: moore.instance "insE" @DedupB_0
+  DedupB #(8) insE(.c(c));
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA() {
-// CHECK:         moore.instance "NestedB" @NestedB_2
+// CHECK:         moore.instance "NestedB" @NestedB
 // CHECK:       }
-// CHECK-LABEL: moore.module private @NestedB_2() {
+// CHECK-LABEL: moore.module private @NestedB() {
 // CHECK:         moore.instance "NestedC" @NestedC
 // CHECK:       }
 // CHECK-LABEL: moore.module private @NestedC() {
