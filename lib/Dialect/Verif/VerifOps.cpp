@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifOps.h"
-#include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -95,39 +94,43 @@ LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// Formal contract InstanceOp verifiers
+// Formal contract verifiers
 //===----------------------------------------------------------------------===//
 
-/// Check that the instance arguments match the argument list from the
-/// instatiated module.
-LogicalResult InstanceOp::verify() {
-  auto module = (*this)->getParentOfType<hw::HWModuleOp>();
-  if (!module)
-    return success();
+LogicalResult ContractOp::verifyRegions() {
+  // Check that the region block arguments match the op's inputs
+  if (getNumRegionArgs() != (*this)->getNumOperands())
+    return emitOpError() << "region must have the same number of arguments "
+                         << "as the number of inputs!";
 
-  auto moduleParameters = module->getAttrOfType<ArrayAttr>("parameters");
-  hw::instance_like_impl::EmitErrorFn emitError =
-      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
-        auto diag = emitOpError();
-        if (fn(diag))
-          diag.attachNote(module->getLoc()) << "module declared here";
-      };
-  return hw::instance_like_impl::verifyParameterStructure(
-      getParameters(), moduleParameters, emitError);
+  // Check that the region block arguments share the same types as the inputs
+  if (getBody().front().getArgumentTypes() != (*this)->getOperandTypes())
+    return emitOpError() << "region must have the same type of arguments "
+                         << "as the type of inputs!";
+
   return success();
 }
 
 LogicalResult InstanceOp::verifyRegions() {
+  // Check that the region block arguments match the op's inputs
+  if (getNumRegionArgs() != (*this)->getNumOperands())
+    return emitOpError() << "region must have the same number of arguments "
+                         << "as the number of inputs!";
+
+  // Check that the region block arguments share the same types as the inputs
+  if (getBody().front().getArgumentTypes() != (*this)->getOperandTypes())
+    return emitOpError() << "region must have the same type of arguments "
+                         << "as the type of inputs!";
+
   // Check that verif.yield yielded the expected number of operations
-  auto nRes = getNumResults();
-  auto nYields = getBody().front().getTerminator()->getNumOperands();
-  if (nRes != nYields)
+  if ((*this)->getNumResults() !=
+      getBody().front().getTerminator()->getNumOperands())
     return emitOpError() << "region terminator must yield the same number"
-                         << "of operations as there are results! Yields: "
-                         << nYields << " expected: " << nRes;
+                         << "of operations as there are results!";
 
   // Check that the yielded types match the result types
-  if (getResultTypes() != getBody().front().getTerminator()->getOperandTypes())
+  if ((*this)->getResultTypes() !=
+      getBody().front().getTerminator()->getOperandTypes())
     return emitOpError() << "region terminator must yield the same types"
                          << "as the result types!";
 

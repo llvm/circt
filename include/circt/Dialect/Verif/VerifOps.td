@@ -354,10 +354,37 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
 // Formal Contract Ops
 //===----------------------------------------------------------------------===//
 
-def ContractOp : VerifOp<"contract", [
-  Pure, HasParent<"hw::HWModuleOp">, NoTerminator, RegionKindInterface, 
-  IsolatedFromAbove
-]>{
+class ContractLikeOp<string mnemonic, list<Trait> traits = []> 
+  : VerifOp<mnemonic, traits # [
+    HasParent<"hw::HWModuleOp">, RegionKindInterface, IsolatedFromAbove
+  ]> {
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+
+    /// Retrieves the region block arguments
+    BlockArgument getRegionArg(unsigned index) {
+      return getBody().front().getArguments()[index];
+    }
+
+    /// Retrieves the number of block arguments
+    unsigned getNumRegionArgs() {
+      return getBody().front().getNumArguments();
+    }
+  }];
+
+  let hasRegionVerifier = 1;
+}
+
+
+def ContractOp : ContractLikeOp<"contract", [NoTerminator]>{
   let summary = "declare a formal contract";
   let description = [{
     This operation declares a formal contract that is used to create precondition 
@@ -368,16 +395,17 @@ def ContractOp : VerifOp<"contract", [
     e.g. 
     ```
     hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
-      verif.contract { 
-        %c0_8 = hw.constant 0 : i8 
-        %prec = comb.icmp bin neq %c0_8, %foo : i8
-        verif.require %precond : i1
+      verif.contract (%clk, %foo) : (i8, i8) {
+        ^bb0(%clk : !seq.clock, %foo : i8): 
+          %c0_8 = hw.constant 0 : i8 
+          %prec = comb.icmp bin neq %c0_8, %foo : i8
+          verif.require %precond : i1
 
-        %out0, %out1 = verif.result : i8  
-        %post = comb.icmp bin ugt %out0, %foo : i8
-        %post1 = comb.icmp bin ult %out1, %foo : i8
-        verif.ensure %post : i1
-        verif.ensure %post1 : i1
+          %out0, %out1 = verif.result : i8  
+          %post = comb.icmp bin ugt %out0, %foo : i8
+          %post1 = comb.icmp bin ult %out1, %foo : i8
+          verif.ensure %post : i1
+          verif.ensure %post1 : i1
       }
       /* ... Module definition ... */
     }
@@ -389,36 +417,32 @@ def ContractOp : VerifOp<"contract", [
 
     /* ... After PrepareForFormal Pass becomes ... */
 
-    %c0_8 = hw.constant 0 : i8 
-    %prec = comb.icmp bin neq %c0_8, %foo : i8
-    verif.assert %precond : i1
+    %bar.0, %bar.1 = verif.instance (%clk, %foo) : (!seq.clock, i8) -> (i8, i8) {
+      ^bb0(%clk : !seq.clock, %foo : i8):
+        %c0_8 = hw.constant 0 : i8 
+        %prec = comb.icmp bin neq %c0_8, %foo : i8
+        verif.assert %precond : i1
 
-    %out0 = verif.symbolic_input : i8
-    %out1 = verif.symbolic_input : i8
-    %post = comb.icmp bin ugt %out0, %foo : i8
-    %post1 = comb.icmp bin ult %out1, %foo : i8
-    verif.assume %post : i1
-    verif.assume %post1 : i1
+        %bar.0 = verif.symbolic_input : i8
+        %bar.1 = verif.symbolic_input : i8
+        %post = comb.icmp bin ugt %bar.0, %foo : i8
+        %post1 = comb.icmp bin ult %bar.1, %foo : i8
+        verif.assume %post : i1
+        verif.assume %post1 : i1
+        verif.yield %bar.0, %bar.1 : i8, i8
+    }
+    
     ```
   }];
-  let regions = (region SizedRegion<1>:$contract_region);
 
   let assemblyFormat = [{
-    attr-dict-with-keyword $contract_region
-  }];
-
-  let extraClassDeclaration = [{
-    /// Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { 
-      return RegionKind::Graph;
-    }
+    `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` $body
   }];
 }
 
-def InstanceOp : VerifOp<"instance", [
-  HasParent<"hw::HWModuleOp">, IsolatedFromAbove,
-  SingleBlockImplicitTerminator<"verif::YieldOp">, RegionKindInterface, 
-  IsolatedFromAbove]>{
+def InstanceOp : ContractLikeOp<"instance", [
+  SingleBlockImplicitTerminator<"verif::YieldOp">
+]>{
   let summary = "declare an instance of a formal contract (replace an hw.instance)";
   let description = [{
     This operation declares an instance of an `hw.module` that contains a 
@@ -429,58 +453,11 @@ def InstanceOp : VerifOp<"instance", [
     and are yielded as a result of the region to be used in the rest of the module.
   }];
 
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs,
-                       ParamDeclArrayAttr:$parameters);
-
-  let regions = (region SizedRegion<1>:$body);
   let results = (outs Variadic<AnyType>:$results);
 
-  // TODO: Make this assembly format look more like the example in basic.mlir, i.e.
-  /*
-    hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
-      %c42_8 = hw.constant 42 : i8
-      %bar.0, %bar.1 = verif.instance "bar" @Bar(foo: %arg1 : i8 as %arg1) {
-        %c0_8 = hw.constant 0 : i8 
-        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
-        verif.assert %precond : i1
-
-        %bar.0 = verif.symbolic_input : i8  
-        %bar.1 = verif.symbolic_input : i8  
-        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
-        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
-        verif.assume %post : i1
-        verif.assume %post1 : i1
-        verif.yield %bar.0, %bar.1 : i8, i8
-      } -> (i8, i8)
-      hw.output %bar.0, %bar.1 : i8, i8
-    }
-  */
   let assemblyFormat = [{
-    $moduleName `,` $inputs`,` $parameters `,` 
-    attr-dict-with-keyword `:` functional-type($inputs, $results) $body
+    `(` $inputs `)` attr-dict `:` functional-type($inputs, $results) $body
   }];
-
-  let extraClassDeclaration = [{
-    /// Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { 
-      return RegionKind::Graph;
-    }
-
-    /// Retrieves the region block arguments
-    BlockArgument getRegionArg(unsigned index) {
-      return getBody().getArguments()[index];
-    }
-
-    /// Retrieves the number of block arguments
-    unsigned getNumRegionArgs() {
-      return getBody().getNumArguments();
-    }
-  }];
-
-  let hasVerifier = 1;
-  let hasRegionVerifier = 1;
 }
 
 class RequireLikeOp<string mnemonic, list<Trait> traits = [
