@@ -61,7 +61,7 @@ static LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
   }
 
   for (auto barg : r.front().getArguments())
-  if (!barg.use_empty() && !barg.hasOneUse())
+    if (!barg.use_empty() && !barg.hasOneUse())
       insertFork(barg, false, rewriter);
 
   return success();
