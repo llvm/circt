@@ -242,7 +242,6 @@ static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
       op->setOperand(i, newVal);
       break;
     }
-  return;
 }
 
 void circt::handshake::insertFork(Value result, bool isLazy,
@@ -268,6 +267,7 @@ void circt::handshake::insertFork(Value result, bool isLazy,
     replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 esi::ChannelType circt::handshake::esiWrapper(Type t) {
   return TypeSwitch<Type, esi::ChannelType>(t)
       .Case<esi::ChannelType>([](auto t) { return t; })
