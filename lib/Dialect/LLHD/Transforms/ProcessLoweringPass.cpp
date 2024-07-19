@@ -13,6 +13,7 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
 
@@ -67,7 +68,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
   return failure();
 }
 
-static LogicalResult isProcValidToLower(llhd::ProcOp op) {
+static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
   size_t numBlocks = op.getBody().getBlocks().size();
 
   if (numBlocks == 1) {
@@ -81,7 +82,7 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
     Block &first = op.getBody().front();
     Block &last = op.getBody().back();
 
-    if (last.getArguments().size() != 0)
+    if (!last.getArguments().empty())
       return op.emitOpError(
           "during process-lowering: the second block (containing the "
           "llhd.wait) is not allowed to have arguments");
@@ -124,36 +125,18 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
 void ProcessLoweringPass::runOnOperation() {
   ModuleOp module = getOperation();
 
-  WalkResult result = module.walk([](llhd::ProcOp op) -> WalkResult {
+  WalkResult result = module.walk([](llhd::ProcessOp op) -> WalkResult {
     // Check invariants
     if (failed(isProcValidToLower(op)))
       return WalkResult::interrupt();
 
-    OpBuilder builder(op);
-
-    // Replace ProcOp with HWModuleOp
-    SmallVector<hw::PortInfo> ports;
-    for (auto [i, ty] : llvm::enumerate(op.getFunctionType().getInputs())) {
-      hw::PortInfo port;
-      port.type = ty;
-      port.name = builder.getStringAttr("inout" + Twine(i));
-      port.dir = hw::ModulePort::InOut;
-      ports.push_back(port);
-    }
-
-    auto entity =
-        builder.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
-    // Move all blocks from the process to the entity, the process does not have
-    // a region afterwards.
-    entity.getBody().takeBody(op.getBody());
     // In the case that wait is used to suspend the process, we need to merge
     // the two blocks as we needed the second block to have a target for wait
     // (the entry block cannot be targeted).
-    if (entity.getBody().getBlocks().size() == 2) {
-      Block &first = entity.getBody().front();
-      Block &second = entity.getBody().back();
+    if (op.getBody().getBlocks().size() == 2) {
+      Block &first = op.getBody().front();
+      Block &second = op.getBody().back();
       // Delete the BranchOp operation in the entry block
-      first.getTerminator()->dropAllReferences();
       first.getTerminator()->erase();
       // Move operations of second block in entry block.
       first.getOperations().splice(first.end(), second.getOperations());
@@ -163,19 +146,12 @@ void ProcessLoweringPass::runOnOperation() {
       second.erase();
     }
 
-    // Delete the process as it is now replaced by an entity.
-    op->dropAllReferences();
-    op->dropAllDefinedValueUses();
-    op->erase();
-
     // Remove the remaining llhd.halt or llhd.wait terminator
-    Operation *terminator = entity.getBody().front().getTerminator();
-    terminator->dropAllReferences();
-    terminator->dropAllUses();
-    terminator->erase();
+    op.getBody().front().getTerminator()->erase();
 
-    builder.setInsertionPointToEnd(entity.getBodyBlock());
-    builder.create<hw::OutputOp>(entity.getLoc());
+    IRRewriter rewriter(op);
+    rewriter.inlineBlockBefore(&op.getBody().front(), op);
+    op.erase();
 
     return WalkResult::advance();
   });

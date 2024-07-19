@@ -25,7 +25,8 @@ def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
 }
 
 def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
-                                 "llhd::ProcOp"> {
+                                 "hw::HWModuleOp"> {
+
   let summary = "Promote memory to block arguments.";
   let description = [{
     Promotes memory locations allocated with `llhd.var` to block arguments. This
@@ -38,7 +39,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     Example:
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !hw.inout<i1>) -> () {
+    llhd.process {
       %c5 = llhd.const 5 : i32
       %cond = llhd.prb %condsig : !hw.inout<i1>
       %ptr = llhd.var %c5 : i32
@@ -57,7 +58,7 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     is transformed to
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !hw.inout<i1>) -> () {
+    llhd.process {
       %c5 = llhd.const 5 : i32
       %cond = llhd.prb %condsig : !hw.inout<i1>
       cond_br %cond, ^bb1, ^bb2(%c5 : i32)
@@ -83,14 +84,14 @@ def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
     This pass is intended as a post-inlining pass to check if all functions
     could be successfully inlined and remove the inlined functions. This
     is necessary because Structural LLHD does not allow functions. Fails in
-    the case that there is still a function call left in a `llhd.proc` or
+    the case that there is still a function call left in a `llhd.process` or
     `hw.module`.
   }];
 
   let constructor = "circt::llhd::createFunctionEliminationPass()";
 }
 
-def EarlyCodeMotion : Pass<"llhd-early-code-motion", "llhd::ProcOp"> {
+def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
   let summary = "Move side-effect-free instructions and llhd.prb up in the CFG";
   let description = [{
     Moves side-effect-free instructions as far up in the CFG as possible. That
