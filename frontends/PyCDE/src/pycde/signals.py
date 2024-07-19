@@ -714,7 +714,7 @@ class ChannelSignal(Signal):
       unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
                                          self.value, ready.value)
       return unwrap_op[0], unwrap_op[1]
-    elif signaling == ChannelSignaling.FIFO0:
+    elif signaling == ChannelSignaling.FIFO:
       rden = types.i1(readyOrRden)
       wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
       return wrap_op[0], wrap_op[1]

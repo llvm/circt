@@ -138,44 +138,54 @@ hw.module @ServiceWrapper(in %clock: i1, in %reset: i1, in %ctrl: !esi.channel<i
   hw.output %HandshakeToESIWrapper.out_ctrl, %HandshakeToESIWrapper.in0_ld_addr0, %HandshakeToESIWrapper.in1_ld_addr0 : !esi.channel<i0>, !esi.channel<i64>, !esi.channel<i64>
 }
 
-// IFACE-LABEL:  hw.module @i1Fifo0Loopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
-// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in, %in_empty : !esi.channel<i3, FIFO0>
-// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<i3, FIFO0>
+// IFACE-LABEL:  hw.module @i1FifoLoopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in, %in_empty : !esi.channel<i3, FIFO>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<i3, FIFO>
 // IFACE-NEXT:     hw.output %rden, %data, %empty : i1, i3, i1
-// HW-LABEL:     hw.module @i1Fifo0Loopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
+// HW-LABEL:     hw.module @i1FifoLoopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
 // HW-NEXT:        hw.output %out_rden, %in, %in_empty : i1, i3, i1
-hw.module @i1Fifo0Loopback(in %in: !esi.channel<i3, FIFO0>, out out: !esi.channel<i3, FIFO0>) {
-  hw.output %in : !esi.channel<i3, FIFO0>
+hw.module @i1FifoLoopback(in %in: !esi.channel<i3, FIFO>, out out: !esi.channel<i3, FIFO>) {
+  hw.output %in : !esi.channel<i3, FIFO>
 }
 
-// IFACE-LABEL:  hw.module @fifo0LoopbackTop()
-// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_rden : !esi.channel<i3, FIFO0>
-// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_empty : !esi.channel<i3, FIFO0>
-// IFACE-NEXT:     %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %data: i3, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
-// HW-LABEL:     hw.module @fifo0LoopbackTop()
-// HW-NEXT:        %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1Fifo0Loopback(in: %foo.out: i3, in_empty: %foo.out_empty: i1, out_rden: %foo.in_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
-hw.module @fifo0LoopbackTop() {
-  %chan = hw.instance "foo" @i1Fifo0Loopback(in: %chan: !esi.channel<i3, FIFO0>) -> (out: !esi.channel<i3, FIFO0>)
+// IFACE-LABEL:  hw.module @fifoLoopbackTop()
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_rden : !esi.channel<i3, FIFO>
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_empty : !esi.channel<i3, FIFO>
+// IFACE-NEXT:     %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1FifoLoopback(in: %data: i3, in_empty: %empty: i1, out_rden: %rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+// HW-LABEL:     hw.module @fifoLoopbackTop()
+// HW-NEXT:        %foo.in_rden, %foo.out, %foo.out_empty = hw.instance "foo" @i1FifoLoopback(in: %foo.out: i3, in_empty: %foo.out_empty: i1, out_rden: %foo.in_rden: i1) -> (in_rden: i1, out: i3, out_empty: i1)
+hw.module @fifoLoopbackTop() {
+  %chan = hw.instance "foo" @i1FifoLoopback(in: %chan: !esi.channel<i3, FIFO>) -> (out: !esi.channel<i3, FIFO>)
 }
 
-// IFACE-LABEL:  hw.module @structFifo0Loopback(in %in_in : !hw.struct<a: i3, b: i7>, in %in_flatBroke_in : i1, in %out_readEnable_in : i1, out in_readEnable : i1, out out : !hw.struct<a: i3, b: i7>, out out_flatBroke : i1)
-// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in_in, %in_flatBroke_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
-// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_readEnable_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
+// IFACE-LABEL:  hw.module @structFifoLoopback(in %in_in : !hw.struct<a: i3, b: i7>, in %in_flatBroke_in : i1, in %out_readEnable_in : i1, out in_readEnable : i1, out out : !hw.struct<a: i3, b: i7>, out out_flatBroke : i1)
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in_in, %in_flatBroke_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_readEnable_in : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO>
 // IFACE-NEXT:     hw.output %rden, %data, %empty : i1, !hw.struct<a: i3, b: i7>, i1
 !st1 = !hw.struct<a: i3, b: i7>
-hw.module @structFifo0Loopback(in %in: !esi.channel<!st1, FIFO0>, out out: !esi.channel<!st1, FIFO0>)
+hw.module @structFifoLoopback(in %in: !esi.channel<!st1, FIFO>, out out: !esi.channel<!st1, FIFO>)
     attributes {esi.portFlattenStructs, esi.portRdenSuffix="_readEnable",
                 esi.portEmptySuffix="_flatBroke", esi.portInSuffix="_in"} {
-  hw.output %in : !esi.channel<!st1, FIFO0>
+  hw.output %in : !esi.channel<!st1, FIFO>
 }
 
-// IFACE-LABEL:  hw.module @structFifo0LoopbackTop()
-// IFACE-NEXT:    %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_readEnable : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
-// IFACE-NEXT:    %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_flatBroke : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO0>
-// IFACE-NEXT:    %foo.in_readEnable, %foo.out, %foo.out_flatBroke = hw.instance "foo" @structFifo0Loopback(in_in: %data: !hw.struct<a: i3, b: i7>, in_flatBroke_in: %empty: i1, out_readEnable_in: %rden: i1) -> (in_readEnable: i1, out: !hw.struct<a: i3, b: i7>, out_flatBroke: i1)
+// IFACE-LABEL:  hw.module @structFifoLoopbackTop()
+// IFACE-NEXT:    %data, %empty = esi.unwrap.fifo %chanOutput, %foo.in_readEnable : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO>
+// IFACE-NEXT:    %chanOutput, %rden = esi.wrap.fifo %foo.out, %foo.out_flatBroke : !esi.channel<!hw.struct<a: i3, b: i7>, FIFO>
+// IFACE-NEXT:    %foo.in_readEnable, %foo.out, %foo.out_flatBroke = hw.instance "foo" @structFifoLoopback(in_in: %data: !hw.struct<a: i3, b: i7>, in_flatBroke_in: %empty: i1, out_readEnable_in: %rden: i1) -> (in_readEnable: i1, out: !hw.struct<a: i3, b: i7>, out_flatBroke: i1)
 // IFACE-NEXT:    hw.output
-hw.module @structFifo0LoopbackTop() {
-  %chan = hw.instance "foo" @structFifo0Loopback(in: %chan: !esi.channel<!st1, FIFO0>) -> (out: !esi.channel<!st1, FIFO0>)
+hw.module @structFifoLoopbackTop() {
+  %chan = hw.instance "foo" @structFifoLoopback(in: %chan: !esi.channel<!st1, FIFO>) -> (out: !esi.channel<!st1, FIFO>)
+}
+
+// IFACE-LABEL:  hw.module @i1FifoDelay1Loopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
+// IFACE-NEXT:     %chanOutput, %rden = esi.wrap.fifo %in, %in_empty : !esi.channel<i3, FIFO(1)>
+// IFACE-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, %out_rden : !esi.channel<i3, FIFO(1)>
+// IFACE-NEXT:     hw.output %rden, %data, %empty : i1, i3, i1
+// HW-LABEL:     hw.module @i1FifoDelay1Loopback(in %in : i3, in %in_empty : i1, in %out_rden : i1, out in_rden : i1, out out : i3, out out_empty : i1)
+// HW-NEXT:        hw.output %out_rden, %in, %in_empty : i1, i3, i1
+hw.module @i1FifoDelay1Loopback(in %in: !esi.channel<i3, FIFO(1)>, out out: !esi.channel<i3, FIFO(1)>) {
+  hw.output %in : !esi.channel<i3, FIFO(1)>
 }
 
 // IFACE-LABEL:  hw.module @i3LoopbackOddNames(in %in : i3, in %in_good : i1, in %out_letErRip : i1, out in_letErRip_out : i1, out out_out : i3, out out_good_out : i1) attributes {esi.portFlattenStructs, esi.portOutSuffix = "_out", esi.portReadySuffix = "_letErRip", esi.portValidSuffix = "_good"} {

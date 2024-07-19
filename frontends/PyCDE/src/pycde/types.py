@@ -557,15 +557,15 @@ class Channel(Type):
 
   SignalingNames = {
       ChannelSignaling.ValidReady: "ValidReady",
-      ChannelSignaling.FIFO0: "FIFO0"
+      ChannelSignaling.FIFO: "FIFO"
   }
 
   def __new__(cls,
               inner_type: Type,
-              signaling: int = ChannelSignaling.ValidReady):
-    return super(Channel,
-                 cls).__new__(cls,
-                              esi.ChannelType.get(inner_type._type, signaling))
+              signaling: int = ChannelSignaling.ValidReady,
+              data_delay: int = 0):
+    return super(Channel, cls).__new__(
+        cls, esi.ChannelType.get(inner_type._type, signaling, data_delay))
 
   @property
   def inner_type(self):
@@ -579,13 +579,19 @@ class Channel(Type):
   def signaling(self):
     return self._type.signaling
 
+  @property
+  def data_delay(self):
+    return self._type.data_delay
+
   def _get_value_class(self):
     from .signals import ChannelSignal
     return ChannelSignal
 
   def __repr__(self):
     signaling = Channel.SignalingNames[self.signaling]
-    return f"Channel<{self.inner_type}, {signaling}>"
+    if self.data_delay == 0:
+      return f"Channel<{self.inner_type}, {signaling}>"
+    return f"Channel<{self.inner_type}, {signaling}({self.data_delay})>"
 
   @property
   def inner(self):
@@ -609,7 +615,7 @@ class Channel(Type):
       wrap_op = esi.WrapValidReadyOp(self._type, types.i1, value.value,
                                      valid.value)
       return wrap_op[0], wrap_op[1]
-    elif signaling == ChannelSignaling.FIFO0:
+    elif signaling == ChannelSignaling.FIFO:
       value = self.inner_type(value)
       empty = types.i1(valueOrEmpty)
       wrap_op = esi.WrapFIFOOp(self._type, types.i1, value.value, empty.value)
