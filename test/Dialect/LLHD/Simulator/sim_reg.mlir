@@ -32,13 +32,13 @@ llhd.entity @root () -> () {
   %s0 = llhd.sig "sig1" %c0 : i32
   %s1 = llhd.sig "sig2" %c0 : i32
   %c = llhd.sig "clock" %1 : i1
-  %p = llhd.prb %c : !llhd.sig<i1>
+  %p = llhd.prb %c : !hw.inout<i1>
   %allset1 = hw.constant 1 : i1
   %nc = comb.xor %p, %allset1 : i1
-  llhd.drv %c, %nc after %t1 : !llhd.sig<i1>
-  llhd.reg %s0, (%c0, "fall" %p after %0 : i32), (%c1, "rise" %p after %0 : i32), (%c2, "low" %p after %0 : i32), (%c3, "high" %p after %0 : i32) : !llhd.sig<i32>
-  %2 = llhd.prb %s1 : !llhd.sig<i32>
+  llhd.drv %c, %nc after %t1 : !hw.inout<i1>
+  llhd.reg %s0, (%c0, "fall" %p after %0 : i32), (%c1, "rise" %p after %0 : i32), (%c2, "low" %p after %0 : i32), (%c3, "high" %p after %0 : i32) : !hw.inout<i32>
+  %2 = llhd.prb %s1 : !hw.inout<i32>
   %allset32 = hw.constant -1 : i32
   %3 = comb.xor %2, %allset32 : i32
-  llhd.reg %s1, (%3, "both" %p after %0 : i32) : !llhd.sig<i32>
+  llhd.reg %s1, (%3, "both" %p after %0 : i32) : !hw.inout<i32>
 }

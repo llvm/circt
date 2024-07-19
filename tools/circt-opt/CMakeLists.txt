@@ -62,7 +62,6 @@ target_link_libraries(circt-opt
   CIRCTIbis
   CIRCTIbisTransforms
   CIRCTInteropDialect
-  CIRCTHWToLLHD
   CIRCTHWToSMT
   CIRCTHWToSystemC
   CIRCTHWToSV

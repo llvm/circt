@@ -32,7 +32,7 @@ def LLHD_VarOp : LLHD_Op<"var", [
     ```
   }];
 
-  let arguments = (ins LLHD_AnyUnderlyingType: $init);
+  let arguments = (ins LLHD_AnyElementType: $init);
   let results = (outs Res<LLHD_AnyPtrType, "the newly allocated reference",
                           [MemAlloc]>: $result);
 
@@ -42,7 +42,7 @@ def LLHD_VarOp : LLHD_Op<"var", [
 def LLHD_LoadOp : LLHD_Op<"load", [
     TypesMatchWith<
       "type of 'result' and underlying type of 'pointer' have to match.",
-      "pointer", "result", "llvm::cast<PtrType>($_self).getUnderlyingType()">
+      "pointer", "result", "llvm::cast<PtrType>($_self).getElementType()">
   ]> {
   let summary = "Load a value.";
   let description = [{
@@ -64,7 +64,7 @@ def LLHD_LoadOp : LLHD_Op<"load", [
 
   let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to load from",
                            [MemRead]>: $pointer);
-  let results = (outs LLHD_AnyUnderlyingType: $result);
+  let results = (outs LLHD_AnyElementType: $result);
 
   let assemblyFormat = "$pointer attr-dict `:` qualified(type($pointer))";
 }
@@ -72,7 +72,7 @@ def LLHD_LoadOp : LLHD_Op<"load", [
 def LLHD_StoreOp : LLHD_Op<"store", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'pointer' have to match.",
-      "pointer", "value", "llvm::cast<PtrType>($_self).getUnderlyingType()">
+      "pointer", "value", "llvm::cast<PtrType>($_self).getElementType()">
   ]> {
   let summary = "Store a value.";
   let description = [{
@@ -94,7 +94,7 @@ def LLHD_StoreOp : LLHD_Op<"store", [
 
   let arguments = (ins Arg<LLHD_AnyPtrType, "the reference to store to",
                            [MemWrite]>: $pointer,
-                       LLHD_AnyUnderlyingType: $value);
+                       LLHD_AnyElementType: $value);
 
   let assemblyFormat = "$pointer `,` $value attr-dict `:` qualified(type($pointer))";
 }

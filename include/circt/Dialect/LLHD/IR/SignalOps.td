@@ -15,7 +15,7 @@ include "mlir/IR/EnumAttr.td"
 def LLHD_SigOp : LLHD_Op<"sig", [
     TypesMatchWith<
       "type of 'init' and underlying type of 'signal' have to match.",
-      "init", "result", "SigType::get($_self)">
+      "init", "result", "hw::InOutType::get($_self)">
   ]> {
   let summary = "Create a signal.";
   let description = [{
@@ -45,8 +45,8 @@ def LLHD_SigOp : LLHD_Op<"sig", [
     signal named "bar", carrying an `i1` type with initial value of 1.
   }];
 
-  let arguments = (ins StrAttr: $name, LLHD_AnyUnderlyingType: $init);
-  let results = (outs LLHD_AnySigType: $result);
+  let arguments = (ins StrAttr: $name, LLHD_AnyElementType: $init);
+  let results = (outs InOutType: $result);
 
   let assemblyFormat = "$name $init attr-dict `:` qualified(type($init))";
 }
@@ -54,7 +54,7 @@ def LLHD_SigOp : LLHD_Op<"sig", [
 def LLHD_PrbOp : LLHD_Op<"prb", [
     TypesMatchWith<
       "type of 'result' and underlying type of 'signal' have to match.",
-      "signal", "result", "llvm::cast<SigType>($_self).getUnderlyingType()">
+      "signal", "result", "llvm::cast<hw::InOutType>($_self).getElementType()">
   ]> {
   let summary = "Probe a signal.";
   let description = [{
@@ -65,7 +65,7 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
     Syntax:
 
     ```
-    prb-op ::= ssa-id `=` `llhd.prb` ssa-sig attr-dict `:` !llhd.sig<type>
+    prb-op ::= ssa-id `=` `llhd.prb` ssa-sig attr-dict `:` !hw.inout<type>
     ```
 
     Example:
@@ -73,13 +73,13 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
     ```mlir
     %const_i1 = llhd.const 1 : i1
     %sig_i1 = llhd.sig %const_i1 : i1
-    %prbd = llhd.prb %sig_i1 : !llhd.sig<i1>
+    %prbd = llhd.prb %sig_i1 : !hw.inout<i1>
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnySigType, "the signal to probe from",
+  let arguments = (ins Arg<InOutType, "the signal to probe from",
                            [MemRead]>: $signal);
-  let results = (outs LLHD_AnyUnderlyingType: $result);
+  let results = (outs LLHD_AnyElementType: $result);
 
   let assemblyFormat = "$signal attr-dict `:` qualified(type($signal))";
 }
@@ -87,7 +87,7 @@ def LLHD_PrbOp : LLHD_Op<"prb", [
 def LLHD_OutputOp : LLHD_Op<"output", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'result' have to match.",
-      "value", "result", "SigType::get($_self)">
+      "value", "result", "hw::InOutType::get($_self)">
   ]> {
   let summary = "Introduce a new signal and drive a value onto it.";
   let description = [{
@@ -109,15 +109,15 @@ def LLHD_OutputOp : LLHD_Op<"output", [
     %value = llhd.const 1 : i1
     %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
     %sig = llhd.sig "sigName" %value : i1
-    llhd.drv %sig, %value after %time : !llhd.sig<i1>
+    llhd.drv %sig, %value after %time : !hw.inout<i1>
     ```
   }];
 
   let arguments = (ins OptionalAttr<StrAttr>: $name,
-                       LLHD_AnyUnderlyingType: $value,
+                       LLHD_AnyElementType: $value,
                        LLHD_TimeType: $time);
 
-  let results = (outs LLHD_AnySigType: $result);
+  let results = (outs InOutType: $result);
 
   let assemblyFormat = [{
     ( $name^ )? $value `after` $time attr-dict `:` qualified(type($value))
@@ -127,7 +127,7 @@ def LLHD_OutputOp : LLHD_Op<"output", [
 def LLHD_DrvOp : LLHD_Op<"drv", [
     TypesMatchWith<
       "type of 'value' and underlying type of 'signal' have to match.",
-      "signal", "value", "llvm::cast<SigType>($_self).getUnderlyingType()">
+      "signal", "value", "llvm::cast<hw::InOutType>($_self).getElementType()">
   ]> {
   let summary = "Drive a value into a signal.";
   let description = [{
@@ -142,7 +142,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
 
     ```
     drv-op ::= `llhd.drv` ssa-signal `,` ssa-const `after` ssa-time
-      (`if` ssa-enable)? `:` !llhd.sig<const-type>
+      (`if` ssa-enable)? `:` !hw.inout<const-type>
     ```
 
     Example:
@@ -154,14 +154,14 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
     %sig = llhd.sig %init : i1
     %new = llhd.not %init : i1
 
-    llhd.drv %sig, %new after %time : !llhd.sig<i1>
-    llhd.drv %sig, %new after %time if %en : !llhd.sig<i1>
+    llhd.drv %sig, %new after %time : !hw.inout<i1>
+    llhd.drv %sig, %new after %time if %en : !hw.inout<i1>
     ```
   }];
 
-  let arguments = (ins Arg<LLHD_AnySigType, "the signal to drive to",
+  let arguments = (ins Arg<InOutType, "the signal to drive to",
                            [MemWrite]>: $signal,
-                       LLHD_AnyUnderlyingType: $value,
+                       LLHD_AnyElementType: $value,
                        LLHD_TimeType: $time,
                        Optional<I1>: $enable);
 
@@ -230,30 +230,30 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     A rising, falling, and dual-edge triggered flip-flop:
 
     ```mlir
-    llhd.reg %Q, (%D, "rise" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
-    llhd.reg %Q, (%D, "fall" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
-    llhd.reg %Q, (%D, "both" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%D, "rise" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
+    llhd.reg %Q, (%D, "fall" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
+    llhd.reg %Q, (%D, "both" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
     ```
 
     A rising-edge triggered flip-flop with active-low reset:
 
     ```mlir
-    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>),
-      (%D, "rise" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%init, "low" %RSTB after %T : !hw.inout<i8>),
+      (%D, "rise" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
     ```
 
     A rising-edge triggered enable flip-flop with active-low reset:
 
     ```mlir
-    llhd.reg %Q, (%init, "low" %RSTB after %T : !llhd.sig<i8>),
-      (%D, "rise" %CLK after %T if %EN : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%init, "low" %RSTB after %T : !hw.inout<i8>),
+      (%D, "rise" %CLK after %T if %EN : !hw.inout<i8>) : !hw.inout<i8>
     ```
 
     A transparent-low and transparent-high latch:
 
     ```mlir
-    llhd.reg %Q, (%D, "low" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
-    llhd.reg %Q, (%D, "high" %CLK after %T : !llhd.sig<i8>) : !llhd.sig<i8>
+    llhd.reg %Q, (%D, "low" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
+    llhd.reg %Q, (%D, "high" %CLK after %T : !hw.inout<i8>) : !hw.inout<i8>
     ```
 
     An SR latch:
@@ -261,15 +261,15 @@ def LLHD_RegOp : LLHD_Op<"reg", [
     ```mlir
     %0 = llhd.const 0 : i1
     %1 = llhd.const 1 : i1
-    llhd.reg %Q, (%0, "high" %R after %T : !llhd.sig<i1>),
-      (%1, "high" %S after %T : !llhd.sig<i1>) : !llhd.sig<i1>
+    llhd.reg %Q, (%0, "high" %R after %T : !hw.inout<i1>),
+      (%1, "high" %S after %T : !hw.inout<i1>) : !hw.inout<i1>
     ```
   }];
 
   let arguments = (ins
-    LLHD_AnySigType: $signal,
+    InOutType: $signal,
     LLHD_RegModeArrayAttr: $modes,
-    Variadic<AnyTypeOf<[LLHD_AnyUnderlyingType, LLHD_AnySigType]>>: $values,
+    Variadic<AnyTypeOf<[LLHD_AnyElementType, InOutType]>>: $values,
     Variadic<I1>: $triggers,
     Variadic<LLHD_TimeType>: $delays,
     Variadic<I1>: $gates,

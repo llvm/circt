@@ -142,7 +142,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
     for (Block *jp : joinPoints) {
       // Add a block argument for the variable at each join point
       BlockArgument phi = jp->addArgument(
-          cast<llhd::PtrType>(var.getType()).getUnderlyingType(), var.getLoc());
+          cast<llhd::PtrType>(var.getType()).getElementType(), var.getLoc());
 
       // Add a load at the end of every predecessor and pass the loaded value as
       // the block argument
@@ -151,7 +151,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
         builder.setInsertionPoint(pred->getTerminator());
         Value load = builder.create<llhd::LoadOp>(
             pred->getTerminator()->getLoc(),
-            cast<llhd::PtrType>(var.getType()).getUnderlyingType(), var);
+            cast<llhd::PtrType>(var.getType()).getElementType(), var);
         // Add the loaded value as additional block argument
         addBlockOperandToTerminator(pred->getTerminator(), jp, load);
       }

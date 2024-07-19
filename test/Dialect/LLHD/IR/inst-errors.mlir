@@ -18,11 +18,11 @@ llhd.proc @fail() -> () {
 
 // -----
 
-llhd.entity @operand_count_mismatch(%arg : !llhd.sig<i32>) -> () {}
+llhd.entity @operand_count_mismatch(%arg : !hw.inout<i32>) -> () {}
 
-llhd.entity @caller(%arg : !llhd.sig<i32>) -> () {
+llhd.entity @caller(%arg : !hw.inout<i32>) -> () {
   // expected-error @+1 {{incorrect number of inputs for entity instantiation}}
-  llhd.inst "mismatch" @operand_count_mismatch() -> (%arg) : () -> (!llhd.sig<i32>)
+  llhd.inst "mismatch" @operand_count_mismatch() -> (%arg) : () -> (!hw.inout<i32>)
 }
 
 // -----
@@ -46,9 +46,9 @@ llhd.entity @test_uniqueness() -> () {
 
 hw.module @module(in %arg0: i2) {}
 
-llhd.entity @moduleTypeMismatch(%arg0: !llhd.sig<i3>) -> () {
+llhd.entity @moduleTypeMismatch(%arg0: !hw.inout<i3>) -> () {
   // expected-error @+1 {{input type mismatch}}
-  llhd.inst "inst" @module(%arg0) -> () : (!llhd.sig<i3>) -> ()
+  llhd.inst "inst" @module(%arg0) -> () : (!hw.inout<i3>) -> ()
 }
 
 // -----
@@ -58,9 +58,9 @@ hw.module @module(out arg0: i2) {
   hw.output %0 : i2
 }
 
-llhd.entity @moduleTypeMismatch() -> (%arg0: !llhd.sig<i3>) {
+llhd.entity @moduleTypeMismatch() -> (%arg0: !hw.inout<i3>) {
   // expected-error @+1 {{output type mismatch}}
-  llhd.inst "inst" @module() -> (%arg0) : () -> !llhd.sig<i3>
+  llhd.inst "inst" @module() -> (%arg0) : () -> !hw.inout<i3>
 }
 
 // -----
@@ -71,4 +71,4 @@ llhd.proc @empty() -> () {}
 // -----
 
 // expected-error @below {{empty block: expect at least a terminator}}
-llhd.proc @empty(%a: !llhd.sig<i1>) -> () {}
+llhd.proc @empty(%a: !hw.inout<i1>) -> () {}

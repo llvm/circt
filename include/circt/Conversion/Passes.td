@@ -546,20 +546,6 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// HWToLLHD
-//===----------------------------------------------------------------------===//
-
-def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
-  let summary = "Convert HW to LLHD";
-  let description = [{
-    This pass translates a HW design into an equivalent structural LLHD
-    description.
-  }];
-  let constructor = "circt::createConvertHWToLLHDPass()";
-  let dependentDialects = ["llhd::LLHDDialect"];
-}
-
-//===----------------------------------------------------------------------===//
 // HWToSystemC
 //===----------------------------------------------------------------------===//
 

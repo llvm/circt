@@ -36,7 +36,7 @@ struct ProcessLoweringPass
 /// Backtrack a signal value and make sure that every part of it is in the
 /// observer list at some point. Assumes that there is no operation that adds
 /// parts to a signal that it does not take as input (e.g. something like
-/// llhd.sig.zext %sig : !llhd.sig<i32> -> !llhd.sig<i64>).
+/// llhd.sig.zext %sig : !hw.inout<i32> -> !hw.inout<i64>).
 static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
   // If the value in the observer list, we don't need to backtrack further.
   if (llvm::is_contained(obs, value))
@@ -47,7 +47,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // last point where it could have been observed. As we've already checked
     // that, we can fail here. This includes for example llhd.sig
     if (llvm::none_of(op->getOperands(), [](Value arg) {
-          return isa<llhd::SigType>(arg.getType());
+          return isa<hw::InOutType>(arg.getType());
         }))
       return failure();
 
@@ -56,7 +56,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // they are covered by that probe. As soon as we find a signal that is not
     // observed no matter how far we backtrack, we fail.
     return success(llvm::all_of(op->getOperands(), [&](Value arg) {
-      return !isa<llhd::SigType>(arg.getType()) ||
+      return !isa<hw::InOutType>(arg.getType()) ||
              succeeded(checkSignalsAreObserved(obs, arg));
     }));
   }

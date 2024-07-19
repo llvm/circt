@@ -40,11 +40,11 @@ def LLHD_EntityOp : LLHD_Op<"entity", [
     ```mlir
     llhd.entity @Foo () -> () {
       %0 = llhd.const 0 : i1
-      %toggle = llhd.sig %0 : i1 -> !llhd.sig<i1>
-      %1 = llhd.prb %toggle : !llhd.sig<i1> -> i1
+      %toggle = llhd.sig %0 : i1 -> !hw.inout<i1>
+      %1 = llhd.prb %toggle : !hw.inout<i1> -> i1
       %2 = llhd.not %1 : i1
       %dt = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-      llhd.drv %toggle, %2, %dt : !llhd.sig<i1>, i1, !llhd.time
+      llhd.drv %toggle, %2, %dt : !hw.inout<i1>, i1, !llhd.time
     }
     ```
   }];
@@ -110,8 +110,8 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     Examples:
 
     ```mlir
-    llhd.proc @example(%in0 : !llhd.sig<i64>, %in1 : !llhd.sig<i1>) ->
-        (%out2 : !llhd.sig<i1>) {
+    llhd.proc @example(%in0 : !hw.inout<i64>, %in1 : !hw.inout<i1>) ->
+        (%out2 : !hw.inout<i1>) {
       br ^bb1
     ^bb1:
       llhd.halt
@@ -166,16 +166,16 @@ def LLHD_InstOp : LLHD_Op<"inst", [
 
     ```mlir
     llhd.inst "foo" @empty() -> () : () -> ()
-    llhd.inst "bar" @proc_symbol() -> (%out0) : () -> !llhd.sig<i32>
+    llhd.inst "bar" @proc_symbol() -> (%out0) : () -> !hw.inout<i32>
     llhd.inst "baz" @entity_symbol(%in0, %in1) -> (%out0, %out1) :
-      (!llhd.sig<i32>, !llhd.sig<i16>) -> (!llhd.sig<i8>, !llhd.sig<i4>)
+      (!hw.inout<i32>, !hw.inout<i16>) -> (!hw.inout<i8>, !hw.inout<i4>)
     ```
   }];
 
   let arguments = (ins StrAttr:$name,
                        FlatSymbolRefAttr:$callee,
-                       Variadic<LLHD_AnySigType>:$inputs,
-                       Variadic<LLHD_AnySigType>:$outputs);
+                       Variadic<InOutType>:$inputs,
+                       Variadic<InOutType>:$outputs);
 
   let assemblyFormat = [{
     $name $callee `(` $inputs `)` `->` `(` $outputs `)` attr-dict `:`
@@ -221,8 +221,8 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
     one signal. All driven values on one signal will be reflected on the other.
   }];
 
-  let arguments = (ins LLHD_AnySigType:$lhs,
-                       LLHD_AnySigType:$rhs);
+  let arguments = (ins InOutType:$lhs,
+                       InOutType:$rhs);
 
   let assemblyFormat = [{
     operands attr-dict `:` qualified(type($lhs))
@@ -254,13 +254,13 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
     ```mlir
     llhd.wait ^bb1
     llhd.wait for %time, ^bb1(%time : !llhd.time)
-    llhd.wait (%0, %1 : !llhd.sig<i64>, !llhd.sig<i1>), ^bb1(%1 : !llhd.sig<i1>)
-    llhd.wait for %time, (%0, %1 : !llhd.sig<i64>, !llhd.sig<i1>),
-      ^bb1(%1, %0 : !llhd.sig<i1>, !llhd.sig<i64>)
+    llhd.wait (%0, %1 : !hw.inout<i64>, !hw.inout<i1>), ^bb1(%1 : !hw.inout<i1>)
+    llhd.wait for %time, (%0, %1 : !hw.inout<i64>, !hw.inout<i1>),
+      ^bb1(%1, %0 : !hw.inout<i1>, !hw.inout<i64>)
     ```
   }];
 
-  let arguments = (ins Variadic<LLHD_AnySigType>:$obs,
+  let arguments = (ins Variadic<InOutType>:$obs,
                        Optional<LLHD_TimeType>:$time,
                        Variadic<AnyType>:$destOps);
 

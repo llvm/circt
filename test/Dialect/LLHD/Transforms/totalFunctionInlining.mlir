@@ -24,18 +24,18 @@ func.func @complex(%flag : i1) -> i32 {
 }
 
 // CHECK-LABEL: @check_entity_inline
-llhd.entity @check_entity_inline() -> (%out : !llhd.sig<i32>) {
+llhd.entity @check_entity_inline() -> (%out : !hw.inout<i32>) {
   // CHECK-NEXT: %{{.*}} = hw.constant
   // CHECK-NEXT: %{{.*}} = llhd.constant_time
   // CHECK-NEXT: llhd.drv
   // CHECK-NEXT: }
   %1 = func.call @simple() : () -> i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
-  llhd.drv %out, %1 after %time : !llhd.sig<i32>
+  llhd.drv %out, %1 after %time : !hw.inout<i32>
 }
 
 // CHECK-LABEL: @check_proc_inline
-llhd.proc @check_proc_inline(%arg : !llhd.sig<i1>) -> (%out : !llhd.sig<i32>) {
+llhd.proc @check_proc_inline(%arg : !hw.inout<i1>) -> (%out : !hw.inout<i32>) {
   // CHECK-NEXT: %[[PRB:.*]] = llhd.prb
   // CHECK-NEXT: cf.cond_br %[[PRB]], ^[[BB1:.*]], ^[[BB2:.*]]
   // CHECK-NEXT: ^[[BB1]]:
@@ -46,12 +46,12 @@ llhd.proc @check_proc_inline(%arg : !llhd.sig<i1>) -> (%out : !llhd.sig<i32>) {
   // CHECK-NEXT: cf.br ^[[BB3]](%[[C1]] : i32)
   // CHECK-NEXT: ^[[BB3]](%[[A:.*]]: i32):
   // CHECK-NEXT: %[[C2:.*]] = llhd.constant_time
-  // CHECK-NEXT: llhd.drv %{{.*}}, %[[A]] after %[[C2]] : !llhd.sig<i32>
+  // CHECK-NEXT: llhd.drv %{{.*}}, %[[A]] after %[[C2]] : !hw.inout<i32>
   // CHECK-NEXT: llhd.halt
   // CHECK-NEXT: }
-  %0 = llhd.prb %arg : !llhd.sig<i1>
+  %0 = llhd.prb %arg : !hw.inout<i1>
   %1 = func.call @complex(%0) : (i1) -> i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
-  llhd.drv %out, %1 after %time : !llhd.sig<i32>
+  llhd.drv %out, %1 after %time : !hw.inout<i32>
   llhd.halt
 }

@@ -1,10 +1,10 @@
 // RUN: circt-opt %s -llhd-process-lowering -split-input-file -verify-diagnostics
 
 // Check wait with observing probed signals
-llhd.proc @prbAndWaitNotObserved(%arg0 : !llhd.sig<i64>) -> () {
+llhd.proc @prbAndWaitNotObserved(%arg0 : !hw.inout<i64>) -> () {
   cf.br ^bb1
 ^bb1:
-  %0 = llhd.prb %arg0 : !llhd.sig<i64>
+  %0 = llhd.prb %arg0 : !hw.inout<i64>
   // expected-error @+1 {{during process-lowering: the wait terminator is required to have all probed signals as arguments}}
   llhd.wait ^bb1
 }
@@ -13,10 +13,10 @@ llhd.proc @prbAndWaitNotObserved(%arg0 : !llhd.sig<i64>) -> () {
 
 // Check that block arguments for the second block are not allowed.
 // expected-error @+1 {{during process-lowering: the second block (containing the llhd.wait) is not allowed to have arguments}}
-llhd.proc @blockArgumentsNotAllowed(%arg0 : !llhd.sig<i64>) -> () {
-  cf.br ^bb1(%arg0 : !llhd.sig<i64>)
-^bb1(%a : !llhd.sig<i64>):
-  llhd.wait ^bb1(%a : !llhd.sig<i64>)
+llhd.proc @blockArgumentsNotAllowed(%arg0 : !hw.inout<i64>) -> () {
+  cf.br ^bb1(%arg0 : !hw.inout<i64>)
+^bb1(%a : !hw.inout<i64>):
+  llhd.wait ^bb1(%a : !hw.inout<i64>)
 }
 
 // -----
@@ -64,12 +64,12 @@ llhd.proc @moreThanTwoBlocksNotAllowed() -> () {
 
 // -----
 
-llhd.proc @muxedSignal(%arg0 : !llhd.sig<i64>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<i1>) -> () {
+llhd.proc @muxedSignal(%arg0 : !hw.inout<i64>, %arg1 : !hw.inout<i64>, %arg2 : !hw.inout<i1>) -> () {
   cf.br ^bb1
 ^bb1:
-  %cond = llhd.prb %arg2 : !llhd.sig<i1>
-  %sig = comb.mux %cond, %arg0, %arg1 : !llhd.sig<i64>
-  %0 = llhd.prb %sig : !llhd.sig<i64>
+  %cond = llhd.prb %arg2 : !hw.inout<i1>
+  %sig = comb.mux %cond, %arg0, %arg1 : !hw.inout<i64>
+  %0 = llhd.prb %sig : !hw.inout<i64>
   // expected-error @+1 {{during process-lowering: the wait terminator is required to have all probed signals as arguments}}
-  llhd.wait (%arg0, %arg2 : !llhd.sig<i64>, !llhd.sig<i1>), ^bb1
+  llhd.wait (%arg0, %arg2 : !hw.inout<i64>, !hw.inout<i1>), ^bb1
 }

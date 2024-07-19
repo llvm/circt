@@ -38,9 +38,9 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     Example:
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !llhd.sig<i1>) -> () {
+    llhd.proc @check_simple(%condsig : !hw.inout<i1>) -> () {
       %c5 = llhd.const 5 : i32
-      %cond = llhd.prb %condsig : !llhd.sig<i1>
+      %cond = llhd.prb %condsig : !hw.inout<i1>
       %ptr = llhd.var %c5 : i32
       cond_br %cond, ^bb1, ^bb2
     ^bb1:
@@ -57,9 +57,9 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     is transformed to
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !llhd.sig<i1>) -> () {
+    llhd.proc @check_simple(%condsig : !hw.inout<i1>) -> () {
       %c5 = llhd.const 5 : i32
-      %cond = llhd.prb %condsig : !llhd.sig<i1>
+      %cond = llhd.prb %condsig : !hw.inout<i1>
       cond_br %cond, ^bb1, ^bb2(%c5 : i32)
     ^bb1:
       %c6 = llhd.const 6 : i32

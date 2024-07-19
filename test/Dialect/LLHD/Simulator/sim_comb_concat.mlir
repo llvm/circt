@@ -19,5 +19,5 @@ llhd.entity @root () -> () {
 
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
-    llhd.drv %intsig, %con after %time : !llhd.sig<i32>
+    llhd.drv %intsig, %con after %time : !hw.inout<i32>
 }

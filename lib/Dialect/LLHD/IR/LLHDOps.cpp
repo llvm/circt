@@ -130,10 +130,10 @@ struct constant_int_all_ones_matcher {
 } // anonymous namespace
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
-  if (auto sig = dyn_cast<llhd::SigType>(type))
-    type = sig.getUnderlyingType();
+  if (auto sig = dyn_cast<hw::InOutType>(type))
+    type = sig.getElementType();
   else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getUnderlyingType();
+    type = ptr.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getNumElements();
   if (auto tup = dyn_cast<hw::StructType>(type))
@@ -142,10 +142,10 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
 }
 
 Type circt::llhd::getLLHDElementType(Type type) {
-  if (auto sig = dyn_cast<llhd::SigType>(type))
-    type = sig.getUnderlyingType();
+  if (auto sig = dyn_cast<hw::InOutType>(type))
+    type = sig.getElementType();
   else if (auto ptr = dyn_cast<llhd::PtrType>(type))
-    type = ptr.getUnderlyingType();
+    type = ptr.getElementType();
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
@@ -271,7 +271,7 @@ static LogicalResult inferReturnTypesOfStructExtractOp(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Type type =
       cast<hw::StructType>(
-          cast<SigPtrType>(operands[0].getType()).getUnderlyingType())
+          cast<SigPtrType>(operands[0].getType()).getElementType())
           .getFieldType(
               cast<StringAttr>(attrs.getNamed("field")->getValue()).getValue());
   if (!type) {
@@ -288,7 +288,7 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
-  return inferReturnTypesOfStructExtractOp<llhd::SigType>(
+  return inferReturnTypesOfStructExtractOp<hw::InOutType>(
       context, loc, operands, attrs, properties, regions, results);
 }
 
@@ -470,7 +470,7 @@ LogicalResult llhd::EntityOp::verify() {
 
   // Check that all block arguments are of signal type
   for (size_t i = 0; i < numArgs; ++i)
-    if (!isa<llhd::SigType>(getArgument(i).getType()))
+    if (!isa<hw::InOutType>(getArgument(i).getType()))
       return emitError("usage of invalid argument type. Got ")
              << getArgument(i).getType() << ", expected LLHD signal type";
 
@@ -487,7 +487,7 @@ LogicalResult circt::llhd::EntityOp::verifyType() {
 
   // Check that all operands are of signal type
   for (Type inputType : type.getInputs())
-    if (!isa<llhd::SigType>(inputType))
+    if (!isa<hw::InOutType>(inputType))
       return emitOpError("usage of invalid argument type. Got ")
              << inputType << ", expected LLHD signal type";
 
@@ -555,7 +555,7 @@ LogicalResult circt::llhd::ProcOp::verifyType() {
 
   // Check that all operands are of signal type
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
-    if (!isa<llhd::SigType>(getArgument(i).getType())) {
+    if (!isa<hw::InOutType>(getArgument(i).getType())) {
       return emitOpError("usage of invalid argument type, was ")
              << getArgument(i).getType() << ", expected LLHD signal type";
     }
@@ -782,16 +782,16 @@ LogicalResult llhd::InstOp::verify() {
 
     // Check input types
     for (size_t i = 0, e = module.getNumInputPorts(); i != e; ++i) {
-      if (cast<llhd::SigType>(getOperand(i).getType()).getUnderlyingType() !=
+      if (cast<hw::InOutType>(getOperand(i).getType()).getElementType() !=
           module.getInputTypes()[i])
         return emitOpError("input type mismatch");
     }
 
     // Check output types
     for (size_t i = 0, e = module.getNumOutputPorts(); i != e; ++i) {
-      if (cast<llhd::SigType>(
+      if (cast<hw::InOutType>(
               getOperand(module.getNumInputPorts() + i).getType())
-              .getUnderlyingType() != module.getOutputTypes()[i])
+              .getElementType() != module.getOutputTypes()[i])
         return emitOpError("output type mismatch");
     }
 
@@ -997,7 +997,7 @@ LogicalResult llhd::RegOp::verify() {
   for (auto val : getValues()) {
     if (val.getType() != getSignal().getType() &&
         val.getType() !=
-            cast<llhd::SigType>(getSignal().getType()).getUnderlyingType()) {
+            cast<hw::InOutType>(getSignal().getType()).getElementType()) {
       return emitOpError(
           "type of each 'value' has to be either the same as the "
           "type of 'signal' or the underlying type of 'signal'");

@@ -44,7 +44,7 @@ llhd.entity @root () -> () {
 
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
-    llhd.drv %concatsig, %array after %time : !llhd.sig<!hw.array<4xi8>>
-    llhd.drv %getsig, %get after %time : !llhd.sig<i8>
-    llhd.drv %slicesig, %slice after %time : !llhd.sig<!hw.array<2xi8>>
+    llhd.drv %concatsig, %array after %time : !hw.inout<array<4xi8>>
+    llhd.drv %getsig, %get after %time : !hw.inout<i8>
+    llhd.drv %slicesig, %slice after %time : !hw.inout<array<2xi8>>
 }

@@ -3,23 +3,23 @@
 // expected-error @+3 {{failed to verify that type of 'init' and underlying type of 'signal' have to match.}}
 llhd.entity @check_illegal_sig () -> () {
   %cI1 = hw.constant 0 : i1
-  %sig1 = "llhd.sig"(%cI1) {name="foo"} : (i1) -> !llhd.sig<i32>
+  %sig1 = "llhd.sig"(%cI1) {name="foo"} : (i1) -> !hw.inout<i32>
 }
 
 // -----
 
 // expected-error @+2 {{failed to verify that type of 'result' and underlying type of 'signal' have to match.}}
-llhd.entity @check_illegal_prb (%sig : !llhd.sig<i1>) -> () {
-  %prb = "llhd.prb"(%sig) {} : (!llhd.sig<i1>) -> i32
+llhd.entity @check_illegal_prb (%sig : !hw.inout<i1>) -> () {
+  %prb = "llhd.prb"(%sig) {} : (!hw.inout<i1>) -> i32
 }
 
 // -----
 
 // expected-error @+4 {{failed to verify that type of 'value' and underlying type of 'signal' have to match.}}
-llhd.entity @check_illegal_drv (%sig : !llhd.sig<i1>) -> () {
+llhd.entity @check_illegal_drv (%sig : !hw.inout<i1>) -> () {
   %c = hw.constant 0 : i32
   %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
-  "llhd.drv"(%sig, %c, %time) {} : (!llhd.sig<i1>, i32, !llhd.time) -> ()
+  "llhd.drv"(%sig, %c, %time) {} : (!hw.inout<i1>, i32, !llhd.time) -> ()
 }
 
 // -----
