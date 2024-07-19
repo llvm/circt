@@ -37,9 +37,6 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
       opt.shouldLowerNoRefTypePortAnnotations(),
       opt.shouldAllowAddingPortsOnPublic()));
 
-  if (opt.shouldConvertProbesToSignals())
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
-
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
         firrtl::createMaterializeDebugInfoPass());
@@ -130,6 +127,10 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Must run this pass after all diagnostic passes have run, otherwise it can
   // hide errors.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeLayersPass());
+
+  // Run after inference, layer specialization.
+  if (opt.shouldConvertProbesToSignals())
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
 
   {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
