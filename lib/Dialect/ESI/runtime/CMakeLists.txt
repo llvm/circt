@@ -33,9 +33,6 @@ set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
 
-# We need zlib to uncompress the manifest.
-find_package(ZLIB REQUIRED)
-
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
   message("-- ESI runtime pulling down json")
@@ -44,6 +41,22 @@ if (NOT TARGET nlohmann_json)
     GIT_TAG        v3.11.3
   )
   FetchContent_MakeAvailable(json)
+endif()
+
+# We need zlib to uncompress the manifest.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+  set(ZLIB_LIBRARY ZLIB::ZLIB)
+else()
+  message("-- zlib not found, pulling down zlib from git")
+  FetchContent_Declare(
+    ZLIB
+    GIT_REPOSITORY https://github.com/madler/zlib.git
+    GIT_TAG        v1.3.1
+  )
+  FetchContent_MakeAvailable(ZLIB)
+  set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+  set(ZLIB_LIBRARY zlib)
 endif()
 
 # In a Python wheel build, we need to install libraries to different places.
@@ -110,14 +123,26 @@ add_library(ESICppRuntime SHARED
   ${ESICppRuntimeSources}
 )
 target_include_directories(ESICppRuntime PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include
+)
+if (DEFINED ZLIB_INCLUDE_DIR)
+  target_include_directories(ESICppRuntime PRIVATE
+    ${ZLIB_INCLUDE_DIR})
+endif()
+if(WIN32 AND TARGET zlib)
+  # On windows, DLLs must be in the same directory (or system directory) to be
+  # found. Windows doesn't have the equivalent of rpath.
+  add_custom_command(TARGET ESICppRuntime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:zlib>
+      ${CMAKE_CURRENT_BINARY_DIR}
+  )
+endif()
 target_link_libraries(ESICppRuntime PUBLIC
-  ZLIB::ZLIB
+  ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
 )
-if(MSVC)
-  # TODO: does Windows need libraries for dynamic loading?
-else()
+if(NOT MSVC)
   target_link_libraries(ESICppRuntime PRIVATE
     dl
   )
@@ -144,7 +169,7 @@ install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
 install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
   DESTINATION ${LIB_DIR}
   PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES zlibd1
+  PRE_INCLUDE_REGEXES zlibd zlib
   COMPONENT ESIRuntime
 )
 install(FILES ${ESICppRuntimeHeaders}
@@ -267,7 +292,7 @@ if(Python3_FOUND)
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
       DESTINATION ${ESI_PYTHON_INSTALL_DIR}
       PRE_EXCLUDE_REGEXES .*
-      PRE_INCLUDE_REGEXES zlibd1
+      PRE_INCLUDE_REGEXES zlibd zlib
       COMPONENT ESIRuntime
     )
 
