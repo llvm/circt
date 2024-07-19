@@ -13,6 +13,7 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
@@ -38,6 +39,11 @@ struct ModuleLowering {
   SmallVector<PortLowering> ports;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
+};
+
+/// Function lowering information.
+struct FunctionLowering {
+  mlir::func::FuncOp op;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -74,6 +80,9 @@ struct Context {
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
+  FunctionLowering *
+  declareFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
 
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
@@ -99,6 +108,7 @@ struct Context {
   /// The top-level operations ordered by their Slang source location. This is
   /// used to produce IR that follows the source file order.
   std::map<slang::SourceLocation, Operation *> orderedRootOps;
+
   /// How we have lowered modules to MLIR.
   DenseMap<const slang::ast::InstanceBodySymbol *,
            std::unique_ptr<ModuleLowering>>
@@ -106,6 +116,11 @@ struct Context {
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;
+
+  /// Functions that have already been converted.
+  DenseMap<const slang::ast::SubroutineSymbol *,
+           std::unique_ptr<FunctionLowering>>
+      functions;
 
   /// A table of defined values, such as variables, that may be referred to by
   /// name in expressions. The expressions use this table to lookup the MLIR

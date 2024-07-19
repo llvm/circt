@@ -64,6 +64,11 @@ struct RootVisitor : public BaseVisitor {
     return context.convertPackage(package);
   }
 
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
+  }
+
   // Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
@@ -88,6 +93,15 @@ struct PackageVisitor : public BaseVisitor {
 
   PackageVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
+
+  // Ignore parameters. These are materialized on-the-fly as `ConstantOp`s.
+  LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::SpecparamSymbol &) { return success(); }
+
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
+  }
 
   /// Emit an error for all other members.
   template <typename T>
@@ -502,6 +516,11 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
+  }
+
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
@@ -766,5 +785,143 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
     if (failed(member.visit(PackageVisitor(*this, loc))))
       return failure();
   }
+  return success();
+}
+
+static void guessNamespacePrefix(const slang::ast::Symbol &symbol,
+                                 SmallString<64> &prefix) {
+  if (symbol.kind == slang::ast::SymbolKind::Root)
+    return;
+  guessNamespacePrefix(symbol.getParentScope()->asSymbol(), prefix);
+  if (!symbol.name.empty()) {
+    prefix += symbol.name;
+    prefix += "::";
+  }
+}
+
+/// Convert a function and its arguments to a function declaration in the IR.
+/// This does not convert the function body.
+FunctionLowering *
+Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  using slang::ast::ArgumentDirection;
+
+  // Check if there already is a declaration for this function.
+  auto &lowering = functions[&subroutine];
+  if (lowering) {
+    if (!lowering->op)
+      return {};
+    return lowering.get();
+  }
+  lowering = std::make_unique<FunctionLowering>();
+  auto loc = convertLocation(subroutine.location);
+
+  // Pick an insertion point for this function according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(subroutine.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  // Class methods are currently not supported.
+  if (subroutine.thisVar) {
+    mlir::emitError(loc) << "unsupported class method";
+    return {};
+  }
+
+  // Determine the function type.
+  SmallVector<Type> inputTypes;
+  SmallVector<Type, 1> outputTypes;
+
+  for (const auto *arg : subroutine.getArguments()) {
+    auto type = cast<moore::UnpackedType>(convertType(arg->getType()));
+    if (!type)
+      return {};
+    if (arg->direction == ArgumentDirection::In) {
+      inputTypes.push_back(type);
+    } else {
+      inputTypes.push_back(moore::RefType::get(type));
+    }
+  }
+
+  if (!subroutine.getReturnType().isVoid()) {
+    auto type = convertType(subroutine.getReturnType());
+    if (!type)
+      return {};
+    outputTypes.push_back(type);
+  }
+
+  auto funcType = FunctionType::get(getContext(), inputTypes, outputTypes);
+
+  // Prefix the function name with the surrounding namespace to create somewhat
+  // sane names in the IR.
+  SmallString<64> funcName;
+  guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), funcName);
+  funcName += subroutine.name;
+
+  // Create a function declaration.
+  auto funcOp = builder.create<mlir::func::FuncOp>(loc, funcName, funcType);
+  SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+  orderedRootOps.insert(it, {subroutine.location, funcOp});
+  lowering->op = funcOp;
+
+  // Add the function to the symbol table of the MLIR module, which uniquifies
+  // its name.
+  symbolTable.insert(funcOp);
+
+  return lowering.get();
+}
+
+/// Convert a function.
+LogicalResult
+Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  // First get or create the function declaration.
+  auto *lowering = declareFunction(subroutine);
+  if (!lowering)
+    return failure();
+  ValueSymbolScope scope(valueSymbols);
+
+  // Create a function body block and populate it with block arguments.
+  auto &block = lowering->op.getBody().emplaceBlock();
+  for (auto [astArg, type] :
+       llvm::zip(subroutine.getArguments(),
+                 lowering->op.getFunctionType().getInputs())) {
+    auto loc = convertLocation(astArg->location);
+    auto blockArg = block.addArgument(type, loc);
+    valueSymbols.insert(astArg, blockArg);
+  }
+
+  // Convert the body of the function.
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToEnd(&block);
+
+  Value returnVar;
+  if (subroutine.returnValVar) {
+    auto type = convertType(*subroutine.returnValVar->getDeclaredType());
+    if (!type)
+      return failure();
+    returnVar = builder.create<moore::VariableOp>(
+        lowering->op.getLoc(),
+        moore::RefType::get(cast<moore::UnpackedType>(type)), StringAttr{},
+        Value{});
+    valueSymbols.insert(subroutine.returnValVar, returnVar);
+  }
+
+  if (failed(convertStatement(subroutine.getBody())))
+    return failure();
+
+  // If there was no explicit return statement provided by the user, insert a
+  // default one.
+  if (block.empty() || !block.back().hasTrait<OpTrait::IsTerminator>()) {
+    if (returnVar && !subroutine.getReturnType().isVoid()) {
+      returnVar = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), returnVar);
+    } else {
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), ValueRange{});
+    }
+  }
+  if (returnVar.use_empty())
+    returnVar.getDefiningOp()->erase();
   return success();
 }
