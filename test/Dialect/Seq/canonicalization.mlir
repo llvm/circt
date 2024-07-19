@@ -79,6 +79,14 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // A register with preset value is not folded right now
   // CHECK: %reg_preset = seq.firreg
   %reg_preset = seq.firreg %reg_preset clock %clk reset sync %r, %c0_i32 preset 3: i32
+
+  // A register with 0 preset value is folded.
+  // CHECK-NOT: %reg_preset_0 = seq.firreg
+  %reg_preset_0 = seq.firreg %reg_preset_0 clock %clk preset 0: i32
+
+  // A register with const false reset and 0 preset value is folded.
+  // CHECK-NOT: %reg_preset_1 = seq.firreg 
+  %reg_preset_1 = seq.firreg %reg_preset_1 clock %clk reset sync %false, %c0_i32 preset 0: i32
 }
 
 // CHECK-LABEL: @FirRegAggregate
