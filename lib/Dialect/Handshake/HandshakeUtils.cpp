@@ -1,4 +1,4 @@
-//===- PassHelpers.cpp - handshake pass helper functions --------*- C++ -*-===//
+//===- HandshakeUtils.cpp - handshake pass helper functions -----*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -26,18 +28,13 @@ using namespace circt;
 using namespace handshake;
 using namespace mlir;
 
-namespace circt {
-
-namespace handshake {
-
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
 /// well as infer a top module for the design by performing a topological sort
 /// of the instance graph. The result of this sort is placed in sortedFuncs.
-LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
-                                   InstanceGraph &instanceGraph,
-                                   std::string &topLevel,
-                                   SmallVectorImpl<std::string> &sortedFuncs) {
+LogicalResult circt::handshake::resolveInstanceGraph(
+    ModuleOp moduleOp, InstanceGraph &instanceGraph, std::string &topLevel,
+    SmallVectorImpl<std::string> &sortedFuncs) {
   // Create use graph
   auto walkFuncOps = [&](handshake::FuncOp funcOp) {
     auto &funcUses = instanceGraph[funcOp.getName().str()];
@@ -106,7 +103,8 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
   return success();
 }
 
-LogicalResult verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
+LogicalResult
+circt::handshake::verifyAllValuesHasOneUse(handshake::FuncOp funcOp) {
   if (funcOp.isExternal())
     return success();
 
@@ -153,7 +151,7 @@ static Type tupleToStruct(TupleType tuple) {
 
 // Converts 't' into a valid HW type. This is strictly used for converting
 // 'index' types into a fixed-width type.
-Type toValidType(Type t) {
+Type circt::handshake::toValidType(Type t) {
   return TypeSwitch<Type, Type>(t)
       .Case<IndexType>(
           [&](IndexType it) { return IntegerType::get(it.getContext(), 64); })
@@ -174,22 +172,6 @@ Type toValidType(Type t) {
       .Case<NoneType>(
           [&](NoneType nt) { return IntegerType::get(nt.getContext(), 0); })
       .Default([&](Type t) { return t; });
-}
-
-// Wraps a type into an ESI ChannelType type. The inner type is converted to
-// ensure comprehensability by the RTL dialects.
-esi::ChannelType esiWrapper(Type t) {
-  return TypeSwitch<Type, esi::ChannelType>(t)
-      .Case<esi::ChannelType>([](auto t) { return t; })
-      .Case<TupleType>(
-          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
-      .Case<NoneType>([](NoneType nt) {
-        // todo: change when handshake switches to i0
-        return esiWrapper(IntegerType::get(nt.getContext(), 0));
-      })
-      .Default([](auto t) {
-        return esi::ChannelType::get(t.getContext(), toValidType(t));
-      });
 }
 
 namespace {
@@ -254,8 +236,55 @@ private:
 };
 } // namespace
 
-hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
-                                         TypeRange outputs) {
+static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
+  for (int i = 0, e = op->getNumOperands(); i < e; ++i)
+    if (op->getOperand(i) == oldVal) {
+      op->setOperand(i, newVal);
+      break;
+    }
+}
+
+void circt::handshake::insertFork(Value result, bool isLazy,
+                                  OpBuilder &rewriter) {
+  // Get successor operations
+  std::vector<Operation *> opsToProcess;
+  for (auto &u : result.getUses())
+    opsToProcess.push_back(u.getOwner());
+
+  // Insert fork after op
+  rewriter.setInsertionPointAfterValue(result);
+  auto forkSize = opsToProcess.size();
+  Operation *newOp;
+  if (isLazy)
+    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result, forkSize);
+  else
+    newOp = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
+
+  // Modify operands of successor
+  // opsToProcess may have multiple instances of same operand
+  // Replace uses one by one to assign different fork outputs to them
+  for (int i = 0, e = forkSize; i < e; ++i)
+    replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+esi::ChannelType circt::handshake::esiWrapper(Type t) {
+  return TypeSwitch<Type, esi::ChannelType>(t)
+      .Case<esi::ChannelType>([](auto t) { return t; })
+      .Case<TupleType>(
+          [&](TupleType tt) { return esiWrapper(tupleToStruct(tt)); })
+      .Case<NoneType>([](NoneType nt) {
+        // todo: change when handshake switches to i0
+        return esiWrapper(IntegerType::get(nt.getContext(), 0));
+      })
+      .Default([](auto t) {
+        return esi::ChannelType::get(t.getContext(), toValidType(t));
+      });
+}
+
+hw::ModulePortInfo circt::handshake::getPortInfoForOpTypes(Operation *op,
+                                                           TypeRange inputs,
+                                                           TypeRange outputs) {
   SmallVector<hw::PortInfo> pinputs, poutputs;
 
   HandshakePortNameGenerator portNames(op);
@@ -298,6 +327,3 @@ hw::ModulePortInfo getPortInfoForOpTypes(Operation *op, TypeRange inputs,
 
   return hw::ModulePortInfo{pinputs, poutputs};
 }
-
-} // namespace handshake
-} // namespace circt

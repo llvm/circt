@@ -11,7 +11,6 @@ add_circt_library(CIRCTHandshakeToDC
     LINK_LIBS PUBLIC
     CIRCTHW
     CIRCTHandshake
-    CIRCTHandshakeTransforms
     CIRCTDC
     MLIRIR
     MLIRPass

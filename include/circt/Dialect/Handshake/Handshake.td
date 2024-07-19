@@ -39,6 +39,7 @@ def Handshake_Dialect : Dialect {
   let usePropertiesForAttributes = 0;
 
   let dependentDialects = [
+    "circt::esi::ESIDialect",
     "circt::seq::SeqDialect"
   ];
 }
