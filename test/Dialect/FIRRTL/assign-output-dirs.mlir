@@ -23,7 +23,7 @@ firrtl.circuit "AssignOutputDirs" {
   // A -> A
   // CHECK: firrtl.module private @ByA() attributes {output_file = #hw.output_file<"A{{/|\\\\}}">} {
   firrtl.module private @ByA() {}
-  
+
   // A & B -> R
   // firrtl.module private @ByAB() {
   firrtl.module private @ByAB() {}
