@@ -687,9 +687,13 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   // If the register has a const reset value, and no preset, we can replace it
   // with the const reset. We cannot replace it with a non-constant reset value.
   if (auto resetValue = getResetValue()) {
-    if (auto *op = resetValue.getDefiningOp())
+    if (auto *op = resetValue.getDefiningOp()) {
       if (op->hasTrait<OpTrait::ConstantLike>() && !presetAttr)
         return resetValue;
+      if (auto constOp = dyn_cast<hw::ConstantOp>(op))
+        if (presetAttr.getValue() == constOp.getValue())
+          return resetValue;
+    }
     return {};
   }
 
