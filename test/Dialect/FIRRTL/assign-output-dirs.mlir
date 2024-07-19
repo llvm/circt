@@ -93,3 +93,38 @@ firrtl.circuit "AssignOutputDirs" {
     firrtl.instance byYZ @ByYZ()
   }
 }
+
+// https://github.com/llvm/circt/issues/7347
+firrtl.circuit "SameOutputDirTwice" {
+  // CHECK: firrtl.module private @Bar() attributes {output_file = #hw.output_file<"verification{{/|\\\\}}testbench{{/|\\\\}}">} {
+  firrtl.module private @Bar() {
+  }
+  firrtl.module @Foo() attributes {output_file = #hw.output_file<"verification/testbench/">} {
+    firrtl.instance bar1 @Bar()
+    firrtl.instance bar2 @Bar()
+  }
+  firrtl.module @SameOutputDirTwice() {}
+}
+
+firrtl.circuit "EmptyOutputDir" {
+  // CHECK: firrtl.module private @Bar() {
+  firrtl.module private @Bar() {
+  }
+  firrtl.module @Foo() attributes {output_file = #hw.output_file<"some_file">} {
+    firrtl.instance bar1 @Bar()
+  }
+  firrtl.module @EmptyOutputDir() {}
+}
+
+firrtl.circuit "EmptyOutputDir2" {
+  // CHECK: firrtl.module private @Baz() attributes {output_file = #hw.output_file<"{{/|\\\\}}path{{/|\\\\}}to{{/|\\\\}}">} {
+  firrtl.module private @Baz() {
+  }
+  firrtl.module @Foo() attributes {output_file = #hw.output_file<"some_file">} {
+    firrtl.instance baz @Baz()
+  }
+  firrtl.module @Bar() attributes {output_file = #hw.output_file<"/path/to/">} {
+    firrtl.instance baz @Baz()
+  }
+  firrtl.module @EmptyOutputDir2() {}
+}
