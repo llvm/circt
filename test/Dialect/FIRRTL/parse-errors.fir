@@ -137,6 +137,25 @@ circuit invalid_add :
    input c : Clock
    ; expected-error @+1 {{second operand must be an integer type, not '!firrtl.clock'}}
    node n = add(in, c)
+;// -----
+
+FIRRTL version 4.0.0
+circuit trailing_comma :
+  public module trailing_comma :
+   input in0 : SInt<8>
+   input in1 : SInt<8>
+   ; expected-error @+1 {{expected expression in primitive operand}}
+   node n = add(in0, in1,)
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit no_commas :
+  public module no_commas :
+   input in0 : SInt<8>
+   input in1 : SInt<8>
+   ; expected-error @+1 {{expected ','}}
+   node n = add(in0 in1)
 
 ;// -----
 
@@ -363,6 +382,27 @@ circuit NestedProbes:
     output p : Probe<Probe<UInt>> ; expected-error {{invalid probe inner type, must be base-type}}
 
 ;// -----
+
+FIRRTL version 4.0.0
+circuit BadCommas:
+  public module BadCommas:
+    output p : Probe<UInt<1>,> ; expected-error {{expected layer name}}
+    wire w : UInt<1>
+    invalidate w
+    define p = probe(w)
+
+;// -----
+
+FIRRTL version 4.0.0
+circuit BadCommas2:
+  public module BadCommas2:
+    output p : Probe<UInt<1>, A,> ; expected-error {{expected '>' to end reference type}}
+    wire w : UInt<1>
+    invalidate w
+    define p = probe(w)
+
+;// -----
+
 FIRRTL version 3.1.0
 
 circuit ProbeOfProp:
@@ -617,6 +657,18 @@ circuit ProbeSMem:
     infer mport read = mem[io.addr], clock
     io.dataOut <= read
     define out = probe(read) ; expected-error {{cannot probe memories or their ports}}
+;// -----
+
+FIRRTL version 3.0.0
+circuit SmemNoRuwInfo:
+  module SmemNoRuwInfo:
+    input clock : Clock
+    input reset : Reset
+    output io : { flip addr : UInt<3>, dataOut : UInt<8>}
+
+    smem mem : UInt<8> [8] @[foo.fir 1:1]
+    infer mport read = mem[io.addr], clock
+    io.dataOut <= read
 
 
 ;// -----
@@ -1371,14 +1423,14 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     output a: Probe<
     ; expected-error @below {{expected probe data type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '<' in reference type}}
     output a: Probe X
@@ -1386,14 +1438,14 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     output a: Probe
     ; expected-error @below {{expected '<' in reference type}}
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected probe data type}}
     output a: Probe<>
@@ -1401,25 +1453,25 @@ circuit Foo:
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
     output a: Probe<UInt<1>
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected '>' to end reference type}}
-    output a: Probe<UInt<1> A
+    output a: Probe<UInt<1>, A
 
 ;// -----
 FIRRTL version 4.0.0
 circuit Foo:
-  layer A bind:
+  layer A, bind:
   public module Foo:
     ; expected-error @below {{expected layer name}}
-    output a: Probe<UInt<1> A.>
+    output a: Probe<UInt<1>, A.>
 
 ;// -----
 FIRRTL version 4.0.0

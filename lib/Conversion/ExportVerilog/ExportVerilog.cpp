@@ -248,7 +248,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
-          SystemFunctionOp>(op))
+          SystemFunctionOp, UnpackedArrayCreateOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -728,7 +728,7 @@ static bool isExpressionUnableToInline(Operation *op,
 
   // StructCreateOp needs to be assigning to a named temporary so that types
   // are inferred properly by verilog
-  if (isa<StructCreateOp, UnionCreateOp>(op))
+  if (isa<StructCreateOp, UnionCreateOp, UnpackedArrayCreateOp>(op))
     return true;
 
   // Aggregate literal syntax only works in an assignment expression, where
@@ -2303,6 +2303,7 @@ private:
   SubExprInfo visitSV(ConstantZOp op);
   SubExprInfo visitSV(ConstantStrOp op);
 
+  SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
     auto result = emitSubExpr(op->getOperand(0), LowestPrecedence);
@@ -3090,6 +3091,16 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayCreateOp op) {
         },
         [&]() { ps << "}"; });
   }
+  return {Unary, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(UnpackedArrayCreateOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  emitBracedList(
+      llvm::reverse(op.getInputs()), [&]() { ps << "'{"; },
+      [&](Value v) { emitSubExprIBox2(v); }, [&]() { ps << "}"; });
   return {Unary, IsUnsigned};
 }
 

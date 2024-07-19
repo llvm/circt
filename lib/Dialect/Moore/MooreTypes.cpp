@@ -199,6 +199,115 @@ LogicalResult UnionType::verify(function_ref<InFlightDiagnostic()> emitError,
 }
 
 //===----------------------------------------------------------------------===//
+// Interfaces for destructurable
+//===----------------------------------------------------------------------===//
+
+static std::optional<DenseMap<Attribute, Type>>
+getAllSubelementIndexMap(ArrayRef<StructLikeMember> members) {
+  DenseMap<Attribute, Type> destructured;
+  for (const auto &member : members)
+    destructured.insert({member.name, RefType::get(member.type)});
+  return destructured;
+}
+
+static Type getTypeAtAllIndex(ArrayRef<StructLikeMember> members,
+                              Attribute index) {
+  auto indexAttr = cast<StringAttr>(index);
+  if (!indexAttr)
+    return {};
+  for (const auto &member : members) {
+    if (member.name == indexAttr) {
+      return RefType::get(member.type);
+    }
+  }
+  return Type();
+}
+
+static std::optional<uint32_t>
+getFieldAllIndex(ArrayRef<StructLikeMember> members, StringAttr nameField) {
+  for (uint32_t fieldIndex = 0; fieldIndex < members.size(); fieldIndex++)
+    if (members[fieldIndex].name == nameField)
+      return fieldIndex;
+  return std::nullopt;
+}
+
+std::optional<DenseMap<Attribute, Type>> StructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type StructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> StructType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedStructType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedStructType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t>
+UnpackedStructType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
+}
+
+std::optional<DenseMap<Attribute, Type>> UnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> UnionType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
+}
+
+std::optional<DenseMap<Attribute, Type>>
+UnpackedUnionType::getSubelementIndexMap() {
+  return getAllSubelementIndexMap(getMembers());
+}
+
+Type UnpackedUnionType::getTypeAtIndex(Attribute index) {
+  return getTypeAtAllIndex(getMembers(), index);
+}
+
+std::optional<uint32_t> UnpackedUnionType::getFieldIndex(StringAttr nameField) {
+  return getFieldAllIndex(getMembers(), nameField);
+}
+
+std::optional<DenseMap<Attribute, Type>> RefType::getSubelementIndexMap() {
+  return TypeSwitch<Type, std::optional<DenseMap<Attribute, Type>>>(
+             getNestedType())
+      .Case<StructType, UnpackedStructType>([](auto &type) {
+        return getAllSubelementIndexMap(type.getMembers());
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
+Type RefType::getTypeAtIndex(Attribute index) {
+  return TypeSwitch<Type, Type>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&index](auto &type) {
+        return getTypeAtAllIndex(type.getMembers(), index);
+      })
+      .Default([](auto) { return Type(); });
+}
+
+std::optional<uint32_t> RefType::getFieldIndex(StringAttr nameField) {
+  return TypeSwitch<Type, std::optional<uint32_t>>(getNestedType())
+      .Case<StructType, UnpackedStructType>([&nameField](auto &type) {
+        return getFieldAllIndex(type.getMembers(), nameField);
+      })
+      .Default([](auto) { return std::nullopt; });
+}
+
+//===----------------------------------------------------------------------===//
 // Generated logic
 //===----------------------------------------------------------------------===//
 

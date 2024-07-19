@@ -11,8 +11,8 @@
 
     // CHECK: moore.concat_ref %a, %b
     %0 = moore.concat_ref %a, %b : (!moore.ref<i8960>, !moore.ref<i42>) -> <i9002>
-    // CHECK: %[[C_READ:.+]] = moore.read %c : i9002
-    %1 = moore.read %c : i9002
+    // CHECK: %[[C_READ:.+]] = moore.read %c
+    %1 = moore.read %c : <i9002>
     // CHECK: %[[CONST_42:.+]] = moore.constant 42 : i32
     // CHECK: %[[TMP1:.+]] = moore.extract %[[C_READ]] from %[[CONST_42]] : i9002, i32 -> i8960
     // CHECK: moore.assign %a, %[[TMP1]] : i8960
@@ -23,14 +23,14 @@
     moore.procedure always {
       // CHECK: moore.concat_ref %u, %v
       %2 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
-      // CHECK: %[[W_READ:.+]] = moore.read %w : l9002
+      // CHECK: %[[W_READ:.+]] = moore.read %w
       // CHECK: %[[CONST_42:.+]] = moore.constant 42 : i32
       // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from %[[CONST_42]] : l9002, i32 -> l8960
       // CHECK: moore.blocking_assign %u, %[[TMP1]] : l8960
       // CHECK: %[[CONST_0:.+]] = moore.constant 0 : i32
       // CHECK: %[[TMP2:.+]] = moore.extract %[[W_READ]] from %[[CONST_0]] : l9002, i32 -> l42
       // CHECK: moore.blocking_assign %v, %[[TMP2]] : l42
-      %3 = moore.read %w : l9002
+      %3 = moore.read %w : <l9002>
       moore.blocking_assign %2, %3 : l9002
 
       %4 = moore.constant 1 : i32
@@ -39,8 +39,8 @@
       scf.if %6 {
         // CHECK: moore.concat_ref %u, %v
         %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
-        // CHECK: %[[W_READ:.+]] = moore.read %w : l9002
-        %8 = moore.read %w : l9002
+        // CHECK: %[[W_READ:.+]] = moore.read %w
+        %8 = moore.read %w : <l9002>
         // CHECK: %[[CONST_42:.+]] = moore.constant 42 : i32
         // CHECK: %[[TMP1:.+]] = moore.extract %[[W_READ]] from %[[CONST_42]] : l9002, i32 -> l8960
         // CHECK: moore.nonblocking_assign %u, %[[TMP1]] : l8960
@@ -59,8 +59,8 @@ moore.module @Nested() {
   %y = moore.variable : <i32>
   %z = moore.variable : <i32>
   moore.procedure always {
-    // CHECK: %[[Z_READ:.+]] = moore.read %z : i32
-    %4 = moore.read %z : i32
+    // CHECK: %[[Z_READ:.+]] = moore.read %z
+    %4 = moore.read %z : <i32>
     // CHECK: %[[TMP1:.+]] = moore.conversion %[[Z_READ]] : !moore.i32 -> !moore.i96
     %5 = moore.conversion %4 : !moore.i32 -> !moore.i96
     // CHECK: %[[TMP2:.+]] = moore.conversion %[[TMP1]] : !moore.i96 -> !moore.i96

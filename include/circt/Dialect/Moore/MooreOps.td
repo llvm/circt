@@ -186,6 +186,7 @@ def ProcedureOp : MooreOp<"procedure", [
 //===----------------------------------------------------------------------===//
 
 def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
   DeclareOpInterfaceMethods<PromotableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
@@ -195,7 +196,10 @@ def VariableOp : MooreOp<"variable", [
   let description = [{
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
-  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    Optional<UnpackedType>:$initial
+  );
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
@@ -247,7 +251,7 @@ def NetOp : MooreOp<"net", [
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];
   let arguments = (ins
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     NetKindAttr:$kind,
     Optional<UnpackedType>:$assignment
   );
@@ -264,7 +268,7 @@ def AssignedVarOp : MooreOp<"assigned_variable", [
     "result", "initial", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "The copy of variable must have the initial value";
-  let arguments = (ins StrAttr:$name, UnpackedType:$initial);
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
@@ -274,7 +278,7 @@ def AssignedVarOp : MooreOp<"assigned_variable", [
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
-    "result", "input", "RefType::get(cast<UnpackedType>($_self))">
+    "input", "result", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -285,7 +289,7 @@ def ReadOp : MooreOp<"read", [
   let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($result)
+    $input attr-dict `:` type($input)
   }];
 }
 
@@ -412,6 +416,7 @@ def ConstantOp : MooreOp<"constant", [Pure]> {
   let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasFolder = 1;
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
@@ -965,7 +970,7 @@ def ExtractRefOp : MooreOp<"extract_ref"> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
+def StructCreateOp : MooreOp<"struct_create", [Pure]> {
   let summary = "Struct Create operation";
   let description = [{
     A structure represents a collection of data types
@@ -990,15 +995,18 @@ def StructCreateOp : MooreOp<"struct_create", [SameOperandsAndResultType]> {
     ```
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
-  let arguments = (ins UnpackedType:$input);
-  let results = (outs UnpackedType:$result);
-  let hasCustomAssemblyFormat = 1;
+  let arguments = (ins Variadic<UnpackedType>:$input);
+  let results = (outs RefType:$result);
   let assemblyFormat = [{
-  $input attr-dict `:` type($input)
+    $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
-def StructExtractOp : MooreOp<"struct_extract"> {
+def StructExtractOp : MooreOp<"struct_extract", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+]> {
   let summary = "Struct Extract operation";
   let description = [{
     Structures can be converted to bits preserving the bit pattern.
@@ -1026,16 +1034,29 @@ def StructExtractOp : MooreOp<"struct_extract"> {
     ```
     See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
   }];
-  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let arguments = (ins StrAttr:$fieldName, Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
-  type($input) `->`
-  type($result)
+    $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject"> {
+def StructExtractRefOp : MooreOp<"struct_extract_ref", [
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+]> {
+  let summary = "Struct Extract operation";
+  let arguments = (ins StrAttr:$fieldName, RefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `,` $fieldName attr-dict `:`
+    type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def StructInjectOp : MooreOp<"struct_inject", [Pure]>  {
   let summary = "Struct Field operation";
   let description = [{
     A structure can be assigned as a whole and passed to
@@ -1059,16 +1080,16 @@ def StructInjectOp : MooreOp<"struct_inject"> {
     ```
     See IEEE 1800-2017 § 7.2. "Assigning to structures".
   }];
-  let arguments = (ins UnpackedType:$LHS, StrAttr:$memberName,
-  UnpackedType:$RHS);
-  let results = (outs UnpackedType:$result);
-  let assemblyFormat = [{
-    $LHS `,`   $memberName `,` $RHS
-    attr-dict `:` type($LHS) type($RHS) `->` type($result)
-  }];
+  let arguments = (ins  RefType:$input, StrAttr:$fieldName,
+  UnpackedType:$newValue);
+  let results = (outs RefType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = true;
 }
 
-def UnionCreateOp : MooreOp<"union_create"> {
+def UnionCreateOp : MooreOp<"union_create", [Pure]> {
   let summary = "Union Create operation";
   let description = [{
     A union is a data type that represents a single piece
@@ -1093,12 +1114,12 @@ def UnionCreateOp : MooreOp<"union_create"> {
     ```
     See IEEE 1800-2017 § 7.3 "Unions"
   }];
-  let arguments = (ins StrAttr:$unionName, UnpackedType:$input);
+  let arguments = (ins UnpackedType:$input, StrAttr:$fieldName);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $unionName `,` $input attr-dict `:`
-  type($input) `->` type($result)
+    $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def UnionExtractOp : MooreOp<"union_extract"> {
@@ -1124,17 +1145,29 @@ def UnionExtractOp : MooreOp<"union_extract"> {
     ```
     See IEEE 1800-2017 § 7.3.1 "Packed unions"
   }];
-  let arguments = (ins StrAttr:$memberName, UnpackedType:$input);
+  let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-  $input `,`   $memberName  attr-dict `:`
-  type($input) `->` type($result)
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
+}
+
+def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
+  let summary = "Union Extract operation";
+  let arguments = (ins StrAttr:$fieldName, RefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
 }
 
 def ConditionalOp : MooreOp<"conditional",[
   RecursiveMemoryEffects,
-  NoRegionArguments, 
+  NoRegionArguments,
   SingleBlockImplicitTerminator<"moore::YieldOp">
 ]> {
   let summary = "Conditional operation";
@@ -1174,8 +1207,8 @@ def ConditionalOp : MooreOp<"conditional",[
 }
 
 def YieldOp : MooreOp<"yield", [
-  Pure, 
-  Terminator, 
+  Pure,
+  Terminator,
   HasParent<"ConditionalOp">
 ]> {
   let summary = "conditional yield and termination operation";

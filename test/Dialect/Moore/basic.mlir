@@ -28,24 +28,24 @@ moore.module @Module() {
   // CHECK: %[[I1_READ:.+]] = moore.read %i1
   // CHECK: %[[I2_READ:.+]] = moore.read %i2 
   // CHECK: moore.instance "ports" @Ports(a: %[[I1_READ]]: !moore.string, c: %[[I2_READ]]: !moore.event) -> (b: !moore.string, d: !moore.event)
-  %i1 = moore.variable : <!moore.string>
-  %i2 = moore.variable : <!moore.event>
-  %5 = moore.read %i1 : !moore.string
-  %6 = moore.read %i2 : !moore.event
+  %i1 = moore.variable : <string>
+  %i2 = moore.variable : <event>
+  %5 = moore.read %i1 : <string>
+  %6 = moore.read %i2 : <event>
   %o1, %o2 = moore.instance "ports" @Ports(a: %5: !moore.string, c: %6: !moore.event) -> (b: !moore.string, d: !moore.event)
 
   // CHECK: %v1 = moore.variable : <i1>
   %v1 = moore.variable : <i1>
   %v2 = moore.variable : <i1>
-  // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+  // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: %[[TMP2:.+]] = moore.variable name "v1" %[[TMP1]] : <i1>
-  %0 = moore.read %v2 : i1
+  %0 = moore.read %v2 : <i1>
   moore.variable name "v1" %0 : <i1>
 
   // CHECK: %w0 = moore.net wire : <l1>
   %w0 = moore.net wire : <l1>
-  // CHECK: %[[W0:.+]] = moore.read %w0 : l1
-  %1 = moore.read %w0 : l1
+  // CHECK: %[[W0:.+]] = moore.read %w0
+  %1 = moore.read %w0 : <l1>
   // CHECK: %w1 = moore.net wire %[[W0]] : <l1>
   %w1 = moore.net wire %1 : <l1>
   // CHECK: %w2 = moore.net uwire %[[W0]] : <l1>
@@ -84,19 +84,19 @@ moore.module @Module() {
   moore.procedure always_latch {}
   moore.procedure always_ff {}
 
-  // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+  // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: moore.assign %v1, %[[TMP1]] : i1
-  %2 = moore.read %v2 : i1
+  %2 = moore.read %v2 : <i1>
   moore.assign %v1, %2 : i1
 
   moore.procedure always {
-    // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+    // CHECK: %[[TMP1:.+]] = moore.read %v2
     // CHECK: moore.blocking_assign %v1, %[[TMP1]] : i1
-    %3 = moore.read %v2 : i1
+    %3 = moore.read %v2 : <i1>
     moore.blocking_assign %v1, %3 : i1
-    // CHECK: %[[TMP2:.+]] = moore.read %v2 : i1
+    // CHECK: %[[TMP2:.+]] = moore.read %v2
     // CHECK: moore.nonblocking_assign %v1, %[[TMP2]] : i1
-    %4 = moore.read %v2 : i1
+    %4 = moore.read %v2 : <i1>
     moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
@@ -274,12 +274,6 @@ moore.module @Expressions(
 
 // CHECK-LABEL: moore.module @GraphRegion
 moore.module @GraphRegion() {
-  // CHECK: [[B_READ:%.+]] = moore.read %b : i32
-  %0 = moore.read %b : i32
-  // CHECK: [[A:%.+]] = moore.variable [[B_READ]] : <i32>
-  %a = moore.variable %0 : <i32>
-  // CHECK: [[B:%.+]] = moore.variable %1 : <i32>
-  %b = moore.variable %1 : <i32>
-  // CHECK: [[CONST_0:%.+]] = moore.constant 0 : i32
-  %1 = moore.constant 0 : i32
+  %1 = moore.add %0, %0 : i32
+  %0 = moore.constant 0 : i32
 }
