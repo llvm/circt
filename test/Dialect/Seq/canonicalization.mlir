@@ -81,12 +81,19 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   %reg_preset = seq.firreg %reg_preset clock %clk reset sync %r, %c0_i32 preset 3: i32
 
   // A register with 0 preset value is folded.
-  // CHECK-NOT: %reg_preset_0 = seq.firreg
   %reg_preset_0 = seq.firreg %reg_preset_0 clock %clk preset 0: i32
+  hw.instance "reg_preset_0" @Observe(x: %reg_preset_0: i32) -> ()
+  // CHECK-NEXT: hw.instance "reg_preset_0" @Observe(x: %c0_i32: i32) -> ()
 
   // A register with const false reset and 0 preset value is folded.
-  // CHECK-NOT: %reg_preset_1 = seq.firreg 
   %reg_preset_1 = seq.firreg %reg_preset_1 clock %clk reset sync %false, %c0_i32 preset 0: i32
+  // CHECK-NEXT: hw.instance "reg_preset_1" @Observe(x: %c0_i32: i32) -> ()
+  hw.instance "reg_preset_1" @Observe(x: %reg_preset_1: i32) -> ()
+
+  // A register with const false reset and 0 preset value is folded.
+  %reg_preset_2 = seq.firreg %reg_preset_2 clock %clk reset sync %false, %c0_i32 preset 3: i32
+  // CHECK-NEXT: hw.instance "reg_preset_2" @Observe(x: %c3_i32: i32) -> ()
+  hw.instance "reg_preset_2" @Observe(x: %reg_preset_2: i32) -> ()
 }
 
 // CHECK-LABEL: @FirRegAggregate
