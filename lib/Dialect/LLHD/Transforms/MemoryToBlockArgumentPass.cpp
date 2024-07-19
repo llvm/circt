@@ -32,6 +32,7 @@ struct MemoryToBlockArgumentPass
     : public circt::llhd::impl::MemoryToBlockArgumentBase<
           MemoryToBlockArgumentPass> {
   void runOnOperation() override;
+  void runOnProcess(llhd::ProcessOp operation);
 };
 
 } // anonymous namespace
@@ -88,12 +89,16 @@ static void addBlockOperandToTerminator(Operation *terminator,
 }
 
 void MemoryToBlockArgumentPass::runOnOperation() {
-  Operation *operation = getOperation();
+  for (auto proc : getOperation().getOps<llhd::ProcessOp>())
+    runOnProcess(proc);
+}
+
+void MemoryToBlockArgumentPass::runOnProcess(llhd::ProcessOp operation) {
   OpBuilder builder(operation);
 
   // No operations that have their own region and are not isolated from above
   // are allowed for now.
-  WalkResult result = operation->walk([](Operation *op) -> WalkResult {
+  WalkResult result = operation.getBody().walk([](Operation *op) -> WalkResult {
     if (op->getNumRegions() > 0 &&
         !op->hasTrait<OpTrait::IsIsolatedFromAbove>())
       return WalkResult::interrupt();
@@ -105,14 +110,11 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   // Get all variables defined in the body of this operation
   // Note that variables that are passed as a function argument are not
   // considered.
-  SmallVector<Value, 16> vars;
-  for (llhd::VarOp var : operation->getRegion(0).getOps<llhd::VarOp>()) {
-    vars.push_back(var.getResult());
-  }
+  SmallVector<Value, 16> vars(operation->getRegion(0).getOps<llhd::VarOp>());
 
   // Don't consider variables that are used in other operations than load and
   // store (e.g. as an argument to a call)
-  for (auto var = vars.begin(); var != vars.end(); ++var) {
+  for (auto *var = vars.begin(); var != vars.end(); ++var) {
     for (Operation *user : var->getUsers()) {
       if (!isa<llhd::LoadOp>(user) && !isa<llhd::StoreOp>(user)) {
         vars.erase(var--);
@@ -247,7 +249,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<llhd::ProcOp>>
+std::unique_ptr<OperationPass<hw::HWModuleOp>>
 circt::llhd::createMemoryToBlockArgumentPass() {
   return std::make_unique<MemoryToBlockArgumentPass>();
 }

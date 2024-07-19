@@ -10,15 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ProcOp : LLHD_Op<"proc", [
-    Symbol,
-    DeclareOpInterfaceMethods<FunctionOpInterface>,
-    IsolatedFromAbove,
-    DeclareOpInterfaceMethods<CallableOpInterface>
-  ]> {
-  let summary = "Create a process";
+def LLHD_ProcessOp : LLHD_Op<"process", [
+  NoRegionArguments,
+  HasParent<"hw::HWModuleOp">
+]> {
+  let summary = "create a process";
   let description = [{
-    A `llhd.proc` represents control-flow in a timed fashion. It allows a
+    A `llhd.process` represents control-flow in a timed fashion. It allows a
     procedural description of how a circuit's output signals change in
     reaction to changing input signals. It has a region with arbitrarily
     many basic blocks. The first block is the entry block and cannot be
@@ -35,115 +33,22 @@ def LLHD_ProcOp : LLHD_Op<"proc", [
     | Process  | control-flow | timed     | Behavioral circuit description |
     | Entity   | data-flow    | timed     | Structural circuit description |
 
-    Syntax:
-
-    ```
-    proc-op ::= `llhd.proc` proc-symbol `(` ssa-input-list `)` `->`
-      `(` ssa-output-list `)` attr-dict `{` proc-region `}`
-    ```
-
     Examples:
 
     ```mlir
-    llhd.proc @example(%in0 : !hw.inout<i64>, %in1 : !hw.inout<i1>) ->
-        (%out2 : !hw.inout<i1>) {
-      br ^bb1
-    ^bb1:
-      llhd.halt
+    hw.module @top() {
+      llhd.process {
+        br ^bb1
+      ^bb1:
+        llhd.halt
+      }
     }
     ```
   }];
 
-  let arguments = (ins
-    TypeAttrOf<FunctionType>:$function_type,
-    I64Attr:$ins,
-    OptionalAttr<DictArrayAttr>:$arg_attrs,
-    OptionalAttr<DictArrayAttr>:$res_attrs
-  );
   let regions = (region MinSizedRegion<1>: $body);
 
-  let extraClassDeclaration = [{
-    /// Verify the type attribute of this function. Returns failure and emits
-    /// an error if the attribute is invalid.
-    LogicalResult verifyType();
-
-    /// Verifies the body of the function.
-    LogicalResult verifyBody();
-  }];
-
-  let hasVerifier = 1;
-}
-
-//===----------------------------------------------------------------------===//
-//=== Process and Entity Structure
-//===----------------------------------------------------------------------===//
-
-def LLHD_InstOp : LLHD_Op<"inst", [
-    CallOpInterface,
-    HasParent<"hw::HWModuleOp">,
-    AttrSizedOperandSegments
-  ]> {
-  let summary = "Instantiates a process or entity.";
-  let description = [{
-    Instantiates a process or entity and thus allows to build hierarchies.
-    Can only be used within an entity. An instance defines a unique name
-    within the entity it resides in.
-
-    Syntax:
-
-    ```
-    inst-op ::= `llhd.inst` inst-name symbol-name `(` ssa-input-list `)` `->`
-      `(` ssa-output-list `)` attr-dict `:`
-      functional-type(ssa-input-list, ssa-output-list)
-    ```
-
-    Example:
-
-    ```mlir
-    llhd.inst "foo" @empty() -> () : () -> ()
-    llhd.inst "bar" @proc_symbol() -> (%out0) : () -> !hw.inout<i32>
-    llhd.inst "baz" @entity_symbol(%in0, %in1) -> (%out0, %out1) :
-      (!hw.inout<i32>, !hw.inout<i16>) -> (!hw.inout<i8>, !hw.inout<i4>)
-    ```
-  }];
-
-  let arguments = (ins StrAttr:$name,
-                       FlatSymbolRefAttr:$callee,
-                       Variadic<InOutType>:$inputs,
-                       Variadic<InOutType>:$outputs);
-
-  let assemblyFormat = [{
-    $name $callee `(` $inputs `)` `->` `(` $outputs `)` attr-dict `:`
-    functional-type($inputs, $outputs)
-  }];
-
-  let extraClassDeclaration = [{
-    FunctionType getCalleeType();
-
-    MutableOperandRange getArgOperandsMutable() {
-      return getInputsMutable();
-    }
-
-    /// Get the argument operands to the called function.
-    operand_range getArgOperands() {
-      return {arg_operand_begin(), arg_operand_end()};
-    }
-
-    operand_iterator arg_operand_begin() { return operand_begin(); }
-    operand_iterator arg_operand_end() { return operand_end(); }
-
-    /// Return the callee of this operation.
-    CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
-    }
-
-    /// Set the callee for this operation.
-    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
-      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
-    }
-  }];
-
-  let hasVerifier = 1;
+  let assemblyFormat = "attr-dict-with-keyword $body";
 }
 
 def LLHD_ConnectOp : LLHD_Op<"con", [
@@ -166,14 +71,10 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
   let hasCanonicalizeMethod = 1;
 }
 
-//===----------------------------------------------------------------------===//
-//=== Control Flow Operations
-//===----------------------------------------------------------------------===//
-
 def LLHD_WaitOp : LLHD_Op<"wait", [
     Terminator,
     AttrSizedOperandSegments,
-    HasParent<"ProcOp">,
+    HasParent<"ProcessOp">,
     DeclareOpInterfaceMethods<BranchOpInterface>
   ]> {
   let summary = "Suspends execution of a process.";
@@ -182,7 +83,7 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
     observed signals change or a fixed time interval has passed. Execution
     resumes at the specified basic block with the passed arguments.
     * This is a terminator instruction.
-    * This instruction is only allowed in processes (`llhd.proc`).
+    * This instruction is only allowed in processes (`llhd.process`).
 
     Example:
 
@@ -207,14 +108,14 @@ def LLHD_WaitOp : LLHD_Op<"wait", [
   }];
 }
 
-def LLHD_HaltOp : LLHD_Op<"halt", [Terminator, HasParent<"ProcOp">]> {
+def LLHD_HaltOp : LLHD_Op<"halt", [Terminator, HasParent<"ProcessOp">]> {
   let summary = "Terminates execution of a process.";
   let description = [{
     The `halt` instruction terminates execution of a process. All processes
     must halt eventually or consist of an infinite loop.
 
     * This is a terminator instruction
-    * This instruction is only allowed in processes (`llhd.proc`).
+    * This instruction is only allowed in processes (`llhd.process`).
 
     Syntax:
 

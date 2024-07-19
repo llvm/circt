@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -inline -llhd-function-elimination | FileCheck %s
+// RUN: circt-opt %s -llhd-function-elimination | FileCheck %s
 
 // This test checks the presence of inlining into entities and processes
 // and their general structure after inlining. It also checks that the functions
@@ -18,11 +18,13 @@ func.func @complex(%flag : i1) -> i32 {
 }
 
 // CHECK-LABEL: @check_proc_inline
-llhd.proc @check_proc_inline(%arg : !hw.inout<i1>) -> (%out : !hw.inout<i32>) {
-  // CHECK-NOT: func.call
-  %0 = llhd.prb %arg : !hw.inout<i1>
-  %1 = func.call @complex(%0) : (i1) -> i32
-  %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
-  llhd.drv %out, %1 after %time : !hw.inout<i32>
-  llhd.halt
+hw.module @check_proc_inline(inout %arg: i1, inout %out: i32) {
+  llhd.process {
+    %0 = llhd.prb %arg : !hw.inout<i1>
+    %1 = func.call @complex(%0) : (i1) -> i32
+    %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+    llhd.drv %out, %1 after %time : !hw.inout<i32>
+    llhd.halt
+  }
+  hw.output
 }

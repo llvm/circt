@@ -25,6 +25,6 @@ hw.module @check_illegal_drv(inout %sig : i1) {
 // -----
 
 func.func @illegal_sig_parent (%arg0: i1) {
-  // expected-error @+1 {{expects parent op to be one of 'hw.module, llhd.proc'}}
+  // expected-error @+1 {{expects parent op to be one of 'hw.module, llhd.process'}}
   %0 = llhd.sig "sig" %arg0 : i1
 }
