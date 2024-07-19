@@ -27,7 +27,7 @@
 // Forceable and colored probes are not supported.
 // Specialize layers on or off to remove colored probes first.
 //
-// Debug ports on FIRRTL memeries are not currently supported,
+// Debug ports on FIRRTL memories are not currently supported,
 // but CHIRRTL debug ports are handled.
 //
 //===----------------------------------------------------------------------===//
@@ -156,20 +156,19 @@ private:
 
 } // end namespace
 
+static Block *getBodyBlock(FModuleLike mod) {
+  // Safety check for below, presently all modules have a region.
+  assert(mod->getNumRegions() == 1);
+  auto &blocks = mod->getRegion(0).getBlocks();
+  return !blocks.empty() ? &blocks.front() : nullptr;
+};
+
 /// Visit a module, converting its ports and internals to use hardware signals
 /// instead of probes.
 LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   // If module has strings describing XMR suffixes for its ports, reject.
   if (auto internalPaths = mod->getAttrOfType<ArrayAttr>("internalPaths"))
     return mod.emitError("cannot convert module with internal path");
-
-  // (helper to determine/get the body block if present)
-  auto getBodyBlock = [](auto mod) {
-    // Safety check for below, presently all modules have a region.
-    assert(mod->getNumRegions() == 1);
-    auto &blocks = mod->getRegion(0).getBlocks();
-    return !blocks.empty() ? &blocks.front() : nullptr;
-  };
 
   // Ports -> new ports without probe-ness.
   // For all probe ports, insert non-probe duplex values to use
@@ -352,7 +351,7 @@ ProbeVisitor::visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op) {
 
   // While the new ports are added as late as possible, the debug port
   // operation we're replacing likely has users and those are before
-  // the new ports.  Add a a wire at a point we know dominates this operation
+  // the new ports.  Add a wire at a point we know dominates this operation
   // and the new port access operations added above.  This will be used for
   // the existing users of the debug port.
   builder.setInsertionPoint(mem);
