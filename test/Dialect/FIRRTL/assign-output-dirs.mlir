@@ -117,7 +117,7 @@ firrtl.circuit "EmptyOutputDir" {
 }
 
 firrtl.circuit "EmptyOutputDir2" {
-  // CHECK: firrtl.module private @Baz() attributes {output_file = #hw.output_file<"{{/|\\\\}}path{{/|\\\\}}to{{/|\\\\}}">} {
+  // CHECK: firrtl.module private @Baz() attributes {output_file = #hw.output_file<"{{.*(/|\\\\)}}path{{/|\\\\}}to{{/|\\\\}}">} {
   firrtl.module private @Baz() {
   }
   firrtl.module @Foo() attributes {output_file = #hw.output_file<"some_file">} {
