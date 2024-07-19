@@ -306,7 +306,8 @@ LogicalResult CompRegOp::verify() {
 
 std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
 
-template <typename TOp> LogicalResult verifyResets(TOp op) {
+template <typename TOp>
+LogicalResult verifyResets(TOp op) {
   if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
     return op->emitOpError(
         "either reset and resetValue or neither must be specified");
@@ -799,7 +800,8 @@ void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> FirMemOp::getTargetResultIndex() { return 0; }
 
-template <class Op> static LogicalResult verifyFirMemMask(Op op) {
+template <class Op>
+static LogicalResult verifyFirMemMask(Op op) {
   if (auto mask = op.getMask()) {
     auto memType = op.getMemory().getType();
     if (!memType.getMaskWidth())
