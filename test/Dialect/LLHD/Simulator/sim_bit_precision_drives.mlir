@@ -7,7 +7,7 @@
 // CHECK-NEXT: 1000ps 0d 0e  root/sameByte  0xfffffffc
 // CHECK-NEXT: 1000ps 0d 0e  root/spanBytes  0xfffff00f
 // CHECK-NEXT: 1000ps 0d 0e  root/twoBytes  0x1234ffff
-llhd.entity @root () -> () {
+hw.module @root() {
   %0 = hw.constant 0x12345678 : i32
   %1 = hw.constant 0xffffffff : i32
   %s0 = llhd.sig "twoBytes" %0 : i32

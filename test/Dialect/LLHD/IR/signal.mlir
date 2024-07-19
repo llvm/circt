@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -mlir-print-op-generic -split-input-file -verify-diagnostics | circt-opt | circt-opt | FileCheck %s
 
 // CHECK-LABEL: checkSigInst
-llhd.entity @checkSigInst () -> () {
+hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
   %cI1 = hw.constant 0 : i1
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1

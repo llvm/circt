@@ -131,14 +131,18 @@ void ProcessLoweringPass::runOnOperation() {
 
     OpBuilder builder(op);
 
-    // Replace proc with entity
-    llhd::EntityOp entity =
-        builder.create<llhd::EntityOp>(op.getLoc(), op.getFunctionType(),
-                                       op.getIns(), /*argAttrs=*/ArrayAttr(),
-                                       /*resAttrs=*/ArrayAttr());
-    // Set the symbol name of the entity to the same as the process (as the
-    // process gets deleted anyways).
-    entity.setName(op.getName());
+    // Replace ProcOp with HWModuleOp
+    SmallVector<hw::PortInfo> ports;
+    for (auto [i, ty] : llvm::enumerate(op.getFunctionType().getInputs())) {
+      hw::PortInfo port;
+      port.type = ty;
+      port.name = builder.getStringAttr("inout" + Twine(i));
+      port.dir = hw::ModulePort::InOut;
+      ports.push_back(port);
+    }
+
+    auto entity =
+        builder.create<hw::HWModuleOp>(op.getLoc(), op.getNameAttr(), ports);
     // Move all blocks from the process to the entity, the process does not have
     // a region afterwards.
     entity.getBody().takeBody(op.getBody());
@@ -169,6 +173,9 @@ void ProcessLoweringPass::runOnOperation() {
     terminator->dropAllReferences();
     terminator->dropAllUses();
     terminator->erase();
+
+    builder.setInsertionPointToEnd(entity.getBodyBlock());
+    builder.create<hw::OutputOp>(entity.getLoc());
 
     return WalkResult::advance();
   });

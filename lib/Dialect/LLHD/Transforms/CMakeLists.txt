@@ -10,6 +10,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   CIRCTLLHDTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   CIRCTLLHD
   MLIRIR
   MLIRControlFlowDialect
