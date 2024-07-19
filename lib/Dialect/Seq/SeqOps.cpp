@@ -306,8 +306,7 @@ LogicalResult CompRegOp::verify() {
 
 std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
 
-template <typename TOp>
-LogicalResult verifyResets(TOp op) {
+template <typename TOp> LogicalResult verifyResets(TOp op) {
   if ((op.getReset() == nullptr) ^ (op.getResetValue() == nullptr))
     return op->emitOpError(
         "either reset and resetValue or neither must be specified");
