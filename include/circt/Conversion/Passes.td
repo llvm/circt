@@ -520,22 +520,6 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// LLHDToLLVM
-//===----------------------------------------------------------------------===//
-
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
-  let summary = "Convert LLHD to LLVM";
-  let description = [{
-    This pass translates LLHD to LLVM.
-  }];
-  let constructor = "circt::createConvertLLHDToLLVMPass()";
-  let dependentDialects = [
-    "mlir::arith::ArithDialect",
-    "mlir::LLVM::LLVMDialect"
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // HWToLLVM
 //===----------------------------------------------------------------------===//
 

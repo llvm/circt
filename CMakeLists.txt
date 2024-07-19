@@ -449,24 +449,6 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-# llhd-sim Configuration
-#-------------------------------------------------------------------------------
-
-if(NOT WIN32)
-  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." ON)
-else()
-  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." OFF)
-endif()
-
-if(CIRCT_LLHD_SIM_ENABLED)
-  message(STATUS "llhd-sim is enabled.")
-else()
-  message(STATUS "llhd-sim is disabled.")
-endif()
-
-llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
-
-#-------------------------------------------------------------------------------
 # Z3Lib Configuration (for circt-lec and SMT dialect integration tests)
 #-------------------------------------------------------------------------------
 
