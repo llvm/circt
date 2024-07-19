@@ -23,8 +23,4 @@
 // and utility function declarations.
 #include "circt/Dialect/Handshake/HandshakeEnums.h.inc"
 
-namespace circt {
-namespace handshake {} // namespace handshake
-} // namespace circt
-
 #endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEDIALECT_H
