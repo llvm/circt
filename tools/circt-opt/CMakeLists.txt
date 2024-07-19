@@ -46,7 +46,6 @@ target_link_libraries(circt-opt
   CIRCTHandshakeTransforms
   CIRCTLECTransforms
   CIRCTLLHD
-  CIRCTLLHDToLLVM
   CIRCTHWToLLVM
   CIRCTCombToArith
   CIRCTCombToLLVM

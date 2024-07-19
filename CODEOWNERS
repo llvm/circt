@@ -32,7 +32,6 @@ tools/arcilator @fabianschuiki @maerhart
 
 # LLHD
 **/LLHD* @fabianschuiki @maerhart
-tools/llhd-sim @fabianschuiki @maerhart
 
 # Pipeline
 **/Dialect/Pipeline @mortbopet
