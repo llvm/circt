@@ -685,23 +685,21 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
 
   // If the register has a const reset value, and no preset, we can replace it
   // with the const reset. We cannot replace it with a non-constant reset value.
-  if (!presetAttr)
-    if (auto resetValue = getResetValue()) {
-      if (auto *op = resetValue.getDefiningOp())
-        if (op->hasTrait<OpTrait::ConstantLike>())
-          return resetValue;
-      return {};
-    }
+  if (auto resetValue = getResetValue()) {
+    if (auto *op = resetValue.getDefiningOp())
+      if (op->hasTrait<OpTrait::ConstantLike>() && !presetAttr)
+        return resetValue;
+    return {};
+  }
 
   // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
   auto intType = dyn_cast<IntegerType>(getType());
   if (!intType)
     return {};
-  // If a non-zero preset present, then we cannot replace with zero.
+  // If preset present, then replace with preset.
   if (presetAttr)
-    if (!presetAttr.getValue().isZero())
-      return {};
+    return presetAttr;
   return IntegerAttr::get(intType, 0);
 }
 
