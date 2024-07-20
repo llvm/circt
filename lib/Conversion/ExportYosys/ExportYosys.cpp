@@ -345,7 +345,7 @@ struct RTLILModuleImporter {
     return success();
   }
 
-  LogicalResult connect(Value value, SigSpec &rhs, Value output) {
+  LogicalResult connect(Location loc, SigSpec &lhs, Value value, Value output) {
     if (auto extract = value.getDefiningOp<comb::ExtractOp>()) {
       auto input = extract.getInput(); // this must be wire
       auto concat = input.getDefiningOp<ConcatOp>();
@@ -365,7 +365,7 @@ struct RTLILModuleImporter {
           bitBackedges[{concat, e - 1 - i}] = back[i];
         };
         assert(backegdes.count(input));
-        mapping[getStr(rhs.as_bit().wire->name)] = concat;
+        mapping[getStr(lhs.as_bit().wire->name)] = concat;
         backegdes.lookup(input).setValue(concat);
         backegdes.erase(input);
       }
@@ -377,9 +377,19 @@ struct RTLILModuleImporter {
     } else if (backegdes.count(value)) {
       backegdes[value].setValue(output);
     } else {
-      return failure();
+      return mlir::emitError(loc) << "unsupported connection";
     }
     return success();
+  }
+
+  LogicalResult connect(Location loc, SigSpec &lhs, SigSpec &rhs) {
+    Value value = convertSigSpec(lhs);
+    Value output = convertSigSpec(rhs);
+    if (!value || !output) {
+      return mlir::emitError(loc) << "unsupported connection";
+    }
+
+    return connect(loc, lhs, value, output);
   }
 
   // mlir::TypedValue<hw::InOutType> getInout();
@@ -419,28 +429,30 @@ struct RTLILModuleImporter {
     builder->setInsertionPointToStart(module.getBodyBlock());
 
     // Import connections.
-    for (auto connect : rtlilModule->connections()) {
-      if (!connect.first.is_wire()) {
-        return module.emitError() << "wire is not expected";
+    for (auto con : rtlilModule->connections()) {
+      if (!con.first.is_wire() && !con.first.is_bit()) {
+        return module.emitError() << "connect lhs is not supported";
       }
 
-      auto *lhs_wire = connect.first.as_wire();
-      mapping.at(getStr(lhs_wire->name)).dump();
-      auto val = mapping.at(getStr(lhs_wire->name));
-      auto rhs_wire = connect.second;
-      if (rhs_wire.is_wire()) {
-        auto rhs = mapping.at(getStr(rhs_wire.as_wire()->name));
-        val.replaceAllUsesWith(rhs);
-      } else {
-        SmallVector<Value> chunks;
-        for (auto w : rhs_wire.chunks()) {
-          if (w.is_wire()) {
-            chunks.push_back(mapping.at(getStr(w.wire->name)));
-          }
-        }
-        val.replaceAllUsesWith(
-            builder->create<comb::ConcatOp>(val.getLoc(), chunks));
-      }
+      if (failed(connect(builder->getUnknownLoc(), con.first, con.second)))
+        return failure();
+
+      // auto *lhs_wire = connect.first.as_wire();
+      // auto val = mapping.at(getStr(lhs_wire->name));
+      // auto rhs_wire = connect.second;
+      // if (rhs_wire.is_wire()) {
+      //   auto rhs = mapping.at(getStr(rhs_wire.as_wire()->name));
+      //   val.replaceAllUsesWith(rhs);
+      // } else {
+      //   SmallVector<Value> chunks;
+      //   for (auto w : rhs_wire.chunks()) {
+      //     if (w.is_wire()) {
+      //       chunks.push_back(mapping.at(getStr(w.wire->name)));
+      //     }
+      //   }
+      //   val.replaceAllUsesWith(
+      //       builder->create<comb::ConcatOp>(val.getLoc(), chunks));
+      // }
     }
     // Import cells.
     for (auto cell : rtlilModule->cells()) {
@@ -456,16 +468,33 @@ struct RTLILModuleImporter {
   }
 
   Value convertSigSpec(const RTLIL::SigSpec &sigSpec) {
+    llvm::errs() << "run";
     if (sigSpec.is_wire())
       return getValueForWire(sigSpec.as_wire());
+    if (sigSpec.is_fully_const()) {
+      if (sigSpec.as_const().size() > 32)
+        return Value();
+      return builder->create<hw::ConstantOp>(
+          builder->getUnknownLoc(),
+          APInt(sigSpec.as_const().size(), sigSpec.as_const().as_int(false)));
+    }
     if (sigSpec.is_bit()) {
       auto bit = sigSpec.as_bit();
-      if (!bit.wire)
+      if (!bit.wire) {
+        module.emitError() << "is not wire";
         return {};
+      }
       auto v = getValueForWire(bit.wire);
       auto width = 1;
       auto offset = bit.offset;
       return builder->create<comb::ExtractOp>(v.getLoc(), v, offset, width);
+    }
+
+    if (sigSpec.is_chunk()) {
+      SmallVector<mlir::Value> chunks;
+      for (auto w : sigSpec.chunks())
+        chunks.push_back(convertSigSpec(w));
+      return builder->create<comb::ConcatOp>(builder->getUnknownLoc(), chunks);
     }
     return {};
   }
@@ -496,40 +525,42 @@ struct RTLILModuleImporter {
       auto output = importer.getPortValue(cell, outputPortName);
 
       llvm::dbgs() << result << " " << output << "\n";
-      output.getParentBlock()->getParentOp()->dump();
-      if (auto extract = output.getDefiningOp<comb::ExtractOp>()) {
-        auto input = extract.getInput(); // this must be wire
-        auto concat = input.getDefiningOp<ConcatOp>();
-        if (!concat) {
-          assert(importer.backegdes.count(input));
-          SmallVector<Value> values;
-          SmallVector<Backedge> back;
-          for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
-               i++) {
-            Backedge temporary =
-                importer.backEdgeBuilder->get(importer.builder->getI1Type());
-            values.push_back(temporary);
-            back.push_back(temporary);
-          };
-          concat = importer.builder->create<comb::ConcatOp>(location, values);
-          for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
-               i++) {
-            importer.bitBackedges[{concat, e - 1 - i}] = back[i];
-          };
-          assert(importer.backegdes.count(input));
-          auto sig = importer.getPortSig(cell, outputPortName);
-          importer.mapping[importer.getStr(sig.as_bit().wire->name)] = concat;
-          importer.backegdes.lookup(input).setValue(concat);
-          importer.backegdes.erase(input);
-        }
-        assert(concat.getNumOperands() ==
-               concat.getType().getIntOrFloatBitWidth());
-        assert(extract.getType().getIntOrFloatBitWidth() == 1);
-        importer.bitBackedges[{concat, extract.getLowBit()}].setValue(result);
-        // importer.backegdes[extract.getInput()].setValue();
-      } else {
-        importer.backegdes[output].setValue(result);
-      }
+      // output.getParentBlock()->getParentOp()->dump();
+      // if (auto extract = output.getDefiningOp<comb::ExtractOp>()) {
+      //   auto input = extract.getInput(); // this must be wire
+      //   auto concat = input.getDefiningOp<ConcatOp>();
+      //   if (!concat) {
+      //     assert(importer.backegdes.count(input));
+      //     SmallVector<Value> values;
+      //     SmallVector<Backedge> back;
+      //     for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
+      //          i++) {
+      //       Backedge temporary =
+      //           importer.backEdgeBuilder->get(importer.builder->getI1Type());
+      //       values.push_back(temporary);
+      //       back.push_back(temporary);
+      //     };
+      //     concat = importer.builder->create<comb::ConcatOp>(location,
+      //     values); for (int i = 0, e =
+      //     input.getType().getIntOrFloatBitWidth(); i < e;
+      //          i++) {
+      //       importer.bitBackedges[{concat, e - 1 - i}] = back[i];
+      //     };
+      //     assert(importer.backegdes.count(input));
+      //     auto sig = importer.getPortSig(cell, outputPortName);
+      //     importer.mapping[importer.getStr(sig.as_bit().wire->name)] =
+      //     concat; importer.backegdes.lookup(input).setValue(concat);
+      //     importer.backegdes.erase(input);
+      //   }
+      //   assert(concat.getNumOperands() ==
+      //          concat.getType().getIntOrFloatBitWidth());
+      //   assert(extract.getType().getIntOrFloatBitWidth() == 1);
+      //   importer.bitBackedges[{concat,
+      //   extract.getLowBit()}].setValue(result);
+      //   // importer.backegdes[extract.getInput()].setValue();
+      // } else {
+      //   importer.backegdes[output].setValue(result);
+      // }
       return success();
     }
 
@@ -549,15 +580,34 @@ struct RTLILModuleImporter {
     }
   };
 
-  struct AndNotOpPattern : public CellPatternBase {
+  template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
   public:
     using CellPatternBase::CellPatternBase;
     Value convert(OpBuilder &builder, Location location,
                   ValueRange inputValues) override {
-      auto andOp = builder.create<AndOp>(location, inputValues, false);
-      return comb::createOrFoldNot(location, andOp, builder, false);
+      auto notB =
+          comb::createOrFoldNot(location, inputValues[1], builder, false);
+
+      Value value;
+      if (isAnd)
+        value = builder.create<AndOp>(
+            location, ArrayRef<Value>{inputValues[0], notB}, false);
+      else
+        value = builder.create<OrOp>(
+            location, ArrayRef<Value>{inputValues[0], notB}, false);
+      return value;
     }
   };
+  struct NorOpPattern : public CellPatternBase {
+  public:
+    using CellPatternBase::CellPatternBase;
+    Value convert(OpBuilder &builder, Location location,
+                  ValueRange inputValues) override {
+      auto aOrB = builder.create<OrOp>(location, inputValues, false);
+      return comb::createOrFoldNot(location, aOrB, builder, false);
+    }
+  };
+
   struct XnorOpPattern : public CellPatternBase {
   public:
     using CellPatternBase::CellPatternBase;
@@ -595,8 +645,11 @@ struct RTLILModuleImporter {
   void registerPatterns() {
     addOpPattern<comb::XorOp>("$_XOR_", {"A", "B"}, "Y");
     addOpPattern<comb::AndOp>("$_AND_", {"A", "B"}, "Y");
-    addPattern<AndNotOpPattern>("$_ANDNOT_", {"A", "B"}, "Y");
+    addOpPattern<comb::OrOp>("$_OR_", {"A", "B"}, "Y");
+    addPattern<AndOrNotOpPattern<true>>("$_ANDNOT_", {"A", "B"}, "Y");
+    addPattern<AndOrNotOpPattern<false>>("$_ORNOT_", {"A", "B"}, "Y");
     addPattern<XnorOpPattern>("$_XNOR_", {"A", "B"}, "Y");
+    addPattern<NorOpPattern>("$_NOR_", {"A", "B"}, "Y");
   }
 
   LogicalResult importCell(RTLIL::Cell *cell) {
