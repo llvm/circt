@@ -9,9 +9,8 @@
 // This transform translate Seq FirMem ops to instances of HW generated modules.
 //
 //===----------------------------------------------------------------------===//
+#include "circt/Conversion/ExportRTLIL.h"
 #include "../PassDetail.h"
-#include "backends/rtlil/rtlil_backend.h"
-#include "circt/Conversion/ExportYosys.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWVisitors.h"
@@ -31,6 +30,8 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+// Yosys headers.
+#include "backends/rtlil/rtlil_backend.h"
 #include "kernel/rtlil.h"
 #include "kernel/yosys.h"
 
@@ -299,7 +300,6 @@ struct YosysCircuitImporter {
 
 struct RTLILImporter {
   RTLIL::Design *design;
-  const bool mutateInplace;
   LogicalResult run(mlir::ModuleOp module);
   using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleLike>;
   ModuleMappingTy moduleMapping;
@@ -370,7 +370,7 @@ struct RTLILModuleImporter {
       auto offset = bit.offset;
       auto idx = builder->create<hw::ConstantOp>(
           v.getLoc(),
-          APInt(bit.wire->width <= 1? 1 : llvm::Log2_32_Ceil(bit.wire->width),
+          APInt(bit.wire->width <= 1 ? 1 : llvm::Log2_32_Ceil(bit.wire->width),
                 bit.offset));
       return builder->create<sv::ArrayIndexInOutOp>(v.getLoc(), v, idx);
     }
@@ -782,7 +782,8 @@ struct RTLILModuleImporter {
           SmallString<16> name;
           name += "yosys_builtin_cell";
           name += v;
-          extMod = builder->create<hw::HWModuleExternOp>(location, v, ports, name);
+          extMod =
+              builder->create<hw::HWModuleExternOp>(location, v, ports, name);
           extMod.setPrivate();
         }
         referredModule = extMod;
@@ -1345,16 +1346,17 @@ LogicalResult ModuleConverter::visitSeq(seq::ToClockOp op) {
   return setLowering(op, result.value());
 }
 
-static void init_yosys() {
+static void init_yosys(bool enableLog = true) {
   // Set up yosys.
   Yosys::log_streams.clear();
-  Yosys::log_streams.push_back(&std::cerr);
+  if (enableLog)
+    Yosys::log_streams.push_back(&std::cerr);
   Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
 }
 
 void ExportYosysPass::runOnOperation() {
-  init_yosys();
+  init_yosys(redirectLog.getValue());
   auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
   auto *design = theDesign.get();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
@@ -1367,15 +1369,18 @@ void ExportYosysPass::runOnOperation() {
   if (failed(exporter.run()))
     return signalPassFailure();
 
-  RTLIL_BACKEND::dump_design(std::cout, design, false);
-  // Yosys::run_pass("hierarchy -top DigitalTop", design);
-  Yosys::run_pass("synth", design);
-  Yosys::run_pass("write_rtlil", design);
-  Yosys::run_pass("write_verilog synth.v", design);
-  // RTLIL_BACKEND::dump_design(std::cout, design, false);
+  if (!topModule.empty())
+    Yosys::run_pass("hierarchy -top " + topModule, design);
+
+  for (auto pass : passes)
+    Yosys::run_pass(pass, design);
+
+  // Erase all ops before importing them.
+  // TODO: We should preserve unrelated parts.
   while (getOperation().begin() != getOperation().end())
     getOperation().begin()->erase();
-  RTLILImporter importer{design, true};
+
+  RTLILImporter importer{design};
   if (failed(importer.run(getOperation())))
     return signalPassFailure();
 }

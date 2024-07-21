@@ -24,7 +24,7 @@
 #include "circt/Conversion/DCToHW.h"
 #include "circt/Conversion/ExportChiselInterface.h"
 #include "circt/Conversion/ExportVerilog.h"
-#include "circt/Conversion/ExportYosys.h"
+#include "circt/Conversion/ExportRTLIL.h"
 #include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Conversion/FSMToSV.h"
 #include "circt/Conversion/HWArithToHW.h"
