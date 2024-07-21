@@ -18,8 +18,6 @@ include "mlir/Rewrite/PassUtil.td"
 
 def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
   let summary = "Lower CIRCTs core dialects to a BMC problem statement";
-  let description = [{
-  }];
   let options = [
     Option<"topModule", "top-module", "std::string",
            /*default=*/"",

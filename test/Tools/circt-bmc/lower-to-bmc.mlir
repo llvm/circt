@@ -1,4 +1,4 @@
-// RUN: circt-opt --externalize-registers --lower-to-bmc="top-module=comb bound=10" %s | FileCheck %s
+// RUN: circt-opt --lower-to-bmc="top-module=comb bound=10" %s | FileCheck %s
 
 // CHECK:  llvm.func @printf(!llvm.ptr, ...)
 // CHECK:  func.func @comb() {
@@ -20,14 +20,14 @@
 // CHECK:  llvm.mlir.global private constant @"Bound reached with no violations!\0A"("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
 // CHECK:  llvm.mlir.global private constant @"Assertion can be violated!\0A"("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
 
-hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
+hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs = 0 : i32} {
   %0 = comb.add %in0, %in1 : i32
   %prop = comb.icmp eq %0, %in0 : i32
   verif.assert %prop : i1
   hw.output %0 : i32
 }
 
-// RUN: circt-opt --externalize-registers --lower-to-bmc="top-module=seq bound=10" %s | FileCheck %s --check-prefix=CHECK1
+// RUN: circt-opt --lower-to-bmc="top-module=seq bound=10" %s | FileCheck %s --check-prefix=CHECK1
 
 // CHECK1:  llvm.func @printf(!llvm.ptr, ...)
 // CHECK1:  func.func @seq() {
@@ -57,11 +57,9 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
 // CHECK1:  }
 // CHECK1:  llvm.mlir.global private constant @"Bound reached with no violations!\0A"("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
 // CHECK1:  llvm.mlir.global private constant @"Assertion can be violated!\0A"("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
-
-hw.module @seq(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
+hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state : i32, out out : i32, out reg_input : i32) attributes {num_regs = 1 : i32} {
   %0 = comb.add %in0, %in1 : i32
-  %reg = seq.compreg %0, %clk : i32
-  %prop = comb.icmp eq %0, %in0 : i32
-  verif.assert %prop : i1
-  hw.output %reg : i32
+  %1 = comb.icmp eq %0, %in0 : i32
+  verif.assert %1 : i1
+  hw.output %reg_state, %0 : i32, i32
 }
