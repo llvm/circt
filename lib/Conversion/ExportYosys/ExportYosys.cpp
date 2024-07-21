@@ -423,7 +423,8 @@ struct RTLILModuleImporter {
 
       // Make sure offset is correct.
       // parent <= wire[t, offset]
-      builder->create<sv::AssignOp>(loc, parent, builder->create<sv::ReadInOutOp>(loc, newRhs));
+      builder->create<sv::AssignOp>(
+          loc, parent, builder->create<sv::ReadInOutOp>(loc, newRhs));
     }
 
     return newWire;
@@ -1324,7 +1325,7 @@ void ExportYosysPass::runOnOperation() {
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
   // Yosys::run_pass("hierarchy -top DigitalTop", design);
-  Yosys::run_pass("synth_xilinx", design);
+  Yosys::run_pass("synth", design);
   Yosys::run_pass("write_rtlil", design);
   Yosys::run_pass("write_verilog synth.v", design);
   // RTLIL_BACKEND::dump_design(std::cout, design, false);
