@@ -38,7 +38,6 @@ endif ()
 add_circt_translation_library(CIRCTExportYosys
   ExportRTLIL.cpp
   ImportRTLIL.cpp
-  YosysOptimizer.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen

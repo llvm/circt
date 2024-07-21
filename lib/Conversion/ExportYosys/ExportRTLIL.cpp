@@ -993,6 +993,7 @@ void ExportYosysParallelPass::runOnOperation() {
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
+
 std::unique_ptr<mlir::Pass> circt::createExportYosys() {
   return std::make_unique<ExportYosysPass>();
 }
