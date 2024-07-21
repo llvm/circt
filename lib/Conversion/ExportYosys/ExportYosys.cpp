@@ -300,26 +300,20 @@ struct RTLILImporter {
   RTLIL::Design *design;
   const bool mutateInplace;
   LogicalResult run(mlir::ModuleOp module);
+  using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleOp>;
+  ModuleMappingTy moduleMapping;
 };
 
 struct RTLILModuleImporter {
   RTLIL::Module *rtlilModule;
   hw::HWModuleOp module;
   MLIRContext *context;
+  hw::HWModuleOp getModuleOp() { return module; }
   RTLILModuleImporter(MLIRContext *context, const RTLILImporter &importer,
-                      RTLIL::Module *rtlilModule)
+                      RTLIL::Module *rtlilModule, OpBuilder &moduleBuilder)
       : importer(importer), rtlilModule(rtlilModule), context(context) {
     builder = std::make_unique<OpBuilder>(context);
-    backEdgeBuilder = std::make_unique<BackedgeBuilder>(
-        *builder, mlir::UnknownLoc::get(context));
     registerPatterns();
-  }
-  const RTLILImporter &importer;
-  StringAttr getStr(const Yosys::RTLIL::IdString &str) const {
-    StringRef s(str.c_str());
-    return builder->getStringAttr(s.starts_with("\\") ? s.drop_front(1) : s);
-  }
-  LogicalResult initModule(OpBuilder &moduleBuilder) {
     size_t size = rtlilModule->ports.size();
     SmallVector<hw::PortInfo> ports(size);
     SmallVector<Value> values(size);
@@ -341,59 +335,110 @@ struct RTLILModuleImporter {
     }
     module = moduleBuilder.create<hw::HWModuleOp>(UnknownLoc::get(context),
                                                   modName, ports);
-
-    return success();
   }
+  const RTLILImporter &importer;
+  StringAttr getStr(const Yosys::RTLIL::IdString &str) const {
+    StringRef s(str.c_str());
+    return builder->getStringAttr(s.starts_with("\\") ? s.drop_front(1) : s);
+  }
+  // LogicalResult initModule(OpBuilder &moduleBuilder) {
+  //   size_t size = rtlilModule->ports.size();
+  //   SmallVector<hw::PortInfo> ports(size);
+  //   SmallVector<Value> values(size);
+  //   auto modName = getStr(rtlilModule->name);
 
-  LogicalResult connect(Location loc, SigSpec &lhs, Value value, Value output) {
-    if (auto extract = value.getDefiningOp<comb::ExtractOp>()) {
-      auto input = extract.getInput(); // this must be wire
-      auto concat = input.getDefiningOp<ConcatOp>();
-      if (!concat) {
-        assert(backegdes.count(input));
-        SmallVector<Value> values;
-        SmallVector<Backedge> back;
-        for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
-             i++) {
-          Backedge temporary = backEdgeBuilder->get(builder->getI1Type());
-          values.push_back(temporary);
-          back.push_back(temporary);
-        };
-        concat = builder->create<comb::ConcatOp>(value.getLoc(), values);
-        for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
-             i++) {
-          bitBackedges[{concat, e - 1 - i}] = back[i];
-        };
-        assert(backegdes.count(input));
-        mapping[getStr(lhs.as_bit().wire->name)] = concat;
-        backegdes.lookup(input).setValue(concat);
-        backegdes.erase(input);
-      }
-      assert(concat.getNumOperands() ==
-             concat.getType().getIntOrFloatBitWidth());
-      assert(extract.getType().getIntOrFloatBitWidth() == 1);
-      bitBackedges[{concat, extract.getLowBit()}].setValue(output);
-      // backegdes[extract.getInput()].setValue();
-    } else if (backegdes.count(value)) {
-      backegdes[value].setValue(output);
-    } else {
-      return mlir::emitError(loc) << "unsupported connection";
+  //   SmallVector<Value> outputs;
+  //   size_t numInput = 0, numOutput = 0;
+  //   for (auto port : rtlilModule->ports) {
+  //     auto *wire = rtlilModule->wires_[port];
+  //     assert(wire->port_input || wire->port_output);
+
+  //     size_t portId = wire->port_id - 1;
+  //     size_t argNum = (wire->port_input ? numInput : numOutput)++;
+  //     ports[portId].name = getStr(wire->name);
+  //     ports[portId].argNum = argNum;
+  //     ports[portId].type = builder->getIntegerType(wire->width);
+  //     ports[portId].dir =
+  //         wire->port_input ? hw::ModulePort::Input : hw::ModulePort::Output;
+  //   }
+  //   module = moduleBuilder.create<hw::HWModuleOp>(UnknownLoc::get(context),
+  //                                                 modName, ports);
+
+  //   return success();
+  // }
+
+  mlir::TypedValue<hw::InOutType> getInOutValue(Location loc,
+                                                SigSpec &sigSpec) {
+    if (sigSpec.is_wire())
+      return wireMapping.lookup(getStr(sigSpec.as_wire()->name));
+
+    // Const cannot be lhs.
+    if (sigSpec.is_fully_const()) {
+      return {};
     }
+
+    if (sigSpec.is_bit()) {
+      auto bit = sigSpec.as_bit();
+      if (!bit.wire) {
+        module.emitError() << "is not wire";
+        return {};
+      }
+      auto v = wireMapping.lookup(getStr(bit.wire->name));
+      assert(v);
+      auto width = 1;
+      auto offset = bit.offset;
+      auto idx = builder->create<hw::ConstantOp>(
+          v.getLoc(),
+          APInt(bit.wire->width == 0 ? 1 : llvm::Log2_32_Ceil(bit.wire->width),
+                bit.offset));
+      return builder->create<sv::ArrayIndexInOutOp>(v.getLoc(), v, idx);
+    }
+
+    if (sigSpec.is_chunk()) {
+      auto chunk = sigSpec.as_chunk();
+      if (!chunk.wire) {
+        mlir::emitError(loc) << "unsupported chunk states";
+        return {};
+      }
+
+      auto v = wireMapping.lookup(getStr(chunk.wire->name));
+      auto arrayLength =
+          cast<hw::ArrayType>(v.getElementType()).getNumElements();
+      auto idx = builder->create<hw::ConstantOp>(
+          v.getLoc(),
+          APInt(arrayLength == 0 ? 1 : llvm::Log2_32_Ceil(arrayLength),
+                chunk.offset));
+      return builder->create<sv::IndexedPartSelectInOutOp>(loc, v, idx,
+                                                           chunk.width);
+    }
+
+    mlir::emitError(loc) << "unsupported lhs value";
+    return {};
+  }
+  LogicalResult connect(Location loc, mlir::TypedValue<hw::InOutType> lhs,
+                        Value rhs) {
+    if (lhs.getType().getElementType() != rhs.getType())
+      rhs = builder->create<hw::BitcastOp>(loc, lhs.getType().getElementType(),
+                                           rhs);
+    builder->create<sv::AssignOp>(loc, lhs, rhs);
     return success();
   }
 
   LogicalResult connect(Location loc, SigSpec &lhs, SigSpec &rhs) {
-    Value value = convertSigSpec(lhs);
+    auto lhsValue = getInOutValue(loc, lhs);
     Value output = convertSigSpec(rhs);
-    if (!value || !output) {
+    if (!lhsValue || !output) {
       return mlir::emitError(loc) << "unsupported connection";
     }
 
-    return connect(loc, lhs, value, output);
+    return connect(loc, lhsValue, output);
   }
 
+  DenseMap<StringAttr, sv::WireOp> wireMapping;
+
   // mlir::TypedValue<hw::InOutType> getInout();
-  LogicalResult importBody() {
+  LogicalResult
+  importBody(const RTLILImporter::ModuleMappingTy &moduleMapping) {
     SmallVector<std::pair<size_t, Value>> outputs;
     builder->setInsertionPointToStart(module.getBodyBlock());
     // Init wires.
@@ -404,15 +449,16 @@ struct RTLILModuleImporter {
             portInfo.at(wire->port_id - 1).argNum);
         mapping.insert({getStr(wire->name), arg});
       } else {
-        // auto w = builder->create<sv::WireOp>(
-        //     builder->getUnknownLoc(),
-        //     hw::ArrayType::get(builder->getIntegerType(1), wire->width));
-        Backedge backedge =
-            backEdgeBuilder->get(builder->getIntegerType(wire->width));
-        backegdes[backedge] = backedge;
-        mapping.insert({getStr(wire->name), backedge});
+        auto loc = builder->getUnknownLoc();
+        auto w = builder->create<sv::WireOp>(
+            loc, hw::ArrayType::get(builder->getIntegerType(1), wire->width));
+        auto read = builder->create<hw::BitcastOp>(
+            loc, builder->getIntegerType(wire->width),
+            builder->create<sv::ReadInOutOp>(loc, w));
+        mapping.insert({getStr(wire->name), read});
+        wireMapping.insert({getStr(wire->name), w});
         if (wire->port_output) {
-          outputs.emplace_back(wire->port_id - 1, backedge);
+          outputs.emplace_back(wire->port_id - 1, read);
         }
       }
     }
@@ -430,33 +476,13 @@ struct RTLILModuleImporter {
 
     // Import connections.
     for (auto con : rtlilModule->connections()) {
-      if (!con.first.is_wire() && !con.first.is_bit()) {
-        return module.emitError() << "connect lhs is not supported";
-      }
-
       if (failed(connect(builder->getUnknownLoc(), con.first, con.second)))
         return failure();
-
-      // auto *lhs_wire = connect.first.as_wire();
-      // auto val = mapping.at(getStr(lhs_wire->name));
-      // auto rhs_wire = connect.second;
-      // if (rhs_wire.is_wire()) {
-      //   auto rhs = mapping.at(getStr(rhs_wire.as_wire()->name));
-      //   val.replaceAllUsesWith(rhs);
-      // } else {
-      //   SmallVector<Value> chunks;
-      //   for (auto w : rhs_wire.chunks()) {
-      //     if (w.is_wire()) {
-      //       chunks.push_back(mapping.at(getStr(w.wire->name)));
-      //     }
-      //   }
-      //   val.replaceAllUsesWith(
-      //       builder->create<comb::ConcatOp>(val.getLoc(), chunks));
-      // }
     }
+
     // Import cells.
     for (auto cell : rtlilModule->cells()) {
-      if (failed(importCell(cell)))
+      if (failed(importCell(moduleMapping, cell)))
         return failure();
     }
 
@@ -468,7 +494,6 @@ struct RTLILModuleImporter {
   }
 
   Value convertSigSpec(const RTLIL::SigSpec &sigSpec) {
-    llvm::errs() << "run";
     if (sigSpec.is_wire())
       return getValueForWire(sigSpec.as_wire());
     if (sigSpec.is_fully_const()) {
@@ -489,14 +514,22 @@ struct RTLILModuleImporter {
       auto offset = bit.offset;
       return builder->create<comb::ExtractOp>(v.getLoc(), v, offset, width);
     }
-
     if (sigSpec.is_chunk()) {
-      SmallVector<mlir::Value> chunks;
-      for (auto w : sigSpec.chunks())
-        chunks.push_back(convertSigSpec(w));
-      return builder->create<comb::ConcatOp>(builder->getUnknownLoc(), chunks);
+      auto bit = sigSpec.as_bit();
+      if (!bit.wire) {
+        module.emitError() << "is not wire";
+        return {};
+      }
+      auto v = getValueForWire(bit.wire);
+      auto width = sigSpec.as_chunk().width;
+      auto offset = sigSpec.as_chunk().offset;
+      return builder->create<comb::ExtractOp>(v.getLoc(), v, offset, width);
     }
-    return {};
+
+    SmallVector<mlir::Value> chunks;
+    for (auto w : sigSpec.chunks())
+      chunks.push_back(convertSigSpec(w));
+    return builder->create<comb::ConcatOp>(builder->getUnknownLoc(), chunks);
   }
 
   Value getPortValue(RTLIL::Cell *cell, StringRef portName) {
@@ -521,47 +554,10 @@ struct RTLILModuleImporter {
       }
       auto location = importer.builder->getUnknownLoc();
 
-      auto result = convert(*importer.builder, location, inputs);
-      auto output = importer.getPortValue(cell, outputPortName);
-
-      llvm::dbgs() << result << " " << output << "\n";
-      // output.getParentBlock()->getParentOp()->dump();
-      // if (auto extract = output.getDefiningOp<comb::ExtractOp>()) {
-      //   auto input = extract.getInput(); // this must be wire
-      //   auto concat = input.getDefiningOp<ConcatOp>();
-      //   if (!concat) {
-      //     assert(importer.backegdes.count(input));
-      //     SmallVector<Value> values;
-      //     SmallVector<Backedge> back;
-      //     for (int i = 0, e = input.getType().getIntOrFloatBitWidth(); i < e;
-      //          i++) {
-      //       Backedge temporary =
-      //           importer.backEdgeBuilder->get(importer.builder->getI1Type());
-      //       values.push_back(temporary);
-      //       back.push_back(temporary);
-      //     };
-      //     concat = importer.builder->create<comb::ConcatOp>(location,
-      //     values); for (int i = 0, e =
-      //     input.getType().getIntOrFloatBitWidth(); i < e;
-      //          i++) {
-      //       importer.bitBackedges[{concat, e - 1 - i}] = back[i];
-      //     };
-      //     assert(importer.backegdes.count(input));
-      //     auto sig = importer.getPortSig(cell, outputPortName);
-      //     importer.mapping[importer.getStr(sig.as_bit().wire->name)] =
-      //     concat; importer.backegdes.lookup(input).setValue(concat);
-      //     importer.backegdes.erase(input);
-      //   }
-      //   assert(concat.getNumOperands() ==
-      //          concat.getType().getIntOrFloatBitWidth());
-      //   assert(extract.getType().getIntOrFloatBitWidth() == 1);
-      //   importer.bitBackedges[{concat,
-      //   extract.getLowBit()}].setValue(result);
-      //   // importer.backegdes[extract.getInput()].setValue();
-      // } else {
-      //   importer.backegdes[output].setValue(result);
-      // }
-      return success();
+      auto rhsValue = convert(*importer.builder, location, inputs);
+      auto lhsSig = importer.getPortSig(cell, outputPortName);
+      auto lhsValue = importer.getInOutValue(location, lhsSig);
+      return importer.connect(location, lhsValue, rhsValue);
     }
 
   private:
@@ -607,6 +603,32 @@ struct RTLILModuleImporter {
       return comb::createOrFoldNot(location, aOrB, builder, false);
     }
   };
+  struct NandOpPattern : public CellPatternBase {
+  public:
+    using CellPatternBase::CellPatternBase;
+    Value convert(OpBuilder &builder, Location location,
+                  ValueRange inputValues) override {
+      auto aOrB = builder.create<AndOp>(location, inputValues, false);
+      return comb::createOrFoldNot(location, aOrB, builder, false);
+    }
+  };
+  struct NotOpPattern : public CellPatternBase {
+  public:
+    using CellPatternBase::CellPatternBase;
+    Value convert(OpBuilder &builder, Location location,
+                  ValueRange inputValues) override {
+      return comb::createOrFoldNot(location, inputValues[0], builder, false);
+    }
+  };
+  struct MuxOpPattern : public CellPatternBase {
+  public:
+    using CellPatternBase::CellPatternBase;
+    Value convert(OpBuilder &builder, Location location,
+                  ValueRange inputValues) override {
+      return builder.create<MuxOp>(location, inputValues[2], inputValues[1],
+                                   inputValues[0]);
+    }
+  };
 
   struct XnorOpPattern : public CellPatternBase {
   public:
@@ -646,30 +668,54 @@ struct RTLILModuleImporter {
     addOpPattern<comb::XorOp>("$_XOR_", {"A", "B"}, "Y");
     addOpPattern<comb::AndOp>("$_AND_", {"A", "B"}, "Y");
     addOpPattern<comb::OrOp>("$_OR_", {"A", "B"}, "Y");
-    addPattern<AndOrNotOpPattern<true>>("$_ANDNOT_", {"A", "B"}, "Y");
-    addPattern<AndOrNotOpPattern<false>>("$_ORNOT_", {"A", "B"}, "Y");
+    addPattern<AndOrNotOpPattern</*isAnd=*/true>>("$_ANDNOT_", {"A", "B"}, "Y");
+    addPattern<AndOrNotOpPattern</*isAnd=*/false>>("$_ORNOT_", {"A", "B"}, "Y");
     addPattern<XnorOpPattern>("$_XNOR_", {"A", "B"}, "Y");
     addPattern<NorOpPattern>("$_NOR_", {"A", "B"}, "Y");
+    addPattern<NandOpPattern>("$_NAND_", {"A", "B"}, "Y");
+    addPattern<NotOpPattern>("$_NOT_", {"A"}, "Y");
+    addPattern<MuxOpPattern>("$_MUX_", {"A", "B", "S"}, "Y");
   }
 
-  LogicalResult importCell(RTLIL::Cell *cell) {
+  LogicalResult importCell(const RTLILImporter::ModuleMappingTy &moduleMapping,
+                           RTLIL::Cell *cell) {
     auto v = cell->type;
     auto mod = rtlilModule->design->module(cell->type);
-    llvm::dbgs() << "Importing Cell " << v.c_str() << "\n";
-    // std.
+    LLVM_DEBUG(llvm::dbgs() << "Importing Cell " << v.c_str() << "\n";);
+    // Standard cells.
     auto it = handler.find(v.c_str());
+    auto location = builder->getUnknownLoc();
     if (it == handler.end()) {
-      llvm::dbgs() << "Unsupported cell type " << v.c_str() << "\n";
-      return failure();
+      if (v == "$") {
+        // Yosys std cells. Just lower it to external module instances.
+        for (auto [lhs, rhs] : cell->connections()) {
+          if (cell->input(lhs)) {
+          }
+        }
+        return failure();
+      }
+
+      // Otherwise lower it to an instance.
+      auto mod = moduleMapping.lookup(getStr(v));
+      auto *referredModule = rtlilModule->design->module(v);
+      if (!mod) {
+        return failure();
+      }
+      SmallVector<Value> values;
+      for (auto [lhs, rhs] : cell->connections()) {
+        if (cell->input(lhs)) {
+        }
+      }
+      // builder->create<hw::InstanceOp>(location, mod, getStr(cell->name),
+      //                                 values);
+      return success();
     }
     auto result = it->second->convert(*this, cell);
     return result;
   }
   DenseMap<StringAttr, Value> mapping;
-  std::unique_ptr<circt::BackedgeBuilder> backEdgeBuilder;
-  DenseMap<Value, circt::Backedge> backegdes;
-  DenseMap<std::pair<Value, size_t>, circt::Backedge> bitBackedges;
   std::unique_ptr<OpBuilder> builder;
+  DenseMap<StringAttr, hw::HWModuleExternOp> exeternalModules;
 };
 } // namespace
 
@@ -1215,7 +1261,7 @@ void ExportYosysPass::runOnOperation() {
 
   RTLIL_BACKEND::dump_design(std::cout, design, false);
   // Yosys::run_pass("hierarchy -top DigitalTop", design);
-  Yosys::run_pass("synth", design);
+  Yosys::run_pass("synth_xilinx", design);
   Yosys::run_pass("write_rtlil", design);
   Yosys::run_pass("write_verilog synth.v", design);
   // RTLIL_BACKEND::dump_design(std::cout, design, false);
@@ -1364,11 +1410,12 @@ LogicalResult RTLILImporter::run(mlir::ModuleOp module) {
   OpBuilder builder(module);
   builder.setInsertionPointToStart(module.getBody());
   for (auto mod : design->modules()) {
-    modules.emplace_back(module.getContext(), *this, mod);
-    modules.back().initModule(builder);
+    modules.emplace_back(module.getContext(), *this, mod, builder);
+    auto moduleOp = modules.back().getModuleOp();
+    moduleMapping.insert({moduleOp.getNameAttr(), moduleOp});
   }
   for (auto &mod : modules) {
-    if (failed(mod.importBody()))
+    if (failed(mod.importBody(moduleMapping)))
       return failure();
   }
   return success();
