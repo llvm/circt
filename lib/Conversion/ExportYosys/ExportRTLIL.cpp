@@ -9,9 +9,9 @@
 // This transform translate Seq FirMem ops to instances of HW generated modules.
 //
 //===----------------------------------------------------------------------===//
-#include "circt/Conversion/ExportYosys.h"
 #include "../PassDetail.h"
 #include "backends/rtlil/rtlil_backend.h"
+#include "circt/Conversion/ExportYosys.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWVisitors.h"
@@ -370,7 +370,7 @@ struct RTLILModuleImporter {
       auto offset = bit.offset;
       auto idx = builder->create<hw::ConstantOp>(
           v.getLoc(),
-          APInt(bit.wire->width == 0 ? 1 : llvm::Log2_32_Ceil(bit.wire->width),
+          APInt(bit.wire->width <= 1? 1 : llvm::Log2_32_Ceil(bit.wire->width),
                 bit.offset));
       return builder->create<sv::ArrayIndexInOutOp>(v.getLoc(), v, idx);
     }
@@ -388,7 +388,7 @@ struct RTLILModuleImporter {
           cast<hw::ArrayType>(v.getElementType()).getNumElements();
       auto idx = builder->create<hw::ConstantOp>(
           v.getLoc(),
-          APInt(arrayLength == 0 ? 1 : llvm::Log2_32_Ceil(arrayLength),
+          APInt(arrayLength <= 1 ? 1 : llvm::Log2_32_Ceil(arrayLength),
                 chunk.offset));
       return builder->create<sv::IndexedPartSelectInOutOp>(loc, v, idx,
                                                            chunk.width);
@@ -412,12 +412,12 @@ struct RTLILModuleImporter {
       auto offset = sig.offset;
       auto idx = builder->create<hw::ConstantOp>(
           loc,
-          APInt(childSize == 0 ? 1 : llvm::Log2_32_Ceil(childSize), offset));
+          APInt(childSize <= 1 ? 1 : llvm::Log2_32_Ceil(childSize), offset));
       auto parent =
           builder->create<sv::IndexedPartSelectInOutOp>(loc, child, idx, width);
 
       auto newIndex = builder->create<hw::ConstantOp>(
-          loc, APInt(size == 0 ? 1 : llvm::Log2_32_Ceil(size), newOffest));
+          loc, APInt(size <= 1 ? 1 : llvm::Log2_32_Ceil(size), newOffest));
       auto newRhs = builder->create<sv::IndexedPartSelectInOutOp>(loc, newWire,
                                                                   idx, width);
 
@@ -522,8 +522,21 @@ struct RTLILModuleImporter {
           builder->getIntegerType(sigSpec.as_const().size()));
     }
     if (sigSpec.is_fully_const()) {
-      if (sigSpec.as_const().size() > 32)
-        return Value();
+      if (sigSpec.as_const().size() > 32) {
+        APInt a = APInt::getZero(sigSpec.as_const().size());
+        for (auto [idx, b] : llvm::enumerate(sigSpec.as_const().bits)) {
+          if (b == RTLIL::State::S0) {
+          } else if (b == RTLIL::State::S1) {
+            a.setBit(idx);
+          } else {
+            mlir::emitError(module.getLoc())
+                << " non-binary constant is not supported yet";
+            return Value();
+          }
+        }
+
+        return builder->create<hw::ConstantOp>(builder->getUnknownLoc(), a);
+      }
       return builder->create<hw::ConstantOp>(
           builder->getUnknownLoc(),
           APInt(sigSpec.as_const().size(), sigSpec.as_const().as_int(false)));
@@ -718,30 +731,43 @@ struct RTLILModuleImporter {
     if (it == handler.end()) {
 
       SmallVector<mlir::TypedValue<hw::InOutType>> lhsValues;
+      SmallVector<std::pair<int, mlir::TypedValue<hw::InOutType>>>
+          lhsValuesWithIndex;
       SmallVector<Value> values;
+      SmallVector<std::pair<int, Value>> rhsValuesWithIndex;
       SmallVector<hw::PortInfo> ports;
       Operation *referredModule;
+      auto *referredRTLILModule = rtlilModule->design->module(cell->type);
       for (auto [lhs, rhs] : cell->connections()) {
         hw::PortInfo hwPort;
         hwPort.name = getStr(lhs);
+        auto portIdx =
+            referredRTLILModule ? referredRTLILModule->wire(lhs)->port_id : 0;
+
         if (cell->output(lhs)) {
           hwPort.dir = hw::PortInfo::Output;
-          lhsValues.push_back(getInOutValue(location, rhs));
-          if (!lhsValues.back())
+          lhsValuesWithIndex.push_back({portIdx, getInOutValue(location, rhs)});
+          if (!lhsValuesWithIndex.back().second)
             return mlir::emitError(location)
                    << "port lowering failed cell name=" << v
+
                    << " port name=" << lhs.c_str();
-          hwPort.type = lhsValues.back().getType().getElementType();
+          auto array = lhsValuesWithIndex.back()
+                           .second.getType()
+                           .getElementType()
+                           .dyn_cast<hw::ArrayType>();
+          hwPort.type =
+              builder->getIntegerType(array ? array.getNumElements() : 1);
         } else {
           hwPort.dir = hw::PortInfo::Input;
-          values.push_back(convertSigSpec(rhs));
+          rhsValuesWithIndex.push_back({portIdx, convertSigSpec(rhs)});
 
-          if (!values.back())
+          if (!rhsValuesWithIndex.back().second)
             return mlir::emitError(location)
                    << "port lowering failed cell name=" << v
                    << " port name=" << lhs.c_str();
 
-          hwPort.type = values.back().getType();
+          hwPort.type = rhsValuesWithIndex.back().second.getType();
         }
 
         ports.push_back(hwPort);
@@ -753,7 +779,10 @@ struct RTLILModuleImporter {
         if (!extMod) {
           OpBuilder::InsertionGuard guard(*builder);
           builder->setInsertionPointToStart(block.get());
-          extMod = builder->create<hw::HWModuleExternOp>(location, v, ports);
+          SmallString<16> name;
+          name += "yosys_builtin_cell";
+          name += v;
+          extMod = builder->create<hw::HWModuleExternOp>(location, v, ports, name);
           extMod.setPrivate();
         }
         referredModule = extMod;
@@ -764,6 +793,21 @@ struct RTLILModuleImporter {
           return failure();
         referredModule = mod;
       }
+
+      if (referredRTLILModule) {
+        std::sort(lhsValuesWithIndex.begin(), lhsValuesWithIndex.end(),
+                  [](const auto &lhs, const auto &rhs) {
+                    return lhs.first < rhs.first;
+                  });
+        std::sort(rhsValuesWithIndex.begin(), rhsValuesWithIndex.end(),
+                  [](const auto &lhs, const auto &rhs) {
+                    return lhs.first < rhs.first;
+                  });
+      }
+      for (auto t : lhsValuesWithIndex)
+        lhsValues.push_back(t.second);
+      for (auto t : rhsValuesWithIndex)
+        values.push_back(t.second);
 
       auto result = builder->create<hw::InstanceOp>(location, referredModule,
                                                     getStr(cell->name), values);
@@ -1460,16 +1504,6 @@ void ExportYosysParallelPass::runOnOperation() {
           })))
     return signalPassFailure();
 }
-
-/*
-  @ModSym_Synth (in %0.. , output : %1) {
-  }
-
-  @FooSym() {
-    %2, %3, %4 = @ModSym_Synth()
-    @test @other inst
-  }
-*/
 
 LogicalResult RTLILImporter::run(mlir::ModuleOp module) {
   SmallVector<RTLILModuleImporter> modules;

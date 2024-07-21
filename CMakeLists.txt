@@ -618,7 +618,6 @@ if(CIRCT_YOSYS_INTEGRATION_ENABLED)
     INSTALL_RPATH "${INSTALL_RPATH}"
     INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/share/include/"
   )
-  #target_link_libraries(libyosys INTERFACE "${INSTALL_DIR}/libyosys.so")
   set(CMAKE_BUILD_RPATH "${INSTALL_DIR}")
 endif()
 
