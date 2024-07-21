@@ -1371,25 +1371,27 @@ void ExportYosysParallelPass::runOnOperation() {
     }
   }
   llvm::sys::SmartMutex<true> mutex;
+  auto logger = [&mutex](auto callback) {
+    llvm::sys::SmartScopedLock<true> lock(mutex);
+    callback();
+  };
   if (failed(mlir::failableParallelForEachN(
           &getContext(), 0, results.size(), [&](auto i) {
             auto &[op, test] = results[i];
-            {
-              llvm::sys::SmartScopedLock<true> lock(mutex);
+            logger([&] {
               llvm::errs() << "[yosys-optimizer] Running [" << i + 1 << "/"
                            << results.size() << "] " << op.getModuleName()
                            << "\n";
-            }
+            });
 
             auto result =
                 runYosys(op.getLoc(), test, "synth_xilinx; write_verilog");
 
-            {
-              llvm::sys::SmartScopedLock<true> lock(mutex);
+            logger([&] {
               llvm::errs() << "[yosys-optimizer] Finished [" << i + 1 << "/"
                            << results.size() << "] " << op.getModuleName()
                            << "\n";
-            }
+            });
 
             // Remove temporary rtlil if success.
             if (succeeded(result))
