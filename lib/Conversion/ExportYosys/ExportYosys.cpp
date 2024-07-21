@@ -394,8 +394,42 @@ struct RTLILModuleImporter {
                                                            chunk.width);
     }
 
-    mlir::emitError(loc) << "unsupported lhs value";
-    return {};
+    // Concat ref.
+
+    auto size = sigSpec.size();
+    auto newWire = builder->create<sv::WireOp>(
+        loc, hw::ArrayType::get(builder->getI1Type(), size));
+    size_t newOffest = 0;
+    for (auto sig : sigSpec.chunks()) {
+      if (!sig.is_wire()) {
+        mlir::emitError(loc) << "unsupported chunk";
+        return {};
+      }
+      auto child = wireMapping.lookup(getStr(sig.wire->name));
+      auto childSize =
+          child.getElementType().cast<hw::ArrayType>().getNumElements();
+      auto width = sig.width;
+      auto offset = sig.offset;
+      auto idx = builder->create<hw::ConstantOp>(
+          loc,
+          APInt(childSize == 0 ? 1 : llvm::Log2_32_Ceil(childSize), offset));
+      auto parent =
+          builder->create<sv::IndexedPartSelectInOutOp>(loc, child, idx, width);
+
+      auto newIndex = builder->create<hw::ConstantOp>(
+          loc, APInt(size == 0 ? 1 : llvm::Log2_32_Ceil(size), newOffest));
+      auto newRhs = builder->create<sv::IndexedPartSelectInOutOp>(loc, newWire,
+                                                                  idx, width);
+
+      // Make sure offset is correct.
+      // parent <= wire[t, offset]
+      builder->create<sv::AssignOp>(loc, parent, builder->create<sv::ReadInOutOp>(loc, newRhs));
+    }
+
+    return newWire;
+
+    // mlir::emitError(loc) << "unsupported lhs value";
+    // return {};
   }
   LogicalResult connect(Location loc, mlir::TypedValue<hw::InOutType> lhs,
                         Value rhs) {
