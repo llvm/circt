@@ -49,26 +49,13 @@ std::string circt::rtlil::getEscapedName(StringRef name) {
 }
 
 namespace {
-#define GEN_PASS_DEF_EXPORTYOSYS
-#define GEN_PASS_DEF_EXPORTYOSYSPARALLEL
-#include "circt/Conversion/Passes.h.inc"
-
-struct ExportYosysPass : public impl::ExportYosysBase<ExportYosysPass> {
-  void runOnOperation() override;
-};
-struct ExportYosysParallelPass
-    : public impl::ExportYosysParallelBase<ExportYosysParallelPass> {
-  void runOnOperation() override;
-};
-
 int64_t getBitWidthSeq(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
   return getBitWidth(type);
 }
 
-struct ExportRTLILDesign;
-
+class ExportRTLILDesign;
 struct ExportRTLILModule
     : public hw::TypeOpVisitor<ExportRTLILModule, LogicalResult>,
       public hw::StmtVisitor<ExportRTLILModule, LogicalResult>,
@@ -269,36 +256,17 @@ struct ExportRTLILModule
 };
 
 struct ExportRTLILDesign {
-  ExportRTLILDesign(Yosys::RTLIL::Design *design, InstanceGraph *instanceGraph)
+  ExportRTLILDesign(Yosys::RTLIL::Design *design,
+                    hw::InstanceGraph *instanceGraph)
       : design(design), instanceGraph(instanceGraph) {}
   llvm::DenseMap<StringAttr, Yosys::RTLIL::Module *> moduleMapping;
+  LogicalResult addModule(hw::HWModuleLike op, bool defineAsBlackBox = false);
+  LogicalResult run();
 
-  LogicalResult addModule(hw::HWModuleLike op, bool defineAsBlackBox = false) {
-    defineAsBlackBox |= isa<hw::HWModuleExternOp>(op);
-    if (design->has(getEscapedName(op.getModuleName()))) {
-      return success(defineAsBlackBox);
-    }
-    auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
-    if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
-      return failure();
-    if (defineAsBlackBox)
-      newModule->set_bool_attribute(ID::blackbox);
-    converter.emplace_back(*this, newModule, op, defineAsBlackBox);
-    return converter.back().lowerPorts();
-  }
-
-  SmallVector<ExportRTLILModule> converter;
-  LogicalResult run() {
-    for (auto &c : converter)
-      if (!c.definedAsBlackBox && failed(c.lowerBody()))
-        return failure();
-    return success();
-  }
-
+  SmallVector<std::unique_ptr<ExportRTLILModule>> converter;
   Yosys::RTLIL::Design *design;
-  InstanceGraph *instanceGraph;
+  hw::InstanceGraph *instanceGraph;
 };
-
 } // namespace
 
 RTLIL::Const ExportRTLILModule::getConstant(const APInt &value) {
@@ -819,7 +787,7 @@ LogicalResult ExportRTLILModule::visitSeq(seq::ToClockOp op) {
   return setLowering(op, result.value());
 }
 
-static void init_yosys(bool enableLog = true) {
+void circt::rtlil::init_yosys(bool enableLog) {
   // Set up yosys.
   Yosys::log_streams.clear();
   if (enableLog)
@@ -827,6 +795,44 @@ static void init_yosys(bool enableLog = true) {
   Yosys::log_error_stderr = true;
   Yosys::yosys_setup();
 }
+
+LogicalResult ExportRTLILDesign::addModule(hw::HWModuleLike op,
+                                           bool defineAsBlackBox) {
+  defineAsBlackBox |= isa<hw::HWModuleExternOp>(op);
+  if (design->has(getEscapedName(op.getModuleName()))) {
+    return success(defineAsBlackBox);
+  }
+  auto *newModule = design->addModule(getEscapedName(op.getModuleName()));
+  if (!moduleMapping.insert({op.getModuleNameAttr(), newModule}).second)
+    return failure();
+  if (defineAsBlackBox)
+    newModule->set_bool_attribute(ID::blackbox);
+  converter.emplace_back(std::make_unique<ExportRTLILModule>(
+      *this, newModule, op, defineAsBlackBox));
+  return converter.back()->lowerPorts();
+}
+
+LogicalResult ExportRTLILDesign::run() {
+  for (auto &c : converter)
+    if (!c->definedAsBlackBox && failed(c->lowerBody()))
+      return failure();
+  return success();
+}
+
+namespace {
+#define GEN_PASS_DEF_EXPORTYOSYS
+#define GEN_PASS_DEF_EXPORTYOSYSPARALLEL
+#include "circt/Conversion/Passes.h.inc"
+
+struct ExportYosysPass : public impl::ExportYosysBase<ExportYosysPass> {
+  void runOnOperation() override;
+};
+struct ExportYosysParallelPass
+    : public impl::ExportYosysParallelBase<ExportYosysParallelPass> {
+  void runOnOperation() override;
+};
+
+} // namespace
 
 void ExportYosysPass::runOnOperation() {
   init_yosys(redirectLog.getValue());
@@ -858,19 +864,6 @@ void ExportYosysPass::runOnOperation() {
     return signalPassFailure();
 }
 
-LogicalResult runYosys(Location loc, StringRef inputFilePath,
-                       std::string command) {
-  auto yosysPath = llvm::sys::findProgramByName("yosys");
-  if (!yosysPath) {
-    return mlir::emitError(loc) << "cannot find 'yosys' executable. Please add "
-                                   "yosys to PATH. Error message='"
-                                << yosysPath.getError().message() << "'";
-  }
-  StringRef commands[] = {"-q", "-p", command, "-f", "rtlil", inputFilePath};
-  auto exitCode = llvm::sys::ExecuteAndWait(yosysPath.get(), commands);
-  return success(exitCode == 0);
-}
-
 static llvm::DenseSet<mlir::StringAttr> designSet(InstanceGraph &instanceGraph,
                                                   StringAttr dut) {
   auto dutModule = instanceGraph.lookup(dut);
@@ -898,9 +891,22 @@ static llvm::DenseSet<mlir::StringAttr> designSet(InstanceGraph &instanceGraph,
   return visited;
 }
 
+LogicalResult runYosys(Location loc, StringRef inputFilePath,
+                       std::string command) {
+  auto yosysPath = llvm::sys::findProgramByName("yosys");
+  if (!yosysPath) {
+    return mlir::emitError(loc) << "cannot find 'yosys' executable. Please add "
+                                   "yosys to PATH. Error message='"
+                                << yosysPath.getError().message() << "'";
+  }
+  StringRef commands[] = {"-q", "-p", command, "-f", "rtlil", inputFilePath};
+  auto exitCode = llvm::sys::ExecuteAndWait(yosysPath.get(), commands);
+  return success(exitCode == 0);
+}
+
 void ExportYosysParallelPass::runOnOperation() {
   // Set up yosys.
-  init_yosys();
+  init_yosys(true);
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
   auto &table = getAnalysis<mlir::SymbolTable>();
 
@@ -921,6 +927,7 @@ void ExportYosysParallelPass::runOnOperation() {
     auto *node = theInstanceGraph.lookup(op.getModuleNameAttr());
     if (!isInDesign(op.getModuleNameAttr()))
       continue;
+
     if (failed(exporter.addModule(op)))
       return signalPassFailure();
 
