@@ -505,14 +505,14 @@ struct RTLILModuleImporter {
       return builder->create<comb::ExtractOp>(v.getLoc(), v, offset, width);
     }
     if (sigSpec.is_chunk()) {
-      auto bit = sigSpec.as_bit();
-      if (!bit.wire) {
+      auto chunk = sigSpec.as_chunk();
+      if (!chunk.wire) {
         module.emitError() << "is not wire";
         return {};
       }
-      auto v = getValueForWire(bit.wire);
-      auto width = sigSpec.as_chunk().width;
-      auto offset = sigSpec.as_chunk().offset;
+      auto v = getValueForWire(chunk.wire);
+      auto width = chunk.width;
+      auto offset = chunk.offset;
       return builder->create<comb::ExtractOp>(v.getLoc(), v, offset, width);
     }
 
