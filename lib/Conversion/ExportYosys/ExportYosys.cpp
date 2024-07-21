@@ -686,10 +686,19 @@ struct RTLILModuleImporter {
     auto it = handler.find(v.c_str());
     auto location = builder->getUnknownLoc();
     if (it == handler.end()) {
+      SmallVector<Value> values;
+      SmallVector<hw::PortInfo> ports;
       if (v == "$") {
         // Yosys std cells. Just lower it to external module instances.
         for (auto [lhs, rhs] : cell->connections()) {
+          hw::PortInfo hwPort;
+          hwPort.name = getStr(lhs);
           if (cell->input(lhs)) {
+            hwPort.dir = hw::PortInfo::Input;
+            values.push_back(convertSigSpec(rhs));
+          } else {
+            hwPort.dir = hw::PortInfo::Output;
+            ports.emplace_back();
           }
         }
         return failure();
@@ -701,7 +710,6 @@ struct RTLILModuleImporter {
       if (!mod) {
         return failure();
       }
-      SmallVector<Value> values;
       for (auto [lhs, rhs] : cell->connections()) {
         if (cell->input(lhs)) {
         }
