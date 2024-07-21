@@ -24,6 +24,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/FunctionExtras.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Mutex.h"
@@ -300,83 +301,63 @@ struct RTLILImporter {
   RTLIL::Design *design;
   const bool mutateInplace;
   LogicalResult run(mlir::ModuleOp module);
-  using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleOp>;
+  using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleLike>;
   ModuleMappingTy moduleMapping;
 };
 
 struct RTLILModuleImporter {
   RTLIL::Module *rtlilModule;
-  hw::HWModuleOp module;
+  hw::HWModuleLike module;
   MLIRContext *context;
-  hw::HWModuleOp getModuleOp() { return module; }
+  hw::HWModuleLike getModuleOp() { return module; }
   RTLILModuleImporter(MLIRContext *context, const RTLILImporter &importer,
                       RTLIL::Module *rtlilModule, OpBuilder &moduleBuilder)
       : importer(importer), rtlilModule(rtlilModule), context(context) {
     builder = std::make_unique<OpBuilder>(context);
+    block = std::make_unique<Block>();
     registerPatterns();
     size_t size = rtlilModule->ports.size();
     SmallVector<hw::PortInfo> ports(size);
     SmallVector<Value> values(size);
     auto modName = getStr(rtlilModule->name);
 
-    SmallVector<Value> outputs;
     size_t numInput = 0, numOutput = 0;
     for (auto port : rtlilModule->ports) {
       auto *wire = rtlilModule->wires_[port];
       assert(wire->port_input || wire->port_output);
 
       size_t portId = wire->port_id - 1;
-      size_t argNum = (wire->port_input ? numInput : numOutput)++;
+      size_t argNum = (wire->port_output ? numOutput : numInput)++;
       ports[portId].name = getStr(wire->name);
       ports[portId].argNum = argNum;
       ports[portId].type = builder->getIntegerType(wire->width);
       ports[portId].dir =
-          wire->port_input ? hw::ModulePort::Input : hw::ModulePort::Output;
+          wire->port_output ? hw::ModulePort::Output : hw::ModulePort::Input;
     }
-    module = moduleBuilder.create<hw::HWModuleOp>(UnknownLoc::get(context),
-                                                  modName, ports);
+    if (rtlilModule->get_blackbox_attribute()) {
+      module = moduleBuilder.create<hw::HWModuleExternOp>(
+          UnknownLoc::get(context), modName, ports);
+      module.setPrivate();
+    } else
+      module = moduleBuilder.create<hw::HWModuleOp>(UnknownLoc::get(context),
+                                                    modName, ports);
   }
   const RTLILImporter &importer;
   StringAttr getStr(const Yosys::RTLIL::IdString &str) const {
     StringRef s(str.c_str());
     return builder->getStringAttr(s.starts_with("\\") ? s.drop_front(1) : s);
   }
-  // LogicalResult initModule(OpBuilder &moduleBuilder) {
-  //   size_t size = rtlilModule->ports.size();
-  //   SmallVector<hw::PortInfo> ports(size);
-  //   SmallVector<Value> values(size);
-  //   auto modName = getStr(rtlilModule->name);
-
-  //   SmallVector<Value> outputs;
-  //   size_t numInput = 0, numOutput = 0;
-  //   for (auto port : rtlilModule->ports) {
-  //     auto *wire = rtlilModule->wires_[port];
-  //     assert(wire->port_input || wire->port_output);
-
-  //     size_t portId = wire->port_id - 1;
-  //     size_t argNum = (wire->port_input ? numInput : numOutput)++;
-  //     ports[portId].name = getStr(wire->name);
-  //     ports[portId].argNum = argNum;
-  //     ports[portId].type = builder->getIntegerType(wire->width);
-  //     ports[portId].dir =
-  //         wire->port_input ? hw::ModulePort::Input : hw::ModulePort::Output;
-  //   }
-  //   module = moduleBuilder.create<hw::HWModuleOp>(UnknownLoc::get(context),
-  //                                                 modName, ports);
-
-  //   return success();
-  // }
 
   mlir::TypedValue<hw::InOutType> getInOutValue(Location loc,
                                                 SigSpec &sigSpec) {
     if (sigSpec.is_wire())
       return wireMapping.lookup(getStr(sigSpec.as_wire()->name));
 
-    // Const cannot be lhs.
+    // Const cannot be inout.
     if (sigSpec.is_fully_const()) {
       return {};
     }
-
+    // Bit selection.
     if (sigSpec.is_bit()) {
       auto bit = sigSpec.as_bit();
       if (!bit.wire) {
@@ -394,6 +375,7 @@ struct RTLILModuleImporter {
       return builder->create<sv::ArrayIndexInOutOp>(v.getLoc(), v, idx);
     }
 
+    // Range selection.
     if (sigSpec.is_chunk()) {
       auto chunk = sigSpec.as_chunk();
       if (!chunk.wire) {
@@ -439,6 +421,9 @@ struct RTLILModuleImporter {
   // mlir::TypedValue<hw::InOutType> getInout();
   LogicalResult
   importBody(const RTLILImporter::ModuleMappingTy &moduleMapping) {
+    if (isa<HWModuleExternOp>(module))
+      return success();
+
     SmallVector<std::pair<size_t, Value>> outputs;
     builder->setInsertionPointToStart(module.getBodyBlock());
     // Init wires.
@@ -496,6 +481,11 @@ struct RTLILModuleImporter {
   Value convertSigSpec(const RTLIL::SigSpec &sigSpec) {
     if (sigSpec.is_wire())
       return getValueForWire(sigSpec.as_wire());
+    if (sigSpec.is_fully_undef()) {
+      return builder->create<sv::ConstantXOp>(
+          builder->getUnknownLoc(),
+          builder->getIntegerType(sigSpec.as_const().size()));
+    }
     if (sigSpec.is_fully_const()) {
       if (sigSpec.as_const().size() > 32)
         return Value();
@@ -679,43 +669,73 @@ struct RTLILModuleImporter {
 
   LogicalResult importCell(const RTLILImporter::ModuleMappingTy &moduleMapping,
                            RTLIL::Cell *cell) {
-    auto v = cell->type;
+    auto v = getStr(cell->type);
     auto mod = rtlilModule->design->module(cell->type);
-    LLVM_DEBUG(llvm::dbgs() << "Importing Cell " << v.c_str() << "\n";);
+    LLVM_DEBUG(llvm::dbgs() << "Importing Cell " << v << "\n";);
     // Standard cells.
-    auto it = handler.find(v.c_str());
+    auto it = handler.find(v);
     auto location = builder->getUnknownLoc();
+
+    if (cell->parameters.size()) {
+      mlir::emitWarning(location)
+          << "parameters on a cell is currently dropped";
+    }
     if (it == handler.end()) {
+
+      SmallVector<mlir::TypedValue<hw::InOutType>> lhsValues;
       SmallVector<Value> values;
       SmallVector<hw::PortInfo> ports;
-      if (v == "$") {
-        // Yosys std cells. Just lower it to external module instances.
-        for (auto [lhs, rhs] : cell->connections()) {
-          hw::PortInfo hwPort;
-          hwPort.name = getStr(lhs);
-          if (cell->input(lhs)) {
-            hwPort.dir = hw::PortInfo::Input;
-            values.push_back(convertSigSpec(rhs));
-          } else {
-            hwPort.dir = hw::PortInfo::Output;
-            ports.emplace_back();
-          }
+      Operation *referredModule;
+      for (auto [lhs, rhs] : cell->connections()) {
+        hw::PortInfo hwPort;
+        hwPort.name = getStr(lhs);
+        if (cell->output(lhs)) {
+          hwPort.dir = hw::PortInfo::Output;
+          lhsValues.push_back(getInOutValue(location, rhs));
+          if (!lhsValues.back())
+            return mlir::emitError(location)
+                   << "port lowering failed cell name=" << v
+                   << " port name=" << lhs.c_str();
+          hwPort.type = lhsValues.back().getType().getElementType();
+        } else {
+          hwPort.dir = hw::PortInfo::Input;
+          values.push_back(convertSigSpec(rhs));
+
+          if (!values.back())
+            return mlir::emitError(location)
+                   << "port lowering failed cell name=" << v
+                   << " port name=" << lhs.c_str();
+
+          hwPort.type = values.back().getType();
         }
-        return failure();
+
+        ports.push_back(hwPort);
       }
 
-      // Otherwise lower it to an instance.
-      auto mod = moduleMapping.lookup(getStr(v));
-      auto *referredModule = rtlilModule->design->module(v);
-      if (!mod) {
-        return failure();
-      }
-      for (auto [lhs, rhs] : cell->connections()) {
-        if (cell->input(lhs)) {
+      if (v.getValue().starts_with("$")) {
+        // Yosys std cells. Just lower it to external module instances.
+        auto &extMod = exeternalModules[v];
+        if (!extMod) {
+          OpBuilder::InsertionGuard guard(*builder);
+          builder->setInsertionPointToStart(block.get());
+          extMod = builder->create<hw::HWModuleExternOp>(location, v, ports);
+          extMod.setPrivate();
         }
+        referredModule = extMod;
+      } else {
+        // Otherwise lower it to an instance.
+        auto mod = moduleMapping.lookup(v);
+        if (!mod)
+          return failure();
+        referredModule = mod;
       }
-      // builder->create<hw::InstanceOp>(location, mod, getStr(cell->name),
-      //                                 values);
+
+      auto result = builder->create<hw::InstanceOp>(location, referredModule,
+                                                    getStr(cell->name), values);
+      assert(result.getNumResults() == lhsValues.size());
+      for (auto [lhs, rhs] : llvm::zip(lhsValues, result.getResults()))
+        if (failed(connect(location, lhs, (Value)rhs)))
+          return failure();
       return success();
     }
     auto result = it->second->convert(*this, cell);
@@ -723,7 +743,8 @@ struct RTLILModuleImporter {
   }
   DenseMap<StringAttr, Value> mapping;
   std::unique_ptr<OpBuilder> builder;
-  DenseMap<StringAttr, hw::HWModuleExternOp> exeternalModules;
+  llvm::MapVector<StringAttr, hw::HWModuleExternOp> exeternalModules;
+  std::unique_ptr<Block> block;
 };
 } // namespace
 
@@ -1424,10 +1445,18 @@ LogicalResult RTLILImporter::run(mlir::ModuleOp module) {
     auto moduleOp = modules.back().getModuleOp();
     moduleMapping.insert({moduleOp.getNameAttr(), moduleOp});
   }
+  llvm::DenseSet<StringAttr> extMap;
   for (auto &mod : modules) {
     if (failed(mod.importBody(moduleMapping)))
       return failure();
+    for (auto [str, ext] : mod.exeternalModules) {
+      auto it = extMap.insert(str).second;
+      if (it) {
+        ext->moveBefore(module.getBody(), module.getBody()->begin());
+      }
+    }
   }
+
   return success();
 }
 //===----------------------------------------------------------------------===//
