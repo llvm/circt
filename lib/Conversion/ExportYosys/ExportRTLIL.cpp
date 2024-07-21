@@ -819,6 +819,29 @@ LogicalResult ExportRTLILDesign::run() {
   return success();
 }
 
+mlir::FailureOr<std::unique_ptr<Yosys::RTLIL::Design>>
+circt::rtlil::exportRTLILDesign(ArrayRef<hw::HWModuleLike> modules,
+                                ArrayRef<hw::HWModuleLike> blackBox,
+                                hw::InstanceGraph &instanceGraph) {
+  auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
+  auto *design = theDesign.get();
+  ExportRTLILDesign exporter(design, &instanceGraph);
+
+  for (auto op : modules)
+    if (failed(exporter.addModule(op)))
+      return failure();
+
+  for (auto op : blackBox) {
+    if (failed(exporter.addModule(op, true)))
+      return failure();
+  }
+
+  if (failed(exporter.run()))
+    return failure();
+
+  return std::move(theDesign);
+}
+
 namespace {
 #define GEN_PASS_DEF_EXPORTYOSYS
 #define GEN_PASS_DEF_EXPORTYOSYSPARALLEL
@@ -836,17 +859,14 @@ struct ExportYosysParallelPass
 
 void ExportYosysPass::runOnOperation() {
   init_yosys(redirectLog.getValue());
-  auto theDesign = std::make_unique<Yosys::RTLIL::Design>();
-  auto *design = theDesign.get();
   auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
-  ExportRTLILDesign exporter(design, &theInstanceGraph);
-  for (auto op : getOperation().getOps<hw::HWModuleLike>()) {
-    if (failed(exporter.addModule(op)))
-      return signalPassFailure();
-  }
 
-  if (failed(exporter.run()))
-    return signalPassFailure();
+  SmallVector<hw::HWModuleLike> modules(
+      getOperation().getOps<hw::HWModuleLike>());
+  auto theDesign =
+      circt::rtlil::exportRTLILDesign(modules, {}, theInstanceGraph);
+
+  auto *design = theDesign->get();
 
   if (!topModule.empty())
     Yosys::run_pass("hierarchy -top " + topModule, design);

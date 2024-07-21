@@ -21,6 +21,11 @@ class InstanceGraph;
 } // namespace hw
 namespace rtlil {
 
+mlir::FailureOr<std::unique_ptr<Yosys::RTLIL::Design>>
+exportRTLILDesign(ArrayRef<hw::HWModuleLike> modules,
+                  ArrayRef<hw::HWModuleLike> blackBox,
+                  hw::InstanceGraph &instanceGraph);
+
 mlir::LogicalResult importRTLILDesign(Yosys::RTLIL::Design *design,
                                       mlir::ModuleOp module);
 std::string getEscapedName(llvm::StringRef name);
