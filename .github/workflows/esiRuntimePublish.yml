@@ -61,7 +61,7 @@ jobs:
         # TODO: cache the binaries produced by vcpkg to save ~1hr of build time:
         #    https://learn.microsoft.com/en-us/vcpkg/consume/binary-caching-github-packages?pivots=windows-runner
         run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==2.16.2
@@ -76,13 +76,15 @@ jobs:
 
       - name: Build wheels (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
+        shell: pwsh
         env:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
           SETUPTOOLS_SCM_DEBUG: True
+          CIRCT_EXTRA_CMAKE_ARGS: -DESI_COSIM=OFF
         run: |
           echo "Building wheel"
-          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python3 -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
+          & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
+          python3 -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
 
       - name: Get wheel name
         shell: bash
