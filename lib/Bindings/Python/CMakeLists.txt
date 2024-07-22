@@ -193,6 +193,7 @@ add_mlir_python_modules(CIRCTPythonModules
   DECLARED_SOURCES
     MLIRPythonSources.Core
     MLIRPythonSources.Dialects.builtin
+    MLIRPythonSources.Dialects.builtin.ops_gen
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
