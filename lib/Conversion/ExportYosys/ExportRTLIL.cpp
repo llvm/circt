@@ -441,14 +441,21 @@ LogicalResult ExportRTLILModule::visitTypeOp(ArrayGetOp op) {
   if (failed(input) || failed(index) || failed(result))
     return failure();
 
+  auto width =
+      hw::type_cast<hw::ArrayType>(op.getInput().getType()).getNumElements();
+  auto sig = rtlilModule->Mul(
+      NEW_ID, index.value(),
+      getConstant(
+          APInt(1ll << op.getIndex().getType().getIntOrFloatBitWidth(), width)),
+      false);
 
-  (void)rtlilModule->addShiftx(NEW_ID, input.value(), index.value(),
-                               result.value());
+  (void)rtlilModule->addShiftx(NEW_ID, input.value(), sig, result.value());
   return success();
 }
 
 LogicalResult ExportRTLILModule::visitTypeOp(ArrayConcatOp op) {
   SigSpec ret;
+  // The order is opposite so reverse it.
   for (auto operand : llvm::reverse(op.getOperands())) {
     auto result = getValue(operand);
     if (failed(result))
