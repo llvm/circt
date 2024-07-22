@@ -770,12 +770,24 @@ static bool isExpressionUnableToInline(Operation *op,
       // Helper to determine if the use will be part of "event control",
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
-        // LTL Clock op's clock operand must be a name.
-        if (auto clockOp = dyn_cast<ltl::ClockOp>(user))
-          return clockOp.getClock() == use.get();
-        // Always blocks must have a name in their sensitivity list.
-        // (all operands)
-        return isa<AlwaysOp, AlwaysFFOp>(user);
+        return TypeSwitch<Operation *, bool>(user)
+            .Case<ltl::ClockOp>([&](auto clockOp) {
+              // LTL Clock op's clock operand must be a name.
+              return clockOp.getClock() == use.get();
+            })
+            .Case<sv::AssertConcurrentOp, sv::AssumeConcurrentOp,
+                  sv::CoverConcurrentOp>(
+                [&](auto op) { return op.getClock() == use.get(); })
+            .Case<sv::AssertPropertyOp, sv::AssumePropertyOp,
+                  sv::CoverPropertyOp>([&](auto op) {
+              return op.getDisable() == use.get() || op.getClock() == use.get();
+            })
+            .Case<AlwaysOp, AlwaysFFOp>([](auto) {
+              // Always blocks must have a name in their sensitivity list.
+              // (all operands)
+              return true;
+            })
+            .Default([](auto) { return false; });
       };
 
       if (!usedInExprControl())
