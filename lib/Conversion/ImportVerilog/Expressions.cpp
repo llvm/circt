@@ -627,8 +627,47 @@ struct RvalueExprVisitor {
   /// Handle subroutine calls.
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::SubroutineSymbol *subroutine) {
-    mlir::emitError(loc, "unsupported subroutine call");
-    return {};
+    auto *lowering = context.declareFunction(*subroutine);
+    if (!lowering)
+      return {};
+
+    // Convert the call arguments. Input arguments are converted to an rvalue.
+    // All other arguments are converted to lvalues and passed into the function
+    // by reference.
+    SmallVector<Value> arguments;
+    for (auto [callArg, declArg] :
+         llvm::zip(expr.arguments(), subroutine->getArguments())) {
+
+      // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for output
+      // and inout arguments.
+      auto *expr = callArg;
+      if (const auto *assign = expr->as_if<slang::ast::AssignmentExpression>())
+        expr = &assign->left();
+
+      Value value;
+      if (declArg->direction == slang::ast::ArgumentDirection::In)
+        value = context.convertRvalueExpression(*expr);
+      else
+        value = context.convertLvalueExpression(*expr);
+      if (!value)
+        return {};
+      arguments.push_back(value);
+    }
+
+    // Create the call.
+    auto callOp =
+        builder.create<mlir::func::CallOp>(loc, lowering->op, arguments);
+
+    // For calls to void functions we need to have a value to return from this
+    // function. Create a dummy `unrealized_conversion_cast`, which will get
+    // deleted again later on.
+    if (callOp.getNumResults() == 0)
+      return builder
+          .create<mlir::UnrealizedConversionCastOp>(
+              loc, moore::VoidType::get(context.getContext()), ValueRange{})
+          .getResult(0);
+
+    return callOp.getResult(0);
   }
 
   /// Handle system calls.

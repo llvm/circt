@@ -42,6 +42,7 @@ add_circt_translation_library(CIRCTImportVerilog
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTMoore
+  MLIRFuncDialect
   MLIRSCFDialect
   MLIRTranslateLib
   PRIVATE
