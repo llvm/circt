@@ -951,6 +951,9 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
       opsToErase.push_back(&op);
   }
 
+  llvm::SmallVector<mlir::Location> locs;
+  llvm::SmallVector<mlir::Value> fieldValues;
+  llvm::SmallVector<mlir::Attribute> opNames;
   // Convert any output property assignments to Field ops.
   for (auto op : llvm::make_early_inc_range(classOp.getOps<PropAssignOp>())) {
     // Property assignments will currently be pointing back to the original
@@ -961,9 +964,16 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
     // Get the original port name, create a Field, and erase the propassign.
     auto name = moduleLike.getPortName(outputPort.getArgNumber());
-    classOp.addField(builder, op.getLoc(), name, op.getSrc());
+
+    locs.push_back(op.getLoc());
+    fieldValues.push_back(op.getSrc());
+    opNames.push_back(mlir::StringAttr::get(classOp.getContext(), name));
+
     op.erase();
   }
+  auto op = builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
+  op.getOperation()->setAttr(
+      "field_names", mlir::ArrayAttr::get(classOp.getContext(), opNames));
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
@@ -1616,6 +1626,21 @@ struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   }
 };
 
+struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op, [&]() {
+      for (auto field : adaptor.getFields()) {
+        field.setType(typeConverter->convertType(field.getType()));
+      }
+    });
+    return success();
+  }
+};
+
 struct ClassExternFieldOpConversion
     : public OpConversionPattern<ClassExternFieldOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1857,6 +1882,7 @@ static void populateRewritePatterns(
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
+  patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
