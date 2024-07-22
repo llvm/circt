@@ -28,24 +28,24 @@ moore.module @Module() {
   // CHECK: %[[I1_READ:.+]] = moore.read %i1
   // CHECK: %[[I2_READ:.+]] = moore.read %i2 
   // CHECK: moore.instance "ports" @Ports(a: %[[I1_READ]]: !moore.string, c: %[[I2_READ]]: !moore.event) -> (b: !moore.string, d: !moore.event)
-  %i1 = moore.variable : <!moore.string>
-  %i2 = moore.variable : <!moore.event>
-  %5 = moore.read %i1 : !moore.string
-  %6 = moore.read %i2 : !moore.event
+  %i1 = moore.variable : <string>
+  %i2 = moore.variable : <event>
+  %5 = moore.read %i1 : <string>
+  %6 = moore.read %i2 : <event>
   %o1, %o2 = moore.instance "ports" @Ports(a: %5: !moore.string, c: %6: !moore.event) -> (b: !moore.string, d: !moore.event)
 
   // CHECK: %v1 = moore.variable : <i1>
   %v1 = moore.variable : <i1>
   %v2 = moore.variable : <i1>
-  // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+  // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: %[[TMP2:.+]] = moore.variable name "v1" %[[TMP1]] : <i1>
-  %0 = moore.read %v2 : i1
+  %0 = moore.read %v2 : <i1>
   moore.variable name "v1" %0 : <i1>
 
   // CHECK: %w0 = moore.net wire : <l1>
   %w0 = moore.net wire : <l1>
-  // CHECK: %[[W0:.+]] = moore.read %w0 : l1
-  %1 = moore.read %w0 : l1
+  // CHECK: %[[W0:.+]] = moore.read %w0
+  %1 = moore.read %w0 : <l1>
   // CHECK: %w1 = moore.net wire %[[W0]] : <l1>
   %w1 = moore.net wire %1 : <l1>
   // CHECK: %w2 = moore.net uwire %[[W0]] : <l1>
@@ -84,55 +84,55 @@ moore.module @Module() {
   moore.procedure always_latch {}
   moore.procedure always_ff {}
 
-  // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+  // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: moore.assign %v1, %[[TMP1]] : i1
-  %2 = moore.read %v2 : i1
+  %2 = moore.read %v2 : <i1>
   moore.assign %v1, %2 : i1
 
   moore.procedure always {
-    // CHECK: %[[TMP1:.+]] = moore.read %v2 : i1
+    // CHECK: %[[TMP1:.+]] = moore.read %v2
     // CHECK: moore.blocking_assign %v1, %[[TMP1]] : i1
-    %3 = moore.read %v2 : i1
+    %3 = moore.read %v2 : <i1>
     moore.blocking_assign %v1, %3 : i1
-    // CHECK: %[[TMP2:.+]] = moore.read %v2 : i1
+    // CHECK: %[[TMP2:.+]] = moore.read %v2
     // CHECK: moore.nonblocking_assign %v1, %[[TMP2]] : i1
-    %4 = moore.read %v2 : i1
+    %4 = moore.read %v2 : <i1>
     moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
   }
 }
 
-// CHECK-LABEL: func.func @Expressions
-func.func @Expressions(
-  // CHECK-SAME: [[A:%[^:]+]]: !moore.i32
-  // CHECK-SAME: [[B:%[^:]+]]: !moore.i32
-  %a: !moore.i32,
-  %b: !moore.i32,
-  // CHECK-SAME: [[C:%[^:]+]]: !moore.l32
-  // CHECK-SAME: [[D:%[^:]+]]: !moore.l3
-  %c: !moore.l32,
-  %d: !moore.l32,
-  // CHECK-SAME: [[X:%[^:]+]]: !moore.i1
-  %x: !moore.i1,
+// CHECK-LABEL: moore.module @Expressions
+moore.module @Expressions(
+  // CHECK-SAME: in [[A:%[^:]+]] : !moore.i32
+  // CHECK-SAME: in [[B:%[^:]+]] : !moore.i32
+  in %a: !moore.i32,
+  in %b: !moore.i32,
+  // CHECK-SAME: in [[C:%[^:]+]] : !moore.l32
+  // CHECK-SAME: in [[D:%[^:]+]] : !moore.l3
+  in %c: !moore.l32,
+  in %d: !moore.l32,
+  // CHECK-SAME: in [[X:%[^:]+]] : !moore.i1
+  in %x: !moore.i1,
 
-  // CHECK-SAME: [[ARRAY1:%[^:]+]]: !moore.uarray<4 x i8>
-  %array1: !moore.uarray<4 x i8>,
-  // CHECK-SAME: [[ARRAY2:%[^:]+]]: !moore.uarray<2 x uarray<4 x i8>>
-  %array2: !moore.uarray<2 x uarray<4 x i8>>,
+  // CHECK-SAME: in [[ARRAY1:%[^:]+]] : !moore.uarray<4 x i8>
+  in %array1: !moore.uarray<4 x i8>,
+  // CHECK-SAME: in [[ARRAY2:%[^:]+]] : !moore.uarray<2 x uarray<4 x i8>>
+  in %array2: !moore.uarray<2 x uarray<4 x i8>>,
 
-  // CHECK-SAME: [[REF_A:%[^:]+]]: !moore.ref<i32>
-  %refA: !moore.ref<i32>,
-  // CHECK-SAME: [[REF_B:%[^:]+]]: !moore.ref<i32>
-  %refB: !moore.ref<i32>,
-  // CHECK-SAME: [[REF_C:%[^:]+]]: !moore.ref<l32>
-  %refC: !moore.ref<l32>,
-  // CHECK-SAME: [[REF_D:%[^:]+]]: !moore.ref<l32>
-  %refD: !moore.ref<l32>,
-  // CHECK-SAME: [[REF_ARRAY1:%[^:]+]]: !moore.ref<uarray<4 x i8>>
-  %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
-  // CHECK-SAME: [[REF_ARRAY2:%[^:]+]]: !moore.ref<uarray<2 x uarray<4 x i8>>>
-  %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
+  // CHECK-SAME: in [[REF_A:%[^:]+]] : !moore.ref<i32>
+  in %refA: !moore.ref<i32>,
+  // CHECK-SAME: in [[REF_B:%[^:]+]] : !moore.ref<i32>
+  in %refB: !moore.ref<i32>,
+  // CHECK-SAME: in [[REF_C:%[^:]+]] : !moore.ref<l32>
+  in %refC: !moore.ref<l32>,
+  // CHECK-SAME: in [[REF_D:%[^:]+]] : !moore.ref<l32>
+  in %refD: !moore.ref<l32>,
+  // CHECK-SAME: in [[REF_ARRAY1:%[^:]+]] : !moore.ref<uarray<4 x i8>>
+  in %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
+  // CHECK-SAME: in [[REF_ARRAY2:%[^:]+]] : !moore.ref<uarray<2 x uarray<4 x i8>>>
+  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
 ) {
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
@@ -269,5 +269,11 @@ func.func @Expressions(
   } {
     moore.yield %b : i32
   }
-  return
+  moore.output
+}
+
+// CHECK-LABEL: moore.module @GraphRegion
+moore.module @GraphRegion() {
+  %1 = moore.add %0, %0 : i32
+  %0 = moore.constant 0 : i32
 }

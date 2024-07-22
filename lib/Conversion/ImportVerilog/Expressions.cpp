@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "slang/ast/SystemSubroutine.h"
 #include "slang/syntax/AllSyntax.h"
 
 using namespace circt;
@@ -60,13 +61,26 @@ struct RvalueExprVisitor {
 
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
-    if (auto value = context.valueSymbols.lookup(&expr.symbol))
-      return isa<moore::NamedConstantOp>(value.getDefiningOp())
-                 ? value
-                 : builder.create<moore::ReadOp>(
-                       loc,
-                       cast<moore::RefType>(value.getType()).getNestedType(),
-                       value);
+    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+      if (auto refType = dyn_cast<moore::RefType>(value.getType()))
+        value =
+            builder.create<moore::ReadOp>(loc, refType.getNestedType(), value);
+      return value;
+    }
+
+    // Try to materialize constant values directly.
+    slang::ast::EvalContext evalContext(context.compilation,
+                                        slang::ast::EvalFlags::CacheResults);
+    auto constant = expr.eval(evalContext);
+    if (constant.isInteger()) {
+      auto type = context.convertType(*expr.type);
+      if (!type)
+        return {};
+      return convertSVInt(constant.integer(), type);
+    }
+
+    // Otherwise some other part of ImportVerilog should have added an MLIR
+    // value for this expression's symbol to the `context.valueSymbols` table.
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
         << "no value generated for " << slang::ast::toString(expr.symbol.kind);
@@ -99,6 +113,16 @@ struct RvalueExprVisitor {
       return {};
     }
 
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
+      auto input = refOp.getInput();
+      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+        refOp.getInputMutable();
+        refOp->erase();
+        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
+                                              refOp.getFieldNameAttr(), rhs);
+        return rhs;
+      }
+    }
     if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
@@ -361,9 +385,15 @@ struct RvalueExprVisitor {
           << value.getBitWidth() << " bits wide; only 64 supported";
       return {};
     }
+    auto intType =
+        moore::IntType::get(context.getContext(), value.getBitWidth(),
+                            value.hasUnknown() ? moore::Domain::FourValued
+                                               : moore::Domain::TwoValued);
     auto truncValue = value.as<uint64_t>().value();
-    return builder.create<moore::ConstantOp>(loc, cast<moore::IntType>(type),
-                                             truncValue);
+    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    if (result.getType() != type)
+      result = builder.create<moore::ConversionOp>(loc, type, result);
+    return result;
   }
 
   // Handle `'0`, `'1`, `'x`, and `'z` literals.
@@ -434,7 +464,23 @@ struct RvalueExprVisitor {
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
         return {};
       }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      auto minuend = context.convertRvalueExpression(expr.left());
+      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
+      auto intType = moore::IntType::get(context.getContext(),
+                                         minuendType.getBitSize().value(),
+                                         minuendType.getDomain());
+      auto sliceWidth =
+          expr.right().constant->integer().as<uint64_t>().value() - 1;
+      auto subtraction =
+          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
     } else
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
       lowBit = context.convertRvalueExpression(expr.left());
 
     if (!type || !value || !lowBit)
@@ -445,7 +491,7 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertRvalueExpression(expr.value());
+    auto value = context.convertLvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
@@ -456,7 +502,9 @@ struct RvalueExprVisitor {
       return builder.create<moore::UnionExtractOp>(
           loc, type, builder.getStringAttr(expr.member.name), value);
     }
-    llvm_unreachable("unsupported symbol kind");
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
   }
 
   // Handle set membership operator.
@@ -564,6 +612,38 @@ struct RvalueExprVisitor {
     return conditionalOp.getResult();
   }
 
+  /// Handle calls.
+  Value visit(const slang::ast::CallExpression &expr) {
+    // Class method calls are currently not supported.
+    if (expr.thisClass()) {
+      mlir::emitError(loc, "unsupported class method call");
+      return {};
+    }
+    return std::visit(
+        [&](auto &subroutine) { return visitCall(expr, subroutine); },
+        expr.subroutine);
+  }
+
+  /// Handle subroutine calls.
+  Value visitCall(const slang::ast::CallExpression &expr,
+                  const slang::ast::SubroutineSymbol *subroutine) {
+    mlir::emitError(loc, "unsupported subroutine call");
+    return {};
+  }
+
+  /// Handle system calls.
+  Value visitCall(const slang::ast::CallExpression &expr,
+                  const slang::ast::CallExpression::SystemCallInfo &info) {
+    const auto &subroutine = *info.subroutine;
+
+    if (subroutine.name == "$signed" || subroutine.name == "$unsigned")
+      return context.convertRvalueExpression(*expr.arguments()[0]);
+
+    mlir::emitError(loc) << "unsupported system call `" << subroutine.name
+                         << "`";
+    return {};
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -637,6 +717,27 @@ struct LvalueExprVisitor {
         lowBit);
   }
 
+  Value visit(const slang::ast::MemberAccessExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto valueType = expr.value().type;
+    auto value = context.convertLvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+    if (valueType->isStruct()) {
+      return builder.create<moore::StructExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          builder.getStringAttr(expr.member.name), value);
+    }
+    if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
+      return builder.create<moore::UnionExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+          builder.getStringAttr(expr.member.name), value);
+    }
+    mlir::emitError(loc, "expression of type ")
+        << value.getType() << " cannot be accessed";
+    return {};
+  }
+
   // Handle range bits selections.
   Value visit(const slang::ast::RangeSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -653,7 +754,23 @@ struct LvalueExprVisitor {
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
         return {};
       }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      auto minuend = context.convertRvalueExpression(expr.left());
+      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
+      auto intType = moore::IntType::get(context.getContext(),
+                                         minuendType.getBitSize().value(),
+                                         minuendType.getDomain());
+      auto sliceWidth =
+          expr.right().constant->integer().as<uint64_t>().value() - 1;
+      auto subtraction =
+          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
     } else
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
       lowBit = context.convertRvalueExpression(expr.left());
 
     if (!type || !value || !lowBit)

@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/IR/RegionKindInterface.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/MemorySlotInterfaces.h"

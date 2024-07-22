@@ -21,18 +21,16 @@
 #include <map>
 #include <stdexcept>
 
-using namespace std;
-
 using namespace esi;
 
-void printInfo(ostream &os, AcceleratorConnection &acc);
-void printHier(ostream &os, AcceleratorConnection &acc);
+void printInfo(std::ostream &os, AcceleratorConnection &acc);
+void printHier(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   // TODO: find a command line parser library rather than doing this by hand.
   if (argc < 3) {
-    cerr << "Expected usage: " << argv[0]
-         << " <backend> <connection specifier> [command]" << endl;
+    std::cerr << "Expected usage: " << argv[0]
+              << " <backend> <connection specifier> [command]" << std::endl;
     return -1;
   }
 
@@ -40,89 +38,93 @@ int main(int argc, const char *argv[]) {
 
   const char *backend = argv[1];
   const char *conn = argv[2];
-  string cmd;
+  std::string cmd;
   if (argc > 3)
     cmd = argv[3];
 
   try {
-    unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
+    std::unique_ptr<AcceleratorConnection> acc = ctxt.connect(backend, conn);
     const auto &info = *acc->getService<services::SysInfo>();
 
     if (cmd == "version")
-      cout << "ESI system version: " << info.getEsiVersion() << endl;
+      std::cout << "ESI system version: " << info.getEsiVersion() << std::endl;
     else if (cmd == "json_manifest")
-      cout << info.getJsonManifest() << endl;
+      std::cout << info.getJsonManifest() << std::endl;
     else if (cmd == "info")
-      printInfo(cout, *acc);
+      printInfo(std::cout, *acc);
     else if (cmd == "hier")
-      printHier(cout, *acc);
+      printHier(std::cout, *acc);
     else {
-      cout << "Connection successful." << endl;
+      std::cout << "Connection successful." << std::endl;
       if (!cmd.empty()) {
-        cerr << "Unknown command: " << cmd << endl;
+        std::cerr << "Unknown command: " << cmd << std::endl;
         return 1;
       }
     }
     return 0;
-  } catch (exception &e) {
-    cerr << "Error: " << e.what() << endl;
+  } catch (std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
     return -1;
   }
 }
 
-void printInfo(ostream &os, AcceleratorConnection &acc) {
-  string jsonManifest = acc.getService<services::SysInfo>()->getJsonManifest();
+void printInfo(std::ostream &os, AcceleratorConnection &acc) {
+  std::string jsonManifest =
+      acc.getService<services::SysInfo>()->getJsonManifest();
   Manifest m(acc.getCtxt(), jsonManifest);
-  os << "API version: " << m.getApiVersion() << endl << endl;
-  os << "********************************" << endl;
-  os << "* Module information" << endl;
-  os << "********************************" << endl;
-  os << endl;
+  os << "API version: " << m.getApiVersion() << std::endl << std::endl;
+  os << "********************************" << std::endl;
+  os << "* Module information" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
   for (ModuleInfo mod : m.getModuleInfos())
     os << "- " << mod;
 
-  os << endl;
-  os << "********************************" << endl;
-  os << "* Type table" << endl;
-  os << "********************************" << endl;
-  os << endl;
+  os << std::endl;
+  os << "********************************" << std::endl;
+  os << "* Type table" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
   size_t i = 0;
   for (const Type *t : m.getTypeTable())
-    os << "  " << i++ << ": " << t->getID() << endl;
+    os << "  " << i++ << ": " << t->getID() << std::endl;
 }
 
-void printPort(ostream &os, const BundlePort &port, string indent = "") {
-  os << indent << "  " << port.getID() << ":" << endl;
+void printPort(std::ostream &os, const BundlePort &port,
+               std::string indent = "") {
+  os << indent << "  " << port.getID() << ":" << std::endl;
   for (const auto &[name, chan] : port.getChannels()) {
-    os << indent << "    " << name << ": " << chan.getType()->getID() << endl;
+    os << indent << "    " << name << ": " << chan.getType()->getID()
+       << std::endl;
   }
 }
 
-void printInstance(ostream &os, const HWModule *d, string indent = "") {
+void printInstance(std::ostream &os, const HWModule *d,
+                   std::string indent = "") {
   os << indent << "* Instance:";
   if (auto inst = dynamic_cast<const Instance *>(d))
-    os << inst->getID() << endl;
+    os << inst->getID() << std::endl;
   else
-    os << "top" << endl;
-  os << indent << "* Ports:" << endl;
+    os << "top" << std::endl;
+  os << indent << "* Ports:" << std::endl;
   for (const BundlePort &port : d->getPortsOrdered())
     printPort(os, port, indent + "  ");
   std::vector<const Instance *> children = d->getChildrenOrdered();
   if (!children.empty()) {
-    os << indent << "* Children:" << endl;
+    os << indent << "* Children:" << std::endl;
     for (const Instance *child : d->getChildrenOrdered())
       printInstance(os, child, indent + "  ");
   }
-  os << endl;
+  os << std::endl;
 }
 
-void printHier(ostream &os, AcceleratorConnection &acc) {
+void printHier(std::ostream &os, AcceleratorConnection &acc) {
   Manifest manifest(acc.getCtxt(),
                     acc.getService<services::SysInfo>()->getJsonManifest());
   std::unique_ptr<Accelerator> design = manifest.buildAccelerator(acc);
-  os << "********************************" << endl;
-  os << "* Design hierarchy" << endl;
-  os << "********************************" << endl;
-  os << endl;
+  os << "********************************" << std::endl;
+  os << "* Design hierarchy" << std::endl;
+  os << "********************************" << std::endl;
+  os << std::endl;
   printInstance(os, design.get());
 }

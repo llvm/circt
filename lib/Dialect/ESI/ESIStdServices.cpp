@@ -99,10 +99,14 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "read")),
       ChannelBundleType::get(
           ctxt,
-          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+          {BundledChannel{
+               StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+               ChannelType::get(
+                   ctxt,
+                   IntegerType::get(
+                       ctxt, 32, IntegerType::SignednessSemantics::Unsigned))},
            BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
   // Write only port.
   ports.push_back(ServicePortInfo{
@@ -112,6 +116,6 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
           {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
                           ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
            BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
 }

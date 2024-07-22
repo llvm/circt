@@ -278,7 +278,7 @@ instantiateSystemVerilogMemory(ServiceImplementReqOp implReq,
   // Now construct the memory writes.
   auto hwClk = b.create<seq::FromClockOp>(clk);
   b.create<sv::AlwaysFFOp>(
-      sv::EventControl::AtPosEdge, hwClk, ResetType::SyncReset,
+      sv::EventControl::AtPosEdge, hwClk, sv::ResetType::SyncReset,
       sv::EventControl::AtPosEdge, rst, [&] {
         for (auto [go, address, data] : writeGoAddressData) {
           Value a = address, d = data; // So the lambda can capture.
@@ -494,11 +494,15 @@ LogicalResult ESIConnectServicesPass::replaceInst(ServiceInstanceOp instOp,
         implOp.getResult(idx + instOpNumResults));
   }
 
+  // Erase the instance first in case it consumes any channels or bundles. If it
+  // does, the service generator will fail to verify the IR as there will be
+  // multiple uses.
+  instOp.erase();
+
   // Try to generate the service provider.
   if (failed(genDispatcher.generate(implOp, decl)))
-    return instOp.emitOpError("failed to generate server");
+    return implOp.emitOpError("failed to generate server");
 
-  instOp.erase();
   return success();
 }
 

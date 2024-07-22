@@ -26,23 +26,21 @@
 #include <iostream>
 #include <set>
 
-using namespace std;
-
 using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::xrt;
 
-/// Parse the connection string and instantiate the accelerator. Connection
-/// string format:
+/// Parse the connection std::string and instantiate the accelerator. Connection
+/// std::string format:
 ///  <xclbin>[:<device_id>]
 /// wherein <device_id> is in BDF format.
-unique_ptr<AcceleratorConnection>
-XrtAccelerator::connect(Context &ctxt, string connectionString) {
-  string xclbin;
-  string device_id;
+std::unique_ptr<AcceleratorConnection>
+XrtAccelerator::connect(Context &ctxt, std::string connectionString) {
+  std::string xclbin;
+  std::string device_id;
 
   size_t colon = connectionString.find(':');
-  if (colon == string::npos) {
+  if (colon == std::string::npos) {
     xclbin = connectionString;
   } else {
     xclbin = connectionString.substr(0, colon);
@@ -55,7 +53,7 @@ XrtAccelerator::connect(Context &ctxt, string connectionString) {
 struct esi::backends::xrt::XrtAccelerator::Impl {
   constexpr static char kernel[] = "esi_kernel";
 
-  Impl(string xclbin, string device_id) {
+  Impl(std::string xclbin, std::string device_id) {
     if (device_id.empty())
       device = ::xrt::device(0);
     else
@@ -67,7 +65,7 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
 
   std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
                                                           const BundleType *) {
-    throw runtime_error("XRT does not support channel communication yet");
+    throw std::runtime_error("XRT does not support channel communication yet");
   }
 
   ::xrt::device device;
@@ -75,7 +73,8 @@ struct esi::backends::xrt::XrtAccelerator::Impl {
 };
 
 /// Construct and connect to a cosim server.
-XrtAccelerator::XrtAccelerator(Context &ctxt, string xclbin, string device_id)
+XrtAccelerator::XrtAccelerator(Context &ctxt, std::string xclbin,
+                               std::string device_id)
     : AcceleratorConnection(ctxt) {
   impl = make_unique<Impl>(xclbin, device_id);
 }
@@ -85,9 +84,14 @@ class XrtMMIO : public MMIO {
 public:
   XrtMMIO(::xrt::ip &ip) : ip(ip) {}
 
-  uint32_t read(uint32_t addr) const override { return ip.read_register(addr); }
-  void write(uint32_t addr, uint32_t data) override {
+  uint64_t read(uint32_t addr) const override {
+    auto lo = static_cast<uint64_t>(ip.read_register(addr));
+    auto hi = static_cast<uint64_t>(ip.read_register(addr + 0x4));
+    return (hi << 32) | lo;
+  }
+  void write(uint32_t addr, uint64_t data) override {
     ip.write_register(addr, data);
+    ip.write_register(addr + 0x4, data >> 32);
   }
 
 private:
@@ -95,7 +99,7 @@ private:
 };
 } // namespace
 
-map<string, ChannelPort &>
+std::map<std::string, ChannelPort &>
 XrtAccelerator::requestChannelsFor(AppIDPath idPath,
                                    const BundleType *bundleType) {
   return impl->requestChannelsFor(idPath, bundleType);

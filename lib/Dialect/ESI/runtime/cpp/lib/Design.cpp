@@ -17,24 +17,23 @@
 #include <map>
 #include <stdexcept>
 
-using namespace std;
 using namespace esi;
 
 namespace esi {
 
 /// Build an index of children by AppID.
-static map<AppID, Instance *>
-buildIndex(const vector<unique_ptr<Instance>> &insts) {
-  map<AppID, Instance *> index;
+static std::map<AppID, Instance *>
+buildIndex(const std::vector<std::unique_ptr<Instance>> &insts) {
+  std::map<AppID, Instance *> index;
   for (auto &item : insts)
     index[item->getID()] = item.get();
   return index;
 }
 
 /// Build an index of ports by AppID.
-static map<AppID, const BundlePort &>
-buildIndex(const vector<unique_ptr<BundlePort>> &ports) {
-  map<AppID, const BundlePort &> index;
+static std::map<AppID, const BundlePort &>
+buildIndex(const std::vector<std::unique_ptr<BundlePort>> &ports) {
+  std::map<AppID, const BundlePort &> index;
   for (auto &item : ports)
     index.emplace(item->getID(), *item);
   return index;

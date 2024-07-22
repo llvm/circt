@@ -2434,6 +2434,36 @@ FuncDPIImportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// Assert Property Like ops
+//===----------------------------------------------------------------------===//
+
+namespace AssertPropertyLikeOp {
+// Check that a clock is never given without an event
+// and that an event is never given with a clock.
+static LogicalResult verify(Value clock, bool eventExists, mlir::Location loc) {
+  if ((!clock && eventExists) || (clock && !eventExists))
+    return mlir::emitError(
+        loc, "Every clock must be associated to an even and vice-versa!");
+  return success();
+}
+} // namespace AssertPropertyLikeOp
+
+LogicalResult AssertPropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
+}
+
+LogicalResult AssumePropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
+}
+
+LogicalResult CoverPropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

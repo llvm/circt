@@ -16,8 +16,8 @@ add_circt_dialect_library(CIRCTSV
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTLTL
   CIRCTSupport
-  CIRCTVerif
   MLIRIR
 )
 

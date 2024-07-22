@@ -145,6 +145,31 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// Declaration Conversion
+//===----------------------------------------------------------------------===//
+
+struct VariableOpConversion : public OpConversionPattern<VariableOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(VariableOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Value init = adaptor.getInitial();
+    // TODO: Unsupport x/z, so the initial value is 0.
+    if (!init && cast<RefType>(op.getResult().getType()).getDomain() ==
+                     Domain::FourValued)
+      return failure();
+
+    if (!init)
+      init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
+    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, hw::InOutType::get(resultType),
+                                             op.getNameAttr(), init);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
 
@@ -181,7 +206,7 @@ struct NamedConstantOpConv : public OpConversionPattern<NamedConstantOp> {
       break;
     }
     auto symAttr =
-        rewriter.getStringAttr(symStr + Twine(":") + adaptor.getName());
+        rewriter.getStringAttr(symStr + Twine("_") + adaptor.getName());
     rewriter.replaceOpWithNewOp<hw::WireOp>(op, resultType, adaptor.getValue(),
                                             op.getNameAttr(),
                                             hw::InnerSymAttr::get(symAttr));
@@ -296,6 +321,20 @@ struct NotOpConversion : public OpConversionPattern<NotOp> {
     Value max = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, -1);
 
     rewriter.replaceOpWithNewOp<comb::XorOp>(op, adaptor.getInput(), max);
+    return success();
+  }
+};
+
+struct NegOpConversion : public OpConversionPattern<NegOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NegOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    Value zero = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, 0);
+
+    rewriter.replaceOpWithNewOp<comb::SubOp>(op, zero, adaptor.getInput());
     return success();
   }
 };
@@ -529,7 +568,7 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
       // Insert new Op to the builtin.module
       // rewriter.setInsertionPointToEnd(
       //   op->getParentOfType<mlir::ModuleOp>()->getBlock());
-      auto procOp = rewriter.create<llhd::ProcOp>(
+      auto procOp = rewriter.create<llhd::ProcessOp>(
           op->getLoc(),
           mlir::FunctionType::get(rewriter.getContext(), std::nullopt,
                                   std::nullopt),
@@ -543,6 +582,39 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
       rewriter.eraseOp(op);
       return success();
     };
+  }
+}
+
+struct ReadOpConversion : public OpConversionPattern<ReadOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ReadOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<llhd::PrbOp>(op, resultType,
+                                             adaptor.getInput());
+    return success();
+  }
+};
+
+template <typename OpTy>
+struct AssignOpConversion : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpTy::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: When we support delay control in Moore dialect, we need to update
+    // this conversion.
+    auto timeAttr =
+        llhd::TimeAttr::get(op->getContext(), unsigned(0),
+                            llvm::StringRef("ns"), unsigned(0), unsigned(0));
+    auto time = rewriter.create<llhd::ConstantTimeOp>(op->getLoc(), timeAttr);
+    rewriter.replaceOpWithNewOp<llhd::DrvOp>(op, adaptor.getDst(),
+                                             adaptor.getSrc(), time, Value{});
+    return success();
   }
 };
 
@@ -609,6 +681,13 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return mlir::IntegerType::get(type.getContext(), type.getWidth());
   });
 
+  typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
+    if (isa<IntType, ArrayType, UnpackedArrayType>(type.getNestedType()))
+      return mlir::IntegerType::get(type.getContext(),
+                                    type.getBitSize().value());
+    return std::nullopt;
+  });
+
   // Valid target types.
   typeConverter.addConversion([](mlir::IntegerType type) { return type; });
   typeConverter.addTargetMaterialization(
@@ -635,14 +714,17 @@ static void populateOpConversion(RewritePatternSet &patterns,
   auto *context = patterns.getContext();
   // clang-format off
   patterns.add<
+  // Patterns of declaration operations.
+    VariableOpConversion,
+
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
-    ExtractOpConversion, ConversionOpConversion,
+    ExtractOpConversion, ConversionOpConversion, ReadOpConversion,
     NamedConstantOpConv,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion,
+    BoolCastOpConversion, NotOpConversion, NegOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
@@ -677,6 +759,9 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of shifting operations.
     ShrOpConversion, ShlOpConversion, AShrOpConversion,
+
+    // Patterns of assignment operations.
+    AssignOpConversion<ContinuousAssignOp>,
 
     // Patterns of branch operations.
     CondBranchOpConversion, BranchOpConversion,

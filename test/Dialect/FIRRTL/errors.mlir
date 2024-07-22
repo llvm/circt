@@ -279,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
   firrtl.instance "" @Foo()
 }
 
@@ -1829,7 +1829,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -2480,6 +2480,25 @@ firrtl.circuit "DPI" {
     %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
   }
 }
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{inputNames has 0 elements but there are 1 input arguments}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {inputNames=[]} : (!firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{output name is given but there is no result}}
+    firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {outputName="foo"} : (!firrtl.uint<8>) -> ()
+  }
+}
+
 
 // -----
 

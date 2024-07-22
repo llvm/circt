@@ -481,10 +481,11 @@ hw.module @Aliasing(inout %a : i42, inout %b : i42, inout %c : i42) {
   sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
 }
 
-hw.module @reg_0(in %in4: i4, in %in8: i8, out a: i8, out b: i8) {
+hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4, //
   // CHECK-NEXT:   input  [7:0] in8, //
+  // CHECK-NEXT:                in8_2, //
   // CHECK-NEXT:   output [7:0] a, //
   // CHECK-NEXT:                b //
   // CHECK-NEXT:  );
@@ -517,6 +518,11 @@ hw.module @reg_0(in %in4: i4, in %in8: i8, out a: i8, out b: i8) {
 
   %subscript2 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   %memout = sv.read_inout %subscript2 : !hw.inout<i8>
+
+  %unpacked_array = sv.unpacked_array_create %in8, %in8_2 : (i8, i8) -> !hw.uarray<2xi8>
+  %unpacked_wire = sv.wire : !hw.inout<uarray<2xi8>>
+  // CHECK: wire [7:0] unpacked_wire[0:1] = '{in8_2, in8};
+  sv.assign %unpacked_wire, %unpacked_array: !hw.uarray<2xi8>
 
   // CHECK-NEXT: assign a = myReg;
   // CHECK-NEXT: assign b = myRegArray1[in4];
@@ -1751,7 +1757,7 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 
 // Emit DPI import.
 
-// CHECK-LABEL: import "DPI-C" linkage_name = function void function_declare1(
+// CHECK-LABEL: import "DPI-C" context linkage_name = function void function_declare1(
 // CHECK-NEXT:    input bit [1:0] in_0,
 // CHECK-NEXT:                    out_0,
 // CHECK-NEXT:                    in_1,
@@ -1759,13 +1765,13 @@ sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
 // CHECK-NEXT: );
 sv.func.dpi.import linkage "linkage_name" @function_declare1
 
-// CHECK-LABEL: import "DPI-C" function bit function_declare2(
+// CHECK-LABEL: import "DPI-C" context function bit function_declare2(
 // CHECK-NEXT:    input bit [1:0] in_0,
 // CHECK-NEXT:                    in_1
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare2
 
-// CHECK-LABEL: import "DPI-C" function void function_declare4(
+// CHECK-LABEL: import "DPI-C" context function void function_declare4(
 // CHECK-NEXT:   input bit         in,
 // CHECK-NEXT:   input byte        in_0,
 // CHECK-NEXT:   input shortint    in_1,

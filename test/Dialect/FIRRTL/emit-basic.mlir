@@ -333,7 +333,7 @@ firrtl.circuit "Foo" {
     firrtl.when %ui1 : !firrtl.uint<1> {
       chirrtl.memoryport.access %port1_port[%someAddr], %someClock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     }
-    // CHECK:      smem seqmem : UInt<3>[256] undefined
+    // CHECK:      smem seqmem : UInt<3>[256], undefined
     // CHECK-NEXT: when ui1 :
     // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
 

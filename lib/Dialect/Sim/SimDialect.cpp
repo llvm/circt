@@ -29,6 +29,19 @@ void SimDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/Sim/Sim.cpp.inc"
       >();
+
+  registerTypes();
 }
 
 #include "circt/Dialect/Sim/SimDialect.cpp.inc"
+
+Operation *SimDialect::materializeConstant(::mlir::OpBuilder &builder,
+                                           ::mlir::Attribute value,
+                                           ::mlir::Type type,
+                                           ::mlir::Location loc) {
+
+  if (auto fmtStrType = llvm::dyn_cast<FormatStringType>(type))
+    return builder.create<FormatLitOp>(loc, fmtStrType,
+                                       llvm::cast<StringAttr>(value));
+  return nullptr;
+}

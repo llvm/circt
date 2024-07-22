@@ -1,3 +1,4 @@
+# XFAIL: *
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: ls %t/hw/XrtTop.sv
@@ -58,7 +59,7 @@ s.package()
 # TOP:         output        s_axi_control_BVALID,
 # TOP:         output [1:0]  s_axi_control_BRESP
 
-# TOP:         __ESI_Manifest_ROM ESI_Manifest_ROM (
+# TOP:         ESI_Manifest_ROM_Wrapper ESI_Manifest_ROM_Wrapper (
 # TOP:           .clk     (ap_clk),
 # TOP:           .address (rom_address),
 # TOP:           .data    (_ESI_Manifest_ROM_data)

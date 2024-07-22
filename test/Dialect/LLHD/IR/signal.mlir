@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -mlir-print-op-generic -split-input-file -verify-diagnostics | circt-opt | circt-opt | FileCheck %s
 
 // CHECK-LABEL: checkSigInst
-llhd.entity @checkSigInst () -> () {
+hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
   %cI1 = hw.constant 0 : i1
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1
@@ -23,15 +23,15 @@ llhd.entity @checkSigInst () -> () {
 }
 
 // CHECK-LABEL: checkPrb
-func.func @checkPrb(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<!hw.array<3xi8>>, %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>) {
-  // CHECK: %{{.*}} = llhd.prb %arg0 : !llhd.sig<i1>
-  %0 = llhd.prb %arg0 : !llhd.sig<i1>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : !llhd.sig<i64>
-  %1 = llhd.prb %arg1 : !llhd.sig<i64>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg2 : !llhd.sig<!hw.array<3xi8>>
-  %2 = llhd.prb %arg2 : !llhd.sig<!hw.array<3xi8>>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
-  %3 = llhd.prb %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
+func.func @checkPrb(%arg0 : !hw.inout<i1>, %arg1 : !hw.inout<i64>, %arg2 : !hw.inout<array<3xi8>>, %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>) {
+  // CHECK: %{{.*}} = llhd.prb %arg0 : !hw.inout<i1>
+  %0 = llhd.prb %arg0 : !hw.inout<i1>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : !hw.inout<i64>
+  %1 = llhd.prb %arg1 : !hw.inout<i64>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg2 : !hw.inout<array<3xi8>>
+  %2 = llhd.prb %arg2 : !hw.inout<array<3xi8>>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
+  %3 = llhd.prb %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
 
   return
 }
@@ -47,21 +47,21 @@ func.func @checkOutput(%arg0: i32, %arg1: !llhd.time) {
 }
 
 // CHECK-LABEL: checkDrv
-func.func @checkDrv(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : i1,
-    %arg3 : i64, %arg4 : !llhd.time, %arg5 : !llhd.sig<!hw.array<3xi8>>,
-    %arg6 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>,
+func.func @checkDrv(%arg0 : !hw.inout<i1>, %arg1 : !hw.inout<i64>, %arg2 : i1,
+    %arg3 : i64, %arg4 : !llhd.time, %arg5 : !hw.inout<array<3xi8>>,
+    %arg6 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>,
     %arg7 : !hw.array<3xi8>, %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>) {
 
-  // CHECK-NEXT: llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
-  llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
-  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 : !llhd.sig<i64>
-  llhd.drv %arg1, %arg3 after %arg4 : !llhd.sig<i64>
-  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !llhd.sig<i64>
-  llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !llhd.sig<i64>
-  // CHECK-NEXT: llhd.drv %arg5, %arg7 after %arg4 : !llhd.sig<!hw.array<3xi8>>
-  llhd.drv %arg5, %arg7 after %arg4 : !llhd.sig<!hw.array<3xi8>>
-  // CHECK-NEXT: llhd.drv %arg6, %arg8 after %arg4 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
-  llhd.drv %arg6, %arg8 after %arg4 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
+  // CHECK-NEXT: llhd.drv %arg0, %arg2 after %arg4 : !hw.inout<i1>
+  llhd.drv %arg0, %arg2 after %arg4 : !hw.inout<i1>
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 : !hw.inout<i64>
+  llhd.drv %arg1, %arg3 after %arg4 : !hw.inout<i64>
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !hw.inout<i64>
+  llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !hw.inout<i64>
+  // CHECK-NEXT: llhd.drv %arg5, %arg7 after %arg4 : !hw.inout<array<3xi8>>
+  llhd.drv %arg5, %arg7 after %arg4 : !hw.inout<array<3xi8>>
+  // CHECK-NEXT: llhd.drv %arg6, %arg8 after %arg4 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
+  llhd.drv %arg6, %arg8 after %arg4 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
 
   return
 }

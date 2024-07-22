@@ -27,8 +27,9 @@ endmodule
 
 // -----
 module Foo;
+  parameter a = 1;
   // expected-error @below {{unsupported construct}}
-  genvar a;
+  defparam a = 2;
 endmodule
 
 // -----
@@ -42,15 +43,6 @@ module Foo;
   // expected-error @+2 {{unsupported type}}
   // expected-note @+1 {{untyped}}
   interconnect x;
-endmodule
-
-// -----
-
-// expected-error @below {{unsupported construct}}
-package Foo;
-endpackage
-
-module Bar;
 endmodule
 
 // -----
@@ -105,4 +97,26 @@ module Foo;
   int a, b[3];
   // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
   int c = a inside { b };
+endmodule
+
+// -----
+module Foo;
+  logic a, b;
+  initial begin
+    casez (a)
+    // expected-error @below {{literals with X or Z bits not supported}}
+    1'bz : b = 1'b1;
+    endcase
+  end
+endmodule
+
+// -----
+module Foo;
+  logic a;
+  initial begin
+    // expected-error @below {{literals with X or Z bits not supported}}
+    casez (1'bz)
+    1'bz : a = 1'b1;
+    endcase
+  end
 endmodule

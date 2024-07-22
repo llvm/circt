@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from functools import singledispatchmethod
 
-from .support import get_user_loc
+from .support import clog2, get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, seq, sv
@@ -84,8 +84,12 @@ class Type:
     return self
 
   @property
-  def bitwidth(self):
+  def bitwidth(self) -> int:
     return hw.get_bitwidth(self._type)
+
+  @property
+  def is_hw_type(self) -> bool:
+    assert False, "Subclass must override this method"
 
   def __call__(self, obj, name: str = None) -> "Signal":
     """Create a Value of this type from a python object."""
@@ -175,6 +179,10 @@ class InOut(Type):
   def element_type(self) -> Type:
     return _FromCirctType(self._type.element_type)
 
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
   def _get_value_class(self):
     from .signals import InOutSignal
     return InOutSignal
@@ -204,6 +212,10 @@ class TypeAlias(Type):
       TypeAlias.RegisteredAliases[name] = alias
 
     return super(TypeAlias, cls).__new__(cls, alias, incl_cls_in_key=False)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return self.inner_type.is_hw_type
 
   @staticmethod
   def declare_aliases(mod):
@@ -292,8 +304,16 @@ class Array(Type):
     return _FromCirctType(self._type.element_type)
 
   @property
+  def is_hw_type(self) -> bool:
+    return True
+
+  @property
   def size(self):
     return self._type.size
+
+  @property
+  def select_bits(self) -> int:
+    return clog2(self.size)
 
   @property
   def shape(self):
@@ -344,6 +364,10 @@ class StructType(Type):
       raise TypeError("Expected either list or dict.")
     return super(StructType, cls).__new__(
         cls, hw.StructType.get([(n, t._type) for (n, t) in fields]))
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
 
   @property
   def fields(self):
@@ -408,12 +432,20 @@ class RegisteredStruct(TypeAlias):
   def _get_value_class(self):
     return self._value_class
 
+  @property
+  def is_hw_type(self) -> bool:
+    return True
+
 
 class BitVectorType(Type):
 
   @property
   def width(self):
     return self._type.width
+
+  @property
+  def is_hw_type(self) -> bool:
+    return True
 
   def _from_obj_check(self, x):
     """This functionality can be shared by all the int types."""
@@ -498,6 +530,10 @@ class ClockType(Type):
   def __new__(cls):
     return super(ClockType, cls).__new__(cls, seq.ClockType.get())
 
+  @property
+  def is_hw_type(self) -> bool:
+    return False
+
   def _get_value_class(self):
     from .signals import ClockSignal
     return ClockSignal
@@ -510,6 +546,10 @@ class Any(Type):
 
   def __new__(cls):
     return super(Any, cls).__new__(cls, esi.AnyType.get())
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
 
 class Channel(Type):
@@ -530,6 +570,10 @@ class Channel(Type):
   @property
   def inner_type(self):
     return _FromCirctType(self._type.inner)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
   @property
   def signaling(self):
@@ -605,6 +649,10 @@ class Bundle(Type):
     return BundleSignal
 
   @property
+  def is_hw_type(self) -> bool:
+    return False
+
+  @property
   def channels(self):
     return [
         BundledChannel(name, dir, _FromCirctType(type))
@@ -619,6 +667,35 @@ class Bundle(Type):
             if dir == ChannelDirection.FROM else ChannelDirection.FROM,
             _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
     ])
+
+  def get_to_from(self) -> typing.Tuple[BundledChannel, BundledChannel]:
+    """In a bidirectional, two-channel bundle, it is often desirable to easily
+    have access to the from and to channels."""
+
+    bundle_channels = self.channels
+    if len(bundle_channels) != 2:
+      raise ValueError("Bundle must have exactly two channels.")
+
+    # Return vars.
+    to_channel_bc: typing.Optional[BundledChannel] = None
+    from_channel_bc: typing.Optional[BundledChannel] = None
+
+    # Look at the first channel.
+    if bundle_channels[0].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[0]
+    else:
+      from_channel_bc = bundle_channels[0]
+
+    # Look at the second channel.
+    if bundle_channels[1].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[1]
+    else:
+      from_channel_bc = bundle_channels[1]
+
+    # Check and return.
+    if to_channel_bc is None or from_channel_bc is None:
+      raise ValueError("Bundle must have one channel in each direction.")
+    return to_channel_bc, from_channel_bc
 
   # Easy accessor for channel types by name.
   def __getattr__(self, attrname: str):
@@ -719,6 +796,10 @@ class List(Type):
   @property
   def element_type(self):
     return _FromCirctType(self._type.element_type)
+
+  @property
+  def is_hw_type(self) -> bool:
+    return False
 
   @property
   def _get_value_class(self):

@@ -111,9 +111,6 @@ class CMakeBuild(build_py):
         "--parallel",
         "--target",
         "ESIRuntime",
-        "esiquery",
-        "ESIPythonRuntime",
-        "EsiCosimDpiServer",
     ],
                           cwd=cmake_build_dir)
 

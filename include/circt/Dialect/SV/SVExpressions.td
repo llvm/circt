@@ -265,3 +265,19 @@ def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
+
+def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperands]> {
+  let summary = "Create an unpacked array";
+  let description = [{
+    Creates an unpacked array from a variable set of values. One or more values must be
+    listed.
+
+    See the HW-SV rationale document for details on operand ordering.
+  }];
+
+  let arguments = (ins Variadic<HWNonInOutType>:$inputs);
+  let results = (outs UnpackedArrayType:$result);
+
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+}
+

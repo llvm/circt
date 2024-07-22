@@ -3,11 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .common import (AppID, Input, Output, _PyProxy, PortError)
-from .module import Generator, Module, ModuleLikeBuilderBase, PortProxyBase
-from .signals import BundleSignal, ChannelSignal, Signal, _FromCirctValue
+from .constructs import AssignableSignal, Mux, Wire
+from .module import generator, Module, ModuleLikeBuilderBase, PortProxyBase
+from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
+                      _FromCirctValue)
+from .support import get_user_loc
 from .system import System
-from .types import (Bits, Bundle, BundledChannel, ChannelDirection, Type, types,
-                    _FromCirctType)
+from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
+                    Type, UInt, types, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -122,16 +125,40 @@ class NamedChannelValue(ChannelSignal):
     super().__init__(input_chan, _FromCirctType(input_chan.type))
 
 
-class _OutputBundleSetter:
+class _OutputBundleSetter(AssignableSignal):
   """Return a list of these as a proxy for a 'request to client connection'.
   Users should call the 'assign' method with the `ChannelValue` which they
   have implemented for this request."""
 
   def __init__(self, req: raw_esi.ServiceImplementConnReqOp,
+               rec: raw_esi.ServiceImplRecordOp,
                old_value_to_replace: ir.OpResult):
+    self.req = req
+    self.rec = rec
     self.type: Bundle = _FromCirctType(req.toClient.type)
-    self.client_name = req.relativeAppIDPath
+    self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
+
+  def add_record(self, details: Dict[str, str]):
+    """Add a record to the manifest for this client request. Generally used to
+    give the runtime necessary information about how to connect to the client
+    through the generated service. For instance, offsets into an MMIO space."""
+
+    ir_details: Dict[str, ir.StringAttr] = {}
+    for k, v in details.items():
+      ir_details[k] = ir.StringAttr.get(str(v))
+    with get_user_loc(), ir.InsertionPoint.at_block_begin(
+        self.rec.reqDetails.blocks[0]):
+      raw_esi.ServiceImplClientRecordOp(
+          self.req.relativeAppIDPath,
+          self.req.servicePort,
+          ir.TypeAttr.get(self.req.toClient.type),
+          ir_details,
+      )
+
+  @property
+  def client_name(self):
+    return self.req.relativeAppIDPath
 
   def assign(self, new_value: ChannelSignal):
     """Assign the generated channel to this request."""
@@ -150,8 +177,10 @@ class _ServiceGeneratorBundles:
   for connecting up."""
 
   def __init__(self, mod: ModuleLikeBuilderBase,
-               req: raw_esi.ServiceImplementReqOp):
+               req: raw_esi.ServiceImplementReqOp,
+               rec: raw_esi.ServiceImplRecordOp):
     self._req = req
+    self._rec = rec
     portReqsBlock = req.portReqs.blocks[0]
 
     # Find the output channel requests and store the settable proxies.
@@ -161,16 +190,10 @@ class _ServiceGeneratorBundles:
         if isinstance(req, raw_esi.ServiceImplementConnReqOp)
     ]
     self._output_reqs = [
-        _OutputBundleSetter(req, self._req.results[num_output_ports + idx])
+        _OutputBundleSetter(req, rec, self._req.results[num_output_ports + idx])
         for idx, req in enumerate(to_client_reqs)
     ]
     assert len(self._output_reqs) == len(req.results) - num_output_ports
-
-  @property
-  def reqs(self) -> List[NamedChannelValue]:
-    """Get the list of incoming channels from the 'to server' connection
-    requests."""
-    return self._input_reqs
 
   @property
   def to_client_reqs(self) -> List[_OutputBundleSetter]:
@@ -179,7 +202,7 @@ class _ServiceGeneratorBundles:
   def check_unconnected_outputs(self):
     for req in self._output_reqs:
       if req._bundle_to_replace is not None:
-        name_str = ".".join(req.client_name)
+        name_str = str(req.client_name)
         raise ValueError(f"{name_str} has not been connected.")
 
 
@@ -206,8 +229,8 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
         impl_opts=opts,
         loc=self.loc)
 
-  def generate_svc_impl(self,
-                        serviceReq: raw_esi.ServiceImplementReqOp) -> bool:
+  def generate_svc_impl(self, serviceReq: raw_esi.ServiceImplementReqOp,
+                        record_op: raw_esi.ServiceImplRecordOp) -> bool:
     """"Generate the service inline and replace the `ServiceInstanceOp` which is
     being implemented."""
 
@@ -217,7 +240,7 @@ class ServiceImplementationModuleBuilder(ModuleLikeBuilderBase):
     with self.GeneratorCtxt(self, ports, serviceReq, generator.loc):
 
       # Run the generator.
-      bundles = _ServiceGeneratorBundles(self, serviceReq)
+      bundles = _ServiceGeneratorBundles(self, serviceReq, record_op)
       rc = generator.gen_func(ports, bundles=bundles)
       if rc is None:
         rc = True
@@ -292,7 +315,8 @@ class _ServiceGeneratorRegistry:
     self._registry[name_attr] = (service_implementation, System.current())
     return ir.DictAttr.get({"name": name_attr})
 
-  def _implement_service(self, req: ir.Operation):
+  def _implement_service(self, req: ir.Operation, decl: ir.Operation,
+                         rec: ir.Operation):
     """This is the callback which the ESI connect-services pass calls. Dispatch
     to the op-specified generator."""
     assert isinstance(req.opview, raw_esi.ServiceImplementReqOp)
@@ -302,7 +326,8 @@ class _ServiceGeneratorRegistry:
       return False
     (impl, sys) = self._registry[impl_name]
     with sys:
-      ret = impl._builder.generate_svc_impl(serviceReq=req.opview)
+      ret = impl._builder.generate_svc_impl(serviceReq=req.opview,
+                                            record_op=rec.opview)
     # The service implementation generator could have instantiated new modules,
     # so we need to generate them. Don't run the appID indexer since during a
     # pass, the IR can be invalid and the indexers assumes it is valid.
@@ -443,13 +468,18 @@ class PureModule(Module):
     esi.ESIPureModuleParamOp(name, type_attr)
 
 
+MMIODataType = Bits(64)
+
+
 @ServiceDecl
 class MMIO:
-  """ESI standard service to request access to an MMIO region."""
+  """ESI standard service to request access to an MMIO region.
+  
+  For now, each client request gets a 1KB region of memory."""
 
   read = Bundle([
-      BundledChannel("offset", ChannelDirection.TO, Bits(32)),
-      BundledChannel("data", ChannelDirection.FROM, Bits(32))
+      BundledChannel("offset", ChannelDirection.TO, UInt(32)),
+      BundledChannel("data", ChannelDirection.FROM, MMIODataType)
   ])
 
   @staticmethod
@@ -462,6 +492,39 @@ class _FuncService(ServiceDecl):
 
   def __init__(self):
     super().__init__(self.__class__)
+
+  def get_coerced(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
+    """Treat any bi-directional bundle as a function by getting a proper
+    function bundle with the appropriate types, then renaming the channels to
+    match the 'bundle_type'. Returns a bundle signal of type 'bundle_type'."""
+
+    from .constructs import Wire
+    bundle_channels = bundle_type.channels
+    if len(bundle_channels) != 2:
+      raise ValueError("Bundle must have exactly two channels.")
+
+    # Find the FROM and TO channels.
+    to_channel_bc: Optional[BundledChannel] = None
+    from_channel_bc: Optional[BundledChannel] = None
+    if bundle_channels[0].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[0]
+    else:
+      from_channel_bc = bundle_channels[0]
+    if bundle_channels[1].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[1]
+    else:
+      from_channel_bc = bundle_channels[1]
+    if to_channel_bc is None or from_channel_bc is None:
+      raise ValueError("Bundle must have one channel in each direction.")
+
+    # Get the function channels and wire them up to create the non-function
+    # bundle 'bundle_type'.
+    from_channel = Wire(from_channel_bc.channel)
+    arg_channel = self.get_call_chans(name, to_channel_bc.channel, from_channel)
+    ret_bundle, from_chans = bundle_type.pack(
+        **{to_channel_bc.name: arg_channel})
+    from_channel.assign(from_chans[from_channel_bc.name])
+    return ret_bundle
 
   def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
     """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
@@ -550,17 +613,121 @@ def package(sys: System):
   """Package all ESI collateral."""
 
   import shutil
-  __root_dir__ = Path(__file__).parent
+  shutil.copy(__dir__ / "ESIPrimitives.sv", sys.hw_output_dir)
 
-  # When pycde is installed through a proper install, all of the collateral
-  # files are under a dir called "collateral".
-  collateral_dir = __root_dir__ / "collateral"
-  if collateral_dir.exists():
-    esi_lib_dir = collateral_dir
-  else:
-    # Build we also want to allow pycde to work in-tree for developers. The
-    # necessary files are screwn around the build tree.
-    build_dir = __root_dir__.parents[4]
-    circt_lib_dir = build_dir / "tools" / "circt" / "lib"
-    esi_lib_dir = circt_lib_dir / "Dialect" / "ESI"
-  # shutil.copy(esi_lib_dir / "ESIPrimitives.sv", sys.hw_output_dir)
+
+def ChannelDemux2(data_type: Type):
+
+  class ChannelDemux2(Module):
+    """Combinational 2-way channel demultiplexer for valid/ready signaling."""
+
+    sel = Input(Bits(1))
+    inp = Input(Channel(data_type))
+    output0 = Output(Channel(data_type))
+    output1 = Output(Channel(data_type))
+
+    @generator
+    def generate(ports) -> None:
+      input_ready = Wire(Bits(1))
+      input, input_valid = ports.inp.unwrap(input_ready)
+
+      output0 = input
+      output0_valid = input_valid & (ports.sel == Bits(1)(0))
+      output0_ch, output0_ready = Channel(data_type).wrap(
+          output0, output0_valid)
+      ports.output0 = output0_ch
+
+      output1 = input
+      output1_valid = input_valid & (ports.sel == Bits(1)(1))
+      output1_ch, output1_ready = Channel(data_type).wrap(
+          output1, output1_valid)
+      ports.output1 = output1_ch
+
+      input_ready.assign((output0_ready & (ports.sel == Bits(1)(0))) |
+                         (output1_ready & (ports.sel == Bits(1)(1))))
+
+  return ChannelDemux2
+
+
+def ChannelDemux(input: ChannelSignal, sel: BitsSignal,
+                 num_outs: int) -> List[ChannelSignal]:
+  """Build a demultiplexer of ESI channels. Ideally, this would be a
+  parameterized module with an array of output channels, but the current ESI
+  channel-port lowering doesn't deal with arrays of channels. Independent of the
+  signaling protocol."""
+
+  dmux2 = ChannelDemux2(input.type)
+
+  def build_tree(inter_input: ChannelSignal, inter_sel: BitsSignal,
+                 inter_num_outs: int, path: str) -> List[ChannelSignal]:
+    """Builds a binary tree of demuxes to demux the input channel."""
+    if inter_num_outs == 0:
+      return []
+    if inter_num_outs == 1:
+      return [inter_input]
+
+    demux2 = dmux2(sel=inter_sel[-1].as_bits(),
+                   inp=inter_input,
+                   instance_name=f"demux2_path{path}")
+    next_sel = inter_sel[:-1].as_bits()
+    tree0 = build_tree(demux2.output0, next_sel, (inter_num_outs + 1) // 2,
+                       path + "0")
+    tree1 = build_tree(demux2.output1, next_sel, (inter_num_outs + 1) // 2,
+                       path + "1")
+    return tree0 + tree1
+
+  return build_tree(input, sel, num_outs, "")
+
+
+def ChannelMux2(data_type: Channel):
+
+  class ChannelMux2(Module):
+    """2 channel arbiter with priority given to input0. Valid/ready only.
+    Combinational."""
+    # TODO: implement some fairness.
+
+    input0 = Input(data_type)
+    input1 = Input(data_type)
+    output_channel = Output(data_type)
+
+    @generator
+    def generate(ports):
+      input0_ready = Wire(Bits(1))
+      input0_data, input0_valid = ports.input0.unwrap(input0_ready)
+      input1_ready = Wire(Bits(1))
+      input1_data, input1_valid = ports.input1.unwrap(input1_ready)
+
+      output_idx = ~input0_valid
+      data_mux = Mux(output_idx, input0_data, input1_data)
+      valid_mux = Mux(output_idx, input0_valid, input1_valid)
+      output_channel, output_ready = data_type.wrap(data_mux, valid_mux)
+      ports.output_channel = output_channel
+
+      input0_ready.assign(output_ready & ~output_idx)
+      input1_ready.assign(output_ready & output_idx)
+
+  return ChannelMux2
+
+
+def ChannelMux(input_channels: List[ChannelSignal]) -> ChannelSignal:
+  """Build a channel multiplexer of ESI channels. Ideally, this would be a
+  parameterized module with an array of output channels, but the current ESI
+  channel-port lowering doesn't deal with arrays of channels. Independent of the
+  signaling protocol."""
+
+  assert len(input_channels) > 0
+  mux2 = ChannelMux2(input_channels[0].type)
+
+  def build_tree(inter_input_channels: List[ChannelSignal]) -> ChannelSignal:
+    assert len(inter_input_channels) > 0
+    if len(inter_input_channels) == 1:
+      return inter_input_channels[0]
+    if len(inter_input_channels) == 2:
+      m = mux2(input0=inter_input_channels[0], input1=inter_input_channels[1])
+      return m.output_channel
+    m0_out = build_tree(inter_input_channels[:len(inter_input_channels) // 2])
+    m1_out = build_tree(inter_input_channels[len(inter_input_channels) // 2:])
+    m = mux2(input0=m0_out, input1=m1_out)
+    return m.output_channel
+
+  return build_tree(input_channels)
