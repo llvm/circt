@@ -104,6 +104,25 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("read", &services::MMIO::read)
       .def("write", &services::MMIO::write);
 
+  py::class_<services::HostMem::HostMemRegion>(m, "HostMemRegion")
+      .def_property_readonly("ptr", &services::HostMem::HostMemRegion::getPtr)
+      .def_property_readonly("size",
+                             &services::HostMem::HostMemRegion::getSize);
+
+  py::class_<services::HostMem::Options>(m, "HostMemOptions")
+      .def(py::init<>())
+      .def_readwrite("writeable", &services::HostMem::Options::writeable)
+      .def_readwrite("use_large_pages",
+                     &services::HostMem::Options::useLargePages);
+
+  py::class_<services::HostMem>(m, "HostMem")
+      .def("allocate", &services::HostMem::allocate, py::arg("size"),
+           py::arg("options") = services::HostMem::Options(),
+           py::return_value_policy::take_ownership)
+      .def("map_memory", &services::HostMem::mapMemory, py::arg("ptr"),
+           py::arg("size"), py::arg("options") = services::HostMem::Options())
+      .def("unmap_memory", &services::HostMem::unmapMemory, py::arg("ptr"));
+
   py::class_<AppID>(m, "AppID")
       .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
            py::arg("idx") = std::nullopt)
@@ -215,6 +234,12 @@ PYBIND11_MODULE(esiCppAccel, m) {
                          "get_service_mmio",
                          [](AcceleratorConnection &acc) {
                            return acc.getService<services::MMIO>({});
+                         },
+                         py::return_value_policy::reference)
+                     .def(
+                         "get_service_hostmem",
+                         [](AcceleratorConnection &acc) {
+                           return acc.getService<services::HostMem>({});
                          },
                          py::return_value_policy::reference);
 

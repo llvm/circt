@@ -113,6 +113,43 @@ private:
   const MMIO *mmio;
 };
 
+class HostMem : public Service {
+public:
+  virtual ~HostMem() = default;
+  virtual std::string getServiceSymbol() const override;
+
+  /// RAII memory region for host memory. Automatically frees the memory when
+  /// deconstructed.
+  struct HostMemRegion {
+    virtual ~HostMemRegion() = default;
+    virtual void *getPtr() const = 0;
+    operator void *() const { return getPtr(); }
+    virtual std::size_t getSize() const = 0;
+  };
+
+  /// Options for allocating host memory.
+  struct Options {
+    bool writeable = false;
+    bool useLargePages = false;
+  };
+
+  /// Allocate a region of host memory in accelerator accessible address space.
+  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
+                                                  Options opts) const = 0;
+
+  /// Try to make a region of host memory accessible to the accelerator. Returns
+  /// 'false' on failure. It is optional for an accelerator backend to implement
+  /// this, so client code needs to have a fallback for when this returns
+  /// 'false'. On success, it is the client's responsibility to ensure that the
+  /// memory eventually gets unmapped.
+  virtual bool mapMemory(void *ptr, std::size_t size, Options opts) const {
+    return false;
+  }
+  /// Unmap memory which was previously mapped with 'mapMemory'. Undefined
+  /// behavior when called with a pointer which was not previously mapped.
+  virtual void unmapMemory(void *ptr) const {}
+};
+
 /// Service for calling functions.
 class FuncService : public Service {
 public:
