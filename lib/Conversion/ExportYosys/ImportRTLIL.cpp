@@ -23,6 +23,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/FunctionExtras.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
@@ -46,7 +47,7 @@ using namespace rtlil;
 
 struct ImportRTLILDesign {
   RTLIL::Design *design;
-  ImportRTLILDesign(RTLIL::Design *design) : design(design){}
+  ImportRTLILDesign(RTLIL::Design *design) : design(design) {}
   LogicalResult run(mlir::ModuleOp module);
   using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleLike>;
   ModuleMappingTy moduleMapping;
@@ -352,7 +353,8 @@ struct ImportRTLILModule {
     SmallVector<SmallString<4>> inputPortNames;
     SmallString<4> outputPortName;
   };
-  template <typename OpName> struct CellOpPattern : public CellPatternBase {
+  template <typename OpName>
+  struct CellOpPattern : public CellPatternBase {
   public:
     using CellPatternBase::CellPatternBase;
     Value convert(OpBuilder &builder, Location location,
@@ -361,7 +363,8 @@ struct ImportRTLILModule {
     }
   };
 
-  template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
+  template <bool isAnd>
+  struct AndOrNotOpPattern : public CellPatternBase {
   public:
     using CellPatternBase::CellPatternBase;
     Value convert(OpBuilder &builder, Location location,
@@ -573,6 +576,30 @@ struct ImportRTLILModule {
   std::unique_ptr<OpBuilder> builder;
   llvm::MapVector<StringAttr, hw::HWModuleExternOp> exeternalModules;
   std::unique_ptr<Block> block;
+};
+
+struct WireCanonicalize : public mlir::OpRewritePattern<sv::WireOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(sv::WireOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<std::pair<size_t, Value>> values;
+    /*
+    for (auto *user : op.getResult().getUsers()) {
+      if (isa<sv::ReadInOutOp>(user)) {
+        continue;
+      }
+      LogicalResult result =
+          mlir::TypeSwitch<Operation *, LogicalResult>(user)
+              .Case<sv::IndexedPartSelectInOutOp>([](auto op) {
+              })
+              .Case<sv::ArrayIndexInOutOp>([](auto op) {})
+              .Case<sv::ReadInOutOp>([](auto op) {})
+              .Case<sv::AssignOp>([](auto op) {})
+              .Default([])
+    }*/
+    return failure();
+  }
 };
 
 LogicalResult ImportRTLILDesign::run(mlir::ModuleOp module) {
