@@ -54,7 +54,9 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  if (hwModule.getOps<verif::AssertOp>().empty()) {
+  // TODO: Check whether instances contain properties to check
+  if (hwModule.getOps<verif::AssertOp>().empty() &&
+      hwModule.getOps<hw::InstanceOp>().empty()) {
     hwModule.emitError("no property provided to check in module");
     return signalPassFailure();
   }
