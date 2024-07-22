@@ -70,11 +70,10 @@ void ExportYosysPass::runOnOperation() {
 
   auto *design = theDesign->get();
 
-  if (!topModule.empty())
-  {
+  if (!topModule.empty()) {
     std::string command = "hierarchy -top ";
     command += topModule;
-    Yosys::run_pass( command, design);
+    Yosys::run_pass(command, design);
   }
 
   for (auto pass : passes)
@@ -207,8 +206,7 @@ void ExportYosysParallelPass::runOnOperation() {
                            << "\n";
             });
 
-            auto result =
-                runYosys(op.getLoc(), test, commands);
+            auto result = runYosys(op.getLoc(), test, commands);
 
             logger([&] {
               llvm::errs() << "[yosys-optimizer] Finished [" << i + 1 << "/"
