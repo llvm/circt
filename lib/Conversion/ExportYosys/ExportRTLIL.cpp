@@ -55,7 +55,7 @@ int64_t getBitWidthSeq(Type type) {
   return getBitWidth(type);
 }
 
-class ExportRTLILDesign;
+struct ExportRTLILDesign;
 struct ExportRTLILModule
     : public hw::TypeOpVisitor<ExportRTLILModule, LogicalResult>,
       public hw::StmtVisitor<ExportRTLILModule, LogicalResult>,
@@ -320,14 +320,19 @@ LogicalResult ExportRTLILModule::lowerPorts() {
 }
 
 LogicalResult ExportRTLILModule::lowerBody() {
-  module.walk([this](Operation *op) {
-    for (auto result : op->getResults()) {
-      // TODO: Use SSA name.
-      mlir::StringAttr name = {};
-      if (getBitWidthSeq(result.getType()) >= 0)
-        createAndSetWire(result, name);
-    }
-  });
+  if (module
+          .walk([this](Operation *op) {
+            for (auto result : op->getResults()) {
+              // TODO: Use SSA name.
+              StringAttr name = {};
+              if (getBitWidthSeq(result.getType()) >= 0)
+                if (failed(createAndSetWire(result, name)))
+                  return WalkResult::interrupt();
+              return WalkResult::advance();
+            }
+          })
+          .wasInterrupted())
+    return failure();
 
   auto result =
       module

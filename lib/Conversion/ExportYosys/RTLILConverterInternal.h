@@ -6,8 +6,8 @@
 #include <string>
 
 namespace Yosys::RTLIL {
-class Design;
-class Module;
+struct Design;
+struct Module;
 } // namespace Yosys::RTLIL
 
 namespace mlir {
