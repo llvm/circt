@@ -31,9 +31,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
-
-# We need zlib to uncompress the manifest.
-find_package(ZLIB REQUIRED)
+set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
@@ -43,6 +41,34 @@ if (NOT TARGET nlohmann_json)
     GIT_TAG        v3.11.3
   )
   FetchContent_MakeAvailable(json)
+endif()
+
+# We need zlib to uncompress the manifest.
+find_package(ZLIB)
+if(ZLIB_FOUND)
+  set(ZLIB_LIBRARY ZLIB::ZLIB)
+else()
+  message("-- zlib not found, pulling down zlib from git")
+  FetchContent_Declare(
+    ZLIB
+    GIT_REPOSITORY https://github.com/madler/zlib.git
+    GIT_TAG        v1.3.1
+  )
+  FetchContent_MakeAvailable(ZLIB)
+  set(ZLIB_INCLUDE_DIR ${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})
+  set(ZLIB_LIBRARY zlib)
+endif()
+
+# In a Python wheel build, we need to install libraries to different places.
+option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
+if (WHEEL_BUILD)
+  message(STATUS "Setting up for a Python wheel build.")
+endif()
+
+if(WIN32)
+  set(LIB_DIR "bin")
+else()
+  set(LIB_DIR "lib")
 endif()
 
 ##===----------------------------------------------------------------------===//
@@ -97,14 +123,26 @@ add_library(ESICppRuntime SHARED
   ${ESICppRuntimeSources}
 )
 target_include_directories(ESICppRuntime PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-target_link_libraries(ESICppRuntime PRIVATE
-  ZLIB::ZLIB
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include
+)
+if (DEFINED ZLIB_INCLUDE_DIR)
+  target_include_directories(ESICppRuntime PRIVATE
+    ${ZLIB_INCLUDE_DIR})
+endif()
+if(WIN32 AND TARGET zlib)
+  # On windows, DLLs must be in the same directory (or system directory) to be
+  # found. Windows doesn't have the equivalent of rpath.
+  add_custom_command(TARGET ESICppRuntime POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:zlib>
+      ${CMAKE_CURRENT_BINARY_DIR}
+  )
+endif()
+target_link_libraries(ESICppRuntime PUBLIC
+  ${ZLIB_LIBRARY}
   nlohmann_json::nlohmann_json
 )
-if(MSVC)
-  # TODO: does Windows need libraries for dynamic loading?
-else()
+if(NOT MSVC)
   target_link_libraries(ESICppRuntime PRIVATE
     dl
   )
@@ -113,8 +151,28 @@ else()
   )
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
+if (WHEEL_BUILD)
+  if (WIN32)
+    set(PYLIBDIR ".")
+  else()
+    set(PYLIBDIR "lib")
+  endif()
+else()
+  set(PYLIBDIR "python/esiaccel")
+endif()
 install(TARGETS ESICppRuntime
-  DESTINATION lib
+  DESTINATION ${PYLIBDIR}
+  COMPONENT ESIRuntime
+)
+
+install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
+  RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+  COMPONENT ESIRuntime
+)
+install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+  DESTINATION ${LIB_DIR}
+  PRE_EXCLUDE_REGEXES .*
+  PRE_INCLUDE_REGEXES zlibd zlib
   COMPONENT ESIRuntime
 )
 install(FILES ${ESICppRuntimeHeaders}
@@ -164,11 +222,6 @@ add_dependencies(ESIRuntime esitester)
 ##===----------------------------------------------------------------------===//
 ## Python bindings for the ESI runtime.
 ##===----------------------------------------------------------------------===//
-
-option(WHEEL_BUILD "Set up the build for a Python wheel." OFF)
-if (WHEEL_BUILD)
-  message(STATUS "Setting up for a Python wheel build.")
-endif()
 
 # Pybind11 is used to wrap the ESICppRuntime APIs.
 if(NOT DEFINED Python3_FOUND)
@@ -229,6 +282,7 @@ if(Python3_FOUND)
             $<TARGET_FILE:esiCppAccel>
             "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel/$<TARGET_FILE_NAME:esiCppAccel>"
     )
+
     if (WHEEL_BUILD)
       install(TARGETS esiCppAccel
         DESTINATION .
@@ -240,6 +294,12 @@ if(Python3_FOUND)
         COMPONENT ESIRuntime
       )
     endif()
+    install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
+      DESTINATION ${PYLIBDIR}
+      PRE_EXCLUDE_REGEXES .*
+      PRE_INCLUDE_REGEXES zlibd zlib
+      COMPONENT ESIRuntime
+    )
 
     foreach(pysrc ${ESIPythonRuntimeSources})
       # Copy each of the Python sources to the build dir.
@@ -276,13 +336,13 @@ if(Python3_FOUND)
     )
 
     add_dependencies(ESIRuntime ESIPythonRuntime)
+
   endif()
 else() # Python not found.
   if (WHEEL_BUILD)
     message (FATAL_ERROR "python-dev is required for a wheel build.")
   endif()
 endif()
-
 
 
 ##===----------------------------------------------------------------------===//
@@ -331,6 +391,11 @@ if(ESI_COSIM)
 
   add_dependencies(ESIRuntime CosimBackend)
 
+  install(TARGETS CosimBackend
+    DESTINATION ${PYLIBDIR}
+    COMPONENT ESIRuntime
+  )
+
   # Build the RTL DPI cosim server.
   add_subdirectory(cosim_dpi_server)
 else()
@@ -365,6 +430,10 @@ if (XRT_PATH)
     -L${XRT_PATH}/lib
   )
   add_dependencies(ESIRuntime XrtBackend)
+  install(TARGETS XrtBackend
+    DESTINATION ${PYLIBDIR}
+    COMPONENT ESIRuntime
+  )
 endif()
 
 install(FILES ${ESICppRuntimeBackendHeaders}

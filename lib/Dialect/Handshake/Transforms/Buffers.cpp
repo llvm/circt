@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
@@ -177,9 +178,8 @@ static void bufferAllFIFOStrategy(Region &r, OpBuilder &builder,
                     /*bufferType=*/BufferTypeEnum::fifo);
 }
 
-LogicalResult circt::handshake::bufferRegion(Region &r, OpBuilder &builder,
-                                             StringRef strategy,
-                                             unsigned bufferSize) {
+static LogicalResult bufferRegion(Region &r, OpBuilder &builder,
+                                  StringRef strategy, unsigned bufferSize) {
   if (strategy == "cycles")
     bufferCyclesStrategy(r, builder, bufferSize);
   else if (strategy == "all")

@@ -138,6 +138,10 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: comb.xor %arg2, [[V29]] : i6
   moore.not %arg2 : !moore.i6
 
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i6
+  // CHECK-NEXT: comb.sub [[ZERO]], %arg2 : i6
+  moore.neg %arg2 : !moore.i6
+
   // CHECK-NEXT: comb.add %arg1, %arg1 : i1
   // CHECK-NEXT: comb.sub %arg1, %arg1 : i1
   // CHECK-NEXT: comb.mul %arg1, %arg1 : i1
@@ -253,4 +257,36 @@ moore.module @ParamTest(){
   // CHECK-NEXT: %sp1 = hw.wire [[SPa]] sym @specparameter_sp1 : i32
   %2 = moore.constant 3 : l32
   %sp1 = moore.named_constant specparam %2 : l32
+}
+
+moore.module @Variable() {
+  // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
+  // CHECK: [[A:%.+]] = llhd.sig "a" [[TMP0]] : i32
+  %a = moore.variable : <i32>
+
+  // CHECK: [[TMP1:%.+]] = hw.constant 0 : i8
+  // CHECK: [[B:%.+]] = llhd.sig "b1" [[TMP1]] : i8
+  %b1 = moore.variable : <i8>
+
+  // CHECK: [[PRB:%.+]] = llhd.prb [[B]] : !hw.inout<i8>
+  %0 = moore.read %b1 : <i8>
+  // CHECK: llhd.sig "b2" [[PRB]] : i8
+  %b2 = moore.variable %0 : <i8>
+
+  // CHECK: %true = hw.constant true
+  %1 = moore.constant true : i1
+  // CHECK: [[CAST:%.+]] = hw.bitcast %true : (i1) -> i1
+  %2 = moore.conversion %1 : !moore.i1 -> !moore.l1
+  // CHECK: llhd.sig "l" [[CAST]] : i1
+  %l = moore.variable %2 : <l1>
+
+  // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
+  %3 = moore.constant 10 : i32
+  
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 0e>
+  // CHECK: llhd.drv [[A]], [[TMP2]] after [[TIME]] : !hw.inout<i32>
+  moore.assign %a, %3 : i32
+
+  // CHECK: hw.output
+  moore.output
 }

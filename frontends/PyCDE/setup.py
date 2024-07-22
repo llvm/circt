@@ -67,8 +67,12 @@ class CMakeBuild(build_py):
         "-DCIRCT_ENABLE_FRONTENDS=PyCDE",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
-        "-DESI_RUNTIME=ON",
     ]
+    # ESI runtime not currently supported on Windows.
+    if os.name == "nt":
+      cmake_args += ["-DESI_RUNTIME=OFF"]
+    else:
+      cmake_args += ["-DESI_RUNTIME=ON"]
     if "COMPILER_LAUNCHER" in os.environ:
       cmake_args += [
           f"-DCMAKE_C_COMPILER_LAUNCHER={os.environ['COMPILER_LAUNCHER']}",

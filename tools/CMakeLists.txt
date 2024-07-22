@@ -12,7 +12,6 @@ add_subdirectory(firtool)
 add_subdirectory(handshake-runner)
 add_subdirectory(hlstool)
 add_subdirectory(ibistool)
-add_subdirectory(llhd-sim)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
 

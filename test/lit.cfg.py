@@ -68,21 +68,12 @@ if config.verilator_path != "":
   tools.append('verilator')
   config.available_features.add('verilator')
 
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
-
 if config.zlib == "1":
   config.available_features.add('zlib')
 
 # Enable tests for schedulers relying on an external solver from OR-Tools.
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')
-
-# Add llhd-sim if it is built.
-if config.llhd_sim_enabled:
-  config.available_features.add('llhd-sim')
-  tools.append('llhd-sim')
 
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:

@@ -5,7 +5,7 @@
 from __future__ import annotations
 from re import T
 
-from .common import Clock, Input, Output
+from .common import Clock, Input, Output, Reset
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
@@ -65,11 +65,19 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
   return w
 
 
+class AssignableSignal:
+  """An interface which indicates that a signal should be assigned to exactly
+  once before generator exit."""
+
+  def assign(self, new_signal: Signal) -> None:
+    assert False, "assign must be implemented by the subclass"
+
+
 def Wire(type: Type, name: str = None):
   """Declare a wire. Used to create backedges. Must assign exactly once. If
   'name' is specified, use 'NamedWire' instead."""
 
-  class WireValue(type._get_value_class()):
+  class WireValue(type._get_value_class(), AssignableSignal):
 
     def __init__(self):
       self._backedge = BackedgeBuilder.create(type._type,
@@ -198,6 +206,9 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
     return data_inputs[0]
   if sel.type.width != (num_inputs - 1).bit_length():
     raise TypeError("'Sel' bit width must be clog2 of number of inputs")
+  data_type = data_inputs[0].type
+  if not all([d.type == data_type for d in data_inputs]):
+    raise TypeError("All data inputs must have the same type")
 
   input_names = [
       i.name if i.name is not None else f"in{idx}"

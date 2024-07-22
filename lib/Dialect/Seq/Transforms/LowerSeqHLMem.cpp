@@ -100,8 +100,8 @@ public:
 
     auto hwClk = rewriter.create<seq::FromClockOp>(clk.getLoc(), clk);
     rewriter.create<sv::AlwaysFFOp>(
-        mem.getLoc(), sv::EventControl::AtPosEdge, hwClk, ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, rst, [&] {
+        mem.getLoc(), sv::EventControl::AtPosEdge, hwClk,
+        sv::ResetType::SyncReset, sv::EventControl::AtPosEdge, rst, [&] {
           for (auto [loc, address, data, en] : writeTuples) {
             Value a = address, d = data; // So the lambda can capture.
             Location l = loc;

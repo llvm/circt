@@ -50,7 +50,7 @@ digraph G {
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
     HWArith [URL="https://circt.llvm.org/docs/Dialects/HWArith/"]
-    MooreMIR [URL="https://circt.llvm.org/docs/Dialects/Moore/", label="Moore MIR"]
+    Moore [URL="https://circt.llvm.org/docs/Dialects/Moore/"]
 
     // Intermediate node to target when lowering to both SV and Core dialects
     lower_to_sv_and_core [shape=point label="" fillcolor=black]
@@ -79,7 +79,6 @@ digraph G {
     subgraph backend_internal_tools{
       node [fillcolor="#fdc086"]
       Arcilator
-      llhd_sim [label="llhd-sim"]
       ExportSystemC
       ExportVerilog [URL="https://circt.llvm.org/docs/VerilogGeneration/"]
     }
@@ -88,7 +87,7 @@ digraph G {
   // External tools
   subgraph external_tools {
     node [shape=octagon fillcolor="#ffff99"]
-    Moore 
+    Slang 
     Calyx_native [label="Calyx native"]
   }
 
@@ -126,13 +125,14 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {Pipeline MSFT HWArith MooreMIR} -> lower_to_core [arrowhead=none]
+  {Pipeline MSFT HWArith Moore} -> lower_to_core [arrowhead=none]
+  Moore -> LLHD
   {ESI FIRRTL FSM} -> lower_to_sv_and_core [arrowhead=none]
   lower_to_sv_and_core -> SV
   lower_to_sv_and_core -> Comb [lhead=cluster_RTL]
   lower_to_core -> Comb [lhead=cluster_RTL]
   Seq -> SV
-  {HW MooreMIR} -> LLHD
+  LLHD -> Arcilator
   Interop -> Arc [ltail=cluster_RTL]
   Comb -> SystemC [ltail=cluster_RTL]
   ExportVerilog -> SVFile
@@ -140,6 +140,7 @@ digraph G {
   // Tool flows
   Arc -> Arcilator
   Arcilator -> SimBinary
+  Arcilator -> VCDTrace
   Scheduling -> LoopSchedule [dir=both]
   Scheduling -> Pipeline [dir=both]
   Chisel -> FIRFile
@@ -149,13 +150,10 @@ digraph G {
   ExportSystemC -> SystemCFile
   SV -> ExportVerilog
   Seq -> ExportVerilog [ltail=cluster_RTL]
-  HW -> llhd_sim [ltail=cluster_RTL]
-  SVVHDL -> Moore [weight=999]
-  Moore -> MooreMIR
+  SVVHDL -> Slang [weight=999]
+  Slang -> Moore
   Calyx -> Calyx_native
   Calyx_native -> lower_to_sv_and_core [arrowhead=none]
-  LLHD -> llhd_sim
-  llhd_sim -> VCDTrace
   ESI -> ServiceDesc
   MSFT -> TCL
   PyFile -> PyCDE
@@ -170,7 +168,7 @@ digraph G {
 
   // Leave one rank free above the RTL cluster to improve routing of incoming
   // edges.
-  {FIRRTL FSM ESI MSFT HWArith MooreMIR} -> space_above_RTL [weight=999, style=invis]
+  {FIRRTL FSM ESI MSFT HWArith Moore} -> space_above_RTL [weight=999, style=invis]
   {space_above_RTL} -> {Seq HW Comb} [lhead=cluster_RTL, weight=999, style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster

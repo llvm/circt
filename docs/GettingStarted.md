@@ -148,16 +148,13 @@ dependencies are installed on your system. They are:
 - libfl2     # Ubuntu only (ignore if gives error)
 - libfl-dev  # Ubuntu only (ignore if gives error)
 
-7) **Install Cap'nProto** (optional, affects ESI dialect only)
+7) **Install GRPC** (optional, affects ESI runtime only)
 
-Some of the ESI dialect code requires [libcapnp](https://capnproto.org/), 0.9.1 or newer.
-(Specifically, the [cosimulation](Dialects/ESI/cosim.md) component.) Most of
-the ESI cosim integration tests also require the python bindings: pycapnp.
-The `utils/get-capnp.sh` script downloads, compiles, and installs a known
-good version to a directory within the circt source code. It optionally
-installs pycapnp via 'pip3'. The capnp compile requires libtool.
-Alternatively, you can use a docker image we provide via
-`utils/run-docker.sh`.
+The ESI runtime requires GRPC for cosimulation. The `utils/get-grpc.sh` script
+installs a known good version of GRPC to a directory within the CIRCT source
+code. Alternatively, you can install GRPC using your package manager, though the
+version may not be compatible with the ESI runtime so results may vary.
+
 
 8) **Install OR-Tools** (optional, enables additional schedulers)
 

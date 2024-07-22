@@ -48,7 +48,7 @@ static void log(char *epId, bool toClient, const MessageData &msg) {
     // Separate 32-bit words.
     if (i % 4 == 0 && i > 0)
       fprintf(logFile, " ");
-    // Separate 64-bit words (capnp word size)
+    // Separate 64-bit words
     if (i % 8 == 0 && i > 0)
       fprintf(logFile, "  ");
     fprintf(logFile, " %02x", b);

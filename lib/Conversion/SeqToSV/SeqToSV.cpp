@@ -97,7 +97,7 @@ public:
       if (lowerToAlwaysFF) {
         rewriter.create<sv::AlwaysFFOp>(
             loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
-            ResetType::SyncReset, sv::EventControl::AtPosEdge,
+            sv::ResetType::SyncReset, sv::EventControl::AtPosEdge,
             adaptor.getReset(), assignValue, assignReset);
       } else {
         rewriter.create<sv::AlwaysOp>(

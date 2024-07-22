@@ -117,3 +117,51 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
   %cat = sim.fmt.concat (%foo, %clf, %ccr, %null, %foo, %null, %cext)
   hw.output %cat : !sim.fstring
 }
+
+
+// CHECK-LABEL: hw.module @flatten_concat1
+// CHECK-DAG:   %[[LH:.+]] = sim.fmt.lit "Hex: "
+// CHECK-DAG:   %[[LD:.+]] = sim.fmt.lit "Dec: "
+// CHECK-DAG:   %[[LB:.+]] = sim.fmt.lit "Bin: "
+// CHECK-DAG:   %[[FH:.+]] = sim.fmt.hex %val : i8
+// CHECK-DAG:   %[[FD:.+]] = sim.fmt.dec %val : i8
+// CHECK-DAG:   %[[FB:.+]] = sim.fmt.bin %val : i8
+// CHECK-DAG:   %[[CAT:.+]] = sim.fmt.concat (%[[LB]], %[[FB]], %[[LD]], %[[FD]], %[[LH]], %[[FH]])
+// CHECK:       hw.output %[[CAT]] : !sim.fstring
+
+hw.module @flatten_concat1(in %val : i8, out res: !sim.fstring) {
+  %binLit = sim.fmt.lit "Bin: "
+  %binVal = sim.fmt.bin %val : i8
+  %binCat = sim.fmt.concat (%binLit, %binVal)
+
+  %decLit = sim.fmt.lit "Dec: "
+  %decVal = sim.fmt.dec %val : i8
+  %decCat = sim.fmt.concat (%decLit, %decVal, %nocat)
+
+  %nocat = sim.fmt.concat ()
+
+  %hexLit = sim.fmt.lit "Hex: "
+  %hexVal = sim.fmt.hex %val : i8
+  %hexCat = sim.fmt.concat (%hexLit, %hexVal)
+
+  %catcat = sim.fmt.concat (%binCat, %nocat, %decCat, %nocat, %hexCat)
+  hw.output %catcat : !sim.fstring
+}
+
+// CHECK-LABEL: hw.module @flatten_concat2
+// CHECK-DAG:   %[[F:.+]] = sim.fmt.lit "Foo"
+// CHECK-DAG:   %[[FF:.+]] = sim.fmt.lit "FooFoo"
+// CHECK-DAG:   %[[CHR:.+]] = sim.fmt.char %val : i8
+// CHECK-DAG:   %[[CAT:.+]] = sim.fmt.concat (%[[F]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[FF]], %[[CHR]], %[[F]])
+// CHECK:       hw.output %[[CAT]] : !sim.fstring
+
+hw.module @flatten_concat2(in %val : i8, out res: !sim.fstring) {
+  %foo = sim.fmt.lit "Foo"
+  %char = sim.fmt.char %val : i8
+
+  %c = sim.fmt.concat (%foo, %char, %foo)
+  %cc = sim.fmt.concat (%c, %c)
+  %ccccc = sim.fmt.concat (%cc, %c, %cc)
+
+  hw.output %ccccc : !sim.fstring
+}

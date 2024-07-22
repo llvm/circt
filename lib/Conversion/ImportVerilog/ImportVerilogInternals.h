@@ -36,17 +36,19 @@ struct PortLowering {
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
+      portsBySyntaxNode;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
 /// operations. Keeps track of the destination MLIR module, builders, and
 /// various worklists and utilities needed for conversion.
 struct Context {
-  Context(mlir::ModuleOp intoModuleOp,
+  Context(slang::ast::Compilation &compilation, mlir::ModuleOp intoModuleOp,
           const slang::SourceManager &sourceManager,
           SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths)
-      : intoModuleOp(intoModuleOp), sourceManager(sourceManager),
-        bufferFilePaths(bufferFilePaths),
+      : compilation(compilation), intoModuleOp(intoModuleOp),
+        sourceManager(sourceManager), bufferFilePaths(bufferFilePaths),
         builder(OpBuilder::atBlockEnd(intoModuleOp.getBody())),
         symbolTable(intoModuleOp) {}
   Context(const Context &) = delete;
@@ -67,10 +69,11 @@ struct Context {
   Type convertType(const slang::ast::DeclaredType &type);
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
-  LogicalResult convertCompilation(slang::ast::Compilation &compilation);
+  LogicalResult convertCompilation();
   ModuleLowering *
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
+  LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
 
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
@@ -83,6 +86,7 @@ struct Context {
   LogicalResult
   convertTimingControl(const slang::ast::TimingControl &timingControl);
 
+  slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
   const slang::SourceManager &sourceManager;
   SmallDenseMap<slang::BufferID, StringRef> &bufferFilePaths;

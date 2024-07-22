@@ -13,11 +13,14 @@ include "circt/Dialect/Verif/VerifDialect.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/HW/HWAttributes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class VerifOp<string mnemonic, list<Trait> traits = []> :
   Op<VerifDialect, mnemonic, traits>;
@@ -169,6 +172,52 @@ def HasBeenResetOp : VerifOp<"has_been_reset", [Pure]> {
 // Logical Equivalence Checking and Model Checking
 //===----------------------------------------------------------------------===//
 
+def BoundedModelCheckingOp : VerifOp<"bmc", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"verif::YieldOp">,
+]> {
+  let summary = "Perform a bounded model check";
+  let description = [{
+    This operation represents a bounded model checking problem explicitly in
+    the IR. The `bound` attribute indicates how many times the `circuit` region
+    should be executed, and `num_regs` indicates the number of registers in the
+    design that have been externalised and appended to the region's
+    inputs/outputs (these values are fed from each `circuit` region execution
+    to the next, as they represent register state, rather than being
+    overwritten with fresh variables like other inputs). The `circuit` region
+    contains the circuit (alongside the `verif` property checking operations)
+    to be checked.
+
+    The `init` region contains the logic to initialize the clock signals, and
+    will be executed once before any other region - it cannot take any
+    arguments, and should return as many `!seq.clock` values as the `circuit`
+    region has `!seq.clock` arguments, followed by any initial arguments of
+    'state' arguments to be fed to the `loop` region (see below).
+
+    The `loop` region contains the logic to advance the clock signals, and will
+    be executed after each execution of the `circuit` region. It should take as
+    arguments as many `!seq.clock` values as the `circuit` region has, and
+    these can be followed by additional 'state' arguments to represent e.g.
+    which clock should be toggled next. The types yielded should be the same,
+    as this region yields the updated clock and state values (this should also
+    match the types yielded by the `init` region).
+  }];
+
+  let arguments = (ins I32Attr:$bound, I32Attr:$num_regs);
+  let regions = (region SizedRegion<1>:$init,
+                        SizedRegion<1>:$loop,
+                        SizedRegion<1>:$circuit);
+
+  let results = (outs I1:$result);
+
+  let assemblyFormat = [{
+    `bound` $bound `num_regs` $num_regs attr-dict-with-keyword `init` $init `loop` $loop `circuit`
+    $circuit
+  }];
+
+  let hasRegionVerifier = true;
+}
+
 def LogicEquivalenceCheckingOp : VerifOp<"lec", [
   IsolatedFromAbove,
   SingleBlockImplicitTerminator<"verif::YieldOp">,
@@ -200,7 +249,7 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp"]>
+  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp"]>
 ]> {
   let summary = "yields values from a region";
 
@@ -212,6 +261,88 @@ def YieldOp : VerifOp<"yield", [
       build($_builder, $_state, std::nullopt);
     }]>,
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// Verification intent ops
+//===----------------------------------------------------------------------===//
+
+def FormalOp : VerifOp<"formal", [
+  NoTerminator, RegionKindInterface, HasParent<"mlir::ModuleOp">, 
+  IsolatedFromAbove, Symbol
+]> {
+  let summary = "defines a formal verification test";
+  let description = [{
+    This operation defines a formal verification test. This should be written 
+    by declaring symbolic values that are then connected to a hardware instance. 
+    These symbols can then be used in additional assertions that are defined 
+    outside of the instantiated `hw.module` but inside of this region. 
+    Assertions/Assumptions defined within the instantiated module will also be 
+    used for verification. The region can then be converted into btor2, 
+    SystemVerilog, or used for verification directly in circt-bmc. The operations 
+    in this region are ignored during regular SystemVerilog emission. This allows 
+    for verification specific logic to be isolated from the design in a way that 
+    is similar to layers.   
+      
+    The attribute `k` defines the upper bound of cycles to check for this test 
+    w.r.t. the implicit clock defined by this operation within its region.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, APIntAttr:$k);
+
+  let regions = (region SizedRegion<1>:$test_region);
+
+  let assemblyFormat = [{
+    $sym_name `(``k` `=` $k `)` attr-dict-with-keyword
+    $test_region
+  }];
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Formal Verification Ops
+//===----------------------------------------------------------------------===//
+
+def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+  let summary = "declare a symbolic input for formal verification";
+  let description = [{
+    This operation declares a symbolic input that can then be used to reason 
+    about `hw.instance` inputs in a symbolic manner in assertions and 
+    assumptions. The result type must be explicitly marked. The resulting value 
+    is a new non-deterministic value for every clock cycle of the implicit clock 
+    defined by the parent `verif.formal`.  
+  }];
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def ConcreteInputOp : VerifOp<"concrete_input", [
+  AllTypesMatch<["init", "update", "result"]>, HasParent<"verif::FormalOp">
+]> {
+  let summary = "declare a concrete input for formal verification";
+  let description = [{
+    This operation declares a concrete input that can then be used in the 
+    reasoning surrounding symbolic inputs, allowing for a form of concolic 
+    reasoning to take place in a `verif.formal` block. Concrete inputs are 
+    defined by an initial value and an update SSA value. This is equivalent 
+    to a register with the parent `verif.formal`'s implicit clock, which is 
+    initialized with the init value and obtains a new value every implicit 
+    clock tick from the update value.
+  }];
+
+  let arguments = (ins AnyType:$init, AnyType:$update);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat = [{
+    $init `,` $update attr-dict `:` type($result)
+  }];
 }
 
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

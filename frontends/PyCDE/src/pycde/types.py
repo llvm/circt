@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from functools import singledispatchmethod
 
-from .support import get_user_loc
+from .support import clog2, get_user_loc
 
 from .circt import ir, support
 from .circt.dialects import esi, hw, seq, sv
@@ -84,7 +84,7 @@ class Type:
     return self
 
   @property
-  def bitwidth(self):
+  def bitwidth(self) -> int:
     return hw.get_bitwidth(self._type)
 
   @property
@@ -310,6 +310,10 @@ class Array(Type):
   @property
   def size(self):
     return self._type.size
+
+  @property
+  def select_bits(self) -> int:
+    return clog2(self.size)
 
   @property
   def shape(self):
@@ -663,6 +667,35 @@ class Bundle(Type):
             if dir == ChannelDirection.FROM else ChannelDirection.FROM,
             _FromCirctType(ty)) for (name, dir, ty) in self._type.channels
     ])
+
+  def get_to_from(self) -> typing.Tuple[BundledChannel, BundledChannel]:
+    """In a bidirectional, two-channel bundle, it is often desirable to easily
+    have access to the from and to channels."""
+
+    bundle_channels = self.channels
+    if len(bundle_channels) != 2:
+      raise ValueError("Bundle must have exactly two channels.")
+
+    # Return vars.
+    to_channel_bc: typing.Optional[BundledChannel] = None
+    from_channel_bc: typing.Optional[BundledChannel] = None
+
+    # Look at the first channel.
+    if bundle_channels[0].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[0]
+    else:
+      from_channel_bc = bundle_channels[0]
+
+    # Look at the second channel.
+    if bundle_channels[1].direction == ChannelDirection.TO:
+      to_channel_bc = bundle_channels[1]
+    else:
+      from_channel_bc = bundle_channels[1]
+
+    # Check and return.
+    if to_channel_bc is None or from_channel_bc is None:
+      raise ValueError("Bundle must have one channel in each direction.")
+    return to_channel_bc, from_channel_bc
 
   # Easy accessor for channel types by name.
   def __getattr__(self, attrname: str):

@@ -44,7 +44,8 @@ circuit Top:
 
   ; CHECK: module Top_assert(
   ; CHECK-NOT: endmodule
-  ; CHECK:   foo: assert property (disable iff (~(en)) cond);
+  ; CHECK:   wire _GEN = ~en; 
+  ; CHECK:   foo: assert property (disable iff (_GEN) cond);
   ; CHECK: endmodule
 
   public module Top:
