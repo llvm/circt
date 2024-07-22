@@ -441,6 +441,7 @@ LogicalResult ExportRTLILModule::visitTypeOp(ArrayGetOp op) {
   if (failed(input) || failed(index) || failed(result))
     return failure();
 
+
   (void)rtlilModule->addShiftx(NEW_ID, input.value(), index.value(),
                                result.value());
   return success();
@@ -519,7 +520,7 @@ LogicalResult ExportRTLILModule::visitComb(ExtractOp op) {
 
 LogicalResult ExportRTLILModule::visitComb(ConcatOp op) {
   SigSpec ret;
-  for (auto operand : op.getOperands()) {
+  for (auto operand : llvm::reverse(op.getOperands())) {
     auto result = getValue(operand);
     if (failed(result))
       return result;

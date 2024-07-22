@@ -199,7 +199,8 @@ void ExportYosysParallelPass::runOnOperation() {
   }
   if (failed(mlir::failableParallelForEachN(
           &getContext(), 0, results.size(), [&](auto i) {
-            auto &[op, test] = results[i];
+            auto op = results[i].first;
+            auto test = results[i].second;
             logger([&] {
               llvm::errs() << "[yosys-optimizer] Running [" << i + 1 << "/"
                            << results.size() << "] " << op.getModuleName()

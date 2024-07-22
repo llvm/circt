@@ -46,6 +46,7 @@ using namespace rtlil;
 
 struct ImportRTLILDesign {
   RTLIL::Design *design;
+  ImportRTLILDesign(RTLIL::Design *design) : design(design){}
   LogicalResult run(mlir::ModuleOp module);
   using ModuleMappingTy = DenseMap<StringAttr, hw::HWModuleLike>;
   ModuleMappingTy moduleMapping;
@@ -311,7 +312,7 @@ struct ImportRTLILModule {
     }
 
     SmallVector<mlir::Value> chunks;
-    for (auto w : sigSpec.chunks())
+    for (auto w : llvm::reverse(sigSpec.chunks()))
       chunks.push_back(convertSigSpec(w));
     return builder->create<comb::ConcatOp>(builder->getUnknownLoc(), chunks);
   }
@@ -600,6 +601,6 @@ LogicalResult ImportRTLILDesign::run(mlir::ModuleOp module) {
 
 LogicalResult circt::rtlil::importRTLILDesign(RTLIL::Design *design,
                                               ModuleOp module) {
-  ImportRTLILDesign importer{design};
+  ImportRTLILDesign importer(design);
   return importer.run(module);
 }
