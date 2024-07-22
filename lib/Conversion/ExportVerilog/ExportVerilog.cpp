@@ -248,7 +248,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp,
-          SystemFunctionOp, UnpackedArrayCreateOp>(op))
+          SystemFunctionOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -280,6 +280,9 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
+  if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
+    return getTypeDims(dims, uarray.getElementType(), loc);
+
   if (hw::type_isa<InterfaceType, StructType, EnumType>(type))
     return;
 
@@ -332,7 +335,7 @@ static Type stripUnpackedTypes(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return stripUnpackedTypes(inoutType.getElementType());
       })
-      .Case<UnpackedArrayType>([](UnpackedArrayType arrayType) {
+      .Case<UnpackedArrayType, sv::UnpackedOpenArrayType>([](auto arrayType) {
         return stripUnpackedTypes(arrayType.getElementType());
       })
       .Default([](Type type) { return type; });
@@ -1869,6 +1872,10 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
                 /*downTo=*/false);
         printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
+      .Case<sv::UnpackedOpenArrayType>([&](auto arrayType) {
+        os << "[]";
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
+      })
       .Case<InterfaceType>([&](auto) {
         // Interface instantiations have parentheses like a module with no
         // ports.
@@ -2304,6 +2311,11 @@ private:
   SubExprInfo visitSV(ConstantStrOp op);
 
   SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
+  SubExprInfo visitSV(sv::UnpackedOpenArrayCastOp op) {
+    // Cast op is noop.
+    return emitSubExpr(op->getOperand(0), LowestPrecedence);
+  }
+
   // Noop cast operators.
   SubExprInfo visitSV(ReadInOutOp op) {
     auto result = emitSubExpr(op->getOperand(0), LowestPrecedence);
