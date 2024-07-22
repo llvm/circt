@@ -440,11 +440,11 @@ firrtl.circuit "ForceRelease" {
       // CHECK-NEXT: firrtl.instance r sym @[[INST_SYM]] @RefMe()
       %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
       // CHECK-NEXT: %[[REF1:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.force %clock, %c, %[[REF1]], %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
-      firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+      // CHECK-NEXT: firrtl.ref.force %clock, %c, %[[REF1]], %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
       // CHECK-NEXT: %[[REF2:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
-      // CHECK-NEXT: firrtl.ref.force_initial %c, %[[REF2]], %x : !firrtl.uint<1>, !firrtl.uint<4>
-      firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.uint<4>
+      // CHECK-NEXT: firrtl.ref.force_initial %c, %[[REF2]], %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
       // CHECK-NEXT: %[[REF3:.+]] = firrtl.xmr.ref @[[XMRPATH]] : !firrtl.rwprobe<uint<4>>
       // CHECK-NEXT: firrtl.ref.release %clock, %c, %[[REF3]] : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
       firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
@@ -675,7 +675,7 @@ firrtl.circuit "DropForceOp" {
     %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
-    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.uint<0>
+    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.rwprobe<uint<0>>, !firrtl.uint<0>
   }
 }
 

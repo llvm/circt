@@ -377,7 +377,7 @@ firrtl.circuit "Foo" {
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
     // CHECK-NEXT: force_initial(refSource.a_rwref, UInt<1>(0))
     firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
-      !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
     // CHECK-NEXT: release_initial(refSource.a_rwref)
     firrtl.ref.release_initial %c1_ui1, %refSource_a_rwref :
       !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
@@ -385,7 +385,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:   force_initial(refSource.a_rwref, UInt<1>(0))
     firrtl.when %enable : !firrtl.uint<1> {
       firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %c0_ui1 :
-        !firrtl.uint<1>, !firrtl.uint<1>
+        !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
     }
     // CHECK-NEXT: when enable :
     // CHECK-NEXT:   release_initial(refSource.a_rwref)
@@ -395,7 +395,7 @@ firrtl.circuit "Foo" {
     }
     // CHECK-NEXT: force(clock, enable, refSource.a_rwref, UInt<1>(1))
     firrtl.ref.force %clock, %enable, %refSource_a_rwref, %c1_ui1 :
-      !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
     // CHECK-NEXT: release(clock, enable, refSource.a_rwref)
     firrtl.ref.release %clock, %enable, %refSource_a_rwref :
       !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
