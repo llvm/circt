@@ -111,8 +111,8 @@ void LowerToBMCPass::runOnOperation() {
         loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
   else {
     hwModule->emitOpError(
-        "No num_regs attribute found - please run externalize "
-        "registers pass first.");
+        "no num_regs attribute found - please run externalize "
+        "registers pass first");
     return signalPassFailure();
   }
 
@@ -123,7 +123,7 @@ void LowerToBMCPass::runOnOperation() {
   for (auto input : hwModule.getInputTypes()) {
     if (isa<seq::ClockType>(input)) {
       if (hasClk) {
-        hwModule.emitError("Designs with multiple clocks not yet supported.");
+        hwModule.emitError("designs with multiple clocks not yet supported");
         return signalPassFailure();
       }
       hasClk = true;
