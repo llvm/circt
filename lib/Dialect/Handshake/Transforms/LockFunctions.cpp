@@ -29,7 +29,8 @@ using namespace circt;
 using namespace handshake;
 using namespace mlir;
 
-LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
+/// Adds a locking mechanism around the region.
+static LogicalResult lockRegion(Region &r, OpBuilder &rewriter) {
   Block *entry = &r.front();
   Location loc = r.getLoc();
 

@@ -196,7 +196,10 @@ def VariableOp : MooreOp<"variable", [
   let description = [{
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
-  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    Optional<UnpackedType>:$initial
+  );
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
@@ -248,7 +251,7 @@ def NetOp : MooreOp<"net", [
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];
   let arguments = (ins
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     NetKindAttr:$kind,
     Optional<UnpackedType>:$assignment
   );
@@ -265,7 +268,7 @@ def AssignedVarOp : MooreOp<"assigned_variable", [
     "result", "initial", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "The copy of variable must have the initial value";
-  let arguments = (ins StrAttr:$name, UnpackedType:$initial);
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
   let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
@@ -275,7 +278,7 @@ def AssignedVarOp : MooreOp<"assigned_variable", [
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
   TypesMatchWith<"input and result types match",
-    "result", "input", "RefType::get(cast<UnpackedType>($_self))">
+    "input", "result", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -286,7 +289,7 @@ def ReadOp : MooreOp<"read", [
   let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($result)
+    $input attr-dict `:` type($input)
   }];
 }
 

@@ -163,8 +163,8 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
 
     if (!init)
       init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, llhd::SigType::get(resultType),
-                                             op.getName(), init);
+    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, hw::InOutType::get(resultType),
+                                             op.getNameAttr(), init);
     return success();
   }
 };
@@ -321,6 +321,20 @@ struct NotOpConversion : public OpConversionPattern<NotOp> {
     Value max = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, -1);
 
     rewriter.replaceOpWithNewOp<comb::XorOp>(op, adaptor.getInput(), max);
+    return success();
+  }
+};
+
+struct NegOpConversion : public OpConversionPattern<NegOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NegOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    Value zero = rewriter.create<hw::ConstantOp>(op.getLoc(), resultType, 0);
+
+    rewriter.replaceOpWithNewOp<comb::SubOp>(op, zero, adaptor.getInput());
     return success();
   }
 };
@@ -675,7 +689,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
-    BoolCastOpConversion, NotOpConversion,
+    BoolCastOpConversion, NotOpConversion, NegOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,

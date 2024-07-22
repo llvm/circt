@@ -19,13 +19,11 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHWArithToHW
-  CIRCTHWToLLHD
   CIRCTHWToLLVM
   CIRCTHWToBTOR2
   CIRCTHWToSMT
   CIRCTHWToSV
   CIRCTHWToSystemC
-  CIRCTLLHDToLLVM
   CIRCTLoopScheduleToCalyx
   CIRCTLTLToCore
   CIRCTMooreToCore

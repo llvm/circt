@@ -40,10 +40,10 @@ add_circt_translation_library(CIRCTImportVerilog
   slang_slang
 
   LINK_LIBS PUBLIC
-  CIRCTMoore
   CIRCTHW
-  MLIRTranslateLib
+  CIRCTMoore
   MLIRSCFDialect
+  MLIRTranslateLib
   PRIVATE
   slang_slang
 )

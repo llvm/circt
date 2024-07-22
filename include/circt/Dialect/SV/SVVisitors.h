@@ -31,7 +31,7 @@ public:
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
-            MacroRefExprSEOp,
+            MacroRefExprSEOp, UnpackedArrayCreateOp,
             // Declarations.
             RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
@@ -109,6 +109,7 @@ public:
   HANDLE(ConstantStrOp, Unhandled);
   HANDLE(MacroRefExprOp, Unhandled);
   HANDLE(MacroRefExprSEOp, Unhandled);
+  HANDLE(UnpackedArrayCreateOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);
