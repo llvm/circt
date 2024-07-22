@@ -90,7 +90,6 @@ void LowerToBMCPass::runOnOperation() {
       LLVM::lookupOrCreateFn(getOperation(), "printf", ptrTy, voidTy, true);
 
   // Replace the top-module with a function performing the BMC
-  Type i32Ty = builder.getI32Type();
   auto entryFunc = builder.create<func::FuncOp>(
       loc, topModule, builder.getFunctionType({}, {}));
   builder.createBlock(&entryFunc.getBody());
@@ -173,6 +172,7 @@ void LowerToBMCPass::runOnOperation() {
 
   if (insertMainFunc) {
     builder.setInsertionPointToEnd(getOperation().getBody());
+    Type i32Ty = builder.getI32Type();
     auto mainFunc = builder.create<func::FuncOp>(
         loc, "main", builder.getFunctionType({i32Ty, ptrTy}, {i32Ty}));
     builder.createBlock(&mainFunc.getBody(), {}, {i32Ty, ptrTy}, {loc, loc});
