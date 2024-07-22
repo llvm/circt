@@ -448,6 +448,43 @@ def LayerOp : FIRRTLOp<
   }];
 }
 
+def FormalOp : FIRRTLOp<"formal", [
+    IsolatedFromAbove,
+    Symbol,
+    SymbolTable,
+    NoTerminator,
+    HasParent<"firrtl::CircuitOp">
+]> {
+  let summary = "A formal test definition.";
+  let description = [{
+    The `firrtl.formal` operation defines a formal verification problem in the same 
+    context as the rest of the design. This problem is solved using bounded model 
+    checking and should be given a bound k, which represents the number of cycles considered 
+    during model checking.
+
+    Example:
+    ```mlir
+
+    firrtl.formal @formal1(k=20) {
+      %bar, %out = firrtl.instance foo @Foo(in bar: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
+      %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
+      firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
+      %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
+      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
+      firrtl.assert %cond
+    }
+}
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, UI64Attr:$k);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name `(` `k` `=` $k `)` attr-dict-with-keyword $body
+  }];
+}
+
 def OptionOp : FIRRTLOp<"option", [
     IsolatedFromAbove,
     Symbol,
