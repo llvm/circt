@@ -742,12 +742,10 @@ def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
   let summary = "Translate core dialects into yosys's RTL IR";
   let constructor = "createExportYosysParallel()";
   let options = [
-    Option<"commands", "commmands", "std::string",
-            "", "yosys commands to run">,
+    ListOption<"passes", "passes", "std::string",
+               "Specify Yosys passes to run">,
     Option<"topModule", "top-module", "std::string",
             "", "top module name">,
-    Option<"importResult", "import-result", "bool",
-            "false", "Import Yosys's result and replace it with the input.">,
     Option<"workspace", "workspace", "std::string",
             "", "workspace to run yosys">
   ];

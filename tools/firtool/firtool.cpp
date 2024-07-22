@@ -710,6 +710,7 @@ int main(int argc, char **argv) {
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
     registerExportYosysPass();
+    registerExportYosysParallelPass();
   }
 
   // Register any pass manager command line options.
