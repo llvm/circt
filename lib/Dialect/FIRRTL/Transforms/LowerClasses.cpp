@@ -1633,7 +1633,7 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.modifyOpInPlace(op, [&]() {
-      for (auto field : adaptor.getFields()) {
+      for (auto field : op.getFields()) {
         field.setType(typeConverter->convertType(field.getType()));
       }
     });
