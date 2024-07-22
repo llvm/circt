@@ -162,10 +162,10 @@ class LowerLayersPass
                            SmallVectorImpl<PortInfo> &ports);
 
   /// Strip layer colors from the module's interface.
-  InnerRefMap runOnModuleLike(FModuleLike moduleLike);
+  FailureOr<InnerRefMap> runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  void runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
+  LogicalResult runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -276,7 +276,8 @@ void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
   }
 }
 
-InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
+FailureOr<InnerRefMap>
+LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   LLVM_DEBUG({
     llvm::dbgs() << "Module: " << moduleLike.getModuleName() << "\n";
     llvm::dbgs() << "  Examining Layer Blocks:\n";
@@ -284,18 +285,24 @@ InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
 
   // Strip away layers from the interface of the module-like op.
   InnerRefMap innerRefMap;
-  TypeSwitch<Operation *, void>(moduleLike.getOperation())
-      .Case<FModuleOp>([&](auto op) {
-        op.setLayers({});
-        removeLayersFromPorts(op);
-        runOnModuleBody(op, innerRefMap);
-      })
-      .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
-        op.setLayers({});
-        removeLayersFromPorts(op);
-      })
-      .Case<ClassOp, ExtClassOp>([](auto) {})
-      .Default([](auto) { assert(0 && "unknown module-like op"); });
+  auto result =
+      TypeSwitch<Operation *, LogicalResult>(moduleLike.getOperation())
+          .Case<FModuleOp>([&](auto op) {
+            op.setLayers({});
+            removeLayersFromPorts(op);
+            return runOnModuleBody(op, innerRefMap);
+          })
+          .Case<FExtModuleOp, FIntModuleOp, FMemModuleOp>([&](auto op) {
+            op.setLayers({});
+            removeLayersFromPorts(op);
+            return success();
+          })
+          .Case<ClassOp, ExtClassOp>([](auto) { return success(); })
+          .Default(
+              [](auto *op) { return op->emitError("unknown module-like op"); });
+
+  if (failed(result))
+    return failure();
 
   return innerRefMap;
 }
@@ -309,8 +316,8 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   layerBlock.erase();
 }
 
-void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
-                                      InnerRefMap &innerRefMap) {
+LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
+                                               InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
   StringRef circuitName = circuitOp.getName();
   hw::InnerSymbolNamespace ns(moduleOp);
@@ -331,7 +338,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   //    this layer block to the new module.
   // 4. Instantiate the new module outside the layer block and hook it up.
   // 5. Erase the layer block.
-  moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
+  auto result = moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
     // Strip layer requirements from any op that might represent a probe.
     if (auto wire = dyn_cast<WireOp>(op)) {
       removeLayersFromValue(wire.getResult());
@@ -659,6 +666,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     return WalkResult::advance();
   });
+  return success(!result.wasInterrupted());
 }
 
 void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
@@ -727,17 +735,27 @@ void LowerLayersPass::runOnOperation() {
   }
 
   auto mergeMaps = [](auto &&a, auto &&b) {
-    for (auto bb : b)
-      a.insert(bb);
+    if (failed(a))
+      return std::forward<decltype(a)>(a);
+    if (failed(b))
+      return std::forward<decltype(b)>(b);
+
+    for (auto bb : *b)
+      a->insert(bb);
     return std::forward<decltype(a)>(a);
   };
 
   // Lower the layer blocks of each module.
   SmallVector<FModuleLike> modules(
       circuitOp.getBodyBlock()->getOps<FModuleLike>());
-  auto innerRefMap =
-      transformReduce(circuitOp.getContext(), modules, InnerRefMap{}, mergeMaps,
-                      [this](FModuleLike mod) { return runOnModuleLike(mod); });
+  auto failureOrInnerRefMap = transformReduce(
+      circuitOp.getContext(), modules, FailureOr<InnerRefMap>(InnerRefMap{}),
+      mergeMaps, [this](FModuleLike mod) -> FailureOr<InnerRefMap> {
+        return runOnModuleLike(mod);
+      });
+  if (failed(failureOrInnerRefMap))
+    return signalPassFailure();
+  auto &innerRefMap = *failureOrInnerRefMap;
 
   // Rewrite any hw::HierPathOps which have namepaths that contain rewritting
   // inner refs.
