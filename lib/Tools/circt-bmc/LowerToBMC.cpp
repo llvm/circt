@@ -39,24 +39,6 @@ struct LowerToBMCPass : public circt::impl::LowerToBMCBase<LowerToBMCPass> {
 };
 } // namespace
 
-static Value lookupOrCreateStringGlobal(OpBuilder &builder, ModuleOp moduleOp,
-                                        StringRef str) {
-  Location loc = moduleOp.getLoc();
-  auto global = moduleOp.lookupSymbol<LLVM::GlobalOp>(str);
-  if (!global) {
-    OpBuilder b = OpBuilder::atBlockEnd(moduleOp.getBody());
-    auto arrayTy = LLVM::LLVMArrayType::get(b.getI8Type(), str.size() + 1);
-    global = b.create<LLVM::GlobalOp>(
-        loc, arrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private, str,
-        StringAttr::get(b.getContext(), Twine(str).concat(Twine('\00'))));
-  }
-
-  // FIXME: sanity check the fetched global: do all the attributes match what
-  // we expect?
-
-  return builder.create<LLVM::AddressOfOp>(loc, global);
-}
-
 void LowerToBMCPass::runOnOperation() {
   Namespace names;
 
@@ -161,12 +143,35 @@ void LowerToBMCPass::runOnOperation() {
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
-  auto successString = lookupOrCreateStringGlobal(
-      builder, getOperation(), "Bound reached with no violations!\n");
-  auto failureString = lookupOrCreateStringGlobal(
-      builder, getOperation(), "Assertion can be violated!\n");
+  // Define global string constants to print on success/failure
+  LLVM::GlobalOp successGlobal, failureGlobal;
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(getOperation().getBody());
+
+    StringRef successStr = "Bound reached with no violations!\n";
+    auto succArrayTy =
+        LLVM::LLVMArrayType::get(builder.getI8Type(), successStr.size() + 1);
+    successGlobal = builder.create<LLVM::GlobalOp>(
+        loc, succArrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
+        successStr,
+        StringAttr::get(builder.getContext(),
+                        Twine(successStr).concat(Twine('\00'))));
+
+    StringRef failureStr = "Assertion can be violated!\n";
+    auto failArrayTy =
+        LLVM::LLVMArrayType::get(builder.getI8Type(), failureStr.size() + 1);
+    failureGlobal = builder.create<LLVM::GlobalOp>(
+        loc, failArrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
+        failureStr,
+        StringAttr::get(builder.getContext(),
+                        Twine(failureStr).concat(Twine('\00'))));
+  }
+
+  auto successStrAddr = builder.create<LLVM::AddressOfOp>(loc, successGlobal);
+  auto failureStrAddr = builder.create<LLVM::AddressOfOp>(loc, failureGlobal);
   auto formatString = builder.create<LLVM::SelectOp>(
-      loc, bmcOp.getResult(), successString, failureString);
+      loc, bmcOp.getResult(), successStrAddr, failureStrAddr);
   builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
   builder.create<func::ReturnOp>(loc);
 
