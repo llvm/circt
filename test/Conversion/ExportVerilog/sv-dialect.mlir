@@ -1784,7 +1784,7 @@ sv.func.dpi.import @function_declare2
 sv.func.dpi.import @function_declare4
 
 sv.func private @open_array(in %array : !sv.open_uarray<i8>)
-// CHECK-LABEL: import "DPI-C" function void open_array
+// CHECK-LABEL: import "DPI-C" context function void open_array
 // CHECK-NEXT:  input byte array[]
 sv.func.dpi.import @open_array
 
