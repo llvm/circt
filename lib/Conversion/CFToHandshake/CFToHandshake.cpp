@@ -12,6 +12,7 @@
 #include "circt/Conversion/CFToHandshake.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Analysis/CFGLoopInfo.h"

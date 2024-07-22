@@ -1202,9 +1202,9 @@ firrtl.module private @is1436_FOO() {
     // CHECK: vectorcreate
     // CHECK: bundlecreate
     // CHECK: firrtl.ref.force %clock, %pred, %[[BOV_REF]],
-    firrtl.ref.force %clock, %pred, %inst_bov_ref, %inst_bov : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
+    firrtl.ref.force %clock, %pred, %inst_bov_ref, %inst_bov : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
     // CHECK: firrtl.ref.force_initial %pred, %[[BOV_REF]],
-    firrtl.ref.force_initial %pred, %inst_bov_ref, %inst_bov : !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
+    firrtl.ref.force_initial %pred, %inst_bov_ref, %inst_bov : !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
     // CHECK: firrtl.ref.release %clock, %pred, %[[BOV_REF]] :
     firrtl.ref.release %clock, %pred, %inst_bov_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<bundle<a: vector<uint<1>, 2>, b: uint<2>>>
     // CHECK: firrtl.ref.release_initial %pred, %[[BOV_REF]] :

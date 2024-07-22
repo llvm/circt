@@ -259,8 +259,8 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   compileTimer.stop();
 
   // Traverse the parsed Verilog AST and map it to the equivalent CIRCT ops.
-  mlirContext
-      ->loadDialect<moore::MooreDialect, hw::HWDialect, scf::SCFDialect>();
+  mlirContext->loadDialect<moore::MooreDialect, hw::HWDialect, scf::SCFDialect,
+                           func::FuncDialect>();
   auto conversionTimer = ts.nest("Verilog to dialect mapping");
   Context context(*compilation, module, driver.sourceManager, bufferFilePaths);
   if (failed(context.convertCompilation()))

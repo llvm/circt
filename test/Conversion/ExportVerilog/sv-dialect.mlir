@@ -1783,6 +1783,23 @@ sv.func.dpi.import @function_declare2
 // CHECK-NEXT: );
 sv.func.dpi.import @function_declare4
 
+sv.func private @open_array(in %array : !sv.open_uarray<i8>)
+// CHECK-LABEL: import "DPI-C" context function void open_array
+// CHECK-NEXT:  input byte array[]
+sv.func.dpi.import @open_array
+
+// CHECK-LABEL: test_open_array
+// CHECK: wire [7:0] _GEN[0:1] = '{in_0, in_1};
+// CHECK-NEXT: always @(posedge clock)
+// CHECK-NEXT:   open_array(_GEN);
+hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {
+  %0 = sv.unpacked_array_create %in_1, %in_0 : (i8, i8) -> !hw.uarray<2xi8>
+  %1 = sv.unpacked_open_array_cast %0 : (!hw.uarray<2xi8>) -> !sv.open_uarray<i8>
+  sv.always posedge %clock {
+    sv.func.call.procedural @open_array(%1) : (!sv.open_uarray<i8>) -> ()
+  }
+}
+
 sv.macro.decl @FOO
 sv.macro.decl @BAR
 

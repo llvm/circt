@@ -75,11 +75,6 @@ if config.zlib == "1":
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')
 
-# Add llhd-sim if it is built.
-if config.llhd_sim_enabled:
-  config.available_features.add('llhd-sim')
-  tools.append('llhd-sim')
-
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:
   config.available_features.add('slang')

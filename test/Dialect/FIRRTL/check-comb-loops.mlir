@@ -663,7 +663,7 @@ firrtl.circuit "Force"   {
   firrtl.module @Force(in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
     %c = firrtl.constant 0 : !firrtl.uint<1>
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force %clock, %c, %w_ref, %w : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force %clock, %c, %w_ref, %w : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
   }
 }
 
@@ -696,7 +696,7 @@ firrtl.circuit "hasnoloops"   {
   firrtl.module @thru(in %clk: !firrtl.clock, in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
     %a, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
     firrtl.connect %out1, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.ref.force %clk, %a, %w_ref, %in1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.ref.force %clk, %a, %w_ref, %in1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
     firrtl.connect %out2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   firrtl.module @hasnoloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
@@ -730,7 +730,7 @@ firrtl.circuit "forceLoop" {
     %inner2_clk, %inner2_in, %w_ref = firrtl.instance inner2  @thru2(in clk: !firrtl.clock, in in: !firrtl.uint<1>, out out: !firrtl.rwprobe<uint<1>>)
     firrtl.connect %inner2_clk, %clk : !firrtl.clock, !firrtl.clock
     firrtl.connect %inner2_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.ref.force %clk, %c, %w_ref, %inner2_in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.ref.force %clk, %c, %w_ref, %inner2_in : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
     %inner2_out = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<1>>
     firrtl.connect %z, %inner2_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
@@ -771,7 +771,7 @@ firrtl.circuit "RefSink" {
       firrtl.ref.resolve %refSource_a_ref : !firrtl.probe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
     firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %b :
-      !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -806,7 +806,7 @@ firrtl.circuit "RefSink" {
       firrtl.ref.resolve %refSource_b_ref : !firrtl.rwprobe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
     firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref, %b :
-      !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -838,7 +838,7 @@ firrtl.circuit "RefSink" {
       firrtl.ref.resolve %refSource_a_rwref2 : !firrtl.rwprobe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
     firrtl.ref.force_initial %c1_ui1, %refSource_a_rwref1, %b :
-      !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -880,7 +880,7 @@ firrtl.circuit "RefSink" {
       firrtl.ref.resolve %rwref2 : !firrtl.rwprobe<uint<1>>
     %b = firrtl.node %a_ref_resolve : !firrtl.uint<1>
     firrtl.ref.force_initial %c1_ui1, %rwref5, %b :
-      !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -1050,7 +1050,7 @@ firrtl.circuit "Issue6820" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
-    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.clock
+    firrtl.ref.force %clock, %c1_ui1, %clockProbe, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<clock>, !firrtl.clock
   }
 }
 

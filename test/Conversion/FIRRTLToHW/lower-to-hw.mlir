@@ -245,7 +245,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract [[SHIFT]] from 0 : (i14) -> i4
     %31 = firrtl.dshr %25, %18 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
-    // CHECK-NEXT: comb.icmp bin ule {{.*}}, {{.*}} : i4
+    // Noop.
+    %c0_ui1 = firrtl.constant 0 : !firrtl.const.uint<1>
+    %32 = firrtl.dshr %in1, %c0_ui1 { name = "test" } : (!firrtl.uint<4>, !firrtl.const.uint<1>) -> !firrtl.uint<4>
+
+    // CHECK: comb.icmp bin ule {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp bin ult {{.*}}, {{.*}} : i4
     %42 = firrtl.lt %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
@@ -1383,9 +1387,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
     firrtl.instance r sym @xmr_sym @RefMe()
     %0 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force %clock, %c, %0, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force %clock, %c, %0, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
     %1 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force_initial %c, %1, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force_initial %c, %1, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
     %2 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
     firrtl.ref.release %clock, %c, %2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
     %3 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>

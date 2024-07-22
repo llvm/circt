@@ -15,7 +15,7 @@
 // CHECK-NEXT: 1000ps 0d 0e  root/int[0]  0x0000
 // CHECK-NEXT: 1000ps 0d 0e  root/int[1]  0xffff
 // CHECK-NEXT: 1000ps 0d 0e  root/struct  0x0000ff00
-llhd.entity @root () -> () {
+hw.module @root() {
     %allset = hw.constant 0xffff : i16
     %allset2 = hw.constant 0xff : i8
     %zero = hw.constant 0 : i16
@@ -35,7 +35,7 @@ llhd.entity @root () -> () {
 
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
-    llhd.drv %intsig, %0 after %time : !llhd.sig<!hw.array<2xi16>>
-    llhd.drv %arrsig, %1 after %time : !llhd.sig<i32>
-    llhd.drv %structsig, %2 after %time : !llhd.sig<i32>
+    llhd.drv %intsig, %0 after %time : !hw.inout<array<2xi16>>
+    llhd.drv %arrsig, %1 after %time : !hw.inout<i32>
+    llhd.drv %structsig, %2 after %time : !hw.inout<i32>
 }

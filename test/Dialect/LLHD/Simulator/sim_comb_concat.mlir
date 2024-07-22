@@ -7,7 +7,7 @@
 
 // CHECK: 0ps 0d 0e  root/int  0x00000000
 // CHECK-NEXT: 1000ps 0d 0e  root/int  0x01020304
-llhd.entity @root () -> () {
+hw.module @root() {
     %init = hw.constant 0 : i32
     %0 = hw.constant 1 : i8
     %1 = hw.constant 2 : i8
@@ -19,5 +19,5 @@ llhd.entity @root () -> () {
 
     %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 
-    llhd.drv %intsig, %con after %time : !llhd.sig<i32>
+    llhd.drv %intsig, %con after %time : !hw.inout<i32>
 }

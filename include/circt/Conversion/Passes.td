@@ -520,22 +520,6 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// LLHDToLLVM
-//===----------------------------------------------------------------------===//
-
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
-  let summary = "Convert LLHD to LLVM";
-  let description = [{
-    This pass translates LLHD to LLVM.
-  }];
-  let constructor = "circt::createConvertLLHDToLLVMPass()";
-  let dependentDialects = [
-    "mlir::arith::ArithDialect",
-    "mlir::LLVM::LLVMDialect"
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // HWToLLVM
 //===----------------------------------------------------------------------===//
 
@@ -559,20 +543,6 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHWArithToHWPass()";
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect", "sv::SVDialect"];
-}
-
-//===----------------------------------------------------------------------===//
-// HWToLLHD
-//===----------------------------------------------------------------------===//
-
-def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
-  let summary = "Convert HW to LLHD";
-  let description = [{
-    This pass translates a HW design into an equivalent structural LLHD
-    description.
-  }];
-  let constructor = "circt::createConvertHWToLLHDPass()";
-  let dependentDialects = ["llhd::LLHDDialect"];
 }
 
 //===----------------------------------------------------------------------===//

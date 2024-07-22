@@ -66,10 +66,10 @@ class CMakeBuild(build_py):
     # Configure the build.
     cfg = "Release"
     cmake_args = [
+        "-GNinja",  # This build only works with Ninja on Windows.
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
-        "-GNinja",
     ]
     cxx = os.getenv("CXX")
     if cxx is not None:
@@ -78,6 +78,11 @@ class CMakeBuild(build_py):
     cc = os.getenv("CC")
     if cc is not None:
       cmake_args.append("-DCMAKE_C_COMPILER={}".format(cc))
+
+    if "VCPKG_INSTALLATION_ROOT" in os.environ:
+      cmake_args.append(
+          f"-DCMAKE_TOOLCHAIN_FILE={os.environ['VCPKG_INSTALLATION_ROOT']}/scripts/buildsystems/vcpkg.cmake"
+      )
 
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")

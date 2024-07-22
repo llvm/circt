@@ -348,8 +348,12 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   for (auto *user : op->getUsers()) {
     if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
       return false;
+    // TODO: We should use the condition used in ExportVerilog regarding
+    // allowExprInEventControl.
     if (!options.allowExprInEventControl &&
-        isa<sv::AlwaysFFOp, sv::AlwaysOp>(user))
+        isa<sv::AlwaysFFOp, sv::AlwaysOp, sv::AssertConcurrentOp,
+            sv::AssumeConcurrentOp, sv::CoverConcurrentOp, sv::AssertPropertyOp,
+            sv::AssumePropertyOp, sv::CoverPropertyOp>(user))
       return false;
   }
 
