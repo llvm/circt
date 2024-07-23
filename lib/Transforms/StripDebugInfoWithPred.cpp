@@ -43,6 +43,9 @@ struct StripDebugInfoWithPred
       newLocations.reserve(fusedLoc.getLocations().size());
       for (auto loc : fusedLoc.getLocations())
         newLocations.push_back(getStrippedLoc(loc));
+      // NOTE: Don't use FusedLoc::get(&getContext(), newLocations,
+      //       fusedLoc.getMetadata()) to avoid a bytecode reader bug
+      //       llvm-project#99626.
       return FusedLoc::get(newLocations, fusedLoc.getMetadata(), &getContext());
     }
 
