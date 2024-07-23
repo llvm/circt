@@ -81,8 +81,6 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createMemToRegOfVecPass(opt.shouldReplicateSequentialMemories(),
                                       opt.shouldIgnoreReadEnableMemories()));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
-
   if (opt.shouldExportChiselInterface()) {
     StringRef outdir = opt.getChiselInterfaceOutputDirectory();
     if (opt.isDefaultOutputFilename() && outdir.empty()) {
@@ -137,6 +135,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerLayersPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
   // Preset the random initialization parameters for each module. The current
   // implementation assumes it can run at a time where every register is
