@@ -205,8 +205,6 @@ jobs:
       # --------
 
       - name: Build and Test CIRCT
-        env:
-          CIRCT_OPT_CHECK_IR_ROUNDTRIP: 1
         run: |
           mkdir build
           cd build
@@ -224,7 +222,7 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLVM_LIT_ARGS="-v" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-          ninja check-circt check-circt-unit -j$(nproc)
+          CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 
       # --------
