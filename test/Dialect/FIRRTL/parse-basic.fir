@@ -1934,6 +1934,6 @@ circuit FormalTest:
     symbolic foo_data : UInt<32>
     connect foo.c, foo_c
     connect foo.data, foo_data
-    intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : foo_c, eq(foo.out, foo_data)))
+    intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, foo_c, eq(foo.out, foo_data)))
 
 

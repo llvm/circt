@@ -36,8 +36,8 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 /// located in a hardware-creating context, such as the body of a module.
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
-    ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+    ParentOneOf<[ 
+      "firrtl::FormalOp", "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
