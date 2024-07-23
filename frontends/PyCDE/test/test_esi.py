@@ -9,8 +9,17 @@ from pycde.constructs import Wire
 from pycde.esi import MMIO
 from pycde.module import Metadata
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, UInt, ClockType)
+                         ChannelDirection, ChannelSignaling, UInt, ClockType)
 from pycde.testing import unittestmodule
+
+# CHECK: Channel<UInt<4>, ValidReady>
+print(Channel(UInt(4)))
+
+# CHECK: Channel<UInt<4>, FIFO>
+print(Channel(UInt(4), ChannelSignaling.FIFO))
+
+# CHECK: Channel<UInt<4>, ValidReady(1)>
+print(Channel(UInt(4), ChannelSignaling.ValidReady, 1))
 
 TestBundle = Bundle([
     BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
