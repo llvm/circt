@@ -205,6 +205,8 @@ jobs:
       # --------
 
       - name: Build and Test CIRCT
+        env:
+          CIRCT_OPT_CHECK_IR_ROUNDTRIP: 1
         run: |
           mkdir build
           cd build
