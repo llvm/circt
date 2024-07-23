@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
@@ -43,14 +44,9 @@ void LowerToBMCPass::runOnOperation() {
   Namespace names;
 
   // Fetch the 'hw.module' operation to model check.
-  Operation *expectedModule = getOperation().lookupSymbol(topModule);
-  if (!expectedModule) {
-    getOperation().emitError("module named '") << topModule << "' not found";
-    return signalPassFailure();
-  }
-  auto hwModule = dyn_cast<hw::HWModuleOp>(expectedModule);
+  auto hwModule = getOperation().lookupSymbol<hw::HWModuleOp>(topModule);
   if (!hwModule) {
-    expectedModule->emitError("must be a 'hw.module'");
+    getOperation().emitError("hw.module named '") << topModule << "' not found";
     return signalPassFailure();
   }
 
@@ -89,7 +85,7 @@ void LowerToBMCPass::runOnOperation() {
   // Double the bound given to the BMC op, as a clock cycle takes 2 BMC
   // iterations
   verif::BoundedModelCheckingOp bmcOp;
-  if (auto numRegs = hwModule->getAttr("num_regs"))
+  if (auto numRegs = hwModule->getAttrOfType<IntegerAttr>("num_regs"))
     bmcOp = builder.create<verif::BoundedModelCheckingOp>(
         loc, 2 * bound, cast<IntegerAttr>(numRegs).getValue().getZExtValue());
   else {
@@ -110,6 +106,18 @@ void LowerToBMCPass::runOnOperation() {
         return signalPassFailure();
       }
       hasClk = true;
+    }
+    if (auto hwStruct = dyn_cast<hw::StructType>(input)) {
+      for (auto field : hwStruct.getElements()) {
+        if (isa<seq::ClockType>(field.type)) {
+          if (hasClk) {
+            hwModule.emitError(
+                "designs with multiple clocks not yet supported");
+            return signalPassFailure();
+          }
+          hasClk = true;
+        }
+      }
     }
   }
   {
