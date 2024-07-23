@@ -6,7 +6,8 @@ func.func @inline_notation() {
   // CHECK: "foo"() : () -> i32 loc(unknown)
   %1 = "foo"() : () -> i32 loc("foo.txt":0:0)
 
-// CHECK: loc(fused["foo", unknown]) 
+// CHECK: affine.for
+// CHECK-NEXT: loc("foo")
   affine.for %i0 = 0 to 8 {
   } loc(fused["foo", "foo.txt":10:8]) 
   return
