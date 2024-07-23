@@ -43,7 +43,7 @@ struct StripDebugInfoWithPred
       newLocations.reserve(fusedLoc.getLocations().size());
       for (auto loc : fusedLoc.getLocations())
         newLocations.push_back(getStrippedLoc(loc));
-      return FusedLoc::get(&getContext(), newLocations, fusedLoc.getMetadata());
+      return FusedLoc::get(newLocations, fusedLoc.getMetadata(), &getContext());
     }
 
     // TODO: Handle other loc type.
