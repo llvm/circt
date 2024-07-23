@@ -336,6 +336,48 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   }];
 }
 
+def SymbolicOp : FIRRTLOp<"symbolic", [HasParent<"firrtl::FormalOp">]> {
+  let summary = "Produce a symbolic value (non-deterministic value)";
+  let description = [{
+    The symbolic operation produces a symbolic value of UInt Type. This 
+    is solely used in the context of formal verification in order to reason 
+    about module instance inputs in a symbolic manner.  
+    Example:  
+    ```mlir  
+
+    %foo.in = firrtl.symbolic : t1
+    %foo.out = firrtl.instance "foo" @Foo(in: %foo.in : t1) -> (t1)
+    %cond = firrtl.geq %foo.in, foo.out : (t1, t1) -> (t1)
+    firrtl.int.verif.assert %cond : t1
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind);
+  let results = (outs UIntType:$result);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::StringAttr":$name,
+                   "::circt::firrtl::NameKindEnumAttr":$nameKind), [{
+      $_state.addAttribute(getNameAttrName($_state.name), name);
+      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
+      $_state.addTypes(elementType);
+    }]>,
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::llvm::StringRef":$name,
+                   "::circt::firrtl::NameKindEnum":$nameKind), [{
+      return build($_builder, $_state, elementType,
+                   $_builder.getStringAttr(name),
+                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind));
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    custom<NameKind>($nameKind) `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
+    qualified(type($result))
+  }];
+}
+
 def NodeOp : HardwareDeclOp<"node", [
       AllTypesMatch<["input","result"]>,
       DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,

@@ -1747,6 +1747,7 @@ private:
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
+  ParseResult parseSymbolic();
   ParseResult parseInvalidate();
   ParseResult parseLayerBlockOrGroup(unsigned indent);
 
@@ -2666,6 +2667,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
+  case FIRToken::kw_symbolic:
+    return parseSymbolic();
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
@@ -3797,6 +3800,29 @@ ParseResult FIRStmtParser::parseConnect() {
   return success();
 }
 
+ParseResult FIRStmtParser::parseSymbolic() {
+  auto startTok = consumeToken(FIRToken::kw_symbolic);
+
+  // If this was actually the start of a connect or something else handle
+  // that.
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  StringRef id;
+  FIRRTLType type;
+  if (parseId(id, "expected symbolic value name") ||
+      parseToken(FIRToken::colon, "expected ':' in symbolic value") ||
+      parseType(type, "expected symbolic value type") || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  auto result =
+      builder.create<SymbolicOp>(type, id, NameKindEnum::InterestingName);
+  return moduleContext.addSymbolEntry(id, result.getResult(),
+                                      startTok.getLoc());
+}
+
 /// propassign ::= 'propassign' expr expr
 ParseResult FIRStmtParser::parsePropAssign() {
   auto startTok = consumeToken(FIRToken::kw_propassign);
@@ -4891,6 +4917,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
@@ -5164,6 +5191,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   if (parseId(id, "expected a formal test name") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseGetSpelling(kSpelling) ||
+      parseToken(FIRToken::identifier, "expected parameter 'k' after ','") ||
       parseToken(FIRToken::equal, "expected '=' after 'k'") ||
       parseIntLit(k, "expected integer in k specification") ||
       parseToken(FIRToken::colon,
@@ -5173,7 +5201,8 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
 
   // Check that the parameter is valid
   if (kSpelling != "k" || k <= 0)
-    return emitError("Invalid parameter given to formal test"), failure();
+    return emitError("Invalid parameter given to formal test: ") << kSpelling,
+           failure();
 
   // Build out the firrtl mlir op
   auto builder = circuit.getBodyBuilder();
@@ -5208,7 +5237,7 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
   case FIRToken::kw_formal:
-    if (requireFeature({4, 0, 0}, "layers"))
+    if (requireFeature({4, 0, 0}, "inline formal tests"))
       return failure();
     return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
@@ -5558,6 +5587,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:

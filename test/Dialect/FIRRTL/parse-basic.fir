@@ -1907,3 +1907,31 @@ circuit GenericIntrinsics:
     ; CHECK-NEXT: %[[SZ:.+]] = firrtl.int.generic "circt_isX"
     ; CHECK-NEXT: "circt_verif_assert" %[[SZ]]
     intrinsic(circt_verif_assert, intrinsic(circt_isX: UInt<1>, data))
+
+;// -----
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "GenericIntrinsics"
+circuit FormalTest:
+
+  ; CHECK: firrtl.module @GenericIntrinsics
+  public module FormalTest:
+    input data : UInt<32>
+    input c : UInt<1>
+    output out : UInt<32>
+
+    when c:
+      node add1 = add(data, UInt<32>(1))
+      out <= add1
+    else:
+      out <= data
+
+  ; CHECK-LABEL: firrtl.formal @testFormal(k=20) 
+  formal testFormal, k = 20:
+    inst foo of FormalTest
+    symbolic foo_c : UInt<1>
+    symbolic foo_data : UInt<32>
+    connect foo.c, foo_c
+    connect foo_data, foo_data
+    intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : foo.c, eq(foo.out, foo.data)))
+
+
