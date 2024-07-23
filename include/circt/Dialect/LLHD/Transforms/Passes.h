@@ -33,6 +33,8 @@ createMemoryToBlockArgumentPass();
 
 std::unique_ptr<OperationPass<hw::HWModuleOp>> createEarlyCodeMotionPass();
 
+std::unique_ptr<OperationPass<hw::HWModuleOp>> createTemporalCodeMotionPass();
+
 /// Register the LLHD Transformation passes.
 void initLLHDTransformationPasses();
 
