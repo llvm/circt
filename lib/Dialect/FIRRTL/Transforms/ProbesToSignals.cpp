@@ -175,29 +175,31 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   // as their replacement while rewriting.  Only if has body.
   SmallVector<std::pair<size_t, WireOp>> wires;
 
-  auto ports = mod.getPorts();
+  auto portTypes = mod.getPortTypes();
+  auto portLocs = mod.getPortLocationsAttr().getAsRange<Location>();
+  SmallVector<Attribute> newPortTypes;
 
-  SmallVector<Attribute> portTypes;
-  portTypes.reserve(ports.size());
-  wires.reserve(ports.size());
+  wires.reserve(portTypes.size());
+  newPortTypes.reserve(portTypes.size());
   auto *block = getBodyBlock(mod);
   bool portsToChange = false;
-  for (auto [idx, port] : llvm::enumerate(ports)) {
-    auto conv = convertType(port.type, port.loc);
+  for (auto [idx, typeAttr, loc] : llvm::enumerate(portTypes, portLocs)) {
+    auto type = cast<TypeAttr>(typeAttr);
+    auto conv = convertType(type.getValue(), loc);
     if (failed(conv))
       return failure();
     auto newType = *conv;
 
     if (newType) {
       portsToChange = true;
-      portTypes.push_back(TypeAttr::get(newType));
+      newPortTypes.push_back(TypeAttr::get(newType));
       if (block) {
         auto builder = OpBuilder::atBlockBegin(block);
-        wires.emplace_back(idx, builder.create<WireOp>(port.loc, newType));
+        wires.emplace_back(idx, builder.create<WireOp>(loc, newType));
         probeToHWMap[block->getArgument(idx)] = wires.back().second.getData();
       }
     } else
-      portTypes.push_back(TypeAttr::get(port.type));
+      newPortTypes.push_back(type);
   }
 
   // Update body, if present.
@@ -211,12 +213,12 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
   // Update signature and argument types.
   if (portsToChange) {
     mod->setAttr(mod.getPortTypesAttrName(),
-                 ArrayAttr::get(mod->getContext(), portTypes));
+                 ArrayAttr::get(mod->getContext(), newPortTypes));
 
     if (block) {
       // We may also need to update the types on the block arguments.
       for (auto [arg, typeAttr] :
-           llvm::zip_equal(block->getArguments(), portTypes))
+           llvm::zip_equal(block->getArguments(), newPortTypes))
         arg.setType(cast<TypeAttr>(typeAttr).getValue());
 
       // Drop the port stand-ins and RAUW to the block arguments.
