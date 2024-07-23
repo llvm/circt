@@ -4585,6 +4585,7 @@ private:
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
+  ParseResult parseFormal(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -5153,6 +5154,33 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_formal);
+  StringRef id, kSpelling;
+  int64_t k = -1;
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // Parse the formal operation
+  if (parseId(id, "expected a formal test name") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(kSpelling) ||
+      parseToken(FIRToken::equal, "expected '=' after 'k'") ||
+      parseIntLit(k, "expected integer in k specification") ||
+      parseToken(FIRToken::colon,
+                 "expected ':' after option group definition") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  // Check that the parameter is valid
+  if (kSpelling != "k" || k <= 0)
+    return emitError("Invalid parameter given to formal test"), failure();
+
+  // Build out the firrtl mlir op
+  auto builder = circuit.getBodyBuilder();
+  builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
+  return success();
+}
+
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
@@ -5167,6 +5195,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
+  case FIRToken::kw_formal:
+    if (requireFeature({4, 0, 0}, "layers"))
+      return failure();
+    return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
     if (removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
