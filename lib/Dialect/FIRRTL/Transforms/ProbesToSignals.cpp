@@ -161,7 +161,7 @@ static Block *getBodyBlock(FModuleLike mod) {
   assert(mod->getNumRegions() == 1);
   auto &blocks = mod->getRegion(0).getBlocks();
   return !blocks.empty() ? &blocks.front() : nullptr;
-};
+}
 
 /// Visit a module, converting its ports and internals to use hardware signals
 /// instead of probes.
