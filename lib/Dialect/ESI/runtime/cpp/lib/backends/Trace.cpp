@@ -302,22 +302,22 @@ public:
                                                   HostMem::Options opts) const {
     auto ret =
         std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
-    impl.write("HostMem") << ret->getPtr() << " allocate " << size
-                          << " bytes. Writeable: " << opts.writeable
-                          << ", useLargePages: " << opts.useLargePages
-                          << std::endl;
+    impl.write("HostMem 0x")
+        << ret->getPtr() << " allocate " << size
+        << " bytes. Writeable: " << opts.writeable
+        << ", useLargePages: " << opts.useLargePages << std::endl;
     return ret;
   }
   virtual bool mapMemory(void *ptr, std::size_t size,
                          HostMem::Options opts) const {
-    impl.write("HostMem") << "map " << ptr << " size " << size
+    impl.write("HostMem") << "map 0x" << ptr << " size " << size
                           << " bytes. Writeable: " << opts.writeable
                           << ", useLargePages: " << opts.useLargePages
                           << std::endl;
     return true;
   }
   virtual void unmapMemory(void *ptr) const {
-    impl.write("HostMem") << "unmap " << ptr << std::endl;
+    impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
   }
 
 private:
