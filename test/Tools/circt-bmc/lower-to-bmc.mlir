@@ -11,14 +11,14 @@
 // CHECK:      verif.assert [[OP1]]
 // CHECK:      verif.yield [[OP0]]
 // CHECK:    }
-// CHECK:    [[SSTR:%.+]] = llvm.mlir.addressof @"Bound reached with no violations!\0A"
-// CHECK:    [[FSTR:%.+]] = llvm.mlir.addressof @"Assertion can be violated!\0A"
-// CHECK:    [[SEL:%.+]] = llvm.select [[BMC]], [[SSTR]], [[FSTR]]
+// CHECK:    [[SSTR_ADDR:%.+]] = llvm.mlir.addressof [[SSTR:@.+]] : !llvm.ptr
+// CHECK:    [[FSTR_ADDR:%.+]] = llvm.mlir.addressof [[FSTR:@.+]] : !llvm.ptr
+// CHECK:    [[SEL:%.+]] = llvm.select [[BMC]], [[SSTR_ADDR]], [[FSTR_ADDR]]
 // CHECK:    llvm.call @printf([[SEL]])
 // CHECK:    return
 // CHECK:  }
-// CHECK:  llvm.mlir.global private constant @"Bound reached with no violations!\0A"("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
-// CHECK:  llvm.mlir.global private constant @"Assertion can be violated!\0A"("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
+// CHECK:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
+// CHECK:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
 
 hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs = 0 : i32} {
   %0 = comb.add %in0, %in1 : i32
@@ -49,14 +49,14 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 // CHECK1:      verif.assert [[OP2]]
 // CHECK1:      verif.yield [[ARG3]], [[OP0]]
 // CHECK1:    }
-// CHECK1:    [[SSTR:%.+]] = llvm.mlir.addressof @"Bound reached with no violations!\0A"
-// CHECK1:    [[FSTR:%.+]] = llvm.mlir.addressof @"Assertion can be violated!\0A"
-// CHECK1:    [[SEL:%.+]] = llvm.select [[BMC]], [[SSTR]], [[FSTR]]
+// CHECK1:    [[SSTR_ADDR:%.+]] = llvm.mlir.addressof [[SSTR:@.+]] : !llvm.ptr
+// CHECK1:    [[FSTR_ADDR:%.+]] = llvm.mlir.addressof [[FSTR:@.+]] : !llvm.ptr
+// CHECK1:    [[SEL:%.+]] = llvm.select [[BMC]], [[SSTR_ADDR]], [[FSTR_ADDR]]
 // CHECK1:    llvm.call @printf([[SEL]])
 // CHECK1:    return
 // CHECK1:  }
-// CHECK1:  llvm.mlir.global private constant @"Bound reached with no violations!\0A"("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
-// CHECK1:  llvm.mlir.global private constant @"Assertion can be violated!\0A"("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
+// CHECK1:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
+// CHECK1:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
 hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state : i32, out out : i32, out reg_input : i32) attributes {num_regs = 1 : i32} {
   %0 = comb.add %in0, %in1 : i32
   %1 = comb.icmp eq %0, %in0 : i32

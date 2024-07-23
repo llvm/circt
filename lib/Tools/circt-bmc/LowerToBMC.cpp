@@ -19,6 +19,8 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Location.h"
+#include "mlir/IR/SymbolTable.h"
+#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;
@@ -42,11 +44,11 @@ struct LowerToBMCPass : public circt::impl::LowerToBMCBase<LowerToBMCPass> {
 
 void LowerToBMCPass::runOnOperation() {
   Namespace names;
-
   // Fetch the 'hw.module' operation to model check.
-  auto hwModule = getOperation().lookupSymbol<hw::HWModuleOp>(topModule);
+  auto moduleOp = getOperation();
+  auto hwModule = moduleOp.lookupSymbol<hw::HWModuleOp>(topModule);
   if (!hwModule) {
-    getOperation().emitError("hw.module named '") << topModule << "' not found";
+    moduleOp.emitError("hw.module named '") << topModule << "' not found";
     return signalPassFailure();
   }
 
@@ -60,14 +62,14 @@ void LowerToBMCPass::runOnOperation() {
   // Create necessary function declarations and globals
   auto *ctx = &getContext();
   OpBuilder builder(ctx);
-  Location loc = getOperation()->getLoc();
-  builder.setInsertionPointToEnd(getOperation().getBody());
+  Location loc = moduleOp->getLoc();
+  builder.setInsertionPointToEnd(moduleOp.getBody());
   auto ptrTy = LLVM::LLVMPointerType::get(ctx);
   auto voidTy = LLVM::LLVMVoidType::get(ctx);
 
   // Lookup or declare printf function.
   auto printfFunc =
-      LLVM::lookupOrCreateFn(getOperation(), "printf", ptrTy, voidTy, true);
+      LLVM::lookupOrCreateFn(moduleOp, "printf", ptrTy, voidTy, true);
 
   // Replace the top-module with a function performing the BMC
   auto entryFunc = builder.create<func::FuncOp>(
@@ -154,34 +156,36 @@ void LowerToBMCPass::runOnOperation() {
   hwModule->erase();
 
   // Define global string constants to print on success/failure
-  LLVM::GlobalOp successGlobal, failureGlobal;
-  {
-    OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(getOperation().getBody());
+  auto createUniqueStringGlobal = [&](StringRef str) -> FailureOr<Value> {
+    Location loc = moduleOp.getLoc();
 
-    StringRef successStr = "Bound reached with no violations!\n";
-    auto succArrayTy =
-        LLVM::LLVMArrayType::get(builder.getI8Type(), successStr.size() + 1);
-    successGlobal = builder.create<LLVM::GlobalOp>(
-        loc, succArrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
-        successStr,
-        StringAttr::get(builder.getContext(),
-                        Twine(successStr).concat(Twine('\00'))));
+    OpBuilder b = OpBuilder::atBlockEnd(moduleOp.getBody());
+    auto arrayTy = LLVM::LLVMArrayType::get(b.getI8Type(), str.size() + 1);
+    auto global = b.create<LLVM::GlobalOp>(
+        loc, arrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
+        "resultString",
+        StringAttr::get(b.getContext(), Twine(str).concat(Twine('\00'))));
+    SymbolTable symTable(moduleOp);
+    if (failed(symTable.renameToUnique(global, {&symTable}))) {
+      return mlir::failure();
+    }
 
-    StringRef failureStr = "Assertion can be violated!\n";
-    auto failArrayTy =
-        LLVM::LLVMArrayType::get(builder.getI8Type(), failureStr.size() + 1);
-    failureGlobal = builder.create<LLVM::GlobalOp>(
-        loc, failArrayTy, /*isConstant=*/true, LLVM::linkage::Linkage::Private,
-        failureStr,
-        StringAttr::get(builder.getContext(),
-                        Twine(failureStr).concat(Twine('\00'))));
+    return success(
+        builder.create<LLVM::AddressOfOp>(loc, global)->getResult(0));
+  };
+
+  auto successStrAddr =
+      createUniqueStringGlobal("Bound reached with no violations!\n");
+  auto failureStrAddr =
+      createUniqueStringGlobal("Assertion can be violated!\n");
+
+  if (failed(successStrAddr) || failed(failureStrAddr)) {
+    moduleOp->emitOpError("could not create result message strings");
+    return signalPassFailure();
   }
 
-  auto successStrAddr = builder.create<LLVM::AddressOfOp>(loc, successGlobal);
-  auto failureStrAddr = builder.create<LLVM::AddressOfOp>(loc, failureGlobal);
   auto formatString = builder.create<LLVM::SelectOp>(
-      loc, bmcOp.getResult(), successStrAddr, failureStrAddr);
+      loc, bmcOp.getResult(), successStrAddr.value(), failureStrAddr.value());
   builder.create<LLVM::CallOp>(loc, printfFunc, ValueRange{formatString});
   builder.create<func::ReturnOp>(loc);
 
