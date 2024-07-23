@@ -1910,10 +1910,10 @@ circuit GenericIntrinsics:
 
 ;// -----
 FIRRTL version 4.0.0
-; CHECK-LABEL: circuit "GenericIntrinsics"
+; CHECK-LABEL: circuit "FormalTest"
 circuit FormalTest:
 
-  ; CHECK: firrtl.module @GenericIntrinsics
+  ; CHECK: firrtl.module @FormalTest
   public module FormalTest:
     input data : UInt<32>
     input c : UInt<1>
@@ -1928,7 +1928,9 @@ circuit FormalTest:
   ; CHECK-LABEL: firrtl.formal @testFormal(k=20) 
   formal testFormal, k = 20:
     inst foo of FormalTest
+    ; CHECK-NEXT: %foo_c = firrtl.symbolic interesting_name : !firrtl.uint<1>
     symbolic foo_c : UInt<1>
+    ; CHECK-NEXT: %foo_data = firrtl.symbolic interesting_name : !firrtl.uint<32>
     symbolic foo_data : UInt<32>
     connect foo.c, foo_c
     connect foo.data, foo_data
