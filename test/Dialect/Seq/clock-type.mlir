@@ -1,4 +1,5 @@
 // RUN: circt-opt --lower-seq-to-sv %s | FileCheck %s
+// RUN: circt-opt %s --mlir-print-op-generic | circt-opt
 
 hw.generator.schema @Some_schema, "Some_schema", ["dummy"]
 
