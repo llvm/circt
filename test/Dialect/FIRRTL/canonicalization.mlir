@@ -3619,5 +3619,15 @@ firrtl.module @sizeof(in %clock: !firrtl.clock,
   %n_bundle = firrtl.node interesting_name %s_bundle : !firrtl.uint<32>
 }
 
+// CHECK-LABEL: @multibit_mux_drop_front
+firrtl.module @multibit_mux_drop_front(in %vec_0: !firrtl.uint<8>, in %vec_1: !firrtl.uint<8>,
+                                       in %vec_2: !firrtl.uint<8>, in %vec_3: !firrtl.uint<8>,
+                                       in %vec_4: !firrtl.uint<8>, in %vec_5: !firrtl.uint<8>,
+                                       in %vec_6: !firrtl.uint<8>, in %vec_7: !firrtl.uint<8>,
+                                       in %index: !firrtl.uint<2>, out %b: !firrtl.uint<8>) {
+  // CHECK-NEXT:  %0 = firrtl.multibit_mux %index, %vec_3, %vec_2, %vec_1, %vec_0
+  %0 = firrtl.multibit_mux %index, %vec_7, %vec_6, %vec_5, %vec_4, %vec_3, %vec_2, %vec_1, %vec_0 : !firrtl.uint<2>, !firrtl.uint<8>
+  firrtl.matchingconnect %b, %0 : !firrtl.uint<8>
+}
 
 }
