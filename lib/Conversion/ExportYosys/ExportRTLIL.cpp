@@ -398,7 +398,7 @@ LogicalResult ExportRTLILModule::visitStmt(InstanceOp op) {
          llvm::zip(names.getAsRange<StringAttr>(), values)) {
       auto loweredValue = getValue(value);
       if (failed(loweredValue)) {
-        return op.emitError() << "port " << portName << " wasnot lowered";
+        return op.emitError() << "port " << portName << " was not lowered";
       }
       cell->connections_.insert(
           {getEscapedName(portName), loweredValue.value()});
@@ -611,6 +611,10 @@ LogicalResult ExportRTLILModule::visitComb(ICmpOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExportRTLILModule::visitSeq(seq::FirRegOp op) {
+  // TODO: Support a register with preset.
+  if (op.getPresetAttr())
+    return op.emitError();
+
   auto result = getValue(op.getResult());
   auto clock = getValue(op.getClk());
   auto next = getValue(op.getNext());
@@ -634,6 +638,7 @@ LogicalResult ExportRTLILModule::visitSeq(seq::FirRegOp op) {
                            getConstant(constOp.getValueAttr()));
       return success();
     }
+
     if (constOp) {
       rtlilModule->addSdff(getNewName(op.getName()), clock.value(),
                            reset.value(), next.value(), result.value(),
@@ -845,7 +850,7 @@ circt::rtlil::exportRTLILDesign(ArrayRef<hw::HWModuleLike> modules,
       return failure();
 
   for (auto op : blackBox) {
-    if (failed(exporter.addModule(op, true)))
+    if (failed(exporter.addModule(op, /*defineAsBlackBox=*/true)))
       return failure();
   }
 
