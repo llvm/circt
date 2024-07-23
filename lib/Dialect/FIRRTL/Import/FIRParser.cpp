@@ -5177,7 +5177,19 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
 
   // Build out the firrtl mlir op
   auto builder = circuit.getBodyBuilder();
-  builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
+  auto formal = builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
+  auto body = formal.getBody().emplaceBlock();
+
+  // Create the statement parser
+  hw::InnerSymbolNamespace ns(circuit);
+  SymbolTable circuitSymTbl(circuit);
+  FIRStmtParser stmtParser(body, getContext(), ns, circuitSymTbl, version);
+
+  // If we've reached a new indentation, parse the internal region
+  if (getIndentation() > indent)
+    if (stmtParser.parseSubBlock(body, indent,
+                                 mlir::SymbolRefAttr::get(formal.getSymName())))
+      return failure();
   return success();
 }
 
