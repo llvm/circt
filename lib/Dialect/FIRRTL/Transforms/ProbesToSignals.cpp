@@ -113,7 +113,7 @@ public:
   template <typename R>
   static FailureOr<bool> mapRange(R &&range, Location loc,
                                   SmallVectorImpl<Type> &newTypes) {
-   newTypes.reserve(llvm::size(range));
+    newTypes.reserve(llvm::size(range));
 
     bool anyConverted = false;
     for (auto type : range) {
