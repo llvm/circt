@@ -122,6 +122,14 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
   return result;
 }
 
+/// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
+static SmallString<32> macroNameForLayer(ArrayRef<StringAttr> layerName) {
+  SmallString<32> result;
+  for (auto part : layerName)
+    appendName(part, result);
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // LowerLayersPass
 //===----------------------------------------------------------------------===//
@@ -129,8 +137,8 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
-    auto layer = dyn_cast<LayerOp>(
-        symbolTable->lookupSymbolIn(getOperation(), layerName));
+    auto layer =
+        cast<LayerOp>(SymbolTable::lookupSymbolIn(getOperation(), layerName));
     if (!layer)
       return nullptr;
     return layer->getAttrOfType<hw::OutputFileAttr>("output_file");
@@ -170,16 +178,25 @@ class LowerLayersPass
   /// remove the cast itself from the IR.
   void removeLayersFromRefCast(RefCastOp cast);
 
+  /// Lower an inline layerblock to an ifdef block.
+  void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
+
+  /// Create macro declarations for a given layer, and its child layers.
+  void createMacroDecls(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
+                        SmallVector<StringAttr> &stack);
+  void createMacroDecls(CircuitNamespace &ns, LayerOp layer);
+
   /// Entry point for the function.
   void runOnOperation() override;
 
   /// Indicates exclusive access to modify the circuitNamespace and the circuit.
   llvm::sys::SmartMutex<true> *circuitMutex;
 
-  SymbolTable *symbolTable;
-
   /// A map of layer blocks to module name that should be created for it.
   DenseMap<LayerBlockOp, StringRef> moduleNames;
+
+  /// A map from inline layers to their macro names.
+  DenseMap<LayerOp, FlatSymbolRefAttr> macroNames;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -279,6 +296,15 @@ InnerRefMap LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   return innerRefMap;
 }
 
+void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
+                                            LayerBlockOp layerBlock) {
+  OpBuilder builder(layerBlock);
+  auto macroName = macroNames[layer];
+  auto ifDef = builder.create<sv::IfDefOp>(layerBlock.getLoc(), macroName);
+  ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+  layerBlock.erase();
+}
+
 void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                                       InnerRefMap &innerRefMap) {
   CircuitOp circuitOp = moduleOp->getParentOfType<CircuitOp>();
@@ -326,6 +352,15 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     if (!layerBlock)
       return WalkResult::advance();
 
+    auto layer = cast<LayerOp>(
+        SymbolTable::lookupSymbolIn(getOperation(), layerBlock.getLayerName()));
+
+    if (layer.getConvention() == LayerConvention::Inline) {
+      lowerInlineLayerBlock(layer, layerBlock);
+      return WalkResult::advance();
+    }
+
+    assert(layer.getConvention() == LayerConvention::Bind);
     Block *body = layerBlock.getBody(0);
     OpBuilder builder(moduleOp);
 
@@ -623,6 +658,35 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   });
 }
 
+void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, OpBuilder &b,
+                                       LayerOp layer,
+                                       SmallVector<StringAttr> &stack) {
+  stack.emplace_back(layer.getSymNameAttr());
+  if (layer.getConvention() == LayerConvention::Inline) {
+    auto *ctx = &getContext();
+    auto macName = macroNameForLayer(stack);
+    auto symName = ns.newName(macName);
+
+    auto symNameAttr = StringAttr::get(ctx, symName);
+    auto macNameAttr = StringAttr();
+    if (macName != symName)
+      macNameAttr = StringAttr::get(ctx, macName);
+
+    b.create<sv::MacroDeclOp>(layer->getLoc(), symNameAttr, ArrayAttr(),
+                              macNameAttr);
+    macroNames[layer] = FlatSymbolRefAttr::get(&getContext(), symNameAttr);
+  }
+  for (auto child : layer.getOps<LayerOp>())
+    createMacroDecls(ns, b, child, stack);
+  stack.pop_back();
+}
+
+void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, LayerOp layer) {
+  OpBuilder b(layer);
+  SmallVector<StringAttr> stack;
+  createMacroDecls(ns, b, layer, stack);
+}
+
 /// Process a circuit to remove all layer blocks in each module and top-level
 /// layer definition.
 void LowerLayersPass::runOnOperation() {
@@ -634,22 +698,25 @@ void LowerLayersPass::runOnOperation() {
   // Initialize members which cannot be initialized automatically.
   llvm::sys::SmartMutex<true> mutex;
   circuitMutex = &mutex;
-  symbolTable = &getAnalysis<SymbolTable>();
 
-  // Determine names for all modules that will be created.  Do this serially to
-  // avoid non-determinism from creating these in the parallel region.
   CircuitNamespace ns(circuitOp);
-  WalkResult result = circuitOp->walk([&](FModuleOp moduleOp) {
-    moduleOp->walk([&](LayerBlockOp layerBlockOp) {
-      auto name = moduleNameForLayer(moduleOp.getModuleName(),
-                                     layerBlockOp.getLayerName());
-      moduleNames.insert({layerBlockOp, ns.newName(name)});
-    });
-    return WalkResult::advance();
-  });
-
-  if (result.wasInterrupted())
-    return signalPassFailure();
+  for (auto &op : *circuitOp.getBodyBlock()) {
+    // Determine names for all modules that will be created.  Do this serially
+    // to avoid non-determinism from creating these in the parallel region.
+    if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+      moduleOp->walk([&](LayerBlockOp layerBlockOp) {
+        auto name = moduleNameForLayer(moduleOp.getModuleName(),
+                                       layerBlockOp.getLayerName());
+        moduleNames.insert({layerBlockOp, ns.newName(name)});
+      });
+      continue;
+    }
+    // Build verilog macro declarations for each inline layer declarations.
+    if (auto layerOp = dyn_cast<LayerOp>(op)) {
+      createMacroDecls(ns, layerOp);
+      continue;
+    }
+  }
 
   auto mergeMaps = [](auto &&a, auto &&b) {
     for (auto bb : b)
@@ -716,6 +783,12 @@ void LowerLayersPass::runOnOperation() {
     auto parentOp = layerOp->getParentOfType<LayerOp>();
     while (parentOp && parentOp != layers.back().first)
       layers.pop_back();
+
+    if (layerOp.getConvention() == LayerConvention::Inline) {
+      layers.emplace_back(layerOp, nullptr);
+      return;
+    }
+
     builder.setInsertionPointToStart(circuitOp.getBodyBlock());
 
     // Save the "layers_CIRCUIT_GROUP" string as this is reused a bunch.
@@ -730,6 +803,8 @@ void LowerLayersPass::runOnOperation() {
 
     SmallString<128> includes;
     for (auto [_, strAttr] : layers) {
+      if (!strAttr)
+        continue;
       includes.append(strAttr);
       includes.append("\n");
     }

@@ -152,16 +152,19 @@ if(NOT MSVC)
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
 if (WHEEL_BUILD)
-  install(TARGETS ESICppRuntime
-    DESTINATION lib
-    COMPONENT ESIRuntime
-  )
+  if (WIN32)
+    set(PYLIBDIR ".")
+  else()
+    set(PYLIBDIR "lib")
+  endif()
 else()
-  install(TARGETS ESICppRuntime
-    DESTINATION python/esiaccel
-    COMPONENT ESIRuntime
-  )
+  set(PYLIBDIR "python/esiaccel")
 endif()
+install(TARGETS ESICppRuntime
+  DESTINATION ${PYLIBDIR}
+  COMPONENT ESIRuntime
+)
+
 install(IMPORTED_RUNTIME_ARTIFACTS ESICppRuntime
   RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
   COMPONENT ESIRuntime
@@ -279,18 +282,20 @@ if(Python3_FOUND)
             $<TARGET_FILE:esiCppAccel>
             "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel/$<TARGET_FILE_NAME:esiCppAccel>"
     )
-    if (WHEEL_BUILD)
-      set (ESI_PYTHON_INSTALL_DIR ".")
-    else()
-      set (ESI_PYTHON_INSTALL_DIR "python/esiaccel")
-    endif()
 
-    install(TARGETS esiCppAccel
-      DESTINATION ${ESI_PYTHON_INSTALL_DIR}
-      COMPONENT ESIRuntime
-    )
+    if (WHEEL_BUILD)
+      install(TARGETS esiCppAccel
+        DESTINATION .
+        COMPONENT ESIRuntime
+      )
+    else()
+      install(TARGETS esiCppAccel
+        DESTINATION python/esiaccel
+        COMPONENT ESIRuntime
+      )
+    endif()
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
-      DESTINATION ${ESI_PYTHON_INSTALL_DIR}
+      DESTINATION ${PYLIBDIR}
       PRE_EXCLUDE_REGEXES .*
       PRE_INCLUDE_REGEXES zlibd zlib
       COMPONENT ESIRuntime
@@ -386,17 +391,10 @@ if(ESI_COSIM)
 
   add_dependencies(ESIRuntime CosimBackend)
 
-  if (WHEEL_BUILD)
-    install(TARGETS CosimBackend
-      DESTINATION lib
-      COMPONENT ESIRuntime
-    )
-  else()
-    install(TARGETS CosimBackend
-      DESTINATION python/esiaccel
-      COMPONENT ESIRuntime
-    )
-  endif()
+  install(TARGETS CosimBackend
+    DESTINATION ${PYLIBDIR}
+    COMPONENT ESIRuntime
+  )
 
   # Build the RTL DPI cosim server.
   add_subdirectory(cosim_dpi_server)
@@ -432,17 +430,10 @@ if (XRT_PATH)
     -L${XRT_PATH}/lib
   )
   add_dependencies(ESIRuntime XrtBackend)
-  if (WHEEL_BUILD)
-    install(TARGETS XrtBackend
-      DESTINATION lib
-      COMPONENT ESIRuntime
-    )
-  else()
-    install(TARGETS XrtBackend
-      DESTINATION python/esiaccel
-      COMPONENT ESIRuntime
-    )
-  endif()
+  install(TARGETS XrtBackend
+    DESTINATION ${PYLIBDIR}
+    COMPONENT ESIRuntime
+  )
 endif()
 
 install(FILES ${ESICppRuntimeBackendHeaders}

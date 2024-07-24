@@ -38,6 +38,12 @@ class AcceleratorConnection:
   def get_service_mmio(self) -> cpp.MMIO:
     return self.cpp_accel.get_service_mmio()
 
+  def get_service_hostmem(self) -> cpp.HostMem:
+    return self.cpp_accel.get_service_hostmem()
+
+
+from .esiCppAccel import HostMemOptions
+
 
 class HWModule:
   """Represents either the top level or an instance of a hardware module."""

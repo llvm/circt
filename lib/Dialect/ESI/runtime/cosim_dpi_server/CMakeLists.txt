@@ -5,11 +5,18 @@
 ##===----------------------------------------------------------------------===//
 
 # Dummy library for a library which should be included by the RTL simulator.
-# Dummy is necessary for linking purposes. NOT to be distributed.
+# Dummy is necessary for linking purposes.
 add_library(MtiPli SHARED
   DummySvDpi.cpp
 )
 set_target_properties(MtiPli PROPERTIES CXX_VISIBILITY_PRESET "default")
+# Technically, we shouldn't have to install this as is _should_ be provided by
+# the simulator, but without it we get runtime link errors. TODO: figure out how
+# to do this properly such that we avoid packaging a dummy library.
+install(TARGETS MtiPli
+  DESTINATION lib
+  COMPONENT ESIRuntime
+)
 
 # DPI calls.
 add_library(EsiCosimDpiServer SHARED
