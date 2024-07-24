@@ -451,6 +451,7 @@ def LayerOp : FIRRTLOp<
 def FormalOp : FIRRTLOp<"formal", [
     IsolatedFromAbove,
     Symbol,
+    InstanceGraphModuleOpInterface,
     NoTerminator,
     HasParent<"firrtl::CircuitOp">
 ]> {
@@ -472,7 +473,6 @@ def FormalOp : FIRRTLOp<"formal", [
       %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
       firrtl.assert %cond
     }
-}
     ```
   }];
 
