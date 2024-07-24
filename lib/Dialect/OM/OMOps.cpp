@@ -225,11 +225,6 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
-void circt::om::ClassOp::addField(OpBuilder &builder, Location loc,
-                                  StringRef name, Value src) {
-  builder.create<ClassFieldOp>(loc, name, src);
-}
-
 static circt::om::Field convertFieldOpToField(circt::om::ClassFieldOp field) {
   return {field.getNameAttr(), field.getValue(), field.getLoc()};
 }
