@@ -50,26 +50,28 @@ void VerifyObjectFieldsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
 
   /// A map from a class and field name to a field.
-  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, ClassFieldLike>> tables;
+  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Value>> tables;
   for (auto op : module->getRegion(0).getOps<om::ClassLike>())
-    tables.insert({op, llvm::DenseMap<StringAttr, ClassFieldLike>()});
+    tables.insert({op, llvm::DenseMap<StringAttr, Value>()});
 
   // Peel tables parallelly.
   if (failed(
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
             ClassLike classLike = entry.first;
             auto &table = entry.second;
-            auto result = classLike.walk([&](ClassFieldLike fieldLike)
+            auto result = classLike.walk([&](ClassFieldsOp fieldsOp)
                                              -> WalkResult {
-              if (table.insert({fieldLike.getNameAttr(), fieldLike}).second)
-                return WalkResult::advance();
-
-              auto emit = fieldLike.emitOpError()
-                          << "field " << fieldLike.getNameAttr()
-                          << " is defined twice";
-              emit.attachNote(table.lookup(fieldLike.getNameAttr()).getLoc())
-                  << "previous definition is here";
-              return WalkResult::interrupt();
+              auto fields = fieldsOp.getFields();
+              for (size_t i = 0; i < fields.size(); i++) {
+                auto name = cast<StringAttr>(cast<ArrayAttr>(
+                                  fieldsOp->getAttr("field_names"))[i]);
+                if (!table.insert({name, fields[i]}).second) {
+                  auto emit = fieldsOp.emitOpError()
+                              << "field " << name << " is defined twice";
+                  return WalkResult::interrupt();
+                }
+              }
+              return WalkResult::advance();
             });
             return LogicalResult::failure(result.wasInterrupted());
           })))
@@ -94,18 +96,18 @@ void VerifyObjectFieldsPass::runOnOperation() {
               }
 
               // Traverse the field path, verifying each field exists.
-              ClassFieldLike finalField;
+              Value finalField;
               auto fields = SmallVector<FlatSymbolRefAttr>(
                   objectField.getFieldPath().getAsRange<FlatSymbolRefAttr>());
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                ClassFieldLike fieldDef;
+                Value fieldValue;
                 auto *it = tables.find(classDef);
                 assert(it != tables.end() && "must be visited");
-                fieldDef = it->second.lookup(field.getAttr());
+                fieldValue = it->second.lookup(field.getAttr());
 
-                if (!fieldDef) {
+                if (!fieldValue) {
                   auto error =
                       objectField.emitOpError("referenced non-existent field ")
                       << field;
@@ -116,11 +118,11 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 // If there are more fields, verify the current field is of
                 // ClassType, and look up the ClassOp for that field.
                 if (i < e - 1) {
-                  auto classType = dyn_cast<ClassType>(fieldDef.getType());
+                  auto classType = dyn_cast<ClassType>(fieldValue.getType());
                   if (!classType) {
                     objectField.emitOpError("nested field access into ")
                         << field << " requires a ClassType, but found "
-                        << fieldDef.getType();
+                        << fieldValue.getType();
                     return WalkResult::interrupt();
                   }
 
@@ -143,7 +145,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
 
                 // On the last iteration down the path, save the final field
                 // being accessed.
-                finalField = fieldDef;
+                finalField = fieldValue;
               }
 
               // Verify the accessed field type matches the result type.
@@ -157,8 +159,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
               return WalkResult::advance();
             });
         return LogicalResult::failure(result.wasInterrupted());
-      });
-  if (failed(result))
+      }); if (failed(result))
     return signalPassFailure();
   return markAllAnalysesPreserved();
 }

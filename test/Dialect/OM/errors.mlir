@@ -47,7 +47,7 @@ om.class @Class2() {
 
 om.class @Class1() {
   %0 = om.constant 1 : i1
-  om.class.field @foo, %0 : i1
+  om.class.fields {field_names = ["foo"]} %0 :i1
 }
 
 om.class @Class2() {
@@ -60,7 +60,7 @@ om.class @Class2() {
 
 om.class @Class1() {
   %0 = om.constant 1 : i1
-  om.class.field @foo, %0 : i1
+  om.class.fields {field_names = ["foo"]} %0 : i1
 }
 
 om.class @Class2(%arg0: i1) {
@@ -129,10 +129,8 @@ om.class @BadPath(%basepath: !om.basepath) {
 // -----
 
 om.class @DupField(%0: i1) {
-  // expected-note @+1 {{previous definition is here}}
-  om.class.field @foo, %0 : i1
-  // expected-error @+1 {{'om.class.field' op field "foo" is defined twice}}
-  om.class.field @foo, %0 : i1
+  // expected-error @+1 {{'om.class.fields' op field "foo" is defined twice}}
+  om.class.fields {field_names = ["foo", "foo"]} %0, %0 : i1, i1
 }
 
 // -----

@@ -98,9 +98,11 @@ circuit Test : %[[
     output out_foo_3 : Inst<Foo_3>
     output out_foo_4 : Inst<Foo_4>
 
+    ; CHECK: [[FOO_1:%.+]] = om.object @Foo_1
     object foo_1 of Foo_1
     propassign out_foo_1, foo_1
 
+    ; CHECK: [[FOO_2:%.+]] = om.object @Foo_2
     object foo_2 of Foo_2
     propassign out_foo_2, foo_2
 
@@ -117,8 +119,7 @@ circuit Test : %[[
     ; CHECK: om.path_create reference %basepath [[NLA2]]
     propassign out_2, path("OMReferenceTarget:~Test|CPU_1/fetch_1:Fetch_1>foo")
 
-    ; CHECK: om.class.field @out_foo_3, [[FOO_3]]
-    ; CHECK: om.class.field @out_foo_4, [[FOO_4]]
+    ; CHECK: om.class.fields {field_names = ["out_foo_1", "out_foo_2", "out_foo_3", "out_foo_4", "out_1", "out_2"]} [[FOO_1]], [[FOO_2]], [[FOO_3]], [[FOO_4]], %4, %5 : !om.class.type<@Foo_1>, !om.class.type<@Foo_2>, !om.class.type<@Foo_3>, !om.class.type<@Foo_3>, !om.path, !om.path
 
   ; CHECK-NOT: OM_2
   class OM_2 :
