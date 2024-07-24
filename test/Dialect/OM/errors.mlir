@@ -50,7 +50,8 @@ om.class @Class1() {
 om.class @Class2() {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
   // expected-error @+1 {{'om.object.field' op referenced non-existent field @foo}}
-  om.class.fields {field_names=["foo"]} %0 : (!om.class.type<@Class1>) -> i1
+  om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i1
+  om.class.fields
 }
 
 // -----
@@ -135,7 +136,10 @@ om.class @MapConstant() {
 
 // -----
 
-om.class @Thing() { }
+om.class @Thing() {
+  om.class.fields
+}
+
 om.class @BadPath(%basepath: !om.basepath) {
   // expected-error @below {{invalid symbol reference}}
   %0 = om.path_create reference %basepath @Thing

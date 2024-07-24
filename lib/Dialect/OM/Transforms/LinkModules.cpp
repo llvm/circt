@@ -171,8 +171,8 @@ static FailureOr<bool> resolveClasses(StringAttr name,
   };
 
   llvm::MapVector<StringAttr, Type> classFields;
-  for (auto fieldOp : classOp.getOps<om::ClassFieldOp>())
-    classFields.insert({fieldOp.getNameAttr(), fieldOp.getType()});
+  for (auto field : classOp.getFields())
+    classFields.insert({field.name, field.value.getType()});
 
   for (auto op : classes) {
     if (op == classOp)
