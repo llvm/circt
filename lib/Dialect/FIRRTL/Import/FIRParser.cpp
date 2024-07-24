@@ -4631,6 +4631,16 @@ private:
     unsigned indent;
   };
 
+  struct DeferredBodyToParse {
+    Block &body;
+    FIRLexerCursor lexerCursor;
+    unsigned indent;
+  };
+
+  ParseResult parseFormalBody(const SymbolTable &circuitSymTbl,
+                              DeferredBodyToParse &defferedBody);
+  SmallVector<DeferredBodyToParse, 0> deferredBodies;
+
   ParseResult parseModuleBody(const SymbolTable &circuitSymTbl,
                               DeferredModuleToParse &deferredModule);
 
@@ -5175,6 +5185,29 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+ParseResult
+FIRCircuitParser::parseFormalBody(const SymbolTable &circuitSymTbl,
+                                  DeferredBodyToParse &defferedBody) {
+
+  // Create a custom lexer for formal body like in module body parser
+  FIRLexer formalBodyLexer(getLexer().getSourceMgr(), getContext());
+  // Reset the lexer to the top of the body
+  defferedBody.lexerCursor.restore(formalBodyLexer);
+  // Reuse a module context for this as strucutre is similar
+  FIRModuleContext context(getConstants(), formalBodyLexer, version);
+  // Default namespace
+  hw::InnerSymbolNamespace ns;
+  // Create the statement parser needed to parse the body content
+  FIRStmtParser stmtParser(defferedBody.body, context, ns, circuitSymTbl,
+                           version);
+
+  // Parse the internal region
+  auto result = stmtParser.parseSimpleStmtBlock(defferedBody.indent);
+  if (failed(result))
+    return result;
+  return success();
+}
+
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
   StringRef id, kSpelling;
@@ -5203,16 +5236,13 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   auto formal = builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
   auto &body = formal.getBody().emplaceBlock();
 
-  // Create the statement parser
-  hw::InnerSymbolNamespace ns;
-  SymbolTable circuitSymTbl(circuit);
-  FIRModuleContext context(getConstants(), getLexer(), version);
-  FIRStmtParser stmtParser(body, context, ns, circuitSymTbl, version);
+  // Defer the parsing of the body
+  deferredModules.emplace_back(
+      DeferredBodyToParse{body, getLexer().getCursor(), indent});
 
-  // If we've reached a new indentation, parse the internal region
-  if (getIndentation() > indent)
-    if (stmtParser.parseSimpleStmtBlock(indent))
-      return failure();
+  // Skip to the end of the body
+  if (skipToModuleEnd(indent))
+    return failure();
   return success();
 }
 
@@ -5557,6 +5587,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
+  deferredBodies.reserve(16);
 
   // Parse any contained modules.
   while (true) {
@@ -5644,6 +5675,16 @@ DoneParsing:
         return success();
       });
   if (failed(anyFailed))
+    return failure();
+
+  // Next, parse all the deffered non-module bodies.
+  auto anyBodyFailed = mlir::failableParallelForEachN(
+      getContext(), 0, deferredBodies.size(), [&](size_t index) {
+        if (parseFormalBody(circuitSymTbl, deferredBodies[index]))
+          return failure();
+        return success();
+      });
+  if (failed(anyBodyFailed))
     return failure();
 
   // Helper to transform a layer name specification of the form `A::B::C` into
