@@ -451,7 +451,6 @@ def LayerOp : FIRRTLOp<
 def FormalOp : FIRRTLOp<"formal", [
     IsolatedFromAbove,
     Symbol,
-    SymbolTable,
     NoTerminator,
     HasParent<"firrtl::CircuitOp">
 ]> {

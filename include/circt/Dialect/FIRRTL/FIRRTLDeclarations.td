@@ -336,7 +336,9 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   }];
 }
 
-def SymbolicOp : FIRRTLOp<"symbolic", [HasParent<"firrtl::FormalOp">]> {
+def SymbolicOp : FIRRTLOp<"symbolic", [
+  HasParent<"firrtl::FormalOp">, HasCustomSSAName
+]> {
   let summary = "Produce a symbolic value (non-deterministic value)";
   let description = [{
     The symbolic operation produces a symbolic value of UInt Type. This 
@@ -354,6 +356,8 @@ def SymbolicOp : FIRRTLOp<"symbolic", [HasParent<"firrtl::FormalOp">]> {
 
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind);
   let results = (outs UIntType:$result);
+
+  let skipDefaultBuilders = true;
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
