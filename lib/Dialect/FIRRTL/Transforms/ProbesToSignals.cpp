@@ -559,6 +559,5 @@ void ProbesToSignalsPass::runOnOperation() {
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createProbesToSignalsPass() {
-
   return std::make_unique<ProbesToSignalsPass>();
 }
