@@ -105,7 +105,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("write", &services::MMIO::write);
 
   py::class_<services::HostMem::HostMemRegion>(m, "HostMemRegion")
-      .def_property_readonly("ptr", &services::HostMem::HostMemRegion::getPtr)
+      .def_property_readonly("ptr",
+                             [](HostMem::HostMemRegion &mem) {
+                               return reinterpret_cast<uintptr_t>(mem.getPtr());
+                             })
       .def_property_readonly("size",
                              &services::HostMem::HostMemRegion::getSize);
 
@@ -119,9 +122,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("allocate", &services::HostMem::allocate, py::arg("size"),
            py::arg("options") = services::HostMem::Options(),
            py::return_value_policy::take_ownership)
-      .def("map_memory", &services::HostMem::mapMemory, py::arg("ptr"),
-           py::arg("size"), py::arg("options") = services::HostMem::Options())
-      .def("unmap_memory", &services::HostMem::unmapMemory, py::arg("ptr"));
+      .def(
+          "map_memory",
+          [](HostMem &self, uintptr_t ptr, size_t size, HostMem::Options opts) {
+            return self.mapMemory(reinterpret_cast<void *>(ptr), size, opts);
+          },
+          py::arg("ptr"), py::arg("size"),
+          py::arg("options") = services::HostMem::Options())
+      .def(
+          "unmap_memory",
+          [](HostMem &self, uintptr_t ptr) {
+            return self.unmapMemory(reinterpret_cast<void *>(ptr));
+          },
+          py::arg("ptr"));
 
   py::class_<AppID>(m, "AppID")
       .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
