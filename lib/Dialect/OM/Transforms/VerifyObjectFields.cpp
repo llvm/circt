@@ -159,7 +159,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
               return WalkResult::advance();
             });
         return LogicalResult::failure(result.wasInterrupted());
-      }); if (failed(result))
+      });
+  if (failed(result))
     return signalPassFailure();
   return markAllAnalysesPreserved();
 }
