@@ -436,10 +436,8 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
   // Be mindful of connect semantics when considering
   // placement.
 
-  auto newDest = probeToHWMap[op.getDest()];
-  auto newSrc = probeToHWMap[op.getSrc()];
-  assert(newDest);
-  assert(newSrc);
+  auto newDest = probeToHWMap.at(op.getDest());
+  auto newSrc = probeToHWMap.at(op.getSrc());
 
   // Source must be ancestor of destination block for a connect
   // to behave the same (generally).
@@ -462,8 +460,7 @@ LogicalResult ProbeVisitor::visitStmt(RefDefineOp op) {
 }
 
 LogicalResult ProbeVisitor::visitExpr(RefCastOp op) {
-  auto input = probeToHWMap[op.getInput()];
-  assert(input);
+  auto input = probeToHWMap.at(op.getInput());
   // Insert wire of the new type, and connect to it.
 
   // y = ref.cast x : probe<t1> -> probe<t2>
@@ -511,8 +508,7 @@ LogicalResult ProbeVisitor::visitExpr(RefSendOp op) {
 
 LogicalResult ProbeVisitor::visitExpr(RefResolveOp op) {
   // ref.resolve x -> map(x)
-  auto val = probeToHWMap[op.getRef()];
-  assert(val);
+  auto val = probeToHWMap.at(op.getRef());
   op.replaceAllUsesWith(val);
   toDelete.push_back(op);
   return success();
@@ -520,7 +516,7 @@ LogicalResult ProbeVisitor::visitExpr(RefResolveOp op) {
 
 LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
   // ref.sub x, fieldid -> index(map(x), fieldid)
-  auto val = probeToHWMap[op.getInput()];
+  auto val = probeToHWMap.at(op.getInput());
   assert(val);
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   builder.setInsertionPointAfterValue(op.getInput());
