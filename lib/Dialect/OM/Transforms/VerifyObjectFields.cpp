@@ -59,20 +59,21 @@ void VerifyObjectFieldsPass::runOnOperation() {
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
             ClassLike classLike = entry.first;
             auto &table = entry.second;
-            auto result = classLike.walk([&](ClassFieldsOp fieldsOp)
-                                             -> WalkResult {
-              auto fields = fieldsOp.getFields();
-              for (size_t i = 0; i < fields.size(); i++) {
-                auto name = cast<StringAttr>(cast<ArrayAttr>(
-                                  fieldsOp->getAttr("field_names"))[i]);
-                if (!table.insert({name, fields[i]}).second) {
-                  auto emit = fieldsOp.emitOpError()
-                              << "field " << name << " is defined twice";
-                  return WalkResult::interrupt();
-                }
-              }
-              return WalkResult::advance();
-            });
+            auto result =
+                classLike.walk([&](ClassFieldsOp fieldsOp) -> WalkResult {
+                  auto fields = fieldsOp.getFields();
+                  auto fieldNames =
+                      cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
+                  for (size_t i = 0; i < fields.size(); i++) {
+                    auto name = cast<StringAttr>(fieldNames[i]);
+                    if (!table.insert({name, fields[i]}).second) {
+                      auto emit = fieldsOp.emitOpError()
+                                  << "field " << name << " is defined twice";
+                      return WalkResult::interrupt();
+                    }
+                  }
+                  return WalkResult::advance();
+                });
             return LogicalResult::failure(result.wasInterrupted());
           })))
     return signalPassFailure();

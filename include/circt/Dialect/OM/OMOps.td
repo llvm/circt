@@ -35,7 +35,7 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
     SingleBlock, NoTerminator,
-    // TODO(lenny): Enable terminator check when ready
+    // TODO: Enable here when extern impl
     // SingleBlockImplicitTerminator<"ClassFieldsOp">, 
     Symbol, RegionKindInterface, IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
@@ -70,7 +70,7 @@ class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
 // Class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassOp : OMClassLike<"class"> {
+def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
@@ -87,11 +87,7 @@ def ClassOp : OMClassLike<"class"> {
       return mlir::RegionKind::Graph;
     }
 
-    using fields_iterator =
-        llvm::mapped_iterator<mlir::detail::op_iterator<circt::om::ClassFieldOp,
-                                                        mlir::Region::OpIterator>,
-                              circt::om::Field (*)(circt::om::ClassFieldOp)>;
-    llvm::iterator_range<fields_iterator> getFields();
+    llvm::SmallVector<Field> getFields();
   }];
 }
 

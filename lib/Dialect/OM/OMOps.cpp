@@ -225,13 +225,21 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
-static circt::om::Field convertFieldOpToField(circt::om::ClassFieldOp field) {
-  return {field.getNameAttr(), field.getValue(), field.getLoc()};
-}
-
-llvm::iterator_range<circt::om::ClassOp::fields_iterator>
-circt::om::ClassOp::getFields() {
-  return llvm::map_range(this->getOps<ClassFieldOp>(), &convertFieldOpToField);
+llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
+  llvm::SmallVector<Field> result;
+  ClassFieldsOp fieldsOp = cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+  auto fields = fieldsOp->getOperands();
+  auto fieldNames =
+      cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
+  for (size_t i = 0; i < fields.size(); i++) {
+    auto field = fields[i];
+    result.push_back({
+      cast<StringAttr>(fieldNames[i]),
+      field,
+      field.getLoc()
+    });
+  }
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
