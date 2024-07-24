@@ -21,8 +21,7 @@
 //
 // Suggested:
 // * Inference passes, especially width inference.  Probes infer slightly
-// differently
-//   than non-probes do (must have same width along the chain).
+//   differently than non-probes do (must have same width along the chain).
 //
 // Forceable and colored probes are not supported.
 // Specialize layers on or off to remove colored probes first.
