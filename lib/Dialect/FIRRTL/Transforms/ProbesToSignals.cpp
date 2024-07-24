@@ -75,34 +75,6 @@ public:
   using FIRRTLVisitor<ProbeVisitor, LogicalResult>::visitExpr;
   using FIRRTLVisitor<ProbeVisitor, LogicalResult>::visitStmt;
 
-  /// Return the converted type, null if same, failure on error.
-  static FailureOr<Type> convertType(Type type, Location loc);
-
-  /// Return "target" type, or failure on error.
-  static FailureOr<Type> mapType(Type type, Location loc) {
-    auto newType = convertType(type, loc);
-    if (failed(newType))
-      return failure();
-    return *newType ? *newType : type;
-  }
-
-  /// Map a range of types, return if changes needed.
-  template <typename R>
-  static FailureOr<bool> mapRange(R &&range, Location loc,
-                                  SmallVectorImpl<Type> &newTypes) {
-    newTypes.reserve(llvm::size(range));
-
-    bool anyConverted = false;
-    for (auto type : range) {
-      auto conv = mapType(type, loc);
-      if (failed(conv))
-        return failure();
-      newTypes.emplace_back(*conv);
-      anyConverted |= *conv != type;
-    }
-    return anyConverted;
-  }
-
   // CHIRRTL
   LogicalResult visitMemoryDebugPortOp(chirrtl::MemoryDebugPortOp op);
 
@@ -154,6 +126,61 @@ private:
 };
 
 } // end namespace
+
+//===----------------------------------------------------------------------===//
+// Type conversion
+//===----------------------------------------------------------------------===//
+
+/// Return the converted type, null if same, failure on error.
+static FailureOr<Type> convertType(Type type, Location loc) {
+  auto err = [type, loc](const Twine &message) {
+    return mlir::emitError(loc, message) << ", cannot convert type " << type;
+  };
+  if (isa<OpenBundleType, OpenVectorType>(type))
+    return err("open aggregates not supported");
+
+  auto refType = dyn_cast<RefType>(type);
+  if (!refType)
+    return Type();
+
+  if (refType.getForceable())
+    return err("rwprobe not supported");
+
+  if (refType.getLayer())
+    return err("layer-colored probes not supported");
+
+  // Otherwise, this maps to the probed type.
+  return refType.getType();
+}
+
+/// Return "target" type, or failure on error.
+static FailureOr<Type> mapType(Type type, Location loc) {
+  auto newType = convertType(type, loc);
+  if (failed(newType))
+    return failure();
+  return *newType ? *newType : type;
+}
+
+/// Map a range of types, return if changes needed.
+template <typename R>
+static FailureOr<bool> mapRange(R &&range, Location loc,
+                                SmallVectorImpl<Type> &newTypes) {
+  newTypes.reserve(llvm::size(range));
+
+  bool anyConverted = false;
+  for (auto type : range) {
+    auto conv = mapType(type, loc);
+    if (failed(conv))
+      return failure();
+    newTypes.emplace_back(*conv);
+    anyConverted |= *conv != type;
+  }
+  return anyConverted;
+}
+
+//===----------------------------------------------------------------------===//
+// Visitor: FModuleLike
+//===----------------------------------------------------------------------===//
 
 static Block *getBodyBlock(FModuleLike mod) {
   // Safety check for below, presently all modules have a region.
@@ -234,31 +261,6 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
     op->erase();
 
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// Visitor: Type conversion
-//===----------------------------------------------------------------------===//
-
-FailureOr<Type> ProbeVisitor::convertType(Type type, Location loc) {
-  auto err = [type, loc](const Twine &message) {
-    return mlir::emitError(loc, message) << ", cannot convert type " << type;
-  };
-  if (isa<OpenBundleType, OpenVectorType>(type))
-    return err("open aggregates not supported");
-
-  auto refType = dyn_cast<RefType>(type);
-  if (!refType)
-    return Type();
-
-  if (refType.getForceable())
-    return err("rwprobe not supported");
-
-  if (refType.getLayer())
-    return err("layer-colored probes not supported");
-
-  // Otherwise, this maps to the probed type.
-  return refType.getType();
 }
 
 //===----------------------------------------------------------------------===//
