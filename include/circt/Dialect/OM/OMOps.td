@@ -112,8 +112,6 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
 
 def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">, Terminator,
                                           ReturnLike, Pure]> {
-  // TODO(lenny): If we want to use terminator/returnlike/pure, we should update the
-  // ClassOp too
   let summary = "Specify the accessible fields of a class";
   let description = [{
     Marks the end of a class definition by providing a list of accessible
