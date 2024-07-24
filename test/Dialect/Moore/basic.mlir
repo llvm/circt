@@ -245,19 +245,19 @@ moore.module @Expressions(
   // CHECK: moore.replicate [[X]] : i1 -> i4
   moore.replicate %x : i1 -> i4
 
-  // CHECK: moore.extract [[A]] from [[B]] : i32, i32 -> i1
-  moore.extract %a from %b : i32, i32 -> i1
-  // CHECK: moore.extract [[ARRAY2]] from [[A]] : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
-  moore.extract %array2 from %a : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
-  // CHECK: moore.extract [[ARRAY1]] from [[A]] : uarray<4 x i8>, i32 -> i8
-  moore.extract %array1 from %a : uarray<4 x i8>, i32 -> i8
+  // CHECK: moore.dyn_extract [[A]] from [[B]] : i32, i32 -> i1
+  moore.dyn_extract %a from %b : i32, i32 -> i1
+  // CHECK: moore.dyn_extract [[ARRAY2]] from [[A]] : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
+  moore.dyn_extract %array2 from %a : uarray<2 x uarray<4 x i8>>, i32 -> uarray<4 x i8>
+  // CHECK: moore.dyn_extract [[ARRAY1]] from [[A]] : uarray<4 x i8>, i32 -> i8
+  moore.dyn_extract %array1 from %a : uarray<4 x i8>, i32 -> i8
 
-  // CHECK: moore.extract_ref [[REF_A]] from [[B]] : <i32>, i32 -> <i1>
-  moore.extract_ref %refA from %b : <i32>, i32 -> <i1>
-  // CHECK: moore.extract_ref [[REF_ARRAY2]] from [[A]] : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  moore.extract_ref %refArray2 from %a : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
-  // CHECK: moore.extract_ref [[REF_ARRAY1]] from [[A]] : <uarray<4 x i8>>, i32 -> <i8>
-  moore.extract_ref %refArray1 from %a : <uarray<4 x i8>>, i32 -> <i8>
+  // CHECK: moore.dyn_extract_ref [[REF_A]] from [[B]] : <i32>, i32 -> <i1>
+  moore.dyn_extract_ref %refA from %b : <i32>, i32 -> <i1>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY2]] from [[A]] : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
+  moore.dyn_extract_ref %refArray2 from %a : <uarray<2 x uarray<4 x i8>>>, i32 -> <uarray<4 x i8>>
+  // CHECK: moore.dyn_extract_ref [[REF_ARRAY1]] from [[A]] : <uarray<4 x i8>>, i32 -> <i8>
+  moore.dyn_extract_ref %refArray1 from %a : <uarray<4 x i8>>, i32 -> <i8>
 
   // CHECK: moore.conditional [[X]] : i1 -> i32 {
   // CHECK:   moore.yield [[A]] : i32

@@ -99,25 +99,18 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: %c2_i32 = hw.constant 2 : i32
   %2 = moore.constant 2 : !moore.i32
 
-  // CHECK-NEXT: [[V16:%.+]] = comb.extract %c2_i32 from 6 : (i32) -> i26
-  // CHECK-NEXT: %c0_i26 = hw.constant 0 : i26
-  // CHECK-NEXT: [[V17:%.+]] = comb.icmp eq [[V16]], %c0_i26 : i26
-  // CHECK-NEXT: [[V18:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i6
-  // CHECK-NEXT: %c-1_i6 = hw.constant -1 : i6
-  // CHECK-NEXT: [[V19:%.+]] = comb.mux [[V17]], [[V18]], %c-1_i6 : i6
-  // CHECK-NEXT: [[V20:%.+]] = comb.shru %arg2, [[V19]] : i6
-  // CHECK-NEXT: comb.extract [[V20]] from 0 : (i6) -> i2
-  moore.extract %arg2 from %2 : !moore.i6, !moore.i32 -> !moore.i2
+  // CHECK-NEXT: comb.extract %arg2 from 2 : (i6) -> i2
+  moore.extract %arg2 from 2 : !moore.i6 -> !moore.i2
 
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 6 : (i32) -> i26
-  // CHECK-NEXT: %c0_i26_3 = hw.constant 0 : i26
-  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], %c0_i26_3 : i26
+  // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i26
+  // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i26
   // CHECK-NEXT: [[V23:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i6
-  // CHECK-NEXT: %c-1_i6_4 = hw.constant -1 : i6
-  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], %c-1_i6_4 : i6
+  // CHECK-NEXT: [[MAX:%.+]] = hw.constant -1 : i6
+  // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i6
   // CHECK-NEXT: [[V25:%.+]] = comb.shru %arg2, [[V24]] : i6
   // CHECK-NEXT: comb.extract [[V25]] from 0 : (i6) -> i1
-  moore.extract %arg2 from %2 : !moore.i6, !moore.i32 -> !moore.i1
+  moore.dyn_extract %arg2 from %2 : !moore.i6, !moore.i32 -> !moore.i1
 
   // CHECK-NEXT: [[V26:%.+]] = hw.constant -1 : i6
   // CHECK-NEXT: comb.icmp eq %arg2, [[V26]] : i6

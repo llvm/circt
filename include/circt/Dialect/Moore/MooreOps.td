@@ -924,9 +924,10 @@ def ReplicateOp : MooreOp<"replicate", [
   }];
 }
 
-def ExtractOp : MooreOp<"extract"> {
-  let summary = "Addressing operation";
+def ExtractOp : MooreOp<"extract", [Pure]> {
+  let summary = "Extract a range or single bits from a value";
   let description = [{
+    It's used to select from a value with a constant low bit.
     This operation includes the vector bit/part-select, array, and memory 
     addressing.If the address is invalid--out of bounds or has x or z bit--
     then it will produce x for 4-state or 0 for 2-state.
@@ -952,6 +953,18 @@ def ExtractOp : MooreOp<"extract"> {
     ```
     See IEEE 1800-2017 § 11.5.2 "Array and memory addressing".
   }];
+  let arguments = (ins UnpackedType:$input, I32Attr:$lowBit);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
+  let description = [{
+    It's similar with extract, but it's used to select from a value
+    with a dynamic low bit.
+  }];
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
@@ -960,8 +973,21 @@ def ExtractOp : MooreOp<"extract"> {
   }];
 }
 
-def ExtractRefOp : MooreOp<"extract_ref"> {
-  let summary = "The copy of extract that explicitly works on the ref type.";
+def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+  let description = [{
+  The copy of extract that explicitly works on the ref type.
+  }];
+  let arguments = (ins RefType:$input, I32Attr:$lowBit);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+  let description = [{
+  The copy of dyn_extract that explicitly works on the ref type.
+  }];
   let arguments = (ins RefType:$input, UnpackedType:$lowBit);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
