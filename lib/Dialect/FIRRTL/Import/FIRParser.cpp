@@ -5237,7 +5237,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   auto &body = formal.getBody().emplaceBlock();
 
   // Defer the parsing of the body
-  deferredModules.emplace_back(
+  deferredBodies.emplace_back(
       DeferredBodyToParse{body, getLexer().getCursor(), indent});
 
   // Skip to the end of the body
