@@ -356,22 +356,8 @@ def SymbolicOp : FIRRTLOp<"symbolic", [
   let arguments = (ins StrAttr:$name);
   let results = (outs UIntType:$result);
 
-  let skipDefaultBuilders = true;
-
-  let builders = [
-    OpBuilder<(ins "::mlir::Type":$elementType,
-                   "::mlir::StringAttr":$name), [{
-      $_state.addAttribute(getNameAttrName($_state.name), name);
-      $_state.addTypes(elementType);
-    }]>,
-    OpBuilder<(ins "::mlir::Type":$elementType,
-                   "::llvm::StringRef":$name), [{
-      return build($_builder, $_state, elementType, $_builder.getStringAttr(name));
-    }]>
-  ];
-
   let assemblyFormat = [{
-    custom<ImplicitSSAName>(attr-dict) `:`qualified(type($result))
+    custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
 }
 

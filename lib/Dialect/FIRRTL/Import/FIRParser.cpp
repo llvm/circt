@@ -3803,11 +3803,6 @@ ParseResult FIRStmtParser::parseConnect() {
 ParseResult FIRStmtParser::parseSymbolic() {
   auto startTok = consumeToken(FIRToken::kw_symbolic);
 
-  // If this was actually the start of a connect or something else handle
-  // that.
-  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
-    return *isExpr;
-
   StringRef id;
   FIRRTLType type;
   if (parseId(id, "expected symbolic value name") ||
