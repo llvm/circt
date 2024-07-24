@@ -346,7 +346,6 @@ def SymbolicOp : FIRRTLOp<"symbolic", [
     about module instance inputs in a symbolic manner.  
     Example:  
     ```mlir  
-
     %foo.in = firrtl.symbolic : t1
     %foo.out = firrtl.instance "foo" @Foo(in: %foo.in : t1) -> (t1)
     %cond = firrtl.geq %foo.in, foo.out : (t1, t1) -> (t1)
@@ -354,31 +353,25 @@ def SymbolicOp : FIRRTLOp<"symbolic", [
     ```
   }];
 
-  let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind);
+  let arguments = (ins StrAttr:$name);
   let results = (outs UIntType:$result);
 
   let skipDefaultBuilders = true;
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                   "::mlir::StringAttr":$name,
-                   "::circt::firrtl::NameKindEnumAttr":$nameKind), [{
+                   "::mlir::StringAttr":$name), [{
       $_state.addAttribute(getNameAttrName($_state.name), name);
-      $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addTypes(elementType);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
-                   "::llvm::StringRef":$name,
-                   "::circt::firrtl::NameKindEnum":$nameKind), [{
-      return build($_builder, $_state, elementType,
-                   $_builder.getStringAttr(name),
-                   ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind));
+                   "::llvm::StringRef":$name), [{
+      return build($_builder, $_state, elementType, $_builder.getStringAttr(name));
     }]>
   ];
 
   let assemblyFormat = [{
-    custom<NameKind>($nameKind) `` custom<FIRRTLImplicitSSAName>(attr-dict) `:`
-    qualified(type($result))
+    custom<ImplicitSSAName>(attr-dict) `:`qualified(type($result))
   }];
 }
 

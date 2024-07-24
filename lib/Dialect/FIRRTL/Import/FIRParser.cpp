@@ -3817,8 +3817,7 @@ ParseResult FIRStmtParser::parseSymbolic() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result =
-      builder.create<SymbolicOp>(type, id, NameKindEnum::InterestingName);
+  auto result = builder.create<SymbolicOp>(type, id);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
