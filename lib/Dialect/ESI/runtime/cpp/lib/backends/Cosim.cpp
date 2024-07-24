@@ -394,6 +394,35 @@ private:
   std::unique_ptr<FuncService::Function> readMMIO;
 };
 
+class CosimHostMem : public HostMem {
+public:
+  CosimHostMem() {}
+
+  struct CosimHostMemRegion : public HostMemRegion {
+    CosimHostMemRegion(std::size_t size) {
+      ptr = malloc(size);
+      this->size = size;
+    }
+    virtual ~CosimHostMemRegion() { free(ptr); }
+    virtual void *getPtr() const { return ptr; }
+    virtual std::size_t getSize() const { return size; }
+
+  private:
+    void *ptr;
+    std::size_t size;
+  };
+
+  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
+                                                  HostMem::Options opts) const {
+    return std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+  }
+  virtual bool mapMemory(void *ptr, std::size_t size,
+                         HostMem::Options opts) const {
+    return true;
+  }
+  virtual void unmapMemory(void *ptr) const {}
+};
+
 } // namespace
 
 Service *CosimAccelerator::createService(Service::Type svcType,
@@ -420,6 +449,8 @@ Service *CosimAccelerator::createService(Service::Type svcType,
 
   if (svcType == typeid(services::MMIO)) {
     return new CosimMMIO(getCtxt(), rpcClient);
+  } else if (svcType == typeid(services::HostMem)) {
+    return new CosimHostMem();
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:

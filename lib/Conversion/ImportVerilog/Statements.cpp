@@ -46,7 +46,17 @@ struct StmtVisitor {
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
-    return failure(!context.convertRvalueExpression(stmt.expr));
+    auto value = context.convertRvalueExpression(stmt.expr);
+    if (!value)
+      return failure();
+
+    // Expressions like calls to void functions return a dummy value that has no
+    // uses. If the returned value is trivially dead, remove it.
+    if (auto *defOp = value.getDefiningOp())
+      if (isOpTriviallyDead(defOp))
+        defOp->erase();
+
+    return success();
   }
 
   // Handle variable declarations.
@@ -314,6 +324,18 @@ struct StmtVisitor {
       return failure();
     if (failed(context.convertStatement(stmt.stmt)))
       return failure();
+    return success();
+  }
+
+  // Handle return statements.
+  LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
+    Value expr;
+    if (stmt.expr) {
+      expr = context.convertRvalueExpression(*stmt.expr);
+      if (!expr)
+        return failure();
+    }
+    builder.create<mlir::func::ReturnOp>(loc, expr);
     return success();
   }
 

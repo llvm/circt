@@ -72,6 +72,8 @@ std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   return manifest;
 }
 
+std::string HostMem::getServiceSymbol() const { return "__builtin_HostMem"; }
+
 CustomService::CustomService(AppIDPath idPath,
                              const ServiceImplDetails &details,
                              const HWClientDetails &clients)

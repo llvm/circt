@@ -75,6 +75,10 @@ struct esi::backends::trace::TraceAccelerator::Impl {
 
   void write(const AppIDPath &id, const std::string &portName, const void *data,
              size_t size);
+  std::ostream &write(std::string service) {
+    *traceWrite << "[" << service << "] ";
+    return *traceWrite;
+  }
 
 private:
   std::ofstream *traceWrite;
@@ -271,12 +275,63 @@ TraceAccelerator::requestChannelsFor(AppIDPath idPath,
   return impl->requestChannelsFor(idPath, bundleType);
 }
 
+class TraceHostMem : public HostMem {
+public:
+  TraceHostMem(TraceAccelerator::Impl &impl) : impl(impl) {}
+
+  struct TraceHostMemRegion : public HostMemRegion {
+    TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
+        : impl(impl) {
+      ptr = malloc(size);
+      this->size = size;
+    }
+    virtual ~TraceHostMemRegion() {
+      impl.write("HostMem") << "free " << ptr << std::endl;
+      free(ptr);
+    }
+    virtual void *getPtr() const { return ptr; }
+    virtual std::size_t getSize() const { return size; }
+
+  private:
+    void *ptr;
+    std::size_t size;
+    TraceAccelerator::Impl &impl;
+  };
+
+  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
+                                                  HostMem::Options opts) const {
+    auto ret =
+        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
+    impl.write("HostMem 0x")
+        << ret->getPtr() << " allocate " << size
+        << " bytes. Writeable: " << opts.writeable
+        << ", useLargePages: " << opts.useLargePages << std::endl;
+    return ret;
+  }
+  virtual bool mapMemory(void *ptr, std::size_t size,
+                         HostMem::Options opts) const {
+    impl.write("HostMem") << "map 0x" << ptr << " size " << size
+                          << " bytes. Writeable: " << opts.writeable
+                          << ", useLargePages: " << opts.useLargePages
+                          << std::endl;
+    return true;
+  }
+  virtual void unmapMemory(void *ptr) const {
+    impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
+};
+
 Service *
 TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
                                       const ServiceImplDetails &details,
                                       const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
     return new TraceSysInfo(manifestJson);
+  if (svcType == typeid(HostMem))
+    return new TraceHostMem(*this);
   if (svcType == typeid(CustomService))
     return new TraceCustomService(*this, idPath, details, clients);
   return nullptr;

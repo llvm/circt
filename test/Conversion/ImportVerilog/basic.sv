@@ -1394,3 +1394,101 @@ endmodule
 package Package;
   typedef logic [41:0] PackageType;
 endpackage
+
+// CHECK-LABEL: func.func private @simpleFunc1(
+// CHECK-SAME:    %arg0: !moore.i32
+// CHECK-SAME:    %arg1: !moore.i32
+// CHECK-SAME:  ) -> !moore.i32
+function int simpleFunc1(int a, b);
+  // CHECK: [[RETVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[TMP:%.+]] = moore.add %arg0, %arg1
+  // CHECK: moore.blocking_assign [[RETVAR]], [[TMP]]
+  simpleFunc1 = a + b;
+  // CHECK: [[TMP:%.+]] = moore.read [[RETVAR]]
+  // CHECK: return [[TMP]]
+endfunction
+
+// CHECK-LABEL: func.func private @simpleFunc2(
+// CHECK-SAME:    %arg0: !moore.i32
+// CHECK-SAME:    %arg1: !moore.i32
+// CHECK-SAME:  ) -> !moore.i32
+function int simpleFunc2(int a, b);
+  // CHECK: [[TMP:%.+]] = moore.add %arg0, %arg1
+  // CHECK: return [[TMP]]
+  return a + b;
+endfunction
+
+package FuncPackage;
+  // CHECK-LABEL: func.func private @"FuncPackage::simpleFunc3"(
+  // CHECK-SAME:    %arg0: !moore.i32
+  // CHECK-SAME:    %arg1: !moore.i32
+  // CHECK-SAME:  ) -> !moore.i32
+  function int simpleFunc3(int a, b);
+    // CHECK: [[TMP:%.+]] = moore.mul %arg0, %arg1
+    // CHECK: return [[TMP]]
+    return a * b;
+  endfunction
+endpackage
+
+// CHECK-LABEL: func.func private @simpleFunc4(
+// CHECK-SAME:    %arg0: !moore.i32
+// CHECK-SAME:    %arg1: !moore.i32
+// CHECK-SAME:  )
+function void simpleFunc4(int a, b);
+  // CHECK: [[TMP1:%.+]] = call @simpleFunc1(%arg0, %arg1)
+  // CHECK: [[TMP2:%.+]] = call @simpleFunc2(%arg0, %arg1)
+  // CHECK: {{%.+}} = call @"FuncPackage::simpleFunc3"([[TMP1]], [[TMP2]])
+  FuncPackage::simpleFunc3(
+    simpleFunc1(a, b),
+    simpleFunc2(a, b)
+  );
+  // CHECK: return
+endfunction
+
+// CHECK-LABEL: func.func private @simpleFunc5()
+function void simpleFunc5();
+  // CHECK: [[TMP1:%.+]] = moore.constant 42 : i32
+  // CHECK: [[TMP2:%.+]] = moore.constant 9001 : i32
+  // CHECK: call @simpleFunc4([[TMP1]], [[TMP2]])
+  simpleFunc4(42, 9001);
+  // CHECK: return
+endfunction
+
+// CHECK-LABEL: func.func private @funcArgs1(
+// CHECK-SAME:    %arg0: !moore.i32
+// CHECK-SAME:    %arg1: !moore.ref<i32>
+// CHECK-SAME:    %arg2: !moore.ref<i32>
+// CHECK-SAME:    %arg3: !moore.ref<i32>
+// CHECK-SAME:    %arg4: !moore.ref<i32>
+// CHECK-SAME:  )
+function automatic void funcArgs1(
+  input int a,
+  output int b,
+  inout int c,
+  ref int d,
+  const ref int e
+);
+  // CHECK: moore.blocking_assign %arg1, %arg0
+  b = a;
+  // CHECK: [[TMP1:%.+]] = moore.read %arg2
+  // CHECK: [[TMP2:%.+]] = moore.add [[TMP1]], %arg0
+  // CHECK: moore.blocking_assign %arg2, [[TMP2]]
+  c += a;
+  // CHECK: [[TMP:%.+]] = moore.read %arg4
+  // CHECK: moore.blocking_assign %arg3, [[TMP]]
+  d = e;
+  // CHECK: return
+endfunction
+
+// CHECK-LABEL: func.func private @funcArgs2()
+function void funcArgs2();
+  // CHECK: %x = moore.variable
+  // CHECK: %y = moore.variable
+  // CHECK: %z = moore.variable
+  // CHECK: %w = moore.variable
+  int x, y, z, w;
+  // CHECK: [[TMP:%.+]] = moore.constant 42
+  // CHECK: call @funcArgs1([[TMP]], %x, %y, %z, %w)
+  funcArgs1(42, x, y, z, w);
+  // CHECK: return
+endfunction

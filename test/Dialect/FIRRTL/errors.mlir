@@ -1461,7 +1461,7 @@ firrtl.circuit "RefForceProbe" {
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-note @above {{prior use here}}
     // expected-error @below {{use of value '%1' expects different type than prior uses: '!firrtl.rwprobe<uint<1>>' vs '!firrtl.probe<uint<1>>'}}
-    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 

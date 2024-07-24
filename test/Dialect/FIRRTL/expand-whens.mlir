@@ -555,9 +555,9 @@ firrtl.module @WhenCForce(in %c: !firrtl.uint<1>, in %clock : !firrtl.clock, in 
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   firrtl.when %c : !firrtl.uint<1> {
     // CHECK: firrtl.ref.force %clock, %c, %n_ref, %x :
-    firrtl.ref.force %clock, %c1_ui1, %n_ref, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force %clock, %c1_ui1, %n_ref, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
     // CHECK: firrtl.ref.force_initial %c, %n_ref, %x :
-    firrtl.ref.force_initial %c1_ui1, %n_ref, %x : !firrtl.uint<1>, !firrtl.uint<4>
+    firrtl.ref.force_initial %c1_ui1, %n_ref, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
     // CHECK: firrtl.ref.release %clock, %c, %n_ref :
     firrtl.ref.release %clock, %c1_ui1, %n_ref : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
     // CHECK: firrtl.ref.release_initial %c, %n_ref :

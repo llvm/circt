@@ -195,8 +195,7 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
   // CHECK: assert property (@(posedge clk) a |-> b);
   // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
-  // CHECK: wire [[W:.+]] = b;
-  // CHECK: assert property (@(posedge clk) disable iff ([[W]]) not a);
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
   %k0 = ltl.clock %i0, posedge %clk : !ltl.property
   %k1 = ltl.clock %n0, negedge %b : !ltl.property
   %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
@@ -261,8 +260,7 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   %b3 = ltl.clock %b2, posedge %clk : !ltl.property
   sv.assert_property %b3 : !ltl.property
 
-  // CHECK: wire [[W0:.+]] = e;
-  // CHECK: assert property (disable iff ([[W0]]) @(posedge clk) a |-> not b ##1 c ##1 d);
+  // CHECK: assert property (disable iff (e) @(posedge clk) a |-> not b ##1 c ##1 d);
   %c0 = ltl.not %b1 : !ltl.sequence
   %c1 = ltl.implication %a, %c0 : i1, !ltl.property
   %c3 = ltl.clock %c1, posedge %clk : !ltl.property
@@ -279,10 +277,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   %true = hw.constant true
 
   // CHECK: wire _GEN = ~isLive;
-  // CHECK: wire [[WR0:.+]] = reset;
-  // CHECK: assert property (disable iff ([[WR0]]) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
-  // CHECK: wire [[WR1:.+]] = reset;
-  // CHECK: assume property (disable iff ([[WR1]]) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
+  // CHECK: assert property (disable iff (reset) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
+  // CHECK: assume property (disable iff (reset) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
   %not_isLive = comb.xor %isLive, %true : i1
   %fell_reset = sv.verbatim.expr "$fell({{0}})"(%reset) : (i1) -> i1
   %0 = comb.and %fell_reset, %not_isLive : i1
@@ -292,10 +288,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   sv.assert_property %liveness_after_reset disable_iff %reset : !ltl.property
   sv.assume_property %liveness_after_reset disable_iff %reset : !ltl.property
 
-  // CHECK: wire [[WR2:.+]] = reset;
-  // CHECK: assert property (disable iff ([[WR2]]) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
-  // CHECK: wire [[WR3:.+]] = reset;
-  // CHECK: assume property (disable iff ([[WR3]]) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
+  // CHECK: assert property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
+  // CHECK-NEXT: assume property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
   %4 = ltl.delay %not_isLive, 1, 0 : i1
   %5 = ltl.concat %isLive, %4 : i1, !ltl.sequence
   %6 = ltl.implication %5, %1 : !ltl.sequence, !ltl.property
@@ -321,15 +315,12 @@ hw.module @ClockedAsserts(in %clk: i1, in %a: i1, in %b: i1) {
   %true = hw.constant true
   %n0 = ltl.not %a : i1
 
-  // CHECK: wire [[WB0:.+]] = b;
-  // CHECK: assert property (@(posedge clk) disable iff ([[WB0]]) not a);
+  // CHECK: assert property (@(posedge clk) disable iff (b) not a);
   sv.assert_property %n0 on posedge %clk disable_iff %b : !ltl.property
 
-  // CHECK: wire [[WB1:.+]] = b;
-  // CHECK: assume property (@(posedge clk) disable iff ([[WB1]]) not a);
+  // CHECK: assume property (@(posedge clk) disable iff (b) not a);
   sv.assume_property %n0 on posedge %clk disable_iff %b : !ltl.property
 
-  // CHECK: wire [[WB2:.+]] = b;
-  // CHECK: cover property (@(posedge clk) disable iff ([[WB2]]) not a);
+  // CHECK: cover property (@(posedge clk) disable iff (b) not a);
   sv.cover_property %n0 on posedge %clk disable_iff %b: !ltl.property
 }

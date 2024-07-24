@@ -33,12 +33,12 @@ include "circt/Dialect/ESI/ESITypes.td"
 def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
 // FIFO interface with a read latency of zero. Very similiar to valid-ready, but
 // cannot assert ready if data is not available.
-def ChannelSignalingFIFO0      : I32EnumAttrCase<"FIFO0",      1>;
+def ChannelSignalingFIFO      : I32EnumAttrCase<"FIFO",      1>;
 
 def ChannelSignaling : I32EnumAttr<
     "ChannelSignaling",
     "ESI channel wire signaling standard",
-    [ChannelSignalingValidReady, ChannelSignalingFIFO0]>{
+    [ChannelSignalingValidReady, ChannelSignalingFIFO]>{
   let cppNamespace = "::circt::esi";
 }
 
@@ -49,6 +49,12 @@ def ChannelTypeImpl : ESI_Type<"Channel"> {
     point-to-point data stream. Channels are typed (like all of ESI). Said
     type can be any MLIR type, but must be lowered to something a backend
     knows how to output (i.e. something emitVerilog knows about).
+
+    Parameters:
+      signaling: the style of the control signals (valid/ready vs FIFO).
+      dataDelay: the number of cycles data takes to arrive after the control
+      indicates a transaction has occured. For instance, on a FIFO without read
+      ahead, this would be 1. Defaults to 0.
 
     Example:
 
@@ -63,14 +69,17 @@ def ChannelTypeImpl : ESI_Type<"Channel"> {
       "Type":$inner,
       DefaultValuedParameter<
         "::circt::esi::ChannelSignaling",
-        "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
+        "::circt::esi::ChannelSignaling::ValidReady">:$signaling,
+      DefaultValuedParameter<"uint64_t", "0">:$dataDelay);
 
-  let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
+  let assemblyFormat = [{
+    `<` $inner (`,` $signaling^ ( `(` $dataDelay^ `)` )? )? `>`
+  }];
 
   let builders = [
     TypeBuilder<(ins "Type":$type), [{
         return Base::get(type.getContext(), type,
-                         ::circt::esi::ChannelSignaling::ValidReady);
+                         ::circt::esi::ChannelSignaling::ValidReady, 0);
       }]>,
   ];
 }
@@ -443,6 +452,7 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def PipelineStageOp : ESI_Physical_Op<"stage", [
