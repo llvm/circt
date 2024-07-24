@@ -5204,7 +5204,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   auto &body = formal.getBody().emplaceBlock();
 
   // Create the statement parser
-  hw::InnerSymbolNamespace ns(circuit);
+  hw::InnerSymbolNamespace ns;
   SymbolTable circuitSymTbl(circuit);
   FIRModuleContext context(getConstants(), getLexer(), version);
   FIRStmtParser stmtParser(body, context, ns, circuitSymTbl, version);
