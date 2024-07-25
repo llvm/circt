@@ -38,11 +38,18 @@ struct transition{
  * @brief Prints solver assertions
  
 */
-void printSolverAssertions(z3::solver &solver, string output) {
+void printSolverAssertions(z3::context &c, z3::solver &solver, string output) {
 
 	ofstream outfile;
 	outfile.open(output, ios::app);
 
+  z3::expr_vector assertions = solver.assertions();
+
+  for (unsigned i = 0; i < assertions.size(); ++i) {
+    Z3_ast ast = assertions[i];
+    outfile << "(assert " << Z3_ast_to_string(c, ast) << ")" << std::endl;
+  }
+  outfile << "(check-sat)" << std::endl;
 
 
   // if(V){
@@ -54,7 +61,7 @@ void printSolverAssertions(z3::solver &solver, string output) {
   // const auto start{std::chrono::steady_clock::now()};
   // int sat = solver.check();
   // const auto end{std::chrono::steady_clock::now()};
-  outfile <<solver.to_smt2();
+  // outfile <<Z3_ast_to_string(c, solver);
   // if(!V)
   //   llvm::outs()<<sat<<"\n";
   // const std::chrono::duration<double> elapsed_seconds{end - start};
@@ -645,8 +652,8 @@ expr parseLTL(string inputFile, vector<expr> &solverVars, vector<string> &stateI
               solverVars[i] = argInputs[i](solverVars[solverVars.size()-1]);
             }
 
-            expr body = (stateInvFun[insertState(state, stateInv)](solverVars.size(), solverVars.data()))!=(solverVars[v]==id);
-            expr ret =(exists(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time-1), nestedForall(solverVars, body, numArgs, numOutputs))));
+            expr body = (stateInvFun[insertState(state, stateInv)](solverVars.size(), solverVars.data()))==(solverVars[v]==id);
+            expr ret =(forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]>=0 && solverVars[solverVars.size()-1]<time-1), nestedForall(solverVars, body, numArgs, numOutputs))));
 
             return ret;
           } else {
@@ -743,7 +750,16 @@ void parse_fsm(string input, string property, string output, int time){
 
   z3::context c;
 
+  Z3_set_ast_print_mode(c, Z3_PRINT_SMTLIB_FULL);
+
+
   solver s(c);
+
+  params p(c);
+  p.set("pp.no_lets", true);
+  s.set(p);
+
+
 
   vector<string> stateInv;
 
@@ -849,7 +865,8 @@ void parse_fsm(string input, string property, string output, int time){
   expr body = stateInvFun.at(transitions.at(0).from)(solverVarsInit.size(), solverVarsInit.data());
   // initial condition
 
-  expr nested = nestedForall(solverVars, body, numArgs, numOutputs);
+  expr nested = forall(solverVars[solverVars.size()-1], implies((solverVars[solverVars.size()-1]==0), ((nestedForall(solverVarsInit, body, numArgs, numOutputs)))));
+
   s.add(nested);
 
   for(auto t: transitions){
@@ -916,10 +933,12 @@ void parse_fsm(string input, string property, string output, int time){
   expr r = parseLTL(property, solverVars, stateInv, argInputs, stateInvFun, numArgs, numOutputs, time);
 
   s.add(r);
-  s.add(xorExp);
+  // s.add(xorExp);
+
+  // p.set("smt.simplify_assignments", false);
 
 
-  printSolverAssertions(s, output);
+  printSolverAssertions(c, s, output);
 
 }
 
