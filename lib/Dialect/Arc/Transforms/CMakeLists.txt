@@ -13,6 +13,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LegalizeStateUpdate.cpp
   LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
+  LowerDPIToArcs.cpp
   LowerLUT.cpp
   LowerState.cpp
   LowerVectorizations.cpp
@@ -35,6 +36,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   CIRCTOM
   CIRCTSV
   CIRCTSeq
+  CIRCTSim
   CIRCTSupport
   MLIRFuncDialect
   MLIRLLVMDialect

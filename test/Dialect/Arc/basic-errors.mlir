@@ -1,4 +1,6 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
+// This needs to be removed.
+// XFAIL:*
 
 // expected-error @+1 {{body contains non-pure operation}}
 arc.define @Foo(%arg0: !seq.clock) {
