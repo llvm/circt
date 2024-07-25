@@ -293,6 +293,22 @@ def ReadOp : MooreOp<"read", [
   }];
 }
 
+def AddressOp : MooreOp<"address", [
+  TypesMatchWith<"input and result types match",
+    "result", "input", "cast<RefType>($_self).getNestedType()">
+]> {
+  let summary = "Read the current value of a declaration";
+  let description = [{
+    Creates an SSA value containing a pointer to a variable or constant.
+    It's similar to llvm.mlir.addressof.
+  }];
+  let arguments = (ins UnpackedType:$input);
+  let results = (outs Arg<RefType, "", [MemRead]>:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Assignments
 //===----------------------------------------------------------------------===//
@@ -332,6 +348,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
     Arg<RefType, "", [MemWrite]>:$dst,
     UnpackedType:$src
   );
+  let hasCanonicalizeMethod = true;
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {

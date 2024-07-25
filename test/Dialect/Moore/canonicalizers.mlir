@@ -66,6 +66,20 @@ moore.module @structAssign(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
   moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
 }
 
+// CHECK-LABEL: moore.module @structExtractRefLower2Inject
+moore.module @structExtractRefLower2Inject(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
+  // CHECK: %ii = moore.variable : <struct<{a: i32, b: i32}>>
+  // CHECK: %0 = moore.constant 1 : i32
+  // CHECK: %1 = moore.struct_inject %ii, "a", %0 : !moore.ref<struct<{a: i32, b: i32}>>
+  // CHECK: moore.output %1 : !moore.ref<struct<{a: i32, b: i32}>>
+  %ii = moore.variable : <struct<{a: i32, b: i32}>>
+  %0 = moore.struct_extract_ref %ii, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  %1 = moore.constant 1 : i32
+  %2 = moore.conversion %1 : !moore.i32 -> !moore.i32
+  moore.blocking_assign %0, %2 : i32
+  moore.output %ii : !moore.ref<struct<{a: i32, b: i32}>>
+}
+
 // CHECK-LABEL: moore.module @structInjectFold
 moore.module @structInjectFold(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
   %x = moore.variable : <i32>
@@ -105,12 +119,11 @@ moore.module @structCreateFold(in %a : !moore.i1, out b : !moore.i1) {
 moore.module @Conversion(out a : !moore.ref<struct<{a: i32, b: i32}>>)  {
   // CHECK: %0 = moore.constant 0 : i64
   // CHECK: %1 = moore.conversion %0 : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
-  // CHECK: %2 = moore.constant 0 : i32
-  // CHECK: %3 = moore.extract %1 from %2 : struct<{a: i32, b: i32}>, i32 -> i32
-  // CHECK: %4 = moore.constant 32 : i32
-  // CHECK: %5 = moore.extract %1 from %4 : struct<{a: i32, b: i32}>, i32 -> i32
-  // CHECK: %6 = moore.struct_create %3, %5 : !moore.i32, !moore.i32 -> <struct<{a: i32, b: i32}>>
-  // CHECK: moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
+  // CHECK: %2 = moore.address %1 : <struct<{a: i32, b: i32}>>
+  // CHECK: %3 = moore.struct_extract %2, "a" : <struct<{a: i32, b: i32}>> -> i32
+  // CHECK: %4 = moore.struct_extract %2, "b" : <struct<{a: i32, b: i32}>> -> i32
+  // CHECK: %5 = moore.struct_create %3, %4 : !moore.i32, !moore.i32 -> <struct<{a: i32, b: i32}>>
+  // CHECK: moore.output %5 : !moore.ref<struct<{a: i32, b: i32}>>
   %0 = moore.constant 0 : i64
   %1 = moore.conversion %0 : !moore.i64 -> !moore.struct<{a: i32, b: i32}>
   %f = moore.variable %1 : <struct<{a: i32, b: i32}>>

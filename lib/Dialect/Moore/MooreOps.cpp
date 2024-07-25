@@ -289,25 +289,22 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
                                        ::mlir::PatternRewriter &rewriter) {
   if (auto initial = op.getInitial()) {
     return TypeSwitch<Type, LogicalResult>(op.getType().getNestedType())
-        .Case<StructType, UnpackedStructType>([&op, &rewriter,
-                                               &initial](auto &type) {
-          SmallVector<Value> createFields;
-          unsigned bit = 0;
-          auto i32 = moore::IntType::getInt(op->getContext(), 32);
-          for (const auto &member : type.getMembers()) {
-            auto memberType = cast<UnpackedType>(member.type);
-            if (auto width = memberType.getBitSize()) {
-              auto lowBit = rewriter.create<ConstantOp>(op.getLoc(), i32, bit);
-              bit += width.value();
-              auto field = rewriter.create<ExtractOp>(op->getLoc(), member.type,
-                                                      initial, lowBit);
-              createFields.push_back(field);
-            }
-          }
-          rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(),
-                                                      createFields);
-          return success();
-        })
+        .Case<StructType, UnpackedStructType>(
+            [&op, &rewriter, &initial](auto &type) {
+              auto addressOp = rewriter.create<AddressOp>(
+                  op.getLoc(),
+                  RefType::get(cast<UnpackedType>(initial.getType())), initial);
+              SmallVector<Value> createFields;
+              for (const auto &member : type.getMembers()) {
+                auto field = rewriter.create<StructExtractOp>(
+                    op->getLoc(), cast<UnpackedType>(member.type), member.name,
+                    addressOp);
+                createFields.push_back(field);
+              }
+              rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(),
+                                                          createFields);
+              return success();
+            })
         .Default([](auto &) { return failure(); });
   }
 
@@ -998,6 +995,28 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
     OpBuilder &builder, Value reachingDefinition,
     const DataLayout &dataLayout) {
   return DeletionKind::Delete;
+}
+
+LogicalResult BlockingAssignOp::canonicalize(BlockingAssignOp op,
+                                             PatternRewriter &rewriter) {
+  if (auto refOp = op.getDst().getDefiningOp<moore::StructExtractRefOp>()) {
+    auto input = refOp.getInput();
+    if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+      auto newOp = rewriter.create<moore::StructInjectOp>(
+          op->getLoc(), input.getType(), input, refOp.getFieldNameAttr(),
+          op.getSrc());
+      rewriter.replaceOpUsesWithIf(
+          input.getDefiningOp(), newOp->getResults(),
+          [&op](OpOperand &operand) {
+            return !operand.getOwner()->isBeforeInBlock(op);
+          });
+      op.getDstMutable();
+      op.erase();
+      refOp.erase();
+      return success();
+    }
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
