@@ -924,7 +924,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
   // Clone the property ops from the FIRRTL Class or Module to the OM Class.
   SmallVector<Operation *> opsToErase;
-  OpBuilder builder = OpBuilder::atBlockBegin(classOp.getBodyBlock());
+  ClassOpBuilder builder = ClassOpBuilder::atBlockBegin(classOp.getBodyBlock());
   for (auto &op : moduleLike->getRegion(0).getOps()) {
     // Check if any operand is a property.
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
@@ -952,8 +952,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   }
 
   llvm::SmallVector<mlir::Location> locs;
+  llvm::SmallVector<mlir::Attribute> fieldNames;
   llvm::SmallVector<mlir::Value> fieldValues;
-  llvm::SmallVector<mlir::Attribute> opNames;
   // Convert any output property assignments to Field ops.
   for (auto op : llvm::make_early_inc_range(classOp.getOps<PropAssignOp>())) {
     // Property assignments will currently be pointing back to the original
@@ -966,15 +966,12 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
     auto name = moduleLike.getPortName(outputPort.getArgNumber());
 
     locs.push_back(op.getLoc());
+    fieldNames.push_back(mlir::StringAttr::get(classOp.getContext(), name));
     fieldValues.push_back(op.getSrc());
-    opNames.push_back(mlir::StringAttr::get(classOp.getContext(), name));
 
     op.erase();
   }
-  auto op =
-      builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
-  op.getOperation()->setAttr(
-      "field_names", mlir::ArrayAttr::get(classOp.getContext(), opNames));
+  builder.createClassFieldsOp(locs, fieldNames, fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
