@@ -7,7 +7,7 @@ import time
 platform = sys.argv[1]
 acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
 
-hostmem = acc.get_host_memory()
+hostmem = acc.get_service_hostmem()
 if hostmem is not None:
   mem1 = hostmem.allocate(1024)
   assert mem1.size == 1024

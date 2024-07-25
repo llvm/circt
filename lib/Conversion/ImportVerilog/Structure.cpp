@@ -300,19 +300,17 @@ struct ModuleVisitor : public BaseVisitor {
         if (!value)
           return failure();
         unsigned offset = 0;
-        auto i32 = moore::IntType::getInt(context.getContext(), 32);
         for (const auto *port : llvm::reverse(multiPort->ports)) {
           if (auto *existingPort = moduleLowering->portsBySyntaxNode.lookup(
                   con->port.getSyntax()))
             port = existingPort;
           unsigned width = port->getType().getBitWidth();
-          auto index = builder.create<moore::ConstantOp>(loc, i32, offset);
           auto sliceType = context.convertType(port->getType());
           if (!sliceType)
             return failure();
           Value slice = builder.create<moore::ExtractRefOp>(
               loc, moore::RefType::get(cast<moore::UnpackedType>(sliceType)),
-              value, index);
+              value, offset);
           // Read to map to rvalue for input ports.
           if (port->direction == slang::ast::ArgumentDirection::In)
             slice = builder.create<moore::ReadOp>(loc, sliceType, slice);

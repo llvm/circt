@@ -31,7 +31,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
-set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
+set(CMAKE_BUILD_RPATH
+      "${CMAKE_BUILD_RPATH}:${CMAKE_BINARY_DIR}/lib:$ORIGIN/../lib")
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
@@ -110,7 +111,6 @@ set(ESIPythonRuntimeSources
   python/esiaccel/accelerator.py
   python/esiaccel/types.py
   python/esiaccel/utils.py
-  python/esiaccel/esiCppAccel.pyi
 )
 
 IF(MSVC)
@@ -265,7 +265,29 @@ if(Python3_FOUND)
       ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
 
+    # Check for stubgen and generate stubs if available.
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" -c "import pybind11_stubgen"
+      RESULT_VARIABLE STUBGEN_EXISTS
+      ERROR_QUIET
+    )
+    if (STUBGEN_EXISTS EQUAL "0")
+      add_custom_command(
+          TARGET esiCppAccel
+          POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
+              python -m pybind11_stubgen 
+                -o "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
+                esiaccel.esiCppAccel
+      )
+    else()
+      message(STATUS "pybind11_stubgen not found. Skipping stub generation.")
+    endif()
+
     if (WHEEL_BUILD)
+      if (NOT STUBGEN_EXISTS EQUAL "0")
+        message (FATAL_ERROR "pybind11_stubgen is required for a wheel build.")
+      endif()
       set_target_properties(esiCppAccel PROPERTIES
         INSTALL_RPATH "$ORIGIN/lib")
     else()
