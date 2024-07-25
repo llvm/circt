@@ -501,33 +501,28 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.concat [[TMP1]] : (!moore.i1) -> i1
     // CHECK: moore.replicate [[TMP2]] : i1 -> i32
     a = {32{1'b0}};
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_1
-    // CHECK: [[TMP2:%.+]] = moore.constant 1 : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l3
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
+    // CHECK: moore.extract [[TMP1]] from 1 : l32 -> l3
     y = vec_1[3:1];
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_2
-    // CHECK: [[TMP2:%.+]] = moore.constant 2 : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l2
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32>
+    // CHECK: moore.extract [[TMP1]] from 2 : l32 -> l2
     y = vec_2[2:3];
-    // CHECK: [[TMP1:%.+]] = moore.read %d
-    // CHECK: [[TMP2:%.+]] = moore.read %x
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i1 -> l1
+    // CHECK: [[TMP1:%.+]] = moore.read %d : <l32>
+    // CHECK: [[TMP2:%.+]] = moore.read %x : <i1>
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : l32, i1 -> l1
     y = d[x];
-    // CHECK: [[TMP1:%.+]] = moore.read %a
-    // CHECK: [[TMP2:%.+]] = moore.read %x
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : i32, i1 -> i1
+    // CHECK: [[TMP1:%.+]] = moore.read %a : <i32>
+    // CHECK: [[TMP2:%.+]] = moore.read %x : <i1>
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : i32, i1 -> i1
     x = a[x];
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_1
-    // CHECK: [[TMP2:%.+]] = moore.constant 15 : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
+    // CHECK: moore.extract [[TMP1]] from 15 : l32 -> l1
     y = vec_1[15];
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_1
-    // CHECK: [[TMP2:%.+]] = moore.constant 15 : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
+    // CHECK: moore.extract [[TMP1]] from 15 : l32 -> l1
     y = vec_1[15+:1];
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_2
-    // CHECK: [[TMP2:%.+]] = moore.constant 0 : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_2 : <l32>
+    // CHECK: moore.extract [[TMP1]] from 0 : l32 -> l1
     y = vec_2[0+:1];
     // CHECK: [[TMP1:%.+]] = moore.read %vec_1
     // CHECK: [[TMP2:%.+]] = moore.constant 1 : i32
@@ -535,39 +530,30 @@ module Expressions;
     // CHECK: [[TMP4:%.+]] = moore.mul [[TMP2]], [[TMP3]] : i32
     // CHECK: [[TMP5:%.+]] = moore.constant 0 : i32
     // CHECK: [[TMP6:%.+]] = moore.sub [[TMP4]], [[TMP5]] : i32
-    // CHECK: moore.extract [[TMP1]] from [[TMP6]] : l32, i32 -> l1
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP6]] : l32, i32 -> l1
     c = vec_1[1*a-:1];
-    // CHECK: [[TMP1:%.+]] = moore.read %arr
-    // CHECK: [[TMP2:%.+]] = moore.constant 3 : i32
-    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP1]] from [[TMP2]] : uarray<3 x uarray<6 x i4>>, i32 -> uarray<6 x i4>
-    // CHECK: [[TMP4:%.+]] = moore.constant 7 : i32
-    // CHECK: [[TMP5:%.+]] = moore.extract [[TMP3]] from [[TMP4]] : uarray<6 x i4>, i32 -> i4
-    // CHECK: [[TMP6:%.+]] = moore.constant 3 : i32
-    // CHECK: moore.extract [[TMP5]] from [[TMP6]] : i4, i32 -> i2
+    // CHECK: [[TMP1:%.+]] = moore.read %arr : <uarray<3 x uarray<6 x i4>>>
+    // CHECK: [[TMP3:%.+]] = moore.extract [[TMP1]] from 3 : uarray<3 x uarray<6 x i4>> -> uarray<6 x i4>
+    // CHECK: [[TMP5:%.+]] = moore.extract [[TMP3]] from 7 : uarray<6 x i4> -> i4
+    // CHECK: moore.extract [[TMP5]] from 3 : i4 -> i2
     c = arr[3][7][4:3];
-    // CHECK: [[TMP1:%.+]] = moore.read %vec_1
-    // CHECK: [[TMP2:%.+]] = moore.read %c
-    // CHECK: moore.extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
+    // CHECK: [[TMP1:%.+]] = moore.read %vec_1 : <l32>
+    // CHECK: [[TMP2:%.+]] = moore.read %c : <i32>
+    // CHECK: moore.dyn_extract [[TMP1]] from [[TMP2]] : l32, i32 -> l1
     y = vec_1[c];
 
-    // CHECK: [[TMP1:%.+]] = moore.constant 1 : i32
-    // CHECK: [[TMP2:%.+]] = moore.extract_ref %v from [[TMP1]] : <array<2 x i4>>, i32 -> <i4>
-    // CHECK: [[TMP3:%.+]] = moore.constant 3 : i32
-    // CHECK: moore.extract_ref [[TMP2]] from [[TMP3]] : <i4>, i32 -> <i1>
+    // CHECK: [[TMP2:%.+]] = moore.extract_ref %v from 1 : <array<2 x i4>> -> <i4>
+    // CHECK: moore.extract_ref [[TMP2]] from 3 : <i4> -> <i1>
     v[1][3] = x;
 
-    // CHECK: [[TMP1:%.+]] = moore.constant 1 : i32
-    // CHECK: moore.extract_ref %vec_1 from [[TMP1]] : <l32>, i32 -> <l2>
+    // CHECK: moore.extract_ref %vec_1 from 1 : <l32> -> <l2>
     vec_1[2:1] = y;
 
-    // CHECK: [[X_READ:%.+]] = moore.read %x
-    // CHECK: moore.extract_ref %vec_1 from [[X_READ]] : <l32>, i1 -> <l1>
+    // CHECK: [[X_READ:%.+]] = moore.read %x : <i1>
+    // CHECK: moore.dyn_extract_ref %vec_1 from [[X_READ]] : <l32>, i1 -> <l1>
     vec_1[x] = y;
     
-    // CHECK: [[CONST_15:%.+]] = moore.constant 15 : i32
-    // CHECK: [[CONST_2:%.+]] = moore.constant 2 : i32
-    // CHECK: [[SUB:%.+]] = moore.sub [[CONST_15]], [[CONST_2]] : i32
-    // CHECK: moore.extract_ref %vec_1 from [[SUB]] : <l32>, i32 -> <l3>
+    // CHECK: moore.extract_ref %vec_1 from 11 : <l32> -> <l3>
     vec_1[15-:3] = y;
 
     //===------------------------------------------------------------------===//
@@ -1120,17 +1106,12 @@ module PortsTop;
   wire [1:0] w3;
   // CHECK: [[X3:%.+]] = moore.read %x3
   // CHECK: [[Y3:%.+]] = moore.read %y3
-  // CHECK: [[TMP:%.+]] = moore.constant 0 :
-  // CHECK: [[V2:%.+]] = moore.extract_ref %z3 from [[TMP]]
-  // CHECK: [[TMP:%.+]] = moore.constant 1 :
-  // CHECK: [[V1:%.+]] = moore.extract_ref %z3 from [[TMP]]
-  // CHECK: [[TMP:%.+]] = moore.constant 2 :
-  // CHECK: [[V0:%.+]] = moore.extract_ref %z3 from [[TMP]]
+  // CHECK: [[V2:%.+]] = moore.extract_ref %z3 from 0
+  // CHECK: [[V1:%.+]] = moore.extract_ref %z3 from 1
+  // CHECK: [[V0:%.+]] = moore.extract_ref %z3 from 2
   // CHECK: [[V0_READ:%.+]] = moore.read [[V0]]
-  // CHECK: [[TMP:%.+]] = moore.constant 0 :
-  // CHECK: [[C1:%.+]] = moore.extract_ref %w3 from [[TMP]]
-  // CHECK: [[TMP:%.+]] = moore.constant 1 :
-  // CHECK: [[C0:%.+]] = moore.extract_ref %w3 from [[TMP]]
+  // CHECK: [[C1:%.+]] = moore.extract_ref %w3 from 0
+  // CHECK: [[C0:%.+]] = moore.extract_ref %w3 from 1
   // CHECK: [[C0_READ:%.+]] = moore.read [[C0]]
   // CHECK: [[V1_VALUE:%.+]], [[C1_VALUE:%.+]] = moore.instance "p3" @MultiPorts(
   // CHECK-SAME:   a0: [[X3]]: !moore.l1
@@ -1258,12 +1239,10 @@ module MultiPorts(
   input c0;
   output c1;
 
-  // CHECK: [[TMP1:%.+]] = moore.constant 0 :
-  // CHECK: [[TMP2:%.+]] = moore.extract_ref %u from [[TMP1]]
+  // CHECK: [[TMP2:%.+]] = moore.extract_ref %u from 0
   // CHECK: moore.assign [[TMP2]], %a0
 
-  // CHECK: [[TMP1:%.+]] = moore.constant 1 :
-  // CHECK: [[TMP2:%.+]] = moore.extract_ref %u from [[TMP1]]
+  // CHECK: [[TMP2:%.+]] = moore.extract_ref %u from 1
   // CHECK: moore.assign [[TMP2]], %a1
 
   // CHECK: moore.assign [[V0]], %v0

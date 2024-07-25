@@ -75,10 +75,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
 
-  py::class_<Context>(m, "Context")
-      .def(py::init<>())
-      .def("connect", &Context::connect);
-
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -105,7 +101,10 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def("write", &services::MMIO::write);
 
   py::class_<services::HostMem::HostMemRegion>(m, "HostMemRegion")
-      .def_property_readonly("ptr", &services::HostMem::HostMemRegion::getPtr)
+      .def_property_readonly("ptr",
+                             [](services::HostMem::HostMemRegion &mem) {
+                               return reinterpret_cast<uintptr_t>(mem.getPtr());
+                             })
       .def_property_readonly("size",
                              &services::HostMem::HostMemRegion::getSize);
 
@@ -113,15 +112,34 @@ PYBIND11_MODULE(esiCppAccel, m) {
       .def(py::init<>())
       .def_readwrite("writeable", &services::HostMem::Options::writeable)
       .def_readwrite("use_large_pages",
-                     &services::HostMem::Options::useLargePages);
+                     &services::HostMem::Options::useLargePages)
+      .def("__repr__", [](services::HostMem::Options &opts) {
+        std::string ret = "HostMemOptions(";
+        if (opts.writeable)
+          ret += "writeable ";
+        if (opts.useLargePages)
+          ret += "use_large_pages";
+        ret += ")";
+        return ret;
+      });
 
   py::class_<services::HostMem>(m, "HostMem")
       .def("allocate", &services::HostMem::allocate, py::arg("size"),
            py::arg("options") = services::HostMem::Options(),
            py::return_value_policy::take_ownership)
-      .def("map_memory", &services::HostMem::mapMemory, py::arg("ptr"),
-           py::arg("size"), py::arg("options") = services::HostMem::Options())
-      .def("unmap_memory", &services::HostMem::unmapMemory, py::arg("ptr"));
+      .def(
+          "map_memory",
+          [](HostMem &self, uintptr_t ptr, size_t size, HostMem::Options opts) {
+            return self.mapMemory(reinterpret_cast<void *>(ptr), size, opts);
+          },
+          py::arg("ptr"), py::arg("size"),
+          py::arg("options") = services::HostMem::Options())
+      .def(
+          "unmap_memory",
+          [](HostMem &self, uintptr_t ptr) {
+            return self.unmapMemory(reinterpret_cast<void *>(ptr));
+          },
+          py::arg("ptr"));
 
   py::class_<AppID>(m, "AppID")
       .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
@@ -222,26 +240,31 @@ PYBIND11_MODULE(esiCppAccel, m) {
   hwmodule.def_property_readonly("children", &HWModule::getChildren,
                                  py::return_value_policy::reference);
 
-  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
-                     .def(py::init(&registry::connect))
-                     .def(
-                         "sysinfo",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::SysInfo>({});
-                         },
-                         py::return_value_policy::reference)
-                     .def(
-                         "get_service_mmio",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::MMIO>({});
-                         },
-                         py::return_value_policy::reference)
-                     .def(
-                         "get_service_hostmem",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::HostMem>({});
-                         },
-                         py::return_value_policy::reference);
+  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection");
+
+  py::class_<Context>(m, "Context")
+      .def(py::init<>())
+      .def("connect", &Context::connect);
+
+  accConn.def(py::init(&registry::connect))
+      .def(
+          "sysinfo",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::SysInfo>({});
+          },
+          py::return_value_policy::reference)
+      .def(
+          "get_service_mmio",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::MMIO>({});
+          },
+          py::return_value_policy::reference)
+      .def(
+          "get_service_hostmem",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::HostMem>({});
+          },
+          py::return_value_policy::reference);
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())

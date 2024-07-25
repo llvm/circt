@@ -22,6 +22,7 @@ namespace circt {
 //===----------------------------------------------------------------------===//
 
 /// Generate the code for registering passes.
+#define GEN_PASS_DECL_LOWERTOBMC
 #define GEN_PASS_DECL_EXTERNALIZEREGISTERS
 #define GEN_PASS_REGISTRATION
 #include "circt/Tools/circt-bmc/Passes.h.inc"
