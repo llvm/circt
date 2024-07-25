@@ -20,9 +20,11 @@ MLIR_CAPI_EXPORTED void registerESIPasses(void);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner,
-                                                   uint32_t signaling);
+                                                   uint32_t signaling,
+                                                   uint64_t dataDelay);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelGetInner(MlirType channelType);
 MLIR_CAPI_EXPORTED uint32_t circtESIChannelGetSignaling(MlirType channelType);
+MLIR_CAPI_EXPORTED uint64_t circtESIChannelGetDataDelay(MlirType channelType);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAnAnyType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIAnyTypeGet(MlirContext);
