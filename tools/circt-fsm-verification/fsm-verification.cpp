@@ -38,7 +38,7 @@ struct transition{
  * @brief Prints solver assertions
  
 */
-void printSolverAssertions(z3::context &c, z3::solver &solver, string output) {
+void printSolverAssertions(z3::context &c, z3::solver &solver, string output, vector<func_decl> stateInvFun) {
 
 	ofstream outfile;
 	outfile.open(output);
@@ -46,6 +46,10 @@ void printSolverAssertions(z3::context &c, z3::solver &solver, string output) {
   z3::expr_vector assertions = solver.assertions();
 
   llvm::outs()<<"assertions size: "<<assertions.size()<<"\n\n";
+
+  for(auto fd: stateInvFun){
+    outfile <<fd.to_string()<<"\n";
+  }
 
   for (unsigned i = 0; i < assertions.size(); ++i) {
     Z3_ast ast = assertions[i];
@@ -777,14 +781,7 @@ void parse_fsm(string input, string property, string output, int time){
 
   Z3_set_ast_print_mode(c, Z3_PRINT_SMTLIB_FULL);
 
-
   solver s(c);
-
-  params p(c);
-  p.set("pp.no_lets", true);
-  s.set(p);
-
-
 
   vector<string> stateInv;
 
@@ -984,7 +981,7 @@ void parse_fsm(string input, string property, string output, int time){
   // p.set("smt.simplify_assignments", false);
 
 
-  printSolverAssertions(c, s, output);
+  printSolverAssertions(c, s, output, stateInvFun);
 
 }
 
