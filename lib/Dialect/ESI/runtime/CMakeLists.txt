@@ -31,7 +31,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
-set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
+set(CMAKE_BUILD_RPATH
+      "${CMAKE_BUILD_RPATH}:${CMAKE_BINARY_DIR}/lib:$ORIGIN/../lib")
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
@@ -274,10 +275,10 @@ if(Python3_FOUND)
       add_custom_command(
           TARGET esiCppAccel
           POST_BUILD
-          COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}"
+          COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/python"
               python -m pybind11_stubgen 
                 -o "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
-                esiCppAccel
+                esiaccel.esiCppAccel
       )
     else()
       message(STATUS "pybind11_stubgen not found. Skipping stub generation.")
