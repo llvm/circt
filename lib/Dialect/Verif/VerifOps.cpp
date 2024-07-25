@@ -98,13 +98,28 @@ LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ContractOp::verifyRegions() {
+  // Retrieve the number of inputs from the parent module
+  auto parent = (*this)->getParentOfType<hw::HWModuleOp>();
+  // Sanity check: parent should always be a hw.module
+  if (!parent)
+    return emitOpError() << "parent of contract must be an hw.module!";
+
+  auto nInputsInModule = parent.getNumInputPorts();
+  auto nOutputsInModule = parent.getNumOutputPorts();
+  auto nOps = (*this)->getNumOperands();
+
   // Check that the region block arguments match the op's inputs
-  if (getNumRegionArgs() != (*this)->getNumOperands())
+  if (nInputsInModule != nOps)
+    return emitOpError() << "contract must have the same number of arguments "
+                         << "as the number of inputs in the parent module!";
+
+  // Check that the region block arguments match the op's inputs
+  if (getNumRegionArgs() != (nOps + nOutputsInModule))
     return emitOpError() << "region must have the same number of arguments "
-                         << "as the number of inputs!";
+                         << "as the number of arguments in the parent module!";
 
   // Check that the region block arguments share the same types as the inputs
-  if (getBody().front().getArgumentTypes() != (*this)->getOperandTypes())
+  if (getBody().front().getArgumentTypes() != parent.getPortTypes())
     return emitOpError() << "region must have the same type of arguments "
                          << "as the type of inputs!";
 

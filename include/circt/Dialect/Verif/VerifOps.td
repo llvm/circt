@@ -492,22 +492,4 @@ def EnsureOp : RequireLikeOp<"ensure">{
   }];
 }
 
-def ResultOp : VerifOp<"result", [HasParent<"verif::ContractOp">]>{
-  let summary = "define a symbolic reference to the outputs of the module";
-  let description = [{
-    This operation defines a set of symbolic references to each output of the 
-    module within which this contract is defined. This means that a single 
-    reference of result will result in as many SSA values as the module has 
-    outputs, with each result corresponding to one output. This is needed 
-    for when the instance of the module will be replaced 
-    by its contract, in which case the results will have all of the postconditions 
-    used to assume its behavior. This is a purely symbolic construct and doesn't 
-    carry any meaning outside of a `verif.contract`.  
-  }];
-
-  let results = (outs Variadic<AnyType>:$result);
-
-  let assemblyFormat = "attr-dict `:` type(results)";
-}
-
 #endif // CIRCT_DIALECT_VERIF_VERIFOPS_TD

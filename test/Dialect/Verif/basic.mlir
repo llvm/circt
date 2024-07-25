@@ -59,8 +59,8 @@ verif.formal @formal1(k = 20) {
 hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
   // CHECK: verif.contract(%foo) : (i8) {
   verif.contract (%foo) : (i8) {
-    // CHECK: ^bb0(%[[ARG:.+]]: i8):
-    ^bb0(%arg1 : i8): 
+    // CHECK: ^bb0(%[[ARG:.+]]: i8, %[[OUT:.+]]: i8, %[[OUT1:.+]]: i8):
+    ^bb0(%arg1 : i8, %bar.0 : i8, %bar.1 : i8): 
       // CHECK: %[[C0:.+]] = hw.constant 0 : i8
       %c0_8 = hw.constant 0 : i8 
       // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %[[ARG]], %[[C0]] : i8
@@ -68,11 +68,9 @@ hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) {
       // CHECK: verif.require %[[PREC]] : i1
       verif.require %prec : i1
 
-      // CHECK: %[[RES:.+]]:2 = verif.result : i8, i8
-      %bar.0, %bar.1 = verif.result : i8, i8  
-      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[RES]]#0, %[[ARG]] : i8
+      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[OUT]], %[[ARG]] : i8
       %post = comb.icmp bin ugt %bar.0, %arg1 : i8
-      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[RES]]#1, %[[ARG]] : i8
+      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[OUT1]], %[[ARG]] : i8
       %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
       // CHECK: verif.ensure %[[P0]] : i1
       verif.ensure %post : i1
