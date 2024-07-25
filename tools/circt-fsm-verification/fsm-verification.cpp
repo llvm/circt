@@ -896,7 +896,7 @@ void parse_fsm(string input, string property, string output, int time) {
 
   // llvm::outs()<<"variables size: "<<variables.size();
 
-  // for(int i=numArgs; i<int(variables.size()); i++){
+  for(int i=numArgs; i<int(variables.size()); i++){
   //   // todo ma che porcata mi sono inventata qui
   //   // if(i==1){
   //   //   bool init_value =
@@ -905,12 +905,12 @@ void parse_fsm(string input, string property, string output, int time) {
   //   is "<<init_value;
   //   //   solverVarsInit.at(i) = c.bool_val(init_value);
   //   // } else {
-  //     int init_value =
-  //     stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
-  //     // llvm::outs()<<"\ninit value of "<<variables[i].first.to_string()<<"
-  //     is "<<init_value; solverVarsInit.at(i) = c.int_val(init_value);
+      int init_value =
+      stoi(variables[i].first.to_string().substr(variables[i].first.to_string().find("_")+1));
+  //     // llvm::outs()<<"\ninit value of "<<variables[i].first.to_string()<<" is "<<init_value; 
+      solverVarsInit[i] = c.int_val(init_value);
   //   // }
-  // }
+  }
   // solverVarsInit.at(solverVarsInit.size()-1) = c.int_val(0);
   for (int i = 0; i < numArgs; i++) {
     solverVarsInit[i] = argInputs[i](0);
@@ -926,17 +926,15 @@ void parse_fsm(string input, string property, string output, int time) {
 
   // llvm::outs()<<stateInvFun.at(transitions.at(0).from).to_string()<<"\n\n";
   // initialize time to 0
-  expr initValues = initValConstraints(solverVarsInit, variables, c);
+  // expr initValues = initValConstraints(solverVarsInit, variables, c);
   expr initState =
       (stateInvFun[0](solverVarsInit.size(), solverVarsInit.data()));
   expr body =
-      implies((solverVarsInit[solverVarsInit.size() - 1] == 0 && initValues),
+      implies((solverVarsInit[solverVarsInit.size() - 1] == 0),
               initState);
   // // // initial condition
   s.add(forall(solverVarsInit[solverVarsInit.size() - 1],
-               nestedForall(solverVarsInit, body, numArgs, numOutputs)));
-  s.add(forall(solverVarsInit[solverVarsInit.size() - 1],
-               nestedForall(solverVarsInit, body, numArgs, numOutputs)));
+               body));
 
   // llvm::outs()<<"\n\n"<<nested.to_string();
   // s.add(nested);
