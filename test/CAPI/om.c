@@ -22,14 +22,16 @@ void testEvaluator(MlirContext ctx) {
       "module {"
       "  om.class @Test(%param: !om.integer) {"
       "    %0 = om.object @Child() : () -> !om.class.type<@Child>"
-      "    om.class.fields {field_names = [\"field\", \"child\"]} %param, %0 : !om.integer, !om.class.type<@Child>"
+      "    om.class.fields {field_names = [\"field\", \"child\"]} %param, %0 : "
+      "!om.integer, !om.class.type<@Child>"
       "  }"
       "  om.class @Child() {"
       "    %0 = om.constant 14 : i64"
       "    %1 = om.constant 15 : i64"
       "    %2 = om.list_create %0, %1 : i64"
       "    %3 = om.tuple_create %2, %0 : !om.list<i64>, i64"
-      "    om.class.fields {field_names = [\"foo\", \"bar\", \"baz\"]} %0, %2, %3 : i64, !om.list<i64>, tuple<!om.list<i64>, i64>"
+      "    om.class.fields {field_names = [\"foo\", \"bar\", \"baz\"]} %0, %2, "
+      "%3 : i64, !om.list<i64>, tuple<!om.list<i64>, i64>"
       "  }"
       "}";
 

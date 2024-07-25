@@ -209,9 +209,8 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   for (auto name : fieldNames) {
     fields.push_back(StringAttr::get(op.getContext(), name));
   }
-  op.getOperation()->setAttr(
-      "field_names",
-      mlir::ArrayAttr::get(op.getContext(), fields));
+  op.getOperation()->setAttr("field_names",
+                             mlir::ArrayAttr::get(op.getContext(), fields));
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
@@ -236,19 +235,16 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 
 llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
   llvm::SmallVector<Field> result;
-  ClassFieldsOp fieldsOp = cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+  ClassFieldsOp fieldsOp =
+      cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
   auto fields = fieldsOp->getOperands();
-  if (fields.empty()) return result;
+  if (fields.empty())
+    return result;
 
-  auto fieldNames =
-      cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
+  auto fieldNames = cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
   for (size_t i = 0; i < fields.size(); i++) {
     auto field = fields[i];
-    result.push_back({
-      cast<StringAttr>(fieldNames[i]),
-      field,
-      field.getLoc()
-    });
+    result.push_back({cast<StringAttr>(fieldNames[i]), field, field.getLoc()});
   }
   return result;
 }

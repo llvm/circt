@@ -62,7 +62,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
             auto result =
                 classLike.walk([&](ClassFieldsOp fieldsOp) -> WalkResult {
                   auto fields = fieldsOp.getFields();
-                  if (fields.empty()) return WalkResult::advance();
+                  if (fields.empty())
+                    return WalkResult::advance();
 
                   auto fieldNames =
                       cast<ArrayAttr>(fieldsOp->getAttr("field_names"));

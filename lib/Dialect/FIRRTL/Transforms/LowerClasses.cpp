@@ -971,7 +971,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
     op.erase();
   }
-  auto op = builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
+  auto op =
+      builder.create<ClassFieldsOp>(builder.getFusedLoc(locs), fieldValues);
   op.getOperation()->setAttr(
       "field_names", mlir::ArrayAttr::get(classOp.getContext(), opNames));
 
