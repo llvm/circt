@@ -3,9 +3,9 @@ import os
 
 reps = 10
 
-folder = "../smtlib-fsm/err-p2/"
+folder = "../smtlib-fsm/linear-p2/"
 
-outputfile = open("z3-err-p2.txt", "w")
+outputfile = open("z3-linear-p2.txt", "w")
 
 for file in os.listdir(folder):
     print(file)
