@@ -200,9 +200,18 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   Block *body = &classOp.getRegion().emplaceBlock();
   auto prevLoc = odsBuilder.saveInsertionPoint();
   odsBuilder.setInsertionPointToEnd(body);
-  for (auto [name, type] : llvm::zip(fieldNames, fieldTypes))
-    odsBuilder.create<circt::om::ClassFieldOp>(loc, name,
-                                               body->addArgument(type, loc));
+  SmallVector<Value> args;
+  for (auto type : fieldTypes) {
+    args.push_back(body->addArgument(type, loc));
+  }
+  auto op = odsBuilder.create<ClassFieldsOp>(loc, args);
+  SmallVector<Attribute> fields;
+  for (auto name : fieldNames) {
+    fields.push_back(StringAttr::get(op.getContext(), name));
+  }
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(), fields));
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
@@ -229,6 +238,8 @@ llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
   llvm::SmallVector<Field> result;
   ClassFieldsOp fieldsOp = cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
   auto fields = fieldsOp->getOperands();
+  if (fields.empty()) return result;
+
   auto fieldNames =
       cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
   for (size_t i = 0; i < fields.size(); i++) {

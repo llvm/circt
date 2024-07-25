@@ -166,7 +166,9 @@ TEST(EvaluatorTests, GetFieldInvalidName) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");
-  cls.getBody().emplaceBlock();
+  auto &body = cls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&body);
+  builder.create<ClassFieldsOp>(SmallVector<Value>());
 
   Evaluator evaluator(mod);
 
@@ -245,7 +247,12 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   builder.setInsertionPointToStart(&body);
   auto constant = builder.create<ConstantOp>(
       circt::om::IntegerAttr::get(&context, builder.getI32IntegerAttr(42)));
-  builder.create<ClassFieldOp>("field", constant);
+  SmallVector<Value> fields = {constant};
+  auto op = builder.create<ClassFieldsOp>(fields);
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           mlir::StringAttr::get(op.getContext(), "field")));
 
   Evaluator evaluator(mod);
 
@@ -289,7 +296,11 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldOp>("field", object);
+  auto op = builder.create<ClassFieldsOp>(SmallVector<Value>({object}));
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           mlir::StringAttr::get(op.getContext(), "field")));
 
   Evaluator evaluator(mod);
 
@@ -346,7 +357,11 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
       builder.create<ObjectFieldOp>(builder.getI32Type(), object,
                                     builder.getArrayAttr(FlatSymbolRefAttr::get(
                                         builder.getStringAttr("field"))));
-  builder.create<ClassFieldOp>("field", field);
+  auto op = builder.create<ClassFieldsOp>(SmallVector<Value>({field}));
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           mlir::StringAttr::get(op.getContext(), "field")));
 
   Evaluator evaluator(mod);
 
@@ -383,15 +398,22 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
-  innerCls.getBody().emplaceBlock();
+  auto &innerBody = innerCls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&innerBody);
+  builder.create<ClassFieldsOp>(SmallVector<Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
-  builder.create<ClassFieldOp>("field1", object);
-  builder.create<ClassFieldOp>("field2", object);
+  SmallVector<Value> fields = {object, object};
+  auto op = builder.create<ClassFieldsOp>(fields);
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           {mlir::StringAttr::get(op.getContext(), "field1"),
+                            mlir::StringAttr::get(op.getContext(), "field2")}));
 
   Evaluator evaluator(mod);
 
@@ -443,7 +465,9 @@ TEST(EvaluatorTests, AnyCastObject) {
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto innerCls = builder.create<ClassOp>("MyInnerClass");
-  innerCls.getBody().emplaceBlock();
+  auto &innerBody = innerCls.getBody().emplaceBlock();
+  builder.setInsertionPointToStart(&innerBody);
+  builder.create<ClassFieldsOp>(SmallVector<Value>());
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   auto cls = builder.create<ClassOp>("MyClass");
@@ -451,7 +475,12 @@ TEST(EvaluatorTests, AnyCastObject) {
   builder.setInsertionPointToStart(&body);
   auto object = builder.create<ObjectOp>(innerCls, body.getArguments());
   auto cast = builder.create<AnyCastOp>(object);
-  builder.create<ClassFieldOp>("field", cast);
+  SmallVector<Value> fields = {cast};
+  auto op = builder.create<ClassFieldsOp>(fields);
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           mlir::StringAttr::get(op.getContext(), "field")));
 
   Evaluator evaluator(mod);
 
@@ -498,7 +527,12 @@ TEST(EvaluatorTests, AnyCastParam) {
   auto cast = builder.create<AnyCastOp>(body.getArgument(0));
   SmallVector<Value> objectParams = {cast};
   auto object = builder.create<ObjectOp>(innerCls, objectParams);
-  builder.create<ClassFieldOp>("field", object);
+  SmallVector<Value> fields = {object};
+  auto op = builder.create<ClassFieldsOp>(fields);
+  op.getOperation()->setAttr(
+      "field_names",
+      mlir::ArrayAttr::get(op.getContext(),
+                           mlir::StringAttr::get(op.getContext(), "field")));
 
   Evaluator evaluator(mod);
 
@@ -527,16 +561,14 @@ TEST(EvaluatorTests, InstantiateGraphRegion) {
   StringRef module =
       "!ty = !om.class.type<@LinkedList>"
       "om.class @LinkedList(%n: !ty, %val: !om.string) {"
-      "  om.class.field @n, %n : !ty"
-      "  om.class.field @val, %val : !om.string"
+      "  om.class.fields {field_names = [\"n\", \"val\"]} %n, %val : !ty, !om.string"
       "}"
       "om.class @ReferenceEachOther() {"
       "  %str = om.constant \"foo\" : !om.string"
       "  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string"
       "  %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty"
       "  %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty"
-      "  om.class.field @field1, %0 : !ty"
-      "  om.class.field @field2, %1 : !ty"
+      "  om.class.fields {field_names = [\"field1\", \"field2\"]} %0, %1 : !ty, !ty"
       "}";
 
   DialectRegistry registry;
@@ -583,12 +615,12 @@ TEST(EvaluatorTests, InstantiateGraphRegion) {
 TEST(EvaluatorTests, InstantiateCycle) {
   StringRef module = "!ty = !om.class.type<@LinkedList>"
                      "om.class @LinkedList(%n: !ty) {"
-                     "  om.class.field @n, %n : !ty"
+                     "  om.class.fields {field_names = [\"n\"]} %n : !ty"
                      "}"
                      "om.class @ReferenceEachOther() {"
                      "  %val = om.object.field %0, [@n] : (!ty) -> !ty"
                      "  %0 = om.object @LinkedList(%val) : (!ty) -> !ty"
-                     "  om.class.field @field, %0 : !ty"
+                     "  om.class.fields {field_names = [\"field\"]} %0 : !ty"
                      "}";
 
   DialectRegistry registry;
@@ -618,7 +650,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
                   "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
                   "  %2 = om.integer.add %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -652,7 +684,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
                   "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
                   "  %1 = om.constant #om.integer<3 : si3> : !om.integer"
                   "  %2 = om.integer.mul %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -686,7 +718,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
                   "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
                   "  %1 = om.constant #om.integer<2 : si3> : !om.integer"
                   "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -720,7 +752,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
                   "  %0 = om.constant #om.integer<8 : si5> : !om.integer"
                   "  %1 = om.constant #om.integer<-2 : si3> : !om.integer"
                   "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -754,7 +786,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
                   "  %1 = om.constant #om.integer<36893488147419100000 : si66> "
                   ": !om.integer"
                   "  %2 = om.integer.shr %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -786,12 +818,12 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
 TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
   StringRef mod = "om.class @Class1() {"
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-                  "  om.class.field @value, %0 : !om.integer"
+                  "  om.class.fields {field_names = [\"value\"]} %0 : !om.integer"
                   "}"
                   ""
                   "om.class @Class2() {"
                   "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-                  "  om.class.field @value, %0 : !om.integer"
+                  "  om.class.fields {field_names = [\"value\"]} %0 : !om.integer"
                   "}"
                   ""
                   "om.class @IntegerBinaryArithmeticObjects() {"
@@ -804,7 +836,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
                   "(!om.class.type<@Class2>) -> !om.integer"
                   ""
                   "  %5 = om.integer.add %1, %3 : !om.integer"
-                  "  om.class.field @result, %5 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %5 : !om.integer"
                   "}";
 
   DialectRegistry registry;
@@ -837,13 +869,12 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
   StringRef mod =
       "om.class @Class1(%input: !om.integer) {"
       "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
-      "  om.class.field @value, %0 : !om.integer"
-      "  om.class.field @input, %input : !om.integer"
+      "  om.class.fields {field_names = [\"value\", \"input\"]} %0, %input : !om.integer, !om.integer"
       "}"
       ""
       "om.class @Class2() {"
       "  %0 = om.constant #om.integer<2 : si3> : !om.integer"
-      "  om.class.field @value, %0 : !om.integer"
+      "  om.class.fields {field_names = [\"value\"]} %0 : !om.integer"
       "}"
       ""
       "om.class @IntegerBinaryArithmeticObjectsDelayed() {"
@@ -856,7 +887,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
       "(!om.class.type<@Class2>) -> !om.integer"
       ""
       "  %5 = om.integer.add %1, %3 : !om.integer"
-      "  om.class.field @result, %5 : !om.integer"
+      "  om.class.fields {field_names = [\"result\"]} %5 : !om.integer"
       "}";
 
   DialectRegistry registry;
@@ -890,7 +921,7 @@ TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
                   "  %0 = om.constant #om.integer<1 : si3> : !om.integer"
                   "  %1 = om.constant #om.integer<2 : si4> : !om.integer"
                   "  %2 = om.integer.add %0, %1 : !om.integer"
-                  "  om.class.field @result, %2 : !om.integer"
+                  "  om.class.fields {field_names = [\"result\"]} %2 : !om.integer"
                   "}";
 
   DialectRegistry registry;

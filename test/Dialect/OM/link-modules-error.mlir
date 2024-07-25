@@ -26,11 +26,15 @@ module {
   }
   module {
     // expected-note @+1 {{class "A" is defined here}}
-    om.class @A() {}
+    om.class @A() {
+      om.class.fields
+    }
   }
   module {
     // expected-note @+1 {{class "A" is defined here}}
-    om.class @A() {}
+    om.class @A() {
+      om.class.fields
+    }
   }
 }
 
@@ -45,12 +49,13 @@ module {
     }
     om.class @UseA(%arg: i1) {
       %0 = om.object @A(%arg) : (i1) -> !om.class.type<@A>
+      om.class.fields
     }
   }
   module {
     // expected-note @+1 {{definition is here}}
     om.class @A(%arg: i2) {
-      om.class.field @a, %arg: i2
+      om.class.fields {field_names = ["a"]} %arg: i2
     }
   }
 }
@@ -67,6 +72,7 @@ module {
   module {
     // expected-note @+1 {{definition is here}}
     om.class @A() {
+      om.class.fields
     }
   }
 }
@@ -83,7 +89,7 @@ module {
     // expected-note @+1 {{definition is here}}
     om.class @A() {
       %0 = om.constant false
-      om.class.field @a, %0 : i1
+      om.class.fields {field_names = ["a"]} %0 : i1
     }
   }
 }
@@ -101,7 +107,7 @@ module {
     // expected-note @+1 {{definition is here}}
     om.class @A() {
       %0 = om.constant false
-      om.class.field @a, %0 : i1
+      om.class.fields {field_names = ["a"]} %0 : i1
     }
   }
 }
