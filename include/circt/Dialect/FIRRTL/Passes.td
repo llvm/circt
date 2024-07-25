@@ -944,4 +944,28 @@ def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
   ];
 }
 
+def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
+  let summary = "Convert probes to signals.";
+  let description = [{
+    This pass transforms the design to replace probes with non-probe signals
+    that are explicitly routed through the design instead of remote access.
+    The result will not be ABI-compatible but provide similar behavior without the
+    use of potentially unsynthesizable cross-module references.
+
+    The pass will do a complete conversion or produce an error.
+
+    Not all FIRRTL designs with probes can be equivalently represented
+    with non-probes.
+
+    Run after LowerOpenAggs, ExpandWhens (so ref.define can always be replaced),
+    and any colored probes are removed through specialization.
+
+    Due to differences in width and reset inference, it is suggested to run
+    those first as well but not required.
+
+    RWProbes and related operations are not supported.
+  }];
+  let constructor = "circt::firrtl::createProbesToSignalsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

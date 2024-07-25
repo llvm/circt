@@ -49,6 +49,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   PrintFIRRTLFieldSource.cpp
   PrintInstanceGraph.cpp
   PrintNLATable.cpp
+  ProbesToSignals.cpp
   RandomizeRegisterInit.cpp
   RegisterOptimizer.cpp
   RemoveUnusedPorts.cpp
