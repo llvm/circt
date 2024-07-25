@@ -41,7 +41,7 @@ struct transition{
 void printSolverAssertions(z3::context &c, z3::solver &solver, string output) {
 
 	ofstream outfile;
-	outfile.open(output, ios::app);
+	outfile.open(output);
 
   z3::expr_vector assertions = solver.assertions();
 
