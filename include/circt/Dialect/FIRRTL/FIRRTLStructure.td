@@ -451,7 +451,7 @@ def LayerOp : FIRRTLOp<
 def FormalOp : FIRRTLOp<"formal", [
     IsolatedFromAbove,
     Symbol,
-    InstanceGraphModuleOpInterface,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
     NoTerminator,
     HasParent<"firrtl::CircuitOp">
 ]> {
