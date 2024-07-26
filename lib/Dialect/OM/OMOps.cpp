@@ -200,14 +200,14 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   Block *body = &classOp.getRegion().emplaceBlock();
   auto prevLoc = odsBuilder.saveInsertionPoint();
   odsBuilder.setInsertionPointToEnd(body);
-  SmallVector<Value> args;
-  for (auto type : fieldTypes) {
-    args.push_back(body->addArgument(type, loc));
-  }
-  SmallVector<Attribute> fields;
-  for (auto name : fieldNames) {
-    fields.push_back(StringAttr::get(classOp.getContext(), name));
-  }
+  SmallVector<Value> args =
+      llvm::map_to_vector(fieldTypes, [&](Type type) -> Value {
+        return body->addArgument(type, loc);
+      });
+  SmallVector<Attribute> fields =
+      llvm::map_to_vector(fieldNames, [&](StringRef name) -> Attribute {
+        return StringAttr::get(classOp.getContext(), name);
+      });
   classOp.addFields(odsBuilder, loc, fields, args);
   odsBuilder.restoreInsertionPoint(prevLoc);
 
