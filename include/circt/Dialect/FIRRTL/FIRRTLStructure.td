@@ -383,6 +383,75 @@ def ClassOp : FIRRTLModuleLike<"class", [
   }];
 }
 
+def FormalOp : FIRRTLModuleLike<"formal", [
+    DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>,
+    DeclareOpInterfaceMethods<FModuleLike, [
+      "getConventionAttr", "getConvention", "getLayersAttr",
+      "getLayers", "getPortDirectionsAttr", "getPortDirections", 
+      "getPortDirection", "getPortNamesAttr", "getPortNameAttr", 
+      "getPortTypesAttr", "getPortTypeAttr", "getPortAnnotationsAttr", 
+      "getPortLocationsAttr", "getPortSymbolsAttr", "hasPortSymbolAttr",
+      "getPortLocationAttr"
+    ]>,
+    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface, [
+      "getModuleName", "getModuleNameAttr"
+    ]>,
+    NoTerminator
+]> {
+  let summary = "A formal test definition.";
+  let description = [{
+    The `firrtl.formal` operation defines a formal verification problem in the same 
+    context as the rest of the design. This problem is solved using bounded model 
+    checking and should be given a bound k, which represents the number of cycles considered 
+    during model checking.
+
+    Example:
+    ```mlir
+
+    firrtl.formal @formal1(k=20) {
+      %bar, %out = firrtl.instance foo @Foo(in bar: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
+      %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
+      firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
+      %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
+      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
+      firrtl.assert %cond
+    }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, UI64Attr:$k);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $sym_name `(` `k` `=` $k `)` attr-dict-with-keyword $body
+  }];
+
+  let extraModuleClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBodyBlock()->begin(); }
+    iterator end() { return getBodyBlock()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBodyBlock()->getArguments();
+    }
+
+    // Return the block argument for the port with the specified index.
+    BlockArgument getArgument(size_t portNumber);
+
+    OpBuilder getBodyBuilder() {
+      assert(!getBody().empty() && "Unexpected empty 'body' region.");
+      Block &bodyBlock = getBody().front();
+      return OpBuilder::atBlockEnd(&bodyBlock);
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+    ArrayAttr getParameters();
+  }];
+}
+
 def ExtClassOp : FIRRTLModuleLike<"extclass", [
   DeclareOpInterfaceMethods<FModuleLike, [
     // ExtClassOps do not support port annotations or enabled layers.
@@ -445,42 +514,6 @@ def LayerOp : FIRRTLOp<
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
     $sym_name $convention attr-dict-with-keyword $body
-  }];
-}
-
-def FormalOp : FIRRTLOp<"formal", [
-    IsolatedFromAbove,
-    Symbol,
-    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
-    NoTerminator,
-    HasParent<"firrtl::CircuitOp">
-]> {
-  let summary = "A formal test definition.";
-  let description = [{
-    The `firrtl.formal` operation defines a formal verification problem in the same 
-    context as the rest of the design. This problem is solved using bounded model 
-    checking and should be given a bound k, which represents the number of cycles considered 
-    during model checking.
-
-    Example:
-    ```mlir
-
-    firrtl.formal @formal1(k=20) {
-      %bar, %out = firrtl.instance foo @Foo(in bar: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
-      %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
-      firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
-      %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
-      %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
-      firrtl.assert %cond
-    }
-    ```
-  }];
-
-  let arguments = (ins SymbolNameAttr:$sym_name, UI64Attr:$k);
-  let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-    $sym_name `(` `k` `=` $k `)` attr-dict-with-keyword $body
   }];
 }
 

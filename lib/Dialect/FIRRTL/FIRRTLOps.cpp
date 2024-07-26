@@ -3352,9 +3352,118 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+//===----------------------------------------------------------------------===//
+// FormalOp and SymbolicOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+}
+
+StringRef FormalOp::getModuleName() { return getSymName(); }
+
+mlir::StringAttr FormalOp::getModuleNameAttr() {
+  return StringAttr::get(getContext(), getModuleName());
+}
+
+ArrayAttr FormalOp::getParameters() { return {}; }
+
+///////////////////////////////////////////
+// Ports: FormalOp can not contain ports
+///////////////////////////////////////////
+
+SmallVector<PortInfo> FormalOp::getPorts() {
+  return SmallVector<PortInfo, 0>();
+}
+
+void FormalOp::erasePorts(const llvm::BitVector &portIndices) {}
+
+void FormalOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {}
+
+SmallVector<::circt::hw::PortInfo> FormalOp::getPortList() {
+  return SmallVector<::circt::hw::PortInfo, 0>();
+}
+
+::circt::hw::PortInfo FormalOp::getPort(size_t idx) {
+  return ::circt::hw::PortInfo();
+}
+
+mlir::DenseBoolArrayAttr FormalOp::getPortDirectionsAttr() {
+  return mlir::DenseBoolArrayAttr::get(getContext(), ArrayRef<bool>());
+}
+
+ArrayRef<bool> FormalOp::getPortDirections() { return ArrayRef<bool>(); }
+
+Direction FormalOp::getPortDirection(size_t portIndex) {
+  return Direction::Out;
+}
+
+mlir::ArrayAttr FormalOp::getPortNamesAttr() {
+  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
+}
+
+StringAttr FormalOp::getPortNameAttr(size_t portIndex) {
+  return StringAttr::get(getContext(), StringRef());
+}
+
+mlir::ArrayAttr FormalOp::getPortTypesAttr() {
+  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
+}
+
+TypeAttr FormalOp::getPortTypeAttr(size_t portIndex) { return TypeAttr(); }
+
+mlir::ArrayAttr FormalOp::getPortAnnotationsAttr() {
+  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
+}
+
+mlir::ArrayAttr FormalOp::getPortLocationsAttr() {
+  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
+}
+
+mlir::ArrayAttr FormalOp::getPortSymbolsAttr() {
+  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
+}
+
+bool FormalOp::hasPortSymbolAttr(size_t portIndex) { return false; }
+
+LocationAttr FormalOp::getPortLocationAttr(size_t portIndex) {
+  return LocationAttr();
+}
+
+BlockArgument FormalOp::getArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
+///////////////////////////////////////////
+// Layers: FormalOp currently ignores layers
+///////////////////////////////////////////
+
+Convention FormalOp::getConvention() { return Convention::Internal; }
+
+ConventionAttr FormalOp::getConventionAttr() {
+  return ConventionAttr::get(getContext(), getConvention());
+}
+
+ArrayAttr FormalOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
+
+ArrayRef<Attribute> FormalOp::getLayers() { return getLayersAttr(); }
+
+// Don't allow formal ops to be removed if not used
+bool FormalOp::canDiscardOnUseEmpty() { return false; }
+
+void FormalOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                        mlir::OpAsmSetValueNameFn setNameFn) {
+  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
 void SymbolicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), getName());
 }
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
@@ -3377,6 +3486,10 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
