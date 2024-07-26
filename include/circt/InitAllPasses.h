@@ -64,7 +64,7 @@ inline void registerAllPasses() {
   esi::registerESIPasses();
   firrtl::registerPasses();
   fsm::registerPasses();
-  llhd::initLLHDTransformationPasses();
+  llhd::registerPasses();
   msft::registerPasses();
   om::registerPasses();
   seq::registerPasses();

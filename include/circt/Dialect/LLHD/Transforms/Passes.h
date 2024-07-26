@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/Pass.h"
 #include <memory>
 
 namespace circt {
@@ -35,8 +36,9 @@ std::unique_ptr<OperationPass<hw::HWModuleOp>> createEarlyCodeMotionPass();
 
 std::unique_ptr<OperationPass<hw::HWModuleOp>> createTemporalCodeMotionPass();
 
-/// Register the LLHD Transformation passes.
-void initLLHDTransformationPasses();
+#define GEN_PASS_DECL_DESEQUENTIALIZATION
+#define GEN_PASS_REGISTRATION
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
 
 } // namespace llhd
 } // namespace circt

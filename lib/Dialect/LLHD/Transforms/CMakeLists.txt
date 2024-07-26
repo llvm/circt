@@ -1,11 +1,11 @@
 add_circt_dialect_library(CIRCTLLHDTransforms
-  TemporalRegions.cpp
-  PassRegistration.cpp
-  ProcessLoweringPass.cpp
+  DesequentializationPass.cpp
+  EarlyCodeMotionPass.cpp
   FunctionEliminationPass.cpp
   MemoryToBlockArgumentPass.cpp
-  EarlyCodeMotionPass.cpp
+  ProcessLoweringPass.cpp
   TemporalCodeMotionPass.cpp
+  TemporalRegions.cpp
 
   DEPENDS
   CIRCTLLHDTransformsIncGen
@@ -13,6 +13,7 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTSeq
   CIRCTLLHD
   MLIRIR
   MLIRControlFlowDialect
