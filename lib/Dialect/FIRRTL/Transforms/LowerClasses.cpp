@@ -924,7 +924,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
   // Clone the property ops from the FIRRTL Class or Module to the OM Class.
   SmallVector<Operation *> opsToErase;
-  ClassOpBuilder builder = ClassOpBuilder::atBlockBegin(classOp.getBodyBlock());
+  OpBuilder builder = OpBuilder::atBlockBegin(classOp.getBodyBlock());
   for (auto &op : moduleLike->getRegion(0).getOps()) {
     // Check if any operand is a property.
     auto propertyOperands = llvm::any_of(op.getOperandTypes(), [](Type type) {
@@ -971,7 +971,8 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
 
     op.erase();
   }
-  builder.createClassFieldsOp(locs, fieldNames, fieldValues);
+
+  classOp.addFields(builder, locs, fieldNames, fieldValues);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.

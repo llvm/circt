@@ -204,13 +204,11 @@ circt::om::ClassOp circt::om::ClassOp::buildSimpleClassOp(
   for (auto type : fieldTypes) {
     args.push_back(body->addArgument(type, loc));
   }
-  auto op = odsBuilder.create<ClassFieldsOp>(loc, args);
   SmallVector<Attribute> fields;
   for (auto name : fieldNames) {
-    fields.push_back(StringAttr::get(op.getContext(), name));
+    fields.push_back(StringAttr::get(classOp.getContext(), name));
   }
-  op.getOperation()->setAttr("field_names",
-                             mlir::ArrayAttr::get(op.getContext(), fields));
+  classOp.addFields(odsBuilder, loc, fields, args);
   odsBuilder.restoreInsertionPoint(prevLoc);
 
   return classOp;
@@ -247,6 +245,21 @@ llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
     result.push_back({cast<StringAttr>(fieldNames[i]), field, field.getLoc()});
   }
   return result;
+}
+
+void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
+                                   llvm::ArrayRef<mlir::Attribute> fieldNames,
+                                   llvm::ArrayRef<mlir::Value> fieldValues) {
+  auto op = builder.create<ClassFieldsOp>(loc, fieldValues);
+  op.getOperation()->setAttr(
+      "field_names", mlir::ArrayAttr::get(this->getContext(), fieldNames));
+}
+
+void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
+                                   llvm::ArrayRef<mlir::Location> locs,
+                                   llvm::ArrayRef<mlir::Attribute> fieldNames,
+                                   llvm::ArrayRef<mlir::Value> fieldValues) {
+  this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldValues);
 }
 
 //===----------------------------------------------------------------------===//

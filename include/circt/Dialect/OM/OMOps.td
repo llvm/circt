@@ -72,6 +72,7 @@ class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
 
 def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
   let extraClassDeclaration = [{
+
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
     // Build the ClassOp with `name` and `formalParamNames`. Then add
@@ -88,6 +89,14 @@ def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp
     }
 
     llvm::SmallVector<Field> getFields();
+    void addFields(mlir::OpBuilder &builder, mlir::Location loc,
+                   llvm::ArrayRef<mlir::Attribute> fieldNames,
+                   llvm::ArrayRef<mlir::Value> fieldValues);
+
+    void addFields(mlir::OpBuilder &builder,
+                   llvm::ArrayRef<mlir::Location> locs,
+                   llvm::ArrayRef<mlir::Attribute> fieldNames,
+                   llvm::ArrayRef<mlir::Value> fieldValues);
   }];
 }
 
