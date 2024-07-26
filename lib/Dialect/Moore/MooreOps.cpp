@@ -301,8 +301,10 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
                     addressOp);
                 createFields.push_back(field);
               }
-              rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(),
-                                                          createFields);
+              auto value = rewriter.create<StructCreateOp>(
+                  op->getLoc(), op.getType().getNestedType(), createFields);
+              rewriter.replaceOpWithNewOp<AddressOp>(
+                  op, RefType::get(value.getType()), value);
               return success();
             })
         .Default([](auto &) { return failure(); });
@@ -531,7 +533,7 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 LogicalResult StructCreateOp::verify() {
   /// checks if the types of the inputs are exactly equal to the types of the
   /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
+  return TypeSwitch<Type, LogicalResult>(getType())
       .Case<StructType, UnpackedStructType>([this](auto &type) {
         auto members = type.getMembers();
         auto inputs = getInput();
@@ -634,14 +636,17 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
     return structInject.getFieldNameAttr() == getFieldNameAttr()
                ? structInject.getNewValue()
                : Value();
-  if (auto structCreate = getInput().getDefiningOp<StructCreateOp>()) {
-    auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
-                   getInput().getType().getNestedType())
-                   .Case<StructType, UnpackedStructType>([this](auto &type) {
-                     return type.getFieldIndex(getFieldNameAttr());
-                   })
-                   .Default([](auto &) { return std::nullopt; });
-    return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+  if (auto addressOp = getInput().getDefiningOp<AddressOp>()) {
+    if (auto structCreate =
+            addressOp.getInput().getDefiningOp<StructCreateOp>()) {
+      auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
+                     getInput().getType().getNestedType())
+                     .Case<StructType, UnpackedStructType>([this](auto &type) {
+                       return type.getFieldIndex(getFieldNameAttr());
+                     })
+                     .Default([](auto &) { return std::nullopt; });
+      return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+    }
   }
   return {};
 }
@@ -822,7 +827,10 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
       createFields.push_back(it->second);
     }
     op.getInputMutable();
-    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), createFields);
+    auto value = rewriter.create<StructCreateOp>(
+        op->getLoc(), op.getType().getNestedType(), createFields);
+    rewriter.replaceOpWithNewOp<AddressOp>(op, RefType::get(value.getType()),
+                                           value);
     return success();
   }
 

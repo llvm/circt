@@ -1039,7 +1039,7 @@ def StructCreateOp : MooreOp<"struct_create", [Pure]> {
     See IEEE 1800-2017 § 7.2. "Structures".
   }];
   let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs RefType:$result);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
