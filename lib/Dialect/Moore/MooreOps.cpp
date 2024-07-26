@@ -287,47 +287,54 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
 
 LogicalResult VariableOp::canonicalize(VariableOp op,
                                        ::mlir::PatternRewriter &rewriter) {
-  if (auto initial = op.getInitial()) {
-    return TypeSwitch<Type, LogicalResult>(op.getType().getNestedType())
-        .Case<StructType, UnpackedStructType>(
-            [&op, &rewriter, &initial](auto &type) {
-              auto addressOp = rewriter.create<AddressOp>(
-                  op.getLoc(),
-                  RefType::get(cast<UnpackedType>(initial.getType())), initial);
-              SmallVector<Value> createFields;
-              for (const auto &member : type.getMembers()) {
-                auto field = rewriter.create<StructExtractOp>(
-                    op->getLoc(), cast<UnpackedType>(member.type), member.name,
-                    addressOp);
-                createFields.push_back(field);
-              }
-              auto value = rewriter.create<StructCreateOp>(
-                  op->getLoc(), op.getType().getNestedType(), createFields);
-              rewriter.replaceOpWithNewOp<AddressOp>(
-                  op, RefType::get(value.getType()), value);
-              return success();
-            })
-        .Default([](auto &) { return failure(); });
-  }
 
-  Value initial;
-  for (auto *user : op->getUsers())
-    if (isa<ContinuousAssignOp>(user) &&
-        (user->getOperand(0) == op.getResult())) {
-      // Don't canonicalize the multiple continuous assignment to the same
-      // variable.
-      if (initial)
+  return TypeSwitch<Type, LogicalResult>(op.getType().getNestedType())
+      .Case<StructType, UnpackedStructType>([&op, &rewriter](auto &type) {
+        SmallVector<Value> createFields;
+        if (auto initial = op.getInitial()) {
+          auto addressOp = rewriter.create<AddressOp>(
+              op.getLoc(), RefType::get(cast<UnpackedType>(initial.getType())),
+              initial);
+          for (const auto &member : type.getMembers()) {
+            auto field = rewriter.create<StructExtractOp>(
+                op->getLoc(), cast<UnpackedType>(member.type), member.name,
+                addressOp);
+            createFields.push_back(field);
+          }
+        } else {
+          for (const auto &member : type.getMembers()) {
+            // todo: support 4-domain value
+            auto field = rewriter.create<ConstantOp>(
+                op->getLoc(), cast<IntType>(member.type), 0);
+            createFields.push_back(field);
+          }
+        }
+        auto value = rewriter.create<StructCreateOp>(
+            op->getLoc(), op.getType().getNestedType(), createFields);
+        rewriter.replaceOpWithNewOp<AddressOp>(
+            op, RefType::get(value.getType()), value);
+        return success();
+      })
+      .Default([&op, &rewriter](auto &) {
+        Value initial;
+        for (auto *user : op->getUsers())
+          if (isa<ContinuousAssignOp>(user) &&
+              (user->getOperand(0) == op.getResult())) {
+            // Don't canonicalize the multiple continuous assignment to the same
+            // variable.
+            if (initial)
+              return failure();
+            initial = user->getOperand(1);
+          }
+
+        if (initial) {
+          rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
+                                                     op.getNameAttr(), initial);
+          return success();
+        }
+
         return failure();
-      initial = user->getOperand(1);
-    }
-
-  if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                               op.getNameAttr(), initial);
-    return success();
-  }
-
-  return failure();
+      });
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
