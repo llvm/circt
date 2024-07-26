@@ -307,3 +307,19 @@ def LLHD_RegOp : LLHD_Op<"reg", [
 
   let hasVerifier = 1;
 }
+
+def DelayOp : LLHD_Op<"delay", [Pure, SameOperandsAndResultType]> {
+  let summary = "specifies value propagation delay";
+  let description = [{
+    This operation propagates all value changes of the input to the output after
+    the specified time delay.
+    Reference values are not supported (e.g., pointers, inout, etc.)
+    since the store-like operation used for those types should encode a delayed
+    store.
+  }];
+
+  let arguments = (ins HWNonInOutType:$input, LLHD_TimeAttr:$delay);
+  let results = (outs HWNonInOutType:$result);
+
+  let assemblyFormat = "$input `by` $delay attr-dict `:` type($result)";
+}
