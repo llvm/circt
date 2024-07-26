@@ -379,17 +379,14 @@ struct RvalueExprVisitor {
       mlir::emitError(loc, "literals with X or Z bits not supported");
       return {};
     }
-    if (value.getBitWidth() > 64) {
-      mlir::emitError(loc, "unsupported bit width: literal is ")
-          << value.getBitWidth() << " bits wide; only 64 supported";
-      return {};
-    }
     auto intType =
         moore::IntType::get(context.getContext(), value.getBitWidth(),
                             value.hasUnknown() ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    auto truncValue = value.as<uint64_t>().value();
-    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    Value result = builder.create<moore::ConstantOp>(
+        loc, intType,
+        APInt(value.getBitWidth(),
+              ArrayRef<uint64_t>(value.getRawPtr(), value.getNumWords())));
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
