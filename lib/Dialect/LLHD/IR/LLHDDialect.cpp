@@ -15,11 +15,8 @@
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/StringRef.h"
 
 using namespace circt;
 using namespace circt::llhd;

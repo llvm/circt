@@ -6,128 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the LLHD ops.
+// This file implements the LLHD ops.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
-#include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringSet.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace mlir;
-
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT = function_ref<ElementValueT(ElementValueT)>>
-static Attribute constFoldUnaryOp(ArrayRef<Attribute> operands,
-                                  const CalculationT &calculate) {
-  assert(operands.size() == 1 && "unary op takes one operand");
-  if (!operands[0])
-    return {};
-
-  if (auto val = dyn_cast<AttrElementT>(operands[0])) {
-    return AttrElementT::get(val.getType(), calculate(val.getValue()));
-  } else if (auto val = dyn_cast<SplatElementsAttr>(operands[0])) {
-    // Operand is a splat so we can avoid expanding the value out and
-    // just fold based on the splat value.
-    auto elementResult = calculate(val.getSplatValue<ElementValueT>());
-    return DenseElementsAttr::get(val.getType(), elementResult);
-  }
-  if (auto val = dyn_cast<ElementsAttr>(operands[0])) {
-    // Operand is ElementsAttr-derived; perform an element-wise fold by
-    // expanding the values.
-    auto valIt = val.getValues<ElementValueT>().begin();
-    SmallVector<ElementValueT, 4> elementResults;
-    elementResults.reserve(val.getNumElements());
-    for (size_t i = 0, e = val.getNumElements(); i < e; ++i, ++valIt)
-      elementResults.push_back(calculate(*valIt));
-    return DenseElementsAttr::get(val.getType(), elementResults);
-  }
-  return {};
-}
-
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT = function_ref<
-              ElementValueT(ElementValueT, ElementValueT, ElementValueT)>>
-static Attribute constFoldTernaryOp(ArrayRef<Attribute> operands,
-                                    const CalculationT &calculate) {
-  assert(operands.size() == 3 && "ternary op takes three operands");
-  if (!operands[0] || !operands[1] || !operands[2])
-    return {};
-
-  if (isa<AttrElementT>(operands[0]) && isa<AttrElementT>(operands[1]) &&
-      isa<AttrElementT>(operands[2])) {
-    auto fst = cast<AttrElementT>(operands[0]);
-    auto snd = cast<AttrElementT>(operands[1]);
-    auto trd = cast<AttrElementT>(operands[2]);
-
-    return AttrElementT::get(
-        fst.getType(),
-        calculate(fst.getValue(), snd.getValue(), trd.getValue()));
-  }
-  if (isa<SplatElementsAttr>(operands[0]) &&
-      isa<SplatElementsAttr>(operands[1]) &&
-      isa<SplatElementsAttr>(operands[2])) {
-    // Operands are splats so we can avoid expanding the values out and
-    // just fold based on the splat value.
-    auto fst = cast<SplatElementsAttr>(operands[0]);
-    auto snd = cast<SplatElementsAttr>(operands[1]);
-    auto trd = cast<SplatElementsAttr>(operands[2]);
-
-    auto elementResult = calculate(fst.getSplatValue<ElementValueT>(),
-                                   snd.getSplatValue<ElementValueT>(),
-                                   trd.getSplatValue<ElementValueT>());
-    return DenseElementsAttr::get(fst.getType(), elementResult);
-  }
-  if (isa<ElementsAttr>(operands[0]) && isa<ElementsAttr>(operands[1]) &&
-      isa<ElementsAttr>(operands[2])) {
-    // Operands are ElementsAttr-derived; perform an element-wise fold by
-    // expanding the values.
-    auto fst = cast<ElementsAttr>(operands[0]);
-    auto snd = cast<ElementsAttr>(operands[1]);
-    auto trd = cast<ElementsAttr>(operands[2]);
-
-    auto fstIt = fst.getValues<ElementValueT>().begin();
-    auto sndIt = snd.getValues<ElementValueT>().begin();
-    auto trdIt = trd.getValues<ElementValueT>().begin();
-    SmallVector<ElementValueT, 4> elementResults;
-    elementResults.reserve(fst.getNumElements());
-    for (size_t i = 0, e = fst.getNumElements(); i < e;
-         ++i, ++fstIt, ++sndIt, ++trdIt)
-      elementResults.push_back(calculate(*fstIt, *sndIt, *trdIt));
-    return DenseElementsAttr::get(fst.getType(), elementResults);
-  }
-  return {};
-}
-
-namespace {
-
-struct constant_int_all_ones_matcher {
-  bool match(Operation *op) {
-    APInt value;
-    return mlir::detail::constant_int_value_binder(&value).match(op) &&
-           value.isAllOnes();
-  }
-};
-
-} // anonymous namespace
 
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = dyn_cast<hw::InOutType>(type))
@@ -150,10 +46,6 @@ Type circt::llhd::getLLHDElementType(Type type) {
     return array.getElementType();
   return type;
 }
-
-//===---------------------------------------------------------------------===//
-// LLHD Operations
-//===---------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
 // ConstantTimeOp
