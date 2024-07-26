@@ -59,6 +59,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
             ClassLike classLike = entry.first;
             auto &table = entry.second;
+            // TODO: Change this to getFields API when moved to ClassLike
             auto result =
                 classLike.walk([&](ClassFieldsOp fieldsOp) -> WalkResult {
                   auto fields = fieldsOp.getFields();
