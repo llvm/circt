@@ -120,35 +120,53 @@ static void loadBackend(std::string backend) {
 
   // First, try the current directory.
   std::filesystem::path backendPath = backendFileName;
+  std::string backendPathStr;
   if (!std::filesystem::exists(backendPath)) {
     // Next, try the directory of the executable.
     backendPath = getExePath().parent_path().append(backendFileName);
     if (!std::filesystem::exists(backendPath)) {
-      // Finally, try
+      // Finally, try the directory of the library.
       backendPath = getLibPath().parent_path().append(backendFileName);
       if (!std::filesystem::exists(backendPath))
-        throw std::runtime_error("Backend library not found");
+        // If all else fails, just try the name.
+        backendPathStr = backendFileName;
     }
   }
+  // If the path was found, convert it to a string.
+  if (backendPathStr.empty())
+    backendPathStr = backendPath.string();
+  else
+    // Otherwise, signal that the path wasn't found by clearing the path and
+    // just use the name. (This is only used on Windows to add the same
+    // directory as the backend DLL to the DLL search path.)
+    backendPath.clear();
 
-  // Attempt to load it.
+    // Attempt to load it.
 #ifdef __linux__
-  void *handle = dlopen(backendPath.c_str(), RTLD_NOW | RTLD_GLOBAL);
+  void *handle = dlopen(backendPathStr.c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!handle)
     throw std::runtime_error("While attempting to load backend plugin: " +
                              std::string(dlerror()));
 #elif _WIN32
   // Set the DLL directory to the same directory as the backend DLL in case it
   // has transitive dependencies.
-  std::filesystem::path backendPathParent = backendPath.parent_path();
-  if (SetDllDirectoryA(backendPathParent.string().c_str()) == 0)
-    throw std::runtime_error("While setting DLL directory: " +
-                             std::to_string(GetLastError()));
+  if (backendPath != std::filesystem::path()) {
+    std::filesystem::path backendPathParent = backendPath.parent_path();
+    if (SetDllDirectoryA(backendPathParent.string().c_str()) == 0)
+      throw std::runtime_error("While setting DLL directory: " +
+                               std::to_string(GetLastError()));
+  }
+
   // Load the backend plugin.
-  HMODULE handle = LoadLibraryA(backendPath.string().c_str());
-  if (!handle)
+  HMODULE handle = LoadLibraryA(backendPathStr.c_str());
+  if (!handle) {
+    DWORD error = GetLastError();
+    if (error == ERROR_MOD_NOT_FOUND)
+      throw std::runtime_error("While attempting to load backend plugin: " +
+                               backendPathStr + " not found");
     throw std::runtime_error("While attempting to load backend plugin: " +
-                             std::to_string(GetLastError()));
+                             std::to_string(error));
+  }
 #else
 #eror "Unsupported platform"
 #endif
