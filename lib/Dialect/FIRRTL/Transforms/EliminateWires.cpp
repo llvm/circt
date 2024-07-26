@@ -51,7 +51,7 @@ struct EliminateWiresPass
     auto &dominance = getAnalysis<mlir::DominanceInfo>();
     std::deque<std::pair<WireOp, MatchingConnectOp>> worklist;
 
-    for (auto wire : op.getOps<WireOp>()) {
+    for (auto wire : op.template getOps<WireOp>()) {
       auto type = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
       if (!type || !type.isPassive()) {
         ++complexTypeWires;
@@ -96,7 +96,7 @@ struct EliminateWiresPass
 void EliminateWiresPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n";);
 
-  TypeSwitch<Operation *>(getOperation())
+  TypeSwitch<Operation *>(&(*getOperation()))
       .Case<FModuleOp, FExtModuleOp, FIntModuleOp, FMemModuleOp, ClassOp,
             ExtClassOp, FormalOp>([&](auto op) { runOnOp(op); })
       .Default([&](auto) {});
