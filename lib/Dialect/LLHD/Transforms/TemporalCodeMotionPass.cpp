@@ -118,8 +118,7 @@ struct TemporalCodeMotionPass
 
 void TemporalCodeMotionPass::runOnOperation() {
   for (auto proc : getOperation().getOps<llhd::ProcessOp>())
-    if (failed(runOnProcess(proc)))
-      return signalPassFailure();
+    (void)runOnProcess(proc); // Ignore processes that could not be lowered
 }
 
 LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
@@ -147,36 +146,20 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
   // TODO: add support for more TRs and wait terminators (e.g., to represent
   // FSMs)
   if (numTRs > 2)
-    return procOp.emitError(
-        "more than 2 temporal regions are currently not supported");
+    return failure();
 
-  Operation *previousWait = nullptr;
+  bool seenWait = false;
   WalkResult walkResult = procOp.walk([&](llhd::WaitOp op) -> WalkResult {
-    if (previousWait) {
-      auto diag =
-          op.emitError("only one 'llhd.wait' operation per process supported");
-      diag.attachNote(previousWait->getLoc())
-          << "first 'llhd.wait' operation here";
-      return diag;
-    }
+    if (seenWait)
+      return failure();
 
     // Check that the block containing the wait is the only exiting block of
     // that TR
     int trId = trAnalysis.getBlockTR(op->getBlock());
-    if (!trAnalysis.hasSingleExitBlock(trId)) {
-      auto diag = op.emitError(
-          "block with wait terminator has to be the only exiting block "
-          "of that temporal region");
+    if (!trAnalysis.hasSingleExitBlock(trId))
+      return failure();
 
-      for (auto *block : trAnalysis.getExitingBlocksInTR(trId))
-        if (block != op->getBlock())
-          diag.attachNote(block->getTerminator()->getLoc())
-              << "other block terminator in same TR here";
-
-      return diag;
-    }
-
-    previousWait = op;
+    seenWait = true;
     return WalkResult::advance();
   });
   if (walkResult.wasInterrupted())
@@ -266,10 +249,7 @@ LogicalResult TemporalCodeMotionPass::runOnProcess(llhd::ProcessOp procOp) {
 
     // Set insertion point before first 'llhd.drv' op in the exiting block
     Operation *moveBefore = exitingBlock->getTerminator();
-    exitingBlock->walk([&](llhd::DrvOp op) {
-      moveBefore = op;
-      return;
-    });
+    exitingBlock->walk([&](llhd::DrvOp op) { moveBefore = op; });
 
     assert(dominator &&
            "could not find nearest common dominator for TR exiting "

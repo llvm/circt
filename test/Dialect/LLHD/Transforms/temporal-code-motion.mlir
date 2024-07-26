@@ -180,3 +180,44 @@ hw.module @basic(in %cond: i1) {
     cf.br ^bb1
   }
 }
+
+// The following processes should stay unmodified, just make sure the pass doesn't crash on them
+
+// CHECK-LABEL: hw.module @more_than_one_wait
+hw.module @more_than_one_wait() {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait ^bb2
+  ^bb2:
+    llhd.wait ^bb1
+  }
+}
+
+// CHECK-LABEL: hw.module @more_than_two_TRs
+hw.module @more_than_two_TRs() {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait ^bb2
+  ^bb2:
+    llhd.wait ^bb3
+  ^bb3:
+    llhd.wait ^bb1
+  }
+}
+
+// CHECK-LABEL: hw.module @more_than_one_TR_wait_terminator
+hw.module @more_than_one_TR_wait_terminator(in %cond: i1) {
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    cf.cond_br %cond, ^bb2, ^bb3
+  ^bb2:
+    llhd.wait ^bb4
+  ^bb3:
+    llhd.wait ^bb4
+  ^bb4:
+    cf.br ^bb1
+  }
+}

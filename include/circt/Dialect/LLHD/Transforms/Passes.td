@@ -117,8 +117,8 @@ def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
     operations in a temporal region into its exit block by adjusting the
     enable operand.
     Furthermore, it combines 'llhd.drv' operations driving the same signal with
-    with the same delay by multiplexing the driven value according to their
-    enable operands.
+    the same delay by multiplexing the driven value according to their enable
+    operands.
     This pass assumes that the early code motion pass has been run beforehand.
     Otherwise, dominance errors are to be expected.
   }];
