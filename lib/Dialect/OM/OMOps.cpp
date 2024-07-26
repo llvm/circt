@@ -233,6 +233,7 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
 
 llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
   llvm::SmallVector<Field> result;
+
   ClassFieldsOp fieldsOp =
       cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
   auto fields = fieldsOp->getOperands();
@@ -240,10 +241,14 @@ llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
     return result;
 
   auto fieldNames = cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
+  assert(fields.size() == fieldNames.size() &&
+         "expected same number of fields and names");
+
   for (size_t i = 0; i < fields.size(); i++) {
     auto field = fields[i];
     result.push_back({cast<StringAttr>(fieldNames[i]), field, field.getLoc()});
   }
+
   return result;
 }
 
