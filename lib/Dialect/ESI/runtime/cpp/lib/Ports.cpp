@@ -42,7 +42,7 @@ ReadChannelPort &BundlePort::getRawRead(const std::string &name) const {
   return *read;
 }
 void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
-                              std::optional<size_t> bufferSize) {
+                              std::optional<unsigned> bufferSize) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
   mode = Mode::Callback;
@@ -50,7 +50,7 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
   ChannelPort::connect(bufferSize);
 }
 
-void ReadChannelPort::connect(std::optional<size_t> bufferSize) {
+void ReadChannelPort::connect(std::optional<unsigned> bufferSize) {
   mode = Mode::Polling;
   maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
   this->callback = [this](MessageData data) {

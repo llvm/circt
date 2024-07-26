@@ -38,7 +38,7 @@ public:
   /// Set up a connection to the accelerator. The buffer size is optional and
   /// should be considered merely a hint. Individual implementations use it
   /// however they like. The unit is number of messages of the port type.
-  virtual void connect(std::optional<size_t> bufferSize = std::nullopt) {
+  virtual void connect(std::optional<unsigned> bufferSize = std::nullopt) {
     connectImpl(bufferSize);
   }
   virtual void disconnect() {}
@@ -50,7 +50,7 @@ private:
 
   /// Called by all connect methods to let backends initiate the underlying
   /// connections.
-  virtual void connectImpl(std::optional<size_t> bufferSize) {}
+  virtual void connectImpl(std::optional<unsigned> bufferSize) {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -85,7 +85,7 @@ public:
   //===--------------------------------------------------------------------===//
 
   virtual void connect(std::function<bool(MessageData)> callback,
-                       std::optional<size_t> bufferSize = std::nullopt);
+                       std::optional<unsigned> bufferSize = std::nullopt);
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -97,7 +97,7 @@ public:
 
   /// Connect to the channel in polling mode.
   virtual void
-  connect(std::optional<size_t> bufferSize = std::nullopt) override;
+  connect(std::optional<unsigned> bufferSize = std::nullopt) override;
 
   /// Asynchronous read.
   virtual std::future<MessageData> readAsync();
