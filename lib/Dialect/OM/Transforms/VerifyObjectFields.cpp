@@ -50,48 +50,39 @@ void VerifyObjectFieldsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
 
   /// A map from a class and field name to a field.
-  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Value>> tables;
-  for (auto op : module->getRegion(0).getOps<om::ClassLike>())
+  // TODO: ClassOp -> ClassLike when getFields API is moved
+  llvm::MapVector<ClassOp, llvm::DenseMap<StringAttr, Value>> tables;
+  for (auto op : module->getRegion(0).getOps<om::ClassOp>())
     tables.insert({op, llvm::DenseMap<StringAttr, Value>()});
 
   // Peel tables parallelly.
   if (failed(
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
-            ClassLike classLike = entry.first;
+            ClassOp classLike = entry.first;
             auto &table = entry.second;
-            // TODO: Change this to getFields API when moved to ClassLike
-            auto result =
-                classLike.walk([&](ClassFieldsOp fieldsOp) -> WalkResult {
-                  auto fields = fieldsOp.getFields();
-                  if (fields.empty())
-                    return WalkResult::advance();
-
-                  auto fieldNames =
-                      cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
-                  for (size_t i = 0; i < fields.size(); i++) {
-                    auto name = cast<StringAttr>(fieldNames[i]);
-                    if (!table.insert({name, fields[i]}).second) {
-                      auto emit = fieldsOp.emitOpError()
-                                  << "field " << name << " is defined twice";
-                      return WalkResult::interrupt();
-                    }
-                  }
-                  return WalkResult::advance();
-                });
-            return LogicalResult::failure(result.wasInterrupted());
+            auto fields = classLike.getFields();
+            for (auto field : fields) {
+              auto name = cast<StringAttr>(field.name);
+              if (!table.insert({name, field.value}).second) {
+                auto emit = classLike.getFieldsOp().emitOpError()
+                            << "field " << name << " is defined twice";
+                return LogicalResult::failure();
+              }
+            }
+            return LogicalResult::success();
           })))
     return signalPassFailure();
 
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
       &getContext(), tables, [&tables, &symbolTable](const auto &entry) {
-        ClassLike classLike = entry.first;
+        ClassOp classLike = entry.first;
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
                   cast<ClassType>(objectField.getObject().getType());
-              ClassLike classDef =
-                  symbolTable.lookupNearestSymbolFrom<ClassLike>(
+              ClassOp classDef =
+                  symbolTable.lookupNearestSymbolFrom<ClassOp>(
                       objectField, objectInstType.getClassName());
               if (!classDef) {
                 objectField.emitError()
@@ -134,7 +125,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
                   // Check if the nested ClassOp exists. ObjectInstOp verifier
                   // already checked the class exits but it's not verified yet
                   // if the object is an input argument.
-                  classDef = symbolTable.lookupNearestSymbolFrom<ClassLike>(
+                  classDef = symbolTable.lookupNearestSymbolFrom<ClassOp>(
                       objectField, classType.getClassName());
 
                   if (!classDef) {

@@ -88,7 +88,9 @@ def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp
       return mlir::RegionKind::Graph;
     }
 
+    ClassFieldsOp getFieldsOp();
     llvm::SmallVector<Field> getFields();
+    // TODO: Should these use ArrayRef<Field> instead?
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                    llvm::ArrayRef<mlir::Value> fieldValues);
