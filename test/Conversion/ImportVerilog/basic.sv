@@ -484,6 +484,8 @@ module Expressions;
     c = 19'd42;
     // CHECK: moore.constant 42 : i19
     c = 19'sd42;
+    // CHECK: moore.constant 123456789123456789123456789123456789 : i128
+    c = 128'd123456789123456789123456789123456789;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
     // CHECK: [[TMP3:%.+]] = moore.read %c
