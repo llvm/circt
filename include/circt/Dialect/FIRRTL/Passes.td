@@ -106,7 +106,7 @@ def LowerSignatures : Pass<"firrtl-lower-signatures", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerSignaturesPass()";
 }
 
-def PassiveWires : Pass<"firrtl-passive-wires", "firrtl::FModuleOp"> {
+def PassiveWires : InterfacePass<"firrtl-passive-wires", "firrtl::FModuleLike"> {
   let summary = "Make FIRRTL wires have passive type";
   let description = [{
     Eliminate flips from aggregate types on wires.
@@ -127,7 +127,7 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   ];
 }
 
-def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
+def RegisterOptimizer : InterfacePass<"firrtl-register-optimizer", "firrtl::FModuleLike"> {
   let summary = "Optimizer Registers";
   let description = [{
     This pass applies classic FIRRTL register optimizations.  These
@@ -226,7 +226,7 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
   ];
 }
 
-def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
+def FlattenMemory : InterfacePass<"firrtl-flatten-memory", "firrtl::FModuleLike"> {
   let summary = "Flatten aggregate memory data to a UInt";
   let description = [{
     This pass flattens the aggregate data of memory into a UInt, and inserts
@@ -272,7 +272,7 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDedupPass()";
 }
 
-def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
+def EliminateWires : InterfacePass<"firrtl-eliminate-wires", "firrtl::FModuleLike"> {
   let summary = "Eliminate Unneeded Wires";
   let description = [{
     This pass eliminates wires for which the write dominates the reads and
@@ -308,7 +308,7 @@ def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   ];
 }
 
-def LowerMatches : Pass<"firrtl-lower-matches", "firrtl::FModuleOp"> {
+def LowerMatches : InterfacePass<"firrtl-lower-matches", "firrtl::FModuleLike"> {
   let summary = "Remove all matchs conditional blocks";
   let description = [{
     Lowers FIRRTL match statements in to when statements, which can later be
@@ -343,7 +343,7 @@ def ExpandWhens : InterfacePass<"firrtl-expand-whens", "firrtl::FModuleLike"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
-def LowerCHIRRTLPass : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
+def LowerCHIRRTLPass : InterfacePass<"firrtl-lower-chirrtl", "firrtl::FModuleLike"> {
   let summary = "Infer the memory ports of SeqMem and CombMem";
   let description = [{
       This pass finds the CHIRRTL behavioral memories and their ports, and
@@ -483,7 +483,7 @@ def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
 }
 
 def PrintFIRRTLFieldSourcePass
-    : Pass<"firrtl-print-field-source", "firrtl::FModuleOp"> {
+    : InterfacePass<"firrtl-print-field-source", "firrtl::FModuleLike"> {
   let summary = "Print field source information.";
   let constructor =  "circt::firrtl::createFIRRTLFieldSourcePass()";
 }
@@ -541,12 +541,12 @@ def CheckCombLoops : Pass<"firrtl-check-comb-loops", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createCheckCombLoopsPass()";
 }
 
-def SFCCompat : Pass<"firrtl-sfc-compat", "firrtl::FModuleOp"> {
+def SFCCompat : InterfacePass<"firrtl-sfc-compat", "firrtl::FModuleLike"> {
   let summary = "Perform SFC Compatibility fixes";
   let constructor = "circt::firrtl::createSFCCompatPass()";
 }
 
-def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+def MergeConnections : InterfacePass<"merge-connections", "firrtl::FModuleLike"> {
   let summary = "Merge field-level connections into full bundle connections";
   let constructor = "circt::firrtl::createMergeConnectionsPass()";
   let options = [
@@ -555,12 +555,12 @@ def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
   ];
 }
 
-def Vectorization : Pass<"vectorization", "firrtl::FModuleOp"> {
+def Vectorization : InterfacePass<"vectorization", "firrtl::FModuleLike"> {
   let summary = "Transform firrtl primitive operations into vector operations";
   let constructor = "circt::firrtl::createVectorizationPass()";
 }
 
-def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
+def InferReadWrite : InterfacePass<"firrtl-infer-rw", "firrtl::FModuleLike"> {
   let summary = "Infer the read-write memory port";
   let description = [{
     This pass merges the read and write ports of a memory, using a simple
@@ -629,7 +629,7 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
   ];
 }
 
-def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
+def DropName : InterfacePass<"firrtl-drop-names", "firrtl::FModuleLike"> {
   let summary = "Drop interesting names";
   let description = [{
     This pass changes names of namable ops to droppable so that we can disable
@@ -668,7 +668,7 @@ def DropName : Pass<"firrtl-drop-names", "firrtl::FModuleOp"> {
 }
 
 def RandomizeRegisterInit :
-    Pass<"firrtl-randomize-register-init", "firrtl::FModuleOp"> {
+    InterfacePass<"firrtl-randomize-register-init", "firrtl::FModuleLike"> {
   let summary = "Randomize register initialization.";
   let description = [{
     This pass eagerly creates large vectors of randomized bits for initializing
@@ -682,7 +682,7 @@ def RandomizeRegisterInit :
   let constructor = "circt::firrtl::createRandomizeRegisterInitPass()";
 }
 
-def CreateCompanionAssume : Pass<"firrtl-create-companion-assume", "firrtl::FModuleOp"> {
+def CreateCompanionAssume : InterfacePass<"firrtl-create-companion-assume", "firrtl::FModuleLike"> {
   let summary = "Create companion assume statements for assertions";
   let description = [{
     This pass generates companion assume statements gated by macros to assertions.
@@ -724,7 +724,7 @@ def LowerIntmodules : Pass<"firrtl-lower-intmodules", "firrtl::CircuitOp"> {
   ];
 }
 
-def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
+def LowerIntrinsics : InterfacePass<"firrtl-lower-intrinsics", "firrtl::FModuleLike"> {
   let summary = "Lower intrinsics";
   let description = [{
     This pass lowers generic intrinsic ops to their implementation or op.
@@ -832,7 +832,7 @@ def LowerLayers : Pass<"firrtl-lower-layers", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
+def LayerMerge : InterfacePass<"firrtl-layer-merge", "firrtl::FModuleLike"> {
   let summary = "Merge layer blocks";
   let description = [{
     Combine all layer blocks in a module which reference the same layer
@@ -844,7 +844,7 @@ def LayerMerge : Pass<"firrtl-layer-merge", "firrtl::FModuleOp"> {
   ];
 }
 
-def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
+def LayerSink : InterfacePass<"firrtl-layer-sink", "firrtl::FModuleLike"> {
   let summary = "Sink operations into layer blocks";
   let description = [{
 
@@ -856,7 +856,7 @@ def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
 }
 
 def MaterializeDebugInfo :
-    Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
+    InterfacePass<"firrtl-materialize-debug-info", "firrtl::FModuleLike"> {
   let summary = "Generate debug ops to track FIRRTL values";
   let description = [{
     This pass creates debug ops to track FIRRTL-level ports, nodes, wires,
@@ -869,7 +869,7 @@ def MaterializeDebugInfo :
 }
 
 def Lint :
-    Pass<"firrtl-lint", "firrtl::FModuleOp"> {
+    InterfacePass<"firrtl-lint", "firrtl::FModuleLike"> {
   let summary = "An analysis pass to detect static simulation failures.";
   let description = [{
     This pass detects operations that will trivially fail any simulation.
