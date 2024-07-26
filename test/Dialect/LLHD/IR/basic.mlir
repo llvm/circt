@@ -120,15 +120,6 @@ hw.module @checkPrb(inout %arg0 : i1, inout %arg1 : i64, inout %arg2 : !hw.array
   %3 = llhd.prb %arg3 : !hw.inout<struct<foo: i1, bar: i2, baz: i4>>
 }
 
-// CHECK-LABEL: @checkOutput
-hw.module @checkOutput(in %arg0 : i32) {
-  %t = llhd.constant_time <0ns, 1d, 0e>
-  // CHECK: %{{.+}} = llhd.output %arg0 after %{{.*}} : i32
-  %0 = llhd.output %arg0 after %t : i32
-  // CHECK-NEXT: %{{.+}} = llhd.output "sigName" %arg0 after %{{.*}} : i32
-  %1 = llhd.output "sigName" %arg0 after %t : i32
-}
-
 // CHECK-LABEL: @checkDrv
 hw.module @checkDrv(inout %arg0 : i1, inout %arg1 : i64, in %arg2 : i1,
     in %arg3 : i64, inout %arg5 : !hw.array<3xi8>,
