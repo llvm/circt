@@ -656,9 +656,9 @@ expr parseLTL(string inputFile, vector<expr> &solverVars,
               solverVars[i] = argInputs[i](solverVars[solverVars.size() - 1]);
             }
 
-            expr body = (stateInvFun[insertState(state, stateInv)](
-                            solverVars.size(), solverVars.data())) ==
-                        (solverVars[v] == id);
+            expr body = implies((stateInvFun[insertState(state, stateInv)](
+                            solverVars.size(), solverVars.data())) &&
+                        (solverVars[v] != id), false);
 
             expr ret =
                 nestedForall(solverVars, body, numArgs, numOutputs, c);
