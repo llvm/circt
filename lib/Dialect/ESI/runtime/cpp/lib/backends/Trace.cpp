@@ -207,7 +207,7 @@ public:
   }
 
 private:
-  void connectImpl() override {
+  void connectImpl(std::optional<unsigned> bufferSize) override {
     assert(!dataPushThread.joinable() && "already connected");
     shutdown = false;
     dataPushThread = std::thread(&ReadTraceChannelPort::dataPushLoop, this);
