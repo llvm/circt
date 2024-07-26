@@ -1,4 +1,4 @@
-//===- LowerDPIToArcs.cpp - Lower DPI ops to Arc  -------------*- C++ -*-===//
+//===- LowerDPIFunc.cpp - Lower sim.dpi.func to func.func  ----*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===
 //
-// This pass lowers Sim DPI operations to Arc and an external function call.
+// This pass lowers Sim DPI func ops to MLIR func and call.
 //
 // sim.dpi.func @foo(input %a: i32, output %b: i64)
 // hw.module @top (..) {
@@ -16,32 +16,32 @@
 // ->
 //
 // func.func @foo(%a: i32, %b: !llvm.ptr) // Output is passed by a reference.
-// arc.define @foo_arc_def(%a: i32) -> (i64) {
+// func.func @foo_wrapper(%a: i32) -> (i64) {
 //    %0 = llvm.alloca: !llvm.ptr
 //    %v = func.call @foo (%a, %0)
-//    arc.return %v:
+//    func.return %v
 // }
 // hw.module @mod(..) {
-//   arc.state @foo_arc_def ()
+//    %result = sim.dpi.call @foo_wrapper(%a) clock %clock
 // }
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/ArcOps.h"
-#include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimPasses.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "arc-lower-dpi-to-arcs"
+#define DEBUG_TYPE "sim-lower-dpi-func"
 
 namespace circt {
-namespace arc {
-#define GEN_PASS_DEF_LOWERDPITOARCS
-#include "circt/Dialect/Arc/ArcPasses.h.inc"
-} // namespace arc
+namespace sim {
+#define GEN_PASS_DEF_LOWERDPIFUNC
+#include "circt/Dialect/Sim/SimPasses.h.inc"
+} // namespace sim
 } // namespace circt
 
 using namespace mlir;
@@ -52,67 +52,25 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerDPIToArcsPass
-    : public arc::impl::LowerDPIToArcsBase<LowerDPIToArcsPass> {
+
+struct LoweringState {
+  DenseMap<StringAttr, func::FuncOp> dpiFuncDeclMapping;
+  circt::Namespace nameSpace;
+};
+struct LowerDPIFuncPass : public sim::impl::LowerDPIFuncBase<LowerDPIFuncPass> {
 
   LogicalResult lowerDPI();
   LogicalResult lowerDPIFuncOp(sim::DPIFuncOp simFunc,
-                               DenseMap<StringAttr, arc::DefineOp> &symToArcDef,
+                               LoweringState &loweringState,
                                SymbolTable &symbolTable);
   void runOnOperation() override;
 };
 
-struct DPICallOpLowering : public OpConversionPattern<sim::DPICallOp> {
-  DPICallOpLowering(const DenseMap<StringAttr, arc::DefineOp> &symToArcDef,
-                    const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern(typeConverter, context), symToArcDef(symToArcDef) {}
-  LogicalResult
-  matchAndRewrite(sim::DPICallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto enable = adaptor.getEnable();
-    auto clock = adaptor.getClock();
-    if (clock) {
-      // Replace DPI call with a state. Latency is 1 for clocked one.
-      rewriter.replaceOpWithNewOp<arc::StateOp>(
-          op, symToArcDef.at(op.getCalleeAttr().getAttr()), clock, enable,
-          /*latency=*/1, adaptor.getInputs());
-    } else {
-      // Unclocked call.
-      if (enable)
-        // TODO: Lower it to scf.if
-        return op->emitError("unclocked call with enable is unsupported now");
-
-      // Replace DPI call with a call since latency is 0.
-      rewriter.replaceOpWithNewOp<arc::CallOp>(
-          op, symToArcDef.at(op.getCalleeAttr().getAttr()),
-          adaptor.getInputs());
-    }
-    return success();
-  }
-
-private:
-  const DenseMap<StringAttr, arc::DefineOp> &symToArcDef;
-};
-
 } // namespace
 
-static void populateLegality(ConversionTarget &target) {
-  target.addLegalDialect<func::FuncDialect>();
-  target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalDialect<hw::HWDialect>();
-  target.addLegalDialect<arc::ArcDialect>();
-
-  target.addIllegalOp<sim::DPIFuncOp>();
-  target.addIllegalOp<sim::DPICallOp>();
-}
-
-static void populateTypeConversion(TypeConverter &typeConverter) {
-  typeConverter.addConversion([&](Type type) { return type; });
-}
-
-LogicalResult LowerDPIToArcsPass::lowerDPIFuncOp(
-    sim::DPIFuncOp simFunc, DenseMap<StringAttr, arc::DefineOp> &symToArcDef,
-    SymbolTable &symbolTable) {
+LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
+                                               LoweringState &loweringState,
+                                               SymbolTable &symbolTable) {
   ImplicitLocOpBuilder builder(simFunc.getLoc(), simFunc);
   auto moduleType = simFunc.getModuleType();
 
@@ -137,7 +95,7 @@ LogicalResult LowerDPIToArcsPass::lowerDPIFuncOp(
   // Look up func.func by verilog name since the function name is equal to the
   // symbol name in MLIR
   if (auto verilogName = simFunc.getVerilogName()) {
-    func = dyn_cast_or_null<func::FuncOp>(symbolTable.lookup(*verilogName));
+    func = symbolTable.lookup<func::FuncOp>(*verilogName);
     // TODO: Check if function type matches.
   }
 
@@ -152,26 +110,25 @@ LogicalResult LowerDPIToArcsPass::lowerDPIFuncOp(
     func.setPrivate();
   }
 
-  // Create an Arc.
-  SmallString<8> arcDefName;
-  arcDefName += simFunc.getSymName();
-  arcDefName += "_dpi_arc";
-  // FIXME: Unique symbol.
-  auto arcOp =
-      builder.create<arc::DefineOp>(arcDefName, moduleType.getFuncType());
+  // Create a wrapper module that calls a DPI function.
+  auto funcOp = builder.create<func::FuncOp>(
+      loweringState.nameSpace.newName(simFunc.getSymName() + "_wrapper"),
+      moduleType.getFuncType());
 
-  auto inserted = symToArcDef.insert({simFunc.getSymNameAttr(), arcOp}).second;
-  (void)inserted;
-  assert(inserted && "symbol must be unique");
+  // Map old symbol to a new func op.
+  loweringState.dpiFuncDeclMapping[simFunc.getSymNameAttr()] = funcOp;
 
-  builder.setInsertionPointToStart(arcOp.addEntryBlock());
+  builder.setInsertionPointToStart(funcOp.addEntryBlock());
   SmallVector<Value> functionInputs;
   SmallVector<LLVM::AllocaOp> functionOutputAllocas;
 
   size_t inputIndex = 0;
   for (auto [idx, arg] : llvm::enumerate(moduleType.getPorts())) {
+    if (arg.dir == hw::ModulePort::InOut)
+      return funcOp->emitError() << "inout is currently not supported";
+
     if (arg.dir == hw::ModulePort::Input) {
-      functionInputs.push_back(arcOp.getArgument(inputIndex));
+      functionInputs.push_back(funcOp.getArgument(inputIndex));
       ++inputIndex;
     } else {
       // Allocate an output placeholder.
@@ -185,42 +142,35 @@ LogicalResult LowerDPIToArcsPass::lowerDPIFuncOp(
 
   builder.create<func::CallOp>(func, functionInputs);
 
-  // Construct outputs of this Arc(= alloca loads).
   SmallVector<Value> results;
   for (auto functionOutputAlloca : functionOutputAllocas)
     results.push_back(builder.create<LLVM::LoadOp>(
         functionOutputAlloca.getElemType(), functionOutputAlloca));
 
-  builder.create<arc::OutputOp>(results);
+  builder.create<func::ReturnOp>(results);
 
   simFunc.erase();
   return success();
 }
 
-LogicalResult LowerDPIToArcsPass::lowerDPI() {
-  LLVM_DEBUG(llvm::dbgs() << "Lowering DPI to arc and func\n");
+LogicalResult LowerDPIFuncPass::lowerDPI() {
+  LLVM_DEBUG(llvm::dbgs() << "Lowering sim DPI func to func.func\n");
   auto op = getOperation();
-  DenseMap<StringAttr, arc::DefineOp> symToArcDef;
+  LoweringState state;
+  state.nameSpace.add(op);
   auto &symbolTable = getAnalysis<SymbolTable>();
-
   for (auto simFunc : llvm::make_early_inc_range(op.getOps<sim::DPIFuncOp>()))
-    if (failed(lowerDPIFuncOp(simFunc, symToArcDef, symbolTable)))
+    if (failed(lowerDPIFuncOp(simFunc, state, symbolTable)))
       return failure();
 
-  ConversionTarget target(getContext());
-  TypeConverter converter;
-  RewritePatternSet patterns(&getContext());
-  populateLegality(target);
-  populateTypeConversion(converter);
-  patterns.add<DPICallOpLowering>(symToArcDef, converter, &getContext());
-  return applyPartialConversion(getOperation(), target, std::move(patterns));
+  op.walk([&](sim::DPICallOp op) {
+    auto func = state.dpiFuncDeclMapping.at(op.getCalleeAttr().getAttr());
+    op.setCallee(func.getSymNameAttr());
+  });
+  return success();
 }
 
-void LowerDPIToArcsPass::runOnOperation() {
+void LowerDPIFuncPass::runOnOperation() {
   if (failed(lowerDPI()))
     return signalPassFailure();
-}
-
-std::unique_ptr<Pass> arc::createLowerDPIToArcsPass() {
-  return std::make_unique<LowerDPIToArcsPass>();
 }

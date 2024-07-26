@@ -23,6 +23,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
@@ -214,10 +215,6 @@ static llvm::cl::opt<std::string>
                                  "simulation to run when output is set to run"),
                   llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
-static llvm::cl::list<std::string> sharedLibs{
-    "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
-    llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
-
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -254,21 +251,18 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     opts.tapMemories = observeMemories;
     pm.addPass(arc::createInferMemoriesPass(opts));
   }
+  pm.addPass(sim::createLowerDPIFunc());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
     return;
-
   {
     ConvertToArcsOptions opts;
     opts.tapRegisters = observeRegisters;
     pm.addPass(createConvertToArcsPass(opts));
   }
-
-  pm.addPass(arc::createLowerDPIToArcsPass());
-
   if (shouldDedup)
     pm.addPass(arc::createDedupPass());
   pm.addPass(hw::createFlattenModulesPass());
@@ -439,15 +433,11 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
-                                              sharedLibs.end());
-
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.transformer = mlir::makeOptimizingTransformer(
         /*optLevel=*/3, /*sizeLevel=*/0,
         /*targetMachine=*/nullptr);
-    engineOptions.sharedLibPaths = sharedLibraries;
 
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
