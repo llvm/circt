@@ -132,7 +132,12 @@ moore.module @Expressions(
   // CHECK-SAME: in [[REF_ARRAY1:%[^:]+]] : !moore.ref<uarray<4 x i8>>
   in %refArray1: !moore.ref<!moore.uarray<4 x i8>>,
   // CHECK-SAME: in [[REF_ARRAY2:%[^:]+]] : !moore.ref<uarray<2 x uarray<4 x i8>>>
-  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>
+  in %refArray2: !moore.ref<uarray<2 x uarray<4 x i8>>>,
+
+  // CHECK-SAME: in [[STRUCT1:%.+]] : !moore.struct<{a: i32, b: i32}>
+  in %struct1: !moore.struct<{a: i32, b: i32}>,
+  // CHECK-SAME: in [[REF_STRUCT1:%.+]] : !moore.ref<struct<{a: i32, b: i32}>>
+  in %refStruct1: !moore.ref<struct<{a: i32, b: i32}>>
 ) {
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
@@ -269,6 +274,16 @@ moore.module @Expressions(
   } {
     moore.yield %b : i32
   }
+
+  // CHECK: moore.struct_create [[A]], [[B]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  moore.struct_create %a, %b : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  // CHECK: moore.struct_extract [[STRUCT1]], "a" : struct<{a: i32, b: i32}> -> i32
+  moore.struct_extract %struct1, "a" : struct<{a: i32, b: i32}> -> i32
+  // CHECK: moore.struct_extract_ref [[REF_STRUCT1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  moore.struct_extract_ref %refStruct1, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+  // CHECK: moore.struct_inject [[STRUCT1]], "a", [[B]] : struct<{a: i32, b: i32}>, i32
+  moore.struct_inject %struct1, "a", %b : struct<{a: i32, b: i32}>, i32
+
   moore.output
 }
 
