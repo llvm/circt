@@ -36,11 +36,9 @@ using namespace firrtl;
 namespace {
 struct FlattenMemoryPass
     : public circt::firrtl::impl::FlattenMemoryBase<FlattenMemoryPass> {
-  /// This pass flattens the aggregate data of memory into a UInt, and inserts
-  /// appropriate bitcasts to access the data.
-  void runOnOperation() override {
-    LLVM_DEBUG(llvm::dbgs() << "\n Running lower memory on module:"
-                            << getOperation().getName());
+
+  template <typename Op>
+  void runOnOp(Op op) {
     SmallVector<Operation *> opsToErase;
     auto hasSubAnno = [&](MemOp op) -> bool {
       for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
@@ -50,7 +48,8 @@ struct FlattenMemoryPass
 
       return false;
     };
-    getOperation().getBodyBlock()->walk([&](MemOp memOp) {
+    Block *body = op.getBodyBlock();
+    body->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory:" << memOp);
       // The vector of leaf elements type after flattening the data.
       SmallVector<IntType> flatMemType;
@@ -195,6 +194,19 @@ struct FlattenMemoryPass
       memOp.erase();
       return;
     });
+  }
+  /// This pass flattens the aggregate data of memory into a UInt, and inserts
+  /// appropriate bitcasts to access the data.
+  void runOnOperation() override {
+    LLVM_DEBUG(llvm::dbgs() << "\n Running lower memory on module:"
+                            << getOperation().getName());
+
+    TypeSwitch<Operation *>(&(*getOperation()))
+        .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
+        // All other ops are ignored -- particularly ops that don't implement
+        // the `getBodyBlock()` method. We don't want an error here because the
+        // pass wasn't designed to run on those ops.
+        .Default([&](auto) {});
   }
 
 private:
