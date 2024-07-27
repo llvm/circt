@@ -75,13 +75,6 @@ endmodule
 
 // -----
 module Foo;
-  bit y;
-  // expected-error @below {{variables in for loop initializer not supported}}
-  initial for (bit x = 0; x;) x = y;
-endmodule
-
-// -----
-module Foo;
   // expected-error @below {{literals with X or Z bits not supported}}
   logic a = 'x;
 endmodule

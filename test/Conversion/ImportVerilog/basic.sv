@@ -355,6 +355,21 @@ module Statements;
     // CHECK: }
     for (y = x; x; x = z) x = y;
 
+    // CHECK: [[TMP:%.+]] = moore.constant true : i1
+    // CHECK: %iv = moore.variable [[TMP]] : <i1>
+    // CHECK: scf.while : () -> () {
+    // CHECK:   [[TMP:%.+]] = moore.read %iv
+    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
+    // CHECK:   scf.condition([[COND]])
+    // CHECK: } do {
+    // CHECK:   [[TMP:%.+]] = moore.read %iv
+    // CHECK:   moore.blocking_assign %y, [[TMP]] : i1
+    // CHECK:   [[TMP:%.+]] = moore.read %iv
+    // CHECK:   moore.blocking_assign %x, [[TMP]] : i1
+    // CHECK:   scf.yield
+    // CHECK: }
+    for (bit iv = '1; iv; x = iv) y = iv;
+
     // CHECK: [[TMP1:%.+]] = moore.read %i
     // CHECK: scf.while (%arg0 = [[TMP1]]) : (!moore.i32) -> !moore.i32 {
     // CHECK:   [[TMP2:%.+]] = moore.bool_cast %arg0 : i32 -> i1
