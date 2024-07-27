@@ -24,35 +24,31 @@ module Empty;
 endmodule
 
 
-module DedupA(input wire a,
-input wire b,
-output wire [3:0] c);
+// CHECK: moore.module private @DedupA(in %a : !moore.i32)
+// CHECK-NOT: @DedupA
+module DedupA(input int a);
 endmodule
 
-module DedupB #(parameter p = 32)
-(input wire a,
-input wire b,
-output wire [3:0] c);
+// CHECK: moore.module private @DedupB(in %a : !moore.i32)
+// CHECK: moore.module private @DedupB_0(in %a : !moore.i16)
+// CHECK-NOT: @DedupB
+module DedupB #(parameter int W)(input bit [W-1:0] a);
 endmodule
 
-// CHECK-LABEL: moore.module private @DedupA(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-// CHECK-LABEL: moore.module private @DedupB(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-// CHECK-LABEL: moore.module private @DedupB_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l4) {
-// CHECK-LABEL: moore.module @Dedup
+// CHECK-LABEL: moore.module @Dedup()
 module Dedup;
-  wire [3:0] a;
-  wire [3:0] b;
-  wire [3:0] c;
-  // CHECK-LABEL: moore.instance "insA" @DedupA
-  DedupA insA(.a(a), .c(c));
-  // CHECK-LABEL: moore.instance "insB" @DedupA
-  DedupA insB(.b(b), .c(c));
-  // CHECK-LABEL: moore.instance "insC" @DedupB
-  DedupB insC(.c(c));
-  // CHECK-LABEL: moore.instance "insD" @DedupB
-  DedupB insD(.a(a), .b(b), .c(c));
-  // CHECK-LABEL: moore.instance "insE" @DedupB_0
-  DedupB #(8) insE(.c(c));
+  int a;
+  shortint b;
+  // CHECK-LABEL: moore.instance "a0" @DedupA(
+  DedupA a0(a);
+  // CHECK-LABEL: moore.instance "a1" @DedupA(
+  DedupA a1(a);
+  // CHECK-LABEL: moore.instance "b0" @DedupB(
+  DedupB #(32) b0(a);
+  // CHECK-LABEL: moore.instance "b1" @DedupB(
+  DedupB #(32) b1(a);
+  // CHECK-LABEL: moore.instance "b2" @DedupB_0(
+  DedupB #(16) b2(b);
 endmodule
 
 // CHECK-LABEL: moore.module @NestedA() {
