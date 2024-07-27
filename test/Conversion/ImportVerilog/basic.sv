@@ -442,6 +442,7 @@ module Expressions;
   // CHECK: %c = moore.variable : <i32>
   int a, b, c;
   // CHECK: %u = moore.variable : <i32>
+  // CHECK: %w = moore.variable : <i32>
   int unsigned u, w;
   // CHECK: %v = moore.variable : <array<2 x i4>>
   bit [1:0][3:0] v;
@@ -680,6 +681,20 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.mods [[TMP1]], [[TMP2]] : l32
     f = d % e;
+    // CHECK: [[TMP1:%.+]] = moore.read %a
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP1:%.+]] = moore.read %b
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP1:%.+]] = moore.pows [[TMP2]], [[TMP3]] : l32
+    // CHECK: moore.conversion [[TMP1]] : !moore.l32 -> !moore.i32
+    c = a ** b;
+    // CHECK: [[TMP1:%.+]] = moore.read %u
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP1:%.+]] = moore.read %w
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.l32
+    // CHECK: [[TMP1:%.+]] = moore.powu [[TMP2]], [[TMP3]] : l32
+    // CHECK: moore.conversion [[TMP1]] : !moore.l32 -> !moore.i32
+    u = u ** w;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
