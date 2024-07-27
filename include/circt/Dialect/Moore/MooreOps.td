@@ -646,6 +646,28 @@ class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 def ModUOp : ModOpBase<"modu">;
 def ModSOp : ModOpBase<"mods">;
 
+class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
+  let summary = "Power";
+  let description = [{
+    Raise the left-hand side to the power of the right-hand side. `powu` treats
+    its operands as unsigned numbers, while `pows` treats them as signed
+    numbers.
+
+    Evaluation rules for `a ** b`:
+
+    |       | a < -1 | a = -1         | a = 0 | a = 1 | a > 1  |
+    |-------|--------|----------------|-------|-------|--------|
+    | b > 0 | a ** b | b odd ? -1 : 1 |     0 |     1 | a ** b |
+    | b = 0 |      1 |              1 |     1 |     1 |      1 |
+    | b < 0 |      0 | b odd ? -1 : 1 |     X |     1 |      0 |
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
+  }];
+}
+
+def PowUOp : PowOpBase<"powu">;
+def PowSOp : PowOpBase<"pows">;
+
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
   let description = [{

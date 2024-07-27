@@ -260,6 +260,18 @@ struct RvalueExprVisitor {
         return createBinary<moore::ModSOp>(lhs, rhs);
       else
         return createBinary<moore::ModUOp>(lhs, rhs);
+    case BinaryOperator::Power: {
+      // Slang casts the LHS and result of the `**` operator to a four-valued
+      // type, since the operator can return X even for two-valued inputs. To
+      // maintain uniform types across operands and results, cast the RHS to
+      // that four-valued type as well.
+      auto rhsCast =
+          builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::PowSOp>(lhs, rhsCast);
+      else
+        return createBinary<moore::PowUOp>(lhs, rhsCast);
+    }
 
     case BinaryOperator::BinaryAnd:
       return createBinary<moore::AndOp>(lhs, rhs);
@@ -364,9 +376,6 @@ struct RvalueExprVisitor {
         return builder.create<moore::AShrOp>(loc, lhs, rhs);
       return builder.create<moore::ShrOp>(loc, lhs, rhs);
     }
-
-    case BinaryOperator::Power:
-      break;
     }
 
     mlir::emitError(loc, "unsupported binary operator");
