@@ -42,10 +42,12 @@ public:
       : typeName(typeName), inputPortNames(inputPortNames),
         outputPortName(outputPortName){};
   LogicalResult convert(ImportRTLILModule &importer, Cell *cell);
+  virtual ~CellPatternBase() {}
 
 private:
-  virtual Value convert(OpBuilder &builder, Location location,
+  virtual Value convert(Cell *cell, OpBuilder &builder, Location location,
                         ValueRange inputValues) = 0;
+
   SmallString<4> typeName;
   SmallVector<SmallString<4>> inputPortNames;
   SmallString<4> outputPortName;
@@ -58,12 +60,19 @@ struct ImportRTLILDesign {
   ModuleMappingTy moduleMapping;
 };
 
-struct ImportRTLILModule {
-
+class ImportRTLILModule {
+public:
   ImportRTLILModule(MLIRContext *context, const ImportRTLILDesign &importer,
                     RTLIL::Module *rtlilModule, OpBuilder &moduleBuilder);
 
   hw::HWModuleLike getModuleOp() { return module; }
+  LogicalResult
+  importBody(const ImportRTLILDesign::ModuleMappingTy &moduleMapping);
+  const auto &getExternalModules() const { return exeternalModules; }
+
+  friend class CellPatternBase;
+
+private:
   RTLIL::Module *rtlilModule;
   hw::HWModuleLike module;
   MLIRContext *context;
@@ -88,62 +97,6 @@ struct ImportRTLILModule {
   DenseMap<StringAttr, sv::WireOp> wireMapping;
   sv::WireOp getWireValue(RTLIL::Wire *wire) const {
     return wireMapping.lookup(getStringAttr(wire));
-  }
-
-  // mlir::TypedValue<hw::InOutType> getInout();
-  LogicalResult
-  importBody(const ImportRTLILDesign::ModuleMappingTy &moduleMapping) {
-    if (isa<HWModuleExternOp>(module))
-      return success();
-
-    SmallVector<std::pair<size_t, Value>> outputs;
-    builder->setInsertionPointToStart(module.getBodyBlock());
-    // Init wires.
-    ModulePortInfo portInfo(module.getPortList());
-    for (auto wire : rtlilModule->wires()) {
-      if (wire->port_input) {
-        auto arg = module.getBodyBlock()->getArgument(
-            portInfo.at(wire->port_id - 1).argNum);
-        mapping.insert({getStringAttr(wire->name), arg});
-      } else {
-        auto loc = builder->getUnknownLoc();
-        auto w = builder->create<sv::WireOp>(
-            loc, hw::ArrayType::get(builder->getIntegerType(1), wire->width));
-        auto read = builder->create<hw::BitcastOp>(
-            loc, builder->getIntegerType(wire->width),
-            builder->create<sv::ReadInOutOp>(loc, w));
-        mapping.insert({getStringAttr(wire), read});
-        wireMapping.insert({getStringAttr(wire), w});
-        if (wire->port_output) {
-          outputs.emplace_back(wire->port_id - 1, read);
-        }
-      }
-    }
-
-    llvm::sort(
-        outputs.begin(), outputs.end(),
-        [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
-    SmallVector<Value> results;
-    for (auto p : llvm::map_range(outputs, [](auto &p) { return p.second; }))
-      results.push_back(p);
-
-    // Ensure terminator.
-    module.getBodyBlock()->getTerminator()->setOperands(results);
-    builder->setInsertionPointToStart(module.getBodyBlock());
-
-    // Import connections.
-    for (auto con : rtlilModule->connections()) {
-      if (failed(connect(builder->getUnknownLoc(), con.first, con.second)))
-        return failure();
-    }
-
-    // Import cells.
-    for (auto cell : rtlilModule->cells()) {
-      if (failed(importCell(moduleMapping, cell)))
-        return failure();
-    }
-
-    return success();
   }
 
   Value getValueForWire(const RTLIL::Wire *wire) const {
@@ -232,13 +185,14 @@ struct ImportRTLILModule {
 
   llvm::StringMap<std::unique_ptr<CellPatternBase>> handler;
 
-  template <typename CellPattern>
-  void addPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
-                  StringRef outputPortName);
+  template <typename CellPattern, typename... Args>
+  void addPattern(StringRef typeName, Args... args);
 
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
+  template <typename OpName>
+  void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
@@ -246,7 +200,7 @@ struct ImportRTLILModule {
 template <typename OpName>
 struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     return builder.create<OpName>(location, inputValues, false);
   }
@@ -255,7 +209,7 @@ struct CellOpPattern : public CellPatternBase {
 template <bool isAnd>
 struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     auto notB = comb::createOrFoldNot(location, inputValues[1], builder, false);
 
@@ -271,7 +225,7 @@ struct AndOrNotOpPattern : public CellPatternBase {
 };
 struct NorOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     auto aOrB = builder.create<OrOp>(location, inputValues, false);
     return comb::createOrFoldNot(location, aOrB, builder, false);
@@ -279,7 +233,7 @@ struct NorOpPattern : public CellPatternBase {
 };
 struct NandOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     auto aOrB = builder.create<AndOp>(location, inputValues, false);
     return comb::createOrFoldNot(location, aOrB, builder, false);
@@ -287,23 +241,42 @@ struct NandOpPattern : public CellPatternBase {
 };
 struct NotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     return comb::createOrFoldNot(location, inputValues[0], builder, false);
   }
 };
 struct MuxOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     return builder.create<MuxOp>(location, inputValues[2], inputValues[1],
                                  inputValues[0]);
   }
 };
 
+struct ICmpOpPattern : public CellPatternBase {
+  using CellPatternBase::CellPatternBase;
+  ICmpOpPattern(StringRef typeName, ICmpPredicate pred)
+      : CellPatternBase(typeName, {"A", "B"}, "Y"), pred(pred){};
+
+  ICmpOpPattern(StringRef typeName, ICmpPredicate pred,
+                ICmpPredicate signedPred)
+      : CellPatternBase(typeName, {"A", "B"}, "Y"), pred(pred){};
+
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
+                ValueRange inputValues) override {
+    return builder.create<ICmpOp>(location, pred, inputValues[0],
+                                  inputValues[1]);
+  }
+
+private:
+  circt::comb::ICmpPredicate pred;
+};
+
 struct XnorOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
-  Value convert(OpBuilder &builder, Location location,
+  Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
     auto aAndB = builder.create<AndOp>(location, inputValues, false);
     auto notA = comb::createOrFoldNot(location, inputValues[0], builder, false);
@@ -319,12 +292,9 @@ struct XnorOpPattern : public CellPatternBase {
 
 } // namespace
 
-template <typename CellPattern>
-void ImportRTLILModule::addPattern(StringRef typeName,
-                                   ArrayRef<StringRef> inputPortNames,
-                                   StringRef outputPortName) {
-  handler.insert({typeName, std::make_unique<CellPattern>(
-                                typeName, inputPortNames, outputPortName)});
+template <typename CellPattern, typename... Args>
+void ImportRTLILModule::addPattern(StringRef typeName, Args... args) {
+  handler.insert({typeName, std::make_unique<CellPattern>(typeName, args...)});
 }
 
 template <typename OpName>
@@ -335,24 +305,44 @@ void ImportRTLILModule::addOpPattern(StringRef typeName,
                                 typeName, inputPortNames, outputPortName)});
 }
 
+template <typename OpName>
+void ImportRTLILModule::addOpPatternBinary(StringRef typeName) {
+  handler.insert({typeName, std::make_unique<CellOpPattern<OpName>>(
+                                typeName, ArrayRef<StringRef>{"A", "B"}, "Y")});
+}
+
 void ImportRTLILModule::registerPatterns() {
-  addOpPattern<comb::XorOp>("$_XOR_", {"A", "B"}, "Y");
-  addOpPattern<comb::AndOp>("$_AND_", {"A", "B"}, "Y");
-  addOpPattern<comb::OrOp>("$_OR_", {"A", "B"}, "Y");
-  addPattern<AndOrNotOpPattern</*isAnd=*/true>>("$_ANDNOT_", {"A", "B"}, "Y");
-  addPattern<AndOrNotOpPattern</*isAnd=*/false>>("$_ORNOT_", {"A", "B"}, "Y");
-  addPattern<XnorOpPattern>("$_XNOR_", {"A", "B"}, "Y");
-  addPattern<NorOpPattern>("$_NOR_", {"A", "B"}, "Y");
-  addPattern<NandOpPattern>("$_NAND_", {"A", "B"}, "Y");
-  addPattern<NotOpPattern>("$_NOT_", {"A"}, "Y");
-  addPattern<MuxOpPattern>("$_MUX_", {"A", "B", "S"}, "Y");
+  // Comb primitive cells.
+  addOpPatternBinary<comb::AddOp>("$add");
+  addOpPatternBinary<comb::AndOp>("$and");
+  addOpPatternBinary<comb::OrOp>("$or");
+  addOpPatternBinary<comb::XorOp>("$xor");
+  addOpPatternBinary<comb::MulOp>("$mul");
+  addPattern<MuxOpPattern>("$mux", ArrayRef<StringRef>{"A", "B", "S"}, "Y");
+  addPattern<ICmpOpPattern>("$eq", ICmpPredicate::eq);
+  addPattern<ICmpOpPattern>("$ne", ICmpPredicate::ne);
+  addPattern<ICmpOpPattern>("$lt", ICmpPredicate::ult);
+
+  // Post-synthesis gate cells.
+  addOpPatternBinary<comb::XorOp>("$_XOR_");
+  addOpPatternBinary<comb::AndOp>("$_AND_");
+  addOpPatternBinary<comb::OrOp>("$_OR_");
+  addPattern<AndOrNotOpPattern</*isAnd=*/true>>(
+      "$_ANDNOT_", ArrayRef<StringRef>{"A", "B"}, "Y");
+  addPattern<AndOrNotOpPattern</*isAnd=*/false>>(
+      "$_ORNOT_", ArrayRef<StringRef>{"A", "B"}, "Y");
+  addPattern<XnorOpPattern>("$_XNOR_", ArrayRef<StringRef>{"A", "B"}, "Y");
+  addPattern<NorOpPattern>("$_NOR_", ArrayRef<StringRef>{"A", "B"}, "Y");
+  addPattern<NandOpPattern>("$_NAND_", ArrayRef<StringRef>{"A", "B"}, "Y");
+  addPattern<NotOpPattern>("$_NOT_", ArrayRef<StringRef>{"A"}, "Y");
+  addPattern<MuxOpPattern>("$_MUX_", ArrayRef<StringRef>{"A", "B", "S"}, "Y");
 }
 
 ImportRTLILModule::ImportRTLILModule(MLIRContext *context,
                                      const ImportRTLILDesign &importer,
                                      RTLIL::Module *rtlilModule,
                                      OpBuilder &moduleBuilder)
-    : importer(importer), rtlilModule(rtlilModule), context(context) {
+    : rtlilModule(rtlilModule), context(context), importer(importer) {
   builder = std::make_unique<OpBuilder>(context);
   block = std::make_unique<Block>();
   registerPatterns();
@@ -410,7 +400,7 @@ ImportRTLILModule::getInOutValue(Location loc, const SigSpec &sigSpec) {
       return {};
     }
     auto wire = getWireValue(bit.wire);
-    assert(v);
+    assert(wire);
     auto idx = builder->create<hw::ConstantOp>(
         wire.getLoc(),
         APInt(bit.wire->width <= 1 ? 1 : llvm::Log2_32_Ceil(bit.wire->width),
@@ -459,8 +449,8 @@ ImportRTLILModule::getInOutValue(Location loc, const SigSpec &sigSpec) {
 
     auto newIndex = builder->create<hw::ConstantOp>(
         loc, APInt(size <= 1 ? 1 : llvm::Log2_32_Ceil(size), newOffest));
-    auto newRhs =
-        builder->create<sv::IndexedPartSelectInOutOp>(loc, newWire, idx, width);
+    auto newRhs = builder->create<sv::IndexedPartSelectInOutOp>(
+        loc, newWire, newIndex, width);
 
     // Make sure offset is correct.
     // parent <= wire[t, offset]
@@ -495,7 +485,7 @@ LogicalResult ImportRTLILModule::importCell(
     const ImportRTLILDesign::ModuleMappingTy &moduleMapping,
     RTLIL::Cell *cell) {
   auto cellName = getStringAttr(cell->type);
-  LLVM_DEBUG(llvm::dbgs() << "Importing Cell " << v << "\n";);
+  LLVM_DEBUG(llvm::dbgs() << "Importing Cell " << cellName << "\n";);
   // Standard cells.
   auto it = handler.find(cellName);
   auto location = builder->getUnknownLoc();
@@ -597,7 +587,7 @@ LogicalResult ImportRTLILModule::importCell(
       lhsValues.push_back(t.second);
     for (auto t : rhsValuesWithIndex)
       values.push_back(t.second);
-  
+
     auto result = builder->create<hw::InstanceOp>(
         location, referredModule, getStringAttr(cell->name), values, paramArgs);
     assert(result.getNumResults() == lhsValues.size());
@@ -610,6 +600,61 @@ LogicalResult ImportRTLILModule::importCell(
   return result;
 }
 
+LogicalResult ImportRTLILModule::importBody(
+    const ImportRTLILDesign::ModuleMappingTy &moduleMapping) {
+  if (isa<HWModuleExternOp>(module))
+    return success();
+
+  SmallVector<std::pair<size_t, Value>> outputs;
+  builder->setInsertionPointToStart(module.getBodyBlock());
+  // Init wires.
+  ModulePortInfo portInfo(module.getPortList());
+  for (auto wire : rtlilModule->wires()) {
+    if (wire->port_input) {
+      auto arg = module.getBodyBlock()->getArgument(
+          portInfo.at(wire->port_id - 1).argNum);
+      mapping.insert({getStringAttr(wire->name), arg});
+    } else {
+      auto loc = builder->getUnknownLoc();
+      auto w = builder->create<sv::WireOp>(
+          loc, hw::ArrayType::get(builder->getIntegerType(1), wire->width));
+      auto read = builder->create<hw::BitcastOp>(
+          loc, builder->getIntegerType(wire->width),
+          builder->create<sv::ReadInOutOp>(loc, w));
+      mapping.insert({getStringAttr(wire), read});
+      wireMapping.insert({getStringAttr(wire), w});
+      if (wire->port_output) {
+        outputs.emplace_back(wire->port_id - 1, read);
+      }
+    }
+  }
+
+  llvm::sort(
+      outputs.begin(), outputs.end(),
+      [](const auto &lhs, const auto &rhs) { return lhs.first < rhs.first; });
+  SmallVector<Value> results;
+  for (auto p : llvm::map_range(outputs, [](auto &p) { return p.second; }))
+    results.push_back(p);
+
+  // Ensure terminator.
+  module.getBodyBlock()->getTerminator()->setOperands(results);
+  builder->setInsertionPointToStart(module.getBodyBlock());
+
+  // Import connections.
+  for (auto con : rtlilModule->connections()) {
+    if (failed(connect(builder->getUnknownLoc(), con.first, con.second)))
+      return failure();
+  }
+
+  // Import cells.
+  for (auto cell : rtlilModule->cells()) {
+    if (failed(importCell(moduleMapping, cell)))
+      return failure();
+  }
+
+  return success();
+}
+
 LogicalResult CellPatternBase::convert(ImportRTLILModule &importer,
                                        Cell *cell) {
   SmallVector<Value> inputs;
@@ -620,7 +665,7 @@ LogicalResult CellPatternBase::convert(ImportRTLILModule &importer,
   }
   auto location = importer.builder->getUnknownLoc();
 
-  auto rhsValue = convert(*importer.builder, location, inputs);
+  auto rhsValue = convert(cell, *importer.builder, location, inputs);
   auto lhsSig = importer.getPortSig(cell, outputPortName);
   auto lhsValue = importer.getInOutValue(location, lhsSig);
   return importer.connect(location, lhsValue, rhsValue);
@@ -639,7 +684,7 @@ LogicalResult ImportRTLILDesign::run(mlir::ModuleOp module) {
   for (auto &mod : modules) {
     if (failed(mod.importBody(moduleMapping)))
       return failure();
-    for (auto [str, ext] : mod.exeternalModules) {
+    for (auto [str, ext] : mod.getExternalModules()) {
       auto it = extMap.insert(str).second;
       if (it) {
         ext->moveBefore(module.getBody(), module.getBody()->begin());

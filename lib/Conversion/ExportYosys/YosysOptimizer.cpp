@@ -189,7 +189,7 @@ void ExportYosysParallelPass::runOnOperation() {
   };
   std::string commands;
   bool first = true;
-  for (auto i : passes) {
+  for (const auto& i : passes) {
     if (first) {
       first = false;
     } else {

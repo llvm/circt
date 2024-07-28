@@ -20,16 +20,8 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Threading.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
-#include "llvm/ADT/FunctionExtras.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Mutex.h"
-#include "llvm/Support/Program.h"
-#include "llvm/Support/ToolOutputFile.h"
 
 // Yosys headers.
 #include "backends/rtlil/rtlil_backend.h"
@@ -63,10 +55,31 @@ struct ExportRTLILModule
       public seq::SeqOpVisitor<ExportRTLILModule, LogicalResult> {
 
   FailureOr<RTLIL::Cell *>
-  createCell(llvm::StringRef cellName, llvm::StringRef instanceName,
+  createCell(Location loc, llvm::StringRef cellName,
+             llvm::StringRef instanceName,
              ArrayRef<std::pair<llvm::StringRef, mlir::Attribute>> parameters,
              ArrayRef<std::pair<llvm::StringRef, mlir::Value>> ports);
-  Yosys::Wire *createWire(Type type, StringAttr name) {
+
+  std::string getLocationStr(Location loc) {
+    llvm::SetVector<mlir::FileLineColLoc> locs;
+    SmallVector<LocationAttr> worklist{loc};
+    while (!worklist.empty()) {
+      auto val = worklist.pop_back_val();
+      if (auto file = dyn_cast<mlir::FileLineColLoc>(val))
+        locs.insert(file);
+      if (auto file = dyn_cast<mlir::FusedLoc>(val))
+        worklist.append(file.getLocations().begin(), file.getLocations().end());
+    }
+    std::string locStr;
+    for (auto loc : locs) {
+      locStr += loc.getFilename().getValue();
+      locStr += ":" + std::to_string(loc.getLine());
+      locStr += ":" + std::to_string(loc.getColumn());
+    }
+    return locStr;
+  }
+
+  Yosys::Wire *createWire(Type type, StringAttr name, LocationAttr loc = {}) {
     int64_t width = getBitWidthSeq(type);
 
     if (width < 0)
@@ -74,11 +87,13 @@ struct ExportRTLILModule
 
     auto *wire =
         rtlilModule->addWire(name ? getNewName(name) : getNewName(), width);
+    if (loc)
+      wire->set_src_attribute(getLocationStr(loc));
     return wire;
   }
 
   LogicalResult createAndSetWire(Value value, StringAttr name) {
-    auto *wire = createWire(value.getType(), name);
+    auto *wire = createWire(value.getType(), name, value.getLoc());
     if (!wire)
       return failure();
     return setValue(value, wire);
@@ -103,26 +118,6 @@ struct ExportRTLILModule
     return getEscapedName(moduleNameSpace.newName(name));
   }
 
-  LogicalResult lowerPorts();
-  LogicalResult lowerBody();
-
-  ExportRTLILModule(ExportRTLILDesign &circuitConverter,
-                    Yosys::RTLIL::Module *rtlilModule, hw::HWModuleLike module,
-                    bool definedAsBlackBox)
-      : circuitConverter(circuitConverter), rtlilModule(rtlilModule),
-        module(module), definedAsBlackBox(definedAsBlackBox) {}
-
-  ExportRTLILDesign &circuitConverter;
-
-  DenseMap<Value, RTLIL::Wire *> mapping;
-  struct MemoryInfo {
-    RTLIL::Memory *mem;
-    unsigned portId;
-  };
-  DenseMap<seq::FirMemOp, MemoryInfo> memoryMapping;
-  SmallVector<RTLIL::Wire *> outputs;
-  const bool definedAsBlackBox;
-
   LogicalResult setLowering(Value value, SigSpec s) {
     auto it = mapping.find(value);
     assert(it != mapping.end());
@@ -135,8 +130,21 @@ struct ExportRTLILModule
     return setLowering(value, SigSpec(s));
   }
 
-  Yosys::RTLIL::Module *rtlilModule;
-  hw::HWModuleLike module;
+  LogicalResult lowerPorts();
+  LogicalResult lowerBody();
+
+  ExportRTLILModule(ExportRTLILDesign &circuitConverter,
+                    Yosys::RTLIL::Module *rtlilModule, hw::HWModuleLike module,
+                    bool definedAsBlackBox)
+      : circuitConverter(circuitConverter), rtlilModule(rtlilModule),
+        module(module), definedAsBlackBox(definedAsBlackBox) {}
+
+  DenseMap<Value, RTLIL::Wire *> mapping;
+  struct MemoryInfo {
+    RTLIL::Memory *mem;
+    unsigned portId;
+  };
+
   using hw::TypeOpVisitor<ExportRTLILModule, LogicalResult>::visitTypeOp;
   using hw::StmtVisitor<ExportRTLILModule, LogicalResult>::visitStmt;
   using comb::CombinationalVisitor<ExportRTLILModule, LogicalResult>::visitComb;
@@ -224,11 +232,13 @@ struct ExportRTLILModule
     // Construct n-1 binary op (currently linear) chains.
     // TODO: Need to create a tree?
     std::optional<SigSpec> cur;
+    auto locStr = getLocationStr(op->getLoc());
     for (auto operand : op->getOperands()) {
       auto result = getValue(operand);
       if (failed(result))
         return failure();
-      cur = cur ? fn(getNewName(), *cur, result.value()) : result.value();
+      cur =
+          cur ? fn(getNewName(), *cur, result.value(), locStr) : result.value();
     }
 
     return setLowering(op->getResult(0), cur.value());
@@ -239,10 +249,11 @@ struct ExportRTLILModule
     assert(op->getNumOperands() == 2 && "only expect binary op");
     auto lhs = getValue(op->getOperand(0));
     auto rhs = getValue(op->getOperand(1));
+    auto locStr = getLocationStr(op->getLoc());
     if (failed(lhs) || failed(rhs))
       return failure();
     return setLowering(op->getResult(0),
-                       fn(getNewName(), lhs.value(), rhs.value()));
+                       fn(getNewName(), lhs.value(), rhs.value(), locStr));
   }
 
   template <typename UnaryFn>
@@ -253,6 +264,14 @@ struct ExportRTLILModule
       return failure();
     return setLowering(op->getResult(0), fn(getNewName(), input.value()));
   }
+
+  ExportRTLILDesign &circuitConverter;
+  DenseMap<seq::FirMemOp, MemoryInfo> memoryMapping;
+  SmallVector<RTLIL::Wire *> outputs;
+  const bool definedAsBlackBox;
+
+  Yosys::RTLIL::Module *rtlilModule;
+  hw::HWModuleLike module;
 };
 
 struct ExportRTLILDesign {
@@ -298,7 +317,7 @@ LogicalResult ExportRTLILModule::lowerPorts() {
   ModulePortInfo ports(module.getPortList());
   size_t inputPos = 0;
   for (auto [idx, port] : llvm::enumerate(ports)) {
-    auto *wire = createWire(port.type, port.name);
+    auto *wire = createWire(port.type, port.name, port.loc);
     if (!wire)
       return mlir::emitError(port.loc) << "unknown type";
     // NOTE: Port id is 1-indexed.
@@ -308,7 +327,9 @@ LogicalResult ExportRTLILModule::lowerPorts() {
       outputs.push_back(wire);
     } else if (port.isInput()) {
       if (!definedAsBlackBox)
-        setValue(module.getBodyBlock()->getArgument(inputPos++), wire);
+        if (failed(
+                setValue(module.getBodyBlock()->getArgument(inputPos++), wire)))
+          return failure();
       wire->port_input = true;
     } else {
       return module.emitError() << "inout is unssuported";
@@ -328,8 +349,8 @@ LogicalResult ExportRTLILModule::lowerBody() {
               if (getBitWidthSeq(result.getType()) >= 0)
                 if (failed(createAndSetWire(result, name)))
                   return WalkResult::interrupt();
-              return WalkResult::advance();
             }
+            return WalkResult::advance();
           })
           .wasInterrupted())
     return failure();
@@ -475,14 +496,14 @@ LogicalResult ExportRTLILModule::visitTypeOp(ArrayConcatOp op) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExportRTLILModule::visitComb(AddOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Add(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Add(name, l, r, false, loc);
   });
 }
 
 LogicalResult ExportRTLILModule::visitComb(SubOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Sub(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Sub(name, l, r, false, loc);
   });
 }
 
@@ -498,26 +519,26 @@ LogicalResult ExportRTLILModule::visitComb(MuxOp op) {
 }
 
 LogicalResult ExportRTLILModule::visitComb(AndOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->And(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, auto &loc) {
+    return rtlilModule->And(name, l, r, false, loc);
   });
 }
 
 LogicalResult ExportRTLILModule::visitComb(MulOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Mul(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Mul(name, l, r, false, loc);
   });
 }
 
 LogicalResult ExportRTLILModule::visitComb(OrOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Or(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Or(name, l, r, false, loc);
   });
 }
 
 LogicalResult ExportRTLILModule::visitComb(XorOp op) {
-  return emitVariadicOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Xor(name, l, r);
+  return emitVariadicOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Xor(name, l, r, false, loc);
   });
 }
 
@@ -543,20 +564,20 @@ LogicalResult ExportRTLILModule::visitComb(ConcatOp op) {
 }
 
 LogicalResult ExportRTLILModule::visitComb(ShlOp op) {
-  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Shl(name, l, r);
+  return emitBinaryOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Shl(name, l, r, false, loc);
   });
 }
 
 LogicalResult ExportRTLILModule::visitComb(ShrUOp op) {
-  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
-    return rtlilModule->Shr(name, l, r);
+  return emitBinaryOp(op, [&](auto name, auto l, auto r, const auto &loc) {
+    return rtlilModule->Shr(name, l, r, false, loc);
   });
 }
 LogicalResult ExportRTLILModule::visitComb(ShrSOp op) {
-  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r, const auto &loc) {
     // TODO: Make sure it's correct
-    return rtlilModule->Sshr(name, l, r);
+    return rtlilModule->Sshr(name, l, r, false, loc);
   });
 }
 
@@ -574,34 +595,32 @@ LogicalResult ExportRTLILModule::visitComb(ParityOp op) {
 }
 
 LogicalResult ExportRTLILModule::visitComb(ICmpOp op) {
-  return emitBinaryOp(op, [&](auto name, auto l, auto r) {
+  return emitBinaryOp(op, [&](auto name, auto l, auto r, const auto &loc) {
     switch (op.getPredicate()) {
     case ICmpPredicate::eq:
     case ICmpPredicate::ceq:
     case ICmpPredicate::weq:
-      return rtlilModule->Eq(name, l, r);
+      return rtlilModule->Eq(name, l, r, false, loc);
     case ICmpPredicate::ne:
     case ICmpPredicate::cne:
     case ICmpPredicate::wne:
-      return rtlilModule->Ne(name, l, r);
+      return rtlilModule->Ne(name, l, r, false, loc);
     case ICmpPredicate::slt:
-      return rtlilModule->Lt(name, l, r, /*is_signed=*/true);
+      return rtlilModule->Lt(name, l, r, /*is_signed=*/true, loc);
     case ICmpPredicate::sle:
-      return rtlilModule->Le(name, l, r, /*is_signed=*/true);
+      return rtlilModule->Le(name, l, r, /*is_signed=*/true, loc);
     case ICmpPredicate::sgt:
-      return rtlilModule->Gt(name, l, r, /*is_signed=*/true);
+      return rtlilModule->Gt(name, l, r, /*is_signed=*/true, loc);
     case ICmpPredicate::sge:
-      return rtlilModule->Ge(name, l, r, /*is_signed=*/true);
+      return rtlilModule->Ge(name, l, r, /*is_signed=*/true, loc);
     case ICmpPredicate::ult:
-      return rtlilModule->Lt(name, l, r, /*is_signed=*/false);
+      return rtlilModule->Lt(name, l, r, /*is_signed=*/false, loc);
     case ICmpPredicate::ule:
-      return rtlilModule->Le(name, l, r, /*is_signed=*/false);
+      return rtlilModule->Le(name, l, r, /*is_signed=*/false, loc);
     case ICmpPredicate::ugt:
-      return rtlilModule->Gt(name, l, r, /*is_signed=*/false);
+      return rtlilModule->Gt(name, l, r, /*is_signed=*/false, loc);
     case ICmpPredicate::uge:
-      return rtlilModule->Ge(name, l, r, /*is_signed=*/false);
-    default:
-      llvm::report_fatal_error("unsupported icmp predicate");
+      return rtlilModule->Ge(name, l, r, /*is_signed=*/false, loc);
     }
   });
 }
@@ -668,11 +687,12 @@ LogicalResult ExportRTLILModule::visitSeq(seq::FirMemOp op) {
 }
 
 FailureOr<RTLIL::Cell *> ExportRTLILModule::createCell(
-    llvm::StringRef cellName, llvm::StringRef instanceName,
+    Location loc, llvm::StringRef cellName, llvm::StringRef instanceName,
     ArrayRef<std::pair<StringRef, mlir::Attribute>> parameters,
     ArrayRef<std::pair<StringRef, mlir::Value>> ports) {
   auto *cell =
       rtlilModule->addCell(getNewName(instanceName), getEscapedName(cellName));
+  cell->set_src_attribute(getLocationStr(loc));
   for (auto [portName, value] : ports) {
     auto loweredValue = getValue(value);
     if (failed(loweredValue))
@@ -726,7 +746,8 @@ LogicalResult ExportRTLILModule::visitSeq(seq::FirMemWriteOp op) {
       {"PORTID", portId},          {"WIDTH", width},
       {"PRIORITY_MASK", trueConst}};
 
-  auto cell = createCell("$memwr_v2", "mem_write", parameters, ports);
+  auto cell =
+      createCell(op->getLoc(), "$memwr_v2", "mem_write", parameters, ports);
   if (failed(cell))
     return cell;
 
@@ -777,7 +798,7 @@ LogicalResult ExportRTLILModule::visitSeq(seq::FirMemReadOp op) {
       {"MEMID", memName},
       {"WIDTH", width}};
 
-  auto cell = createCell("$memrd", "mem_read", parameters, ports);
+  auto cell = createCell(op->getLoc(), "$memrd", "mem_read", parameters, ports);
   if (failed(cell))
     return cell;
   if (!op.getEnable()) {

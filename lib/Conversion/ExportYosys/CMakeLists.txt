@@ -16,7 +16,6 @@ if (MSVC)
 else ()
   # slang uses exceptions; we intercept these in ImportVerilog
   add_compile_options(-D_YOSYS_)
-  # add_compile_options(-DYOSYS_ENABLE_TCL)
   add_compile_options(-DYOSYS_ENABLE_ABC)
   add_compile_options(-DYOSYS_ENABLE_GLOB)
   add_compile_options(-DYOSYS_ENABLE_PLUGINS)
@@ -28,9 +27,9 @@ else ()
   ## slang has some classes with virtual funcs but non-virtual destructor.
   #add_compile_options(-Wno-non-virtual-dtor)
   ## some other warnings we've seeSHAREDn
-  #add_compile_options(-Wno-c++98-compat-extra-semi)
+  add_compile_options(-Wno-c++98-compat-extra-semi)
   #add_compile_options(-Wno-ctad-maybe-unsupported)
-  #add_compile_options(-Wno-cast-qual)
+  add_compile_options(-Wno-cast-qual)
   ## visitor switch statements cover all cases but have default
   #add_compile_options(-Wno-covered-switch-default)
 endif ()
