@@ -784,4 +784,36 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// Yosys Integration 
+//===----------------------------------------------------------------------===//
+
+#ifdef CIRCT_YOSYS_INTEGRATION_ENABLED
+def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
+  let summary = "Translate core dialects into yosys's RTL IR";
+  let constructor = "createExportYosys()";
+  let options = [
+    ListOption<"passes", "passes", "std::string",
+               "Specify Yosys passes to run">,
+    Option<"topModule", "top-module", "std::string",
+            "", "top module name">,
+    Option<"redirectLog", "redirect-log", "bool",
+            "false", "">
+  ];
+}
+
+def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
+  let summary = "Translate core dialects into yosys's RTL IR";
+  let constructor = "createExportYosysParallel()";
+  let options = [
+    ListOption<"passes", "passes", "std::string",
+               "Specify Yosys passes to run">,
+    Option<"topModule", "top-module", "std::string",
+            "", "top module name">,
+    Option<"workspace", "workspace", "std::string",
+            "", "workspace to run yosys">
+  ];
+}
+#endif
+
 #endif // CIRCT_CONVERSION_PASSES_TD
