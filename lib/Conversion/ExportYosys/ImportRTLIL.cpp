@@ -9,7 +9,6 @@
 // This transform translate Seq FirMem ops to instances of HW generated modules.
 //
 //===----------------------------------------------------------------------===//
-#include "../PassDetail.h"
 #include "RTLILConverterInternal.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -439,7 +438,7 @@ ImportRTLILModule::getInOutValue(Location loc, const SigSpec &sigSpec) {
     }
     auto child = wireMapping.lookup(getStringAttr(sig.wire));
     auto childSize =
-        child.getElementType().cast<hw::ArrayType>().getNumElements();
+        cast<hw::ArrayType>(child.getElementType()).getNumElements();
     auto width = sig.width;
     auto offset = sig.offset;
     auto idx = builder->create<hw::ConstantOp>(
@@ -514,10 +513,8 @@ LogicalResult ImportRTLILModule::importCell(
                  << "port lowering failed cell name=" << cellName
 
                  << " port name=" << lhs.c_str();
-        auto array = lhsValuesWithIndex.back()
-                         .second.getType()
-                         .getElementType()
-                         .dyn_cast<hw::ArrayType>();
+        auto array = dyn_cast<hw::ArrayType>(
+            lhsValuesWithIndex.back().second.getType().getElementType());
         hwPort.type =
             builder->getIntegerType(array ? array.getNumElements() : 1);
       } else {

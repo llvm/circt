@@ -9,7 +9,6 @@
 // This transform translate Seq FirMem ops to instances of HW generated modules.
 //
 //===----------------------------------------------------------------------===//
-#include "../PassDetail.h"
 #include "RTLILConverterInternal.h"
 #include "circt/Conversion/ExportRTLIL.h"
 #include "circt/Dialect/Comb/CombVisitors.h"

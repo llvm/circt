@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Conversion/ExportRTLIL.h"
-#include "../PassDetail.h"
 #include "RTLILConverterInternal.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
