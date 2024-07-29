@@ -176,7 +176,7 @@ public:
       : WriteChannelPort(type), rpcClient(rpcClient), desc(desc), name(name) {}
   ~WriteCosimChannelPort() = default;
 
-  void connectImpl() override {
+  void connectImpl(std::optional<unsigned> bufferSize) override {
     if (desc.type() != getType()->getID())
       throw std::runtime_error("Channel '" + name +
                                "' has wrong type. Expected " +
@@ -224,7 +224,7 @@ public:
         context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
-  void connectImpl() override {
+  void connectImpl(std::optional<unsigned> bufferSize) override {
     // Sanity checking.
     if (desc.type() != getType()->getID())
       throw std::runtime_error("Channel '" + name +

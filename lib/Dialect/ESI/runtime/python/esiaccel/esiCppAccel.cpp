@@ -175,7 +175,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       });
 
   py::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect)
+      .def("connect", &ChannelPort::connect,
+           py::arg("buffer_size") = std::nullopt)
       .def_property_readonly("type", &ChannelPort::getType,
                              py::return_value_policy::reference);
 
