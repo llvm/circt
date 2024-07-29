@@ -78,11 +78,11 @@ hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) {
       // CHECK: verif.ensure %[[P1]] : i1
       verif.ensure %post1 : i1
   }
-  // CHECK-LABEL: %[[C1:.+]] = hw.constant
+  // CHECK: %[[C1:.+]] = hw.constant
   %c1_8 = hw.constant 1 : i8
-  // CHECK-LABEL: %[[O1:.+]] = comb.add
+  // CHECK: %[[O1:.+]] = comb.add
   %o0 = comb.add bin %foo, %c1_8 : i8
-  // CHECK-LABEL: %[[O2:.+]] = comb.sub
+  // CHECK: %[[O2:.+]] = comb.sub
   %o1 = comb.sub bin %foo, %c1_8 : i8
   // CHECK-LABEL: hw.output
   hw.output %o0, %o1 : i8, i8
