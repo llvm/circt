@@ -655,8 +655,8 @@ firrtl.circuit "Foo" {
     %d = firrtl.double 0.333333333333333333333333333333333333333
     firrtl.propassign %double, %d : !firrtl.double
 
-    // CHECK: propassign path, path("OMDeleted")
-    %p = firrtl.unresolved_path "OMDeleted"
+    // CHECK: propassign path, path("OMDeleted:")
+    %p = firrtl.unresolved_path "OMDeleted:"
     firrtl.propassign %path, %p : !firrtl.path
 
     // CHECK:      propassign list,

@@ -7,7 +7,7 @@ import time
 platform = sys.argv[1]
 acc = esiaccel.AcceleratorConnection(platform, sys.argv[2])
 
-hostmem = acc.get_host_memory()
+hostmem = acc.get_service_hostmem()
 if hostmem is not None:
   mem1 = hostmem.allocate(1024)
   assert mem1.size == 1024
@@ -30,7 +30,7 @@ assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
 mysvc_send = loopback.ports[esiaccel.AppID("mysvc_recv")].write_port("recv")
-mysvc_send.connect()
+mysvc_send.connect(buffer_size=12)
 mysvc_send.write(None)
 print(f"mysvc_send.type: {mysvc_send.type}")
 assert isinstance(mysvc_send.type, types.VoidType)

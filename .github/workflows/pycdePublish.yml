@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-
   # ---------------------------------------------------------------------------
   #  Build and test Linux wheels. Run the CIRCT tests also.
   # ---------------------------------------------------------------------------
@@ -81,7 +80,6 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-
   # ---------------------------------------------------------------------------
   #  Build and test Windows wheels.
   # ---------------------------------------------------------------------------
@@ -126,8 +124,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install cibuildwheel twine
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel twine
           choco install ninja
 
       - name: Build wheel
@@ -141,7 +139,7 @@ jobs:
           RUN_TESTS: False
         run: |
           echo "Building wheel"
-          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python3 -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
 
       - name: Get wheel name
         shell: bash
@@ -157,7 +155,6 @@ jobs:
           path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
-
 
   # ---------------------------------------------------------------------------
   #  If both the Linux and Windows builds are successful, push the wheels to

@@ -185,10 +185,6 @@ struct StmtVisitor {
 
   // Handle `for` loops.
   LogicalResult visit(const slang::ast::ForLoopStatement &stmt) {
-    if (!stmt.loopVars.empty())
-      return mlir::emitError(loc,
-                             "variables in for loop initializer not supported");
-
     // Generate the initializers.
     for (auto *initExpr : stmt.initializers)
       if (!context.convertRvalueExpression(*initExpr))

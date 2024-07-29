@@ -109,4 +109,21 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
   let constructor = "circt::llhd::createEarlyCodeMotionPass()";
 }
 
+def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
+  let summary = "move drive operations to the exit basic block in processes";
+  let description = [{
+    This pass uses the temporal region analysis to transform the IR such that
+    every temporal region has a unique exit block and moves all 'llhd.drv'
+    operations in a temporal region into its exit block by adjusting the
+    enable operand.
+    Furthermore, it combines 'llhd.drv' operations driving the same signal with
+    the same delay by multiplexing the driven value according to their enable
+    operands.
+    This pass assumes that the early code motion pass has been run beforehand.
+    Otherwise, dominance errors are to be expected.
+  }];
+
+  let constructor = "circt::llhd::createTemporalCodeMotionPass()";
+}
+
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
