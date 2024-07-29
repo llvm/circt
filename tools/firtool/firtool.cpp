@@ -267,6 +267,18 @@ static cl::list<std::string>
                   cl::value_desc("layer-list"), cl::MiscFlags::CommaSeparated,
                   cl::cat(mainCategory));
 
+enum class LayerSpecializationOpt { None, Enable, Disable };
+static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
+    "default-layer-specialization",
+    llvm::cl::desc("The default specialization for layers"),
+    llvm::cl::values(
+        clEnumValN(LayerSpecializationOpt::None, "none", "Layers are disabled"),
+        clEnumValN(LayerSpecializationOpt::Disable, "disable",
+                   "Layers are disabled"),
+        clEnumValN(LayerSpecializationOpt::Enable, "enable",
+                   "Layers are enabled")),
+    cl::init(LayerSpecializationOpt::None), cl::cat(mainCategory)};
+
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
@@ -371,6 +383,19 @@ static LogicalResult processBuffer(
     options.scalarizeExtModules = scalarizeExtModules;
     options.enableLayers = enableLayers;
     options.disableLayers = disableLayers;
+
+    switch (defaultLayerSpecialization) {
+    case LayerSpecializationOpt::None:
+      options.defaultLayerSpecialization = std::nullopt;
+      break;
+    case LayerSpecializationOpt::Enable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Enable;
+      break;
+    case LayerSpecializationOpt::Disable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Disable;
+      break;
+    }
+
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");

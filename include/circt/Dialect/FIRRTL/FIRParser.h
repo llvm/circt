@@ -14,7 +14,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 #define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Support/LLVM.h"
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,6 +55,7 @@ struct FIRParserOptions {
   bool scalarizeExtModules = false;
   std::vector<std::string> enableLayers;
   std::vector<std::string> disableLayers;
+  std::optional<LayerSpecialization> defaultLayerSpecialization;
 };
 
 mlir::OwningOpRef<mlir::ModuleOp> importFIRFile(llvm::SourceMgr &sourceMgr,
