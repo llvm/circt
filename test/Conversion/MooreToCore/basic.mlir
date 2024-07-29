@@ -201,8 +201,8 @@ moore.module @InstanceNull() {
   moore.output
 }
 
-// CHECK-LABEL: hw.module @Null() {
-moore.module @Null() {
+// CHECK-LABEL: hw.module private @Null() {
+moore.module private @Null() {
 
   // CHECK-NEXT: hw.output
   moore.output
@@ -222,10 +222,10 @@ moore.module @Top(in %arg0 : !moore.l1, in %arg1 : !moore.l1, out out0 : !moore.
   moore.output %inst_1.c : !moore.l1
 }
 
-// CHECK-LABEL: hw.module @SubModule_0(in
+// CHECK-LABEL: hw.module private @SubModule_0(in
 // CHECK-SAME: %[[V0:.*]] : i1, in
 // CHECK-SAME: %[[V1:.*]] : i1, out c : i1) {
-moore.module @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1) {
+moore.module private @SubModule_0(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1) {
   // CHECK-NEXT: %[[V2:.*]] = comb.and %[[V0]], %[[V1]] : i1
   %0 = moore.and %a, %b : !moore.l1
 
