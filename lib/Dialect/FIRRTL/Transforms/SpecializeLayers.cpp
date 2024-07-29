@@ -128,22 +128,21 @@ private:
   Block::iterator it;
 };
 
-/// The specialization mode of a layer.
-enum class Specialization { Enable, Disable };
-
 /// A specialized value.  If the value is colored such that it is disabled,
 /// it will not contain an underlying value.  Otherwise, contains the
 /// specialized version of the value.
 template <typename T>
 struct Specialized {
   /// Create a disabled specialized value.
-  Specialized() : Specialized(Specialization::Disable, nullptr) {}
+  Specialized() : Specialized(LayerSpecialization::Disable, nullptr) {}
 
   /// Create an enabled specialized value.
-  Specialized(T value) : Specialized(Specialization::Enable, value) {}
+  Specialized(T value) : Specialized(LayerSpecialization::Enable, value) {}
 
   /// Returns true if the value was specialized away.
-  bool isDisabled() const { return value.getInt() == Specialization::Disable; }
+  bool isDisabled() const {
+    return value.getInt() == LayerSpecialization::Disable;
+  }
 
   /// Returns the specialized value if it still exists.
   T getValue() const {
@@ -154,17 +153,19 @@ struct Specialized {
   operator bool() const { return !isDisabled(); }
 
 private:
-  Specialized(Specialization specialization, T value)
+  Specialized(LayerSpecialization specialization, T value)
       : value(value, specialization) {}
-  llvm::PointerIntPair<T, 1, Specialization> value;
+  llvm::PointerIntPair<T, 1, LayerSpecialization> value;
 };
 
 struct SpecializeLayers {
   SpecializeLayers(
       CircuitOp circuit,
-      const DenseMap<SymbolRefAttr, Specialization> &specializations)
+      const DenseMap<SymbolRefAttr, LayerSpecialization> &specializations,
+      std::optional<LayerSpecialization> defaultSpecialization)
       : context(circuit->getContext()), circuit(circuit),
-        specializations(specializations) {}
+        specializations(specializations),
+        defaultSpecialization(defaultSpecialization) {}
 
   /// Create a reference to every field in the inner symbol, and record it in
   /// the list of removed symbols.
@@ -187,18 +188,18 @@ struct SpecializeLayers {
 
   /// If this layer reference is being specialized, returns the specialization
   /// mode.  Otherwise, it returns disabled value.
-  std::optional<Specialization> getSpecialization(SymbolRefAttr layerRef) {
+  std::optional<LayerSpecialization> getSpecialization(SymbolRefAttr layerRef) {
     auto it = specializations.find(layerRef);
     if (it != specializations.end())
       return it->getSecond();
-    return std::nullopt;
+    return defaultSpecialization;
   }
 
   /// Forms a symbol reference to a layer using head as the root reference, and
   /// nestedRefs as the path to the specific layer. If this layer reference is
   /// being specialized, returns the specialization mode.  Otherwise, it returns
   /// nullopt.
-  std::optional<Specialization>
+  std::optional<LayerSpecialization>
   getSpecialization(StringAttr head, ArrayRef<FlatSymbolRefAttr> nestedRefs) {
     return getSpecialization(SymbolRefAttr::get(head, nestedRefs));
   }
@@ -227,23 +228,27 @@ struct SpecializeLayers {
     // name with the prefix which is then reset to the empty string, and copy it
     // into the new specialize layer reference.
     auto helper = [&](StringAttr ref) -> bool {
-      if (auto specialization = getSpecialization(oldRoot, oldNestedRefs)) {
-        if (*specialization == Specialization::Enable) {
-          // We are enabling this layer, the next non-enabled layer should
-          // include this layer's name as a prefix.
-          prefix.append(ref.getValue());
-          prefix.append("_");
-          return true;
-        }
-        // We are disabling this layer.
-        return false;
-      }
+      auto specialization = getSpecialization(oldRoot, oldNestedRefs);
+
       // We are not specializing this layer. Mangle the name with the current
       // prefix.
-      newRef.push_back(FlatSymbolRefAttr::get(
-          StringAttr::get(ref.getContext(), prefix + ref.getValue())));
-      prefix.clear();
-      return true;
+      if (!specialization) {
+        newRef.push_back(FlatSymbolRefAttr::get(
+            StringAttr::get(ref.getContext(), prefix + ref.getValue())));
+        prefix.clear();
+        return true;
+      }
+
+      // We are enabling this layer, the next non-enabled layer should
+      // include this layer's name as a prefix.
+      if (*specialization == LayerSpecialization::Enable) {
+        prefix.append(ref.getValue());
+        prefix.append("_");
+        return true;
+      }
+
+      // We are disabling this layer.
+      return false;
     };
 
     if (!helper(oldRoot))
@@ -328,7 +333,7 @@ struct SpecializeLayers {
 
     // We are enabling this layer, and all contents of this layer need to be
     // moved (inlined) to the insertion point.
-    if (*specialization == Specialization::Enable) {
+    if (*specialization == LayerSpecialization::Enable) {
       // Move all contents to the insertion point and specialize them.
       specializeBlock(layerBlock.getBody(), insertionPoint, removedSyms);
       // Erase the now empty layerblock.
@@ -604,7 +609,9 @@ struct SpecializeLayers {
             return;
           }
 
-          if (*specialization == Specialization::Enable) {
+          // We are enabling this layer.  We must inline inner layers, and
+          // mangle their names.
+          if (*specialization == LayerSpecialization::Enable) {
             for (auto nested :
                  llvm::make_early_inc_range(block->getOps<LayerOp>())) {
               nestedRefs.push_back(SymbolRefAttr::get(nested));
@@ -691,7 +698,10 @@ struct SpecializeLayers {
 
   MLIRContext *context;
   CircuitOp circuit;
-  const DenseMap<SymbolRefAttr, Specialization> &specializations;
+  const DenseMap<SymbolRefAttr, LayerSpecialization> &specializations;
+  /// The default specialization mode to be applied when a layer has not been
+  /// explicitly enabled or disabled.
+  std::optional<LayerSpecialization> defaultSpecialization;
 };
 
 struct SpecializeLayersPass
@@ -701,24 +711,16 @@ struct SpecializeLayersPass
     auto circuit = getOperation();
     SymbolTableCollection stc;
 
-    // Get the list of enabled and disabled layers, and remove them from the
-    // circuit operation.
-    auto enabledLayers = circuit.getEnableLayersAttr();
-    circuit.removeEnableLayersAttr();
-    auto disabledLayers = circuit.getDisableLayersAttr();
-    circuit.removeDisableLayersAttr();
-
-    // If we did not transform the circuit the circuit, return early.
-    // TODO: if both arrays are empty we could preserve specific analyses, but
-    // not all analyses since we have modified the circuit op.
-    if (!enabledLayers && !disabledLayers)
-      return markAllAnalysesPreserved();
-
     // Set of layers to enable or disable.
-    DenseMap<SymbolRefAttr, Specialization> specializations;
+    DenseMap<SymbolRefAttr, LayerSpecialization> specializations;
+
+    // If we are not specialization any layers, we can return early.
+    bool shouldSpecialize = false;
 
     // Record all the layers which are being enabled.
-    if (enabledLayers) {
+    if (auto enabledLayers = circuit.getEnableLayersAttr()) {
+      shouldSpecialize = true;
+      circuit.removeEnableLayersAttr();
       for (auto enabledLayer : enabledLayers.getAsRange<SymbolRefAttr>()) {
         // Verify that this is a real layer.
         if (!stc.lookupSymbolIn(circuit, enabledLayer)) {
@@ -726,12 +728,14 @@ struct SpecializeLayersPass
           signalPassFailure();
           return;
         }
-        specializations[enabledLayer] = Specialization::Enable;
+        specializations[enabledLayer] = LayerSpecialization::Enable;
       }
     }
 
     // Record all of the layers which are being disabled.
-    if (disabledLayers) {
+    if (auto disabledLayers = circuit.getDisableLayersAttr()) {
+      shouldSpecialize = true;
+      circuit.removeDisableLayersAttr();
       for (auto disabledLayer : disabledLayers.getAsRange<SymbolRefAttr>()) {
         // Verify that this is a real layer.
         if (!stc.lookupSymbolIn(circuit, disabledLayer)) {
@@ -742,9 +746,9 @@ struct SpecializeLayersPass
         }
 
         // Verify that we are not both enabling and disabling this layer.
-        auto [it, inserted] =
-            specializations.try_emplace(disabledLayer, Specialization::Disable);
-        if (!inserted && it->getSecond() == Specialization::Enable) {
+        auto [it, inserted] = specializations.try_emplace(
+            disabledLayer, LayerSpecialization::Disable);
+        if (!inserted && it->getSecond() == LayerSpecialization::Enable) {
           mlir::emitError(circuit.getLoc())
               << "layer " << disabledLayer << " both enabled and disabled";
           signalPassFailure();
@@ -753,8 +757,20 @@ struct SpecializeLayersPass
       }
     }
 
+    std::optional<LayerSpecialization> defaultSpecialization = std::nullopt;
+    if (auto specialization = circuit.getDefaultLayerSpecialization()) {
+      shouldSpecialize = true;
+      defaultSpecialization = *specialization;
+    }
+
+    // If we did not transform the circuit, return early.
+    // TODO: if both arrays are empty we could preserve specific analyses, but
+    // not all analyses since we have modified the circuit op.
+    if (!shouldSpecialize)
+      return markAllAnalysesPreserved();
+
     // Run specialization on our circuit.
-    SpecializeLayers(circuit, specializations)();
+    SpecializeLayers(circuit, specializations, defaultSpecialization)();
   }
 };
 } // end anonymous namespace
