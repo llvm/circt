@@ -35,7 +35,12 @@ public:
   ChannelPort(const Type *type) : type(type) {}
   virtual ~ChannelPort() { disconnect(); }
 
-  virtual void connect() { connectImpl(); }
+  /// Set up a connection to the accelerator. The buffer size is optional and
+  /// should be considered merely a hint. Individual implementations use it
+  /// however they like. The unit is number of messages of the port type.
+  virtual void connect(std::optional<unsigned> bufferSize = std::nullopt) {
+    connectImpl(bufferSize);
+  }
   virtual void disconnect() {}
 
   const Type *getType() const { return type; }
@@ -45,7 +50,7 @@ private:
 
   /// Called by all connect methods to let backends initiate the underlying
   /// connections.
-  virtual void connectImpl() {}
+  virtual void connectImpl(std::optional<unsigned> bufferSize) {}
 };
 
 /// A ChannelPort which sends data to the accelerator.
@@ -79,7 +84,8 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(std::function<bool(MessageData)> callback);
+  virtual void connect(std::function<bool(MessageData)> callback,
+                       std::optional<unsigned> bufferSize = std::nullopt);
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -90,7 +96,8 @@ public:
   static constexpr uint64_t DefaultMaxDataQueueMsgs = 32;
 
   /// Connect to the channel in polling mode.
-  virtual void connect() override;
+  virtual void
+  connect(std::optional<unsigned> bufferSize = std::nullopt) override;
 
   /// Asynchronous read.
   virtual std::future<MessageData> readAsync();
@@ -105,7 +112,10 @@ public:
 
   /// Set maximum number of messages to store in the dataQueue. 0 means no
   /// limit. This is only used in polling mode and is set to default of 32 upon
-  /// connect.
+  /// connect. While it may seem redundant to have this and bufferSize, there
+  /// may be (and are) backends which have a very small amount of memory which
+  /// are accelerator accessible and want to move messages out as quickly as
+  /// possible.
   void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
 
 protected:

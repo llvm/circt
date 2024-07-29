@@ -646,6 +646,28 @@ class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 def ModUOp : ModOpBase<"modu">;
 def ModSOp : ModOpBase<"mods">;
 
+class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
+  let summary = "Power";
+  let description = [{
+    Raise the left-hand side to the power of the right-hand side. `powu` treats
+    its operands as unsigned numbers, while `pows` treats them as signed
+    numbers.
+
+    Evaluation rules for `a ** b`:
+
+    |       | a < -1 | a = -1         | a = 0 | a = 1 | a > 1  |
+    |-------|--------|----------------|-------|-------|--------|
+    | b > 0 | a ** b | b odd ? -1 : 1 |     0 |     1 | a ** b |
+    | b = 0 |      1 |              1 |     1 |     1 |      1 |
+    | b < 0 |      0 | b odd ? -1 : 1 |     X |     1 |      0 |
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
+  }];
+}
+
+def PowUOp : PowOpBase<"powu">;
+def PowSOp : PowOpBase<"pows">;
+
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
   let description = [{
@@ -924,9 +946,10 @@ def ReplicateOp : MooreOp<"replicate", [
   }];
 }
 
-def ExtractOp : MooreOp<"extract"> {
-  let summary = "Addressing operation";
+def ExtractOp : MooreOp<"extract", [Pure]> {
+  let summary = "Extract a range or single bits from a value";
   let description = [{
+    It's used to select from a value with a constant low bit.
     This operation includes the vector bit/part-select, array, and memory 
     addressing.If the address is invalid--out of bounds or has x or z bit--
     then it will produce x for 4-state or 0 for 2-state.
@@ -952,6 +975,18 @@ def ExtractOp : MooreOp<"extract"> {
     ```
     See IEEE 1800-2017 § 11.5.2 "Array and memory addressing".
   }];
+  let arguments = (ins UnpackedType:$input, I32Attr:$lowBit);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
+  let description = [{
+    It's similar with extract, but it's used to select from a value
+    with a dynamic low bit.
+  }];
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
@@ -960,8 +995,21 @@ def ExtractOp : MooreOp<"extract"> {
   }];
 }
 
-def ExtractRefOp : MooreOp<"extract_ref"> {
-  let summary = "The copy of extract that explicitly works on the ref type.";
+def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+  let description = [{
+  The copy of extract that explicitly works on the ref type.
+  }];
+  let arguments = (ins RefType:$input, I32Attr:$lowBit);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+  let description = [{
+  The copy of dyn_extract that explicitly works on the ref type.
+  }];
   let arguments = (ins RefType:$input, UnpackedType:$lowBit);
   let results = (outs RefType:$result);
   let assemblyFormat = [{

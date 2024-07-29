@@ -260,6 +260,18 @@ struct RvalueExprVisitor {
         return createBinary<moore::ModSOp>(lhs, rhs);
       else
         return createBinary<moore::ModUOp>(lhs, rhs);
+    case BinaryOperator::Power: {
+      // Slang casts the LHS and result of the `**` operator to a four-valued
+      // type, since the operator can return X even for two-valued inputs. To
+      // maintain uniform types across operands and results, cast the RHS to
+      // that four-valued type as well.
+      auto rhsCast =
+          builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::PowSOp>(lhs, rhsCast);
+      else
+        return createBinary<moore::PowUOp>(lhs, rhsCast);
+    }
 
     case BinaryOperator::BinaryAnd:
       return createBinary<moore::AndOp>(lhs, rhs);
@@ -364,9 +376,6 @@ struct RvalueExprVisitor {
         return builder.create<moore::AShrOp>(loc, lhs, rhs);
       return builder.create<moore::ShrOp>(loc, lhs, rhs);
     }
-
-    case BinaryOperator::Power:
-      break;
     }
 
     mlir::emitError(loc, "unsupported binary operator");
@@ -379,17 +388,14 @@ struct RvalueExprVisitor {
       mlir::emitError(loc, "literals with X or Z bits not supported");
       return {};
     }
-    if (value.getBitWidth() > 64) {
-      mlir::emitError(loc, "unsupported bit width: literal is ")
-          << value.getBitWidth() << " bits wide; only 64 supported";
-      return {};
-    }
     auto intType =
         moore::IntType::get(context.getContext(), value.getBitWidth(),
                             value.hasUnknown() ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    auto truncValue = value.as<uint64_t>().value();
-    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    Value result = builder.create<moore::ConstantOp>(
+        loc, intType,
+        APInt(value.getBitWidth(),
+              ArrayRef<uint64_t>(value.getRawPtr(), value.getNumWords())));
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
@@ -440,24 +446,47 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertRvalueExpression(expr.value());
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-
-    if (!type || !value || !lowBit)
+    if (!type || !value)
       return {};
-    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+    if (auto *constValue = expr.selector().constant) {
+      assert(!constValue->hasUnknown());
+      assert(constValue->size() <= 32);
+
+      auto lowBit = constValue->integer().as<uint32_t>().value();
+      return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+    }
+    auto lowBit = context.convertRvalueExpression(expr.selector());
+    if (!lowBit)
+      return {};
+    return builder.create<moore::DynExtractOp>(loc, type, value, lowBit);
   }
 
   // Handle range bits selections.
   Value visit(const slang::ast::RangeSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertRvalueExpression(expr.value());
-    Value lowBit;
+    if (!type || !value)
+      return {};
+
+    Value dynLowBit;
+    uint32_t constLowBit;
+    auto *leftConst = expr.left().constant;
+    auto *rightConst = expr.right().constant;
+    if (leftConst) {
+      assert(!leftConst->hasUnknown());
+      assert(leftConst->size() <= 32);
+    }
+    if (rightConst) {
+      assert(!rightConst->hasUnknown());
+      assert(rightConst->size() <= 32);
+    }
+
     if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (expr.left().constant && expr.right().constant) {
-        auto lhs = expr.left().constant->integer().as<uint64_t>().value();
-        auto rhs = expr.right().constant->integer().as<uint64_t>().value();
-        lowBit = lhs < rhs ? context.convertRvalueExpression(expr.left())
-                           : context.convertRvalueExpression(expr.right());
+      if (leftConst && rightConst) {
+        // Estimate whether is big endian or little endian.
+        auto lhs = leftConst->integer().as<uint32_t>().value();
+        auto rhs = rightConst->integer().as<uint32_t>().value();
+        constLowBit = lhs < rhs ? lhs : rhs;
       } else {
         mlir::emitError(loc, "unsupported a variable as the index in the")
             << slang::ast::toString(expr.getSelectionKind()) << "kind";
@@ -468,23 +497,33 @@ struct RvalueExprVisitor {
       // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
       // depending on little endian or bit endian. No matter which situation,
       // the low bit must be "0".
-      auto minuend = context.convertRvalueExpression(expr.left());
-      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
-      auto intType = moore::IntType::get(context.getContext(),
-                                         minuendType.getBitSize().value(),
-                                         minuendType.getDomain());
-      auto sliceWidth =
-          expr.right().constant->integer().as<uint64_t>().value() - 1;
-      auto subtraction =
-          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
-      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
-    } else
+      if (leftConst) {
+        auto subtrahend = leftConst->integer().as<uint32_t>().value();
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value();
+        constLowBit = subtrahend - sliceWidth - 1;
+      } else {
+        auto subtrahend = context.convertRvalueExpression(expr.left());
+        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
+        auto intType = moore::IntType::get(context.getContext(),
+                                           subtrahendType.getBitSize().value(),
+                                           subtrahendType.getDomain());
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value() - 1;
+        auto minuend =
+            builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
+      }
+    } else {
       // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      lowBit = context.convertRvalueExpression(expr.left());
-
-    if (!type || !value || !lowBit)
-      return {};
-    return builder.create<moore::ExtractOp>(loc, type, value, lowBit);
+      if (leftConst)
+        constLowBit = leftConst->integer().as<uint32_t>().value();
+      else
+        dynLowBit = context.convertRvalueExpression(expr.left());
+    }
+    if (leftConst && rightConst)
+      return builder.create<moore::ExtractOp>(loc, type, value, constLowBit);
+    return builder.create<moore::DynExtractOp>(loc, type, value, dynLowBit);
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
@@ -746,13 +785,92 @@ struct LvalueExprVisitor {
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto value = context.convertLvalueExpression(expr.value());
-    auto lowBit = context.convertRvalueExpression(expr.selector());
-
-    if (!type || !value || !lowBit)
+    if (!type || !value)
       return {};
-    return builder.create<moore::ExtractRefOp>(
+    if (auto *constValue = expr.selector().constant) {
+      assert(!constValue->hasUnknown());
+      assert(constValue->size() <= 32);
+
+      auto lowBit = constValue->integer().as<uint32_t>().value();
+      return builder.create<moore::ExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+          lowBit);
+    }
+    auto lowBit = context.convertRvalueExpression(expr.selector());
+    if (!lowBit)
+      return {};
+    return builder.create<moore::DynExtractRefOp>(
         loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
         lowBit);
+  }
+
+  // Handle range bits selections.
+  Value visit(const slang::ast::RangeSelectExpression &expr) {
+    auto type = context.convertType(*expr.type);
+    auto value = context.convertLvalueExpression(expr.value());
+    if (!type || !value)
+      return {};
+
+    Value dynLowBit;
+    uint32_t constLowBit;
+    auto *leftConst = expr.left().constant;
+    auto *rightConst = expr.right().constant;
+    if (leftConst) {
+      assert(!leftConst->hasUnknown());
+      assert(leftConst->size() <= 32);
+    }
+    if (rightConst) {
+      assert(!rightConst->hasUnknown());
+      assert(rightConst->size() <= 32);
+    }
+
+    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
+      if (leftConst && rightConst) {
+        // Estimate whether is big endian or little endian.
+        auto lhs = leftConst->integer().as<uint32_t>().value();
+        auto rhs = rightConst->integer().as<uint32_t>().value();
+        constLowBit = lhs < rhs ? lhs : rhs;
+      } else {
+        mlir::emitError(loc, "unsupported a variable as the index in the")
+            << slang::ast::toString(expr.getSelectionKind()) << "kind";
+        return {};
+      }
+    } else if (expr.getSelectionKind() ==
+               slang::ast::RangeSelectionKind::IndexedDown) {
+      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
+      // depending on little endian or bit endian. No matter which situation,
+      // the low bit must be "0".
+      if (leftConst) {
+        auto subtrahend = leftConst->integer().as<uint32_t>().value();
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value();
+        constLowBit = subtrahend - sliceWidth - 1;
+      } else {
+        auto subtrahend = context.convertRvalueExpression(expr.left());
+        auto subtrahendType = cast<moore::UnpackedType>(subtrahend.getType());
+        auto intType = moore::IntType::get(context.getContext(),
+                                           subtrahendType.getBitSize().value(),
+                                           subtrahendType.getDomain());
+        auto sliceWidth =
+            expr.right().constant->integer().as<uint32_t>().value() - 1;
+        auto minuend =
+            builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
+        dynLowBit = builder.create<moore::SubOp>(loc, subtrahend, minuend);
+      }
+    } else {
+      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
+      if (leftConst)
+        constLowBit = leftConst->integer().as<uint32_t>().value();
+      else
+        dynLowBit = context.convertRvalueExpression(expr.left());
+    }
+    if (leftConst && rightConst)
+      return builder.create<moore::ExtractRefOp>(
+          loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+          constLowBit);
+    return builder.create<moore::DynExtractRefOp>(
+        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
+        dynLowBit);
   }
 
   Value visit(const slang::ast::MemberAccessExpression &expr) {
@@ -774,48 +892,6 @@ struct LvalueExprVisitor {
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be accessed";
     return {};
-  }
-
-  // Handle range bits selections.
-  Value visit(const slang::ast::RangeSelectExpression &expr) {
-    auto type = context.convertType(*expr.type);
-    auto value = context.convertLvalueExpression(expr.value());
-    Value lowBit;
-    if (expr.getSelectionKind() == slang::ast::RangeSelectionKind::Simple) {
-      if (expr.left().constant && expr.right().constant) {
-        auto lhs = expr.left().constant->integer().as<uint64_t>().value();
-        auto rhs = expr.right().constant->integer().as<uint64_t>().value();
-        lowBit = lhs < rhs ? context.convertRvalueExpression(expr.left())
-                           : context.convertRvalueExpression(expr.right());
-      } else {
-        mlir::emitError(loc, "unsupported a variable as the index in the")
-            << slang::ast::toString(expr.getSelectionKind()) << "kind";
-        return {};
-      }
-    } else if (expr.getSelectionKind() ==
-               slang::ast::RangeSelectionKind::IndexedDown) {
-      // IndexedDown: arr[7-:8]. It's equivalent to arr[7:0] or arr[0:7]
-      // depending on little endian or bit endian. No matter which situation,
-      // the low bit must be "0".
-      auto minuend = context.convertRvalueExpression(expr.left());
-      auto minuendType = cast<moore::UnpackedType>(minuend.getType());
-      auto intType = moore::IntType::get(context.getContext(),
-                                         minuendType.getBitSize().value(),
-                                         minuendType.getDomain());
-      auto sliceWidth =
-          expr.right().constant->integer().as<uint64_t>().value() - 1;
-      auto subtraction =
-          builder.create<moore::ConstantOp>(loc, intType, sliceWidth);
-      lowBit = builder.create<moore::SubOp>(loc, minuend, subtraction);
-    } else
-      // IndexedUp: arr[0+:8]. "0" is the low bit, "8" is the bits slice width.
-      lowBit = context.convertRvalueExpression(expr.left());
-
-    if (!type || !value || !lowBit)
-      return {};
-    return builder.create<moore::ExtractRefOp>(
-        loc, moore::RefType::get(cast<moore::UnpackedType>(type)), value,
-        lowBit);
   }
 
   /// Emit an error for all other expressions.

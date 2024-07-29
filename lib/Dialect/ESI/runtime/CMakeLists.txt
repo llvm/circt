@@ -31,7 +31,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
-set(CMAKE_BUILD_RPATH "$ORIGIN/../lib")
+set(CMAKE_BUILD_RPATH
+      "${CMAKE_BUILD_RPATH}:${CMAKE_BINARY_DIR}/lib:$ORIGIN/../lib")
 
 # JSON parser for the manifest.
 if (NOT TARGET nlohmann_json)
@@ -110,7 +111,6 @@ set(ESIPythonRuntimeSources
   python/esiaccel/accelerator.py
   python/esiaccel/types.py
   python/esiaccel/utils.py
-  python/esiaccel/esiCppAccel.pyi
 )
 
 IF(MSVC)
@@ -264,8 +264,38 @@ if(Python3_FOUND)
     pybind11_add_module(esiCppAccel
       ${CMAKE_CURRENT_SOURCE_DIR}/python/esiaccel/esiCppAccel.cpp)
     target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
+    set_target_properties(esiCppAccel PROPERTIES
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
+    )
+
+    # Check for stubgen and generate stubs if available.
+    find_program(STUBGEN pybind11-stubgen)
+    if ("${STUBGEN}" STREQUAL "STUBGEN-NOTFOUND")
+      message(STATUS "pybind11_stubgen not found. Skipping stub generation.")
+    else()
+      if(WIN32)
+        # I just wasted all day trying to figure out the DLL search path on
+        # Windows both locally and in the runner. I'm done. Windows wheels
+        # won't have a stub until somebody else figures this out.
+        # TODO: have the patience to make this work.
+        message(WARNING "pybind11-stubgen is not supported on Windows.")
+      else()
+        set(stubgen_python_path "$ENV{PYTHONPATH}:${CMAKE_CURRENT_BINARY_DIR}/python")
+        add_custom_command(
+            TARGET esiCppAccel
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${stubgen_python_path}"
+                ${STUBGEN}
+                  -o "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel"
+                  esiaccel.esiCppAccel
+        )
+      endif()
+    endif()
 
     if (WHEEL_BUILD)
+      if ("${STUBGEN}" STREQUAL "STUBGEN-NOTFOUND")
+        message (FATAL_ERROR "pybind11_stubgen is required for a wheel build.")
+      endif()
       set_target_properties(esiCppAccel PROPERTIES
         INSTALL_RPATH "$ORIGIN/lib")
     else()
@@ -274,14 +304,6 @@ if(Python3_FOUND)
     endif()
     set_target_properties(esiCppAccel PROPERTIES
       INSTALL_RPATH_USE_LINK_PATH FALSE)
-
-    add_custom_command(
-        TARGET esiCppAccel
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-            $<TARGET_FILE:esiCppAccel>
-            "${CMAKE_CURRENT_BINARY_DIR}/python/esiaccel/$<TARGET_FILE_NAME:esiCppAccel>"
-    )
 
     if (WHEEL_BUILD)
       install(TARGETS esiCppAccel

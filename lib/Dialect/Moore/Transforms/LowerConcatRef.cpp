@@ -64,11 +64,8 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // small or vice versa. Like "logic [7:0] or [0:7]".
 
       // Only able to correctly handle the situation like "[7:0]" now.
-      auto i32 = moore::IntType::getInt(op.getContext(), 32);
-      auto lowBit =
-          rewriter.create<ConstantOp>(op.getLoc(), i32, srcWidth - width);
-      auto extract =
-          rewriter.create<ExtractOp>(op.getLoc(), type, op.getSrc(), lowBit);
+      auto extract = rewriter.create<ExtractOp>(op.getLoc(), type, op.getSrc(),
+                                                srcWidth - width);
 
       // Update the real bit width of RHS of assignment. Like "c" the above
       // description mentioned.

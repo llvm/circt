@@ -1,4 +1,5 @@
 ; RUN: firtool -lower-annotations-no-ref-type-ports %s | FileCheck %s
+; RUN: firtool -probes-to-signals %s | FileCheck %s
 
 FIRRTL version 4.0.0
 circuit Foo: %[[
