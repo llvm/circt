@@ -1,7 +1,12 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 // Basic MLIR operation parser round-tripping
 
-firrtl.circuit "Basic" {
+firrtl.circuit "Basic" attributes {
+  // CHECK: firrtl.specialization_disable = #firrtl<layerspecialization disable>
+  firrtl.specialization_disable = #firrtl<layerspecialization disable>,
+  // CHECK: firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  } {
 firrtl.extmodule @Basic()
 
 // CHECK-LABEL: firrtl.module @Intrinsics
