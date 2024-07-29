@@ -390,20 +390,20 @@ def ContractOp : ContractLikeOp<"contract", [NoTerminator]>{
     This operation declares a formal contract that is used to create precondition 
     and postconditions on a parent module. These are used as an abstraction to 
     better modularize formal verification such that each module containing a contract 
-    is checked exactly once.
+    is checked exactly once. The contract contains a single block where the block arguments 
+    represent the inputs and outputs in the same order as in the module signature.
           
     e.g. 
     ```
-    hw.module @Bar(in %clk : !seq.clock, in %foo : i8, out "" : i8, out "1" : i8) { 
-      verif.contract (%clk, %foo) : (i8, i8) {
-        ^bb0(%clk : !seq.clock, %foo : i8): 
+    hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+      verif.contract (%foo) : (i8) {
+        ^bb0(%arg1 : i8, %bar.0 : i8, %bar.1 : i8): 
           %c0_8 = hw.constant 0 : i8 
-          %prec = comb.icmp bin neq %c0_8, %foo : i8
-          verif.require %precond : i1
+          %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+          verif.require %prec : i1
 
-          %out0, %out1 = verif.result : i8  
-          %post = comb.icmp bin ugt %out0, %foo : i8
-          %post1 = comb.icmp bin ult %out1, %foo : i8
+          %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+          %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
           verif.ensure %post : i1
           verif.ensure %post1 : i1
       }
@@ -413,20 +413,20 @@ def ContractOp : ContractLikeOp<"contract", [NoTerminator]>{
 
     This later is used to replace any instance of Bar during verification:  
     ```
-    %bar.0, %bar.1 = hw.instance "bar" @Bar("clk": %clk : !seq.clock, "foo" : %foo : i8)  -> ("" : i8, "1" : i8)
+    %bar.0, %bar.1 = hw.instance "bar" @Bar("foo" : %foo : i8)  -> ("" : i8, "1" : i8)
 
     /* ... After PrepareForFormal Pass becomes ... */
 
-    %bar.0, %bar.1 = verif.instance (%clk, %foo) : (!seq.clock, i8) -> (i8, i8) {
-      ^bb0(%clk : !seq.clock, %foo : i8):
-        %c0_8 = hw.constant 0 : i8 
-        %prec = comb.icmp bin neq %c0_8, %foo : i8
-        verif.assert %precond : i1
+    %bar.0, %bar.1 = verif.instance (%c42_8) : (i8) -> (i8, i8) {
+      ^bb0(%arg1: i8):
+        %c0_8 = hw.constant 0 : i8
+        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+        verif.assert %prec : i1
 
         %bar.0 = verif.symbolic_input : i8
         %bar.1 = verif.symbolic_input : i8
-        %post = comb.icmp bin ugt %bar.0, %foo : i8
-        %post1 = comb.icmp bin ult %bar.1, %foo : i8
+        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
         verif.assume %post : i1
         verif.assume %post1 : i1
         verif.yield %bar.0, %bar.1 : i8, i8

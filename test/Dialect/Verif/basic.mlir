@@ -56,6 +56,7 @@ verif.formal @formal1(k = 20) {
   %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1) -> ("" : i1, "1" : i1)
 }
 
+// CHECK-LABEL: hw.module @Bar
 hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
   // CHECK: verif.contract(%foo) : (i8) {
   verif.contract (%foo) : (i8) {
@@ -77,12 +78,17 @@ hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) {
       // CHECK: verif.ensure %[[P1]] : i1
       verif.ensure %post1 : i1
   }
+  // CHECK-LABEL: %[[C1:.+]] = hw.constant
   %c1_8 = hw.constant 1 : i8
+  // CHECK-LABEL: %[[O1:.+]] = comb.add
   %o0 = comb.add bin %foo, %c1_8 : i8
+  // CHECK-LABEL: %[[O2:.+]] = comb.sub
   %o1 = comb.sub bin %foo, %c1_8 : i8
+  // CHECK-LABEL: hw.output
   hw.output %o0, %o1 : i8, i8
 }
 
+// CHECK-LABEL: hw.module @Foo1
 hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
   // CHECK: %[[C42:.+]] = hw.constant 42 : i8
   %c42_8 = hw.constant 42 : i8
