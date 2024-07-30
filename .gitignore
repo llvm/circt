@@ -7,6 +7,10 @@ TAGS
 .idea
 compile_commands.json
 .cache/
+
+/fsm-benchmarking/smtlib-fsm*
+/fsm-benchmarking/fsm*
+
 #*
 *~
 .DS_Store

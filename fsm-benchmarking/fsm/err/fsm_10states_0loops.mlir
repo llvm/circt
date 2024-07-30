@@ -176,9 +176,20 @@ fsm.machine @fsm10(%err: i16) -> () attributes {initialState = "_0"} {
 
 	fsm.state @_10 output {
 	} transitions {
+		fsm.transition @_10
+			guard {
+				%tmp1 = comb.icmp ne %err, %c0 : i16
+				fsm.return %tmp1
+			}
+		fsm.transition @ERR
+			guard {
+				%tmp1 = comb.icmp eq %err, %c1 : i16
+				fsm.return %tmp1
+			}
 	}
 
 	fsm.state @ERR output {
 	} transitions {
+		fsm.transition @ERR
 	}
 }

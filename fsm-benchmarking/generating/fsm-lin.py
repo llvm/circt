@@ -39,6 +39,7 @@ for n in num_fsm:
 
     var = "x0"
 
+
     for s in range(n):
         rows.append(s)
         cols.append(s+1)

@@ -2,14 +2,14 @@ import numpy as np
 import subprocess 
 import os
 
-prop = 2
+prop = 1
 
 # example command
 # ninja && valgrind bin/fsm-verification ../fsm_examples/input-err-state/errstate-fsm/fsm_5states_0loops.mlir ../fsm_examples/ltl_p3.mlir 4
 
-folder ="fsm/linear/"
+folder ="fsm/lin-var-8/"
 
-target="smtlib-fsm/linear-p2/"
+target="smtlib-fsm/lin-p1-v8/"
 
 
 for filename in os.listdir("../"+target):
@@ -21,9 +21,9 @@ for filename in os.listdir("../"+target):
 
 for file in os.listdir("../"+folder):
     print(file)
-    states = int(file.split("_")[1].split("s")[0])
+    # pay attention to this line before running stuff
+    states = int(file.split("_")[2].split("s")[0])
     
-    time = states+10
 
     ltl = open("tmp_prop.mlir", "w")
 
@@ -42,7 +42,7 @@ for file in os.listdir("../"+folder):
 
     ltl.close()
 
-    command = "../../build/bin/fsm-verification ../../fsm-benchmarking/"+folder+file+" ../../fsm-benchmarking/testing/tmp_prop.mlir ../../fsm-benchmarking/"+target+file.split(".mlir")[0]+".smt "+str(time)
+    command = "../../build/bin/fsm-verification ../../fsm-benchmarking/"+folder+file+" ../../fsm-benchmarking/testing/tmp_prop.mlir ../../fsm-benchmarking/"+target+file.split(".mlir")[0]+".smt "
     print(command)
 
     process = subprocess.run([command], shell=True)

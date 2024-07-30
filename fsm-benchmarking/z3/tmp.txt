@@ -1,0 +1,369 @@
+
+rep 0 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.02)
+
+rep 1 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 2 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.02)
+
+rep 3 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 4 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.02)
+
+rep 5 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 6 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 7 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 8 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 9 file ../smtlib-fsm/linear-p1/fsm_100states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               77.48
+ :memory                   71.06
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               3191634
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             26399
+ :time                     0.01
+ :total-time               0.03)
+
+rep 0 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341538
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.01
+ :time.spacer.init_rules   0.00
+ :time.spacer.solve        0.00
+ :time.spacer.solve.reach  0.00
+ :total-time               0.03)
+
+rep 1 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.02)
+
+rep 2 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.03)
+
+rep 3 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341481
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.01
+ :time.spacer.init_rules   0.00
+ :total-time               0.03)
+
+rep 4 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.01)
+
+rep 5 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341538
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.01
+ :time.spacer.init_rules   0.00
+ :time.spacer.solve        0.00
+ :time.spacer.solve.reach  0.00
+ :total-time               0.03)
+
+rep 6 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.02)
+
+rep 7 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.03)
+
+rep 8 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341538
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.01
+ :time.spacer.init_rules   0.00
+ :time.spacer.solve        0.00
+ :total-time               0.03)
+
+rep 9 file ../smtlib-fsm/linear-p1/fsm_10states_0loops.smtunsat
+(:SPACER-num-pobs          1
+ :SPACER-num-reach-queries 1
+ :added-eqs                4
+ :final-checks             2
+ :max-memory               76.44
+ :memory                   70.41
+ :mk-bool-var              16
+ :mk-clause                8
+ :num-allocs               1341424
+ :num-checks               2
+ :pool_solver.checks       1
+ :pool_solver.checks.sat   1
+ :propagations             6
+ :rlimit-count             3719
+ :time                     0.00
+ :total-time               0.02)
