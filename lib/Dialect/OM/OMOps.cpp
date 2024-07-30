@@ -231,7 +231,6 @@ void circt::om::ClassOp::getAsmBlockArgumentNames(
   getClassLikeAsmBlockArgumentNames(*this, region, setNameFn);
 }
 
-
 ClassFieldsLike circt::om::ClassOp::getFieldsOp() {
   return cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
 }
@@ -255,8 +254,7 @@ llvm::SmallVector<FieldValue> circt::om::ClassOp::getFieldValues() {
 
   for (size_t i = 0; i < fields.size(); i++) {
     auto field = fields[i];
-    result.push_back(
-        FieldValue(cast<StringAttr>(fieldNames[i]), field));
+    result.push_back(FieldValue(cast<StringAttr>(fieldNames[i]), field));
   }
 
   return result;

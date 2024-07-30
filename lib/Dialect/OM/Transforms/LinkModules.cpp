@@ -198,15 +198,13 @@ static FailureOr<bool> resolveClasses(StringAttr name,
 
       // Field not found in its definition.
       if (it == classFields.end())
-        return emitError(op)
-               << "declaration has a field " << field.getName()
-               << " but not found in its definition";
+        return emitError(op) << "declaration has a field " << field.getName()
+                             << " but not found in its definition";
 
       if (it->second != field.getType())
-        return emitError(op)
-               << "declaration has a field " << field.getName()
-               << " but types don't match, " << it->second << " vs "
-               << field.getType();
+        return emitError(op) << "declaration has a field " << field.getName()
+                             << " but types don't match, " << it->second
+                             << " vs " << field.getType();
       declaredFields.insert(field.getName());
     }
 

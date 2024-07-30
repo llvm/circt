@@ -22,6 +22,7 @@ class Field {
   mlir::StringAttr name;
   mlir::Location loc;
   mlir::Type type;
+
 public:
   Field(mlir::StringAttr name, mlir::Location loc, mlir::Type type)
       : name(name), loc(loc), type(type) {}

@@ -80,9 +80,8 @@ void VerifyObjectFieldsPass::runOnOperation() {
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
                   cast<ClassType>(objectField.getObject().getType());
-              ClassOp classDef =
-                  symbolTable.lookupNearestSymbolFrom<ClassOp>(
-                      objectField, objectInstType.getClassName());
+              ClassOp classDef = symbolTable.lookupNearestSymbolFrom<ClassOp>(
+                  objectField, objectInstType.getClassName());
               if (!classDef) {
                 objectField.emitError()
                     << "class " << objectInstType.getClassName()
