@@ -38,12 +38,20 @@ namespace {
 struct InferReadWritePass
     : public circt::firrtl::impl::InferReadWriteBase<InferReadWritePass> {
 
-private:
-  template <typename Op>
-  void runOnOp(Op op) {
+  /// This pass performs two memory transformations:
+  ///  1. If the multi-bit enable port is connected to a constant 1,
+  ///     then, replace with a single bit mask. Create a new memory with a
+  ///     1 bit mask, and replace the old memory with it. The single bit mask
+  ///     memory is always lowered to an unmasked memory.
+  ///  2. If the read and write enable ports are trivially mutually exclusive,
+  ///     then create a new memory with a single read/write port, and replace
+  ///     the old memory with it.
+  void runOnOperation() override {
+    LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
+                            << getOperation().getName());
     SmallVector<Operation *> opsToErase;
-    Block *body = op.getBodyBlock();
-    for (MemOp memOp : llvm::make_early_inc_range(body->getOps<MemOp>())) {
+    for (MemOp memOp : llvm::make_early_inc_range(
+             getOperation().getBodyBlock()->getOps<MemOp>())) {
       inferUnmasked(memOp, opsToErase);
       simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
@@ -216,27 +224,6 @@ private:
     }
     for (auto *o : opsToErase)
       o->erase();
-  }
-
-public:
-  /// This pass performs two memory transformations:
-  ///  1. If the multi-bit enable port is connected to a constant 1,
-  ///     then, replace with a single bit mask. Create a new memory with a
-  ///     1 bit mask, and replace the old memory with it. The single bit mask
-  ///     memory is always lowered to an unmasked memory.
-  ///  2. If the read and write enable ports are trivially mutually exclusive,
-  ///     then create a new memory with a single read/write port, and replace
-  ///     the old memory with it.
-  void runOnOperation() override {
-    LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
-                            << getOperation().getName());
-
-    TypeSwitch<Operation *>(&(*getOperation()))
-        .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-        // All other ops are ignored -- particularly ops that don't implement
-        // the `getBodyBlock()` method. We don't want an error here because the
-        // pass wasn't designed to run on those ops.
-        .Default([&](auto) {});
   }
 
 private:
