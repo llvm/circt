@@ -1907,3 +1907,39 @@ circuit GenericIntrinsics:
     ; CHECK-NEXT: %[[SZ:.+]] = firrtl.int.generic "circt_isX"
     ; CHECK-NEXT: "circt_verif_assert" %[[SZ]]
     intrinsic(circt_verif_assert, intrinsic(circt_isX: UInt<1>, data))
+
+;// -----
+FIRRTL version 4.0.0
+; CHECK-LABEL: circuit "FormalTest"
+circuit FormalTest:
+
+  ; CHECK-LABEL: firrtl.module @FormalTest
+  public module FormalTest:
+    input data : UInt<32>
+    input c : UInt<1>
+    output out : UInt<32>
+
+    when c:
+      node add1 = add(data, UInt<32>(1))
+      out <= add1
+    else:
+      out <= data
+
+  ; CHECK-LABEL: firrtl.formal @testFormal(k = 20) 
+  formal testFormal, k = 20:
+    ; CHECK-NEXT: %foo_data, %foo_c, %foo_out = firrtl.instance foo interesting_name @FormalTest(in data: !firrtl.uint<32>, in c: !firrtl.uint<1>, out out: !firrtl.uint<32>)
+    inst foo of FormalTest
+    ; CHECK-NEXT: %s_foo_c = firrtl.symbolic : !firrtl.uint<1>
+    symbolic s_foo_c : UInt<1>
+    ; CHECK-NEXT: %s_foo_data = firrtl.symbolic : !firrtl.uint<32>
+    symbolic s_foo_data : UInt<32>
+    ; CHECK-NEXT: firrtl.matchingconnect %foo_c, %s_foo_c : !firrtl.uint<1>
+    connect foo.c, s_foo_c
+    ; CHECK-NEXT: firrtl.matchingconnect %foo_data, %s_foo_data : !firrtl.uint<32>
+    connect foo.data, s_foo_data
+    ; CHECK-NEXT: %0 = firrtl.eq %foo_out, %s_foo_data : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<1>
+    ; CHECK-NEXT: %1 = firrtl.int.generic "circt_ltl_implication"  %s_foo_c, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert"  %1 : (!firrtl.uint<1>) -> ()
+    intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, s_foo_c, eq(foo.out, s_foo_data)))
+
+
