@@ -239,3 +239,24 @@ hw.module @AggregateInline(in %clock: i1) {
   // CHECK: assign [[GEN]] = register.a[15:0]
   hw.output
 }
+
+// CHECK-LABEL: module hoist_reg
+// DISALLOW-LABEL: module hoist_reg
+hw.module @hoist_reg(in %dummy : i32, out out : i17) {
+  %res_reg = sv.reg : !hw.inout<i17>
+  // CHECK: initial
+  // CHECK: reg  [31:0] tmp;
+  // CHECK end // initial
+  // DISALLOW: reg  [31:0] tmp;
+  // DISALLOW: initial
+  sv.initial {
+    %tmp = sv.reg : !hw.inout<i32>
+    %17 = sv.read_inout %tmp : !hw.inout<i32>
+    %29 = comb.xor %dummy, %17 : i32
+    %32 = comb.extract %29 from 3 : (i32) -> i17
+    sv.passign %res_reg, %32 : i17
+  }
+
+  %res_reg_data = sv.read_inout %res_reg : !hw.inout<i17>
+  hw.output %res_reg_data : i17
+}
