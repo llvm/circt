@@ -146,3 +146,9 @@ module Typedefs;
   myType1 v0;
   myType2 v1;
 endmodule
+
+// CHECK-LABEL: moore.module @String
+module String;
+  // CHECK-NEXT: %s = moore.variable : <string>
+  string s;
+endmodule
