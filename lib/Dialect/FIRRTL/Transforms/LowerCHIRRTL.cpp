@@ -66,10 +66,10 @@ struct LowerCHIRRTLPass
   Value getConst(unsigned c) {
     auto &value = constCache[c];
     if (!value) {
-      auto builder = OpBuilder::atBlockBegin(body);
+      auto module = getOperation();
+      auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
       auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
-      value = builder.create<ConstantOp>(getOperation().getLoc(), u1Type,
-                                         APInt(1, c));
+      value = builder.create<ConstantOp>(module.getLoc(), u1Type, APInt(1, c));
     }
     return value;
   }
@@ -95,9 +95,6 @@ struct LowerCHIRRTLPass
   void cloneSubindexOpForMemory(OpType op, Value input, T... operands);
 
   void runOnOperation() override;
-
-  template <typename Op>
-  void runOnOp(Op op);
 
   /// Cached constants.
   DenseMap<unsigned, Value> constCache;
@@ -127,9 +124,6 @@ struct LowerCHIRRTLPass
     Value mode;
   };
   DenseMap<Value, WDataInfo> wdataValues;
-
-  // Internally used data about the operations (avoids template issues)
-  Block *body;
 };
 } // end anonymous namespace
 
@@ -165,7 +159,7 @@ void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
   auto type = value.getType();
   auto &invalid = invalidCache[type];
   if (!invalid) {
-    auto builder = OpBuilder::atBlockBegin(body);
+    auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
     invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
   }
   emitConnect(builder, value, invalid);
@@ -656,13 +650,12 @@ void LowerCHIRRTLPass::visitUnhandledOp(Operation *op) {
   }
 }
 
-template <typename Op>
-void LowerCHIRRTLPass::runOnOp(Op op) {
+void LowerCHIRRTLPass::runOnOperation() {
   // Walk the entire body of the module and dispatch the visitor on each
   // function.  This will replace all CHIRRTL memories and ports, and update all
   // uses.
-  body = op.getBodyBlock();
-  body->walk([&](Operation *op) { dispatchCHIRRTLVisitor(op); });
+  getOperation().getBodyBlock()->walk(
+      [&](Operation *op) { dispatchCHIRRTLVisitor(op); });
 
   // If there are no operations to delete, then we didn't find any CHIRRTL
   // memories.
@@ -675,15 +668,6 @@ void LowerCHIRRTLPass::runOnOp(Op op) {
 
   // Clear out any cached data.
   clear();
-}
-
-void LowerCHIRRTLPass::runOnOperation() {
-  TypeSwitch<Operation *>(&(*getOperation()))
-      .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-      // All other ops are ignored -- particularly ops that don't implement
-      // the `getBodyBlock()` method. We don't want an error here because the
-      // pass wasn't designed to run on those ops.
-      .Default([&](auto) {});
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerCHIRRTLPass() {

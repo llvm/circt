@@ -32,25 +32,6 @@ namespace {
 struct MaterializeDebugInfoPass
     : public circt::firrtl::impl::MaterializeDebugInfoBase<
           MaterializeDebugInfoPass> {
-  template <typename Op>
-  void runOnOp(Op module) {
-    auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
-
-    // Create DI variables for each port.
-    for (const auto &[port, value] :
-         llvm::zip(module.getPorts(), module.getArguments())) {
-      materializeVariable(builder, port.name, value);
-    }
-
-    // Create DI variables for each declaration in the module body.
-    module.walk([&](Operation *op) {
-      TypeSwitch<Operation *>(op).Case<WireOp, NodeOp, RegOp, RegResetOp>(
-          [&](auto op) {
-            builder.setInsertionPointAfter(op);
-            materializeVariable(builder, op.getNameAttr(), op.getResult());
-          });
-    });
-  }
   void runOnOperation() override;
   void materializeVariable(OpBuilder &builder, StringAttr name, Value value);
   Value convertToDebugAggregates(OpBuilder &builder, Value value);
@@ -58,13 +39,23 @@ struct MaterializeDebugInfoPass
 } // namespace
 
 void MaterializeDebugInfoPass::runOnOperation() {
+  auto module = getOperation();
+  auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
 
-  TypeSwitch<Operation *>(&(*getOperation()))
-      .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-      // All other ops are ignored -- particularly ops that don't implement
-      // the `getBodyBlock()` method. We don't want an error here because the
-      // pass wasn't designed to run on those ops.
-      .Default([&](auto) {});
+  // Create DI variables for each port.
+  for (const auto &[port, value] :
+       llvm::zip(module.getPorts(), module.getArguments())) {
+    materializeVariable(builder, port.name, value);
+  }
+
+  // Create DI variables for each declaration in the module body.
+  module.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op).Case<WireOp, NodeOp, RegOp, RegResetOp>(
+        [&](auto op) {
+          builder.setInsertionPointAfter(op);
+          materializeVariable(builder, op.getNameAttr(), op.getResult());
+        });
+  });
 }
 
 /// Materialize debug variable ops for a value.

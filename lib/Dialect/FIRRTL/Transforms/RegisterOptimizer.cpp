@@ -47,26 +47,6 @@ namespace {
 
 struct RegisterOptimizerPass
     : public circt::firrtl::impl::RegisterOptimizerBase<RegisterOptimizerPass> {
-
-  template <typename Op>
-  void runOnOp(Op mod) {
-    SmallVector<Operation *> toErase;
-    mlir::DominanceInfo dom(mod);
-    Block *body = mod.getBodyBlock();
-
-    for (auto &op : *body) {
-      if (auto reg = dyn_cast<RegResetOp>(&op))
-        checkRegReset(dom, toErase, reg);
-      else if (auto reg = dyn_cast<RegOp>(&op))
-        checkReg(dom, toErase, reg);
-    }
-    for (auto *op : toErase)
-      op->erase();
-
-    if (!toErase.empty())
-      return markAllAnalysesPreserved();
-  }
-
   void runOnOperation() override;
   void checkRegReset(mlir::DominanceInfo &dom,
                      SmallVector<Operation *> &toErase, RegResetOp reg);
@@ -162,14 +142,23 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
 }
 
 void RegisterOptimizerPass::runOnOperation() {
+  auto mod = getOperation();
   LLVM_DEBUG(debugPassHeader(this) << "\n";);
 
-  TypeSwitch<Operation *>(&(*getOperation()))
-      .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-      // All other ops are ignored -- particularly ops that don't implement
-      // the `getBodyBlock()` method. We don't want an error here because the
-      // pass wasn't designed to run on those ops.
-      .Default([&](auto) {});
+  SmallVector<Operation *> toErase;
+  mlir::DominanceInfo dom(mod);
+
+  for (auto &op : *mod.getBodyBlock()) {
+    if (auto reg = dyn_cast<RegResetOp>(&op))
+      checkRegReset(dom, toErase, reg);
+    else if (auto reg = dyn_cast<RegOp>(&op))
+      checkReg(dom, toErase, reg);
+  }
+  for (auto *op : toErase)
+    op->erase();
+
+  if (!toErase.empty())
+    return markAllAnalysesPreserved();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createRegisterOptimizerPass() {

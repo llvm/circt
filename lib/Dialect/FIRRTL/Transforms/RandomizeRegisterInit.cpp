@@ -50,8 +50,7 @@ std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
 /// each register should consume. The goal is for registers to always read the
 /// same random bits for the same seed, regardless of optimizations that might
 /// remove registers.
-template <typename Op>
-static void createRandomizationAttributes(Op mod) {
+static void createRandomizationAttributes(FModuleOp mod) {
   OpBuilder builder(mod);
 
   // Walk all registers.
@@ -75,12 +74,5 @@ static void createRandomizationAttributes(Op mod) {
 }
 
 void RandomizeRegisterInitPass::runOnOperation() {
-  TypeSwitch<Operation *>(&(*getOperation()))
-      .Case<FModuleOp, FExtModuleOp, FIntModuleOp, FMemModuleOp, ClassOp,
-            ExtClassOp, FormalOp>(
-          [&](auto op) { createRandomizationAttributes(op); })
-      // All other ops are ignored -- particularly ops that don't implement
-      // the `getBodyBlock()` method. We don't want an error here because the
-      // pass wasn't designed to run on those ops.
-      .Default([&](auto) {});
+  createRandomizationAttributes(getOperation());
 }

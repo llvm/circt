@@ -33,19 +33,6 @@ using namespace firrtl;
 namespace {
 struct LowerIntrinsicsPass
     : public circt::firrtl::impl::LowerIntrinsicsBase<LowerIntrinsicsPass> {
-
-  template <typename Op>
-  void runOnOp(Op op) {
-    auto result = lowering->lower(op);
-    if (failed(result))
-      return signalPassFailure();
-
-    numConverted += *result;
-
-    if (*result == 0)
-      markAllAnalysesPreserved();
-  }
-
   LogicalResult initialize(MLIRContext *context) override;
   void runOnOperation() override;
 
@@ -66,14 +53,14 @@ LogicalResult LowerIntrinsicsPass::initialize(MLIRContext *context) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
+  auto result = lowering->lower(getOperation());
+  if (failed(result))
+    return signalPassFailure();
 
-  TypeSwitch<Operation *>(&(*getOperation()))
-      .Case<FModuleOp, FExtModuleOp, FIntModuleOp, FMemModuleOp, ClassOp,
-            ExtClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-      // All other ops are ignored -- particularly ops that don't implement
-      // the `getBodyBlock()` method. We don't want an error here because the
-      // pass wasn't designed to run on those ops.
-      .Default([&](auto) {});
+  numConverted += *result;
+
+  if (*result == 0)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.

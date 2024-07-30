@@ -38,12 +38,12 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
       opt.shouldAllowAddingPortsOnPublic()));
 
   if (opt.shouldEnableDebugInfo())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleLike>(
         firrtl::createMaterializeDebugInfoPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createLowerIntmodulesPass(opt.shouldFixupEICGWrapper()));
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createLowerIntrinsicsPass());
 
   return success();
@@ -56,21 +56,22 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInjectDUTHierarchyPass());
 
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createPassiveWiresPass());
 
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createDropNamesPass(opt.getPreserveMode()));
 
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(mlir::createCSEPass());
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
+        mlir::createCSEPass());
 
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createLowerCHIRRTLPass());
 
   // Run LowerMatches before InferWidths, as the latter does not support the
   // match statement, but it does support what they lower to.
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createLowerMatchesPass());
 
   // Width inference creates canonicalization opportunities.
@@ -106,7 +107,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   }
 
   if (!opt.shouldLowerMemories())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         firrtl::createFlattenMemoryPass());
 
   // The input mlir file could be firrtl dialect so we might need to clean
@@ -116,7 +117,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       opt.getPreserveAggregate(), firrtl::PreserveAggregate::None));
 
   {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nestAny();
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>();
     modulePM.addPass(firrtl::createExpandWhensPass());
     modulePM.addPass(firrtl::createSFCCompatPass());
   }
@@ -132,7 +133,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createProbesToSignalsPass());
 
   {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nestAny();
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>();
     modulePM.addPass(firrtl::createLayerMergePass());
     modulePM.addPass(firrtl::createLayerSinkPass());
   }
@@ -146,18 +147,18 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // currently in the final module it will be emitted in, all registers have
   // been created, and no registers have yet been removed.
   if (opt.isRandomEnabled(FirtoolOptions::RandomKind::Reg))
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         firrtl::createRandomizeRegisterInitPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         createSimpleCanonicalizerPass());
 
   // Run the infer-rw pass, which merges read and write ports of a memory with
   // mutually exclusive enables.
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         firrtl::createInferReadWritePass());
 
   if (opt.shouldReplicateSequentialMemories())
@@ -166,7 +167,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (opt.shouldAddCompanionAssume())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         circt::firrtl::createCreateCompanionAssume());
 
   if (!opt.shouldDisableOptimization())
@@ -205,9 +206,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // canonicalization opportunities that we should pick up here before we
   // proceed to output-specific pipelines.
   if (!opt.shouldDisableOptimization()) {
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         createSimpleCanonicalizerPass());
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         circt::firrtl::createRegisterOptimizerPass());
     // Re-run IMConstProp to propagate constants produced by register
     // optimizations.
@@ -220,12 +221,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
         firrtl::createEmitOMIRPass(opt.getOmirOutputFile()));
 
   // Always run this, required for legalization.
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       firrtl::createMergeConnectionsPass(
           !opt.shouldDisableAggressiveMergeConnections()));
 
   if (!opt.shouldDisableOptimization())
-    pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
         firrtl::createVectorizationPass());
 
   auto outputFilename = opt.getOutputFilename();
@@ -254,7 +255,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
-  pm.nest<firrtl::CircuitOp>().nestAny().addPass(
+  pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleLike>().addPass(
       circt::firrtl::createLintingPass());
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),

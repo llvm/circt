@@ -144,24 +144,7 @@ private:
 // IntrinsicLowerings
 //===----------------------------------------------------------------------===//
 
-// Explicit instanciation of things to avoid implementing template in header
-template FailureOr<size_t>
-IntrinsicLowerings::lower(FModuleOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(FExtModuleOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(FIntModuleOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(FMemModuleOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(ClassOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(ExtClassOp mod, bool allowUnknownIntrinsics);
-template FailureOr<size_t>
-IntrinsicLowerings::lower(FormalOp mod, bool allowUnknownIntrinsics);
-
-template <typename ModuleLikeOp>
-FailureOr<size_t> IntrinsicLowerings::lower(ModuleLikeOp mod,
+FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
                                             bool allowUnknownIntrinsics) {
 
   ConversionTarget target(*context);
