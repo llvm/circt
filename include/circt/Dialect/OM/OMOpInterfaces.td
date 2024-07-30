@@ -48,9 +48,9 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Get the class-like body block",
       "mlir::Block *", "getBodyBlock", (ins),
       /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
-    InterfaceMethod<"Get the class-like fields operation",
+    InterfaceMethod<"Get the class-like fields op",
       "circt::om::ClassFieldsLike", "getFieldsOp", (ins)>,
-    InterfaceMethod<"Get the class-like fields structs",
+    InterfaceMethod<"Get the class-like fields objects",
       "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>
   ];
 }
