@@ -201,6 +201,19 @@ module Basic;
   // CHECK: %ev2 = moore.variable [[VARIANT_B]]
   MyEnum ev1 = VariantA;
   MyEnum ev2 = VariantB;
+
+// CHECK: [[STR_WELCOME:%.+]] = moore.string "Welcome to Moore" : i128
+// CHECK: [[CONV_WELCOME:%.+]] = moore.conversion [[STR_WELCOME]] : !moore.i128 -> !moore.string
+// CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
+string s = "Welcome to Moore";
+
+// CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
+// CHECK: [[STR_HELLO:%.+]] = moore.string "Hello World" : i88
+// CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i88 -> !moore.string
+// CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
+string s1; 
+assign s1 = "Hello World";
+
 endmodule
 
 // CHECK-LABEL: moore.module @Statements
@@ -1501,21 +1514,3 @@ function void funcArgs2();
   funcArgs1(42, x, y, z, w);
   // CHECK: return
 endfunction
-
-// CHECK-LABEL: moore.module @String_test1
-module String_test1;
-  // CHECK: %0 = moore.string "Welcome to Moore" : i128
-  // CHECK: %1 = moore.conversion %0 : !moore.i128 -> !moore.string
-  // CHECK: %s = moore.variable %1 : <string>
-  string s = "Welcome to Moore";
-endmodule
-
-// CHECK-LABEL: moore.module @String_test2
-module String_test2;
-    // CHECK: %s1 = moore.variable : <string>
-    // CHECK: %0 = moore.string "Hello World" : i88
-    // CHECK: %1 = moore.conversion %0 : !moore.i88 -> !moore.string
-    // CHECK: moore.assign %s1, %1 : string
-    string s1; 
-    assign s1 = "Hello World";
-endmodule
