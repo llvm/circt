@@ -34,9 +34,6 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    SingleBlock, NoTerminator,
-    // TODO: Enable here when extern impl
-    // SingleBlockImplicitTerminator<"ClassFieldsOp">, 
     Symbol, RegionKindInterface, IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
@@ -66,11 +63,17 @@ class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
     DeclareOpInterfaceMethods<ClassFieldLike>]> {
 }
 
+class OMClassFieldsLike<string mnemonic, list<Trait> traits = []> :
+  OMOp<mnemonic, traits # [Terminator, ReturnLike, Pure,
+    DeclareOpInterfaceMethods<ClassFieldsLike>]> {
+}
+
 //===----------------------------------------------------------------------===//
 // Class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
+def ClassOp : OMClassLike<"class", [
+      SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
   let extraClassDeclaration = [{
 
     mlir::Block *getBodyBlock() { return &getBody().front(); }
@@ -88,8 +91,7 @@ def ClassOp : OMClassLike<"class", [SingleBlockImplicitTerminator<"ClassFieldsOp
       return mlir::RegionKind::Graph;
     }
 
-    ClassFieldsOp getFieldsOp();
-    llvm::SmallVector<Field> getFields();
+    llvm::SmallVector<FieldValue> getFieldValues();
     // TODO: Should these use ArrayRef<Field> instead?
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::Attribute> fieldNames,
@@ -114,14 +116,7 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
   }];
 }
 
-def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">, Terminator,
-                                          ReturnLike, Pure]> {
-  let summary = "Specify the accessible fields of a class";
-  let description = [{
-    Marks the end of a class definition by providing a list of accessible
-    fields.
-  }];
-
+def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">]> {
   let arguments = (ins Variadic<AnyType>:$fields);
 
   let assemblyFormat = "attr-dict ($fields^ `:` qualified(type($fields)))?";
@@ -131,7 +126,8 @@ def ClassFieldsOp : OMOp<"class.fields", [HasParent<"ClassOp">, Terminator,
 // External class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassExternOp : OMClassLike<"class.extern"> {
+def ClassExternOp : OMClassLike<"class.extern", [
+      SingleBlockImplicitTerminator<"ClassExternFieldsOp">]> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     
@@ -139,6 +135,14 @@ def ClassExternOp : OMClassLike<"class.extern"> {
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
     }
+
+    void addFields(mlir::OpBuilder &builder, mlir::Location loc,
+                   llvm::ArrayRef<mlir::StringAttr> fieldNames,
+                   llvm::ArrayRef<mlir::Type> fieldTypes);
+    void addFields(mlir::OpBuilder &builder, 
+                   llvm::ArrayRef<mlir::Location> locs, 
+                   llvm::ArrayRef<mlir::StringAttr> fieldNames,
+                   llvm::ArrayRef<mlir::Type> fieldTypes);
   }];
 }
 
@@ -151,6 +155,14 @@ def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
 
   let assemblyFormat = [{
     $name attr-dict `:` $type
+  }];
+}
+
+def ClassExternFieldsOp : OMClassFieldsLike<"class.extern.fields",
+    [HasParent<"ClassExternOp">]> {
+
+  let assemblyFormat = [{
+    attr-dict
   }];
 }
 

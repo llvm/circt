@@ -52,11 +52,8 @@ om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
 // CHECK-LABEL: om.class.extern @Extern
 // CHECK-SAME: (%param1: i1, %param2: i2)
 om.class.extern @Extern(%param1: i1, %param2: i2) {
-  // CHECK: om.class.extern.field @field1 : i3
-  om.class.extern.field @field1 : i3
-
-  // CHECK: om.class.extern.field @field2 : i4
-  om.class.extern.field @field2 : i4
+  // CHECK: om.class.extern.fields {field1 = i3, field2 = i4}
+  om.class.extern.fields {field1 = i3, field2 = i4}
 }
 
 // CHECK-LABEL: om.class @ExternObject

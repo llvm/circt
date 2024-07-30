@@ -1,6 +1,4 @@
 //===- OMOpInterfaces.td - Object Model dialect op interfaces -------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -14,6 +12,16 @@
 #define CIRCT_DIALECT_OM_OMOPINTERFACES_TD
 
 include "mlir/IR/OpBase.td"
+
+def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
+  let cppNamespace = "circt::om";
+
+  let description = [{
+    Marks the end of a class-like definition by providing a list of accessible
+    fields.
+  }];
+
+}
 
 def ClassLike : OpInterface<"ClassLike"> {
   let cppNamespace = "circt::om";
@@ -37,7 +45,11 @@ def ClassLike : OpInterface<"ClassLike"> {
       "mlir::Region &", "getBody", (ins)>,
     InterfaceMethod<"Get the class-like body block",
       "mlir::Block *", "getBodyBlock", (ins),
-      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>
+      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
+    InterfaceMethod<"Get the class-like fields operation",
+      "circt::om::ClassFieldsLike", "getFieldsOp", (ins)>,
+    InterfaceMethod<"Get the class-like fields structs",
+      "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>
   ];
 }
 

@@ -35,7 +35,7 @@ module {
   }
   module attributes {om.namespace = "B"} {
     om.class.extern @A(%arg: i1) {
-      om.class.extern.field @a: i1
+      om.class.extern.fields {a = i1}
     }
     om.class @Conflict() {
       %0 = om.constant 0 : i1

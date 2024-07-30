@@ -172,7 +172,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
 
   llvm::MapVector<StringAttr, Type> classFields;
   for (auto field : classOp.getFields())
-    classFields.insert({field.name, field.value.getType()});
+    classFields.insert({field.getName(), field.getType()});
 
   for (auto op : classes) {
     if (op == classOp)
@@ -193,21 +193,21 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     }
     // Check declared fields.
     llvm::DenseSet<StringAttr> declaredFields;
-    for (auto fieldOp : op.getBodyBlock()->getOps<om::ClassExternFieldOp>()) {
-      auto it = classFields.find(fieldOp.getNameAttr());
+    for (auto field : op.getFields()) {
+      auto it = classFields.find(field.getName());
 
       // Field not found in its definition.
       if (it == classFields.end())
         return emitError(op)
-               << "declaration has a field " << fieldOp.getNameAttr()
+               << "declaration has a field " << field.getName()
                << " but not found in its definition";
 
-      if (it->second != fieldOp.getType())
+      if (it->second != field.getType())
         return emitError(op)
-               << "declaration has a field " << fieldOp.getNameAttr()
+               << "declaration has a field " << field.getName()
                << " but types don't match, " << it->second << " vs "
-               << fieldOp.getType();
-      declaredFields.insert(fieldOp.getNameAttr());
+               << field.getType();
+      declaredFields.insert(field.getName());
     }
 
     for (auto [fieldName, _] : classFields)

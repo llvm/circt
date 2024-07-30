@@ -50,20 +50,19 @@ void VerifyObjectFieldsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
 
   /// A map from a class and field name to a field.
-  // TODO: ClassOp -> ClassLike when getFields API is moved
-  llvm::MapVector<ClassOp, llvm::DenseMap<StringAttr, Value>> tables;
-  for (auto op : module->getRegion(0).getOps<om::ClassOp>())
-    tables.insert({op, llvm::DenseMap<StringAttr, Value>()});
+  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Type>> tables;
+  for (auto op : module->getRegion(0).getOps<om::ClassLike>())
+    tables.insert({op, llvm::DenseMap<StringAttr, Type>()});
 
   // Peel tables parallelly.
   if (failed(
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
-            ClassOp classLike = entry.first;
+            ClassLike classLike = entry.first;
             auto &table = entry.second;
             auto fields = classLike.getFields();
             for (auto field : fields) {
-              auto name = cast<StringAttr>(field.name);
-              if (!table.insert({name, field.value}).second) {
+              auto name = cast<StringAttr>(field.getName());
+              if (!table.insert({name, field.getType()}).second) {
                 auto emit = classLike.getFieldsOp().emitOpError()
                             << "field " << name << " is defined twice";
                 return LogicalResult::failure();
@@ -76,7 +75,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
       &getContext(), tables, [&tables, &symbolTable](const auto &entry) {
-        ClassOp classLike = entry.first;
+        ClassLike classLike = entry.first;
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
@@ -92,18 +91,17 @@ void VerifyObjectFieldsPass::runOnOperation() {
               }
 
               // Traverse the field path, verifying each field exists.
-              Value finalField;
+              Type finalFieldType;
               auto fields = SmallVector<FlatSymbolRefAttr>(
                   objectField.getFieldPath().getAsRange<FlatSymbolRefAttr>());
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                Value fieldValue;
                 auto *it = tables.find(classDef);
                 assert(it != tables.end() && "must be visited");
-                fieldValue = it->second.lookup(field.getAttr());
+                Type fieldType = it->second.lookup(field.getAttr());
 
-                if (!fieldValue) {
+                if (!fieldType) {
                   auto error =
                       objectField.emitOpError("referenced non-existent field ")
                       << field;
@@ -114,11 +112,11 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 // If there are more fields, verify the current field is of
                 // ClassType, and look up the ClassOp for that field.
                 if (i < e - 1) {
-                  auto classType = dyn_cast<ClassType>(fieldValue.getType());
+                  auto classType = dyn_cast<ClassType>(fieldType);
                   if (!classType) {
                     objectField.emitOpError("nested field access into ")
                         << field << " requires a ClassType, but found "
-                        << fieldValue.getType();
+                        << fieldType;
                     return WalkResult::interrupt();
                   }
 
@@ -141,14 +139,14 @@ void VerifyObjectFieldsPass::runOnOperation() {
 
                 // On the last iteration down the path, save the final field
                 // being accessed.
-                finalField = fieldValue;
+                finalFieldType = fieldType;
               }
 
               // Verify the accessed field type matches the result type.
-              if (finalField.getType() != objectField.getResult().getType()) {
+              if (finalFieldType != objectField.getResult().getType()) {
                 objectField.emitOpError("expected type ")
                     << objectField.getResult().getType()
-                    << ", but accessed field has type " << finalField.getType();
+                    << ", but accessed field has type " << finalFieldType;
 
                 return WalkResult::interrupt();
               }

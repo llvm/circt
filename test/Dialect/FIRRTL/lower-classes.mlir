@@ -25,7 +25,7 @@ firrtl.circuit "Component" {
   }
 
   // CHECK-LABEL: om.class.extern @ExtClass(%basepath: !om.basepath, %input: !om.string) {
-  // CHECK-NEXT:    om.class.extern.field @field : !om.string
+  // CHECK-NEXT:    om.class.extern.fields {field = !om.string}
   // CHECK-NEXT:  }
   firrtl.extclass private @ExtClass(in input: !firrtl.string, out field: !firrtl.string)
 
@@ -295,10 +295,10 @@ firrtl.circuit "ModuleInstances" {
   }
 
   // CHECK: om.class.extern @ExtModule_Class(%basepath: !om.basepath, %inputProp: !om.string)
-  // CHECK:   om.class.extern.field @outputProp : !om.string
+  // CHECK:   om.class.extern.fields {outputProp = !om.string}
 
   // CHECK: om.class.extern @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string)
-  // CHECK:   om.class.extern.field @outputProp : !om.string
+  // CHECK:   om.class.extern.fields {outputProp = !om.string}
 
   // CHECK: om.class @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string)
   // CHECK:   om.class.fields {field_names = ["outputProp"]} %[[IN_PROP0]] : !om.string

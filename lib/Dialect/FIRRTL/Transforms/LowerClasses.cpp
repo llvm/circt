@@ -999,6 +999,9 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   classBody->addArgument(BasePathType::get(&getContext()),
                          UnknownLoc::get(&getContext()));
 
+  llvm::SmallVector<mlir::StringAttr> fieldNames;
+  llvm::SmallVector<mlir::Type> fieldTypes;
+  llvm::SmallVector<mlir::Location> locs;
   for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
     auto type = moduleLike.getPortType(i);
     if (!isa<PropertyType>(type))
@@ -1009,13 +1012,16 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
     if (direction == Direction::In)
       classBody->addArgument(type, loc);
     else {
+      locs.push_back(loc);
       auto name = moduleLike.getPortNameAttr(i);
-      builder.create<om::ClassExternFieldOp>(loc, name, type);
+      fieldNames.push_back(name);
+      fieldTypes.push_back(type);
     }
 
     // In case this is a Module, remember to erase this port.
     portsToErase.set(i);
   }
+  classExternOp.addFields(builder, locs, fieldNames, fieldTypes);
 
   // If the module-like is a Class, it will be completely erased later.
   // Otherwise, erase just the property ports and ops.
@@ -1656,6 +1662,25 @@ struct ClassExternFieldOpConversion
   }
 };
 
+struct ClassExternFieldsOpConversion
+    : public OpConversionPattern<ClassExternFieldsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClassExternFieldsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op, [&]() {
+      auto *operation = op.getOperation();
+      for (auto field : operation->getAttrs()) {
+        Type type = typeConverter->convertType(
+            cast<TypeAttr>(field.getValue()).getValue());
+        operation->setAttr(field.getName(), mlir::TypeAttr::get(type));
+      }
+    });
+    return success();
+  }
+};
+
 struct ObjectOpConversion : public OpConversionPattern<om::ObjectOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1771,8 +1796,14 @@ static void populateConversionTarget(ConversionTarget &target) {
 
   // the OM op class.extern.field doesn't have operands or results, so we must
   // check it's type for a firrtl dialect.
-  target.addDynamicallyLegalOp<ClassExternFieldOp>(
-      [](ClassExternFieldOp op) { return !isa<FIRRTLType>(op.getType()); });
+  target.addDynamicallyLegalOp<ClassExternFieldsOp>([](ClassExternFieldsOp op) {
+    for (auto field : op.getParentOp().getFields()) {
+      if (isa<FIRRTLType>(field.getType())) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   // OM Class ops are legal if they don't use FIRRTL types for block arguments.
   target.addDynamicallyLegalOp<om::ClassOp, om::ClassExternOp>(
@@ -1883,6 +1914,7 @@ static void populateRewritePatterns(
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
+  patterns.add<ClassExternFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
                                                  patterns.getContext());
