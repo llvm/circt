@@ -1,4 +1,15 @@
-#include "chrono"
+//===- circt-fsmt.cpp - Part of the circt-bmc bounded model checker ----------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implements the 'circt-fsmt' tool
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMGraph.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -13,14 +24,41 @@
 #include <iostream>
 #include <vector>
 #include <z3++.h>
+#include "circt/Conversion/CombToSMT.h"
+#include "circt/Conversion/HWToSMT.h"
+#include "circt/Conversion/SMTToZ3LLVM.h"
 
-#define V 0
-
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
-using namespace std;
-using namespace z3;
+
+//===----------------------------------------------------------------------===//
+// Command-line options declaration
+//===----------------------------------------------------------------------===//
+
+static cl::OptionCategory mainCategory("circt-fsmt Options");
+
+static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
+                                          cl::desc("<Input file>"),
+                                          cl::cat(mainCategory));
+
+static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
+                                           cl::value_desc("filename"),
+                                           cl::init("-"),
+                                           cl::cat(mainCategory));
+
+enum OutputFormat { OutputMLIR, OutputLLVM, OutputSMTLIB };
+static cl::opt<OutputFormat> outputFormat(
+    cl::desc("Specify output format"),
+    cl::values(clEnumValN(OutputMLIR, "emit-mlir", "Emit LLVM MLIR dialect"),
+               clEnumValN(OutputLLVM, "emit-llvm", "Emit LLVM"),
+               clEnumValN(OutputSMTLIB, "emit-smtlib", "Emit object file")),
+    cl::init(OutputLLVM), cl::cat(mainCategory));
+
+#endif
+
+//===----------------------------------------------------------------------===//
+// Tool implementation
+//===----------------------------------------------------------------------===//
 
 using z3Fun = std::function<expr(vector<expr>)>;
 
@@ -33,9 +71,9 @@ struct transition {
   z3FunA action, output;
 };
 
-/**
- * @brief Prints solver assertions
-*/
+//
+// @brief Prints solver assertions
+//
 void printSolverAssertions(z3::context &c, z3::solver &solver, string output,
                            vector<func_decl> stateInvFun) {
 
@@ -61,9 +99,9 @@ void printSolverAssertions(z3::context &c, z3::solver &solver, string output,
   outfile.close();
 }
 
-/**
- * @brief Prints FSM transition
-*/
+//
+// @brief Prints FSM transition
+//
 void printTransitions(vector<transition> &transitions) {
   llvm::outs() << "\nPRINTING TRANSITIONS\n";
   for (auto t : transitions) {
@@ -72,9 +110,9 @@ void printTransitions(vector<transition> &transitions) {
 }
 
 
-/**
- * @brief Prints z3::expr-mlir::Value map
-*/
+//
+// @brief Prints z3::expr-mlir::Value map
+//
 void printExprValMap(vector<std::pair<expr, mlir::Value>> &exprMap) {
   llvm::outs() << "\n\nEXPR-VAL:";
   for (auto e : exprMap) {
@@ -84,9 +122,9 @@ void printExprValMap(vector<std::pair<expr, mlir::Value>> &exprMap) {
   llvm::outs() << "END\n";
 }
 
-/**
- * @brief Returns FSM's initial state
- */
+//
+// @brief Returns FSM's initial state
+ //
 string getInitialState(Operation &mod) {
   for (Region &rg : mod.getRegions()) {
     for (Block &block : rg) {
@@ -100,9 +138,9 @@ string getInitialState(Operation &mod) {
   llvm::errs() << "Initial state does not exist\n";
 }
 
-/**
- * @brief Returns list of values to be updated within an action region
- */
+//
+// @brief Returns list of values to be updated within an action region
+ //
 vector<mlir::Value> actionsCounter(Region &action) {
   vector<mlir::Value> toUpdate;
   for (auto &op : action.getOps()) {
@@ -113,9 +151,9 @@ vector<mlir::Value> actionsCounter(Region &action) {
   return toUpdate;
 }
 
-/**
- * @brief Returns expression from Comb dialect operator
- */
+//
+// @brief Returns expression from Comb dialect operator
+ //
 expr manageCombExp(Operation &op, vector<expr> &vec, z3::context &c) {
 
   if (auto add = dyn_cast<comb::AddOp>(op)) {
@@ -164,9 +202,9 @@ expr manageCombExp(Operation &op, vector<expr> &vec, z3::context &c) {
   assert(false && "LLVM unreachable");
 }
 
-/**
- * @brief Returns expression from densemap or constant operator
- */
+//
+// @brief Returns expression from densemap or constant operator
+ //
 expr getExpr(mlir::Value v, vector<std::pair<expr, mlir::Value>> &exprMap,
              z3::context &c) {
 
@@ -184,9 +222,9 @@ expr getExpr(mlir::Value v, vector<std::pair<expr, mlir::Value>> &exprMap,
   llvm::errs() << "Expression not found.";
 }
 
-/**
- * @brief Returns guard expression for input region
- */
+//
+// @brief Returns guard expression for input region
+ //
 expr getGuardExpr(vector<std::pair<expr, mlir::Value>> &exprMap, Region &guard,
                   z3::context &c) {
 
@@ -209,9 +247,9 @@ expr getGuardExpr(vector<std::pair<expr, mlir::Value>> &exprMap, Region &guard,
   return expr(c.bool_const("true"));
 }
 
-/**
- * @brief Returns output expression for input region
- */
+//
+// @brief Returns output expression for input region
+ //
 vector<expr> getOutputExpr(vector<std::pair<expr, mlir::Value>> &exprMap,
                            Region &guard, z3::context &c) {
   vector<expr> outputExp;
@@ -236,9 +274,9 @@ vector<expr> getOutputExpr(vector<std::pair<expr, mlir::Value>> &exprMap,
   }
 }
 
-/**
- * @brief Returns actions for all expressions for the input region
- */
+//
+// @brief Returns actions for all expressions for the input region
+ //
 vector<expr> getActionExpr(Region &action, context &c,
                            vector<mlir::Value> &toUpdate,
                            vector<std::pair<expr, mlir::Value>> &exprMap) {
@@ -276,9 +314,9 @@ vector<expr> getActionExpr(Region &action, context &c,
   return updatedVec;
 }
 
-/**
- * @brief Parse FSM arguments and add them to the variable map
- */
+//
+// @brief Parse FSM arguments and add them to the variable map
+ //
 int populateArgs(Operation &mod, vector<mlir::Value> &vecVal,
                  vector<std::pair<expr, mlir::Value>> &variables,
                  z3::context &c) {
@@ -309,9 +347,9 @@ int populateArgs(Operation &mod, vector<mlir::Value> &vecVal,
   return numArgs;
 }
 
-/**
- * @brief Parse FSM output and add them to the variable map
- */
+//
+// @brief Parse FSM output and add them to the variable map
+ //
 int populateOutputs(Operation &mod, vector<mlir::Value> &vecVal,
                     vector<std::pair<expr, mlir::Value>> &variables,
                     z3::context &c, MLIRContext &context,
@@ -349,9 +387,9 @@ int populateOutputs(Operation &mod, vector<mlir::Value> &vecVal,
   return numOutput;
 }
 
-/**
- * @brief Parse FSM variables and add them to the variable map
- */
+//
+// @brief Parse FSM variables and add them to the variable map
+ //
 void populateVars(Operation &mod, vector<mlir::Value> &vecVal,
                   vector<std::pair<expr, mlir::Value>> &variables,
                   z3::context &c, int numArgs) {
@@ -390,9 +428,9 @@ void populateVars(Operation &mod, vector<mlir::Value> &vecVal,
   }
 }
 
-/**
- * @brief Insert state if not present, return position in vector otherwise
- */
+//
+// @brief Insert state if not present, return position in vector otherwise
+ //
 int insertState(string state, vector<string> &stateInv) {
   int i = 0;
   for (auto s : stateInv) {
@@ -405,9 +443,9 @@ int insertState(string state, vector<string> &stateInv) {
   return stateInv.size() - 1;
 }
 
-/**
- * @brief Parse FSM states and add them to the state map
- */
+//
+// @brief Parse FSM states and add them to the state map
+ //
 void populateST(Operation &mod, context &c, vector<string> &stateInv,
                 vector<transition> &transitions, vector<mlir::Value> &vecVal,
                 int numOutput) {
@@ -511,9 +549,9 @@ void populateST(Operation &mod, context &c, vector<string> &stateInv,
   }
 }
 
-/**
- * @brief Nest SMT assertion for all variables in the variables vector
- */
+//
+// @brief Nest SMT assertion for all variables in the variables vector
+ //
 expr nestedForall(vector<expr> &solverVars, expr &body, int i,
                   int numOutputs, z3::context &c) {
   z3::expr_vector univQ(c);
@@ -528,9 +566,9 @@ expr nestedForall(vector<expr> &solverVars, expr &body, int i,
   return ret;
 }
 
-/**
- * @brief Build Z3 boolean function for each state in the state map
- */
+//
+// @brief Build Z3 boolean function for each state in the state map
+ //
 void populateStateInvMap(vector<string> &stateInv, context &c,
                          vector<Z3_sort> &invInput,
                          vector<func_decl> &stateInvFun) {
@@ -543,9 +581,9 @@ void populateStateInvMap(vector<string> &stateInv, context &c,
   }
 }
 
-/**
- * @brief Build Z3 sort for each input argument
- */
+//
+// @brief Build Z3 sort for each input argument
+ //
 void populateInvInput(vector<std::pair<expr, mlir::Value>> &variables,
                       context &c, vector<expr> &solverVars,
                       vector<Z3_sort> &invInput, int numArgs, int numOutputs) {
@@ -574,9 +612,9 @@ void populateInvInput(vector<std::pair<expr, mlir::Value>> &variables,
   }
 }
 
-/**
- * @brief Parse LTL dialect file expressing property
- */
+//
+// @brief Parse LTL dialect file expressing property
+ //
 expr parseLTL(string inputFile, vector<expr> &solverVars,
               vector<string> &stateInv, 
               vector<func_decl> &stateInvFun, int numArgs, int numOutputs,
@@ -747,10 +785,10 @@ expr parseLTL(string inputFile, vector<expr> &solverVars,
   return c.bool_val(true);
 }
 
-/**
- * @brief Parse FSM and build SMT model
- */
-void parseFSM(string input, string property, string output) {
+//
+// @brief Parse FSM and build SMT model
+ //
+void translateFSM(string input, string property, string output) {
 
   DialectRegistry registry;
 
@@ -970,6 +1008,9 @@ void parseFSM(string input, string property, string output) {
 
 }
 
+/// The entry point for the `circt-fsmt` tool:
+/// parses the input file and calls the `convertFSM` function to do the actual work.
+
 int main(int argc, char **argv) {
   string input = argv[1];
   cout << "input file: " << input << endl;
@@ -980,7 +1021,7 @@ int main(int argc, char **argv) {
   string output = argv[3];
   cout << "output file: " << output << endl;
 
-  parseFSM(input, prop, output);
+  translateFSM(input, prop, output);
 
   return 0;
 }
