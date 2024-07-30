@@ -15,6 +15,7 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
+  CIRCTFSMToSMT
   CIRCTFSMToSV
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW

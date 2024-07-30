@@ -38,6 +38,7 @@ target_link_libraries(circt-opt
   CIRCTFIRRTLTransforms
   CIRCTFSM
   CIRCTFSMTransforms
+  CIRCTFSMToSMT
   CIRCTFSMToSV
   CIRCTHandshake
   CIRCTHandshakeToDC

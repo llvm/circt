@@ -137,6 +137,7 @@ add_mlir_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSM
   CIRCTFSMTransforms
   CIRCTFSMToSV
+  CIRCTFSMToSMT
 )
 
 add_mlir_public_c_api_library(CIRCTCAPIHandshake

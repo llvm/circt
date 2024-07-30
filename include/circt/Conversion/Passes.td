@@ -811,4 +811,17 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// FSMToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to SMT";
+  let constructor = "circt::createConvertFSMToSMTPass()";
+  let dependentDialects = [
+      "circt::comb::CombDialect",
+      "circt::hw::HWDialect",
+  ];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD
