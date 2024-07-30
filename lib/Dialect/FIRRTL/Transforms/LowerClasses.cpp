@@ -1797,12 +1797,9 @@ static void populateConversionTarget(ConversionTarget &target) {
   // the OM op class.extern.field doesn't have operands or results, so we must
   // check it's type for a firrtl dialect.
   target.addDynamicallyLegalOp<ClassExternFieldsOp>([](ClassExternFieldsOp op) {
-    for (auto field : op.getParentOp().getFields()) {
-      if (isa<FIRRTLType>(field.getType())) {
-        return false;
-      }
-    }
-    return true;
+    return llvm::all_of(op.getParentOp().getFields(), [](Field field) {
+      return !isa<FIRRTLType>(field.getType());
+    });
   });
 
   // OM Class ops are legal if they don't use FIRRTL types for block arguments.
