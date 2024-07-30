@@ -14,7 +14,7 @@
 #include <vector>
 #include <z3++.h>
 
-#define V 1
+#define V 0
 
 using namespace llvm;
 using namespace mlir;
@@ -520,15 +520,10 @@ expr nestedForall(vector<expr> &solverVars, expr &body, int i,
 
   for(int idx = 0; idx < solverVars.size()-1-numOutputs; idx++){
     univQ.push_back(solverVars[idx]);
-    llvm::outs()<<"\n\nunivQ[idx]: "<<univQ[idx].to_string();
   }
   univQ.push_back(solverVars[solverVars.size()-1]);
 
   expr ret = forall(univQ, body);
-
-  llvm::outs()<<"\n\n body??? "<<body.is_bool();
-  llvm::outs()<<"\n\n ret??? "<<ret.to_string();
-
 
   return ret;
 }
@@ -664,7 +659,7 @@ expr parseLTL(string inputFile, vector<expr> &solverVars,
 
             expr b1 = implies((stateInvFun[insertState(state, stateInv)](
                             solverVars.size(), solverVars.data())) &&
-                        (solverVars[v] == id), false);
+                        (solverVars[v] != id), false);
 
 
             expr r1 = nestedForall(solverVars, b1, numArgs, numOutputs, c);
@@ -954,6 +949,17 @@ void parseFSM(string input, string property, string output) {
       }
     }
   }
+
+  // for(auto state1 : stateInvFun){
+  //   expr mutualExc = c.bool_val(true);
+  //   for(auto state2: stateInvFun){
+  //     if(state1.to_string() != state2.to_string()){
+  //       mutualExc = mutualExc && !state2(solverVars.size(), solverVars.data());
+  //     }
+  //   }
+  //   expr stateMutualExc = implies(state1(solverVars.size(), solverVars.data()), mutualExc);
+  //   s.add(nestedForall(solverVars, stateMutualExc, numArgs, numOutputs, c));
+  // }
 
   expr r = parseLTL(property, solverVars, stateInv, stateInvFun,
                     0, numOutputs, c);
