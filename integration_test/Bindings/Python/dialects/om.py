@@ -58,15 +58,15 @@ with Context() as ctx, Location.unknown():
 
       %map = om.map_create %entry1, %entry2: !om.string, !om.integer
 
-      om.class.fields {field_names = "field", "child", "reference", "list", "tuple", "nest", "map", "map_create"} %param, %0, %sym, %list, %tuple, %2, %3, %map : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, tuple<!om.list<!om.string>, om.integer>, !om.class.type<@Nest>, !om.map<!om.string, !om.integer>, !om.map<!om.string, !om.integer>
+      om.class.fields {field_names = ["field", "child", "reference", "list", "tuple", "nest", "map", "map_create"]} %param, %0, %sym, %list, %tuple, %2, %3, %map : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, tuple<!om.list<!om.string>, !om.integer>, !om.class.type<@Nest>, !om.map<!om.string, !om.integer>, !om.map<!om.string, !om.integer>
     }
 
     om.class @Child(%0: !om.integer) {
-      om.class.fields {field_names = "foo"} %0 : !om.integer
+      om.class.fields {field_names = ["foo"]} %0 : !om.integer
     }
 
     om.class @Nest(%0: !om.list<!om.class.type<@Child>>) {
-      om.class.fields {field_names = "list_child"} %0 : !om.list<!om.class.type<@Child>>
+      om.class.fields {field_names = ["list_child"]} %0 : !om.list<!om.class.type<@Child>>
     }
 
     hw.module @Root(in %clock: i1) {
@@ -141,23 +141,23 @@ print(obj.type.name)
 print(obj.field)
 
 # location of the om.class.field @field
-# CHECK: loc("-":27:7)
-print(obj.get_field_loc("field"))
+# CHECK: loc("-":22:20)
+print("field:", obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
-# CHECK: loc("-":60:7)
-print(obj.child.get_field_loc("foo"))
+# CHECK: loc("-":50:21)
+print("foo", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
 (fst, snd) = obj.tuple
 # CHECK: 14
 print(snd)
 
-# CHECK: loc("-":39:7)
-print(obj.get_field_loc("tuple"))
+# CHECK: loc("-":31:16)
+print("tuple", obj.get_field_loc("tuple"))
 
-# CHECK: loc("-":25:5)
+# CHECK: loc("-":22:5)
 print(obj.loc)
 
 try:
@@ -169,13 +169,13 @@ except IndexError as e:
 for (name, field) in obj:
   # location from om.class.field @child, %0 : !om.class.type<@Child>
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc("-":30:12)
+  # CHECK-SAME: loc: loc("-":26:12)
   # location from om.class.field @field, %param : !om.integer
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":27:7)
+  # CHECK-SAME: loc: loc("-":22:20)
   # location from om.class.field @reference, %sym : !om.ref
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":33:7)
+  # CHECK-SAME: loc: loc("-":23:14)
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
