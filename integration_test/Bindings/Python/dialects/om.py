@@ -30,7 +30,7 @@ with Context() as ctx, Location.unknown():
       %0 = om.object @node() : () -> !om.class.type<@node>
       %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
     
-      om.class.fields {field_names = ["client_omnode_0_OMIROut", "node0_OMIROut", "node1_OMIROut"]} # %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
+      om.class.fields {field_names = ["client_omnode_0_OMIROut", "node0_OMIROut", "node1_OMIROut"]} %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
     }
 
     om.class @Test(%param: !om.integer) {
