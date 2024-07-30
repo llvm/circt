@@ -75,7 +75,6 @@ class OMClassFieldsLike<string mnemonic, list<Trait> traits = []> :
 def ClassOp : OMClassLike<"class", [
       SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
   let extraClassDeclaration = [{
-
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
     // Build the ClassOp with `name` and `formalParamNames`. Then add
