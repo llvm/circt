@@ -383,48 +383,6 @@ def ClassOp : FIRRTLModuleLike<"class", [
   }];
 }
 
-def ExtClassOp : FIRRTLModuleLike<"extclass", [
-  DeclareOpInterfaceMethods<FModuleLike, [
-    // ExtClassOps do not support port annotations or enabled layers.
-    // Override these methods to return an empty array attr.
-    "getPortAnnotationsAttr",
-    "getLayersAttr"]>,
-  DeclareOpInterfaceMethods<ClassLike>,
-  DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>]> {
-  let summary = "FIRRTL external class";
-  let description = [{
-    The "firrtl.extclass" operation represents a reference to an external
-    firrtl class, and includes a given name, as well as a list of ports.
-    Just as usual firrtl.class definitions, An ext.class may only have property
-    ports.
-
-    example:
-    ```mlir
-    firrtl.extclass @MyImportedClass(in in_str: !firrtl.string, out out_str: !firrtl.string)
-    ```
-  }];
-  let arguments = (ins SymbolNameAttr:$sym_name, 
-                       DenseBoolArrayAttr:$portDirections,
-                       ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
-                       ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
-  let results = (outs);
-  let regions = (region AnyRegion:$body);
-  let skipDefaultBuilders = 1;
-  let builders = [
-    OpBuilder<(ins
-      "StringAttr":$name,
-      "ArrayRef<PortInfo>":$ports
-    )>
-  ];
-  let extraModuleClassDeclaration = [{
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                                  mlir::OpAsmSetValueNameFn setNameFn);
-
-    ArrayAttr getParameters();
-  }];
-  let hasCustomAssemblyFormat = 1;
-}
-
 def FormalOp : FIRRTLModuleLike<"formal", [
     DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>,
     DeclareOpInterfaceMethods<FModuleLike, [
@@ -492,6 +450,48 @@ def FormalOp : FIRRTLModuleLike<"formal", [
                                   mlir::OpAsmSetValueNameFn setNameFn);
     ArrayAttr getParameters();
   }];
+}
+
+def ExtClassOp : FIRRTLModuleLike<"extclass", [
+  DeclareOpInterfaceMethods<FModuleLike, [
+    // ExtClassOps do not support port annotations or enabled layers.
+    // Override these methods to return an empty array attr.
+    "getPortAnnotationsAttr",
+    "getLayersAttr"]>,
+  DeclareOpInterfaceMethods<ClassLike>,
+  DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>]> {
+  let summary = "FIRRTL external class";
+  let description = [{
+    The "firrtl.extclass" operation represents a reference to an external
+    firrtl class, and includes a given name, as well as a list of ports.
+    Just as usual firrtl.class definitions, An ext.class may only have property
+    ports.
+
+    example:
+    ```mlir
+    firrtl.extclass @MyImportedClass(in in_str: !firrtl.string, out out_str: !firrtl.string)
+    ```
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, 
+                       DenseBoolArrayAttr:$portDirections,
+                       ArrayRefAttr:$portNames, ArrayRefAttr:$portTypes,
+                       ArrayRefAttr:$portSyms, ArrayRefAttr:$portLocations);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$name,
+      "ArrayRef<PortInfo>":$ports
+    )>
+  ];
+  let extraModuleClassDeclaration = [{
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
+
+    ArrayAttr getParameters();
+  }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def LayerOp : FIRRTLOp<

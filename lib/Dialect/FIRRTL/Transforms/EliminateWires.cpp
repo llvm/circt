@@ -45,61 +45,54 @@ namespace {
 struct EliminateWiresPass
     : public circt::firrtl::impl::EliminateWiresBase<EliminateWiresPass> {
   void runOnOperation() override;
-
-  template <typename Op>
-  void runOnOp(Op op) {
-    auto &dominance = getAnalysis<mlir::DominanceInfo>();
-    std::deque<std::pair<WireOp, MatchingConnectOp>> worklist;
-
-    for (auto wire : op.getOps<WireOp>()) {
-      auto type = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
-      if (!type || !type.isPassive()) {
-        ++complexTypeWires;
-        continue;
-      }
-      // This will fail if there are multiple connects (due to aggregate
-      // decomposition or whens) or if there are connects in blocks (due to
-      // whens or matches).  We are fine with this, we don't want to reason
-      // about those cases as other passes will handle them.
-      auto writer = getSingleConnectUserOf(wire.getResult());
-      if (!writer) {
-        ++complexWriteWires;
-        continue;
-      }
-      bool safe = true;
-      for (auto *user : wire->getUsers()) {
-        if (!dominance.dominates(writer, user)) {
-          ++notDomWires;
-          safe = false;
-          break;
-        }
-      }
-      if (!safe)
-        continue;
-      worklist.emplace_back(wire, writer);
-    }
-
-    for (auto [wire, writer] : worklist) {
-      mlir::ImplicitLocOpBuilder builder(wire->getLoc(), writer);
-      auto node = builder.create<NodeOp>(
-          writer.getSrc(), wire.getName(), wire.getNameKind(),
-          wire.getAnnotations(), wire.getInnerSymAttr(), wire.getForceable());
-      wire.replaceAllUsesWith(node);
-      wire.erase();
-      writer.erase();
-      ++erasedWires;
-    }
-  }
 };
 } // end anonymous namespace
 
 void EliminateWiresPass::runOnOperation() {
   LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  auto module = getOperation();
+  auto &dominance = getAnalysis<mlir::DominanceInfo>();
 
-  TypeSwitch<Operation *>(getOperation())
-      .Case<FModuleOp, FExtModuleOp, FIntModuleOp, FMemModuleOp, ClassOp,
-            ExtClassOp, FormalOp>([&](auto op) { runOnOp(op); })
-      .Default([&](auto) {});
+  std::deque<std::pair<WireOp, MatchingConnectOp>> worklist;
+
+  for (auto wire : module.getOps<WireOp>()) {
+    auto type = type_dyn_cast<FIRRTLBaseType>(wire.getResult().getType());
+    if (!type || !type.isPassive()) {
+      ++complexTypeWires;
+      continue;
+    }
+    // This will fail if there are multiple connects (due to aggregate
+    // decomposition or whens) or if there are connects in blocks (due to whens
+    // or matches).  We are fine with this, we don't want to reason about those
+    // cases as other passes will handle them.
+    auto writer = getSingleConnectUserOf(wire.getResult());
+    if (!writer) {
+      ++complexWriteWires;
+      continue;
+    }
+    bool safe = true;
+    for (auto *user : wire->getUsers()) {
+      if (!dominance.dominates(writer, user)) {
+        ++notDomWires;
+        safe = false;
+        break;
+      }
+    }
+    if (!safe)
+      continue;
+    worklist.emplace_back(wire, writer);
+  }
+
+  for (auto [wire, writer] : worklist) {
+    mlir::ImplicitLocOpBuilder builder(wire->getLoc(), writer);
+    auto node = builder.create<NodeOp>(
+        writer.getSrc(), wire.getName(), wire.getNameKind(),
+        wire.getAnnotations(), wire.getInnerSymAttr(), wire.getForceable());
+    wire.replaceAllUsesWith(node);
+    wire.erase();
+    writer.erase();
+    ++erasedWires;
+  }
 }
 
 /// This is the pass constructor.
