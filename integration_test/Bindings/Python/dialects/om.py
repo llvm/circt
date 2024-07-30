@@ -17,49 +17,39 @@ with Context() as ctx, Location.unknown():
     om.class @node() {
       %0 = om.constant #om.list<!om.string,["MyThing" : !om.string]> : !om.list<!om.string>
       %1 = om.constant "Component.inst1.foo" : !om.string
-      om.class.field @field2, %1 : !om.string
+      om.class.fields {field_names = ["field2"]} %1 : !om.string
     }
     
     om.class @comp(
         %inst1_propOut_bore: !om.class.type<@node>,
         %inst2_propOut_bore: !om.class.type<@node>) {
-      om.class.field @field2, %inst1_propOut_bore : !om.class.type<@node>
-      om.class.field @field3, %inst2_propOut_bore : !om.class.type<@node>
+      om.class.fields {field_names = ["field2", "field3"]} %inst1_propOut_bore, %inst2_propOut_bore : !om.class.type<@node>, !om.class.type<@node>
     }
     
     om.class  @Client() {
       %0 = om.object @node() : () -> !om.class.type<@node>
       %2 = om.object @comp(%0, %0) : (!om.class.type<@node>, !om.class.type<@node>) -> !om.class.type<@comp>
     
-      om.class.field @client_omnode_0_OMIROut, %2 : !om.class.type<@comp>
-      om.class.field @node0_OMIROut, %0 : !om.class.type<@node>
-      om.class.field @node1_OMIROut, %0 : !om.class.type<@node>
+      om.class.fields {field_names = ["client_omnode_0_OMIROut", "node0_OMIROut", "node1_OMIROut"]} # %2, %0, %0 : !om.class.type<@comp>, !om.class.type<@node>, !om.class.type<@node>
     }
 
     om.class @Test(%param: !om.integer) {
       %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
-      om.class.field @field, %param : !om.integer
 
       %c_14 = om.constant #om.integer<14> : !om.integer
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
-      om.class.field @child, %0 : !om.class.type<@Child>
 
-      om.class.field @reference, %sym : !om.ref
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
-      om.class.field @list, %list : !om.list<!om.string>
 
       %tuple = om.tuple_create %list, %c_14: !om.list<!om.string>, !om.integer
-      om.class.field @tuple, %tuple : tuple<!om.list<!om.string>, !om.integer>
 
       %c_15 = om.constant #om.integer<15> : !om.integer
       %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
-      om.class.field @nest, %2 : !om.class.type<@Nest>
 
       %3 = om.constant #om.map<!om.integer, {a = #om.integer<42>, b = #om.integer<32>}> : !om.map<!om.string, !om.integer>
-      om.class.field @map, %3 : !om.map<!om.string, !om.integer>
 
       %x = om.constant "X" : !om.string
       %y = om.constant "Y" : !om.string
@@ -67,15 +57,16 @@ with Context() as ctx, Location.unknown():
       %entry2 = om.tuple_create %y, %c_15: !om.string, !om.integer
 
       %map = om.map_create %entry1, %entry2: !om.string, !om.integer
-      om.class.field @map_create, %map : !om.map<!om.string, !om.integer>
+
+      om.class.fields {field_names = "field", "child", "reference", "list", "tuple", "nest", "map", "map_create"} %param, %0, %sym, %list, %tuple, %2, %3, %map : !om.integer, !om.class.type<@Child>, !om.ref, !om.list<!om.string>, tuple<!om.list<!om.string>, om.integer>, !om.class.type<@Nest>, !om.map<!om.string, !om.integer>, !om.map<!om.string, !om.integer>
     }
 
     om.class @Child(%0: !om.integer) {
-      om.class.field @foo, %0 : !om.integer
+      om.class.fields {field_names = "foo"} %0 : !om.integer
     }
 
     om.class @Nest(%0: !om.list<!om.class.type<@Child>>) {
-      om.class.field @list_child, %0 : !om.list<!om.class.type<@Child>>
+      om.class.fields {field_names = "list_child"} %0 : !om.list<!om.class.type<@Child>>
     }
 
     hw.module @Root(in %clock: i1) {
@@ -85,21 +76,19 @@ with Context() as ctx, Location.unknown():
     om.class @Paths(%basepath: !om.frozenbasepath) {
       %0 = om.frozenbasepath_create %basepath "Foo/bar"
       %1 = om.frozenpath_create reference %0 "Bar/baz:Baz>w"
-      om.class.field @path, %1 : !om.frozenpath
 
       %3 = om.frozenpath_empty
-      om.class.field @deleted, %3 : !om.frozenpath
+      om.class.fields {field_names = ["path", "deleted"]} %1, %3 : !om.frozenpath, !om.frozenpath
     }
 
     om.class @Class1(%input: !om.integer) {
       %0 = om.constant #om.integer<1 : si3> : !om.integer
-      om.class.field @value, %0 : !om.integer
-      om.class.field @input, %input : !om.integer
+      om.class.fields {field_names = ["value", "input"]} %0, %input : !om.integer, !om.integer
     }
 
     om.class @Class2() {
       %0 = om.constant #om.integer<2 : si3> : !om.integer
-      om.class.field @value, %0 : !om.integer
+      om.class.fields {field_names = ["value"]} %0 : !om.integer
     }
 
     om.class @IntegerBinaryArithmeticObjectsDelayed() {
@@ -110,7 +99,7 @@ with Context() as ctx, Location.unknown():
       %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
 
       %5 = om.integer.add %1, %3 : !om.integer
-      om.class.field @result, %5 : !om.integer
+      om.class.fields {field_names = ["result"]} %5 : !om.integer
     }
   }
   """)
