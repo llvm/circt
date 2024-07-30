@@ -1,2 +1,0 @@
-
-rep 0 file ../smtlib-fsm/err-p2/fsm_100states_0loops.smt
