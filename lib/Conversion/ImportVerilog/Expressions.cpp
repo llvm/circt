@@ -83,7 +83,7 @@ struct RvalueExprVisitor {
     // value for this expression's symbol to the `context.valueSymbols` table.
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no rvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 
@@ -113,15 +113,6 @@ struct RvalueExprVisitor {
       return {};
     }
 
-    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp.getInput();
-      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
-                                              refOp.getFieldNameAttr(), rhs);
-        refOp->erase();
-        return rhs;
-      }
-    }
     if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
@@ -529,7 +520,7 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertLvalueExpression(expr.value());
+    auto value = context.convertRvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
@@ -764,7 +755,7 @@ struct LvalueExprVisitor {
       return value;
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 

@@ -38,65 +38,58 @@ moore.module @MultiAssign() {
   moore.output
 }
 
-// CHECK-LABEL: moore.module @structAssign
-moore.module @structAssign(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
-  %x = moore.variable : <i32>
-  %y = moore.variable : <i32>
-  %z = moore.variable : <i32>
-  // CHECK: %0 = moore.constant 4 : i32
-  // CHECK: %1 = moore.read %x
-  // CHECK: %2 = moore.constant 1 : i32
-  // CHECK: %3 = moore.add %1, %2 : i32
-  // CHECK: %4 = moore.struct_create %3, %0 : !moore.i32, !moore.i32 -> <struct<{a: i32, b: i32}>>
-  %ii = moore.variable : <struct<{a: i32, b: i32}>>
-  %0 = moore.constant 4 : i32
-  %1 = moore.conversion %0 : !moore.i32 -> !moore.i32
-  %2 = moore.struct_inject %ii, "b", %1 : !moore.ref<struct<{a: i32, b: i32}>>
-  %3 = moore.read %x : <i32>
-  %4 = moore.constant 1 : i32
-  %5 = moore.add %3, %4 : i32
-  %6 = moore.struct_inject %2, "a", %5 : !moore.ref<struct<{a: i32, b: i32}>>
-  %7 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %y, %3 : i32
-  moore.assign %y, %7 : i32
-  %8 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %z, %3 : i32
-  moore.assign %z, %8 : i32
-  // CHECK: moore.output %4 : !moore.ref<struct<{a: i32, b: i32}>>
-  moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
+// CHECK-LABEL: func.func @StructExtractFold1
+func.func @StructExtractFold1(%arg0: !moore.struct<{a: i17, b: i42}>, %arg1: !moore.i17) -> (!moore.i17) {
+  // CHECK-NEXT: return %arg1 : !moore.i17
+  %0 = moore.struct_inject %arg0, "a", %arg1 : struct<{a: i17, b: i42}>, i17
+  %1 = moore.struct_extract %0, "a" : struct<{a: i17, b: i42}> -> i17
+  return %1 : !moore.i17
 }
 
-// CHECK-LABEL: moore.module @structInjectFold
-moore.module @structInjectFold(out a : !moore.ref<struct<{a: i32, b: i32}>>) {
-  %x = moore.variable : <i32>
-  %y = moore.variable : <i32>
-  %z = moore.variable : <i32>
-  %ii = moore.variable : <struct<{a: i32, b: i32}>>
-  // CHECK: %0 = moore.read %x
-  // CHECK: %1 = moore.constant 1 : i32
-  // CHECK: %2 = moore.add %0, %1 : i32
-  // CHECK: %3 = moore.struct_inject %ii, "a", %2 : !moore.ref<struct<{a: i32, b: i32}>>
-  %0 = moore.constant 4 : i32
-  %1 = moore.conversion %0 : !moore.i32 -> !moore.i32
-  %2 = moore.struct_inject %ii, "a", %1 : !moore.ref<struct<{a: i32, b: i32}>>
-  %3 = moore.read %x : <i32>
-  %4 = moore.constant 1 : i32
-  %5 = moore.add %3, %4 : i32
-  %6 = moore.struct_inject %2, "a", %5 : !moore.ref<struct<{a: i32, b: i32}>>
-  %7 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %y, %2 : i32
-  moore.assign %y, %7 : i32
-  %8 = moore.struct_extract %6, "a" : <struct<{a: i32, b: i32}>> -> i32
-  // CHECK: moore.assign %z, %2 : i32
-  moore.assign %z, %8 : i32
-  // CHECK: moore.output %3 : !moore.ref<struct<{a: i32, b: i32}>>
-  moore.output %6 : !moore.ref<struct<{a: i32, b: i32}>>
+// CHECK-LABEL: func.func @StructExtractFold2
+func.func @StructExtractFold2(%arg0: !moore.i17, %arg1: !moore.i42) -> (!moore.i17, !moore.i42) {
+  // CHECK-NEXT: return %arg0, %arg1 : !moore.i17, !moore.i42
+  %0 = moore.struct_create %arg0, %arg1 : !moore.i17, !moore.i42 -> struct<{a: i17, b: i42}>
+  %1 = moore.struct_extract %0, "a" : struct<{a: i17, b: i42}> -> i17
+  %2 = moore.struct_extract %0, "b" : struct<{a: i17, b: i42}> -> i42
+  return %1, %2 : !moore.i17, !moore.i42
 }
 
-// CHECK-LABEL: moore.module @structCreateFold
-moore.module @structCreateFold(in %a : !moore.i1, out b : !moore.i1) {
-    %0 = moore.struct_create %a : !moore.i1 -> <struct<{a: i1}>>
-    %1 = moore.struct_extract %0, "a" : <struct<{a: i1}>> -> i1
-    // CHECK:  moore.output %a : !moore.i1
-    moore.output %1 : !moore.i1
-  }
+// CHECK-LABEL: func.func @StructInjectFold1
+func.func @StructInjectFold1(%arg0: !moore.struct<{a: i32, b: i32}>) -> (!moore.struct<{a: i32, b: i32}>) {
+  // CHECK-NEXT: [[C42:%.+]] = moore.constant 42
+  // CHECK-NEXT: [[C43:%.+]] = moore.constant 43
+  // CHECK-NEXT: [[TMP:%.+]] = moore.struct_create [[C42]], [[C43]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  // CHECK-NEXT: return [[TMP]]
+  %0 = moore.constant 42 : i32
+  %1 = moore.constant 43 : i32
+  %2 = moore.struct_inject %arg0, "a", %1 : struct<{a: i32, b: i32}>, i32
+  %3 = moore.struct_inject %2, "b", %1 : struct<{a: i32, b: i32}>, i32
+  %4 = moore.struct_inject %3, "a", %0 : struct<{a: i32, b: i32}>, i32
+  return %4 : !moore.struct<{a: i32, b: i32}>
+}
+
+// CHECK-LABEL: func.func @StructInjectFold2
+func.func @StructInjectFold2() -> (!moore.struct<{a: i32, b: i32}>) {
+  // CHECK-NEXT: [[C42:%.+]] = moore.constant 42
+  // CHECK-NEXT: [[C43:%.+]] = moore.constant 43
+  // CHECK-NEXT: [[TMP:%.+]] = moore.struct_create [[C42]], [[C43]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  // CHECK-NEXT: return [[TMP]]
+  %0 = moore.constant 42 : i32
+  %1 = moore.constant 43 : i32
+  %2 = moore.struct_create %0, %0 : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+  %3 = moore.struct_inject %2, "b", %1 : struct<{a: i32, b: i32}>, i32
+  return %3 : !moore.struct<{a: i32, b: i32}>
+}
+
+// CHECK-LABEL: func.func @StructInjectFold3
+func.func @StructInjectFold3(%arg0: !moore.struct<{a: i32, b: i32}>) -> (!moore.struct<{a: i32, b: i32}>) {
+  // CHECK-NEXT: [[C43:%.+]] = moore.constant 43
+  // CHECK-NEXT: [[TMP:%.+]] = moore.struct_inject %arg0, "a", [[C43]] : struct<{a: i32, b: i32}>, i32
+  // CHECK-NEXT: return [[TMP]]
+  %0 = moore.constant 42 : i32
+  %1 = moore.constant 43 : i32
+  %2 = moore.struct_inject %arg0, "a", %0 : struct<{a: i32, b: i32}>, i32
+  %3 = moore.struct_inject %2, "a", %1 : struct<{a: i32, b: i32}>, i32
+  return %3 : !moore.struct<{a: i32, b: i32}>
+}

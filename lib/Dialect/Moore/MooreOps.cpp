@@ -261,6 +261,8 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
+  if (getInitial())
+    return {};
   return {MemorySlot{getResult(), getType()}};
 }
 
@@ -310,6 +312,8 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
   if (isa<SVModuleOp>(getOperation()->getParentOp()))
     return {};
+  if (getInitial())
+    return {};
 
   auto refType = getType();
   auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(refType);
@@ -328,6 +332,7 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
     const SmallPtrSetImpl<Attribute> &usedIndices, OpBuilder &builder,
     SmallVectorImpl<DestructurableAllocationOpInterface> &newAllocators) {
   assert(slot.ptr == getResult());
+  assert(!getInitial());
   builder.setInsertionPointAfter(*this);
 
   auto destructurableType = cast<DestructurableTypeInterface>(getType());
@@ -335,8 +340,12 @@ DenseMap<Attribute, MemorySlot> VariableOp::destructure(
   for (Attribute index : usedIndices) {
     auto elemType = cast<RefType>(destructurableType.getTypeAtIndex(index));
     assert(elemType && "used index must exist");
-    auto varOp = builder.create<VariableOp>(getLoc(), elemType,
-                                            cast<StringAttr>(index), Value());
+    StringAttr varName;
+    if (auto name = getName(); name && !name->empty())
+      varName = StringAttr::get(
+          getContext(), (*name) + "." + cast<StringAttr>(index).getValue());
+    auto varOp =
+        builder.create<VariableOp>(getLoc(), elemType, varName, Value());
     newAllocators.push_back(varOp);
     slotMap.try_emplace<MemorySlot>(index, {varOp.getResult(), elemType});
   }
@@ -507,47 +516,59 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 
+static std::optional<uint32_t> getStructFieldIndex(Type type, StringAttr name) {
+  if (auto structType = dyn_cast<StructType>(type))
+    return structType.getFieldIndex(name);
+  if (auto structType = dyn_cast<UnpackedStructType>(type))
+    return structType.getFieldIndex(name);
+  assert(0 && "expected StructType or UnpackedStructType");
+  return {};
+}
+
+static ArrayRef<StructLikeMember> getStructMembers(Type type) {
+  if (auto structType = dyn_cast<StructType>(type))
+    return structType.getMembers();
+  if (auto structType = dyn_cast<UnpackedStructType>(type))
+    return structType.getMembers();
+  assert(0 && "expected StructType or UnpackedStructType");
+  return {};
+}
+
+static UnpackedType getStructFieldType(Type type, StringAttr name) {
+  if (auto index = getStructFieldIndex(type, name))
+    return getStructMembers(type)[*index].type;
+  return {};
+}
+
 LogicalResult StructCreateOp::verify() {
-  /// checks if the types of the inputs are exactly equal to the types of the
-  /// result struct fields
-  return TypeSwitch<Type, LogicalResult>(getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto inputs = getInput();
-        if (inputs.size() != members.size())
-          return failure();
-        for (size_t i = 0; i < members.size(); i++) {
-          auto memberType = cast<UnpackedType>(members[i].type);
-          auto inputType = inputs[i].getType();
-          if (inputType != memberType) {
-            emitOpError("input types must match struct field types and orders");
-            return failure();
-          }
-        }
-        return success();
-      })
-      .Default([this](auto &) {
-        emitOpError("Result type must be StructType or UnpackedStructType");
-        return failure();
-      });
+  auto members = getStructMembers(getType());
+
+  // Check that the number of operands matches the number of struct fields.
+  if (getFields().size() != members.size())
+    return emitOpError() << "has " << getFields().size()
+                         << " operands, but result type requires "
+                         << members.size();
+
+  // Check that the operand types match the struct field types.
+  for (auto [index, pair] : llvm::enumerate(llvm::zip(getFields(), members))) {
+    auto [value, member] = pair;
+    if (value.getType() != member.type)
+      return emitOpError() << "operand #" << index << " has type "
+                           << value.getType() << ", but struct field "
+                           << member.name << " requires " << member.type;
+  }
+  return success();
 }
 
 OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
-  auto inputs = adaptor.getInput();
-
-  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
-    return {};
-
-  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
-                     cast<RefType>(getType()).getNestedType())
-                     .Case<StructType, UnpackedStructType>(
-                         [](auto &type) { return type.getMembers(); })
-                     .Default([](auto) { return std::nullopt; });
-  SmallVector<NamedAttribute> namedInputs;
-  for (auto [input, member] : llvm::zip(inputs, members))
-    namedInputs.push_back(NamedAttribute(member.name, input));
-
-  return DictionaryAttr::get(getContext(), namedInputs);
+  SmallVector<NamedAttribute> fields;
+  for (auto [member, field] :
+       llvm::zip(getStructMembers(getType()), adaptor.getFields())) {
+    if (!field)
+      return {};
+    fields.push_back(NamedAttribute(member.name, field));
+  }
+  return DictionaryAttr::get(getContext(), fields);
 }
 
 //===----------------------------------------------------------------------===//
@@ -555,73 +576,36 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractOp::verify() {
-  /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto resultType = getType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == resultType) {
-            return success();
-          }
-        }
-        emitOpError("result type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be StructType or UnpackedStructType");
-        return failure();
-      });
-}
-
-bool StructExtractOp::canRewire(const DestructurableMemorySlot &slot,
-                                SmallPtrSetImpl<Attribute> &usedIndices,
-                                SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
-                                const DataLayout &dataLayout) {
-  if (slot.ptr == getInput()) {
-    usedIndices.insert(getFieldNameAttr());
-    return true;
-  }
-  return false;
-}
-
-DeletionKind StructExtractOp::rewire(const DestructurableMemorySlot &slot,
-                                     DenseMap<Attribute, MemorySlot> &subslots,
-                                     OpBuilder &builder,
-                                     const DataLayout &dataLayout) {
-  auto index = getFieldNameAttr();
-  const auto &memorySlot = subslots.at(index);
-  auto readOp = builder.create<moore::ReadOp>(
-      getLoc(), cast<RefType>(memorySlot.elemType).getNestedType(),
-      memorySlot.ptr);
-  replaceAllUsesWith(readOp.getResult());
-  getInputMutable().drop();
-  erase();
-  return DeletionKind::Keep;
+  auto type = getStructFieldType(getInput().getType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "extracts field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType())
+    return emitOpError() << "result type " << getType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
-  if (auto constOperand = adaptor.getInput()) {
-    auto operandAttr = llvm::cast<DictionaryAttr>(constOperand);
-    for (const auto &ele : operandAttr)
-      if (ele.getName() == getFieldNameAttr())
-        return ele.getValue();
+  // Extract on a constant struct input.
+  if (auto fields = dyn_cast_or_null<DictionaryAttr>(adaptor.getInput()))
+    if (auto value = fields.get(getFieldNameAttr()))
+      return value;
+
+  // extract(inject(s, "field", v), "field") -> v
+  if (auto inject = getInput().getDefiningOp<StructInjectOp>()) {
+    if (inject.getFieldNameAttr() == getFieldNameAttr())
+      return inject.getNewValue();
+    return {};
   }
 
-  if (auto structInject = getInput().getDefiningOp<StructInjectOp>())
-    return structInject.getFieldNameAttr() == getFieldNameAttr()
-               ? structInject.getNewValue()
-               : Value();
-  if (auto structCreate = getInput().getDefiningOp<StructCreateOp>()) {
-    auto ind = TypeSwitch<Type, std::optional<uint32_t>>(
-                   getInput().getType().getNestedType())
-                   .Case<StructType, UnpackedStructType>([this](auto &type) {
-                     return type.getFieldIndex(getFieldNameAttr());
-                   })
-                   .Default([](auto &) { return std::nullopt; });
-    return ind.has_value() ? structCreate->getOperand(ind.value()) : Value();
+  // extract(create({"field": v, ...}), "field") -> v
+  if (auto create = getInput().getDefiningOp<StructCreateOp>()) {
+    if (auto index = getStructFieldIndex(create.getType(), getFieldNameAttr()))
+      return create.getFields()[*index];
+    return {};
   }
+
   return {};
 }
 
@@ -630,25 +614,15 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructExtractRefOp::verify() {
-  /// checks if the type of the result match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto resultType = getType().getNestedType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == resultType) {
-            return success();
-          }
-        }
-        emitOpError("result type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be refrence of StructType or "
-                    "UnpackedStructType");
-        return failure();
-      });
+  auto type = getStructFieldType(
+      cast<RefType>(getInput().getType()).getNestedType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "extracts field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType().getNestedType())
+    return emitOpError() << "result ref of type " << getType().getNestedType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 bool StructExtractRefOp::canRewire(
@@ -682,75 +656,14 @@ StructExtractRefOp::rewire(const DestructurableMemorySlot &slot,
 //===----------------------------------------------------------------------===//
 
 LogicalResult StructInjectOp::verify() {
-  /// checks if the type of the new value match field type in this struct
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto filedName = getFieldName();
-        auto newValueType = getNewValue().getType();
-        for (const auto &member : members) {
-          if (member.name == filedName && member.type == newValueType) {
-            return success();
-          }
-        }
-        emitOpError("new value type must match struct field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be StructType or UnpackedStructType");
-        return failure();
-      });
-}
-
-void StructInjectOp::print(OpAsmPrinter &p) {
-  p << " ";
-  p.printOperand(getInput());
-  p << ", " << getFieldNameAttr() << ", ";
-  p.printOperand(getNewValue());
-  p << " : " << getInput().getType();
-}
-
-ParseResult StructInjectOp::parse(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
-  OpAsmParser::UnresolvedOperand operand, val;
-  StringAttr fieldName;
-  Type declType;
-
-  if (parser.parseOperand(operand) || parser.parseComma() ||
-      parser.parseAttribute(fieldName) || parser.parseComma() ||
-      parser.parseOperand(val) || parser.parseColonType(declType))
-    return failure();
-
-  return TypeSwitch<Type, ParseResult>(cast<RefType>(declType).getNestedType())
-      .Case<StructType, UnpackedStructType>([&parser, &result, &declType,
-                                             &fieldName, &operand, &val,
-                                             &inputOperandsLoc](auto &type) {
-        auto members = type.getMembers();
-        Type fieldType;
-        for (const auto &member : members)
-          if (member.name == fieldName)
-            fieldType = member.type;
-        if (!fieldType) {
-          parser.emitError(parser.getNameLoc(),
-                           "field name '" + fieldName.getValue() +
-                               "' not found in struct type");
-          return failure();
-        }
-
-        auto fieldNameAttr =
-            StringAttr::get(parser.getContext(), Twine(fieldName));
-        result.addAttribute("fieldName", fieldNameAttr);
-        result.addTypes(declType);
-        if (parser.resolveOperands({operand, val}, {declType, fieldType},
-                                   inputOperandsLoc, result.operands))
-          return failure();
-
-        return success();
-      })
-      .Default([&parser, &inputOperandsLoc](auto &) {
-        return parser.emitError(inputOperandsLoc,
-                                "invalid kind of type specified");
-      });
+  auto type = getStructFieldType(getInput().getType(), getFieldNameAttr());
+  if (!type)
+    return emitOpError() << "injects field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getNewValue().getType())
+    return emitOpError() << "injected value " << getNewValue().getType()
+                         << " must match struct field type " << type;
+  return success();
 }
 
 OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
@@ -758,66 +671,51 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
   auto newValue = adaptor.getNewValue();
   if (!input || !newValue)
     return {};
-  SmallVector<NamedAttribute> array;
-  llvm::copy(cast<DictionaryAttr>(input), std::back_inserter(array));
-  for (auto &ele : array) {
-    if (ele.getName() == getFieldName())
-      ele.setValue(newValue);
-  }
-  return DictionaryAttr::get(getContext(), array);
+  NamedAttrList fields(cast<DictionaryAttr>(input));
+  fields.set(getFieldNameAttr(), newValue);
+  return fields.getDictionary(getContext());
 }
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
-  // Canonicalize multiple injects into a create op and eliminate overwrites.
-  SmallPtrSet<Operation *, 4> injects;
-  DenseMap<StringAttr, Value> fields;
+  auto members = getStructMembers(op.getType());
 
-  // Chase a chain of injects. Bail out if cycles are present.
-  StructInjectOp inject = op;
-  Value input;
-  do {
-    if (!injects.insert(inject).second)
+  // Chase a chain of `struct_inject` ops, with an optional final
+  // `struct_create`, and take note of the values assigned to each field.
+  SmallPtrSet<Operation *, 4> injectOps;
+  DenseMap<StringAttr, Value> fieldValues;
+  Value input = op;
+  while (auto injectOp = input.getDefiningOp<StructInjectOp>()) {
+    if (!injectOps.insert(injectOp).second)
       return failure();
+    fieldValues.insert({injectOp.getFieldNameAttr(), injectOp.getNewValue()});
+    input = injectOp.getInput();
+  }
+  if (auto createOp = input.getDefiningOp<StructCreateOp>())
+    for (auto [value, member] : llvm::zip(createOp.getFields(), members))
+      fieldValues.insert({member.name, value});
 
-    fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
-    input = inject.getInput();
-    inject = input.getDefiningOp<StructInjectOp>();
-  } while (inject);
-  assert(input && "missing input to inject chain");
-
-  auto members = TypeSwitch<Type, ArrayRef<StructLikeMember>>(
-                     cast<RefType>(op.getType()).getNestedType())
-                     .Case<StructType, UnpackedStructType>(
-                         [](auto &type) { return type.getMembers(); })
-                     .Default([](auto) { return std::nullopt; });
-
-  // If the inject chain sets all fields, canonicalize to create.
-  if (fields.size() == members.size()) {
-    SmallVector<Value> createFields;
-    for (const auto &member : members) {
-      auto it = fields.find(member.name);
-      assert(it != fields.end() && "missing field");
-      createFields.push_back(it->second);
-    }
-    op.getInputMutable();
-    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), createFields);
+  // If the inject chain sets all fields, canonicalize to a `struct_create`.
+  if (fieldValues.size() == members.size()) {
+    SmallVector<Value> values;
+    values.reserve(fieldValues.size());
+    for (auto member : members)
+      values.push_back(fieldValues.lookup(member.name));
+    rewriter.replaceOpWithNewOp<StructCreateOp>(op, op.getType(), values);
     return success();
   }
 
-  // Nothing to canonicalize, only the original inject in the chain.
-  if (injects.size() == fields.size())
+  // If each inject op in the chain assigned to a unique field, there is nothing
+  // to canonicalize.
+  if (injectOps.size() == fieldValues.size())
     return failure();
 
-  // Eliminate overwrites. The hash map contains the last write to each field.
-  for (const auto &member : members) {
-    auto it = fields.find(member.name);
-    if (it == fields.end())
-      continue;
-    input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
-                                            member.name, it->second);
-  }
-
+  // Otherwise we can eliminate overwrites by creating new injects. The hash map
+  // of field values contains the last assigned value for each field.
+  for (auto member : members)
+    if (auto value = fieldValues.lookup(member.name))
+      input = rewriter.create<StructInjectOp>(op.getLoc(), op.getType(), input,
+                                              member.name, value);
   rewriter.replaceOp(op, input);
   return success();
 }
