@@ -26,18 +26,6 @@
 
 #include <optional>
 
-#define DEFINE_COMMON_MEMBERS(ProblemClass)                                    \
-protected:                                                                     \
-  ProblemClass() {}                                                            \
-                                                                               \
-public:                                                                        \
-  static constexpr auto PROBLEM_NAME = #ProblemClass;                          \
-  static ProblemClass get(Operation *containingOp) {                           \
-    ProblemClass prob;                                                         \
-    prob.setContainingOp(containingOp);                                        \
-    return prob;                                                               \
-  }
-
 namespace circt {
 namespace scheduling {
 
@@ -85,12 +73,18 @@ namespace scheduling {
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
 class Problem {
-  DEFINE_COMMON_MEMBERS(Problem)
-
 public:
+  static constexpr auto name = "Problem";
+
+  /// Construct an empty scheduling problem. \p containingOp is used for its
+  /// MLIRContext and to emit diagnostics.
+  explicit Problem(Operation *containingOp) : containingOp(containingOp) {}
   virtual ~Problem() = default;
 
   friend detail::DependenceIterator;
+
+protected:
+  Problem() = default;
 
   //===--------------------------------------------------------------------===//
   // Aliases for the problem components
@@ -290,7 +284,12 @@ public:
 /// construct a pipelined datapath with a fixed, integer initiation interval,
 /// in which the execution of multiple iterations/samples/etc. may overlap.
 class CyclicProblem : public virtual Problem {
-  DEFINE_COMMON_MEMBERS(CyclicProblem)
+public:
+  static constexpr auto name = "CyclicProblem";
+  using Problem::Problem;
+
+protected:
+  CyclicProblem() = default;
 
 private:
   DependenceProperty<unsigned> distance;
@@ -338,7 +337,12 @@ public:
 /// continuous unit, e.g. in nanoseconds, inside the discrete time steps/cycles
 /// determined by the underlying scheduling problem.
 class ChainingProblem : public virtual Problem {
-  DEFINE_COMMON_MEMBERS(ChainingProblem)
+public:
+  static constexpr auto name = "ChainingProblem";
+  using Problem::Problem;
+
+protected:
+  ChainingProblem() = default;
 
 private:
   OperatorTypeProperty<float> incomingDelay, outgoingDelay;
@@ -407,7 +411,12 @@ public:
 /// exceed the operator type's limit. These constraints do not apply to operator
 /// types without a limit (not set, or 0).
 class SharedOperatorsProblem : public virtual Problem {
-  DEFINE_COMMON_MEMBERS(SharedOperatorsProblem)
+public:
+  static constexpr auto name = "SharedOperatorsProblem";
+  using Problem::Problem;
+
+protected:
+  SharedOperatorsProblem() = default;
 
 private:
   OperatorTypeProperty<unsigned> limit;
@@ -445,9 +454,13 @@ public:
 ///      not exceed the operator type's limit.
 class ModuloProblem : public virtual CyclicProblem,
                       public virtual SharedOperatorsProblem {
-  DEFINE_COMMON_MEMBERS(ModuloProblem)
+public:
+  static constexpr auto name = "ModuloProblem";
+  using CyclicProblem::CyclicProblem;
 
 protected:
+  ModuloProblem() = default;
+
   /// \p opr is not oversubscribed in any congruence class modulo II.
   virtual LogicalResult verifyUtilization(OperatorType opr) override;
 
@@ -470,7 +483,12 @@ public:
 /// in which the execution of multiple iterations/samples/etc. may overlap.
 class ChainingCyclicProblem : public virtual ChainingProblem,
                               public virtual CyclicProblem {
-  DEFINE_COMMON_MEMBERS(ChainingCyclicProblem)
+public:
+  static constexpr auto name = "ChainingCyclicProblem";
+  using ChainingProblem::ChainingProblem;
+
+protected:
+  ChainingCyclicProblem() = default;
 
 public:
   LogicalResult checkDefUse(Dependence dep);
@@ -480,7 +498,5 @@ public:
 
 } // namespace scheduling
 } // namespace circt
-
-#undef DEFINE_COMMON_MEMBERS
 
 #endif // CIRCT_SCHEDULING_PROBLEMS_H

@@ -249,7 +249,10 @@ def LogicEquivalenceCheckingOp : VerifOp<"lec", [
 
 def YieldOp : VerifOp<"yield", [
   Terminator,
-  ParentOneOf<["verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp"]>
+  ParentOneOf<[
+    "verif::LogicEquivalenceCheckingOp", "verif::BoundedModelCheckingOp",
+    "verif::InstanceOp"
+  ]>
 ]> {
   let summary = "yields values from a region";
 
@@ -309,7 +312,9 @@ def FormalOp : VerifOp<"formal", [
 // Formal Verification Ops
 //===----------------------------------------------------------------------===//
 
-def SymbolicInputOp : VerifOp<"symbolic_input", [HasParent<"verif::FormalOp">]>{
+def SymbolicInputOp : VerifOp<"symbolic_input", [
+  ParentOneOf<["verif::FormalOp", "verif::InstanceOp"]>
+]>{
   let summary = "declare a symbolic input for formal verification";
   let description = [{
     This operation declares a symbolic input that can then be used to reason 
@@ -342,6 +347,148 @@ def ConcreteInputOp : VerifOp<"concrete_input", [
 
   let assemblyFormat = [{
     $init `,` $update attr-dict `:` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Formal Contract Ops
+//===----------------------------------------------------------------------===//
+
+class ContractLikeOp<string mnemonic, list<Trait> traits = []> 
+  : VerifOp<mnemonic, traits # [
+    HasParent<"hw::HWModuleOp">, RegionKindInterface, IsolatedFromAbove
+  ]> {
+
+  let arguments = (ins Variadic<AnyType>:$inputs);
+
+  let regions = (region SizedRegion<1>:$body);
+
+  let extraClassDeclaration = [{
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
+
+    /// Retrieves the region block arguments
+    BlockArgument getRegionArg(unsigned index) {
+      return getBody().front().getArguments()[index];
+    }
+
+    /// Retrieves the number of block arguments
+    unsigned getNumRegionArgs() {
+      return getBody().front().getNumArguments();
+    }
+  }];
+
+  let hasRegionVerifier = 1;
+}
+
+
+def ContractOp : ContractLikeOp<"contract", [NoTerminator]>{
+  let summary = "declare a formal contract";
+  let description = [{
+    This operation declares a formal contract that is used to create precondition 
+    and postconditions on a parent module. These are used as an abstraction to 
+    better modularize formal verification such that each module containing a contract 
+    is checked exactly once. The contract contains a single block where the block arguments 
+    represent the inputs and outputs in the same order as in the module signature.
+          
+    e.g. 
+    ```
+    hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+      verif.contract (%foo) : (i8) {
+        ^bb0(%arg1 : i8, %bar.0 : i8, %bar.1 : i8): 
+          %c0_8 = hw.constant 0 : i8 
+          %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+          verif.require %prec : i1
+
+          %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+          %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+          verif.ensure %post : i1
+          verif.ensure %post1 : i1
+      }
+      /* ... Module definition ... */
+    }
+    ```
+
+    This later is used to replace any instance of Bar during verification:  
+    ```
+    %bar.0, %bar.1 = hw.instance "bar" @Bar("foo" : %foo : i8)  -> ("" : i8, "1" : i8)
+
+    /* ... After PrepareForFormal Pass becomes ... */
+
+    %bar.0, %bar.1 = verif.instance (%c42_8) : (i8) -> (i8, i8) {
+      ^bb0(%arg1: i8):
+        %c0_8 = hw.constant 0 : i8
+        %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+        verif.assert %prec : i1
+
+        %bar.0 = verif.symbolic_input : i8
+        %bar.1 = verif.symbolic_input : i8
+        %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+        %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+        verif.assume %post : i1
+        verif.assume %post1 : i1
+        verif.yield %bar.0, %bar.1 : i8, i8
+    }
+    
+    ```
+  }];
+
+  let assemblyFormat = [{
+    `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` $body
+  }];
+}
+
+def InstanceOp : ContractLikeOp<"instance", [
+  SingleBlockImplicitTerminator<"verif::YieldOp">
+]>{
+  let summary = "declare an instance of a formal contract (replace an hw.instance)";
+  let description = [{
+    This operation declares an instance of an `hw.module` that contains a 
+    `verif.contract` definition. The body of this op will be a modified version 
+    of the body of the referenced module's contract body, with `verif.require` 
+    ops being reoplaced with `verif.assert` and `verif.ensure` being replaced 
+    with `verif.assume`. The `verif.result` ops are converted into `verif.symbolic_input` 
+    and are yielded as a result of the region to be used in the rest of the module.
+  }];
+
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{
+    `(` $inputs `)` attr-dict `:` functional-type($inputs, $results) $body
+  }];
+}
+
+class RequireLikeOp<string mnemonic, list<Trait> traits = [
+  HasParent<"verif::ContractOp">, AttrSizedOperandSegments
+]> : VerifOp<mnemonic, traits> {
+  let arguments = (ins LTLAnyPropertyType:$property,
+                      OptionalAttr<ClockEdgeAttr>:$edge, Optional<I1>:$clock,
+                      Optional<I1>:$enable,
+                      OptionalAttr<StrAttr>:$label);
+  let assemblyFormat = [{
+    $property (`if` $enable^)? (`,` $edge^ $clock)? 
+    (`label` $label^)? attr-dict `:` type($property)
+  }];
+}
+
+def RequireOp : RequireLikeOp<"require"> {
+  let summary = "define a precondition for the given contract";
+  let description = [{
+    This operation defines a precondition for the parent contract. 
+    Preconditions are assumed during the verification of a module and 
+    asserted during the verification of an instance of a module.
+  }];
+}
+
+
+def EnsureOp : RequireLikeOp<"ensure">{
+  let summary = "define a postcondition for the given contract";
+  let description = [{
+    This operation defines a postcondition for the parent contract. 
+    Postconditions are asserted during the verification of a module and 
+    assumed during the verification of an instance of a module.
   }];
 }
 

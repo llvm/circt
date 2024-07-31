@@ -78,7 +78,7 @@ private:
 } // namespace
 
 ModuloProblem AffineToLoopSchedule::getModuloProblem(CyclicProblem &prob) {
-  auto modProb = ModuloProblem::get(prob.getContainingOp());
+  ModuloProblem modProb(prob.getContainingOp());
   for (auto *op : prob.getOperations()) {
     auto opr = prob.getLinkedOperatorType(op);
     if (opr.has_value()) {

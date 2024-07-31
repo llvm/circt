@@ -5605,6 +5605,8 @@ DoneParsing:
     circuit.setEnableLayersAttr(enableLayers);
   if (auto disableLayers = parseLayers(getConstants().options.disableLayers))
     circuit.setDisableLayersAttr(disableLayers);
+  circuit.setDefaultLayerSpecialization(
+      getConstants().options.defaultLayerSpecialization);
 
   return success();
 }

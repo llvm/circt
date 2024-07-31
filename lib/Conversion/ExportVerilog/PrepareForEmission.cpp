@@ -975,9 +975,9 @@ static LogicalResult legalizeHWModule(Block &block,
     if (auto call = dyn_cast<mlir::CallOpInterface>(op))
       lowerFunctionCallResults(call);
 
-    // If logic op is located in a procedural region, we have to move the logic
+    // If a reg or logic is located in a procedural region, we have to move the
     // op declaration to a valid program point.
-    if (isProceduralRegion && isa<LogicOp>(op)) {
+    if (isProceduralRegion && isa<LogicOp, RegOp>(op)) {
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
