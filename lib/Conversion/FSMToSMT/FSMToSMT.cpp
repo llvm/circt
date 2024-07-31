@@ -1034,8 +1034,8 @@ using namespace hw;
 //   return 0;
 // }
 
-void FSMTransitionConversion(){
-
+void FSMTransitionConversion(mlir::TypeConverter& a1, mlir::MLIRContext* a2){
+  llvm::outs()<<"my first pass\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -1051,7 +1051,7 @@ struct ConvertFSMToSMTPass
 
 void circt::populateFSMToSMTConversionPatterns(TypeConverter &converter,
                                                  RewritePatternSet &patterns) {
-  patterns.add<>(
+  patterns.add<FSMTransitionConversion>(
       converter, patterns.getContext());
 }
 
