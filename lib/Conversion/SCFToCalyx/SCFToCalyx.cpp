@@ -29,7 +29,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/Casting.h"
+#include "llvm/Support/LogicalResult.h"
 
 #include <variant>
 
@@ -1648,25 +1648,26 @@ private:
         for (auto operandEnum : enumerate(callSchedPtr->callOp.getOperands())) {
           auto operand = operandEnum.value();
           auto index = operandEnum.index();
-          if (isa<MemRefType>(operand.getType())) {
-            auto memOpName = getState<ComponentLoweringState>()
-                                 .getMemoryInterface(operand)
-                                 .memName();
-            auto memOpNameAttr =
-                SymbolRefAttr::get(rewriter.getContext(), memOpName);
-            Value argI = calleeFunc.getArgument(index);
-            if (isa<MemRefType>(argI.getType())) {
-              NamedAttrList namedAttrList;
-              namedAttrList.append(
-                  rewriter.getStringAttr(
-                      instanceOpLoweringState->getMemoryInterface(argI)
-                          .memName()),
-                  memOpNameAttr);
-              refCells.push_back(
-                  DictionaryAttr::get(rewriter.getContext(), namedAttrList));
-            }
-          } else {
+          if (!isa<MemRefType>(operand.getType())) {
             inputPorts.push_back(operand);
+            continue;
+          }
+
+          auto memOpName = getState<ComponentLoweringState>()
+                               .getMemoryInterface(operand)
+                               .memName();
+          auto memOpNameAttr =
+              SymbolRefAttr::get(rewriter.getContext(), memOpName);
+          Value argI = calleeFunc.getArgument(index);
+          if (isa<MemRefType>(argI.getType())) {
+            NamedAttrList namedAttrList;
+            namedAttrList.append(
+                rewriter.getStringAttr(
+                    instanceOpLoweringState->getMemoryInterface(argI)
+                        .memName()),
+                memOpNameAttr);
+            refCells.push_back(
+                DictionaryAttr::get(rewriter.getContext(), namedAttrList));
           }
         }
         llvm::copy(instanceOp.getResults().take_front(inputPorts.size()),
@@ -2077,8 +2078,7 @@ private:
     SmallVector<Value, 4> extraMemRefOperands;
     SmallVector<Operation *, 4> opsToModify;
     for (auto &op : callee.getBody().getOps()) {
-      if (isa<memref::AllocaOp>(op) || isa<memref::AllocOp>(op) ||
-          isa<memref::GetGlobalOp>(op))
+      if (isa<memref::AllocaOp, memref::AllocOp, memref::GetGlobalOp>(op))
         opsToModify.push_back(&op);
     }
 
@@ -2155,14 +2155,12 @@ private:
     /// We only create a new top-level function and call the original top-level
     /// function from the new one if the original top-level has `memref` in its
     /// argument
-    bool hasMemrefArgsInTopLevel = false;
-    for (auto funcOp : moduleOp.getOps<FuncOp>()) {
-      if (funcOp.getName() == topLevelFunction) {
-        if (hasMemrefArguments(funcOp)) {
-          hasMemrefArgsInTopLevel = true;
-        }
-      }
-    }
+    auto funcOps = moduleOp.getOps<FuncOp>();
+    bool hasMemrefArgsInTopLevel =
+        std::any_of(funcOps.begin(), funcOps.end(), [&](auto funcOp) {
+          return funcOp.getName() == topLevelFunction &&
+                 hasMemrefArguments(funcOp);
+        });
 
     std::string oldName = topLevelFunction;
     if (hasMemrefArgsInTopLevel) {
@@ -2171,12 +2169,12 @@ private:
       OpBuilder builder(moduleOp.getContext());
       Operation *oldTopLevelFuncOp =
           SymbolTable::lookupSymbolIn(moduleOp, oldName);
-      auto oldTopLevelFunc = dyn_cast_or_null<FuncOp>(oldTopLevelFuncOp);
-
-      if (!oldTopLevelFunc)
-        oldTopLevelFunc.emitOpError("Original top-level function not found!");
-
-      insertCallFromNewTopLevel(builder, newTopLevelFunc, oldTopLevelFunc);
+      if (auto oldTopLevelFunc = dyn_cast<FuncOp>(oldTopLevelFuncOp))
+        insertCallFromNewTopLevel(builder, newTopLevelFunc, oldTopLevelFunc);
+      else {
+        moduleOp.emitOpError("Original top-level function not found!");
+        return failure();
+      }
     }
 
     return success();
