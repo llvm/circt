@@ -1420,13 +1420,13 @@ class BuildIfGroups : public calyx::FuncOpPartialLoweringPattern {
         getState<ComponentLoweringState>().setElseGroup(scfIfOp, elseGroupOp);
       }
 
-      for (auto res : scfIfOp.getResults()) {
+      for (auto ifOpRes : scfIfOp.getResults()) {
         auto reg = createRegister(
             scfIfOp.getLoc(), rewriter, getComponent(),
-            res.getType().getIntOrFloatBitWidth(),
+            ifOpRes.getType().getIntOrFloatBitWidth(),
             getState<ComponentLoweringState>().getUniqueName("if_res"));
-        getState<ComponentLoweringState>().setResultRegs(scfIfOp, reg,
-                                                         res.getResultNumber());
+        getState<ComponentLoweringState>().setResultRegs(
+            scfIfOp, reg, ifOpRes.getResultNumber());
       }
 
       return WalkResult::advance();
