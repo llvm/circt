@@ -1660,7 +1660,7 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
   // elements.
   auto indexWidth = op.getIndex().getType().getBitWidthOrSentinel();
   uint64_t inputSize = op.getInputs().size();
-  if (indexWidth < 64 && 1ull << indexWidth < inputSize) {
+  if (indexWidth >= 0 && indexWidth < 64 && 1ull << indexWidth < inputSize) {
     rewriter.modifyOpInPlace(op, [&]() {
       op.getInputsMutable().erase(0, inputSize - (1ull << indexWidth));
     });
