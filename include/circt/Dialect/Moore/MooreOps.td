@@ -454,6 +454,21 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
 }
 
+def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = moore.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
+}
+
 def ConversionOp : MooreOp<"conversion", [Pure]> {
   let summary = "A type conversion";
   let description = [{
