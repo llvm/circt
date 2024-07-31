@@ -291,6 +291,7 @@ def ReadOp : MooreOp<"read", [
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def AddressOp : MooreOp<"address", [

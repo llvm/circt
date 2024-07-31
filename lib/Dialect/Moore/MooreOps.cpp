@@ -909,11 +909,15 @@ LogicalResult BlockingAssignOp::canonicalize(BlockingAssignOp op,
   if (auto refOp = op.getDst().getDefiningOp<moore::StructExtractRefOp>()) {
     auto input = refOp.getInput();
     if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+      auto value = rewriter.create<ReadOp>(
+          op->getLoc(), cast<RefType>(input.getType()).getNestedType(), input);
       auto newOp = rewriter.create<moore::StructInjectOp>(
-          op->getLoc(), input.getType(), input, refOp.getFieldNameAttr(),
+          op->getLoc(), value.getType(), value, refOp.getFieldNameAttr(),
           op.getSrc());
+      auto newOpAddress = rewriter.create<moore::AddressOp>(
+          op.getLoc(), RefType::get(newOp.getType()), newOp);
       rewriter.replaceOpUsesWithIf(
-          input.getDefiningOp(), newOp->getResults(),
+          input.getDefiningOp(), newOpAddress->getResults(),
           [&op](OpOperand &operand) {
             return !operand.getOwner()->isBeforeInBlock(op);
           });
@@ -960,6 +964,16 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
                            const DataLayout &dataLayout) {
   getResult().replaceAllUsesWith(reachingDefinition);
   return DeletionKind::Delete;
+}
+
+LogicalResult ReadOp::canonicalize(ReadOp op, PatternRewriter &rewriter) {
+  if (auto addr = op.getInput().getDefiningOp<AddressOp>()) {
+    auto value = addr.getInput();
+    op.replaceAllUsesWith(value);
+    op.erase();
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
