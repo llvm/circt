@@ -1,7 +1,9 @@
 ; RUN: firtool --verilog -allow-adding-ports-on-public-modules %s | FileCheck %s
 ; RUN: firtool --verilog -allow-adding-ports-on-public-modules -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGGREGATE
 ; RUN: firtool --verilog -allow-adding-ports-on-public-modules -lower-annotations-no-ref-type-ports %s | FileCheck %s --check-prefix=NOREFS
+; RUN: firtool -allow-adding-ports-on-public-modules --parse-only %s | circt-opt --firrtl-probes-to-signals | firtool --verilog --format=mlir | FileCheck %s --check-prefix=PROBESTOSIGNALS
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
@@ -38,7 +40,7 @@ circuit Top : %[[
       infer mport write = rf[io.addr], clock
       write <= io.dataIn
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
@@ -98,3 +100,28 @@ circuit Top : %[[
 ; NOREFS-NEXT:   .memTap_6 (memTap_6),
 ; NOREFS-NEXT:   .memTap_7 (memTap_7)
 ; NOREFS-NEXT: )
+
+; PROBESTOSIGNALS:      module DUTModule(
+; PROBESTOSIGNALS-NOT:  endmodule
+; PROBESTOSIGNALS:        rf_8x8 rf_ext (
+; PROBESTOSIGNALS:          .R1_data (memTap_0_7),
+; PROBESTOSIGNALS:          .R2_data (memTap_0_6),
+; PROBESTOSIGNALS:          .R3_data (memTap_0_5),
+; PROBESTOSIGNALS:          .R4_data (memTap_0_4),
+; PROBESTOSIGNALS:          .R5_data (memTap_0_3),
+; PROBESTOSIGNALS:          .R6_data (memTap_0_2),
+; PROBESTOSIGNALS:          .R7_data (memTap_0_1),
+; PROBESTOSIGNALS:          .R8_data (memTap_0_0)
+; PROBESTOSIGNALS:   )
+; PROBESTOSIGNALS:      endmodule
+; PROBESTOSIGNALS:      DUTModule dut (
+; PROBESTOSIGNALS-NOT:  endmodule
+; PROBESTOSIGNALS:        .memTap_0_0 (memTap_0),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_1 (memTap_1),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_2 (memTap_2),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_3 (memTap_3),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_4 (memTap_4),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_5 (memTap_5),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_6 (memTap_6),
+; PROBESTOSIGNALS-NEXT:   .memTap_0_7 (memTap_7)
+; PROBESTOSIGNALS-NEXT: )

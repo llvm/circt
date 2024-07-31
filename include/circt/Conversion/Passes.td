@@ -88,7 +88,7 @@ def TestApplyLoweringOption : Pass<"test-apply-lowering-options",
     "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
   ];
   let options = [
-    Option<"options", "options", "std::string", "", "Lowering Options">
+    Option<"optionsString", "options", "std::string", "", "Lowering Options">
   ];
 }
 
@@ -118,8 +118,7 @@ def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
   ];
 }
 
-def PrepareForEmission : Pass<"prepare-for-emission",
-                              "hw::HWModuleOp"> {
+def PrepareForEmission : Pass<"prepare-for-emission"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
     This pass runs only PrepareForEmission.
@@ -439,15 +438,15 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
     Option<"verificationFlavor", "verification-flavor",
-           "circt::firrtl::VerificationFlavor", 
-           "circt::firrtl::VerificationFlavor::None", 
-           "Specify a verification flavor used in the lowering", 
+           "circt::firrtl::VerificationFlavor",
+           "circt::firrtl::VerificationFlavor::None",
+           "Specify a verification flavor used in the lowering",
            [{::llvm::cl::values(
-            clEnumValN(circt::firrtl::VerificationFlavor::None, 
+            clEnumValN(circt::firrtl::VerificationFlavor::None,
               "none", "Use the flavor specified by the op"),
             clEnumValN(circt::firrtl::VerificationFlavor::IfElseFatal,
               "if-else-fatal", "Use Use `if(cond) else $fatal(..)` format"),
-            clEnumValN(circt::firrtl::VerificationFlavor::Immediate, 
+            clEnumValN(circt::firrtl::VerificationFlavor::Immediate,
               "immediate", "Use immediate verif statements"),
             clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
           )}]
@@ -521,22 +520,6 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// LLHDToLLVM
-//===----------------------------------------------------------------------===//
-
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
-  let summary = "Convert LLHD to LLVM";
-  let description = [{
-    This pass translates LLHD to LLVM.
-  }];
-  let constructor = "circt::createConvertLLHDToLLVMPass()";
-  let dependentDialects = [
-    "mlir::arith::ArithDialect",
-    "mlir::LLVM::LLVMDialect"
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // HWToLLVM
 //===----------------------------------------------------------------------===//
 
@@ -560,20 +543,6 @@ def HWArithToHW : Pass<"lower-hwarith-to-hw", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createHWArithToHWPass()";
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect", "sv::SVDialect"];
-}
-
-//===----------------------------------------------------------------------===//
-// HWToLLHD
-//===----------------------------------------------------------------------===//
-
-def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
-  let summary = "Convert HW to LLHD";
-  let description = [{
-    This pass translates a HW design into an equivalent structural LLHD
-    description.
-  }];
-  let constructor = "circt::createConvertHWToLLHDPass()";
-  let dependentDialects = ["llhd::LLHDDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -709,7 +678,9 @@ def ConvertCombToSMT : Pass<"convert-comb-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert combinational ops and constants to SMT ops";
   // Need to depend on HWDialect because some 'comb' canonicalization patterns
   // build 'hw.constant' operations.
-  let dependentDialects = ["smt::SMTDialect", "hw::HWDialect"];
+  let dependentDialects = [
+    "smt::SMTDialect", "hw::HWDialect", "mlir::func::FuncDialect"
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -806,6 +777,8 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
   let constructor = "circt::createLowerSimToSVPass()";
   let dependentDialects = [
     "circt::comb::CombDialect",
+    "circt::emit::EmitDialect",
+    "circt::seq::SeqDialect",
     "circt::sv::SVDialect",
     "circt::hw::HWDialect"
   ];

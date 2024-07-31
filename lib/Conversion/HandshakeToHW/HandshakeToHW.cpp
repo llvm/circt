@@ -11,13 +11,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
@@ -25,11 +25,17 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_HANDSHAKETOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -1911,7 +1917,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
 }
 
 namespace {
-class HandshakeToHWPass : public HandshakeToHWBase<HandshakeToHWPass> {
+class HandshakeToHWPass
+    : public circt::impl::HandshakeToHWBase<HandshakeToHWPass> {
 public:
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();

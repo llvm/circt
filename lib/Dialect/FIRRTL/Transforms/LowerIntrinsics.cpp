@@ -11,8 +11,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERINTRINSICS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -22,7 +31,8 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerIntrinsicsPass : public LowerIntrinsicsBase<LowerIntrinsicsPass> {
+struct LowerIntrinsicsPass
+    : public circt::firrtl::impl::LowerIntrinsicsBase<LowerIntrinsicsPass> {
   LogicalResult initialize(MLIRContext *context) override;
   void runOnOperation() override;
 
@@ -43,8 +53,14 @@ LogicalResult LowerIntrinsicsPass::initialize(MLIRContext *context) {
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  if (failed(lowering->lower(getOperation())))
+  auto result = lowering->lower(getOperation());
+  if (failed(result))
     return signalPassFailure();
+
+  numConverted += *result;
+
+  if (*result == 0)
+    markAllAnalysesPreserved();
 }
 
 /// This is the pass constructor.

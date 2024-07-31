@@ -5,11 +5,14 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   FunctionEliminationPass.cpp
   MemoryToBlockArgumentPass.cpp
   EarlyCodeMotionPass.cpp
+  TemporalCodeMotionPass.cpp
 
   DEPENDS
   CIRCTLLHDTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTComb
+  CIRCTHW
   CIRCTLLHD
   MLIRIR
   MLIRControlFlowDialect

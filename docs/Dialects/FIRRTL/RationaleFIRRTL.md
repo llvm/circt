@@ -43,21 +43,20 @@ The FIRRTL dialect and FIR parser is a generally complete implementation of the
 FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
 FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
-parsing an SFC Annotation file consisting of only local annotations and
-converting this to operation or argument attributes.  Non-local annotations are
-also supported.
+parsing an SFC Annotation file and converting this to operation or argument 
+attributes.
 
-There are some exceptions to the above:
+## ABI
 
-1) We don't support the `Fixed` types for fixed point numbers, and some
-   primitives associated with them.
-2) We don't support `Interval` types
-
-Some of these may be research efforts that didn't gain broad adoption, in which
-case we don't want to support them.  However, if there is a good reason and a
-community that would benefit from adding support for these, we can do so.
+An auxillary spec has been written, shipped with the firrtl spec, which is the
+firrtl ABI spec.  This spec was co-developed with the CIRCT implementation and
+the CIRCT implementation conforms to that spec.  That spec covers the effects
+of several annotations, naming, verilog structure, and other issues.
 
 ## Naming
+
+While this section is a useful discussion, it has been replaced by formally
+defining the FIRRTL ABI, which we confirm too.
 
 Names in Verilog form part of the public API of a design and are used for many
 purposes and flows.  Many things in verilog may have names, and those names
@@ -569,7 +568,7 @@ include the following:
 - Ports on a `firrtl.module`, where the foreign types are treated as opaque values moving in and out of the module
 - Ports on a `firrtl.instance`
 - `firrtl.wire` to allow for def-after-use cases; the wire must have a single strict connect that uniquely defines the wire's value
-- `firrtl.strictconnect` to module outputs, instance inputs, and wires
+- `firrtl.matchingconnect` to module outputs, instance inputs, and wires
 
 The expected lowering for strict connects is for the connect to be eliminated
 and the right-hand-side source value of the connect being instead materialized

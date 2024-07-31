@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/DCToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
@@ -25,12 +24,18 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_DCTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -656,6 +661,46 @@ public:
   }
 };
 
+class MergeConversionPattern : public OpConversionPattern<MergeOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(MergeOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    BackedgeBuilder bb(rewriter, op.getLoc());
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto output = io.outputs[0];
+    RTLBuilder rtlb(op.getLoc(), rewriter);
+
+    // A winner is found if any of the two input valids are high.
+    Value hasWin = rtlb.bitOr(io.getInputValids());
+
+    // The winning index is either 0b0 (first) or 0b1 (second), hence we can
+    // just use either of the input valids as win index signal. The op is
+    // defined to select inputs with priority first >> second, so use the first
+    // input.
+    Value winWasFirst = io.inputs[0].valid;
+    Value winWasSecond = rtlb.bitNot(winWasFirst);
+    Value winIndex = winWasSecond;
+
+    output.valid->setValue(hasWin);
+    output.data->setValue(winIndex);
+
+    // Create the logic to set the done wires for the result. The done wire is
+    // asserted when the output is valid and ready.
+    Value outValidAndReady = rtlb.bitAnd({hasWin, output.ready});
+
+    // Create the logic to assign the arg ready outputs. An argument is ready
+    // when the output is valid and ready, and the given input is selected.
+    io.inputs[0].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasFirst}));
+    io.inputs[1].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasSecond}));
+
+    rewriter.replaceOp(op, output.channel);
+
+    return success();
+  }
+};
+
 class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
   // Essentially a no-op, seeing as the type converter does the heavy
   // lifting here.
@@ -805,7 +850,7 @@ static bool isLegalOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class DCToHWPass : public DCToHWBase<DCToHWPass> {
+class DCToHWPass : public circt::impl::DCToHWBase<DCToHWPass> {
 public:
   void runOnOperation() override {
     Operation *parent = getOperation();
@@ -848,13 +893,12 @@ public:
 
     RewritePatternSet patterns(parent->getContext());
 
-    patterns.insert<ForkConversionPattern, JoinConversionPattern,
-                    SelectConversionPattern, BranchConversionPattern,
-                    PackConversionPattern, UnpackConversionPattern,
-                    BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern,
-                    ToESIConversionPattern, FromESIConversionPattern>(
-        typeConverter, parent->getContext());
+    patterns.insert<
+        ForkConversionPattern, JoinConversionPattern, SelectConversionPattern,
+        BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
+        BufferConversionPattern, SourceConversionPattern, SinkConversionPattern,
+        MergeConversionPattern, TypeConversionPattern, ToESIConversionPattern,
+        FromESIConversionPattern>(typeConverter, parent->getContext());
 
     if (failed(applyPartialConversion(parent, target, std::move(patterns))))
       signalPassFailure();

@@ -14,8 +14,12 @@
 #define CIRCT_DIALECT_SIM_SIMOPS_TD
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
@@ -52,6 +56,313 @@ def FatalOp : SimOp<"fatal"> {
   let results = (outs);
 
   let assemblyFormat = "$clk `,` $cond attr-dict";
+}
+
+def DPIFuncOp : SimOp<"func.dpi",
+     [IsolatedFromAbove, Symbol, OpAsmOpInterface,
+      FunctionOpInterface]> {
+  let summary = "A System Verilog function";
+  let description = [{
+    `sim.func.dpi` models an external function in a core dialect.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
+    OptionalAttr<LocationArrayAttr>:$argument_locs,
+    OptionalAttr<StrAttr>:$verilogName
+  );
+  let regions = (region AnyRegion:$body);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    mlir::FunctionType getFunctionType() {
+      return getModuleType().getFuncType();
+    }
+
+    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
+      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
+    }
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    ::mlir::Region *getCallableRegion() { return nullptr; }
+  }];
+}
+
+def DPICallOp : SimOp<"func.dpi.call",
+     [CallOpInterface, AttrSizedOperandSegments,
+      DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "A call option for DPI function with an optional clock and enable";
+  let description = [{
+    `sim.func.dpi.call` represents SystemVerilog DPI function call. There are two
+    optional operands `clock` and `enable`.
+
+    If `clock` is not provided, the callee is invoked when input values are changed.
+    If provided, the DPI function is called at clock's posedge. The result values behave
+    like registers and the DPI function is used as a state transfer function of them.
+
+    `enable` operand is used to conditionally call the DPI since DPI call could be quite
+    more expensive than native constructs. When `enable` is low, results of unclocked
+    calls are undefined and in SV results they are lowered into `X`. Users are expected
+    to gate result values by another `enable` to model a default value of results.
+
+    For clocked calls, a low enable means that its register state transfer function is
+    not called. Hence their values will not be modify in that clock.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                      Optional<ClockType>:$clock,
+                      Optional<I1>:$enable,
+                      Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat = [{
+    $callee `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
+    attr-dict `:` functional-type($inputs, results)
+  }];
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+  }];
+
+}
+
+def FormatLitOp : SimOp<"fmt.lit", [Pure, ConstantLike]> {
+  let summary = "Literal string token";
+  let description = [{
+    Creates a constant, raw ASCII string literal for formatted printing.
+    The given string attribute will be outputted as is,
+    including non-printable characters. The literal may be empty or contain
+    null characters ('\0') which must not be interpreted as string
+    terminators by backends.
+  }];
+
+  let assemblyFormat = "$literal attr-dict";
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+}
+
+def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
+  let summary = "Hexadecimal format specifier";
+  let description = [{
+    Format the given integer value as lower-case hexadecimal string.
+
+    The printed value will be left-padded with '0' up to the
+    length required to print the maximum value of the argument's
+    type. Zero width values will produce the empty string.
+    No further prefix will be added.
+  }];
+
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
+  let summary = "Binary format specifier";
+  let description = [{
+    Format the given integer value as binary (base two) string.
+
+    The printed value will be left-padded with '0' up to the number
+    of bits of the argument's type. Zero width values will produce
+    the empty string. No further prefix will be added.
+  }];
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+
+def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
+  let summary = "Decimal format specifier";
+  let description = [{
+    Format the given integer value as signed or unsigned decimal string.
+
+    Leading zeros are omitted. Non-negative or unsigned values will
+    _not_ be prefixed with a '+'.
+
+    For unsigned formatting, the printed value will
+    be left-padded with spaces up to _at least_ the length required to print
+    the maximum unsigned value of the argument's type.
+    For signed formatting, the printed value will be
+    left-padded with spaces up to _at least_ the length required
+    to print the minimum signed value of the argument's type
+    including the '-' character.
+    E.g., a zero value of type `i1` requires no padding for unsigned
+    formatting and one leading space for signed formatting.
+    Format specifiers of same argument type and signedness must be
+    padded to the same width. Zero width values will produce
+    a single '0'.
+
+    Backends are recommended to not exceed the required amount of padding.
+  }];
+
+  let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "(`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))";
+
+  let extraClassDeclaration = [{
+      static inline unsigned getDecimalWidth(unsigned bits, bool isSigned) {
+        if (bits == 0)
+          return 1;
+        if (bits == 1)
+          return isSigned ? 2 : 1;
+
+        if (isSigned)
+          bits--;
+
+        // Should be precise up until bits = 13301
+        const double baseConversionFactor = 0.30103; // log(2) / log(10) + epsilon
+        unsigned digits = std::ceil(bits * baseConversionFactor);
+
+        return isSigned ? digits + 1 : digits;
+      }
+  }];
+}
+
+def FormatCharOp : SimOp<"fmt.char", [Pure]> {
+  let summary = "Character format specifier";
+  let description = [{
+    Format the given integer value as a single character.
+
+    For integer values up to 127, ASCII compatible encoding is assumed.
+    For larger values, the encoding is unspecified.
+
+    If the argument's type width is less than eight bits, the value is
+    zero extended.
+    If the width is greater than eight bits, the resulting formatted string
+    is undefined.
+  }];
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
+  let summary = "Concatenate format strings";
+
+  let description = [{
+    Concatenates an arbitrary number of format strings from
+    left to right. If the argument list is empty, the empty string
+    literal is produced.
+
+    Concatenations must not be recursive. I.e., a concatenated string should
+    not contain itself directly or indirectly.
+  }];
+
+
+  let arguments = (ins Variadic<FormatStringType>:$inputs);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = true;
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let extraClassDeclaration = [{
+    /// Returns true iff all of the input strings are primitive
+    /// (i.e. non-concatenated) tokens or block arguments.
+    bool isFlat() {
+      return llvm::none_of(getInputs(), [](Value operand) {
+        return !!operand.getDefiningOp<circt::sim::FormatStringConcatOp>();
+      });
+    };
+
+    /// Attempts to flatten this operation's input strings as much as possible.
+    ///
+    /// The flattened values are pushed into the passed vector.
+    /// If the concatenation is acyclic, the function will return 'success'
+    /// and all the flattened values are guaranteed to _not_ be the result of
+    /// a format string concatenation.
+    /// If a cycle is encountered, the function will return 'failure'.
+    /// On encountering a cycle, the result of the concat operation
+    /// forming the cycle is pushed into the list of flattened values
+    /// and flattening continues without recursing into the cycle.
+    LogicalResult getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands);
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::ValueRange":$inputs), [{
+      return build($_builder, $_state, circt::sim::FormatStringType::get($_builder.getContext()), inputs);
+    }]>
+  ];
+}
+
+def PrintFormattedOp : SimOp<"print"> {
+  let summary = "Print a formatted string on a given clock and condition";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console on the
+    rising edge of the given clock, if, and only if, the condition argument
+    is 'true'.
+
+    Multiple print operations in the same module and on the same clock edge
+    are performed according to their order of occurence in the IR. The order
+    of printing for operations in different modules, instances or on different
+    clocks is undefined.
+  }];
+
+
+  let arguments = (ins FormatStringType:$input, ClockType:$clock, I1:$condition);
+
+  let hasCanonicalizeMethod = true;
+  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+}
+
+def PrintFormattedProcOp : SimOp<"proc.print"> {
+  let summary = "Print a formatted string within a procedural region";
+
+  let description = [{
+    Evaluate a format string and print it to the simulation console.
+
+    This operation must be within a procedural region.
+  }];
+
+  let arguments = (ins FormatStringType:$input);
+
+  let hasVerifier = true;
+  let hasCanonicalizeMethod = true;
+
+  let assemblyFormat = "$input attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

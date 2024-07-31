@@ -34,7 +34,7 @@ firrtl.circuit "Test" {
     %0 = firrtl.wire : !firrtl.probe<bundle<f: uint<1>>, @A>
     // CHECK: %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>>
     %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>, @A>
-    // CHECK-NOT: firrtl.cast
+    // CHECK-NOT: firrtl.ref.cast
     %2 = firrtl.ref.cast %1 : (!firrtl.probe<uint<1>, @A>) -> !firrtl.probe<uint<1>, @A::@B>
   }
 
@@ -46,7 +46,7 @@ firrtl.circuit "Test" {
       %0 = firrtl.wire : !firrtl.probe<bundle<f: uint<1>>, @A>
       // CHECK: %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>>
       %1 = firrtl.ref.sub %0[0] : !firrtl.probe<bundle<f: uint<1>>, @A>
-      // CHECK-NOT: firrtl.cast
+      // CHECK-NOT: firrtl.ref.cast
       %2 = firrtl.ref.cast %1 : (!firrtl.probe<uint<1>, @A>) -> !firrtl.probe<uint<1>, @A::@B>
     }
   }
@@ -89,8 +89,8 @@ firrtl.circuit "Test" {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   // CHECK:   %[[p:.+]], %[[q:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
-  // CHECK:   firrtl.strictconnect %[[q]], %c1_ui1 : !firrtl.uint<1>
-  // CHECK:   firrtl.strictconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[q]], %c1_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CaptureHardware() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -105,7 +105,7 @@ firrtl.circuit "Test" {
   // CHECK: }
   // CHECK: firrtl.module @CapturePort(in %in: !firrtl.uint<1>) {
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
-  // CHECK:   firrtl.strictconnect %[[p]], %in : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %in : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CapturePort(in %in: !firrtl.uint<1>){
     firrtl.layerblock @A {
@@ -115,12 +115,12 @@ firrtl.circuit "Test" {
 
   // CHECK: firrtl.module private @[[A:.+]](in %[[p:.+]]: !firrtl.uint<1>) {
   // CHECK:   %w = firrtl.wire : !firrtl.uint<1>
-  // CHECK:   firrtl.connect %w, %[[p]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   firrtl.connect %w, %[[p]] : !firrtl.uint<1>
   // CHECK: }
   // CHECK: firrtl.module @CaptureHardwareViaConnect() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
-  // CHECK:   firrtl.strictconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CaptureHardwareViaConnect() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -140,7 +140,7 @@ firrtl.circuit "Test" {
   // CHECK:   %0 = firrtl.ref.send %w : !firrtl.uint<1>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
   // CHECK:   %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[p]], %1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CaptureProbeSrc() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -166,9 +166,9 @@ firrtl.circuit "Test" {
   // CHECK:   %[[b1:.+]], %[[b2:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A_B.sv", excludeFromFileList>} @[[B]]
   // CHECK:   %[[a1:.+]], %[[a2:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
   // CHECK:   %0 = firrtl.ref.resolve %[[a2]] : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[b1]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[b1]], %0 : !firrtl.uint<1>
   // CHECK:   %1 = firrtl.ref.resolve %[[a1]] : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[b2]], %1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[b2]], %1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @NestedCaptureHardware() {
     firrtl.layerblock @A {
@@ -189,7 +189,7 @@ firrtl.circuit "Test" {
   // CHECK: firrtl.module @WhenUnderLayer() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
-  // CHECK:   firrtl.strictconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @WhenUnderLayer() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -234,7 +234,7 @@ firrtl.circuit "Test" {
   // CHECK:   %0 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
   // CHECK:   %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[p]], %1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @SrcOutside() {
     %0 = firrtl.wire : !firrtl.probe<uint<1>, @A>
@@ -293,7 +293,7 @@ firrtl.circuit "Test" {
   // CHECK:   %w = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
   // CHECK:   %0 = firrtl.ref.resolve %w : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[p]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %0 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @ResolveColoredRefUnderLayerBlock() {
     %w = firrtl.wire : !firrtl.probe<uint<1>, @A>
@@ -319,7 +319,7 @@ firrtl.circuit "Test" {
   // CHECK:   %foo_o = firrtl.instance foo @Foo(out o: !firrtl.probe<uint<1>>)
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} {lowerToBind, output_file = #hw.output_file<"layers_Test_A.sv", excludeFromFileList>} @[[A]]
   // CHECK:   %0 = firrtl.ref.resolve %foo_o : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[p]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %0 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @ResolveColoredRefPortUnderLayerBlock1() {
     %foo_o = firrtl.instance foo @Foo(out o : !firrtl.probe<uint<1>, @A>)
@@ -349,6 +349,75 @@ firrtl.circuit "Test" {
   firrtl.module @ResolveColoredRefPortUnderEnabledLayer() attributes {layers=[@A]} {
     %foo_o = firrtl.instance foo @Foo(out o : !firrtl.probe<uint<1>, @A>)
     %x = firrtl.ref.resolve %foo_o : !firrtl.probe<uint<1>, @A>
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Inline Layers
+  //===--------------------------------------------------------------------===//
+
+  // CHECK: sv.macro.decl @[[INLINE:.*]]["Inline"]
+  firrtl.layer @Inline inline {
+    // CHECK: sv.macro.decl @Inline_Inline
+    firrtl.layer @Inline inline {}
+    firrtl.layer @Bound bind {
+      // CHECK: sv.macro.decl @Inline_Bound_Inline
+      firrtl.layer @Inline inline {}
+      firrtl.layer @Bound bind {
+        // CHECK: sv.macro.decl @Inline_Bound_Bound_Inline
+        firrtl.layer @Inline inline {}
+      }
+    }
+  }
+
+  firrtl.layer @Bound bind {
+    // CHECK: sv.macro.decl @Bound_Inline
+    firrtl.layer @Inline inline {}
+  }
+
+  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Inline_Bound() {
+  // CHECK:   %w3 = firrtl.wire : !firrtl.uint<3>
+  // CHECK:   sv.ifdef  @Inline_Bound_Inline {
+  // CHECK:     %w4 = firrtl.wire : !firrtl.uint<4>
+  // CHECK:   }
+  // CHECK: }
+
+  // CHECK: firrtl.module private @ModuleWithInlineLayerBlocks_Bound() {
+  // CHECK:   %w5 = firrtl.wire : !firrtl.uint<5>
+  // CHECK:   sv.ifdef @Bound_Inline {
+  // CHECK:     %w6 = firrtl.wire : !firrtl.uint<6>
+  // CHECK:   }
+  // CHECK: }
+
+  // CHECK: firrtl.module @ModuleWithInlineLayerBlocks() {
+  // CHECK:   sv.ifdef @[[INLINE]] {
+  // CHECK:     %w1 = firrtl.wire : !firrtl.uint<1>
+  // CHECK:     sv.ifdef  @Inline_Inline {
+  // CHECK:       %w2 = firrtl.wire : !firrtl.uint<2>
+  // CHECK:     }
+  // CHECK:     firrtl.instance inline_bound {lowerToBind, output_file = #hw.output_file<"layers_Test_Inline_Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Inline_Bound()
+  // CHECK:   }
+  // CHECK:   firrtl.instance bound {lowerToBind, output_file = #hw.output_file<"layers_Test_Bound.sv", excludeFromFileList>} @ModuleWithInlineLayerBlocks_Bound()
+  // CHECK: }
+  firrtl.module @ModuleWithInlineLayerBlocks() {
+    firrtl.layerblock @Inline {
+      %w1 = firrtl.wire : !firrtl.uint<1>
+      firrtl.layerblock @Inline::@Inline {
+        %w2 = firrtl.wire : !firrtl.uint<2>
+      }
+      firrtl.layerblock @Inline::@Bound {
+        %w3 = firrtl.wire : !firrtl.uint<3>
+        firrtl.layerblock @Inline::@Bound::@Inline {
+          %w4 = firrtl.wire : !firrtl.uint<4>
+        }
+      }
+    }
+
+    firrtl.layerblock @Bound {
+      %w5 = firrtl.wire : !firrtl.uint<5>
+      firrtl.layerblock @Bound::@Inline {
+        %w6 = firrtl.wire : !firrtl.uint<6>
+      }
+    }
   }
 }
 
@@ -432,15 +501,15 @@ firrtl.circuit "Simple" {
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A_B.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A_B(
 // CHECK-NEXT:   %[[A_B_cc_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_B_cc]]
-// CHECK-NEXT:   firrtl.strictconnect %[[A_B_C_cc]], %[[A_B_cc_resolve]]
-// CHECK-NEXT:   firrtl.strictconnect %[[A_B_b]], %b
+// CHECK-NEXT:   firrtl.matchingconnect %[[A_B_C_cc]], %[[A_B_cc_resolve]]
+// CHECK-NEXT:   firrtl.matchingconnect %[[A_B_b]], %b
 // CHECK-NEXT:   %[[A_a:[_a-zA-Z0-9]+]], %[[A_c:[_a-zA-Z0-9]+]] = firrtl.instance a {
 // CHECK-SAME:     lowerToBind
 // CHECK-SAME:     output_file = #hw.output_file<"layers_Simple_A.sv", excludeFromFileList>
 // CHECK-SAME:     @Simple_A(
 // CHECK-NEXT:   %[[A_c_resolve:[_a-zA-Z0-9]+]] = firrtl.ref.resolve %[[A_c]]
-// CHECK-NEXT:   firrtl.strictconnect %[[A_B_c]], %[[A_c_resolve]]
-// CHECK-NEXT:   firrtl.strictconnect %[[A_a]], %a
+// CHECK-NEXT:   firrtl.matchingconnect %[[A_B_c]], %[[A_c_resolve]]
+// CHECK-NEXT:   firrtl.matchingconnect %[[A_a]], %a
 // CHECK:      }
 //
 // CHECK-DAG:  sv.verbatim "`endif // layers_Simple_A"
@@ -489,7 +558,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   // CHECK: firrtl.module @CaptureSrcTwice() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %[[p:.+]] = firrtl.instance {{.+}} @[[A]]
-  // CHECK:   firrtl.strictconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[p]], %c0_ui1 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CaptureSrcTwice() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -508,7 +577,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   // CHECK:   %w1 = firrtl.wire : !firrtl.probe<uint<1>>
   // CHECK:   %[[out:.+]], %[[in:.+]] = firrtl.instance {{.+}} @[[A]](out {{.+}}: !firrtl.probe<uint<1>>, in {{.+}}: !firrtl.uint<1>)
   // CHECK:   %0 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[in]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[in]], %0 : !firrtl.uint<1>
   // CHECK:   firrtl.ref.define %w1, %[[out]] : !firrtl.probe<uint<1>>
   // CHECK: }
   firrtl.module @CaptureAsDstThenSrc() {
@@ -533,7 +602,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   // CHECK:   %[[in:.+]], %[[out:.+]] = firrtl.instance {{.+}} @[[A]]
   // CHECK:   firrtl.ref.define %w1, %[[out]] : !firrtl.probe<uint<1>>
   // CHECK:   %0 = firrtl.ref.resolve %w1 : !firrtl.probe<uint<1>>
-  // CHECK:   firrtl.strictconnect %[[in]], %0 : !firrtl.uint<1>
+  // CHECK:   firrtl.matchingconnect %[[in]], %0 : !firrtl.uint<1>
   // CHECK: }
   firrtl.module @CaptureAsSrcThenDst() {
     %w1 = firrtl.wire : !firrtl.probe<uint<1>, @A>
@@ -594,7 +663,7 @@ firrtl.circuit "Foo" attributes {
     }
   ]
 } {
-  firrtl.layer @A  bind {}
+  firrtl.layer @A  bind attributes {output_file = #hw.output_file<"testbench/", excludeFromFileList>} {}
   firrtl.module @Bar() attributes {
     annotations = [
       {

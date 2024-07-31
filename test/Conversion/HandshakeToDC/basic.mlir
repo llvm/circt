@@ -171,6 +171,23 @@ handshake.func @test_control_merge_data(%arg0 : i2, %arg1 : i2) -> (i2, index) {
   return %out, %idx : i2, index
 }
 
+// CHECK-LABEL:   hw.module @test_control_fixed_index_type(in 
+// CHECK-SAME:                    %[[VAL_0:.*]] : !dc.value<i4>, in %[[VAL_1:.*]] : !dc.value<i4>, out out0 : !dc.value<i4>, out out1 : !dc.value<i32>) {
+// CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i4>
+// CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i4>
+// CHECK:           %[[VAL_6:.*]] = dc.merge %[[VAL_2]], %[[VAL_4]]
+// CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = dc.unpack %[[VAL_6]] : !dc.value<i1>
+// CHECK:           %[[VAL_9:.*]] = arith.select %[[VAL_8]], %[[VAL_3]], %[[VAL_5]] : i4
+// CHECK:           %[[VAL_10:.*]] = dc.pack %[[VAL_7]], %[[VAL_9]] : i4
+// CHECK:           %[[VAL_11:.*]] = arith.extui %[[VAL_8]] : i1 to i32
+// CHECK:           %[[VAL_12:.*]] = dc.pack %[[VAL_7]], %[[VAL_11]] : i32
+// CHECK:           hw.output %[[VAL_10]], %[[VAL_12]] : !dc.value<i4>, !dc.value<i32>
+// CHECK:         }
+handshake.func @test_control_fixed_index_type(%arg0 : i4, %arg1 : i4) -> (i4, i32) {
+  %out, %idx = control_merge %arg0, %arg1 : i4, i32
+  return %out, %idx : i4, i32
+}
+
 // CHECK:   hw.module @branch_and_merge(in %[[VAL_0:.*]] : !dc.value<i1>, in %[[VAL_1:.*]] : !dc.token, out out0 : !dc.token, out out1 : !dc.value<index>) {
 // CHECK:           %[[VAL_2:.*]] = dc.merge %[[VAL_3:.*]], %[[VAL_4:.*]]
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_2]] : !dc.value<i1>
@@ -187,4 +204,28 @@ handshake.func @branch_and_merge(%0 : i1, %1 : none) -> (none, index) {
   %out, %idx = control_merge %true, %false : none, index
   %true, %false = cond_br %0, %1 : none
   return %out, %idx : none, index
+}
+
+// CHECK:   hw.module @datamerge(in %[[VAL_0:.*]] : !dc.value<i1>, in %[[VAL_1:.*]] : !dc.value<i1>, in %[[VAL_2:.*]] : !dc.value<i1>, out out0 : !dc.value<i1>) {
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i1>
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = dc.unpack %[[VAL_1]] : !dc.value<i1>
+// CHECK:           %[[VAL_7:.*]] = dc.merge %[[VAL_3]], %[[VAL_5]]
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = dc.unpack %[[VAL_7]] : !dc.value<i1>
+// CHECK:           %[[VAL_10:.*]] = arith.select %[[VAL_9]], %[[VAL_4]], %[[VAL_6]] : i1
+// CHECK:           %[[VAL_11:.*]] = dc.pack %[[VAL_8]], %[[VAL_10]] : i1
+// CHECK:           hw.output %[[VAL_11]] : !dc.value<i1>
+// CHECK:         }
+handshake.func @datamerge(%arg0 : i1, %arg1 : i1, %arg2 : i1) -> i1 {
+  %out = merge %arg0, %arg1 : i1
+  return %out : i1
+}
+
+// CHECK:   hw.module @nonemerge(in %[[VAL_0:.*]] : !dc.token, in %[[VAL_1:.*]] : !dc.token, out out0 : !dc.token) {
+// CHECK:           %[[VAL_2:.*]] = dc.merge %[[VAL_0]], %[[VAL_1]]
+// CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = dc.unpack %[[VAL_2]] : !dc.value<i1>
+// CHECK:           hw.output %[[VAL_3]] : !dc.token
+// CHECK:         }
+handshake.func @nonemerge(%arg0 : none, %arg1 : none) -> none {
+  %out = merge %arg0, %arg1 : none
+  return %out : none
 }

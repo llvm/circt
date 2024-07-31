@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraph.h"
@@ -33,7 +34,7 @@
 namespace circt {
 namespace firrtl {
 
-class StrictConnectOp;
+class MatchingConnectOp;
 
 // works for regs, nodes, and wires
 bool hasDroppableName(Operation *op);
@@ -131,7 +132,7 @@ bool hasDontTouch(Operation *op);
 /// after the definition of the value. Users of this function are likely
 /// interested in the source side of the returned connect, the definition of
 /// which does likely not dominate the original value.
-StrictConnectOp getSingleConnectUserOf(Value value);
+MatchingConnectOp getSingleConnectUserOf(Value value);
 
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.

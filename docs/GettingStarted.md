@@ -24,7 +24,10 @@ ninja.
 
 *Note:* CIRCT is known to build with at least GCC 9.4 and Clang 13.0.1, but
 older versions may not be supported. It is recommended to use the same C++
-toolchain to compile both LLVM and CIRCT to avoid potential issues.
+toolchain to compile both LLVM and CIRCT to avoid potential issues.   
+  
+*Recommendation:* In order to greatly reduce memory usage during linking, we
+recommend using the LLVM linker [`lld`](https://lld.llvm.org/).
 
 If you plan to use the Python bindings, you should start by reading [the
  instructions](https://mlir.llvm.org/docs/Bindings/Python/#building) for building
@@ -64,9 +67,11 @@ $ mkdir llvm/build
 $ cd llvm/build
 $ cmake -G Ninja ../llvm \
     -DLLVM_ENABLE_PROJECTS="mlir" \
-    -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
+    -DLLVM_TARGETS_TO_BUILD="host" \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-mlir
 ```
@@ -81,11 +86,17 @@ $ cmake -G Ninja .. \
     -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
     -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DLLVM_USE_SPLIT_DWARF=ON \
+    -DLLVM_ENABLE_LLD=ON  
 $ ninja
 $ ninja check-circt
 $ ninja check-circt-integration # Run the integration tests.
-```
+```  
+In order to use the recommended `lld` linker, use the `-DLLVM_ENABLE_LLD=ON`. 
+Removing that flag will use your compiler's default linker. More details about
+these problems and their solutions can be found 
+[in the LLVM docs](https://llvm.org/docs/GettingStarted.html#common-problems).  
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
@@ -137,16 +148,13 @@ dependencies are installed on your system. They are:
 - libfl2     # Ubuntu only (ignore if gives error)
 - libfl-dev  # Ubuntu only (ignore if gives error)
 
-7) **Install Cap'nProto** (optional, affects ESI dialect only)
+7) **Install GRPC** (optional, affects ESI runtime only)
 
-Some of the ESI dialect code requires [libcapnp](https://capnproto.org/), 0.9.1 or newer.
-(Specifically, the [cosimulation](Dialects/ESI/cosim.md) component.) Most of
-the ESI cosim integration tests also require the python bindings: pycapnp.
-The `utils/get-capnp.sh` script downloads, compiles, and installs a known
-good version to a directory within the circt source code. It optionally
-installs pycapnp via 'pip3'. The capnp compile requires libtool.
-Alternatively, you can use a docker image we provide via
-`utils/run-docker.sh`.
+The ESI runtime requires GRPC for cosimulation. The `utils/get-grpc.sh` script
+installs a known good version of GRPC to a directory within the CIRCT source
+code. Alternatively, you can install GRPC using your package manager, though the
+version may not be compatible with the ESI runtime so results may vary.
+
 
 8) **Install OR-Tools** (optional, enables additional schedulers)
 
@@ -217,6 +225,8 @@ Cheat sheet for powershell:
     -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$(PWD)" `
     -DCIRCT_BINDINGS_PYTHON_ENABLED=ON `
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DLLVM_USE_SPLIT_DWARF=ON 
+    -DLLVM_ENABLE_LLD=ON
 > ninja -C<build_dir> check-circt
 ```
 
@@ -269,4 +279,127 @@ Patches are submitted to LLVM/MLIR via GitHub pull-requests, the basic flow is a
 6) Publish the branch on your fork of the repository and create a GitHub pull-request.
 
 When your review converges and your patch is approved, it can be merged directly on GitHub.
-If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.
+If you have commit access, you can do this yourself, otherwise a reviewer can do it for you.  
+  
+## Writing a basic CIRCT Pass  
+
+Passes can be added at several levels in CIRCT. Here we illustrate this with a simple pass, targetting 
+the `hw` dialect, that replaces all of the wire names with `foo. This example is very basic and is 
+meant for people who want to get a quick and dirty start at writing passes for CIRCT. For more detailed
+tutorials, we recommend looking at the [MLIR docs](https://mlir.llvm.org/docs/PassManagement/), and their
+[Toy tutorials](https://mlir.llvm.org/docs/Tutorials/Toy/).  
+To add a simple dialect pass, that doesn't perform any dialect conversion, you can do the following:  
+1) Update your dialect’s Passes.td file to define what your pass will do in a high-level, well documented way, 
+e.g. in `include/circt/Dialect/HW/Passes.td`:  
+```
+def FooWires : Pass<"hw-foo-wires", "hw::HwModuleOp"> {
+  let summary = "Change all wires' name to foo_<n>.";
+  let description = [{
+    Very basic pass that numbers all of the wires in a given module.
+    The wires' names are then all converte to foo_<that number>.
+  }];
+  let constructor = "circt::hw::createFooWiresPass()";
+}
+```    
+Once this is added, compile CIRCT. This will generate a base class for your pass following the naming
+defined in the [tablegen description](https://mlir.llvm.org/docs/PassManagement/#tablegen-specification). 
+This base class will contain some methods that need to be implemented. 
+Your goal is to now implement those.  
+
+2) Create a new file that contains your pass in the dialect's pass folder, e.g. in `lib/Dialect/HW/Transforms`. 
+Don't forget to also add it in the folder's CMakeLists.txt. 
+This file should implement:  
+  - A struct with the name of your pass, which extends the pass base class generated by the tablegen description.
+  - This struct should define an override of the `void runOnOperation()` method, e.g.  
+  ```cpp
+  namespace {
+    // A test pass that simply replaces all wire names with foo_<n>
+    struct FooWiresPass : FooWiresBase<FooWiresPass> {
+      void runOnOperation() override;
+    };
+  }
+  ```  
+  - The `runOnOperation` method will contain the actual logic of your pass, which you can now implement, e.g.
+  ```cpp
+  void FooWiresPass::runOnOperation() {
+    size_t nWires = 0; // Counts the number of wires modified
+    getOperation().walk([&](hw::WireOp wire) { // Walk over every wire in the module
+      wire.setName("foo_" + std::to_string(nWires++)); // Rename said wire
+    });
+  }
+  ``` 
+  > *Note*: Here `getOperation().walk([&](WireOp wire) { ... });` is used to traverse every wire in the design, you can also
+  > use it to generically walk over all operations and then visit them individually 
+  > using a [visitor pattern](https://en.wikipedia.org/wiki/Visitor_pattern) by overloading type visitors 
+  > defined by each dialect. More details can be found in the 
+  > [MLIR docs](https://mlir.llvm.org/docs/Tutorials/UnderstandingTheIRStructure/), e.g.
+  ```cpp
+  #include "circt/Dialect/HW/HWVisitors.h" // defines dispatchTypeOpVisitor which calls visit(op)
+
+  namespace {
+    // A test pass that simply replaces all wire names with foo_<n>
+    struct VisitorExamplePass 
+      : public VisitorExampleBase<VisitorExamplePass>,
+        public hw::TypeOpVisitor<VisitorExamplePass> // Allows for the visitor overloads to be added
+    {
+    public:  
+      void runOnOperation() override;
+
+      // Vistor overloads
+      void visitTypeOp(hw::ConstantOp op) { /*...*/ }
+      void visitTypeOp(/*other hw operations*/) { /*...*/ }
+    };
+  }
+
+  void VisitorExamplePass::runOnOperation() {
+    module.walk([&](Operation* op) { dispatchTypeOpVisitor(op); });
+  }
+  ```
+  - Finally implement the constructor for the pass, as defined in the tablegen description, e.g.  
+  ```cpp
+  std::unique_ptr<mlir::Pass> circt::hw::createFooWiresPass() {
+    return std::make_unique<FooWiresPass>();
+  }
+  ```  
+    
+3) Define the pass constructor in the dialect's `Passes.h` file, e.g. in `include/circt/Dialect/hw/HWPasses.h` add:  
+```cpp
+std::unique_ptr<mlir::Pass> createFooWiresPass();
+```
+4) Make sure to add a test to check your pass, e.g. in `test/Dialect/HW`:  
+```mlir
+// RUN: circt-opt --hw-foo-wires %s | FileCheck %s
+
+hw.module @foo(in %a: i32, in %b: i32, out out: i32) {
+  // CHECK:   %c1_i32 = hw.constant 1 : i32
+  %c1 = hw.constant 1 : i32
+  // CHECK:   %foo_0 = hw.wire %c1_i32  : i32
+  %wire_1 = hw.wire %c1 : i32
+  // CHECK:   %foo_1 = hw.wire %a  : i32
+  %wire_a = hw.wire %a : i32
+  // CHECK:   %foo_2 = hw.wire %b  : i32
+  %wire_b = hw.wire %b : i32
+  // CHECK:   %0 = comb.add bin %foo_1, %foo_0 : i32
+  %ap1 = comb.add bin %wire_a, %wire_1 : i32
+  // CHECK:   %foo_3 = hw.wire %0  : i32
+  %wire_ap1 = hw.wire %ap1 : i32
+  // CHECK:   %1 = comb.add bin %foo_3, %foo_2 : i32
+  %ap1pb = comb.add bin %wire_ap1, %wire_b : i32
+  // CHECK:   %foo_4 = hw.wire %1  : i32
+  %wire_ap1pb = hw.wire %ap1pb : i32
+  // CHECK:   hw.output %foo_4 : i32
+  hw.output %wire_ap1pb : i32
+}
+```
+Now re-run cmake and compile CIRCT and you should be able to run your new pass! 
+By default, every pass is accessible using `circt-opt` through the name that was defined in the tablegen description, 
+e.g. `circt-opt --hw-foo-wires <file_name>.mlir`. 
+These passes can also be included in certain compilation pipelines that are well packaged in tools like firtool.  
+We recommend looking at recently merged Pull-Requests or other [MLIR tutorials](https://mlir.llvm.org/docs/Tutorials/) 
+to learn how to go beyond what we've shown in this quick start guide.  
+The full source code of this pass is available at the following links:  
+- Pass Source: [FooWires.cpp](https://github.com/llvm/circt/blob/main/lib/Dialect/HW/Transforms/FooWires.cpp)   
+- Pass Test: [foo.mlir](https://github.com/llvm/circt/blob/main/test/Dialect/HW/foo.mlir)  
+- HW Dialect Pass Header: [HWPasses.h](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/HWPasses.h#L32)  
+- Tablegen Description: [Passes.td](https://github.com/llvm/circt/blob/main/include/circt/Dialect/HW/Passes.td#L81-L88)  
+- [CMakeLists.txt](https://github.com/llvm/circt/blob/main/lib/Dialect/HW/Transforms/CMakeLists.txt#L8)

@@ -49,6 +49,15 @@ def OrOp : AssocLTLOp<"or"> {
   }];
 }
 
+def IntersectOp : AssocLTLOp<"intersect"> {
+  let summary = "The intersection of booleans sequences or properties.";
+  let description = [{
+    The intersection of two properties. This checks that both properties both hold 
+    and have the same start and end times. This differs from `ltl.and` which doesn't 
+    consider the timings of each operand, only their results. 
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//
@@ -151,6 +160,77 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
+def RepeatOp : LTLOp<"repeat", [Pure]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    OptionalAttr<I64Attr>:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base (`,` $more^)? attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+
+  let summary = "Repeats a sequence by a number of times.";
+  let description = [{
+    Repeat the `$input` sequence at least `$base` times, at most `$base` +
+    `$more` times. The number must be greater than or equal to zero. Omitting
+    `$more` indicates an unbounded but finite repetition. For example:
+
+    - `ltl.repeat %seq, 2, 0` repeats `%seq` exactly 2 times.
+    - `ltl.repeat %seq, 2, 2` repeats `%seq` 2, 3, or 4 times.
+    - `ltl.repeat %seq, 2` repeats `%seq` 2 or more times. The number of times
+      is unbounded but finite.
+    - `ltl.repeat %seq, 0, 0` represents an empty sequence.
+  }];
+}
+
+def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:` type($input)
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let description = [{
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
+    and `$base + $more` times in a finite number of evaluations. The final evaluation 
+    in the sequence has to match. The `$base` must be greater than or equal to zero 
+    and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents 
+    a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
+  }];
+}
+
+def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
+  let arguments = (ins
+    LTLAnySequenceType:$input,
+    I64Attr:$base,
+    I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $base `,` $more attr-dict `:` type($input)
+  }];
+
+  let hasFolder = 1;
+
+  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let description = [{
+    Non-consecutive repetition of the `$input` sequence. This must hold between `$base` 
+    and `$base + $more` times in a finite number of evaluations. The final evaluation 
+    in the sequence does not have to match. The `$base` must be greater than or equal to zero 
+    and the range `$more` can't be omitted. For example, both a !b b b !b !b b c and 
+    a !b b b !b !b b !b c represent matching observations of 
+    `ltl.non_consecutive_repeat %b, 1, 2`.
+  }];
+}
+
+
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
@@ -188,6 +268,23 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
     `$antecedent` does *not* match at a given point in time, the result property
     trivially holds. This is conceptually identical to the implication operator
     →, but with additional temporal semantics.
+  }];
+}
+
+def UntilOp: LTLOp<"until", [Pure]> {
+  let arguments = (ins LTLAnyPropertyType:$input,
+                       LTLAnyPropertyType:$condition);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    operands attr-dict `:` type(operands)
+  }];
+
+  let summary = "Property always holds until another property holds.";
+  let description = [{
+    Checks that the `$input` property always holds until the `$condition`
+    property holds once. This operator is weak: the property will hold even if
+    `$input` always holds and `$condition` never holds. This operator is
+    nonoverlapping: `$input` does not have to hold when `$condition` holds.
   }];
 }
 
@@ -245,71 +342,6 @@ def ClockOp : LTLOp<"clock", [
 
     The operation returns a property if the `$input` is a property, and a
     sequence otherwise.
-  }];
-}
-
-def DisableOp : LTLOp<"disable", [Pure]> {
-  let arguments = (ins LTLAnyPropertyType:$input, I1:$condition);
-  let results = (outs LTLPropertyType:$result);
-  let assemblyFormat = [{
-    $input `if` $condition attr-dict `:` type($input)
-  }];
-  let hasFolder = 1;
-
-  let summary = "Disable the evaluation of a property based on a condition.";
-  let description = [{
-    Creates a new property which evaluates the given `$input` property only if
-    the given disable `$condition` is false throughout the entire evaluation. If
-    the `$condition` is true at any point in time during the evaluation of
-    `$input`, the resulting property is disabled.
-
-    The disabling is "infectious". If a property is disabled, it also implicitly
-    disables all properties that use it. Consider the following example:
-    ```
-    %0 = ltl.disable %prop if %cond
-    %1 = ltl.or %0, %otherProp
-    ```
-    If the property `%0` is disabled, the derived property `%1` is also
-    disabled.
-
-    As a result, it is always legal to canonicalize the IR into a form where
-    there is only one `ltl.disable` operation at the root of a property
-    expression.
-
-    Note that a property being disabled based on a condition is different from a
-    property that trivially evaluates to true if the condition does not hold.
-    The former ensures that a property is only checked when a certain condition
-    is true, but the number of cases in which the property holds or doesn't hold
-    remains unchanged. The latter adds additional cases where the property
-    holds, which can offer a solver unintended ways to make assertions or
-    coverage proofs derived from the property pass. For example:
-
-    ```
-    %p0 = ltl.or %prop, %cond
-    %p1 = ltl.disable %prop if %cond
-    ```
-
-    `$cond` being true would disable the evaluation of `%p0` and would make
-    `%p1` evaluate to true. These are subtly different. If used in an  assertion
-    during simulation, `$cond` would adequately disable triggering of the
-    assertion in both cases. However, if used in a formal verification setting
-    where proofs for `%p0` and `%p1` always holding or never holding are sought,
-    a solver might use `%cond = true` to trivially make `%p0` hold, which is not
-    possible for `%p1`. Consider the following more concrete example:
-
-    ```
-    %p2 = ltl.or %protocolCorrectProperty, %reset
-    %p3 = ltl.disable %protocolCorrectProperty if %reset
-    verif.cover %p2
-    verif.cover %p3
-    ```
-
-    The intent is to formally prove coverage for `%protocolCorrectProperty`
-    while the circuit is in regular operation (i.e., out of reset). A formal
-    solver would trivially prove coverage for `%p2` by assigning
-    `%reset = true`, but would have to actually prove coverage for the
-    underlying `%protocolCorrectProperty` for `%p3`. The latter is almost always
-    the intended behavior.
   }];
 }
 

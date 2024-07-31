@@ -11,7 +11,7 @@
 #
 # It is recommended to build with Ninja and ccache. To do so, set environment
 # variables by prefixing to above invocations:
-#   CMAKE_GENERATOR=Ninja CMAKE_CXX_COMPILER=clang++
+#   CC=clang CXX=clang++
 #
 # On CIs, it is often advantageous to re-use/control the CMake build directory.
 # This can be set with the PYCDE_CMAKE_BUILD_DIR env var.
@@ -66,8 +66,8 @@ class CMakeBuild(build_py):
     # Configure the build.
     cfg = "Release"
     cmake_args = [
+        "-GNinja",  # This build only works with Ninja on Windows.
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
-        "-DCAPNP_PATH={}".format(os.getenv("CAPNP_PATH")),
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
     ]
@@ -78,6 +78,11 @@ class CMakeBuild(build_py):
     cc = os.getenv("CC")
     if cc is not None:
       cmake_args.append("-DCMAKE_C_COMPILER={}".format(cc))
+
+    if "VCPKG_INSTALLATION_ROOT" in os.environ:
+      cmake_args.append(
+          f"-DCMAKE_TOOLCHAIN_FILE={os.environ['VCPKG_INSTALLATION_ROOT']}/scripts/buildsystems/vcpkg.cmake"
+      )
 
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
@@ -111,9 +116,6 @@ class CMakeBuild(build_py):
         "--parallel",
         "--target",
         "ESIRuntime",
-        "esiquery",
-        "ESIPythonRuntime",
-        "EsiCosimDpiServer",
     ],
                           cwd=cmake_build_dir)
 

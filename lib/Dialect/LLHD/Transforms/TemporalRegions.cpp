@@ -39,9 +39,9 @@ static bool allPredecessorTRsKnown(Block *block,
 }
 
 void llhd::TemporalRegionAnalysis::recalculate(Operation *operation) {
-  assert(isa<ProcOp>(operation) &&
-         "TemporalRegionAnalysis: operation needs to be llhd::ProcOp");
-  ProcOp proc = cast<ProcOp>(operation);
+  assert(isa<ProcessOp>(operation) &&
+         "TemporalRegionAnalysis: operation needs to be llhd::ProcessOp");
+  auto proc = cast<ProcessOp>(operation);
   int nextTRnum = -1;
   blockMap.clear();
   trMap.clear();

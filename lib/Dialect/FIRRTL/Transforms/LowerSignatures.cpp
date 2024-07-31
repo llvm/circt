@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -35,6 +37,13 @@
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERSIGNATURES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -449,7 +458,7 @@ static void lowerModuleBody(FModuleOp mod,
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
     for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
-      assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
+      assert(isa<MatchingConnectOp>(use) || isa<ConnectOp>(use));
       use->erase();
     }
     inst->erase();
@@ -462,7 +471,8 @@ static void lowerModuleBody(FModuleOp mod,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerSignaturesPass : public LowerSignaturesBase<LowerSignaturesPass> {
+struct LowerSignaturesPass
+    : public circt::firrtl::impl::LowerSignaturesBase<LowerSignaturesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

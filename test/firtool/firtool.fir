@@ -6,7 +6,7 @@
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | circt-opt -firrtl-lower-annotations | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
 ; RUN: firtool %s --format=fir --ir-verilog | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
-
+FIRRTL version 4.0.0
 
 circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
@@ -56,7 +56,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
   type V3 = UInt<1>[3]
   type V2 = UInt<1>[2]
 
-  module test_mod :
+  public module test_mod :
     input clock : Clock
     input a: UInt<1>
     input b: UInt<2>
@@ -111,29 +111,29 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>, in %vec_0: !firrtl.uint<1>, in %vec_1: !firrtl.uint<1>, in %vec_2: !firrtl.uint<1>, out %out_implicitTrunc: !firrtl.uint<1>, out %out_prettifyExample: !firrtl.uint<1>, out %out_multibitMux: !firrtl.uint<1>, out %out_mux2cell_0: !firrtl.uint<1>, out %out_mux2cell_1: !firrtl.uint<1>) {{.*}}{
 ; MLIR:         %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance cat @Cat(in a: !firrtl.uint<2>, in b: !firrtl.uint<2>, in c: !firrtl.uint<2>, out d: !firrtl.uint<6>)
-; MLIR-NEXT:    firrtl.strictconnect %cat_a, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.strictconnect %cat_b, %b : !firrtl.uint<2>
-; MLIR-NEXT:    firrtl.strictconnect %cat_c, %b : !firrtl.uint<2>
+; MLIR-NEXT:    firrtl.matchingconnect %cat_a, %b : !firrtl.uint<2>
+; MLIR-NEXT:    firrtl.matchingconnect %cat_b, %b : !firrtl.uint<2>
+; MLIR-NEXT:    firrtl.matchingconnect %cat_c, %b : !firrtl.uint<2>
 ; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance implicitTrunc @ImplicitTrunc(in inp_1: !firrtl.uint<1>, in inp_2: !firrtl.sint<5>, out out1: !firrtl.sint<3>, out out2: !firrtl.sint<3>)
-; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_1, %a : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %implicitTrunc_inp_1, %a : !firrtl.uint<1>
 ; MLIR-NEXT:    %0 = firrtl.asSInt %cat_d : (!firrtl.uint<6>) -> !firrtl.sint<6>
 ; MLIR-NEXT:    %1 = firrtl.bits %0 4 to 0 : (!firrtl.sint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    %2 = firrtl.asSInt %1 : (!firrtl.uint<5>) -> !firrtl.sint<5>
-; MLIR-NEXT:    firrtl.strictconnect %implicitTrunc_inp_2, %2 : !firrtl.sint<5>
+; MLIR-NEXT:    firrtl.matchingconnect %implicitTrunc_inp_2, %2 : !firrtl.sint<5>
 ; MLIR:         %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance prettifyExample @PrettifyExample(in inp_1: !firrtl.uint<5>, in inp_2: !firrtl.uint<5>, in inp_3: !firrtl.uint<5>, out out1: !firrtl.uint<10>, out out2: !firrtl.uint<10>)
 ; MLIR-NEXT:    %3 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
-; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
-; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
-; MLIR-NEXT:    firrtl.strictconnect %prettifyExample_inp_3, %3 : !firrtl.uint<5>
+; MLIR-NEXT:    firrtl.matchingconnect %prettifyExample_inp_1, %3 : !firrtl.uint<5>
+; MLIR-NEXT:    firrtl.matchingconnect %prettifyExample_inp_2, %3 : !firrtl.uint<5>
+; MLIR-NEXT:    firrtl.matchingconnect %prettifyExample_inp_3, %3 : !firrtl.uint<5>
 ; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance flipFlop @FlipFlop(in clock: !firrtl.clock, in a_d: !firrtl.uint<1>, out a_q: !firrtl.uint<1>)
-; MLIR-NEXT:    firrtl.strictconnect %flipFlop_clock, %clock : !firrtl.clock
-; MLIR-NEXT:    firrtl.strictconnect %flipFlop_a_d, %a : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.strictconnect %c, %flipFlop_a_q : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %flipFlop_clock, %clock : !firrtl.clock
+; MLIR-NEXT:    firrtl.matchingconnect %flipFlop_a_d, %a : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %c, %flipFlop_a_q : !firrtl.uint<1>
 ; MLIR-NEXT:    %multibitMux_a_0, %multibitMux_a_1, %multibitMux_a_2, %multibitMux_sel, %multibitMux_b = firrtl.instance multibitMux @MultibitMux(in a_0: !firrtl.uint<1>, in a_1: !firrtl.uint<1>, in a_2: !firrtl.uint<1>, in sel: !firrtl.uint<2>, out b: !firrtl.uint<1>)
-; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_0, %vec_0 : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.strictconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
-; MLIR-NEXT:    firrtl.strictconnect %multibitMux_sel, %b : !firrtl.uint<2>
+; MLIR-NEXT:    firrtl.matchingconnect %multibitMux_a_0, %vec_0 : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %multibitMux_a_1, %vec_1 : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %multibitMux_a_2, %vec_2 : !firrtl.uint<1>
+; MLIR-NEXT:    firrtl.matchingconnect %multibitMux_sel, %b : !firrtl.uint<2>
 
 ; ANNOTATIONS-LABEL: firrtl.module @test_mod
 ; ANNOTATIONS-SAME: {class = "circt.test", info = "a ModuleTarget Annotation"}
@@ -295,13 +295,6 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     output out : UInt<1>
     out is invalid
 
-  intmodule Mux2:
-     input sel: UInt<1>
-     input high: UInt
-     input low: UInt
-     output out: UInt
-     intrinsic = circt_mux2cell
-
   extmodule Val:
      output v: UInt<1>
   ; VERILOG-LABEL: Mux2Cell
@@ -319,15 +312,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input low: UInt<1>
     output out: UInt<1>[2]
     wire w: UInt<1>
-    inst mux2 of Mux2
     inst ext of Val
     w <= ext.v
-    mux2.sel <= xor(cond, UInt<1>(1))
-    mux2.high <= w
-    mux2.low <= low
-    out[0] <= mux2.out
-    inst mux2_1 of Mux2
-    mux2_1.sel <= xor(cond, UInt<1>(1))
-    mux2_1.high <= ext.v
-    mux2_1.low <= low
-    out[1] <= mux2_1.out
+    out[0] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), w, low)
+    out[1] <= intrinsic(circt_mux2cell : UInt, xor(cond, UInt<1>(1)), ext.v, low)

@@ -67,7 +67,7 @@ public:
                      BigIntType, BigUIntType, IntType, UIntType>(type);
   }
 
-  bool isSigned() { return isa<SignedType, IntBaseType>(); }
+  bool isSigned() { return mlir::isa<SignedType, IntBaseType>(*this); }
 
 protected:
   using Type::Type;

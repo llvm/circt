@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_INTEROP_INTEROPOPS_H
 
 #include "circt/Dialect/Interop/InteropDialect.h"
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 

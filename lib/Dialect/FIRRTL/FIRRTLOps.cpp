@@ -113,6 +113,29 @@ bool firrtl::isDuplexValue(Value val) {
   return false;
 }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+MemOp::computeDataFlow() {
+  // If read result has non-zero latency, then no combinational dependency
+  // exists.
+  if (getReadLatency() > 0)
+    return {};
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+  // Add a dependency from the enable and address fields to the data field.
+  for (auto memPort : getResults())
+    if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
+      auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+      auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
+      auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(enableFieldId)));
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(addressFieldId)));
+    }
+  return deps;
+}
+
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;
@@ -164,9 +187,11 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
-constexpr const char *toString(Flow flow) {
+const char *toString(Flow flow) {
   switch (flow) {
   case Flow::None:
     return "no flow";
@@ -177,6 +202,8 @@ constexpr const char *toString(Flow flow) {
   case Flow::Duplex:
     return "duplex flow";
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
@@ -2092,13 +2119,6 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    llvm::report_fatal_error("instance op not in circuit");
-  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
-}
-
 void InstanceOp::build(
     OpBuilder &builder, OperationState &result, TypeRange resultTypes,
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
@@ -2733,6 +2753,51 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
+InstanceChoiceOp
+InstanceChoiceOp::erasePorts(OpBuilder &builder,
+                             const llvm::BitVector &portIndices) {
+  assert(portIndices.size() >= getNumResults() &&
+         "portIndices is not at least as large as getNumResults()");
+
+  if (portIndices.none())
+    return *this;
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(getPortNames().getValue(), portIndices);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
+
+  auto newOp = builder.create<InstanceChoiceOp>(
+      getLoc(), newResultTypes, getModuleNames(), getCaseNames(), getName(),
+      getNameKind(), direction::packAttribute(getContext(), newPortDirections),
+      ArrayAttr::get(getContext(), newPortNames), getAnnotationsAttr(),
+      ArrayAttr::get(getContext(), newPortAnnotations), getLayers(),
+      getInnerSymAttr());
+
+  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
+       oldIdx != numOldPorts; ++oldIdx) {
+    if (portIndices.test(oldIdx)) {
+      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+      continue;
+    }
+    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
+    ++newIdx;
+  }
+
+  // Copy over "output_file" information so that this is not lost when ports
+  // are erased.
+  //
+  // TODO: Other attributes may need to be copied over.
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    newOp->setAttr("output_file", outputFile);
+
+  return newOp;
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//
@@ -3261,6 +3326,12 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3283,6 +3354,12 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegResetOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
@@ -3565,7 +3642,7 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult StrictConnectOp::verify() {
+LogicalResult MatchingConnectOp::verify() {
   if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = type_cast<FIRRTLBaseType>(type);
 
@@ -5445,6 +5522,77 @@ void VerbatimWireOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// DPICallIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeAllowedForDPI(Operation *op, Type type) {
+  return !type.walk([&](firrtl::IntType intType) -> mlir::WalkResult {
+                auto width = intType.getWidth();
+                if (width < 0) {
+                  op->emitError() << "unknown width is not allowed for DPI";
+                  return WalkResult::interrupt();
+                }
+                if (width == 1 || width == 8 || width == 16 || width == 32 ||
+                    width >= 64)
+                  return WalkResult::advance();
+                op->emitError()
+                    << "integer types used by DPI functions must have a "
+                       "specific bit width; "
+                       "it must be equal to 1(bit), 8(byte), 16(shortint), "
+                       "32(int), 64(longint) "
+                       "or greater than 64, but got "
+                    << intType;
+                return WalkResult::interrupt();
+              })
+              .wasInterrupted();
+}
+
+LogicalResult DPICallIntrinsicOp::verify() {
+  if (auto inputNames = getInputNames()) {
+    if (getInputs().size() != inputNames->size())
+      return emitError() << "inputNames has " << inputNames->size()
+                         << " elements but there are " << getInputs().size()
+                         << " input arguments";
+  }
+  if (auto outputName = getOutputName())
+    if (getNumResults() == 0)
+      return emitError() << "output name is given but there is no result";
+
+  auto checkType = [this](Type type) {
+    return isTypeAllowedForDPI(*this, type);
+  };
+  return success(llvm::all_of(this->getResultTypes(), checkType) &&
+                 llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+DPICallIntrinsicOp::computeDataFlow() {
+  if (getClock())
+    return {};
+
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+
+  for (auto operand : getOperands()) {
+    auto type = type_cast<FIRRTLBaseType>(operand.getType());
+    auto baseFieldRef = getFieldRefFromValue(operand);
+    SmallVector<circt::FieldRef> operandFields;
+    walkGroundTypes(
+        type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+          operandFields.push_back(baseFieldRef.getSubField(dstIndex));
+        });
+
+    // Record operand -> result dependency.
+    for (auto result : getResults())
+      walkGroundTypes(
+          type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+            for (auto field : operandFields)
+              deps.emplace_back(circt::FieldRef(result, dstIndex), field);
+          });
+  }
+  return deps;
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 
@@ -5853,6 +6001,7 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -6071,6 +6220,10 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 LogicalResult LayerBlockOp::verify() {
   auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
+
+  // Get parent operation that isn't a when or match.
+  while (isa<WhenOp, MatchOp>(parentOp))
+    parentOp = parentOp->getParentOp();
 
   // Verify the correctness of the symbol reference.  Only verify that this
   // layer block makes sense in its parent module or layer block.

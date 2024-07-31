@@ -10,12 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKEREMOVEBUFFERS
+#define GEN_PASS_DEF_HANDSHAKEINSERTBUFFERS
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -34,7 +43,8 @@ struct RemoveHandshakeBuffers : public OpRewritePattern<handshake::BufferOp> {
 };
 
 struct HandshakeRemoveBuffersPass
-    : public HandshakeRemoveBuffersBase<HandshakeRemoveBuffersPass> {
+    : public circt::handshake::impl::HandshakeRemoveBuffersBase<
+          HandshakeRemoveBuffersPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
     ConversionTarget target(getContext());
@@ -168,9 +178,8 @@ static void bufferAllFIFOStrategy(Region &r, OpBuilder &builder,
                     /*bufferType=*/BufferTypeEnum::fifo);
 }
 
-LogicalResult circt::handshake::bufferRegion(Region &r, OpBuilder &builder,
-                                             StringRef strategy,
-                                             unsigned bufferSize) {
+static LogicalResult bufferRegion(Region &r, OpBuilder &builder,
+                                  StringRef strategy, unsigned bufferSize) {
   if (strategy == "cycles")
     bufferCyclesStrategy(r, builder, bufferSize);
   else if (strategy == "all")
@@ -186,7 +195,8 @@ LogicalResult circt::handshake::bufferRegion(Region &r, OpBuilder &builder,
 
 namespace {
 struct HandshakeInsertBuffersPass
-    : public HandshakeInsertBuffersBase<HandshakeInsertBuffersPass> {
+    : public circt::handshake::impl::HandshakeInsertBuffersBase<
+          HandshakeInsertBuffersPass> {
   HandshakeInsertBuffersPass(const std::string &strategy, unsigned bufferSize) {
     this->strategy = strategy;
     this->bufferSize = bufferSize;

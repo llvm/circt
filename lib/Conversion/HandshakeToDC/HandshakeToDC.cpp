@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToDC.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
@@ -22,10 +21,16 @@
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/MathExtras.h"
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_HANDSHAKETODC
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -198,6 +203,50 @@ public:
   }
 };
 
+class MergeOpConversion : public DCOpConversionPattern<handshake::MergeOp> {
+public:
+  using DCOpConversionPattern<handshake::MergeOp>::DCOpConversionPattern;
+  using OpAdaptor = typename handshake::MergeOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(handshake::MergeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getNumOperands() > 2)
+      return rewriter.notifyMatchFailure(op, "only two inputs supported");
+
+    SmallVector<Value, 4> tokens, data;
+
+    for (auto input : adaptor.getDataOperands()) {
+      auto up = unpack(rewriter, input);
+      tokens.push_back(up.token);
+      if (up.data)
+        data.push_back(up.data);
+    }
+
+    // Control side
+    Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
+    auto selectedIndexUnpacked = unpack(rewriter, selectedIndex);
+    Value mergeOutput;
+
+    if (!data.empty()) {
+      // Data-merge; mux the selected input.
+      auto dataMux = rewriter.create<arith::SelectOp>(
+          op.getLoc(), selectedIndexUnpacked.data, data[0], data[1]);
+      convertedOps->insert(dataMux);
+
+      // Pack the data mux with the control token.
+      mergeOutput = pack(rewriter, selectedIndexUnpacked.token, dataMux);
+    } else {
+      // Control-only merge; throw away the index value of the dc.merge
+      // operation and only forward the dc.token.
+      mergeOutput = selectedIndexUnpacked.token;
+    }
+
+    rewriter.replaceOp(op, mergeOutput);
+    return success();
+  }
+};
+
 class ControlMergeOpConversion
     : public DCOpConversionPattern<handshake::ControlMergeOp> {
 public:
@@ -219,6 +268,8 @@ public:
         data.push_back(up.data);
     }
 
+    bool isIndexType = isa<IndexType>(op.getIndex().getType());
+
     // control-side
     Value selectedIndex = rewriter.create<dc::MergeOp>(op.getLoc(), tokens);
     auto mergeOpUnpacked = unpack(rewriter, selectedIndex);
@@ -238,9 +289,16 @@ public:
 
     // if the original op used `index` as the select operand type, we need to
     // index-cast the unpacked select operand
-    if (isa<IndexType>(op.getIndex().getType())) {
+    if (isIndexType) {
       selValue = rewriter.create<arith::IndexCastOp>(
           op.getLoc(), rewriter.getIndexType(), selValue);
+      convertedOps->insert(selValue.getDefiningOp());
+      selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
+    } else {
+      // The cmerge had a specific type defined for the index type. dc.merge
+      // provides an i1 operand for the selected index, so we need to cast it.
+      selValue = rewriter.create<arith::ExtUIOp>(
+          op.getLoc(), op.getIndex().getType(), selValue);
       convertedOps->insert(selValue.getDefiningOp());
       selectedIndex = pack(rewriter, mergeOpUnpacked.token, selValue);
     }
@@ -547,7 +605,7 @@ public:
       TypeConverter::SignatureConversion result(moduleRegion.getNumArguments());
       (void)getTypeConverter()->convertSignatureArgs(
           TypeRange(moduleRegion.getArgumentTypes()), result);
-      rewriter.applySignatureConversion(&moduleRegion, result);
+      rewriter.applySignatureConversion(hwModule.getBodyBlock(), result);
     }
 
     rewriter.eraseOp(op);
@@ -555,7 +613,8 @@ public:
   }
 };
 
-class HandshakeToDCPass : public HandshakeToDCBase<HandshakeToDCPass> {
+class HandshakeToDCPass
+    : public circt::impl::HandshakeToDCBase<HandshakeToDCPass> {
 public:
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
@@ -624,12 +683,12 @@ LogicalResult circt::handshaketodc::runHandshakeToDC(
   // Add handshake conversion patterns.
   // Note: merge/control merge are not supported - these are non-deterministic
   // operators and we do not care for them.
-  patterns
-      .add<BufferOpConversion, CondBranchConversionPattern,
-           SinkOpConversionPattern, SourceOpConversionPattern,
-           MuxOpConversionPattern, ForkOpConversionPattern, JoinOpConversion,
-           ControlMergeOpConversion, ConstantOpConversion, SyncOpConversion>(
-          ctx, typeConverter, &convertedOps);
+  patterns.add<BufferOpConversion, CondBranchConversionPattern,
+               SinkOpConversionPattern, SourceOpConversionPattern,
+               MuxOpConversionPattern, ForkOpConversionPattern,
+               JoinOpConversion, MergeOpConversion, ControlMergeOpConversion,
+               ConstantOpConversion, SyncOpConversion>(ctx, typeConverter,
+                                                       &convertedOps);
 
   // ALL other single-result operations are converted via the
   // UnitRateConversionPattern.

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -prepare-for-emission --split-input-file -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(any(prepare-for-emission))' --split-input-file -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s -export-verilog -split-input-file
 
 // CHECK: @namehint_variadic
@@ -149,26 +149,6 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
 // -----
 
 module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
-  // CHECK-LABEL: @DisableIff(
-  hw.module @DisableIff(in %clk: i1, in %a: i1, in %b: i1) {
-    %b_xor_b = comb.xor %b, %b : i1
-
-    // CHECK: %[[XOR:.+]] = comb.xor
-    // CHECK: %[[WIRE:.+]] = sv.wire
-    // CHECK: sv.assign %[[WIRE]], %[[XOR]]
-    // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
-    // CHECK: ltl.disable %{{.+}} if %[[READ]]
-    %i0 = ltl.implication %a, %b : i1, i1
-    %k0 = ltl.clock %i0, posedge %clk : !ltl.property
-    %k5 = ltl.disable %k0 if %b_xor_b : !ltl.property
-
-    verif.assert %k5: !ltl.property
-  }
-}
-
-// -----
-
-module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} {
   // CHECK-LABEL: @ClockExpr(
   hw.module @ClockExpr(in %clk: i1, in %a: i1, in %b: i1) {
     %clk_xor_b = comb.xor %clk, %b : i1
@@ -181,7 +161,7 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
     %i0 = ltl.implication %a, %b : i1, i1
     %k0 = ltl.clock %i0, posedge %clk_xor_b : !ltl.property
 
-    verif.assert %k0: !ltl.property
+    verif.assert %k0 : !ltl.property
   }
 }
 

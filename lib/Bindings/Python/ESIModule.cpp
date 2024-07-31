@@ -35,11 +35,12 @@ using namespace circt::esi;
 // pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, PyObject *> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
-                                        MlirOperation declOp, void *userData) {
+                                        MlirOperation declOp,
+                                        MlirOperation recOp, void *userData) {
   std::string *name = static_cast<std::string *>(userData);
   py::handle genFunc(serviceGenFuncLookup[name]);
   py::gil_scoped_acquire();
-  py::object rc = genFunc(reqOp);
+  py::object rc = genFunc(reqOp, declOp, recOp);
   return rc.cast<bool>() ? mlirLogicalResultSuccess()
                          : mlirLogicalResultFailure();
 }
@@ -87,16 +88,21 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirType inner, uint32_t signaling = 0) {
+          [](py::object cls, MlirType inner, uint32_t signaling = 0,
+             uint64_t dataDelay = 0) {
             if (circtESITypeIsAChannelType(inner))
               return cls(inner);
-            return cls(circtESIChannelTypeGet(inner, signaling));
+            return cls(circtESIChannelTypeGet(inner, signaling, dataDelay));
           },
-          py::arg("cls"), py::arg("inner"), py::arg("signaling") = 0)
+          py::arg("cls"), py::arg("inner"), py::arg("signaling") = 0,
+          py::arg("dataDelay") = 0)
       .def_property_readonly(
           "inner", [](MlirType self) { return circtESIChannelGetInner(self); })
-      .def_property_readonly("signaling", [](MlirType self) {
-        return circtESIChannelGetSignaling(self);
+      .def_property_readonly(
+          "signaling",
+          [](MlirType self) { return circtESIChannelGetSignaling(self); })
+      .def_property_readonly("data_delay", [](MlirType self) {
+        return circtESIChannelGetDataDelay(self);
       });
 
   mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)

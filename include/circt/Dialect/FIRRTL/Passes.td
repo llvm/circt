@@ -272,6 +272,25 @@ def Dedup : Pass<"firrtl-dedup", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createDedupPass()";
 }
 
+def EliminateWires : Pass<"firrtl-eliminate-wires", "firrtl::FModuleOp"> {
+  let summary = "Eliminate Unneeded Wires";
+  let description = [{
+    This pass eliminates wires for which the write dominates the reads and
+    for which there are no other preservation reasons.
+  }];
+  let statistics = [
+    Statistic<"erasedWires", "num-erased-wires",
+      "Number of wires erased">,
+    Statistic<"complexWriteWires", "num-complex-wires",
+      "Number of wires not erased due to complex writes">,
+    Statistic<"notDomWires", "num-not-dominating-wires",
+      "Number of wires not erased due to dominance issues">,
+    Statistic<"complexTypeWires", "num-not-passive-wires",
+      "Number of wires not erased due to type issues">
+  ];
+  let constructor = "circt::firrtl::createEliminateWiresPass()";
+}
+
 def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
   let summary = "Emit OMIR annotations";
   let description = [{
@@ -711,6 +730,9 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
     This pass lowers generic intrinsic ops to their implementation or op.
   }];
   let constructor = "circt::firrtl::createLowerIntrinsicsPass()";
+  let statistics = [
+    Statistic<"numConverted", "num-converted", "Number of intrinsic operations lowered">,
+  ];
 }
 
 def LowerOpenAggs : Pass<"firrtl-lower-open-aggs", "firrtl::CircuitOp"> {
@@ -833,40 +855,6 @@ def LayerSink : Pass<"firrtl-layer-sink", "firrtl::FModuleOp"> {
   ];
 }
 
-def HoistPassthrough : Pass<"firrtl-hoist-passthrough", "firrtl::CircuitOp"> {
-  let summary = "Hoist passthrough logic";
-  let description = [{
-    This pass hoists simple passthrough connections up.
-  }];
-  let constructor = "circt::firrtl::createHoistPassthroughPass()";
-  let options = [
-    Option<"hoistHWDrivers", "hoist-hw", "bool", "true",
-      "Hoist HW drivers.">
-  ];
-  let statistics = [
-    Statistic<"numUTurnsHoisted", "num-u-turns",
-      "Number of u-turns hoisted">,
-    Statistic<"numRefDrivers", "num-ref-drivers",
-      "Number of ref-type drivers processed">,
-    Statistic<"numHWDrivers", "num-hw-drivers",
-      "Number of hw-type drivers processed">
-  ];
-}
-
-def ProbeDCE : Pass<"firrtl-probe-dce", "firrtl::CircuitOp"> {
-  let summary = "Delete dead probe ports and operations.";
-  let description = [{
-    Simple pass to delete dead probe ports and operations.
-    Diagnoses illegal or unsupported input probe uses.
-    Post-condition: no input probe ports.
-  }];
-  let constructor = "circt::firrtl::createProbeDCEPass()";
-  let statistics = [
-    Statistic<"numErasedPorts", "num-erased-ports", "Number of ports erased">,
-    Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">
-  ];
-}
-
 def MaterializeDebugInfo :
     Pass<"firrtl-materialize-debug-info", "firrtl::FModuleOp"> {
   let summary = "Generate debug ops to track FIRRTL values";
@@ -891,8 +879,24 @@ def Lint :
   let constructor = "circt::firrtl::createLintingPass()";
 }
 
-def SpecializeOption :
-    Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
+def SpecializeLayers : Pass<"firrtl-specialize-layers", "firrtl::CircuitOp"> {
+  let summary = "Specialize a configurable design for a given layer";
+  let description = [{
+    This pass performs specialization of layers, layerblocks, and probe
+    operations by permanantly enabling or disabling layers.  The layers are
+    specified by attributes on the `firrtl.circuit` operation in the
+    `enable_layers` and `disable_layers` attributes which are both lists of
+    SymbolRefAttrs.  When a layer is specialized, it will be removed from the
+    circuit and all references to it should be cleaned up.  If a layer is
+    disabled, all layerblock are referencing that layer will be deleted, and all
+    probe colored by that layer will be removed.  When a layer is enabled, all
+    contents of the layer will be inlined in to the outer context, and probes
+    colored by that layer will no longer be colored.
+  }];
+  let constructor = "circt::firrtl::createSpecializeLayersPass()";
+}
+
+def SpecializeOption : Pass<"firrtl-specialize-option", "firrtl::CircuitOp"> {
   let summary = "Specialize a configurable design for a given option.";
   let description = [{
     If the design has option groups, instead of preserving the information
@@ -909,6 +913,59 @@ def SpecializeOption :
     Statistic<"numInstances", "num-instances",
       "Number of instances specialized">
   ];
+}
+
+def ModuleSummary : Pass<"firrtl-module-summary", "firrtl::CircuitOp"> {
+  let summary = "Print a summary of modules.";
+  let description = [{
+    The pass produces a summary of modules.
+  }];
+  let constructor = "circt::firrtl::createModuleSummaryPass()";
+}
+
+def LowerDPI : Pass<"firrtl-lower-dpi", "firrtl::CircuitOp"> {
+    let summary = "Lower DPI intrinsic into Sim DPI operations";
+    let constructor = "circt::firrtl::createLowerDPIPass()";
+    let dependentDialects = ["hw::HWDialect", "seq::SeqDialect", "sim::SimDialect"];
+  }
+
+def AssignOutputDirs : Pass<"firrtl-assign-output-dirs", "firrtl::CircuitOp"> {
+  let summary = "Assign output directories to modules.";
+  let description = [{
+    While some modules are assigned output directories by the user, many modules
+    "don't care" what output directory they are placed into. This pass uses the
+    instance graph to assign these modules to the "deepest" output directory
+    possible.
+  }];
+  let constructor = "circt::firrtl::createAssignOutputDirsPass()";
+  let options = [
+    Option<"outputDirOption", "output-dir", "std::string", "",
+      "The default output directory.">
+  ];
+}
+
+def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
+  let summary = "Convert probes to signals.";
+  let description = [{
+    This pass transforms the design to replace probes with non-probe signals
+    that are explicitly routed through the design instead of remote access.
+    The result will not be ABI-compatible but provide similar behavior without the
+    use of potentially unsynthesizable cross-module references.
+
+    The pass will do a complete conversion or produce an error.
+
+    Not all FIRRTL designs with probes can be equivalently represented
+    with non-probes.
+
+    Run after LowerOpenAggs, ExpandWhens (so ref.define can always be replaced),
+    and any colored probes are removed through specialization.
+
+    Due to differences in width and reset inference, it is suggested to run
+    those first as well but not required.
+
+    RWProbes and related operations are not supported.
+  }];
+  let constructor = "circt::firrtl::createProbesToSignalsPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

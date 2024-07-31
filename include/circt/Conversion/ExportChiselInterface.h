@@ -18,6 +18,10 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_EXPORTCHISELINTERFACE
+#define GEN_PASS_DECL_EXPORTSPLITCHISELINTERFACE
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass>
 createExportChiselInterfacePass(llvm::raw_ostream &os);
 

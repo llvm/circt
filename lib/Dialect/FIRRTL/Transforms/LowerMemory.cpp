@@ -9,7 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -20,6 +19,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -27,6 +27,13 @@
 #include "llvm/Support/Parallel.h"
 #include <optional>
 #include <set>
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERMEMORY
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -93,7 +100,8 @@ FirMemory getSummary(MemOp op) {
 }
 
 namespace {
-struct LowerMemoryPass : public LowerMemoryBase<LowerMemoryPass> {
+struct LowerMemoryPass
+    : public circt::firrtl::impl::LowerMemoryBase<LowerMemoryPass> {
 
   /// Get the cached namespace for a module.
   hw::InnerSymbolNamespace &getModuleNamespace(FModuleLike module) {
@@ -249,9 +257,9 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
   for (auto [dst, src] : llvm::zip(wrapper.getBodyBlock()->getArguments(),
                                    memInst.getResults())) {
     if (wrapper.getPortDirection(dst.getArgNumber()) == Direction::Out)
-      b.create<StrictConnectOp>(mem->getLoc(), dst, src);
+      b.create<MatchingConnectOp>(mem->getLoc(), dst, src);
     else
-      b.create<StrictConnectOp>(mem->getLoc(), src, dst);
+      b.create<MatchingConnectOp>(mem->getLoc(), src, dst);
   }
 
   // Create an instance of the wrapper memory module, which will replace the
@@ -518,7 +526,7 @@ void LowerMemoryPass::runOnOperation() {
   // If no module is marked as the DUT, then the top module is the DUT.
   auto *dut = instanceGraph.getTopLevelNode();
   auto it = llvm::find_if(*body, [&](Operation &op) -> bool {
-    return AnnotationSet(&op).hasAnnotation(dutAnnoClass);
+    return AnnotationSet::hasAnnotation(&op, dutAnnoClass);
   });
   if (it != body->end())
     dut = instanceGraph.lookup(cast<igraph::ModuleOpInterface>(*it));

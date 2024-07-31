@@ -8,6 +8,7 @@ add_circt_conversion_library(CIRCTSimToSV
   Core
 
   LINK_LIBS PUBLIC
+  CIRCTEmit
   CIRCTSim
   CIRCTSeq
 )

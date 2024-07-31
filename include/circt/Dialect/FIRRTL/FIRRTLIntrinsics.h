@@ -34,7 +34,8 @@ struct GenericIntrinsic {
   // Input checking
   //===--------------------------------------------------------------------===//
 
-  ParseResult hasNInputs(unsigned n);
+  ParseResult hasNInputs(unsigned n, unsigned c = 0);
+  unsigned getNumInputs();
 
   template <typename C>
   ParseResult checkInputType(unsigned n, const Twine &msg, C &&call) {
@@ -82,7 +83,7 @@ struct GenericIntrinsic {
 
   ParamDeclAttr getParamByName(StringRef name) {
     for (auto param : op.getParameters().getAsRange<ParamDeclAttr>())
-      if (param.getName().getValue().equals(name))
+      if (param.getName().getValue() == name)
         return param;
     return {};
   }
@@ -236,8 +237,8 @@ public:
     (addConverter<T>(args), ...);
   }
 
-  /// Lowers all intrinsics in a module.
-  LogicalResult lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
+  /// Lowers all intrinsics in a module.  Returns number converted or failure.
+  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
 
 private:
   template <typename T>

@@ -10,7 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -32,6 +34,13 @@
 #include "llvm/Support/ErrorHandling.h"
 
 #define DEBUG_TYPE "infer-widths"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERWIDTHS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using mlir::InferTypeOpInterface;
 using mlir::WalkOrder;
@@ -58,24 +67,6 @@ static void diagnoseUninferredType(InFlightDiagnostic &diag, Type t,
   else if (auto bundleType = type_dyn_cast<BundleType>(basetype))
     for (auto &elem : bundleType.getElements())
       diagnoseUninferredType(diag, elem.type, str + "." + elem.name.getValue());
-}
-
-/// Get FieldRef pointing to the specified inner symbol target, which must be
-/// valid. Returns null FieldRef if target points to something with no value,
-/// such as a port of an external module.
-static FieldRef getRefForIST(const hw::InnerSymTarget &ist) {
-  if (ist.isPort()) {
-    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
-        .Case<FModuleOp>([&](auto fmod) {
-          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
-        })
-        .Default({});
-  }
-
-  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
-  assert(symOp && symOp.getTargetResultIndex() &&
-         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
-  return FieldRef(symOp.getTargetResult(), ist.getField());
 }
 
 /// Calculate the "InferWidths-fieldID" equivalent for the given fieldID + type.
@@ -1607,15 +1598,15 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
 
-      .Case<ConnectOp, StrictConnectOp>(
+      .Case<ConnectOp, MatchingConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
         // (but don't solve to make this true, don't back-propagate)
         constrainTypes(op.getDest(), op.getSrc(), true);
       })
-      // StrictConnect is an identify constraint
-      .Case<StrictConnectOp>([&](auto op) {
+      // MatchingConnect is an identify constraint
+      .Case<MatchingConnectOp>([&](auto op) {
         // This back-propagates width from destination to source,
         // causing source to sometimes be inferred wider than
         // it should be (https://github.com/llvm/circt/issues/5391).
@@ -1760,7 +1751,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           mappingFailed = true;
           return;
         }
-        auto ref = getRefForIST(ist);
+        auto ref = getFieldRefForTarget(ist);
         if (!ref) {
           op->emitError("target of rwprobe resolved to unsupported target");
           mappingFailed = true;
@@ -1952,7 +1943,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller,
                << "Constrained " << *largerVar << " >= " << *c << "\n");
     // If we're constraining larger == smaller, add the LEQ contraint as well.
     // Solve for GEQ but check that LEQ is true.
-    // Used for strictconnect, some reference operations, and anywhere the
+    // Used for matchingconnect, some reference operations, and anywhere the
     // widths should be inferred strictly in one direction but are required to
     // also be equal for correctness.
     if (equal) {
@@ -2353,7 +2344,8 @@ struct DenseMapInfo<InternedSlot<T>> {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class InferWidthsPass : public InferWidthsBase<InferWidthsPass> {
+class InferWidthsPass
+    : public circt::firrtl::impl::InferWidthsBase<InferWidthsPass> {
   void runOnOperation() override;
 };
 } // namespace

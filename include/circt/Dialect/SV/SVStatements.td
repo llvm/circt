@@ -12,6 +12,9 @@
 
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -265,8 +268,9 @@ def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
 def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
 
 def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
-                                   [NoReset, SyncReset, AsyncReset]>;
-
+                                   [NoReset, SyncReset, AsyncReset]> {
+  let cppNamespace = "::circt::sv";
+}
 
 def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
                                    RecursiveMemoryEffects, RecursivelySpeculatable,
@@ -877,5 +881,200 @@ def MacroDefOp : SVOp<"macro.def",
 
   let extraClassDeclaration = [{
     MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
+// Function/Call
+//===----------------------------------------------------------------------===//
+
+def FuncDPIImportOp: SVOp<"func.dpi.import",
+  [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "DPI import statement";
+  let description = [{
+     `sv.func.dpi.import` represents DPI function import statement defined in
+     IEEE 1800-2017 section 35.4.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       OptionalAttr<StrAttr>: $linkage_name);
+  let results = (outs);
+
+  let assemblyFormat = "(`linkage` $linkage_name^)? $callee attr-dict";
+}
+
+def FuncOp : SVOp<"func",
+     [IsolatedFromAbove, Symbol, OpAsmOpInterface, ProceduralRegion,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<PortList>,
+      FunctionOpInterface, HasParent<"mlir::ModuleOp">, 
+      HWEmittableModuleLike]> {
+  let summary = "A SystemVerilog function";
+  let description = [{
+    `sv.func` represents SystemVerilog function in IEEE 1800-2017 section 13.4
+     "Functions". Similar to HW module, it's allowed to mix the order of input
+    and output arguments. `sv.func` can be used for both function
+    declaration and definition, i.e. a function without a body
+    region is a declaration.
+
+    In SV there are two representations for function results,
+    "output argument" and "return value". Currently an output argument
+    is considered as as a return value if it's is the last argument
+    and has a special attribute `sv.func.explicitly_returned`.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
+    OptionalAttr<LocationArrayAttr>:$input_locs, // Null for actual definition.
+    OptionalAttr<LocationArrayAttr>:$result_locs,
+    OptionalAttr<StrAttr>:$verilogName
+  );
+
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    static mlir::StringRef getExplicitlyReturnedAttrName() {
+      return "sv.func.explicitly_returned";
+    }
+
+    mlir::FunctionType getFunctionType() {
+      return getModuleType().getFuncType();
+    }
+
+    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
+      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
+    }
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    Type getExplicitlyReturnedType();
+
+    size_t getNumOutputs() {
+      return getResultTypes().size();
+    }
+
+    size_t getNumInputs() {
+      return getArgumentTypes().size();
+    }
+
+    ::mlir::Region *getCallableRegion() { return isExternal() ? nullptr : &getBody(); }
+    bool isDeclaration() { return isExternal(); }
+
+    /// OpAsmInterface
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                          mlir::OpAsmSetValueNameFn setNameFn);
+    SmallVector<hw::PortInfo> getPortList(bool excludeExplicitReturn);
+  }];
+  let extraClassDefinition = [{
+    hw::ModuleType $cppClass::getHWModuleType() {
+      return getModuleType();
+    }
+    void $cppClass::setHWModuleType(hw::ModuleType type) {
+      return setModuleType(type);
+    }
+    void $cppClass::setAllPortNames(llvm::ArrayRef<mlir::Attribute>) {
+    }
+
+    size_t $cppClass::getNumPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumPorts();
+    }
+
+    size_t $cppClass::getNumInputPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumInputs();
+    }
+
+    size_t $cppClass::getNumOutputPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumOutputs();
+    }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) {
+      auto modty = getHWModuleType();
+      return modty.getPortIdForInputId(idx);
+    }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      auto modty = getHWModuleType();
+      return modty.getPortIdForOutputId(idx);
+    }
+  }];
+}
+
+class SVFuncCallBase<string mnemonic, list<Trait> traits = []>: SVOp<mnemonic,
+  traits # [CallOpInterface, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat =
+      "$callee `(` $inputs `)` attr-dict `:` functional-type($inputs, results)";
+
+  let extraClassDeclaration = [{
+    Value getExplicitlyReturnedValue(sv::FuncOp op);
+
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), callee.get<mlir::SymbolRefAttr>());
+    }
+  }];
+}
+
+def FuncCallProceduralOp : SVFuncCallBase<"func.call.procedural", [ProceduralOp]> {
+  let summary = "Function call in a procedural region";
+}
+
+def FuncCallOp : SVFuncCallBase<"func.call", [NonProceduralOp]> {
+  let summary = "Function call in a non-procedural region";
+  let description = [{
+    This op represents a function call in a non-procedural region.
+    A function call in a non-procedural region must have a return
+    value and no output argument.
+  }];
+}
+
+def ReturnOp : SVOp<"return",
+                   [Pure, ReturnLike, Terminator, HasParent<"FuncOp">]> {
+  let summary = "Function return operation";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+
+  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// SV output control.
+//===----------------------------------------------------------------------===//
+
+def ReserveNamesOp : SVOp<"reserve_names", [
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "Disallow a set of names to be used during emission";
+
+  let arguments = (ins StrArrayAttr:$reservedNames);
+  let assemblyFormat = [{
+    $reservedNames attr-dict
   }];
 }

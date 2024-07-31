@@ -12,28 +12,36 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Path.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-using namespace circt;
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_HWEXPORTMODULEHIERARCHY
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
+using namespace circt;
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
 class HWExportModuleHierarchyPass
-    : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
+    : public circt::sv::impl::HWExportModuleHierarchyBase<
+          HWExportModuleHierarchyPass> {
 
 private:
   DenseMap<Operation *, hw::InnerSymbolNamespace> moduleNamespaces;

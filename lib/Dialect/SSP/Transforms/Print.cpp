@@ -10,16 +10,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
+#include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/SSPPasses.h"
+#include "circt/Dialect/SSP/Utilities.h"
+#include "circt/Scheduling/Problems.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Scheduling/Utilities.h"
+
+namespace circt {
+namespace ssp {
+#define GEN_PASS_DEF_PRINT
+#include "circt/Dialect/SSP/SSPPasses.h.inc"
+} // namespace ssp
+} // namespace circt
 
 using namespace circt;
 using namespace scheduling;
 using namespace ssp;
 
 namespace {
-struct PrintPass : public PrintBase<PrintPass> {
+struct PrintPass : public circt::ssp::impl::PrintBase<PrintPass> {
   explicit PrintPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override;
   raw_ostream &os;
@@ -36,17 +49,17 @@ void PrintPass::runOnOperation() {
   auto moduleOp = getOperation();
   for (auto instOp : moduleOp.getOps<InstanceOp>()) {
     StringRef probName = instOp.getProblemName();
-    if (probName.equals("Problem"))
+    if (probName == "Problem")
       printInstance<Problem>(instOp, os);
-    else if (probName.equals("CyclicProblem"))
+    else if (probName == "CyclicProblem")
       printInstance<CyclicProblem>(instOp, os);
-    else if (probName.equals("ChainingProblem"))
+    else if (probName == "ChainingProblem")
       printInstance<ChainingProblem>(instOp, os);
-    else if (probName.equals("SharedOperatorsProblem"))
+    else if (probName == "SharedOperatorsProblem")
       printInstance<SharedOperatorsProblem>(instOp, os);
-    else if (probName.equals("ModuloProblem"))
+    else if (probName == "ModuloProblem")
       printInstance<ModuloProblem>(instOp, os);
-    else if (probName.equals("ChainingCyclicProblem"))
+    else if (probName == "ChainingCyclicProblem")
       printInstance<ChainingCyclicProblem>(instOp, os);
     else {
       auto instName = instOp.getSymName().value_or("unnamed");

@@ -3,6 +3,7 @@
 from pycde import Clock, Input, types, System
 from pycde.module import AppID, generator, Module, modparams
 from pycde.testing import unittestmodule
+from pycde.types import StructType
 
 
 # CHECK: TypeError: Module parameter definitions cannot have *args
@@ -91,3 +92,9 @@ class OperatorError2(Module):
   def build(ports):
     # CHECK: Comparisons of signed/unsigned integers to Bits<32> not supported. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b == ports.a
+
+
+# -----
+
+# CHECK: Structs must have at least one field
+StructType([])

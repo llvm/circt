@@ -145,12 +145,12 @@ jobs:
           # gcc   + debug   + assert   + shared
           - cc: clang
             cxx: clang++
-            mode: debug
+            mode: Debug
             assert: ON
             shared: ON
           - cc: gcc
             cxx: g++
-            mode: release
+            mode: Release
             assert: OFF
             shared: OFF
 
@@ -222,7 +222,7 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLVM_LIT_ARGS="-v" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-          ninja check-circt check-circt-unit -j$(nproc)
+          CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 
       # --------
@@ -268,19 +268,19 @@ jobs:
       - name: clang-tidy
         if: ${{ always() }}
         run: |
-          git diff -U0 $DIFF_COMMIT...HEAD | \
-            clang-tidy-diff -path build -p1 -fix -j$(nproc)
-          git clang-format -f $DIFF_COMMIT
-          git diff --ignore-submodules > clang-tidy.patch
-          if [ -s clang-tidy.patch ]; then
-            echo "Clang-tidy problems in the following files. " \
-              "See diff in the clang-tidy.patch artifact."
-            git diff --ignore-submodules --name-only
-            git checkout .
+          if git diff -U0 $DIFF_COMMIT...HEAD | clang-tidy-diff -path build -p1 -fix -j$(nproc); then
+            exit 0
+          fi
+          if git diff --quiet --ignore-submodules; then
             exit 1
           fi
-          echo "Clang-tidy found no problems"
-          exit 0
+          git clang-format -f $DIFF_COMMIT
+          echo "Fixups available for the following files:"
+          git diff --ignore-submodules --name-only
+          echo "See diff in the clang-tidy.patch artifact."
+          git diff --ignore-submodules > clang-tidy.patch
+          git checkout .
+          exit 1
 
       # Upload the tidy patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.

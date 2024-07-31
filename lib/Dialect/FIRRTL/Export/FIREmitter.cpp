@@ -77,7 +77,7 @@ struct Emitter {
   void emitStatement(SkipOp op);
   void emitStatement(PrintFOp op);
   void emitStatement(ConnectOp op);
-  void emitStatement(StrictConnectOp op);
+  void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
@@ -587,7 +587,14 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
   ps << "layer " << PPExtString(op.getSymName()) << ", "
-     << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
+     << PPExtString(stringifyLayerConvention(op.getConvention()));
+
+  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+    ps << ", ";
+    ps.writeQuotedEscaped(outputFile.getFilename().getValue());
+  }
+
+  ps << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : op.getBody().getOps()) {
@@ -637,11 +644,11 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              PropAssignOp, InstanceOp, InstanceChoiceOp, AttachOp, MemOp,
-              InvalidValueOp, SeqMemOp, CombMemOp, MemoryPortOp,
-              MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+              MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
+              AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
+              MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
+              RefForceOp, RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
               LayerBlockOp, GenericIntrinsicOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
@@ -841,7 +848,7 @@ void Emitter::emitStatement(ConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(StrictConnectOp op) {
+void Emitter::emitStatement(MatchingConnectOp op) {
   startStatement();
   if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -996,7 +1003,7 @@ void Emitter::emitStatement(SeqMemOp op) {
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
-    ps << PP::space;
+    ps << "," << PP::space;
     emitAttribute(op.getRuw());
   });
   emitLocationAndNewLine(op);
@@ -1115,7 +1122,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp, StrictConnectOp>(use.getOwner());
+               isa<ConnectOp, MatchingConnectOp>(use.getOwner());
       }))
     return;
 
@@ -1502,7 +1509,8 @@ void Emitter::emitType(Type type, bool includeConst) {
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
   ps << PP::neverbreak;
-  if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
+  if (auto fileLoc =
+          dyn_cast_or_null<FileLineColLoc, LocationAttr>(LocationAttr(loc))) {
     ps << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
       ps << " ";

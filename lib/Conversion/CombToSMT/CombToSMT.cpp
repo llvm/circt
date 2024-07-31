@@ -10,6 +10,7 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -192,6 +193,34 @@ struct OneToOneOpConversion : OpConversionPattern<SourceOp> {
   }
 };
 
+/// Lower the SourceOp to the TargetOp special-casing if the second operand is
+/// zero to return a new symbolic value.
+template <typename SourceOp, typename TargetOp>
+struct DivisionOpConversion : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto type = dyn_cast<smt::BitVectorType>(adaptor.getRhs().getType());
+    if (!type)
+      return failure();
+
+    auto resultType = OpConversionPattern<SourceOp>::typeConverter->convertType(
+        op.getResult().getType());
+    Value zero =
+        rewriter.create<smt::BVConstantOp>(loc, APInt(type.getWidth(), 0));
+    Value isZero = rewriter.create<smt::EqOp>(loc, adaptor.getRhs(), zero);
+    Value symbolicVal = rewriter.create<smt::DeclareFunOp>(loc, resultType);
+    Value division =
+        rewriter.create<TargetOp>(loc, resultType, adaptor.getOperands());
+    rewriter.replaceOpWithNewOp<smt::IteOp>(op, isZero, symbolicVal, division);
+    return success();
+  }
+};
+
 /// Converts an operation with a variadic number of operands to a chain of
 /// binary operations assuming left-associativity of the operation.
 template <typename SourceOp, typename TargetOp>
@@ -236,10 +265,10 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
                OneToOneOpConversion<ShlOp, smt::BVShlOp>,
                OneToOneOpConversion<ShrUOp, smt::BVLShrOp>,
                OneToOneOpConversion<ShrSOp, smt::BVAShrOp>,
-               OneToOneOpConversion<DivSOp, smt::BVSDivOp>,
-               OneToOneOpConversion<DivUOp, smt::BVUDivOp>,
-               OneToOneOpConversion<ModSOp, smt::BVSRemOp>,
-               OneToOneOpConversion<ModUOp, smt::BVURemOp>,
+               DivisionOpConversion<DivSOp, smt::BVSDivOp>,
+               DivisionOpConversion<DivUOp, smt::BVUDivOp>,
+               DivisionOpConversion<ModSOp, smt::BVSRemOp>,
+               DivisionOpConversion<ModUOp, smt::BVURemOp>,
                VariadicToBinaryOpConversion<ConcatOp, smt::ConcatOp>,
                VariadicToBinaryOpConversion<AddOp, smt::BVAddOp>,
                VariadicToBinaryOpConversion<MulOp, smt::BVMulOp>,

@@ -20,5 +20,6 @@ include "mlir/IR/SymbolInterfaces.td"
 
 include "circt/Dialect/Sim/SimDialect.td"
 include "circt/Dialect/Sim/SimOps.td"
+include "circt/Dialect/Sim/SimTypes.td"
 
 #endif // CIRCT_DIALECT_SIM_SIM_TD

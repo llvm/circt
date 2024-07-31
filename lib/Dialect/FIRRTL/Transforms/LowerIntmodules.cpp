@@ -11,12 +11,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERINTMODULES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -26,7 +34,8 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerIntmodulesPass : public LowerIntmodulesBase<LowerIntmodulesPass> {
+struct LowerIntmodulesPass
+    : public circt::firrtl::impl::LowerIntmodulesBase<LowerIntmodulesPass> {
   void runOnOperation() override;
   using LowerIntmodulesBase::fixupEICGWrapper;
 };

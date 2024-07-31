@@ -1,5 +1,5 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics %s | circt-opt | FileCheck %s
-FIRRTL version 1.1.0
+FIRRTL version 2.0.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {

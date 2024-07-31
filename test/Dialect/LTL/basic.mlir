@@ -62,6 +62,13 @@ ltl.concat %s : !ltl.sequence
 ltl.concat %s, %s : !ltl.sequence, !ltl.sequence
 ltl.concat %s, %s, %s : !ltl.sequence, !ltl.sequence, !ltl.sequence
 
+// CHECK: ltl.repeat {{%.+}}, 0 : !ltl.sequence
+// CHECK: ltl.repeat {{%.+}}, 42 : !ltl.sequence
+// CHECK: ltl.repeat {{%.+}}, 42, 1337 : !ltl.sequence
+ltl.repeat %s, 0 : !ltl.sequence
+ltl.repeat %s, 42 : !ltl.sequence
+ltl.repeat %s, 42, 1337 : !ltl.sequence
+
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
@@ -75,6 +82,9 @@ ltl.not %p : !ltl.property
 
 // CHECK: ltl.implication {{%.+}}, {{%.+}} : !ltl.sequence, !ltl.property
 ltl.implication %s, %p : !ltl.sequence, !ltl.property
+
+// CHECK: ltl.until {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
+ltl.until %p, %p : !ltl.property, !ltl.property
 
 // CHECK: ltl.eventually {{%.+}} : i1
 // CHECK: ltl.eventually {{%.+}} : !ltl.sequence
@@ -104,5 +114,3 @@ unrealized_conversion_cast %clk0 : !ltl.sequence to index
 unrealized_conversion_cast %clk1 : !ltl.sequence to index
 unrealized_conversion_cast %clk2 : !ltl.property to index
 
-// CHECK: ltl.disable {{%.+}} if {{%.+}} : !ltl.property
-ltl.disable %p if %true : !ltl.property

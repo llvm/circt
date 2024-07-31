@@ -147,7 +147,7 @@ class System:
     ret: Dict[str, Any] = {}
     for op in compat_mod.body:
       # TODO: handle symbolrefs pointing to potentially renamed symbols.
-      if isinstance(op, hw.HWModuleOp):
+      if isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
         from .module import import_hw_module
         im = import_hw_module(op)
         self._create_circt_mod(im._builder)
@@ -158,6 +158,8 @@ class System:
         ret[ir.StringAttr(op.sym_name).value] = ram
         self.body.append(op)
       else:
+        if "sym_name" in op.attributes:
+          ret[ir.StringAttr(op.attributes["sym_name"]).value] = op
         # TODO: do symbol renaming.
         self.body.append(op)
     return ret
@@ -249,8 +251,11 @@ class System:
 
   PASS_PHASES = [
       # First, run all the passes with callbacks into pycde.
+      "builtin.module(verify-esi-connections)",
       "builtin.module(esi-connect-services)",
+      "builtin.module(verify-esi-connections)",
       lambda sys: sys.generate(),
+      "builtin.module(verify-esi-connections)",
       # After all of the pycde code has been executed, we have all the types
       # defined so we can go through and output the typedefs delcarations.
       lambda sys: TypeAlias.declare_aliases(sys.mod),
@@ -285,7 +290,8 @@ class System:
 
     self._op_cache.release_ops()
     if debug:
-      open("after_generate.mlir", "w").write(str(self.mod))
+      with open("after_generate.mlir", "w") as agm:
+        self.mod.operation.print(file=agm, enable_debug_info=True)
     for idx, phase in enumerate(self.PASS_PHASES):
       aplog = None
       if debug:
@@ -311,7 +317,7 @@ class System:
         raise err
       finally:
         if aplog is not None:
-          aplog.write(str(self.mod))
+          self.mod.operation.print(file=aplog, enable_debug_info=True)
           aplog.close()
       self._op_cache.release_ops()
 
@@ -341,6 +347,10 @@ class System:
     assert self.passed, "Must call compile before package"
     for func in self.packaging_funcs:
       func(self)
+    # Since PyCDE is currently being used pretty much exclusively for ESI, it's
+    # fair to just package the ESI collateral always.
+    from .esi import package as esi_package
+    esi_package(self)
 
 
 class _OpCache:

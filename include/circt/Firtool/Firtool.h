@@ -95,6 +95,7 @@ public:
   bool shouldAllowAddingPortsOnPublic() const {
     return allowAddingPortsOnPublic;
   }
+  bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplicateSequentialMemories() const { return replSeqMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
@@ -103,9 +104,6 @@ public:
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldEmitOMIR() const { return emitOMIR; }
   bool shouldExportChiselInterface() const { return exportChiselInterface; }
-  bool shouldDisableHoistingHWPassthrough() const {
-    return disableHoistingHWPassthrough;
-  }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
   bool shouldEtcDisableInstanceExtraction() const {
     return etcDisableInstanceExtraction;
@@ -158,6 +156,11 @@ public:
 
   FirtoolOptions &setAllowAddingPortsOnPublic(bool value) {
     allowAddingPortsOnPublic = value;
+    return *this;
+  }
+
+  FirtoolOptions &setConvertProbesToSignals(bool value) {
+    probesToSignals = value;
     return *this;
   }
 
@@ -215,11 +218,6 @@ public:
 
   FirtoolOptions &setDisableAggressiveMergeConnections(bool value) {
     disableAggressiveMergeConnections = value;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableHoistingHWPassthrough(bool value) {
-    disableHoistingHWPassthrough = value;
     return *this;
   }
 
@@ -370,6 +368,7 @@ private:
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
   bool allowAddingPortsOnPublic;
+  bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
   firrtl::PreserveValues::PreserveMode preserveMode;
   bool enableDebugInfo;
@@ -381,7 +380,6 @@ private:
   bool noDedup;
   firrtl::CompanionMode companionMode;
   bool disableAggressiveMergeConnections;
-  bool disableHoistingHWPassthrough;
   bool emitOMIR;
   std::string omirOutFile;
   bool lowerMemories;

@@ -9,10 +9,10 @@
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/TopologicalSortUtils.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTHWTOSMT
@@ -143,6 +143,32 @@ void circt::populateHWToSMTTypeConverter(TypeConverter &converter) {
         Value constZero = builder.create<smt::BVConstantOp>(loc, 0, width);
         Value constOne = builder.create<smt::BVConstantOp>(loc, 1, width);
         return builder.create<smt::IteOp>(loc, inputs[0], constOne, constZero);
+      });
+
+  // Convert an unrealized conversion cast from 'smt.bool' to i1
+  // into a direct conversion from 'smt.bool' to 'smt.bv<1>'.
+  converter.addTargetMaterialization(
+      [&](OpBuilder &builder, smt::BitVectorType resultType, ValueRange inputs,
+          Location loc) -> std::optional<Value> {
+        if (inputs.size() != 1 || resultType.getWidth() != 1)
+          return std::nullopt;
+
+        auto intType = dyn_cast<IntegerType>(inputs[0].getType());
+        if (!intType || intType.getWidth() != 1)
+          return std::nullopt;
+
+        auto castOp =
+            inputs[0].getDefiningOp<mlir::UnrealizedConversionCastOp>();
+        if (!castOp || castOp.getInputs().size() != 1)
+          return std::nullopt;
+
+        if (!isa<smt::BoolType>(castOp.getInputs()[0].getType()))
+          return std::nullopt;
+
+        Value constZero = builder.create<smt::BVConstantOp>(loc, 0, 1);
+        Value constOne = builder.create<smt::BVConstantOp>(loc, 1, 1);
+        return builder.create<smt::IteOp>(loc, castOp.getInputs()[0], constOne,
+                                          constZero);
       });
 
   // Convert a 'smt.bv<1>'-typed value to a 'smt.bool'-typed value

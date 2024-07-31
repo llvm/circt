@@ -56,6 +56,14 @@ OrOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
   return inferAndLikeReturnTypes(context, operands, inferredReturnTypes);
 }
 
+LogicalResult
+IntersectOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
+                              ValueRange operands, DictionaryAttr attributes,
+                              OpaqueProperties properties, RegionRange regions,
+                              SmallVectorImpl<Type> &inferredReturnTypes) {
+  return inferAndLikeReturnTypes(context, operands, inferredReturnTypes);
+}
+
 //===----------------------------------------------------------------------===//
 // ClockOp
 //===----------------------------------------------------------------------===//

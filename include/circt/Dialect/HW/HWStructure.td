@@ -114,7 +114,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">,
-       Emittable]>{
+       HWEmittableModuleLike]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -714,7 +714,7 @@ def TriggeredOp : HWOp<"triggered", [
   let results = (outs);
 
   let assemblyFormat = [{
-    $event $trigger  `(` $inputs `)` `:` type($inputs) $body attr-dict
+    $event $trigger  (`(` $inputs^ `)` `:` type($inputs))? $body attr-dict
   }];
 
   let extraClassDeclaration = [{

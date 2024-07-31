@@ -1,6 +1,6 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(ibis.design(ibis.class(ibis.method(ibis-reblock))))' %s | FileCheck %s
 
-// CHECK-LABEL:   ibis.class @Reblock {
+// CHECK-LABEL:   ibis.class sym @Reblock {
 // CHECK:           %[[VAL_0:.*]] = ibis.this <@foo::@Reblock>
 // CHECK:           ibis.method @foo(%[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i32) -> i32 {
 // CHECK:             %[[VAL_3:.*]] = ibis.sblock () -> i32 {
@@ -27,7 +27,7 @@
 // CHECK:         }
 
 ibis.design @foo {
-ibis.class @Reblock {
+ibis.class sym @Reblock {
   %this = ibis.this <@foo::@Reblock>
 
   ibis.method @foo(%arg0 : i32, %arg1 : i32) -> i32 {

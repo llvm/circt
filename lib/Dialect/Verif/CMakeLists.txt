@@ -12,6 +12,11 @@ add_circt_dialect_library(CIRCTVerif
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   CIRCTLTL
+  CIRCTSeq
   MLIRIR
+  MLIRTransforms
 )
+
+add_subdirectory(Transforms)

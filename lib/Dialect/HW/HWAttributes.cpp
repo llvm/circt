@@ -130,6 +130,16 @@ bool OutputFileAttr::isDirectory() {
   return getFilename().getValue().ends_with(llvm::sys::path::get_separator());
 }
 
+StringRef OutputFileAttr::getDirectory() {
+  auto dir = getFilename().getValue();
+  for (unsigned i = 0, e = dir.size(); i < e; ++i) {
+    if (dir.ends_with(llvm::sys::path::get_separator()))
+      break;
+    dir = dir.drop_back();
+  }
+  return dir;
+}
+
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
 Attribute OutputFileAttr::parse(AsmParser &p, Type type) {
@@ -341,8 +351,7 @@ Attribute InnerSymAttr::parse(AsmParser &parser, Type type) {
 void InnerSymAttr::print(AsmPrinter &odsPrinter) const {
 
   auto props = getProps();
-  if (props.size() == 1 &&
-      props[0].getSymVisibility().getValue().equals("public") &&
+  if (props.size() == 1 && props[0].getSymVisibility().getValue() == "public" &&
       props[0].getFieldID() == 0) {
     odsPrinter << "@" << props[0].getName().getValue();
     return;
@@ -961,7 +970,7 @@ replaceDeclRefInExpr(Location loc,
       auto res = replaceDeclRefInExpr(loc, parameters, operand, emitErrors);
       if (failed(res))
         return {failure()};
-      replacedOperands.push_back(res->cast<TypedAttr>());
+      replacedOperands.push_back(cast<TypedAttr>(*res));
     }
     return {
         hw::ParamExprAttr::get(paramExprAttr.getOpcode(), replacedOperands)};
@@ -1038,12 +1047,12 @@ FailureOr<Type> hw::evaluateParametricType(Location loc, ArrayAttr parameters,
           return {failure()};
 
         // If the width was evaluated to a constant, return an `IntegerType`
-        if (auto intAttr = evaluatedWidth->dyn_cast<IntegerAttr>())
+        if (auto intAttr = dyn_cast<IntegerAttr>(*evaluatedWidth))
           return {IntegerType::get(type.getContext(),
                                    intAttr.getValue().getSExtValue())};
 
         // Otherwise parameter references are still involved
-        return hw::IntType::get(evaluatedWidth->cast<TypedAttr>());
+        return hw::IntType::get(cast<TypedAttr>(*evaluatedWidth));
       })
       .Case<hw::ArrayType, hw::UnpackedArrayType>(
           [&](auto arrayType) -> FailureOr<Type> {

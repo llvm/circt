@@ -14,15 +14,15 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_CONVERTHWTOSMT
+#include "circt/Conversion/Passes.h.inc"
+
 /// Get the HW to SMT conversion patterns.
 void populateHWToSMTConversionPatterns(TypeConverter &converter,
                                        RewritePatternSet &patterns);
 
 /// Get the HW to SMT type conversions.
 void populateHWToSMTTypeConverter(TypeConverter &converter);
-
-#define GEN_PASS_DECL_CONVERTHWTOSMT
-#include "circt/Conversion/Passes.h.inc"
 
 } // namespace circt
 

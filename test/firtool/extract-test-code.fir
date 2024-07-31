@@ -42,20 +42,17 @@ circuit Top:
     input cond : UInt<1>
     assert(clock, cond, cond, "Some assertion")
 
-  intmodule VerifAssertIntrinsic_foo :
-    input property : UInt<1>
-    intrinsic = circt_verif_assert
-    parameter label = "foo"
-
   ; CHECK: module Top_assert(
   ; CHECK-NOT: endmodule
-  ; CHECK:   foo: assert property (cond);
+  ; CHECK:   wire _GEN = ~en; 
+  ; CHECK:   foo: assert property (disable iff (_GEN) cond);
   ; CHECK: endmodule
 
   public module Top:
     input clock : Clock
-    input cond : UInt<1>
-    output out : UInt<1>
+    input cond  : UInt<1>
+    input en    : UInt<1>
+    output out  : UInt<1>
 
     inst instance_extracted of InstanceExtracted
     connect instance_extracted.clock, clock
@@ -66,5 +63,4 @@ circuit Top:
     connect input_only.clock, clock
     connect input_only.cond, cond
 
-    inst verif of VerifAssertIntrinsic_foo
-    connect verif.property, cond
+    intrinsic(circt_verif_assert<label="foo">, cond, en)

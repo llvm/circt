@@ -15,12 +15,25 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
   Op<MooreDialect, mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// Constraints
+//===----------------------------------------------------------------------===//
+
+class ResultIsSingleBitMatchingInputDomain<string result, string input> :
+  TypesMatchWith<"result is single bit matching input domain",
+    input, result, [{
+    IntType::get($_self.getContext(), 1,
+      llvm::cast<UnpackedType>($_self).getDomain())
+  }]>;
 
 //===----------------------------------------------------------------------===//
 // Structure
@@ -28,30 +41,64 @@ class MooreOp<string mnemonic, list<Trait> traits = []> :
 
 def SVModuleOp : MooreOp<"module", [
   IsolatedFromAbove,
+  RegionKindInterface,
   Symbol,
-  NoTerminator,
-  SingleBlock
+  SingleBlockImplicitTerminator<"OutputOp">,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
 ]> {
   let summary = "A module definition";
   let description = [{
     The `moore.module` operation represents a SystemVerilog module, including
     its name, port list, and the constituent parts that make up its body. The
-    module's body is an SSACFG region, since declarations within SystemVerilog
-    modules generally have to appear before their uses, and dedicated assignment
-    operators are used to make connections after declarations.
+    module's body is a graph region.
 
     See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
   let regions = (region SizedRegion<1>:$bodyRegion);
-  let assemblyFormat = [{
-    $sym_name attr-dict-with-keyword $bodyRegion
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [OpBuilder<
+    (ins "StringRef":$name, "hw::ModuleType":$type)>];
+  let extraClassDeclaration = [{
+    /// Return the `moore.output` op terminator of this module.
+    OutputOp getOutputOp();
+    /// Return the list of values assigned to output ports.
+    OperandRange getOutputs();
+    /// Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { 
+      return RegionKind::Graph;
+    }
   }];
 }
 
+def OutputOp : MooreOp<"output", [
+  Terminator, HasParent<"SVModuleOp">, Pure, ReturnLike
+]> {
+  let summary = "Assign module outputs";
+  let description = [{
+    The `moore.output` operation marks the end of a `moore.module` body region
+    and specifies the values to present for the module's output ports.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$outputs);
+  let builders = [
+    OpBuilder<(ins), [{ build($_builder, $_state, std::nullopt); }]>
+  ];
+  let assemblyFormat = [{
+    attr-dict ($outputs^ `:` type($outputs))?
+  }];
+  let hasVerifier = 1;
+}
+
 def InstanceOp : MooreOp<"instance", [
-  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -60,11 +107,15 @@ def InstanceOp : MooreOp<"instance", [
     See IEEE 1800-2017 § 23.3 "Module instances".
   }];
 
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName);
-  let assemblyFormat = [{
-    $instanceName $moduleName attr-dict
-  }];
+  let arguments = (ins
+    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$moduleName,
+    Variadic<AnyType>:$inputs,
+    StrArrayAttr:$inputNames,
+    StrArrayAttr:$outputNames
+  );
+  let results = (outs Variadic<AnyType>:$outputs);
+  let hasCustomAssemblyFormat = 1;
 }
 
 def Initial: I32EnumAttrCase<"Initial", 0, "initial">;
@@ -135,20 +186,26 @@ def ProcedureOp : MooreOp<"procedure", [
 //===----------------------------------------------------------------------===//
 
 def VariableOp : MooreOp<"variable", [
+  DeclareOpInterfaceMethods<DestructurableAllocationOpInterface>,
+  DeclareOpInterfaceMethods<PromotableAllocationOpInterface>,
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"initial value and variable types match",
-    "result", "initial", "$_self">,
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "A variable declaration";
   let description = [{
     See IEEE 1800-2017 § 6.8 "Variable declarations".
   }];
-  let arguments = (ins StrAttr:$name, Optional<UnpackedType>:$initial);
-  let results = (outs Res<UnpackedType, "", [MemAlloc]>:$result);
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$name,
+    Optional<UnpackedType>:$initial
+  );
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) ($initial^)? attr-dict
+    `` custom<ImplicitSSAName>($name) ($initial^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
@@ -174,47 +231,65 @@ def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
 def NetOp : MooreOp<"net", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"assigned value and variable types match",
-    "result", "assignment", "$_self">,
+    "result", "assignment", "cast<RefType>($_self).getNestedType()">,
 ]> {
   let summary = "A net declaration";
   let description = [{
-    The `moore.net' operation is a net declaration. Net types defines different types
-    of net connection in SV. There are twelve built-in net types defined in the official
-    standard construct of the operation:
-    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`, `uwire`,
-    `wire`, `wand`, `wor`.
-    Optional assignment argument allows net operation to be initialized with specific
-    values as soon as it is created. Only one net declaration assignment can be made for
-    a particular net. See IEEE 1800-2017 § 10.3.1 "The net declaration assignment" for
-    the differences between net declaration assignments and continuous assign statements.
-    It has some features that are not supported: declaring an interconnect net and using
-    user-defined types in the net operation.
+    The `moore.net` operation is a net declaration. Net types defines different
+    types of net connection in SV. There are twelve built-in net types defined
+    in the official standard construct of the operation:
+    `supply0`, `supply1`, `tri`, `triand`, `trior`, `trireg`, `tri0`, `tri1`,
+    `uwire`, `wire`, `wand`, `wor`.
+    Optional assignment argument allows net operation to be initialized with
+    specific values as soon as it is created. Only one net declaration
+    assignment can be made for a particular net. See IEEE 1800-2017 § 10.3.1
+    "The net declaration assignment" for the differences between net declaration
+    assignments and continuous assign statements. It has some features that are
+    not supported: declaring an interconnect net and using user-defined types in
+    the net operation.
     
     See IEEE 1800-2017 § 6.7 "Net declarations".
   }];
   let arguments = (ins
-    StrAttr:$name,
+    OptionalAttr<StrAttr>:$name,
     NetKindAttr:$kind,
     Optional<UnpackedType>:$assignment
   );
-  let results = (outs UnpackedType:$result);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    ``custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
+    `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
 }
 
-def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
+def AssignedVarOp : MooreOp<"assigned_variable", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+  TypesMatchWith<"initial value and variable types match",
+    "result", "initial", "cast<RefType>($_self).getNestedType()">
+]> {
+  let summary = "The copy of variable must have the initial value";
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
+  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
+  }];
+}
+
+def ReadOp : MooreOp<"read", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>,
+  TypesMatchWith<"input and result types match",
+    "input", "result", "cast<RefType>($_self).getNestedType()">
+]> {
   let summary = "Read the current value of a declaration";
   let description = [{
     Samples the current value of a declaration. This is a helper to capture the
-    exact point at which declarations that can be targeted by assignments are
-    read.
+    exact point at which declarations that can be targeted by all possible 
+    expressions are read. It's similar to llvm.load.
   }];
-  let arguments = (ins Arg<UnpackedType, "", [MemRead]>:$input);
+  let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($result)
+    $input attr-dict `:` type($input)
   }];
 }
 
@@ -223,8 +298,9 @@ def ReadLValueOp : MooreOp<"read_lvalue", [SameOperandsAndResultType]> {
 //===----------------------------------------------------------------------===//
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
-    MooreOp<mnemonic, traits # [SameTypeOperands]> {
-  let arguments = (ins AnyType:$dst, AnyType:$src);
+    MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
+    "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
+  let arguments = (ins RefType:$dst, UnpackedType:$src);
   let assemblyFormat = [{
     $dst `,` $src attr-dict `:` type($src)
   }];
@@ -241,7 +317,9 @@ def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
   }];
 }
 
-def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
+def BlockingAssignOp : AssignOpBase<"blocking_assign", [
+  DeclareOpInterfaceMethods<PromotableMemOpInterface>
+]> {
   let summary = "Blocking procedural assignment";
   let description = [{
     A blocking procedural assignment in a sequential block, such as `x = y`. The
@@ -250,7 +328,10 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign"> {
 
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
-  let arguments = (ins Arg<AnyType, "", [MemWrite]>:$dst, AnyType:$src);
+  let arguments = (ins
+    Arg<RefType, "", [MemWrite]>:$dst,
+    UnpackedType:$src
+  );
 }
 
 def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
@@ -267,19 +348,125 @@ def NonBlockingAssignOp : AssignOpBase<"nonblocking_assign"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+def None: I32EnumAttrCase<"None", 0, "none">;
+/// Transit from 0 to x/z/1, and from x/z to 1.
+def PosEdge: I32EnumAttrCase<"PosEdge", 1, "posedge">;
+/// Transit from 1 to x/z/0, and from x/z to 0.
+def NegEdge: I32EnumAttrCase<"NegEdge", 2, "negedge">;
+/// Include the negedge and posedge.
+def BothEdges: I32EnumAttrCase<"BothEdges", 3, "edge">;
+
+def EdgeAtrr: I32EnumAttr<"Edge", "Edge kind",
+                          [None, PosEdge, NegEdge, BothEdges]>{
+  let cppNamespace = "circt::moore";
+}
+
+def EventOp : MooreOp<"wait_event", [
+  HasParent<"ProcedureOp">
+]> {
+  let summary = "Detecting posedge and negedge";
+  let description = [{
+    It is introduced by the symbol `@`, and it allows statement execution to
+    be delayed until the occurrence of some simulation event occurring in a
+    procedure executing concurrently with this procedure.
+
+    For the implicit event control(`@(*)`), there are two situations that are
+    not automatically added to event expression:
+      1. Identifiers that only appear in wait or event expressions.
+         ```
+          always @(*) begin    // equivalent to @(b)
+            @(n) kid = b;      // n is not added to @(*)
+          end
+         ```
+      2. Identifiers that only appear as a hierarchical_variable_identifier
+         in the variable_lvalue of the left-hand side of assignments.
+         ```
+          always @(*) begin
+            a = b + c;         // a is not added to @(*)
+          end
+         ```
+
+    Example:
+    ```
+      @(a, b, c)        // none
+      @(posedge clk)    // positive edge
+      @(negedge clk)    // negative edge
+      @(edge clk)       // both edge
+      @(*)              // implicit event control
+    ```
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins EdgeAtrr:$edge, UnpackedType:$input);
+  let results = (outs);
+  let assemblyFormat = [{
+    $edge $input attr-dict `:` type($input)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//
 
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
   let arguments = (ins APIntAttr:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+  let hasFolder = 1;
   let builders = [
-    OpBuilder<(ins "Type":$type, "const APInt &":$value)>,
-    OpBuilder<(ins "Type":$type, "int64_t":$value)>,
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
+    OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
+}
+
+def Parameter : I32EnumAttrCase<"Parameter", 0, "parameter">;
+def LocalParameter : I32EnumAttrCase<"LocalParameter", 1, "localparam">;
+def SpecParameter : I32EnumAttrCase<"SpecParameter", 2, "specparam">;
+
+def NamedConstAttr : I32EnumAttr<"NamedConst", "elaboration-time constants", 
+       [Parameter, LocalParameter, SpecParameter]>{
+    let cppNamespace = "circt::moore";
+}
+
+def NamedConstantOp : MooreOp<"named_constant", [
+  SameOperandsAndResultType,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
+]>{
+  let summary = "An elaboration time constant expression";
+  let description = [{
+    Constants are named data objects that never change. SystemVerilog provides
+    three elaboration-time constants: parameter, localparam, and specparam.
+
+    See IEEE 1800-2017 § 6.20 "Constants".
+  }];
+  let arguments = (ins StrAttr:$name,
+                       NamedConstAttr:$kind,
+                       IntType:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $kind
+    ``custom<ImplicitSSAName>($name)
+    $value `:` type($result) attr-dict
+  }];
+}
+
+def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = moore.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -353,12 +540,7 @@ def NotOp : MooreOp<"not", [Pure, SameOperandsAndResultType]> {
 
 class ReduceOpBase<string mnemonic, string operatorName> : MooreOp<mnemonic, [
   Pure,
-  TypesMatchWith<"result is single bit of input", "input", "result", [{
-    llvm::cast<UnpackedType>($_self)
-      .getSimpleBitVector()
-      .toSingleBit()
-      .getType($_self.getContext())
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "input">
 ]> {
   let arguments = (ins SimpleBitVectorType:$input);
   let results = (outs AnySingleBitType:$result);
@@ -382,11 +564,7 @@ def ReduceXorOp : ReduceOpBase<"reduce_xor", "XOR">;
 
 def BoolCastOp : MooreOp<"bool_cast", [
   Pure,
-  TypesMatchWith<"result is single bit matching input domain",
-    "input", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "input">
 ]> {
   let summary = "Cast a value to a single bit boolean";
   let description = [{
@@ -444,7 +622,7 @@ def MulOp : BinaryOpBase<"mul", [Commutative]> {
   }];
 }
 
-def DivOp : BinaryOpBase<"div"> {
+class DivOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Division";
   let description = [{
     Divide the left-hand side by the right-hand side operand. Any fractional
@@ -456,7 +634,10 @@ def DivOp : BinaryOpBase<"div"> {
   }];
 }
 
-def ModOp : BinaryOpBase<"mod"> {
+def DivUOp : DivOpBase<"divu">;
+def DivSOp : DivOpBase<"divs">;
+
+class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
   let summary = "Remainder";
   let description = [{
     Compute the remainder of the left-hand side divided by the right-hand side
@@ -476,6 +657,31 @@ def ModOp : BinaryOpBase<"mod"> {
     | -11 |  -3 |     -2 |
   }];
 }
+
+def ModUOp : ModOpBase<"modu">;
+def ModSOp : ModOpBase<"mods">;
+
+class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
+  let summary = "Power";
+  let description = [{
+    Raise the left-hand side to the power of the right-hand side. `powu` treats
+    its operands as unsigned numbers, while `pows` treats them as signed
+    numbers.
+
+    Evaluation rules for `a ** b`:
+
+    |       | a < -1 | a = -1         | a = 0 | a = 1 | a > 1  |
+    |-------|--------|----------------|-------|-------|--------|
+    | b > 0 | a ** b | b odd ? -1 : 1 |     0 |     1 | a ** b |
+    | b = 0 |      1 |              1 |     1 |     1 |      1 |
+    | b < 0 |      0 | b odd ? -1 : 1 |     X |     1 |      0 |
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
+  }];
+}
+
+def PowUOp : PowOpBase<"powu">;
+def PowSOp : PowOpBase<"pows">;
 
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
@@ -568,11 +774,7 @@ class LogicalEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   Commutative,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the bits in the left- and right-hand side operand and returns a
@@ -625,11 +827,7 @@ def CaseNeOp : CaseEqOpBase<"case_ne"> { let summary = "Case inequality"; }
 class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the bits in the left- and right-hand side operand and returns a
@@ -658,19 +856,16 @@ def WildcardNeOp : WildcardEqOpBase<"wildcard_ne"> {
 class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
   SameTypeOperands,
-  TypesMatchWith<"result is single bit matching input domain",
-    "lhs", "result", [{
-    IntType::get($_self.getContext(),
-      IntType::getAtomForDomain(llvm::cast<UnpackedType>($_self).getDomain()))
-  }]>
+  ResultIsSingleBitMatchingInputDomain<"result", "lhs">
 ]> {
   let description = [{
     Compares the left- and right-hand side operand and returns a single bit 0,
     1, or X result. If any bit in the two operands is Z or X, returns X.
-    Otherwise, if all bits are 0 or 1, `lt`, `le`, `gt`, and `ge` return whether
-    the left-hand side is less than, less than or equal to, greater than, or
-    greater than or equal to the right-hand side, respectively. `lt` corresponds
-    to the `<` operator, `le` to `<=`, `gt` to `>`, and `ge` to `>=`.
+    Otherwise, if all bits are 0 or 1, `ult/slt`, `ule/sle`, `ugt/sgt`, and
+    `uge/sge` return whether the left-hand side is less than, less than or equal
+    to, greater than, or greater than or equal to the right-hand side,
+    respectively. `ult/slt` corresponds to the `<` operator, `ule/sle` to `<=`,
+    `ugt/sgt` to `>`, and `uge/sge` to `>=`.
 
     See IEEE 1800-2017 § 11.4.4 "Relational operators".
   }];
@@ -681,10 +876,31 @@ class RelationalOpBase<string mnemonic> : MooreOp<mnemonic, [
   }];
 }
 
-def LtOp : RelationalOpBase<"lt"> { let summary = "Less than"; }
-def LeOp : RelationalOpBase<"le"> { let summary = "Less than or equal"; }
-def GtOp : RelationalOpBase<"gt"> { let summary = "Greater than"; }
-def GeOp : RelationalOpBase<"ge"> { let summary = "Greater than or equal"; }
+def UltOp : RelationalOpBase<"ult"> {
+  let summary = "Unsigned less than comparison";
+}
+def UleOp : RelationalOpBase<"ule"> {
+  let summary = "Unsigned less than or equal comparison";
+}
+def UgtOp : RelationalOpBase<"ugt"> {
+  let summary = "Unsigned greater than comparison";
+}
+def UgeOp : RelationalOpBase<"uge"> {
+  let summary = "Unsigned greater than or equal comparison";
+}
+
+def SltOp : RelationalOpBase<"slt"> {
+  let summary = "Signed less than comparison";
+}
+def SleOp : RelationalOpBase<"sle"> {
+  let summary = "Signed less than or equal comparison";
+}
+def SgtOp : RelationalOpBase<"sgt"> {
+  let summary = "Signed greater than comparison";
+}
+def SgeOp : RelationalOpBase<"sge"> {
+  let summary = "Signed greater than or equal comparison";
+}
 
 def ConcatOp : MooreOp<"concat", [
     Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
@@ -702,10 +918,21 @@ def ConcatOp : MooreOp<"concat", [
     is the sum of the sizes of all operands. If any of the operands is
     four-valued, the result is four-valued; otherwise it is two-valued.
   }];
-  let arguments = (ins Variadic<SimpleBitVectorType>:$values);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins Variadic<IntType>:$values);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $values attr-dict `:` functional-type($values, $result)
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
+  }];
+}
+
+def ConcatRefOp : MooreOp<"concat_ref", [
+    Pure, DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "The copy of concat that explicitly works on the ref type.";
+  let arguments = (ins Variadic<RefType>:$values);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $values attr-dict `:` `(` type($values) `)` `->` type($result)
   }];
 }
 
@@ -727,16 +954,21 @@ def ReplicateOp : MooreOp<"replicate", [
     ```
     See IEEE 1800-2017 §11.4.12 "Concatenation operators".
   }];
-  let arguments = (ins SimpleBitVectorType:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let arguments = (ins IntType:$value);
+  let results = (outs IntType:$result);
   let assemblyFormat = [{
-    $value attr-dict `:` functional-type($value, $result)
+    $value attr-dict `:` type($value) `->` type($result)
   }];
 }
 
-def ExtractOp : MooreOp<"extract"> {
-  let summary = "Addressing operation";
+//===----------------------------------------------------------------------===//
+// Bit/Element Extraction
+//===----------------------------------------------------------------------===//
+
+def ExtractOp : MooreOp<"extract", [Pure]> {
+  let summary = "Extract a range or single bits from a value";
   let description = [{
+    It's used to select from a value with a constant low bit.
     This operation includes the vector bit/part-select, array, and memory 
     addressing.If the address is invalid--out of bounds or has x or z bit--
     then it will produce x for 4-state or 0 for 2-state.
@@ -762,12 +994,255 @@ def ExtractOp : MooreOp<"extract"> {
     ```
     See IEEE 1800-2017 § 11.5.2 "Array and memory addressing".
   }];
+  let arguments = (ins UnpackedType:$input, I32Attr:$lowBit);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractOp : MooreOp<"dyn_extract", [Pure]> {
+  let description = [{
+    It's similar with extract, but it's used to select from a value
+    with a dynamic low bit.
+  }];
   let arguments = (ins UnpackedType:$input, UnpackedType:$lowBit);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowBit attr-dict `:` 
+    $input `from` $lowBit attr-dict `:`
     type($input) `,` type($lowBit) `->` type($result)
   }];
-} 
+}
 
+def ExtractRefOp : MooreOp<"extract_ref", [Pure]> {
+  let description = [{
+  The copy of extract that explicitly works on the ref type.
+  }];
+  let arguments = (ins RefType:$input, I32Attr:$lowBit);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
+def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
+  let description = [{
+  The copy of dyn_extract that explicitly works on the ref type.
+  }];
+  let arguments = (ins RefType:$input, UnpackedType:$lowBit);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowBit attr-dict `:`
+    type($input) `,` type($lowBit) `->` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Struct Manipulation
+//===----------------------------------------------------------------------===//
+
+def StructCreateOp : MooreOp<"struct_create", [Pure]> {
+  let summary = "Create a struct value from individual fields";
+  let arguments = (ins Variadic<UnpackedType>:$fields);
+  let results = (outs AnyStructType:$result);
+  let assemblyFormat = [{
+    $fields attr-dict `:` type($fields) `->` type($result)
+  }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+def StructExtractOp : MooreOp<"struct_extract", [Pure]> {
+  let summary = "Obtain the value of a struct field";
+  let arguments = (ins StrAttr:$fieldName, AnyStructType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+def StructExtractRefOp : MooreOp<"struct_extract_ref", [
+  Pure,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
+]> {
+  let summary = "Create a reference to a struct field";
+  let arguments = (ins StrAttr:$fieldName, AnyStructRefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def StructInjectOp : MooreOp<"struct_inject", [
+  Pure,
+  AllTypesMatch<["input", "result"]>
+]> {
+  let summary = "Update the value of a struct field";
+  let description = [{
+    Takes an existing struct value, sets one of its fields to a new value, and
+    returns the resulting struct value.
+  }];
+  let arguments = (ins
+    AnyStructType:$input,
+    StrAttr:$fieldName,
+    UnpackedType:$newValue
+  );
+  let results = (outs AnyStructType:$result);
+  let assemblyFormat = [{
+    $input `,` $fieldName `,` $newValue attr-dict
+    `:` type($input) `,` type($newValue)
+  }];
+  let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = true;
+}
+
+//===----------------------------------------------------------------------===//
+// Union Manipulation
+//===----------------------------------------------------------------------===//
+
+def UnionCreateOp : MooreOp<"union_create", [Pure]> {
+  let summary = "Union Create operation";
+  let description = [{
+    A union is a data type that represents a single piece
+    of storage that can be accessed using one of
+    the named member data types. Only one of the
+    data types in the union can be used at a time.
+    By default, a union is unpacked, meaning there
+    is no required representation for how members
+    of the union are stored. Dynamic types and chandle
+    types can only be used in tagged unions.
+    See IEEE 1800-2017 § 7.3 "Unions"
+
+    Example:
+    ```
+    typedef union { int i; shortreal f; } num; // named union type
+    num n;
+    n.f = 0.0; // set n in floating point format
+    typedef struct {
+    bit isfloat;
+    union { int i; shortreal f; } n;           // anonymous union type
+    } tagged_st;                               // named structure
+    ```
+    See IEEE 1800-2017 § 7.3 "Unions"
+  }];
+  let arguments = (ins UnpackedType:$input, StrAttr:$fieldName);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def UnionExtractOp : MooreOp<"union_extract"> {
+  let summary = "Union Extract operation";
+  let description = [{
+    With packed unions, writing one member and reading another is
+    independent of the byte ordering of the machine,
+    unlike an unpacked union of unpacked structures,
+    which are C-compatible and have members in ascending address order.
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
+
+    Example:
+    ```
+    typedef union packed { // default unsigned
+    s_atmcell acell;
+    bit [423:0] bit_slice;
+    bit [52:0][7:0] byte_slice;
+    } u_atmcell;
+    u_atmcell u1;
+    byte b; bit [3:0] nib;
+    b = u1.bit_slice[415:408]; // same as b = u1.byte_slice[51];
+    nib = u1.bit_slice [423:420];
+    ```
+    See IEEE 1800-2017 § 7.3.1 "Packed unions"
+  }];
+  let arguments = (ins StrAttr:$fieldName, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def UnionExtractRefOp : MooreOp<"union_extract_ref"> {
+  let summary = "Union Extract operation";
+  let arguments = (ins StrAttr:$fieldName, RefType:$input);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `,`   $fieldName  attr-dict `:`
+    type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def ConditionalOp : MooreOp<"conditional",[
+  RecursiveMemoryEffects,
+  NoRegionArguments,
+  SingleBlockImplicitTerminator<"moore::YieldOp">
+]> {
+  let summary = "Conditional operation";
+  let description = [{
+    If cond_predicate is true, the operator returns the value of the first 
+    expression without evaluating the second expression; if false, it returns 
+    the value of the second expression without evaluating the first expression.
+    If cond_predicate evaluates to an ambiguous value (x or z), then both the
+    first expression and the second expression shall be evaluated, and compared
+    for logical equivalence. If that comparison is true (1), the operator shall
+    return either the first or second expression. Otherwise the operator returns
+    a result based on the data types of the expressions.
+
+    When both the first and second expressions are of integral types, if the
+    cond_predicate evaluates to an ambiguous value and the expressions are not
+    logically equivalent, their results shall be combined bit by bit using the
+    table below to calculate the final result. The first and second expressions
+    are extended to the same width.
+
+    |?: | 0 | 1 | X | Z |
+    |---|---|---|---|---|
+    | 0 | 0 | X | X | X |
+    | 1 | X | 1 | X | X |
+    | X | X | X | X | X |
+    | Z | X | X | X | X |
+
+    See IEEE 1800-2017 § 11.4.11 "Conditional operator".
+  }];
+  let arguments = (ins AnySingleBitType:$condition);
+  let results = (outs UnpackedType:$result);
+  let regions = (region SizedRegion<1>:$trueRegion,
+                        SizedRegion<1>:$falseRegion);
+  let assemblyFormat = [{
+    $condition attr-dict `:` type($condition) `->` type($result)
+    $trueRegion $falseRegion
+  }];
+}
+
+def YieldOp : MooreOp<"yield", [
+  Pure,
+  Terminator,
+  HasParent<"ConditionalOp">
+]> {
+  let summary = "conditional yield and termination operation";
+  let description = [{
+    "moore.yield" yields an SSA value from the Moore dialect op region and
+    terminates the regions. The semantics of how the values are yielded is
+    defined by the parent operation.
+    If "moore.yield" has any operands, the operands must match the parent
+    operation's results.
+    If the parent operation defines no values, then the "moore.yield" may be
+    left out in the custom syntax and the builders will insert one implicitly.
+    Otherwise, it has to be present in the syntax to indicate which values are
+    yielded.
+  }];
+  let arguments = (ins UnpackedType:$result);
+  let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
+  let assemblyFormat = [{
+    attr-dict $result `:` type($result)
+  }];
+  let hasVerifier = 1;
+}
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

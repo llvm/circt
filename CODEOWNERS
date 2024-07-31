@@ -22,9 +22,7 @@ tools/arcilator @fabianschuiki @maerhart
 **/Dialect/ESI @teqdruid
 
 # FIRRTL
-**/FIRRTL* @darthscsi @dtzSiFive @seldridge
-*/firtool @dtzSiFive
-libs/Firtool @dtzSiFive
+**/FIRRTL* @darthscsi @seldridge
 
 # FSM
 **/Dialect/FSM @mortbopet
@@ -34,13 +32,12 @@ libs/Firtool @dtzSiFive
 
 # LLHD
 **/LLHD* @fabianschuiki @maerhart
-tools/llhd-sim @fabianschuiki @maerhart
 
 # Pipeline
 **/Dialect/Pipeline @mortbopet
 
 # Handshake
-**/Handshake* @Dinistro @mortbopet @RamirezLucas
+**/Handshake* @Dinistro @mortbopet
 
 # HW
 **/Dialect/HW @darthscsi
@@ -56,15 +53,11 @@ lib/Target/ExportSMTLIB @maerhart
 # Ibis
 **/Dialect/Ibis @teqdruid @mortbopet @blakep-msft
 
-## Conversions
-
-lib/Conversion/ExportVerilog @dtzSiFive
-
 
 ## Infra
 
 # CI
-.github @teqdruid @dtzSiFive
+.github @teqdruid
 
 # PrettyPrinter
 **/Support/Pretty* @dtzSiFive

@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
@@ -14,8 +13,12 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
 
-using namespace mlir;
+namespace circt {
+#define GEN_PASS_DEF_STRIPDEBUGINFOWITHPRED
+#include "circt/Transforms/Passes.h.inc"
+} // namespace circt
 
+using namespace mlir;
 template <typename OpOrBlockArgument>
 static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
   if (op->getLoc() != newLoc)
@@ -24,7 +27,7 @@ static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
 
 namespace {
 struct StripDebugInfoWithPred
-    : public circt::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
+    : public circt::impl::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
   StripDebugInfoWithPred(const std::function<bool(mlir::Location)> &pred)
       : pred(pred) {}
   void runOnOperation() override;
@@ -40,7 +43,10 @@ struct StripDebugInfoWithPred
       newLocations.reserve(fusedLoc.getLocations().size());
       for (auto loc : fusedLoc.getLocations())
         newLocations.push_back(getStrippedLoc(loc));
-      return FusedLoc::get(&getContext(), newLocations, fusedLoc.getMetadata());
+      // NOTE: Don't use FusedLoc::get(&getContext(), newLocations,
+      //       fusedLoc.getMetadata()) to avoid a bytecode reader bug
+      //       llvm-project#99626.
+      return FusedLoc::get(newLocations, fusedLoc.getMetadata(), &getContext());
     }
 
     // TODO: Handle other loc type.

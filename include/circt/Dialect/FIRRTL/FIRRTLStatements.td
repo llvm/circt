@@ -46,7 +46,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let results = (outs);
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+    "$dest `,` $src  attr-dict `:` custom<OptionalBinaryOpTypes>(type($dest), type($src))";
 
   let hasVerifier = 1;
   let hasCanonicalizer = true;
@@ -55,19 +55,20 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",
         CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
-def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
-    Connect two values with strict constraints:
+    Connect two values with matching type constraints.  The types of the lhs and
+    rhs must match:
     ```
-      firrtl.strictconnect %dest, %src : t1
-      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
+      firrtl.matchingconnect %dest, %src : t1
+      firrtl.matchingconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
-  let arguments = (ins StrictConnectableType:$dest,
-                       StrictConnectableType:$src);
+  let arguments = (ins MatchingConnectableType:$dest,
+                       MatchingConnectableType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -246,10 +247,10 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
     ```mlir
       firrtl.match %in : !firrtl.enum<Some: uint<1>, None: uint<0>> {
         case Some(%arg0) {
-          !firrtl.strictconnect %w, %arg0 : !firrtl.uint<1>
+          !firrtl.matchingconnect %w, %arg0 : !firrtl.uint<1>
         }
         case None(%arg0) {
-          !firrt.strictconnect %w, %c1 : !firrtl.uint<1>
+          !firrt.matchingconnect %w, %c1 : !firrtl.uint<1>
         }
       }
     ```
@@ -311,17 +312,19 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
 
 //===- Reference force/release --------------------------------------------===//
 
-class ForceRefTypeConstraint<string ref, string base>
-  : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
-                   base, ref,
-                   "RefType::get(firrtl::type_cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
+class ForceRefTypeConstraint<string ref, string base> : PredOpTrait<
+        "reference type of " # ref # " should be RWProbe of " # base,
+        CPred<[{
+          firrtl::type_cast<RefType>($}] # ref # [{.getType()).getType() ==
+          firrtl::type_cast<FIRRTLBaseType>($}] # base # [{.getType()).getAllConstDroppedType()
+        }]>>;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
   let description = "Force a RWProbe to the specified value using the specified clock and predicate.";
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
-    "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($src))";
+    "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest)) `,` qualified(type($src))";
   let hasCanonicalizer = 1;
 }
 def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"dest", "src">]> {
@@ -329,7 +332,7 @@ def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"de
   let description = "Force a RWProbe to the specified value continuously.";
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
-    "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($src))";
+    "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($dest)) `,` qualified(type($src))";
   let hasCanonicalizer = 1;
 }
 def RefReleaseOp : FIRRTLOp<"ref.release"> {
@@ -356,7 +359,7 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<"int.verif." # mnemonic, traits> {
   let summary = "FIRRTL variant of `verif." # mnemonic # "`";
   let description = "See `verif." # mnemonic # "` op in the Verif dialect.";
-  let arguments = (ins UInt1Type:$property, OptionalAttr<StrAttr>:$label);
+  let arguments = (ins UInt1Type:$property, Optional<UInt1Type>:$enable, OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
@@ -373,7 +376,9 @@ def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
 def LayerBlockOp : FIRRTLOp<
   "layerblock",
   [SingleBlock, NoTerminator, NoRegionArguments,
-   ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
+   ParentOneOf<[
+     "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+     "firrtl::WhenOp", "firrtl::MatchOp"]>,
    DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";

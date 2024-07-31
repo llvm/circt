@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -23,10 +22,18 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_VBTOBV
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -60,7 +67,7 @@ public:
   void handleConnect(Op);
 
   LogicalResult visitStmt(ConnectOp);
-  LogicalResult visitStmt(StrictConnectOp);
+  LogicalResult visitStmt(MatchingConnectOp);
 
   LogicalResult visitExpr(AggregateConstantOp);
   LogicalResult visitExpr(VectorCreateOp);
@@ -689,7 +696,7 @@ LogicalResult Visitor::visitStmt(ConnectOp op) {
   return success();
 }
 
-LogicalResult Visitor::visitStmt(StrictConnectOp op) {
+LogicalResult Visitor::visitStmt(MatchingConnectOp op) {
   handleConnect(op);
   return success();
 }
@@ -967,7 +974,7 @@ LogicalResult Visitor::visit(FModuleOp op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class VBToBVPass : public VBToBVBase<VBToBVPass> {
+class VBToBVPass : public circt::firrtl::impl::VBToBVBase<VBToBVPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

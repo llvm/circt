@@ -192,7 +192,6 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
-    MLIRPythonSources.Dialects.builtin
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS

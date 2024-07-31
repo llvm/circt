@@ -164,7 +164,7 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %w = firrtl.wire : !firrtl.uint<1>
       firrtl.when %test : !firrtl.uint<1> {
-        firrtl.strictconnect %w, %c0_ui1 : !firrtl.uint<1>
+        firrtl.matchingconnect %w, %c0_ui1 : !firrtl.uint<1>
       }
     }
   }

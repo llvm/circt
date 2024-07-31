@@ -124,6 +124,11 @@ void walkGroundTypes(
 /// If root is a blockargument, this must be FModuleLike.
 hw::InnerSymTarget getTargetFor(FieldRef ref);
 
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+FieldRef getFieldRefForTarget(const hw::InnerSymTarget &ist);
+
 /// Ensure that the the InnerSymAttr has a symbol on the field specified.
 /// Returns the updated InnerSymAttr as well as the name of the symbol attached
 /// to the specified field.
@@ -217,6 +222,7 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, uint64_t fieldID,
 inline FIRRTLBaseType getBaseType(Type type) {
   return TypeSwitch<Type, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<LHSType>([](auto lhs) { return lhs.getType(); })
       .Case<RefType>([](auto ref) { return ref.getType(); })
       .Default([](Type type) { return nullptr; });
 }

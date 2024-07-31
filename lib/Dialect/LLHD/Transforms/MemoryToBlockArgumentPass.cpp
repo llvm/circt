@@ -10,20 +10,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Dominance.h"
+#include "mlir/Pass/Pass.h"
 #include <set>
 
-using namespace circt;
+namespace circt {
+namespace llhd {
+#define GEN_PASS_DEF_MEMORYTOBLOCKARGUMENT
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+} // namespace llhd
+} // namespace circt
 
+using namespace circt;
 namespace {
 
 struct MemoryToBlockArgumentPass
-    : public llhd::MemoryToBlockArgumentBase<MemoryToBlockArgumentPass> {
+    : public circt::llhd::impl::MemoryToBlockArgumentBase<
+          MemoryToBlockArgumentPass> {
   void runOnOperation() override;
+  void runOnProcess(llhd::ProcessOp operation);
 };
 
 } // anonymous namespace
@@ -80,12 +89,16 @@ static void addBlockOperandToTerminator(Operation *terminator,
 }
 
 void MemoryToBlockArgumentPass::runOnOperation() {
-  Operation *operation = getOperation();
+  for (auto proc : getOperation().getOps<llhd::ProcessOp>())
+    runOnProcess(proc);
+}
+
+void MemoryToBlockArgumentPass::runOnProcess(llhd::ProcessOp operation) {
   OpBuilder builder(operation);
 
   // No operations that have their own region and are not isolated from above
   // are allowed for now.
-  WalkResult result = operation->walk([](Operation *op) -> WalkResult {
+  WalkResult result = operation.getBody().walk([](Operation *op) -> WalkResult {
     if (op->getNumRegions() > 0 &&
         !op->hasTrait<OpTrait::IsIsolatedFromAbove>())
       return WalkResult::interrupt();
@@ -97,14 +110,11 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   // Get all variables defined in the body of this operation
   // Note that variables that are passed as a function argument are not
   // considered.
-  SmallVector<Value, 16> vars;
-  for (llhd::VarOp var : operation->getRegion(0).getOps<llhd::VarOp>()) {
-    vars.push_back(var.getResult());
-  }
+  SmallVector<Value, 16> vars(operation->getRegion(0).getOps<llhd::VarOp>());
 
   // Don't consider variables that are used in other operations than load and
   // store (e.g. as an argument to a call)
-  for (auto var = vars.begin(); var != vars.end(); ++var) {
+  for (auto *var = vars.begin(); var != vars.end(); ++var) {
     for (Operation *user : var->getUsers()) {
       if (!isa<llhd::LoadOp>(user) && !isa<llhd::StoreOp>(user)) {
         vars.erase(var--);
@@ -134,7 +144,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
     for (Block *jp : joinPoints) {
       // Add a block argument for the variable at each join point
       BlockArgument phi = jp->addArgument(
-          cast<llhd::PtrType>(var.getType()).getUnderlyingType(), var.getLoc());
+          cast<llhd::PtrType>(var.getType()).getElementType(), var.getLoc());
 
       // Add a load at the end of every predecessor and pass the loaded value as
       // the block argument
@@ -143,7 +153,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
         builder.setInsertionPoint(pred->getTerminator());
         Value load = builder.create<llhd::LoadOp>(
             pred->getTerminator()->getLoc(),
-            cast<llhd::PtrType>(var.getType()).getUnderlyingType(), var);
+            cast<llhd::PtrType>(var.getType()).getElementType(), var);
         // Add the loaded value as additional block argument
         addBlockOperandToTerminator(pred->getTerminator(), jp, load);
       }
@@ -239,7 +249,7 @@ void MemoryToBlockArgumentPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<OperationPass<llhd::ProcOp>>
+std::unique_ptr<OperationPass<hw::HWModuleOp>>
 circt::llhd::createMemoryToBlockArgumentPass() {
   return std::make_unique<MemoryToBlockArgumentPass>();
 }

@@ -35,6 +35,92 @@ verif.cover %true label "foo3" : i1
 verif.cover %s : !ltl.sequence
 verif.cover %p : !ltl.property
 
+//===----------------------------------------------------------------------===//
+// Formal
+//===----------------------------------------------------------------------===//
+hw.module @Foo(in %0 "0": i1, in %1 "1": i1, out "" : i1, out "1" : i1) {
+  hw.output %0 , %1: i1, i1
+ }
+
+// CHECK: verif.formal @formal1(k = 20 : i64) {
+verif.formal @formal1(k = 20) {
+  // CHECK: %[[C1:.+]] = hw.constant true
+  %c1_i1 = hw.constant true
+  // CHECK: %[[SYM:.+]] = verif.symbolic_input : i1
+  %sym = verif.symbolic_input : i1
+  // CHECK: %[[CLK_U:.+]] = comb.xor %8, %[[C1]] : i1
+  %clk_update = comb.xor %8, %c1_i1 : i1
+  // CHECK: %8 = verif.concrete_input %[[C1]], %[[CLK_U]] : i1
+  %8 = verif.concrete_input %c1_i1, %clk_update : i1
+  // CHECK: %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %6: i1, "1": %8: i1) -> ("": i1, "1": i1)
+  %foo.0, %foo.1 = hw.instance "foo" @Foo("0": %sym: i1, "1": %8 : i1) -> ("" : i1, "1" : i1)
+}
+
+// CHECK-LABEL: hw.module @Bar
+hw.module @Bar(in %foo : i8, out "" : i8, out "1" : i8) { 
+  // CHECK: verif.contract(%foo) : (i8) {
+  verif.contract (%foo) : (i8) {
+    // CHECK: ^bb0(%[[ARG:.+]]: i8, %[[OUT:.+]]: i8, %[[OUT1:.+]]: i8):
+    ^bb0(%arg1 : i8, %bar.0 : i8, %bar.1 : i8): 
+      // CHECK: %[[C0:.+]] = hw.constant 0 : i8
+      %c0_8 = hw.constant 0 : i8 
+      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %[[ARG]], %[[C0]] : i8
+      %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+      // CHECK: verif.require %[[PREC]] : i1
+      verif.require %prec : i1
+
+      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[OUT]], %[[ARG]] : i8
+      %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[OUT1]], %[[ARG]] : i8
+      %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+      // CHECK: verif.ensure %[[P0]] : i1
+      verif.ensure %post : i1
+      // CHECK: verif.ensure %[[P1]] : i1
+      verif.ensure %post1 : i1
+  }
+  // CHECK: %[[C1:.+]] = hw.constant
+  %c1_8 = hw.constant 1 : i8
+  // CHECK: %[[O1:.+]] = comb.add
+  %o0 = comb.add bin %foo, %c1_8 : i8
+  // CHECK: %[[O2:.+]] = comb.sub
+  %o1 = comb.sub bin %foo, %c1_8 : i8
+  // CHECK-LABEL: hw.output
+  hw.output %o0, %o1 : i8, i8
+}
+
+// CHECK-LABEL: hw.module @Foo1
+hw.module @Foo1(in %0 "0": i1, in %1 "1": i1, out "" : i8, out "1" : i8) {
+  // CHECK: %[[C42:.+]] = hw.constant 42 : i8
+  %c42_8 = hw.constant 42 : i8
+  // CHECK: %[[OUTS:.+]]:2 = verif.instance(%[[C42]]) : (i8) -> (i8, i8) {
+  %bar.0, %bar.1 = verif.instance (%c42_8) : (i8) -> (i8, i8) {
+    // CHECK: ^bb0(%[[ARG:.+]]: i8):
+    ^bb0(%arg1: i8):
+      // CHECK: %[[C0:.+]] = hw.constant 0 : i8
+      %c0_8 = hw.constant 0 : i8
+      // CHECK: %[[PREC:.+]] = comb.icmp bin ugt %[[ARG]], %[[C0]] : i8
+      %prec = comb.icmp bin ugt %arg1, %c0_8 : i8
+      // CHECK: verif.assert %[[PREC]] : i1
+      verif.assert %prec : i1
+
+      // CHECK: %[[OUT0:.+]] = verif.symbolic_input : i8
+      %bar.0 = verif.symbolic_input : i8
+      // CHECK: %[[OUT1:.+]] = verif.symbolic_input : i8
+      %bar.1 = verif.symbolic_input : i8
+      // CHECK: %[[P0:.+]] = comb.icmp bin ugt %[[OUT0]], %[[ARG]] : i8
+      %post = comb.icmp bin ugt %bar.0, %arg1 : i8
+      // CHECK: %[[P1:.+]] = comb.icmp bin ult %[[OUT1]], %[[ARG]] : i8
+      %post1 = comb.icmp bin ult %bar.1, %arg1 : i8
+      // CHECK: verif.assume %[[P0]] : i1
+      verif.assume %post : i1
+      // CHECK: verif.assume %[[P1]] : i1
+      verif.assume %post1 : i1
+      // CHECK: verif.yield %[[OUT0]], %[[OUT1]] : i8, i8
+      verif.yield %bar.0, %bar.1 : i8, i8
+  } 
+  // CHECK: hw.output %[[OUTS]]#0, %[[OUTS]]#1 : i8, i8
+  hw.output %bar.0, %bar.1 : i8, i8
+ }
 
 //===----------------------------------------------------------------------===//
 // Print-related
@@ -82,4 +168,73 @@ verif.lec {verif.some_attr} first {
 } second {
 ^bb0(%arg0: i32, %arg1: i32):
   verif.yield %arg0, %arg1 : i32, i32 {verif.some_attr}
+}
+
+//===----------------------------------------------------------------------===//
+// Bounded Model Checking related operations
+//===----------------------------------------------------------------------===//
+
+// CHECK: verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
+// CHECK: } loop {
+// CHECK: } circuit {
+// CHECK: ^bb0(%{{.*}}):
+// CHECK: verif.yield %{{.*}} : i32
+// CHECK: }
+verif.bmc bound 10 num_regs 0 attributes {verif.some_attr} init {
+} loop {
+} circuit {
+^bb0(%arg0: i32):
+  %false = hw.constant false
+  // Arbitrary assertion so op verifies
+  verif.assert %false : i1
+  verif.yield %arg0 : i32
+}
+
+//CHECK: verif.bmc bound 10 num_regs 1 attributes {verif.some_attr}
+//CHECK: init {
+//CHECK:   %{{.*}} = hw.constant false
+//CHECK:   %{{.*}} = seq.to_clock %{{.*}}
+//CHECK:   verif.yield %{{.*}}, %{{.*}} : !seq.clock, i1
+//CHECK: }
+//CHECK: loop {
+//CHECK:   ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i1):
+//CHECK:   %{{.*}} = seq.from_clock %{{.*}}
+//CHECK:   %{{.*}} = hw.constant true
+//CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i1
+//CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i1
+//CHECK:   %{{.*}} = seq.to_clock %{{.*}}
+//CHECK:   verif.yield %{{.*}}, %{{.*}} : !seq.clock, i1
+//CHECK: }
+//CHECK: circuit {
+//CHECK: ^bb0(%{{.*}}: !seq.clock, %{{.*}}: i32, %{{.*}}: i32):
+//CHECK:   %{{.*}} = hw.constant -1 : i32
+//CHECK:   %{{.*}} = comb.add %{{.*}}, %{{.*}} : i32
+//CHECK:   %{{.*}} = comb.xor %{{.*}}, %{{.*}} : i32
+//CHECK:   verif.yield %{{.*}}, %{{.*}} : i32, i32
+//CHECK: }
+verif.bmc bound 10 num_regs 1 attributes {verif.some_attr}
+init {
+  %c0_i1 = hw.constant 0 : i1
+  %clk = seq.to_clock %c0_i1
+  verif.yield %clk, %c0_i1 : !seq.clock, i1
+}
+loop {
+  ^bb0(%clk: !seq.clock, %stateArg: i1):
+  %from_clock = seq.from_clock %clk
+  %c-1_i1 = hw.constant -1 : i1
+  %neg_clock = comb.xor %from_clock, %c-1_i1 : i1
+  %newStateArg = comb.xor %stateArg, %c-1_i1 : i1
+  %newclk = seq.to_clock %neg_clock
+  verif.yield %newclk, %newStateArg : !seq.clock, i1
+}
+circuit {
+^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32):
+  %c-1_i32 = hw.constant -1 : i32
+  %0 = comb.add %arg0, %state0 : i32
+  // %state0 is the result of a seq.compreg taking %0 as input
+  %2 = comb.xor %state0, %c-1_i32 : i32
+  %false = hw.constant false
+  // Arbitrary assertion so op verifies
+  verif.assert %false : i1
+  verif.yield %2, %0 : i32, i32
 }

@@ -15,15 +15,6 @@ using namespace circt;
 using namespace ltl;
 using namespace mlir;
 
-/// Check if an attribute is an integer zero.
-static bool isConstantZero(Attribute attr) {
-  if (!attr)
-    return false;
-  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
-    return intAttr.getValue().isZero();
-  return false;
-}
-
 /// Concatenate two value ranges into a larger range. Useful for declarative
 /// rewrites.
 static SmallVector<Value> concatValues(ValueRange a, ValueRange b) {
@@ -62,7 +53,7 @@ namespace patterns {
 OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
   // delay(s, 0, 0) -> s
   if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
-      !isa<SequenceType>(getResult().getType()))
+      isa<SequenceType>(getInput().getType()))
     return getInput();
 
   return {};
@@ -92,13 +83,32 @@ void ConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
-// DisableOp
+// RepeatLikeOps
 //===----------------------------------------------------------------------===//
 
-OpFoldResult DisableOp::fold(FoldAdaptor adaptor) {
-  // disable(p, false) -> p
-  if (isConstantZero(adaptor.getCondition()))
-    return getInput();
+namespace {
+struct RepeatLikeOp {
+  static OpFoldResult fold(uint64_t base, uint64_t more, Value input) {
+    // repeat(s, 1, 0) -> s
+    if (base == 1 && more == 0 && isa<SequenceType>(input.getType()))
+      return input;
 
+    return {};
+  }
+};
+} // namespace
+
+OpFoldResult RepeatOp::fold(FoldAdaptor adaptor) {
+  auto more = adaptor.getMore();
+  if (more.has_value())
+    return RepeatLikeOp::fold(adaptor.getBase(), *more, getInput());
   return {};
+}
+
+OpFoldResult GoToRepeatOp::fold(FoldAdaptor adaptor) {
+  return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
+}
+
+OpFoldResult NonConsecutiveRepeatOp::fold(FoldAdaptor adaptor) {
+  return RepeatLikeOp::fold(adaptor.getBase(), adaptor.getMore(), getInput());
 }

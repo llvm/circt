@@ -13,13 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -27,9 +27,17 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 
 #include <set>
+
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_SVEXTRACTTESTCODE
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -554,7 +562,7 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   }
 
   return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
-             verif::AssertOp>(op);
+             verif::AssertOp, verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -564,7 +572,8 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
       if (mod->getAttr("firrtl.extract.cover.extra"))
         return true;
-  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp>(op);
+  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp, verif::ClockedCoverOp>(
+      op);
 }
 
 static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -575,7 +584,8 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
       if (mod->getAttr("firrtl.extract.assume.extra"))
         return true;
 
-  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(op);
+  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp,
+             verif::ClockedAssumeOp>(op);
 }
 
 /// Return true if the operation belongs to the design.
@@ -627,7 +637,7 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
 namespace {
 
 struct SVExtractTestCodeImplPass
-    : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+    : public circt::sv::impl::SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   SVExtractTestCodeImplPass(bool disableInstanceExtraction,
                             bool disableRegisterExtraction,
                             bool disableModuleInlining) {

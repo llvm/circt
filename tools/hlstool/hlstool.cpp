@@ -57,8 +57,6 @@
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
 
-#include <iostream>
-
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
@@ -230,7 +228,7 @@ static LoweringOptionsOption loweringOptions(mainCategory);
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
   config.useTopDownTraversal = true;
-  config.enableRegionSimplification = false;
+  config.enableRegionSimplification = mlir::GreedySimplifyRegionLevel::Disabled;
   return mlir::createCanonicalizerPass(config);
 }
 

@@ -120,6 +120,9 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 def TypeWidthAdjust32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr(type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel() - type_cast<FIRRTLBaseType>($1.getType()).getBitWidthOrSentinel())">;
 
+// Int 1 is one higher than int 2
+def AdjInt : Constraint<CPred<"$0.getValue() + 1 == $1.getValue()">>;
+
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
 
@@ -194,16 +197,16 @@ def NotGt : Pat <
   (MoveNameHint $old, (LEQPrimOp $x, $y)),
   []>;
 
-// connect(a:t,b:t) -> strictconnect(a,b)
+// connect(a:t,b:t) -> matchingconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, $src),
+  (MatchingConnectOp $dst, $src),
   [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
 
-// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+// connect(a:t1,b:(t2<t1) -> matchingconnect(a,(pad b))
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, (PadPrimOp $src,
+  (MatchingConnectOp $dst, (PadPrimOp $src,
     (NativeCodeCall<"type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
   [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
@@ -658,7 +661,7 @@ def MuxPadSel : Pat<
   (MuxPrimOp:$old $cond, $a, $b),
   (MoveNameHint $old, (MuxPrimOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
@@ -668,7 +671,7 @@ def Mux2PadSel : Pat<
   (Mux2CellIntrinsicOp:$old $cond, $a, $b),
   (MoveNameHint $old, (Mux2CellIntrinsicOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
@@ -692,6 +695,12 @@ def CatCast : Pat <
   (CatPrimOp:$old (AsUIntPrimOp $x), (AsUIntPrimOp $y)),
   (MoveNameHint $old, (CatPrimOp $x, $y)),
   [(EqualSigns $x, $y)]>;
+
+// cat(bits a:b x, bits b+1:c x) -> bits( a:c x)
+def CatBitsBits : Pat <
+  (CatPrimOp:$old (BitsPrimOp $x, I32Attr:$hi, I32Attr:$mid), (BitsPrimOp $x, I32Attr:$mid2, I32Attr:$low)),
+  (MoveNameHint $old, (BitsPrimOp $x, $hi, $low)),
+  [(AdjInt $mid2, $mid)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<

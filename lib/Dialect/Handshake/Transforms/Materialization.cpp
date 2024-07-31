@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -22,8 +22,17 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKEMATERIALIZEFORKSSINKS
+#define GEN_PASS_DEF_HANDSHAKEDEMATERIALIZEFORKSSINKS
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -32,48 +41,14 @@ using namespace mlir::affine;
 
 using BlockValues = DenseMap<Block *, std::vector<Value>>;
 
-static void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
-  for (int i = 0, e = op->getNumOperands(); i < e; ++i)
-    if (op->getOperand(i) == oldVal) {
-      op->setOperand(i, newVal);
-      break;
-    }
-  return;
-}
-
 static void insertSink(Value val, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(val);
   rewriter.create<SinkOp>(val.getLoc(), val);
 }
 
-namespace circt {
-namespace handshake {
-
-void insertFork(Value result, bool isLazy, OpBuilder &rewriter) {
-  // Get successor operations
-  std::vector<Operation *> opsToProcess;
-  for (auto &u : result.getUses())
-    opsToProcess.push_back(u.getOwner());
-
-  // Insert fork after op
-  rewriter.setInsertionPointAfterValue(result);
-  auto forkSize = opsToProcess.size();
-  Operation *newOp;
-  if (isLazy)
-    newOp = rewriter.create<LazyForkOp>(result.getLoc(), result, forkSize);
-  else
-    newOp = rewriter.create<ForkOp>(result.getLoc(), result, forkSize);
-
-  // Modify operands of successor
-  // opsToProcess may have multiple instances of same operand
-  // Replace uses one by one to assign different fork outputs to them
-  for (int i = 0, e = forkSize; i < e; ++i)
-    replaceFirstUse(opsToProcess[i], result, newOp->getResult(i));
-}
-
-// Insert Fork Operation for every operation and function argument with more
-// than one successor.
-LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
+/// Insert Fork Operation for every operation and function argument with more
+/// than one successor.
+static LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
   for (Operation &op : r.getOps()) {
     // Ignore terminators, and don't add Forks to Forks.
     if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
@@ -92,8 +67,8 @@ LogicalResult addForkOps(Region &r, OpBuilder &rewriter) {
   return success();
 }
 
-// Create sink for every unused result
-LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
+/// Adds sink operations to any unused value in r.
+static LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
   BlockValues liveOuts;
 
   for (Block &block : r) {
@@ -121,12 +96,9 @@ LogicalResult addSinkOps(Region &r, OpBuilder &rewriter) {
   return success();
 }
 
-} // namespace handshake
-} // namespace circt
-
 namespace {
 struct HandshakeMaterializeForksSinksPass
-    : public HandshakeMaterializeForksSinksBase<
+    : public circt::handshake::impl::HandshakeMaterializeForksSinksBase<
           HandshakeMaterializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
@@ -141,7 +113,7 @@ struct HandshakeMaterializeForksSinksPass
 };
 
 struct HandshakeDematerializeForksSinksPass
-    : public HandshakeDematerializeForksSinksBase<
+    : public circt::handshake::impl::HandshakeDematerializeForksSinksBase<
           HandshakeDematerializeForksSinksPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();

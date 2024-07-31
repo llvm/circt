@@ -300,8 +300,8 @@ class Port:
     if not supports_host:
       raise TypeError(f"unsupported type: {reason}")
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self, buffer_size: Optional[int] = None):
+    self.cpp_port.connect(buffer_size)
     return self
 
 
@@ -333,17 +333,15 @@ class ReadPort(Port):
     super().__init__(owner, cpp_port)
     self.cpp_port: cpp.ReadChannelPort = cpp_port
 
-  def read(self) -> Tuple[bool, Optional[object]]:
+  def read(self) -> object:
     """Read a typed message from the channel. Returns a deserialized object of a
     type defined by the port type."""
 
     buffer = self.cpp_port.read()
-    if buffer is None:
-      return (False, None)
     (msg, leftover) = self.type.deserialize(buffer)
     if len(leftover) != 0:
       raise ValueError(f"leftover bytes: {leftover}")
-    return (True, msg)
+    return msg
 
 
 class BundlePort:

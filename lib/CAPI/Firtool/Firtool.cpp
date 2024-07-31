@@ -174,11 +174,6 @@ void circtFirtoolOptionsSetDisableAggressiveMergeConnections(
   unwrap(options)->setDisableAggressiveMergeConnections(value);
 }
 
-void circtFirtoolOptionsSetDisableHoistingHWPassthrough(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setDisableHoistingHWPassthrough(value);
-}
-
 void circtFirtoolOptionsSetEmitOmir(CirctFirtoolFirtoolOptions options,
                                     bool value) {
   unwrap(options)->setEmitOMIR(value);

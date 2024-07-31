@@ -10,27 +10,37 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_ADDSEQMEMPORTS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
+struct AddSeqMemPortsPass
+    : public circt::firrtl::impl::AddSeqMemPortsBase<AddSeqMemPortsPass> {
   void runOnOperation() override;
   LogicalResult processAddPortAnno(Location loc, Annotation anno);
   LogicalResult processFileAnno(Location loc, StringRef metadataDir,
@@ -66,8 +76,11 @@ struct AddSeqMemPortsPass : public AddSeqMemPortsBase<AddSeqMemPortsPass> {
     /// which is for some reason the format of the metadata file.
     std::vector<SmallVector<Attribute>> instancePaths;
   };
+
+  CircuitNamespace circtNamespace;
   /// This maps a module to information about the memories.
   DenseMap<Operation *, MemoryInfo> memInfoMap;
+  DenseMap<Attribute, Operation *> innerRefToInstanceMap;
 
   InstanceGraph *instanceGraph;
 
@@ -163,7 +176,7 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
 InstanceGraphNode *AddSeqMemPortsPass::findDUT() {
   // Find the DUT module.
   for (auto *node : *instanceGraph) {
-    if (AnnotationSet(node->getModule()).hasAnnotation(dutAnnoClass))
+    if (AnnotationSet::hasAnnotation(node->getModule(), dutAnnoClass))
       return node;
   }
   return instanceGraph->getTopLevelNode();
@@ -248,12 +261,13 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
         // current module.
         auto &instancePaths = memInfo.instancePaths;
         auto ref = getInnerRefTo(inst);
+        innerRefToInstanceMap[ref] = inst;
         // If its a mem module, this is the start of a path to the module.
         if (isa<FMemModuleOp>(submodule))
           instancePaths.push_back({ref});
         // Copy any paths through the submodule to memories, adding the ref to
         // the current instance.
-        for (auto subPath : subMemInfo.instancePaths) {
+        for (const auto &subPath : subMemInfo.instancePaths) {
           instancePaths.push_back(subPath);
           instancePaths.back().push_back(ref);
         }
@@ -271,7 +285,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp module, bool isDUT) {
     Value instPort = values[i];
     if (port.direction == Direction::In)
       std::swap(modulePort, instPort);
-    builder.create<StrictConnectOp>(port.loc, modulePort, instPort);
+    builder.create<MatchingConnectOp>(port.loc, modulePort, instPort);
   }
   return success();
 }
@@ -284,6 +298,9 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
   // Output buffer.
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
+
+  SymbolTable &symTable = getAnalysis<SymbolTable>();
+  HierPathCache cache(circuit, symTable);
 
   // The current parameter to the verbatim op.
   unsigned paramIndex = 0;
@@ -308,22 +325,37 @@ void AddSeqMemPortsPass::createOutputFile(igraph::ModuleOpInterface module) {
 
   // The current sram we are processing.
   unsigned sramIndex = 0;
-  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
   auto &instancePaths = memInfoMap[module].instancePaths;
-  for (auto instancePath : instancePaths) {
-    os << sramIndex++ << " -> ";
-    addSymbol(dutSymbol);
-    // The instance path is reverse from the order we print it.
-    for (auto ref : llvm::reverse(instancePath)) {
-      os << ".";
-      addSymbol(ref);
-    }
-    os << "\n";
-  }
+  auto dutSymbol = FlatSymbolRefAttr::get(module.getModuleNameAttr());
 
-  // Put the information in a verbatim operation.
   auto loc = builder.getUnknownLoc();
+  // Put the information in a verbatim operation.
   builder.create<emit::FileOp>(loc, outputFile, [&] {
+    for (auto instancePath : instancePaths) {
+      // Note: Reverse instancepath to construct the NLA.
+      SmallVector<Attribute> path(llvm::reverse(instancePath));
+      os << sramIndex++ << " -> ";
+      addSymbol(dutSymbol);
+      os << ".";
+
+      auto nlaSymbol = cache.getRefFor(builder.getArrayAttr(path));
+      addSymbol(nlaSymbol);
+      NamedAttrList fields;
+      // There is no current client for the distinct attr, but it will be used
+      // by OM::path once the metadata is moved to OM, instead of the verbatim.
+      auto id = DistinctAttr::create(UnitAttr::get(builder.getContext()));
+      fields.append("id", id);
+      fields.append("class", builder.getStringAttr("circt.tracker"));
+      fields.append("circt.nonlocal", nlaSymbol);
+      // Now add the nonlocal annotation to the leaf instance.
+      auto *leafInstance = innerRefToInstanceMap[instancePath.front()];
+
+      AnnotationSet annos(leafInstance);
+      annos.addAnnotations(builder.getDictionaryAttr(fields));
+      annos.applyToOperation(leafInstance);
+
+      os << "\n";
+    }
     builder.create<sv::VerbatimOp>(loc, buffer, ValueRange{},
                                    builder.getArrayAttr(params));
   });
@@ -334,6 +366,7 @@ void AddSeqMemPortsPass::runOnOperation() {
   auto *context = &getContext();
   auto circuit = getOperation();
   instanceGraph = &getAnalysis<InstanceGraph>();
+  circtNamespace = CircuitNamespace(circuit);
   // Clear the state.
   userPorts.clear();
   memInfoMap.clear();
@@ -417,7 +450,7 @@ void AddSeqMemPortsPass::runOnOperation() {
           auto type = value.getType();
           auto attr = getIntZerosAttr(type);
           auto zero = builder.create<ConstantOp>(portInfo.loc, type, attr);
-          builder.create<StrictConnectOp>(portInfo.loc, value, zero);
+          builder.create<MatchingConnectOp>(portInfo.loc, value, zero);
         }
       }
     }

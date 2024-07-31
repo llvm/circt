@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/SeqToSV.h"
-#include "../PassDetail.h"
 #include "FirMemLowering.h"
 #include "FirRegLowering.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -41,7 +40,7 @@ using namespace seq;
 using hw::HWModuleOp;
 using llvm::MapVector;
 
-namespace {
+namespace circt {
 #define GEN_PASS_DEF_LOWERSEQTOSV
 #include "circt/Conversion/Passes.h.inc"
 
@@ -55,7 +54,7 @@ struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   using LowerSeqToSVBase<SeqToSVPass>::LowerSeqToSVBase;
   using LowerSeqToSVBase<SeqToSVPass>::numSubaccessRestored;
 };
-} // anonymous namespace
+} // namespace circt
 
 namespace {
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
@@ -98,7 +97,7 @@ public:
       if (lowerToAlwaysFF) {
         rewriter.create<sv::AlwaysFFOp>(
             loc, sv::EventControl::AtPosEdge, adaptor.getClk(),
-            ResetType::SyncReset, sv::EventControl::AtPosEdge,
+            sv::ResetType::SyncReset, sv::EventControl::AtPosEdge,
             adaptor.getReset(), assignValue, assignReset);
       } else {
         rewriter.create<sv::AlwaysOp>(

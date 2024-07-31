@@ -10,11 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -25,6 +25,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
@@ -32,6 +33,13 @@
 #include <variant>
 
 #define DEBUG_TYPE "gct"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_GRANDCENTRAL
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -45,7 +53,7 @@ namespace {
 // These are used to provide hard-errors if a user tries to use the YAML
 // infrastructure improperly.  We only implement conversion to YAML and not
 // conversion from YAML.  The LLVM YAML infrastructure doesn't provide the
-// ability to differentitate this and we don't need it for the purposes of
+// ability to differentiate this and we don't need it for the purposes of
 // Grand Central.
 [[maybe_unused]] static std::string noDefault(StringRef clazz) {
   return ("default '" + clazz +
@@ -67,8 +75,8 @@ namespace yaml {
 
 /// Context information necessary for YAML generation.
 struct Context {
-  /// A symbol table consisting of _only_ the interfaces construted by the Grand
-  /// Central pass.  This is not a symbol table because we do not have an
+  /// A symbol table consisting of _only_ the interfaces constructed by the
+  /// Grand Central pass.  This is not a symbol table because we do not have an
   /// up-to-date symbol table that includes interfaces at the time the Grand
   /// Central pass finishes.  This structure is easier to build up and is only
   /// the information we need.
@@ -153,7 +161,7 @@ std::string static stripComment(StringRef str) {
 
 /// Conversion from a `DescribedSignal` to YAML.  This is
 /// implemented using YAML normalization to first convert this to an internal
-/// `Field` structure which has a one-to-one mapping to the YAML represntation.
+/// `Field` structure which has a one-to-one mapping to the YAML representation.
 template <>
 struct MappingContextTraits<DescribedSignal, Context> {
   /// A one-to-one representation with a YAML representation of a signal/field.
@@ -191,7 +199,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
       //     dimensions: [ 3, 2, 1 ]
       //     width: 8
       //
-      // Note that the above is equivalenet to the following Verilog
+      // Note that the above is equivalent to the following Verilog
       // specification.
       //
       //     wire [7:0] foo [2:0][1:0][0:0]
@@ -216,7 +224,7 @@ struct MappingContextTraits<DescribedSignal, Context> {
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
     Field(IO &io) { llvm_unreachable(noDefault("Field").c_str()); }
 
-    /// This cannot be denomralized back to an interface op.
+    /// This cannot be denormalized back to an interface op.
     DescribedSignal denormalize(IO &) {
       llvm_unreachable(deNorm("DescribedSignal").c_str());
     }
@@ -245,7 +253,7 @@ struct MappingContextTraits<DescribedInstance, Context> {
     /// An optional textual description of the interface.
     std::optional<std::string> description = std::nullopt;
 
-    /// An array describing the dimnensionality of the interface.
+    /// An array describing the dimensionality of the interface.
     SmallVector<int64_t, 2> dimensions;
 
     /// The underlying interface.
@@ -338,7 +346,7 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
               auto tpe = op->getAttrOfType<StringAttr>(
                   "firrtl.grandcentral.yaml.type");
 
-              // This is a descripton.  Update the mutable description and
+              // This is a description.  Update the mutable description and
               // continue;
               if (tpe.getValue() == "description") {
                 description = op.getFormatStringAttr();
@@ -374,7 +382,7 @@ struct MappingContextTraits<sv::InterfaceOp, Context> {
     /// A no-argument constructor is necessary to work with LLVM's YAML library.
     Interface(IO &io) { llvm_unreachable(noDefault("Interface").c_str()); }
 
-    /// This cannot be denomralized back to an interface op.
+    /// This cannot be denormalized back to an interface op.
     sv::InterfaceOp denormalize(IO &) {
       llvm_unreachable(deNorm("sv::InterfaceOp").c_str());
     }
@@ -487,8 +495,8 @@ struct VerbatimType {
   /// The textual representation of the type.
   std::string str;
 
-  /// True if this is a type which must be "instatiated" and requires a trailing
-  /// "()".
+  /// True if this is a type which must be "instantiated" and requires a
+  /// trailing "()".
   bool instantiation;
 
   /// A vector storing the width of each dimension of the type.
@@ -582,7 +590,8 @@ struct InterfaceElemsBuilder {
 /// 3. The circuit-level Grand Central annotation is walked to both generate and
 ///    instantiate interfaces and to generate the "mappings" file that produces
 ///    cross-module references (XMRs) to drive the interface.
-struct GrandCentralPass : public GrandCentralBase<GrandCentralPass> {
+struct GrandCentralPass
+    : public circt::firrtl::impl::GrandCentralBase<GrandCentralPass> {
   using GrandCentralBase::companionMode;
 
   void runOnOperation() override;
@@ -635,7 +644,7 @@ private:
 
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
-  /// the type of the field exmained.
+  /// the type of the field examined.
   std::optional<TypeSum>
   computeField(Attribute field, IntegerAttr id, StringAttr prefix,
                VerbatimBuilder &path, SmallVector<VerbatimXMRbuilder> &xmrElems,
@@ -654,7 +663,7 @@ private:
   igraph::ModuleOpInterface getEnclosingModule(Value value,
                                                FlatSymbolRefAttr sym = {});
 
-  /// Inforamtion about how the circuit should be extracted.  This will be
+  /// Information about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
   std::optional<ExtractionInfo> maybeExtractInfo = std::nullopt;
 
@@ -677,7 +686,7 @@ private:
   InstancePathCache *instancePaths = nullptr;
 
   /// The namespace associated with the circuit.  This is lazily constructed
-  /// using `getNamesapce`.
+  /// using `getNamespace`.
   std::optional<CircuitNamespace> circuitNamespace;
 
   /// The module namespaces. These are lazily constructed by
@@ -765,7 +774,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
   /// Optionally unpack a ReferenceTarget encoded as a DictionaryAttr.  Return
   /// either a pair containing the Target string (up to the reference) and an
   /// array of components or none if the input is malformed.  The input
-  /// DicionaryAttr encoding is a JSON object of a serialized ReferenceTarget
+  /// DictionaryAttr encoding is a JSON object of a serialized ReferenceTarget
   /// Scala class.  By example, this is converting:
   ///   ~Foo|Foo>a.b[0]
   /// To:
@@ -901,7 +910,7 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
     // Each element is an AugmentedField with members:
     //   "name": String
     //   "description": Option[String]
-    //   "tpe": AugmenetedType
+    //   "tpe": AugmentedType
     SmallVector<Attribute> elements;
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
@@ -1069,7 +1078,13 @@ parseAugmentedType(ApplyState &state, DictionaryAttr augmentedType,
                                     state.symTbl, state.targetCaches)
                             ->ref.getOp());
     builder.setInsertionPointToEnd(companionMod.getBodyBlock());
-    auto sink = builder.create<WireOp>(source->getType(), name);
+    // Sink type must be passive.  It's required to be converted to a NodeOp by
+    // the wiring problem solving, and later checked to be a Node.
+    // This also ensures passive sink so works equally well w/ or w/o probes.
+    auto sinkType = source->getType();
+    if (auto baseSinkType = type_dyn_cast<FIRRTLBaseType>(sinkType))
+      sinkType = baseSinkType.getPassiveType();
+    auto sink = builder.create<WireOp>(sinkType, name);
     state.targetCaches.insertOp(sink);
     AnnotationSet annotations(context);
     annotations.addAnnotations(
@@ -1343,7 +1358,7 @@ bool GrandCentralPass::traverseField(
           return StringAttr::get(&getContext(), "assign " + replStr + ";");
         };
 
-        // This is the new style of XMRs using RefTypes.  The value subsitution
+        // This is the new style of XMRs using RefTypes.  The value substitution
         // index is set to -1, as it will be incremented when generating the
         // string.
         // Generate the path from the LCA to the module that contains the leaf.
@@ -1543,7 +1558,7 @@ void GrandCentralPass::runOnOperation() {
 
   CircuitOp circuitOp = getOperation();
 
-  // Look at the circuit annotaitons to do two things:
+  // Look at the circuit annotations to do two things:
   //
   // 1. Determine extraction information (directory and filename).
   // 2. Populate a worklist of all annotations that encode interfaces.
@@ -1706,7 +1721,7 @@ void GrandCentralPass::runOnOperation() {
     return id;
   };
 
-  /// TODO: Handle this differently to allow construction of an optionsl
+  /// TODO: Handle this differently to allow construction of an options
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
   instancePaths = &instancePathCache;
 
@@ -1741,7 +1756,8 @@ void GrandCentralPass::runOnOperation() {
         }
         auto instOp = dyn_cast<InstanceOp>(*a->getInstance());
         if (dutModules.contains(mod) ||
-            AnnotationSet(mod->getModule()).hasAnnotation(companionAnnoClass) ||
+            AnnotationSet::hasAnnotation(mod->getModule(),
+                                         companionAnnoClass) ||
             (instOp && instOp.getLowerToBind()))
           continue;
         modules.push_back(mod);
@@ -1878,8 +1894,8 @@ void GrandCentralPass::runOnOperation() {
             // If this is a companion, then:
             //   1. Insert it into the companion map
             //   2. Create a new mapping module.
-            //   3. Instatiate the mapping module in the companion.
-            //   4. Check that the companion is instantated exactly once.
+            //   3. Instantiate the mapping module in the companion.
+            //   4. Check that the companion is instantiated exactly once.
             //   5. Set attributes on that lone instance so it will become a
             //      bind if extraction information was provided.  If a DUT is
             //      known, then anything in the test harness will not be
@@ -2250,7 +2266,7 @@ void GrandCentralPass::runOnOperation() {
               uloc, str->toStr(elem.elemName.getValue()));
 
           // If we need to generate a YAML representation of the interface, then
-          // add attirbutes that describe what this `sv::VerbatimOp` is.
+          // add attributes that describe what this `sv::VerbatimOp` is.
           if (maybeHierarchyFileYAML) {
             if (str->instantiation)
               instanceOp->setAttr("firrtl.grandcentral.yaml.type",

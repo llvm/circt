@@ -5,12 +5,16 @@ func.func private @Seq(%arg0: !ltl.sequence)
 func.func private @Prop(%arg0: !ltl.property)
 
 // CHECK-LABEL: @DelayFolds
-func.func @DelayFolds(%arg0: !ltl.sequence) {
-  // TODO: This can't happen because the fold changes type, need to be able to cast i1 to sequence
+func.func @DelayFolds(%arg0: !ltl.sequence, %arg1: i1) {
   // delay(s, 0, 0) -> s
-  // COM: CHECK-NEXT: call @Seq(%arg0)
-  //%0 = ltl.delay %arg0, 0, 0 : !ltl.sequence
-  //call @Seq(%0) : (!ltl.sequence) -> ()
+  // delay(i, 0, 0) -> delay(i, 0, 0)
+  // CHECK-NEXT: ltl.delay %arg1, 0, 0 : i1
+  // CHECK-NEXT: call @Seq(%arg0)
+  // CHECK-NEXT: call @Seq({{%.+}})
+  %0 = ltl.delay %arg0, 0, 0 : !ltl.sequence
+  %n0 = ltl.delay %arg1, 0, 0 : i1
+  call @Seq(%0) : (!ltl.sequence) -> ()
+  call @Seq(%n0) : (!ltl.sequence) -> ()
 
   // delay(delay(s, 1), 2) -> delay(s, 3)
   // CHECK-NEXT: ltl.delay %arg0, 3 :
@@ -95,12 +99,32 @@ func.func @ConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %arg2: !ltl.s
   return
 }
 
-// CHECK-LABEL: @ClockingFolds
-func.func @ClockingFolds(%arg0: !ltl.property) {
-  // disable(p, false) -> p
-  // CHECK-NEXT: call @Prop(%arg0)
-  %false = hw.constant false
-  %0 = ltl.disable %arg0 if %false : !ltl.property
-  call @Prop(%0) : (!ltl.property) -> ()
+// CHECK-LABEL: @RepeatFolds
+func.func @RepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
+  return
+}
+
+// CHECK-LABEL: @GoToRepeatFolds
+func.func @GoToRepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.goto_repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
+  return
+}
+
+// CHECK-LABEL: @NonConsecutiveRepeatFolds
+func.func @NonConsecutiveRepeatFolds(%arg0: !ltl.sequence) {
+  // repeat(s, 1, 0) -> s
+  // CHECK-NEXT: call @Seq(%arg0)
+  %0 = ltl.non_consecutive_repeat %arg0, 1, 0: !ltl.sequence
+  call @Seq(%0) : (!ltl.sequence) -> ()
+
   return
 }

@@ -16,12 +16,14 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1182,7 +1184,7 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
       matchPattern(op.getStep(), mlir::m_ConstantInt(&step)) &&
       lb + step == ub) {
     // Unroll the loop if it's executed only once.
-    op.getInductionVar().replaceAllUsesWith(op.getLowerBound());
+    rewriter.replaceAllUsesWith(op.getInductionVar(), op.getLowerBound());
     replaceOpWithRegion(rewriter, op, op.getBodyRegion());
     rewriter.eraseOp(op);
     return success();
@@ -2104,6 +2106,361 @@ ModportStructAttr ModportStructAttr::get(MLIRContext *context,
                                          ModportDirection direction,
                                          FlatSymbolRefAttr signal) {
   return get(context, ModportDirectionAttr::get(context, direction), signal);
+}
+
+//===----------------------------------------------------------------------===//
+// FuncOp
+//===----------------------------------------------------------------------===//
+
+ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto builder = parser.getBuilder();
+  // Parse visibility.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+
+  result.addAttribute(FuncOp::getModuleTypeAttrName(result.name), modType);
+
+  // Convert the specified array of dictionary attrs (which may have null
+  // entries) to an ArrayAttr of dictionaries.
+  auto unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> attrs, inputLocs, outputLocs;
+  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
+    return attr && cast<Location>(attr) != unknownLoc;
+  };
+
+  for (auto &port : ports) {
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+    auto loc = port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc;
+    (port.direction == hw::PortInfo::Direction::Output ? outputLocs : inputLocs)
+        .push_back(loc);
+  }
+
+  result.addAttribute(FuncOp::getPerArgumentAttrsAttrName(result.name),
+                      builder.getArrayAttr(attrs));
+
+  if (llvm::any_of(outputLocs, nonEmptyLocsFn))
+    result.addAttribute(FuncOp::getResultLocsAttrName(result.name),
+                        builder.getArrayAttr(outputLocs));
+  // Parse the attribute dict.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // Add the entry block arguments.
+  SmallVector<OpAsmParser::Argument, 4> entryArgs;
+  for (auto &port : ports)
+    if (port.direction != hw::ModulePort::Direction::Output)
+      entryArgs.push_back(port);
+
+  // Parse the optional function body. The printer will not print the body if
+  // its empty, so disallow parsing of empty body in the parser.
+  auto *body = result.addRegion();
+  llvm::SMLoc loc = parser.getCurrentLocation();
+
+  mlir::OptionalParseResult parseResult =
+      parser.parseOptionalRegion(*body, entryArgs,
+                                 /*enableNameShadowing=*/false);
+  if (parseResult.has_value()) {
+    if (failed(*parseResult))
+      return failure();
+    // Function body was parsed, make sure its not empty.
+    if (body->empty())
+      return parser.emitError(loc, "expected non-empty function body");
+  } else {
+    if (llvm::any_of(inputLocs, nonEmptyLocsFn))
+      result.addAttribute(FuncOp::getInputLocsAttrName(result.name),
+                          builder.getArrayAttr(inputLocs));
+  }
+
+  return success();
+}
+
+void FuncOp::getAsmBlockArgumentNames(mlir::Region &region,
+                                      mlir::OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  // Assign port names to the bbargs.
+  auto func = cast<FuncOp>(region.getParentOp());
+
+  auto *block = &region.front();
+
+  auto names = func.getModuleType().getInputNames();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    // Let mlir deterministically convert names to valid identifiers
+    setNameFn(block->getArgument(i), cast<StringAttr>(names[i]));
+  }
+}
+
+Type FuncOp::getExplicitlyReturnedType() {
+  if (!getPerArgumentAttrs() || getNumOutputs() == 0)
+    return {};
+
+  // Check if the last port is used as an explicit return.
+  auto lastArgument = getModuleType().getPorts().back();
+  auto lastArgumentAttr = dyn_cast<DictionaryAttr>(
+      getPerArgumentAttrsAttr()[getPerArgumentAttrsAttr().size() - 1]);
+
+  if (lastArgument.dir == hw::ModulePort::Output && lastArgumentAttr &&
+      lastArgumentAttr.getAs<UnitAttr>(getExplicitlyReturnedAttrName()))
+    return lastArgument.type;
+  return {};
+}
+
+ArrayRef<Attribute> FuncOp::getAllPortAttrs() {
+  if (getPerArgumentAttrs())
+    return getPerArgumentAttrs()->getValue();
+  return {};
+}
+
+void FuncOp::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+  setPerArgumentAttrsAttr(ArrayAttr::get(getContext(), attrs));
+}
+
+void FuncOp::removeAllPortAttrs() { setPerArgumentAttrsAttr({}); }
+SmallVector<Location> FuncOp::getAllPortLocs() {
+  SmallVector<Location> portLocs;
+  portLocs.reserve(getNumPorts());
+  auto resultLocs = getResultLocsAttr();
+  unsigned inputCount = 0;
+  auto modType = getModuleType();
+  auto unknownLoc = UnknownLoc::get(getContext());
+  auto *body = getBodyBlock();
+  auto inputLocs = getInputLocsAttr();
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
+    if (modType.isOutput(i)) {
+      auto loc = resultLocs
+                     ? cast<Location>(
+                           resultLocs.getValue()[portLocs.size() - inputCount])
+                     : unknownLoc;
+      portLocs.push_back(loc);
+    } else {
+      auto loc = body ? body->getArgument(inputCount).getLoc()
+                      : (inputLocs ? cast<Location>(inputLocs[inputCount])
+                                   : unknownLoc);
+      portLocs.push_back(loc);
+      ++inputCount;
+    }
+  }
+  return portLocs;
+}
+
+void FuncOp::setAllPortLocsAttrs(llvm::ArrayRef<mlir::Attribute> locs) {
+  SmallVector<Attribute> resultLocs, inputLocs;
+  unsigned inputCount = 0;
+  auto modType = getModuleType();
+  auto *body = getBodyBlock();
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
+    if (modType.isOutput(i))
+      resultLocs.push_back(locs[i]);
+    else if (body)
+      body->getArgument(inputCount++).setLoc(cast<Location>(locs[i]));
+    else // Need to store locations in an attribute if declaration.
+      inputLocs.push_back(locs[i]);
+  }
+  setResultLocsAttr(ArrayAttr::get(getContext(), resultLocs));
+  if (!body)
+    setInputLocsAttr(ArrayAttr::get(getContext(), inputLocs));
+}
+
+SmallVector<hw::PortInfo> FuncOp::getPortList() { return getPortList(false); }
+
+hw::PortInfo FuncOp::getPort(size_t idx) {
+  auto modTy = getHWModuleType();
+  auto emptyDict = DictionaryAttr::get(getContext());
+  LocationAttr loc = getPortLoc(idx);
+  DictionaryAttr attrs = dyn_cast_or_null<DictionaryAttr>(getPortAttrs(idx));
+  if (!attrs)
+    attrs = emptyDict;
+  return {modTy.getPorts()[idx],
+          modTy.isOutput(idx) ? modTy.getOutputIdForPortId(idx)
+                              : modTy.getInputIdForPortId(idx),
+          attrs, loc};
+}
+
+SmallVector<hw::PortInfo> FuncOp::getPortList(bool excludeExplicitReturn) {
+  auto modTy = getModuleType();
+  auto emptyDict = DictionaryAttr::get(getContext());
+  auto skipLastArgument = getExplicitlyReturnedType() && excludeExplicitReturn;
+  SmallVector<hw::PortInfo> retval;
+  auto portAttr = getAllPortLocs();
+  for (unsigned i = 0, e = skipLastArgument ? modTy.getNumPorts() - 1
+                                            : modTy.getNumPorts();
+       i < e; ++i) {
+    DictionaryAttr attrs = emptyDict;
+    if (auto perArgumentAttr = getPerArgumentAttrs())
+      if (auto argumentAttr =
+              dyn_cast_or_null<DictionaryAttr>((*perArgumentAttr)[i]))
+        attrs = argumentAttr;
+
+    retval.push_back({modTy.getPorts()[i],
+                      modTy.isOutput(i) ? modTy.getOutputIdForPortId(i)
+                                        : modTy.getInputIdForPortId(i),
+                      attrs, portAttr[i]});
+  }
+  return retval;
+}
+
+void FuncOp::print(OpAsmPrinter &p) {
+  FuncOp op = *this;
+  // Print the operation and the function name.
+  auto funcName =
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(funcName);
+  hw::module_like_impl::printModuleSignatureNew(
+      p, op.getBody(), op.getModuleType(),
+      op.getPerArgumentAttrsAttr()
+          ? ArrayRef<Attribute>(op.getPerArgumentAttrsAttr().getValue())
+          : ArrayRef<Attribute>{},
+      getAllPortLocs());
+
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, op,
+      {visibilityAttrName, getModuleTypeAttrName(),
+       getPerArgumentAttrsAttrName(), getInputLocsAttrName(),
+       getResultLocsAttrName()});
+  // Print the body if this is not an external function.
+  Region &body = op->getRegion(0);
+  if (!body.empty()) {
+    p << ' ';
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ReturnOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ReturnOp::verify() {
+  auto func = getParentOp<sv::FuncOp>();
+  auto funcResults = func.getResultTypes();
+  auto returnedValues = getOperands();
+  if (funcResults.size() != returnedValues.size())
+    return emitOpError("must have same number of operands as region results.");
+  // Check that the types of our operands and the region's results match.
+  for (size_t i = 0, e = funcResults.size(); i < e; ++i) {
+    if (funcResults[i] != returnedValues[i].getType()) {
+      emitOpError("output types must match function. In "
+                  "operand ")
+          << i << ", expected " << funcResults[i] << ", but got "
+          << returnedValues[i].getType() << ".";
+      return failure();
+    }
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Call Ops
+//===----------------------------------------------------------------------===//
+
+static Value
+getExplicitlyReturnedValueImpl(sv::FuncOp op,
+                               mlir::Operation::result_range results) {
+  if (!op.getExplicitlyReturnedType())
+    return {};
+  return results.back();
+}
+
+Value FuncCallOp::getExplicitlyReturnedValue(sv::FuncOp op) {
+  return getExplicitlyReturnedValueImpl(op, getResults());
+}
+
+Value FuncCallProceduralOp::getExplicitlyReturnedValue(sv::FuncOp op) {
+  return getExplicitlyReturnedValueImpl(op, getResults());
+}
+
+LogicalResult
+FuncCallProceduralOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp = dyn_cast_or_null<sv::FuncOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  return success();
+}
+
+LogicalResult FuncCallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp = dyn_cast_or_null<sv::FuncOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+
+  // Non-procedural call cannot have output arguments.
+  if (referencedOp.getNumOutputs() != 1 ||
+      !referencedOp.getExplicitlyReturnedType()) {
+    auto diag = emitError()
+                << "function called in a non-procedural region must "
+                   "return a single result";
+    diag.attachNote(referencedOp.getLoc()) << "doesn't satisfy the constraint";
+    return failure();
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// FuncDPIImportOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FuncDPIImportOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp = dyn_cast_or_null<sv::FuncOp>(
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()));
+
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (!referencedOp.isDeclaration())
+    return emitError("imported function must be a declaration but '")
+           << getCallee() << "' is defined";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Assert Property Like ops
+//===----------------------------------------------------------------------===//
+
+namespace AssertPropertyLikeOp {
+// Check that a clock is never given without an event
+// and that an event is never given with a clock.
+static LogicalResult verify(Value clock, bool eventExists, mlir::Location loc) {
+  if ((!clock && eventExists) || (clock && !eventExists))
+    return mlir::emitError(
+        loc, "Every clock must be associated to an even and vice-versa!");
+  return success();
+}
+} // namespace AssertPropertyLikeOp
+
+LogicalResult AssertPropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
+}
+
+LogicalResult AssumePropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
+}
+
+LogicalResult CoverPropertyOp::verify() {
+  return AssertPropertyLikeOp::verify(getClock(), getEvent().has_value(),
+                                      getLoc());
 }
 
 //===----------------------------------------------------------------------===//

@@ -75,10 +75,6 @@ PYBIND11_MODULE(esiCppAccel, m) {
                              py::return_value_policy::reference)
       .def_property_readonly("size", &ArrayType::getSize);
 
-  py::class_<Context>(m, "Context")
-      .def(py::init<>())
-      .def("connect", &Context::connect);
-
   py::class_<ModuleInfo>(m, "ModuleInfo")
       .def_property_readonly("name", [](ModuleInfo &info) { return info.name; })
       .def_property_readonly("summary",
@@ -103,6 +99,47 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<services::MMIO>(m, "MMIO")
       .def("read", &services::MMIO::read)
       .def("write", &services::MMIO::write);
+
+  py::class_<services::HostMem::HostMemRegion>(m, "HostMemRegion")
+      .def_property_readonly("ptr",
+                             [](services::HostMem::HostMemRegion &mem) {
+                               return reinterpret_cast<uintptr_t>(mem.getPtr());
+                             })
+      .def_property_readonly("size",
+                             &services::HostMem::HostMemRegion::getSize);
+
+  py::class_<services::HostMem::Options>(m, "HostMemOptions")
+      .def(py::init<>())
+      .def_readwrite("writeable", &services::HostMem::Options::writeable)
+      .def_readwrite("use_large_pages",
+                     &services::HostMem::Options::useLargePages)
+      .def("__repr__", [](services::HostMem::Options &opts) {
+        std::string ret = "HostMemOptions(";
+        if (opts.writeable)
+          ret += "writeable ";
+        if (opts.useLargePages)
+          ret += "use_large_pages";
+        ret += ")";
+        return ret;
+      });
+
+  py::class_<services::HostMem>(m, "HostMem")
+      .def("allocate", &services::HostMem::allocate, py::arg("size"),
+           py::arg("options") = services::HostMem::Options(),
+           py::return_value_policy::take_ownership)
+      .def(
+          "map_memory",
+          [](HostMem &self, uintptr_t ptr, size_t size, HostMem::Options opts) {
+            return self.mapMemory(reinterpret_cast<void *>(ptr), size, opts);
+          },
+          py::arg("ptr"), py::arg("size"),
+          py::arg("options") = services::HostMem::Options())
+      .def(
+          "unmap_memory",
+          [](HostMem &self, uintptr_t ptr) {
+            return self.unmapMemory(reinterpret_cast<void *>(ptr));
+          },
+          py::arg("ptr"));
 
   py::class_<AppID>(m, "AppID")
       .def(py::init<std::string, std::optional<uint32_t>>(), py::arg("name"),
@@ -138,7 +175,8 @@ PYBIND11_MODULE(esiCppAccel, m) {
       });
 
   py::class_<ChannelPort>(m, "ChannelPort")
-      .def("connect", &ChannelPort::connect)
+      .def("connect", &ChannelPort::connect,
+           py::arg("buffer_size") = std::nullopt)
       .def_property_readonly("type", &ChannelPort::getType,
                              py::return_value_policy::reference);
 
@@ -150,14 +188,14 @@ PYBIND11_MODULE(esiCppAccel, m) {
         p.write(dataVec);
       });
   py::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
-      .def("read",
-           [](ReadChannelPort &p) -> py::object {
-             MessageData data;
-             if (!p.read(data))
-               return py::none();
-             return py::bytearray((const char *)data.getBytes(),
-                                  data.getSize());
-           })
+      .def(
+          "read",
+          [](ReadChannelPort &p) -> py::bytearray {
+            MessageData data;
+            p.read(data);
+            return py::bytearray((const char *)data.getBytes(), data.getSize());
+          },
+          "Read data from the channel. Blocking.")
       .def("read_async", &ReadChannelPort::readAsync);
 
   py::class_<BundlePort>(m, "BundlePort")
@@ -203,44 +241,31 @@ PYBIND11_MODULE(esiCppAccel, m) {
   hwmodule.def_property_readonly("children", &HWModule::getChildren,
                                  py::return_value_policy::reference);
 
-  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection")
-                     .def(py::init(&registry::connect))
-                     .def(
-                         "sysinfo",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::SysInfo>({});
-                         },
-                         py::return_value_policy::reference)
-                     .def(
-                         "get_service_mmio",
-                         [](AcceleratorConnection &acc) {
-                           return acc.getService<services::MMIO>({});
-                         },
-                         py::return_value_policy::reference);
+  auto accConn = py::class_<AcceleratorConnection>(m, "AcceleratorConnection");
 
-// Only include this cosim-only feature if cosim is enabled.It's a bit of a hack
-// to test both styles of manifest retrieval for cosim. Come up with a more
-// generic way to set accelerator-specific properties/configurations.
-#ifdef ESI_COSIM
-  py::enum_<backends::cosim::CosimAccelerator::ManifestMethod>(
-      m, "CosimManifestMethod")
-      .value("ManifestCosim",
-             backends::cosim::CosimAccelerator::ManifestMethod::Cosim)
-      .value("ManifestMMIO",
-             backends::cosim::CosimAccelerator::ManifestMethod::MMIO)
-      .export_values();
+  py::class_<Context>(m, "Context")
+      .def(py::init<>())
+      .def("connect", &Context::connect);
 
-  accConn.def(
-      "set_manifest_method",
-      [](AcceleratorConnection &acc,
-         backends::cosim::CosimAccelerator::ManifestMethod method) {
-        auto cosim = dynamic_cast<backends::cosim::CosimAccelerator *>(&acc);
-        if (!cosim)
-          throw std::runtime_error(
-              "set_manifest_method only supported for cosim connections");
-        cosim->setManifestMethod(method);
-      });
-#endif // ESI_COSIM
+  accConn.def(py::init(&registry::connect))
+      .def(
+          "sysinfo",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::SysInfo>({});
+          },
+          py::return_value_policy::reference)
+      .def(
+          "get_service_mmio",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::MMIO>({});
+          },
+          py::return_value_policy::reference)
+      .def(
+          "get_service_hostmem",
+          [](AcceleratorConnection &acc) {
+            return acc.getService<services::HostMem>({});
+          },
+          py::return_value_policy::reference);
 
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())

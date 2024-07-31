@@ -38,7 +38,7 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
       "firrtl::FModuleOp", "firrtl::LayerBlockOp",
-      "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
+      "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -132,9 +132,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
-    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
-    /// and updates any users of the remaining ports to point at the new
-    /// instance.
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
     InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
 
     /// Clone the instance op and add ports.  This is usually used in
@@ -156,11 +155,6 @@ def InstanceOp : HardwareDeclOp<"instance", [
       Operation *moduleOp = node->getModule();
       return dyn_cast_or_null<T>(moduleOp);
     }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let hasVerifier = true;
@@ -210,6 +204,11 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
 
+    /// Builds a new instance with the ports listed in `portIndices` erased, and
+    /// updates any users of the remaining ports to point at the new instance.
+    InstanceChoiceOp erasePorts(OpBuilder &builder,
+                                const llvm::BitVector &portIndices);
+
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -240,7 +239,7 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
 }
 
 
-def MemOp : HardwareDeclOp<"mem"> {
+def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new mem";
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -358,7 +357,7 @@ def NodeOp : HardwareDeclOp<"node", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable); // ReferenceKinds
-  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
+  let results = (outs PassiveType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Value":$input,
@@ -393,7 +392,7 @@ def NodeOp : HardwareDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : HardwareDeclOp<"reg", [Forceable]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -485,7 +484,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:

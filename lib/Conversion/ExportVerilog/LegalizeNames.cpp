@@ -25,6 +25,15 @@ using namespace hw;
 using namespace ExportVerilog;
 
 //===----------------------------------------------------------------------===//
+// GlobalNameTable
+//===----------------------------------------------------------------------===//
+
+void GlobalNameTable::addReservedNames(NameCollisionResolver &resolver) const {
+  for (auto &name : reservedNames)
+    resolver.insertUsedName(name);
+}
+
+//===----------------------------------------------------------------------===//
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//
 
@@ -109,6 +118,7 @@ private:
   /// globalNameTable.
   void legalizeModuleNames(HWModuleOp module);
   void legalizeInterfaceNames(InterfaceOp interface);
+  void legalizeFunctionNames(FuncOp func);
 
   // Gathers prefixes of enum types by inspecting typescopes in the module.
   void gatherEnumPrefixes(mlir::ModuleOp topLevel);
@@ -129,15 +139,18 @@ private:
 } // namespace circt
 
 // This function legalizes local names in the given module.
-static void legalizeModuleLocalNames(HWModuleOp module,
+static void legalizeModuleLocalNames(HWEmittableModuleLike module,
                                      const LoweringOptions &options,
                                      const GlobalNameTable &globalNameTable) {
   // A resolver for a local name collison.
   NameCollisionResolver nameResolver(options);
+  globalNameTable.addReservedNames(nameResolver);
+
   // Register names used by parameters.
-  for (auto param : module.getParameters())
-    nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
-        module, cast<ParamDeclAttr>(param).getName()));
+  if (auto hwModule = dyn_cast<hw::HWModuleOp>(*module))
+    for (auto param : hwModule.getParameters())
+      nameResolver.insertUsedName(globalNameTable.getParameterVerilogName(
+          module, cast<ParamDeclAttr>(param).getName()));
 
   auto *ctxt = module.getContext();
 
@@ -146,8 +159,16 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   auto ports = module.getPortList();
   SmallVector<Attribute> newNames(ports.size());
   bool updated = false;
+  bool isFuncOp = isa<FuncOp>(module);
   for (auto [idx, port] : llvm::enumerate(ports)) {
     auto verilogName = port.attrs.get(verilogNameAttr);
+    // A function return value must named the exact same name to its function
+    // Verilog name.
+    if (isFuncOp && port.attrs.get(FuncOp::getExplicitlyReturnedAttrName())) {
+      updated = true;
+      newNames[idx] = StringAttr::get(ctxt, getSymOpName(module));
+      continue;
+    }
     if (verilogName) {
       auto newName = StringAttr::get(
           ctxt, nameResolver.getLegalName(cast<StringAttr>(verilogName)));
@@ -172,7 +193,7 @@ static void legalizeModuleLocalNames(HWModuleOp module,
   // Legalize the value names. We first mark existing hw.verilogName attrs as
   // being used, and then resolve names of declarations.
   module.walk([&](Operation *op) {
-    if (!isa<HWModuleOp>(op)) {
+    if (module != op) {
       // If there is a hw.verilogName attr, mark names as used.
       if (auto name = op->getAttrOfType<StringAttr>(verilogNameAttr)) {
         nameResolver.insertUsedName(
@@ -186,7 +207,8 @@ static void legalizeModuleLocalNames(HWModuleOp module,
       } else if (auto forOp = dyn_cast<ForOp>(op)) {
         nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
       } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
-                     AssumeConcurrentOp, CoverConcurrentOp, verif::AssertOp,
+                     AssumeConcurrentOp, CoverConcurrentOp, AssertPropertyOp,
+                     AssumePropertyOp, CoverPropertyOp, verif::AssertOp,
                      verif::CoverOp, verif::AssumeOp>(op)) {
         // Notice and renamify the labels on verification statements.
         if (auto labelAttr = op->getAttrOfType<StringAttr>("label"))
@@ -196,12 +218,12 @@ static void legalizeModuleLocalNames(HWModuleOp module,
           // name from verificaiton kinds.
           StringRef defaultName =
               llvm::TypeSwitch<Operation *, StringRef>(op)
-                  .Case<AssertOp, AssertConcurrentOp, verif::AssertOp>(
-                      [](auto) { return "assert"; })
-                  .Case<CoverOp, CoverConcurrentOp, verif::CoverOp>(
-                      [](auto) { return "cover"; })
-                  .Case<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(
-                      [](auto) { return "assume"; });
+                  .Case<AssertOp, AssertConcurrentOp, AssertPropertyOp,
+                        verif::AssertOp>([](auto) { return "assert"; })
+                  .Case<CoverOp, CoverConcurrentOp, CoverPropertyOp,
+                        verif::CoverOp>([](auto) { return "cover"; })
+                  .Case<AssumeOp, AssumeConcurrentOp, AssumePropertyOp,
+                        verif::AssumeOp>([](auto) { return "assume"; });
           nameEntries.emplace_back(
               op, StringAttr::get(op->getContext(), defaultName));
         }
@@ -237,6 +259,12 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
       globalNameResolver.insertUsedName(name);
+    } else if (auto reservedNamesOp = dyn_cast<sv::ReserveNamesOp>(op)) {
+      for (StringAttr name :
+           reservedNamesOp.getReservedNames().getAsRange<StringAttr>()) {
+        globalNameTable.reservedNames.insert(name);
+        globalNameResolver.insertUsedName(name);
+      }
     }
   }
 
@@ -257,7 +285,8 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel,
 
   // Legalize names in HW modules parallelly.
   mlir::parallelForEach(
-      topLevel.getContext(), topLevel.getOps<HWModuleOp>(), [&](auto module) {
+      topLevel.getContext(), topLevel.getOps<HWEmittableModuleLike>(),
+      [&](auto module) {
         legalizeModuleLocalNames(module, options, globalNameTable);
       });
 
@@ -320,6 +349,18 @@ void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
       if (newName != name)
         op.setAttr(verilogNameAttr, StringAttr::get(ctxt, newName));
     }
+  }
+}
+
+void GlobalNameResolver::legalizeFunctionNames(FuncOp func) {
+  MLIRContext *ctxt = func.getContext();
+  if (auto verilogName = func.getVerilogName()) {
+    globalNameResolver.insertUsedName(*verilogName);
+    return;
+  }
+  auto newName = globalNameResolver.getLegalName(func.getName());
+  if (newName != func.getName()) {
+    func.setVerilogName(StringAttr::get(ctxt, newName));
   }
 }
 

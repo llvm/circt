@@ -1,0 +1,192 @@
+name: PyCDE Test and Publish
+
+on:
+  push:
+    tags:
+      - pycde-*
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  #  Build and test Linux wheels. Run the CIRCT tests also.
+  # ---------------------------------------------------------------------------
+
+  build-linux:
+    name: Build
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=1ES-CIRCT-builds
+      - 1ES.ImageOverride=CIRCT-StdUbuntu2204
+    strategy:
+      matrix:
+        python-env:
+          - cp38-manylinux_x86_64
+          - cp39-manylinux_x86_64
+          - cp310-manylinux_x86_64
+          - cp311-manylinux_x86_64
+          - cp312-manylinux_x86_64
+    steps:
+      - name: Get CIRCT (no submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: false
+
+      - name: Get shallow LLVM submodule
+        run: |
+          git submodule update --init --recursive --recommend-shallow --depth 1
+
+      - name: Install dependencies
+        run: |
+          set -o errexit
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cibuildwheel twine
+
+      # Build CIRCT and run its tests using a Docker container with all the
+      # integration testing prerequisite installed.
+      - name: Build wheel
+        env:
+          CIBW_BUILD: ${{ matrix.python-env }}
+          CMAKE_GENERATOR: Ninja
+          SETUPTOOLS_SCM_DEBUG: True
+          BUILD_TYPE: Release
+          RUN_TESTS: True
+        run: |
+          set -o errexit
+          export PATH=$PATH:$HOME/.local/bin
+
+          echo "Building wheel"
+          cibuildwheel --output-dir wheelhouse frontends/PyCDE
+
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  #  Build and test Windows wheels.
+  # ---------------------------------------------------------------------------
+
+  build-windows:
+    name: Build
+    # Run on an internal MSFT subscription. Please DO NOT use this for any other
+    # workflows without talking to John Demme (john.demme@microsoft.com, GH
+    # teqdruid) first. We may lose funding for this if it ends up costing too
+    # much.
+    # If individual jobs fail due to timeouts or disconnects, please report to
+    # John and re-run the job.
+    runs-on:
+      - self-hosted
+      - 1ES.Pool=1ES-CIRCT-builds
+      - 1ES.ImageOverride=1esMMSWindows2022
+    strategy:
+      matrix:
+        python-env:
+          - cp38-win_amd64
+          - cp39-win_amd64
+          - cp310-win_amd64
+          - cp311-win_amd64
+          - cp312-win_amd64
+    steps:
+      # Since we don't use docker on Windows, we need to install the dependencies.
+      - name: Build additional c++ deps
+        shell: pwsh
+        run: |
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib
+
+      - name: Get CIRCT
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: false
+
+      - name: Get shallow LLVM submodule
+        run: |
+          git submodule update --init --recursive --recommend-shallow --depth 1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel twine
+          choco install ninja
+
+      - name: Build wheel
+        shell: cmd
+        env:
+          CIBW_BUILD: ${{ matrix.python-env }}
+          CMAKE_GENERATOR: Ninja
+          SETUPTOOLS_SCM_DEBUG: True
+          BUILD_TYPE: Release
+          # PyCDE integration tests are not yet implemented on Windows.
+          RUN_TESTS: False
+        run: |
+          echo "Building wheel"
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && python -m cibuildwheel --output-dir wheelhouse frontends/PyCDE
+
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
+          retention-days: 7
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  #  If both the Linux and Windows builds are successful, push the wheels to
+  #  pypi. Only do this on the main branch or a tag.
+  # ---------------------------------------------------------------------------
+
+  push_wheels:
+    name: Push wheels (Tag or Weekly)
+    runs-on: ubuntu-20.04
+    if: github.repository == 'llvm/circt' && ( github.ref == 'refs/heads/main' || github.ref_type == 'tag' )
+    needs:
+      - build-linux
+      - build-windows
+    environment:
+      name: pypi
+      url: https://pypi.org/p/esiaccel
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: ./wheelhouse/
+          merge-multiple: true
+
+      - name: List downloaded wheels
+        run: ls -laR
+        working-directory: ./wheelhouse/
+
+      - name: Upload wheels to pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: wheelhouse/
+          verify-metadata: false

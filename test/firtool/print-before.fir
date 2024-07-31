@@ -10,5 +10,6 @@
 ; RUN: firtool %s -mlir-print-ir-before=lower-firrtl-to-hw 2>&1 | FileCheck %s -Dpass=LowerFIRRTLToHW
 ; RUN: firtool %s -mlir-print-ir-before=prepare-for-emission 2>&1 | FileCheck %s -Dpass=PrepareForEmission
 ; CHECK: IR Dump Before [[pass]]
+FIRRTL version 4.0.0
 circuit Empty:
-  module Empty:
+  public module Empty:

@@ -25,7 +25,8 @@ def ProcessLowering : Pass<"llhd-process-lowering", "ModuleOp"> {
 }
 
 def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
-                                 "llhd::ProcOp"> {
+                                 "hw::HWModuleOp"> {
+
   let summary = "Promote memory to block arguments.";
   let description = [{
     Promotes memory locations allocated with `llhd.var` to block arguments. This
@@ -38,9 +39,9 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     Example:
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !llhd.sig<i1>) -> () {
+    llhd.process {
       %c5 = llhd.const 5 : i32
-      %cond = llhd.prb %condsig : !llhd.sig<i1>
+      %cond = llhd.prb %condsig : !hw.inout<i1>
       %ptr = llhd.var %c5 : i32
       cond_br %cond, ^bb1, ^bb2
     ^bb1:
@@ -57,9 +58,9 @@ def MemoryToBlockArgument : Pass<"llhd-memory-to-block-argument",
     is transformed to
 
     ```mlir
-    llhd.proc @check_simple(%condsig : !llhd.sig<i1>) -> () {
+    llhd.process {
       %c5 = llhd.const 5 : i32
-      %cond = llhd.prb %condsig : !llhd.sig<i1>
+      %cond = llhd.prb %condsig : !hw.inout<i1>
       cond_br %cond, ^bb1, ^bb2(%c5 : i32)
     ^bb1:
       %c6 = llhd.const 6 : i32
@@ -83,14 +84,14 @@ def FunctionElimination : Pass<"llhd-function-elimination", "ModuleOp"> {
     This pass is intended as a post-inlining pass to check if all functions
     could be successfully inlined and remove the inlined functions. This
     is necessary because Structural LLHD does not allow functions. Fails in
-    the case that there is still a function call left in a `llhd.proc` or
-    `llhd.entity`.
+    the case that there is still a function call left in a `llhd.process` or
+    `hw.module`.
   }];
 
   let constructor = "circt::llhd::createFunctionEliminationPass()";
 }
 
-def EarlyCodeMotion : Pass<"llhd-early-code-motion", "llhd::ProcOp"> {
+def EarlyCodeMotion : Pass<"llhd-early-code-motion", "hw::HWModuleOp"> {
   let summary = "Move side-effect-free instructions and llhd.prb up in the CFG";
   let description = [{
     Moves side-effect-free instructions as far up in the CFG as possible. That
@@ -106,6 +107,23 @@ def EarlyCodeMotion : Pass<"llhd-early-code-motion", "llhd::ProcOp"> {
   }];
 
   let constructor = "circt::llhd::createEarlyCodeMotionPass()";
+}
+
+def TemporalCodeMotion : Pass<"llhd-temporal-code-motion", "hw::HWModuleOp"> {
+  let summary = "move drive operations to the exit basic block in processes";
+  let description = [{
+    This pass uses the temporal region analysis to transform the IR such that
+    every temporal region has a unique exit block and moves all 'llhd.drv'
+    operations in a temporal region into its exit block by adjusting the
+    enable operand.
+    Furthermore, it combines 'llhd.drv' operations driving the same signal with
+    the same delay by multiplexing the driven value according to their enable
+    operands.
+    This pass assumes that the early code motion pass has been run beforehand.
+    Otherwise, dominance errors are to be expected.
+  }];
+
+  let constructor = "circt::llhd::createTemporalCodeMotionPass()";
 }
 
 #endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES

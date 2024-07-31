@@ -15,6 +15,7 @@
 
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Support/InstanceGraphInterface.td"
 
 def PortList : OpInterface<"PortList", []> {
@@ -402,6 +403,15 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
   ];
 }
 
+def HWEmittableModuleLike : OpInterface<"HWEmittableModuleLike", [HWModuleLike,
+                                        Emittable]> {
+  let cppNamespace = "::circt::hw";
+  let description = [{
+    This interface indicates that the module like op is emittable in SV and
+    requires SV legalization on its body.
+  }];
+}
+
 
 def HWInstanceLike : OpInterface<"HWInstanceLike", [
     InstanceGraphInstanceOpInterface]> {
@@ -534,6 +544,25 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
       "::mlir::LogicalResult", "verifyInnerRefs",
       (ins "::circt::hw::InnerRefNamespace&":$ns)
     >,
+  ];
+}
+
+def CombDataflow : OpInterface<"CombDataFlow"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    This interface is used for specifying the combinational dataflow that exists
+    in the results and operands of an operation.
+    Any operation that doesn't implement this interface is assumed to have a
+    combinational dependence from each operand to each result.
+  }];
+  let methods = [
+    InterfaceMethod<[{
+     Get the combinational dataflow relations between the operands and the results.
+     This returns a pair of ground type fieldrefs. The first element is the destination
+     and the second is the source of the dependence. The default implementation returns
+     an empty list, which implies that the operation is not combinational.}],
+     "llvm::SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
+     (ins)>,
   ];
 }
 

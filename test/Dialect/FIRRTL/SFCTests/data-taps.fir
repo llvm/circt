@@ -7,6 +7,7 @@
 ; This test was extracted from:
 ; - github.com/sifive/$internal:
 ;   - src/test/scala/grandcentral/DataTapsTest.scala
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -100,7 +101,7 @@ circuit Top : %[[
     signed.io.in <= io.in
     io.out <= signed.io.out
 
-  module Top :
+  public module Top :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip in : UInt<1>, out : UInt<1>}
@@ -135,6 +136,7 @@ circuit Top : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -177,7 +179,7 @@ circuit Top : %[[
     g <= inv
     f <= inv
 
-  module Top:
+  public module Top:
     output io : { b : UInt<1>, c : UInt<1>, d: UInt<1> }
 
     inst foo of Foo
@@ -200,12 +202,15 @@ circuit Top : %[[
     io.d <= d
 
     ; CHECK:      module Top
+    ; TODO: fix having constants carry names
+    ; CHECK:        wire inv = 1'h0
     ; CHECK:        io_b = Top.foo.f_probe;
     ; CHECK-NEXT:   io_c = Top.foo.g_probe;
     ; CHECK-NEXT:   io_d = inv;
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit TestHarness : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -222,7 +227,7 @@ circuit TestHarness : %[[
     "target": "~TestHarness|Test>inv"
   }
 ]]
-  module TestHarness :
+  public module TestHarness :
     output io : UInt<1>
     inst system of Top
     io <= system.io
@@ -259,6 +264,7 @@ circuit TestHarness : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
@@ -478,7 +484,7 @@ circuit Top : %[[
     tap_10 is invalid
     tap_11 is invalid
 
-  module Top :
+  public module Top :
     output port_Top : UInt<1>
     port_Top is invalid
 
@@ -539,6 +545,7 @@ circuit Top : %[[
 
 ; // -----
 
+FIRRTL version 4.0.0
 circuit Top : %[[
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
@@ -569,7 +576,7 @@ circuit Top : %[[
 
     io.out <= sum
 
-  module Top :
+  public module Top :
     output io : { flip in : UInt<8>, out : UInt<8>}
     output taps : UInt<8>[2]
 

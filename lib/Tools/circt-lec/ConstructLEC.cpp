@@ -9,11 +9,11 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Tools/circt-lec/Passes.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/TopologicalSortUtils.h"
 
 using namespace mlir;
 using namespace circt;
@@ -110,36 +110,31 @@ void ConstructLECPass::runOnOperation() {
 
   builder.createBlock(&entryFunc.getBody());
 
-  Value areEquivalent;
-  if (moduleA == moduleB) {
-    // Trivially equivalent
-    areEquivalent =
-        builder.create<LLVM::ConstantOp>(loc, builder.getI1Type(), 1);
-    moduleA->erase();
-  } else {
-    auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
-    areEquivalent = lecOp.getAreEquivalent();
-    auto *outputOpA = moduleA.getBodyBlock()->getTerminator();
-    auto *outputOpB = moduleB.getBodyBlock()->getTerminator();
-    lecOp.getFirstCircuit().takeBody(moduleA.getBody());
-    lecOp.getSecondCircuit().takeBody(moduleB.getBody());
+  auto lecOp = builder.create<verif::LogicEquivalenceCheckingOp>(loc);
+  Value areEquivalent = lecOp.getAreEquivalent();
+  builder.cloneRegionBefore(moduleA.getBody(), lecOp.getFirstCircuit(),
+                            lecOp.getFirstCircuit().end());
+  builder.cloneRegionBefore(moduleB.getBody(), lecOp.getSecondCircuit(),
+                            lecOp.getSecondCircuit().end());
 
-    moduleA->erase();
+  moduleA->erase();
+  if (moduleA != moduleB)
     moduleB->erase();
 
-    {
-      OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPoint(outputOpA);
-      builder.create<verif::YieldOp>(loc, outputOpA->getOperands());
-      outputOpA->erase();
-      builder.setInsertionPoint(outputOpB);
-      builder.create<verif::YieldOp>(loc, outputOpB->getOperands());
-      outputOpB->erase();
-    }
-
-    sortTopologically(&lecOp.getFirstCircuit().front());
-    sortTopologically(&lecOp.getSecondCircuit().front());
+  {
+    auto *term = lecOp.getFirstCircuit().front().getTerminator();
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(term);
+    builder.create<verif::YieldOp>(loc, term->getOperands());
+    term->erase();
+    term = lecOp.getSecondCircuit().front().getTerminator();
+    builder.setInsertionPoint(term);
+    builder.create<verif::YieldOp>(loc, term->getOperands());
+    term->erase();
   }
+
+  sortTopologically(&lecOp.getFirstCircuit().front());
+  sortTopologically(&lecOp.getSecondCircuit().front());
 
   // TODO: we should find a more elegant way of reporting the result than
   // already inserting some LLVM here

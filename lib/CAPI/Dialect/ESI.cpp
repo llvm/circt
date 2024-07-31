@@ -30,12 +30,14 @@ bool circtESITypeIsAChannelType(MlirType type) {
   return isa<ChannelType>(unwrap(type));
 }
 
-MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
+MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling,
+                                uint64_t dataDelay) {
   auto signalEnum = symbolizeChannelSignaling(signaling);
   if (!signalEnum)
     return {};
   auto cppInner = unwrap(inner);
-  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum));
+  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum,
+                               dataDelay));
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
@@ -43,6 +45,9 @@ MlirType circtESIChannelGetInner(MlirType channelType) {
 }
 uint32_t circtESIChannelGetSignaling(MlirType channelType) {
   return (uint32_t)cast<ChannelType>(unwrap(channelType)).getSignaling();
+}
+uint64_t circtESIChannelGetDataDelay(MlirType channelType) {
+  return cast<ChannelType>(unwrap(channelType)).getDataDelay();
 }
 
 bool circtESITypeIsAnAnyType(MlirType type) {
@@ -86,10 +91,11 @@ void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
     void *userData) {
   ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
-      unwrap(impl_type),
-      [genFunc, userData](ServiceImplementReqOp req,
-                          ServiceDeclOpInterface decl, ServiceImplRecordOp) {
-        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
+      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req,
+                                             ServiceDeclOpInterface decl,
+                                             ServiceImplRecordOp record) {
+        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()),
+                              wrap(record.getOperation()), userData));
       });
 }
 //===----------------------------------------------------------------------===//

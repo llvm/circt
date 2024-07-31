@@ -279,7 +279,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
   firrtl.instance "" @Foo()
 }
 
@@ -921,7 +921,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
     // expected-error @+1 {{op operand #0 must be a sized passive base type}}
-    firrtl.strictconnect %a, %in : !firrtl.uint
+    firrtl.matchingconnect %a, %in : !firrtl.uint
   }
 }
 
@@ -1130,9 +1130,12 @@ firrtl.circuit "InvalidRef" {
 // Mux ref
 
 firrtl.circuit "MuxRef" {
-  firrtl.module @MuxRef() {}
-  firrtl.module private @MuxRefPrivate(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
-                          in %cond: !firrtl.uint<1>) {
+  firrtl.extmodule private @MuxRefPrivate(out a: !firrtl.probe<uint<1>>, out b: !firrtl.probe<uint<1>>,
+                                          out cond: !firrtl.uint<1>)
+  firrtl.module @MuxRef() {
+    %a, %b, %cond = firrtl.instance vals @MuxRefPrivate(out a: !firrtl.probe<uint<1>>,
+                                                        out b: !firrtl.probe<uint<1>>,
+                                                        out cond: !firrtl.uint<1>)
     // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
   }
@@ -1142,8 +1145,9 @@ firrtl.circuit "MuxRef" {
 // Bitcast ref
 
 firrtl.circuit "BitcastRef" {
-  firrtl.module @BitcastRef() {}
-  firrtl.module private @BitcastRefPrivate(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule @BitcastRef(out a: !firrtl.probe<uint<1>>)
+  firrtl.module private @BitcastRefPrivate() {
+    %a = firrtl.instance vals @BitcastRef(out a: !firrtl.probe<uint<1>>)
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.probe<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.probe<uint<1>>) -> (!firrtl.probe<uint<1>>)
   }
@@ -1157,7 +1161,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
     %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
+    firrtl.matchingconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1165,12 +1169,13 @@ firrtl.circuit "Top" {
 // Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {}
-  // expected-note @+1 {{destination was defined here}}
-  firrtl.module private @InProbe(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule private @Probe(out _a: !firrtl.probe<uint<1>>)
+  firrtl.module @Foo() {
+    // expected-note @below {{destination was defined here}}
+    %_a = firrtl.instance val @Probe(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
-    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    // expected-error @+1 {{connect has invalid flow: the destination expression "val._a" has source flow, expected sink or duplex flow}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1318,7 +1323,7 @@ firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %0 : !firrtl.string
+    firrtl.matchingconnect %out, %0 : !firrtl.string
   }
 }
 
@@ -1456,7 +1461,7 @@ firrtl.circuit "RefForceProbe" {
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-note @above {{prior use here}}
     // expected-error @below {{use of value '%1' expects different type than prior uses: '!firrtl.rwprobe<uint<1>>' vs '!firrtl.probe<uint<1>>'}}
-    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -1800,12 +1805,12 @@ firrtl.circuit "ConstOpenBundle" {
 }
 
 // -----
-// Strict connect between non-equivalent anonymous type operands.
+// Matching connect between non-equivalent anonymous type operands.
 
-firrtl.circuit "NonEquivalenctStrictConnect" {
-  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+firrtl.circuit "NonEquivalenctMatchingConnect" {
+  firrtl.module @NonEquivalenctMatchingConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
-    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+    firrtl.matchingconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
 
@@ -1824,7 +1829,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match, sv.ifdef'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -1917,8 +1922,8 @@ firrtl.circuit "LayerBlockDrivesSinksOutside" {
     firrtl.layerblock @A {
       firrtl.when %cond : !firrtl.uint<1> {
         %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
-        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing layer block}}
-        firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
+        // expected-error @below {{'firrtl.matchingconnect' op connects to a destination which is defined outside its enclosing layer block}}
+        firrtl.matchingconnect %b_c, %a : !firrtl.uint<1>
       }
     }
   }
@@ -2036,16 +2041,6 @@ firrtl.circuit "RWProbeTypes" {
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
@@ -2276,21 +2271,29 @@ firrtl.circuit "InstanceOfClass" {
 // -----
 
 firrtl.circuit "InputProbePublic" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.module @InputProbePublic(in %in : !firrtl.probe<uint<1>>) { }
 }
 
 // -----
 
+firrtl.circuit "InputProbePrivate" {
+  firrtl.module @InputProbePrivate() { }
+  // expected-error @below {{input probe not allowed}}
+  firrtl.module private @Private(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
 }
 
 // -----
 
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
 }
 
@@ -2457,5 +2460,97 @@ firrtl.circuit "Top" {
       @C -> @Bar
     } ()
   }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{unknown width is not allowed for DPI}}
+    %1 = firrtl.int.dpi.call "clocked_result"(%in_1) clock %clock enable %enable : (!firrtl.uint) -> !firrtl.uint<8>
+  }
+}
+
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{integer types used by DPI functions must have a specific bit width; it must be equal to 1(bit), 8(byte), 16(shortint), 32(int), 64(longint) or greater than 64, but got '!firrtl.uint<4>'}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{inputNames has 0 elements but there are 1 input arguments}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {inputNames=[]} : (!firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{output name is given but there is no result}}
+    firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {outputName="foo"} : (!firrtl.uint<8>) -> ()
+  }
+}
+
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.bundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.vector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{bundle element "a" cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openbundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{vector cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openvector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{lhs type cannot contain an AnalogType}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<analog<1>>
+}
 }
 

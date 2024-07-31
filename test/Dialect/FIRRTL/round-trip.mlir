@@ -1,7 +1,12 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 // Basic MLIR operation parser round-tripping
 
-firrtl.circuit "Basic" {
+firrtl.circuit "Basic" attributes {
+  // CHECK: firrtl.specialization_disable = #firrtl<layerspecialization disable>
+  firrtl.specialization_disable = #firrtl<layerspecialization disable>,
+  // CHECK: firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  firrtl.specialization_enable = #firrtl<layerspecialization enable>
+  } {
 firrtl.extmodule @Basic()
 
 // CHECK-LABEL: firrtl.module @Intrinsics
@@ -62,7 +67,7 @@ firrtl.module @Foo(in %clock: !firrtl.clock) {
   // CHECK-SAME: { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
   %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTarget alternatives @Platform
     { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget } (in clock: !firrtl.clock)
-  firrtl.strictconnect %inst_clock, %clock : !firrtl.clock
+  firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
 }
 
 // CHECK-LABEL: firrtl.layer @LayerA bind

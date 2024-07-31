@@ -1,11 +1,11 @@
 add_circt_dialect_library(CIRCTHandshakeTransforms
   Analysis.cpp
-  PassHelpers.cpp
-  Materialization.cpp
   Buffers.cpp
+  LegalizeMemrefs.cpp
   LockFunctions.cpp
   LowerExtmemToHW.cpp
-  LegalizeMemrefs.cpp
+  Materialization.cpp
+  SplitMerges.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen

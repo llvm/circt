@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --esi-connect-services -split-input-file -verify-diagnostics
+// RUN: circt-opt %s --verify-esi-connections --esi-connect-services -split-input-file -verify-diagnostics
 
 sv.interface @IData {
   sv.interface.signal @data : i32
@@ -92,7 +92,7 @@ esi.service.decl @HostComms {
 
 hw.module @Top(in %clk: i1, in %rst: i1) {
   // expected-error @+2 {{'esi.service.impl_req' op did not recognize option name "badOpt"}}
-  // expected-error @+1 {{'esi.service.instance' op failed to generate server}}
+  // expected-error @+1 {{'esi.service.impl_req' op failed to generate server}}
   esi.service.instance #esi.appid<"cosim"> svc @HostComms impl as  "cosim" opts {badOpt = "wrong!"} (%clk, %rst) : (i1, i1) -> ()
 }
 
@@ -148,3 +148,45 @@ hw.module.extern @TypeAModuleDst(in %windowed: !TypeAwin1)
   ]>
 
 hw.module.extern @TypeAModuleDst(in %windowed: !TypeAwin1)
+
+// -----
+
+hw.module.extern @Source(out a: !esi.channel<i1>)
+hw.module.extern @Sink(in %a: !esi.channel<i1>)
+
+hw.module @Top() {
+  // expected-error @+1 {{channels must have at most one use}}
+  %a = hw.instance "src" @Source() -> (a: !esi.channel<i1>)
+  // expected-note @+1 {{channel used here}}
+  hw.instance "sink1" @Sink(a: %a: !esi.channel<i1>) -> ()
+  // expected-note @+1 {{channel used here}}
+  hw.instance "sink2" @Sink(a: %a: !esi.channel<i1>) -> ()
+}
+
+// -----
+
+!bundleType = !esi.bundle<[!esi.channel<i32> to addr]>
+
+hw.module.extern @Source(out a: !bundleType)
+hw.module.extern @Sink(in %a: !bundleType)
+
+hw.module @Top() {
+  // expected-error @+1 {{bundles must have exactly one use}}
+  %a = hw.instance "src" @Source() -> (a: !bundleType)
+  // expected-note @+1 {{bundle used here}}
+  hw.instance "sink1" @Sink(a: %a: !bundleType) -> ()
+  // expected-note @+1 {{bundle used here}}
+  hw.instance "sink2" @Sink(a: %a: !bundleType) -> ()
+}
+
+// -----
+
+!bundleType = !esi.bundle<[!esi.channel<i32> to addr]>
+
+hw.module.extern @Source(out a: !bundleType)
+hw.module.extern @Sink(in %a: !bundleType)
+
+hw.module @Top() {
+  // expected-error @+1 {{bundles must have exactly one use}}
+  %a = hw.instance "src" @Source() -> (a: !bundleType)
+}

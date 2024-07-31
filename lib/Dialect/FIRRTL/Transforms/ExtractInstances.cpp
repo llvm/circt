@@ -12,11 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -28,6 +28,7 @@
 #include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
@@ -35,6 +36,13 @@
 #include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "firrtl-extract-instances"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_EXTRACTINSTANCES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -59,7 +67,7 @@ struct ExtractionInfo {
 };
 
 struct ExtractInstancesPass
-    : public ExtractInstancesBase<ExtractInstancesPass> {
+    : public circt::firrtl::impl::ExtractInstancesBase<ExtractInstancesPass> {
   void runOnOperation() override;
   void collectAnnos();
   void collectAnno(InstanceOp inst, Annotation anno);
@@ -630,7 +638,7 @@ void ExtractInstancesPass::extractInstances() {
         auto src = newParentInst.getResult(numParentPorts + portIdx);
         if (newPorts[portIdx].second.direction == Direction::In)
           std::swap(src, dst);
-        builder.create<StrictConnectOp>(dst, src);
+        builder.create<MatchingConnectOp>(dst, src);
       }
 
       // Move the wiring prefix from the old to the new instance. We just look
@@ -981,7 +989,7 @@ void ExtractInstancesPass::groupInstances() {
         Value src = wrapper.getArgument(portIdx);
         if (ports[portIdx].direction == Direction::Out)
           std::swap(dst, src);
-        builder.create<StrictConnectOp>(result.getLoc(), dst, src);
+        builder.create<MatchingConnectOp>(result.getLoc(), dst, src);
         ++portIdx;
       }
     }

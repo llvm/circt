@@ -4,8 +4,9 @@
 ; context-sensitive interpretation of invalid.
 
 ; CHECK-LABEL: module InvalidInterpretations
+FIRRTL version 4.0.0
 circuit InvalidInterpretations:
-  module InvalidInterpretations:
+  public module InvalidInterpretations:
     input clock: Clock
     input reset: UInt<1>
     input cond: UInt<1>
@@ -48,8 +49,9 @@ circuit InvalidInterpretations:
 ; See: https://github.com/llvm/circt/issues/2782
 
 ; CHECK-LABEL: module InvalidInOtherModule
+FIRRTL version 4.0.0
 circuit InvalidInOtherModule :
-  module InvalidInOtherModule :
+  public module InvalidInOtherModule :
     input clock: Clock
     input reset: UInt<1>
     output b: SInt<8>

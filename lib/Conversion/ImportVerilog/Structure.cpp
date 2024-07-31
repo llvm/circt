@@ -13,7 +13,108 @@ using namespace circt;
 using namespace ImportVerilog;
 
 //===----------------------------------------------------------------------===//
-// Module Member Conversion
+// Base Visitor
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Base visitor which ignores AST nodes that are handled by Slang's name
+/// resolution and type checking.
+struct BaseVisitor {
+  // Skip semicolons.
+  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+    return success();
+  }
+
+  // Skip members that are implicitly imported from some other scope for the
+  // sake of name resolution, such as enum variant names.
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Skip typedefs.
+  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
+  // Skip imports. The AST already has its names resolved.
+  LogicalResult visit(const slang::ast::ExplicitImportSymbol &) {
+    return success();
+  }
+  LogicalResult visit(const slang::ast::WildcardImportSymbol &) {
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Top-Level Item Conversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct RootVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  RootVisitor(Context &context, Location loc)
+      : context(context), loc(loc), builder(context.builder) {}
+
+  // Handle packages.
+  LogicalResult visit(const slang::ast::PackageSymbol &package) {
+    return context.convertPackage(package);
+  }
+
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
+  }
+
+  // Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    mlir::emitError(loc, "unsupported construct: ")
+        << slang::ast::toString(node.kind);
+    return failure();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Package Conversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct PackageVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
+  Context &context;
+  Location loc;
+  OpBuilder &builder;
+
+  PackageVisitor(Context &context, Location loc)
+      : context(context), loc(loc), builder(context.builder) {}
+
+  // Ignore parameters. These are materialized on-the-fly as `ConstantOp`s.
+  LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::SpecparamSymbol &) { return success(); }
+
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
+  }
+
+  /// Emit an error for all other members.
+  template <typename T>
+  LogicalResult visit(T &&node) {
+    mlir::emitError(loc, "unsupported construct: ")
+        << slang::ast::toString(node.kind);
+    return failure();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Module Conversion
 //===----------------------------------------------------------------------===//
 
 static moore::ProcedureKind
@@ -72,37 +173,185 @@ static moore::NetKind convertNetKind(slang::ast::NetType::NetKind kind) {
 }
 
 namespace {
-struct MemberVisitor {
+struct ModuleVisitor : public BaseVisitor {
+  using BaseVisitor::visit;
+
   Context &context;
   Location loc;
   OpBuilder &builder;
 
-  MemberVisitor(Context &context, Location loc)
+  ModuleVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
-  // Skip empty members (stray semicolons).
-  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+  // Skip ports which are already handled by the module itself.
+  LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
+
+  // Skip genvars.
+  LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
     return success();
   }
-
-  // Skip members that are implicitly imported from some other scope for the
-  // sake of name resolution, such as enum variant names.
-  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
-    return success();
-  }
-
-  // Skip typedefs.
-  LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
 
   // Handle instances.
   LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
-    auto targetModule = context.convertModuleHeader(&instNode.body);
-    if (!targetModule)
-      return failure();
+    using slang::ast::ArgumentDirection;
+    using slang::ast::AssignmentExpression;
+    using slang::ast::MultiPortSymbol;
+    using slang::ast::PortSymbol;
 
-    builder.create<moore::InstanceOp>(
-        loc, builder.getStringAttr(instNode.name),
-        FlatSymbolRefAttr::get(targetModule.getSymNameAttr()));
+    auto *moduleLowering = context.convertModuleHeader(&instNode.body);
+    if (!moduleLowering)
+      return failure();
+    auto module = moduleLowering->op;
+    auto moduleType = module.getModuleType();
+
+    // Set visibility attribute for instantiated module.
+    SymbolTable::setSymbolVisibility(module, SymbolTable::Visibility::Private);
+
+    // Prepare the values that are involved in port connections. This creates
+    // rvalues for input ports and appropriate lvalues for output, inout, and
+    // ref ports. We also separate multi-ports into the individual underlying
+    // ports with their corresponding connection.
+    SmallDenseMap<const PortSymbol *, Value> portValues;
+    portValues.reserve(moduleType.getNumPorts());
+
+    for (const auto *con : instNode.getPortConnections()) {
+      const auto *expr = con->getExpression();
+
+      // Handle unconnected behavior. The expression is null if it have no
+      // connection for the port.
+      if (!expr) {
+        auto *port = con->port.as_if<PortSymbol>();
+        if (auto *existingPort =
+                moduleLowering->portsBySyntaxNode.lookup(port->getSyntax()))
+          port = existingPort;
+
+        switch (port->direction) {
+        case slang::ast::ArgumentDirection::In: {
+          auto refType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+
+          if (const auto *net =
+                  port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netOp = builder.create<moore::NetOp>(
+                loc, refType, StringAttr::get(builder.getContext(), net->name),
+                convertNetKind(net->netType.netKind), nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), netOp);
+            portValues.insert({port, readOp});
+          } else if (const auto *var =
+                         port->internalSymbol
+                             ->as_if<slang::ast::VariableSymbol>()) {
+            auto varOp = builder.create<moore::VariableOp>(
+                loc, refType, StringAttr::get(builder.getContext(), var->name),
+                nullptr);
+            auto readOp = builder.create<moore::ReadOp>(
+                loc, refType.getNestedType(), varOp);
+            portValues.insert({port, readOp});
+          } else {
+            return mlir::emitError(loc)
+                   << "unsupported internal symbol for unconnected port `"
+                   << port->name << "`";
+          }
+          continue;
+        }
+
+        // No need to express unconnected behavior for output port, skip to the
+        // next iteration of the loop.
+        case slang::ast::ArgumentDirection::Out:
+          continue;
+
+        // TODO: Mark Inout port as unsupported and it will be supported later.
+        default:
+          return mlir::emitError(loc)
+                 << "unsupported port `" << port->name << "` ("
+                 << slang::ast::toString(port->kind) << ")";
+        }
+      }
+
+      // Unpack the `<expr> = EmptyArgument` pattern emitted by Slang for
+      // output and inout ports.
+      if (const auto *assign = expr->as_if<AssignmentExpression>())
+        expr = &assign->left();
+
+      // Regular ports lower the connected expression to an lvalue or rvalue and
+      // either attach it to the instance as an operand (for input, inout, and
+      // ref ports), or assign an instance output to it (for output ports).
+      if (auto *port = con->port.as_if<PortSymbol>()) {
+        // Convert as rvalue for inputs, lvalue for all others.
+        auto value = (port->direction == slang::ast::ArgumentDirection::In)
+                         ? context.convertRvalueExpression(*expr)
+                         : context.convertLvalueExpression(*expr);
+        if (!value)
+          return failure();
+        if (auto *existingPort =
+                moduleLowering->portsBySyntaxNode.lookup(con->port.getSyntax()))
+          port = existingPort;
+        portValues.insert({port, value});
+        continue;
+      }
+
+      // Multi-ports lower the connected expression to an lvalue and then slice
+      // it up into multiple sub-values, one for each of the ports in the
+      // multi-port.
+      if (const auto *multiPort = con->port.as_if<MultiPortSymbol>()) {
+        // Convert as lvalue.
+        auto value = context.convertLvalueExpression(*expr);
+        if (!value)
+          return failure();
+        unsigned offset = 0;
+        for (const auto *port : llvm::reverse(multiPort->ports)) {
+          if (auto *existingPort = moduleLowering->portsBySyntaxNode.lookup(
+                  con->port.getSyntax()))
+            port = existingPort;
+          unsigned width = port->getType().getBitWidth();
+          auto sliceType = context.convertType(port->getType());
+          if (!sliceType)
+            return failure();
+          Value slice = builder.create<moore::ExtractRefOp>(
+              loc, moore::RefType::get(cast<moore::UnpackedType>(sliceType)),
+              value, offset);
+          // Read to map to rvalue for input ports.
+          if (port->direction == slang::ast::ArgumentDirection::In)
+            slice = builder.create<moore::ReadOp>(loc, sliceType, slice);
+          portValues.insert({port, slice});
+          offset += width;
+        }
+        continue;
+      }
+
+      mlir::emitError(loc) << "unsupported instance port `" << con->port.name
+                           << "` (" << slang::ast::toString(con->port.kind)
+                           << ")";
+      return failure();
+    }
+
+    // Match the module's ports up with the port values determined above.
+    SmallVector<Value> inputValues;
+    SmallVector<Value> outputValues;
+    inputValues.reserve(moduleType.getNumInputs());
+    outputValues.reserve(moduleType.getNumOutputs());
+
+    for (auto &port : moduleLowering->ports) {
+      auto value = portValues.lookup(&port.ast);
+      if (port.ast.direction == ArgumentDirection::Out)
+        outputValues.push_back(value);
+      else
+        inputValues.push_back(value);
+    }
+
+    // Create the instance op itself.
+    auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
+    auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
+    auto inst = builder.create<moore::InstanceOp>(
+        loc, moduleType.getOutputTypes(), builder.getStringAttr(instNode.name),
+        FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
+        inputNames, outputNames);
+
+    // Assign output values from the instance to the connected expression.
+    for (auto [lvalue, output] : llvm::zip(outputValues, inst.getOutputs()))
+      if (lvalue)
+        builder.create<moore::ContinuousAssignOp>(loc, lvalue, output);
 
     return success();
   }
@@ -115,17 +364,14 @@ struct MemberVisitor {
 
     Value initial;
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertExpression(*init);
+      initial = context.convertRvalueExpression(*init);
       if (!initial)
         return failure();
-
-      if (initial.getType() != loweredType)
-        initial =
-            builder.create<moore::ConversionOp>(loc, loweredType, initial);
     }
 
     auto varOp = builder.create<moore::VariableOp>(
-        loc, loweredType, builder.getStringAttr(varNode.name), initial);
+        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(varNode.name), initial);
     context.valueSymbols.insert(&varNode, varOp);
     return success();
   }
@@ -138,7 +384,7 @@ struct MemberVisitor {
 
     Value assignment;
     if (netNode.getInitializer()) {
-      assignment = context.convertExpression(*netNode.getInitializer());
+      assignment = context.convertRvalueExpression(*netNode.getInitializer());
       if (!assignment)
         return failure();
     }
@@ -151,8 +397,8 @@ struct MemberVisitor {
              << netNode.netType.name << "`";
 
     auto netOp = builder.create<moore::NetOp>(
-        loc, loweredType, builder.getStringAttr(netNode.name), netkind,
-        assignment);
+        loc, moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(netNode.name), netkind, assignment);
     context.valueSymbols.insert(&netNode, netOp);
     return success();
   }
@@ -168,13 +414,20 @@ struct MemberVisitor {
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
 
-    auto lhs = context.convertExpression(expr.left());
-    auto rhs = context.convertExpression(expr.right());
+    auto lhs = context.convertLvalueExpression(expr.left());
+    auto rhs = context.convertRvalueExpression(expr.right());
     if (!lhs || !rhs)
       return failure();
 
-    if (lhs.getType() != rhs.getType())
-      rhs = builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
+      auto input = refOp.getInput();
+      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
+                                              refOp.getFieldNameAttr(), rhs);
+        refOp->erase();
+        return success();
+      }
+    }
 
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
@@ -191,6 +444,65 @@ struct MemberVisitor {
     return context.convertStatement(procNode.getBody());
   }
 
+  // Handle parameters.
+  LogicalResult visit(const slang::ast::ParameterSymbol &paramNode) {
+    auto type = cast<moore::IntType>(context.convertType(paramNode.getType()));
+    if (!type)
+      return failure();
+
+    auto valueInt = paramNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
+
+    auto namedConstantOp = builder.create<moore::NamedConstantOp>(
+        loc, type, builder.getStringAttr(paramNode.name),
+        paramNode.isLocalParam()
+            ? moore::NamedConstAttr::get(context.getContext(),
+                                         moore::NamedConst::LocalParameter)
+            : moore::NamedConstAttr::get(context.getContext(),
+                                         moore::NamedConst::Parameter),
+        value);
+    context.valueSymbols.insert(&paramNode, namedConstantOp);
+    return success();
+  }
+
+  // Handle specparam.
+  LogicalResult visit(const slang::ast::SpecparamSymbol &spNode) {
+    auto type = cast<moore::IntType>(context.convertType(spNode.getType()));
+    if (!type)
+      return failure();
+
+    auto valueInt = spNode.getValue().integer().as<uint64_t>().value();
+    Value value = builder.create<moore::ConstantOp>(loc, type, valueInt);
+
+    auto namedConstantOp = builder.create<moore::NamedConstantOp>(
+        loc, type, builder.getStringAttr(spNode.name),
+        moore::NamedConstAttr::get(context.getContext(),
+                                   moore::NamedConst::SpecParameter),
+        value);
+    context.valueSymbols.insert(&spNode, namedConstantOp);
+    return success();
+  }
+
+  // Handle generate block.
+  LogicalResult visit(const slang::ast::GenerateBlockSymbol &genNode) {
+    if (!genNode.isUninstantiated) {
+      for (auto &member : genNode.members()) {
+        if (failed(member.visit(ModuleVisitor(context, loc))))
+          return failure();
+      }
+    }
+    return success();
+  }
+
+  // Handle generate block array.
+  LogicalResult visit(const slang::ast::GenerateBlockArraySymbol &genArrNode) {
+    for (const auto *member : genArrNode.entries) {
+      if (failed(member->asSymbol().visit(ModuleVisitor(context, loc))))
+        return failure();
+    }
+    return success();
+  }
+
   // Ignore statement block symbols. These get generated by Slang for blocks
   // with variables and other declarations. For example, having an initial
   // procedure with a variable declaration, such as `initial begin int x;
@@ -199,6 +511,11 @@ struct MemberVisitor {
   // variable layout _next to_ the initial procedure.
   LogicalResult visit(const slang::ast::StatementBlockSymbol &) {
     return success();
+  }
+
+  // Handle functions and tasks.
+  LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
+    return context.convertFunction(subroutine);
   }
 
   /// Emit an error for all other members.
@@ -217,8 +534,7 @@ struct MemberVisitor {
 
 /// Convert an entire Slang compilation to MLIR ops. This is the main entry
 /// point for the conversion.
-LogicalResult
-Context::convertCompilation(slang::ast::Compilation &compilation) {
+LogicalResult Context::convertCompilation() {
   const auto &root = compilation.getRoot();
 
   // Visit all top-level declarations in all compilation units. This does not
@@ -226,17 +542,17 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
   // which are listed separately as top instances.
   for (auto *unit : root.compilationUnits) {
     for (const auto &member : unit->members()) {
-      // Error out on all top-level declarations.
       auto loc = convertLocation(member.location);
-      return mlir::emitError(loc, "unsupported construct: ")
-             << slang::ast::toString(member.kind);
+      if (failed(member.visit(RootVisitor(*this, loc))))
+        return failure();
     }
   }
 
   // Prime the root definition worklist by adding all the top-level modules.
   SmallVector<const slang::ast::InstanceSymbol *> topInstances;
   for (auto *inst : root.topInstances)
-    convertModuleHeader(&inst->body);
+    if (!convertModuleHeader(&inst->body))
+      return failure();
 
   // Convert all the root module definitions.
   while (!moduleWorklist.empty()) {
@@ -253,10 +569,67 @@ Context::convertCompilation(slang::ast::Compilation &compilation) {
 /// the op to the worklist of module bodies to be lowered. This acts like a
 /// module "declaration", allowing instances to already refer to a module even
 /// before its body has been lowered.
-moore::SVModuleOp
+ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
-  if (auto op = moduleOps.lookup(module))
-    return op;
+  using slang::ast::ArgumentDirection;
+  using slang::ast::MultiPortSymbol;
+  using slang::ast::ParameterSymbol;
+  using slang::ast::PortSymbol;
+  using slang::ast::TypeParameterSymbol;
+
+  auto parameters = module->parameters;
+  bool hasModuleSame = false;
+  // If there is already exist a module that has the same name with this
+  // module ,has the same parent scope and has the same parameters we can
+  // define this module is a duplicate module
+  for (auto const &existingModule : modules) {
+    if (module->getDeclaringDefinition() ==
+        existingModule.getFirst()->getDeclaringDefinition()) {
+      auto moduleParameters = existingModule.getFirst()->parameters;
+      hasModuleSame = true;
+      for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
+           it1 != parameters.end() && it2 != moduleParameters.end();
+           it1++, it2++) {
+        // Parameters size different
+        if (it1 == parameters.end() || it2 == moduleParameters.end()) {
+          hasModuleSame = false;
+          break;
+        }
+        const auto *para1 = (*it1)->symbol.as_if<ParameterSymbol>();
+        const auto *para2 = (*it2)->symbol.as_if<ParameterSymbol>();
+        // Parameters kind different
+        if ((para1 == nullptr) ^ (para2 == nullptr)) {
+          hasModuleSame = false;
+          break;
+        }
+        // Compare ParameterSymbol
+        if (para1 != nullptr) {
+          hasModuleSame = para1->getValue() == para2->getValue();
+        }
+        // Compare TypeParameterSymbol
+        if (para1 == nullptr) {
+          auto para1Type = convertType(
+              (*it1)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+          auto para2Type = convertType(
+              (*it2)->symbol.as<TypeParameterSymbol>().getTypeAlias());
+          hasModuleSame = para1Type == para2Type;
+        }
+        if (!hasModuleSame)
+          break;
+      }
+      if (hasModuleSame) {
+        module = existingModule.first;
+        break;
+      }
+    }
+  }
+
+  auto &slot = modules[module];
+  if (slot)
+    return slot.get();
+  slot = std::make_unique<ModuleLowering>();
+  auto &lowering = *slot;
+
   auto loc = convertLocation(module->location);
   OpBuilder::InsertionGuard g(builder);
 
@@ -265,31 +638,66 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // only minor differences in semantics.
   if (module->getDefinition().definitionKind !=
       slang::ast::DefinitionKind::Module) {
-    mlir::emitError(loc, "unsupported construct: ")
-        << module->getDefinition().getKindString();
+    mlir::emitError(loc) << "unsupported construct: "
+                         << module->getDefinition().getKindString();
     return {};
   }
 
   // Handle the port list.
+  auto block = std::make_unique<Block>();
+  SmallVector<hw::ModulePort> modulePorts;
   for (auto *symbol : module->getPortList()) {
-    auto portLoc = convertLocation(symbol->location);
-    mlir::emitError(portLoc, "unsupported module port: ")
-        << slang::ast::toString(symbol->kind);
-    return {};
+    auto handlePort = [&](const PortSymbol &port) {
+      auto portLoc = convertLocation(port.location);
+      auto type = convertType(port.getType());
+      if (!type)
+        return failure();
+      auto portName = builder.getStringAttr(port.name);
+      BlockArgument arg;
+      if (port.direction == ArgumentDirection::Out) {
+        modulePorts.push_back({portName, type, hw::ModulePort::Output});
+      } else {
+        // Only the ref type wrapper exists for the time being, the net type
+        // wrapper for inout may be introduced later if necessary.
+        if (port.direction != slang::ast::ArgumentDirection::In)
+          type = moore::RefType::get(cast<moore::UnpackedType>(type));
+        modulePorts.push_back({portName, type, hw::ModulePort::Input});
+        arg = block->addArgument(type, portLoc);
+      }
+      lowering.ports.push_back({port, portLoc, arg});
+      return success();
+    };
+
+    if (const auto *port = symbol->as_if<PortSymbol>()) {
+      if (failed(handlePort(*port)))
+        return {};
+    } else if (const auto *multiPort = symbol->as_if<MultiPortSymbol>()) {
+      for (auto *port : multiPort->ports)
+        if (failed(handlePort(*port)))
+          return {};
+    } else {
+      mlir::emitError(convertLocation(symbol->location))
+          << "unsupported module port `" << symbol->name << "` ("
+          << slang::ast::toString(symbol->kind) << ")";
+      return {};
+    }
   }
+  auto moduleType = hw::ModuleType::get(getContext(), modulePorts);
 
   // Pick an insertion point for this module according to the source file
   // location.
-  auto it = orderedRootOps.lower_bound(module->location);
+  auto it = orderedRootOps.upper_bound(module->location);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
     builder.setInsertionPoint(it->second);
 
   // Create an empty module that corresponds to this module.
-  auto moduleOp = builder.create<moore::SVModuleOp>(loc, module->name);
+  auto moduleOp =
+      builder.create<moore::SVModuleOp>(loc, module->name, moduleType);
   orderedRootOps.insert(it, {module->location, moduleOp});
-  moduleOp.getBodyRegion().emplaceBlock();
+  moduleOp.getBodyRegion().push_back(block.release());
+  lowering.op = moduleOp;
 
   // Add the module to the symbol table of the MLIR module, which uniquifies its
   // name as we'd expect.
@@ -297,25 +705,220 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // Schedule the body to be lowered.
   moduleWorklist.push(module);
-  moduleOps.insert({module, moduleOp});
-  return moduleOp;
+
+  // Map duplicate port by Syntax
+  for (const auto &port : lowering.ports)
+    lowering.portsBySyntaxNode.insert({port.ast.getSyntax(), &port.ast});
+
+  return &lowering;
 }
 
 /// Convert a module's body to the corresponding IR ops. The module op must have
 /// already been created earlier through a `convertModuleHeader` call.
 LogicalResult
 Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
-  auto moduleOp = moduleOps.lookup(module);
-  assert(moduleOp);
+  auto &lowering = *modules[module];
   OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToEnd(moduleOp.getBody());
+  builder.setInsertionPointToEnd(lowering.op.getBody());
 
+  // Convert the body of the module.
   ValueSymbolScope scope(valueSymbols);
   for (auto &member : module->members()) {
     auto loc = convertLocation(member.location);
-    if (failed(member.visit(MemberVisitor(*this, loc))))
+    if (failed(member.visit(ModuleVisitor(*this, loc))))
       return failure();
   }
 
+  // Create additional ops to drive input port values onto the corresponding
+  // internal variables and nets, and to collect output port values for the
+  // terminator.
+  SmallVector<Value> outputs;
+  for (auto &port : lowering.ports) {
+    Value value;
+    if (auto *expr = port.ast.getInternalExpr()) {
+      value = convertLvalueExpression(*expr);
+    } else if (port.ast.internalSymbol) {
+      if (const auto *sym =
+              port.ast.internalSymbol->as_if<slang::ast::ValueSymbol>())
+        value = valueSymbols.lookup(sym);
+    }
+    if (!value)
+      return mlir::emitError(port.loc, "unsupported port: `")
+             << port.ast.name
+             << "` does not map to an internal symbol or expression";
+
+    // Collect output port values to be returned in the terminator.
+    if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
+      if (isa<moore::RefType>(value.getType()))
+        value = builder.create<moore::ReadOp>(
+            value.getLoc(),
+            cast<moore::RefType>(value.getType()).getNestedType(), value);
+      outputs.push_back(value);
+      continue;
+    }
+
+    // Assign the value coming in through the port to the internal net or symbol
+    // of that port.
+    Value portArg = port.arg;
+    if (port.ast.direction != slang::ast::ArgumentDirection::In)
+      portArg = builder.create<moore::ReadOp>(
+          port.loc, cast<moore::RefType>(value.getType()).getNestedType(),
+          port.arg);
+    builder.create<moore::ContinuousAssignOp>(port.loc, value, portArg);
+  }
+  builder.create<moore::OutputOp>(lowering.op.getLoc(), outputs);
+
+  return success();
+}
+
+/// Convert a package and its contents.
+LogicalResult
+Context::convertPackage(const slang::ast::PackageSymbol &package) {
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  ValueSymbolScope scope(valueSymbols);
+  for (auto &member : package.members()) {
+    auto loc = convertLocation(member.location);
+    if (failed(member.visit(PackageVisitor(*this, loc))))
+      return failure();
+  }
+  return success();
+}
+
+static void guessNamespacePrefix(const slang::ast::Symbol &symbol,
+                                 SmallString<64> &prefix) {
+  if (symbol.kind == slang::ast::SymbolKind::Root)
+    return;
+  guessNamespacePrefix(symbol.getParentScope()->asSymbol(), prefix);
+  if (!symbol.name.empty()) {
+    prefix += symbol.name;
+    prefix += "::";
+  }
+}
+
+/// Convert a function and its arguments to a function declaration in the IR.
+/// This does not convert the function body.
+FunctionLowering *
+Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  using slang::ast::ArgumentDirection;
+
+  // Check if there already is a declaration for this function.
+  auto &lowering = functions[&subroutine];
+  if (lowering) {
+    if (!lowering->op)
+      return {};
+    return lowering.get();
+  }
+  lowering = std::make_unique<FunctionLowering>();
+  auto loc = convertLocation(subroutine.location);
+
+  // Pick an insertion point for this function according to the source file
+  // location.
+  OpBuilder::InsertionGuard g(builder);
+  auto it = orderedRootOps.upper_bound(subroutine.location);
+  if (it == orderedRootOps.end())
+    builder.setInsertionPointToEnd(intoModuleOp.getBody());
+  else
+    builder.setInsertionPoint(it->second);
+
+  // Class methods are currently not supported.
+  if (subroutine.thisVar) {
+    mlir::emitError(loc) << "unsupported class method";
+    return {};
+  }
+
+  // Determine the function type.
+  SmallVector<Type> inputTypes;
+  SmallVector<Type, 1> outputTypes;
+
+  for (const auto *arg : subroutine.getArguments()) {
+    auto type = cast<moore::UnpackedType>(convertType(arg->getType()));
+    if (!type)
+      return {};
+    if (arg->direction == ArgumentDirection::In) {
+      inputTypes.push_back(type);
+    } else {
+      inputTypes.push_back(moore::RefType::get(type));
+    }
+  }
+
+  if (!subroutine.getReturnType().isVoid()) {
+    auto type = convertType(subroutine.getReturnType());
+    if (!type)
+      return {};
+    outputTypes.push_back(type);
+  }
+
+  auto funcType = FunctionType::get(getContext(), inputTypes, outputTypes);
+
+  // Prefix the function name with the surrounding namespace to create somewhat
+  // sane names in the IR.
+  SmallString<64> funcName;
+  guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), funcName);
+  funcName += subroutine.name;
+
+  // Create a function declaration.
+  auto funcOp = builder.create<mlir::func::FuncOp>(loc, funcName, funcType);
+  SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+  orderedRootOps.insert(it, {subroutine.location, funcOp});
+  lowering->op = funcOp;
+
+  // Add the function to the symbol table of the MLIR module, which uniquifies
+  // its name.
+  symbolTable.insert(funcOp);
+
+  return lowering.get();
+}
+
+/// Convert a function.
+LogicalResult
+Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  // First get or create the function declaration.
+  auto *lowering = declareFunction(subroutine);
+  if (!lowering)
+    return failure();
+  ValueSymbolScope scope(valueSymbols);
+
+  // Create a function body block and populate it with block arguments.
+  auto &block = lowering->op.getBody().emplaceBlock();
+  for (auto [astArg, type] :
+       llvm::zip(subroutine.getArguments(),
+                 lowering->op.getFunctionType().getInputs())) {
+    auto loc = convertLocation(astArg->location);
+    auto blockArg = block.addArgument(type, loc);
+    valueSymbols.insert(astArg, blockArg);
+  }
+
+  // Convert the body of the function.
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToEnd(&block);
+
+  Value returnVar;
+  if (subroutine.returnValVar) {
+    auto type = convertType(*subroutine.returnValVar->getDeclaredType());
+    if (!type)
+      return failure();
+    returnVar = builder.create<moore::VariableOp>(
+        lowering->op.getLoc(),
+        moore::RefType::get(cast<moore::UnpackedType>(type)), StringAttr{},
+        Value{});
+    valueSymbols.insert(subroutine.returnValVar, returnVar);
+  }
+
+  if (failed(convertStatement(subroutine.getBody())))
+    return failure();
+
+  // If there was no explicit return statement provided by the user, insert a
+  // default one.
+  if (block.empty() || !block.back().hasTrait<OpTrait::IsTerminator>()) {
+    if (returnVar && !subroutine.getReturnType().isVoid()) {
+      returnVar = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), returnVar);
+    } else {
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), ValueRange{});
+    }
+  }
+  if (returnVar.use_empty())
+    returnVar.getDefiningOp()->erase();
   return success();
 }

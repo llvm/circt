@@ -225,7 +225,7 @@ firrtl::resolveEntities(TokenAnnoTarget path, CircuitOp circuit,
     // AnnoTarget::getType() is not safe (CHIRRTL ops crash, null if instance),
     // avoid. For now, only references in ports can be targets, check that.
     // TODO: containsReference().
-    if (ref.isa<PortAnnoTarget>() && isa<RefType>(ref.getType())) {
+    if (isa<PortAnnoTarget>(ref) && isa<RefType>(ref.getType())) {
       mlir::emitError(circuit.getLoc())
           << "cannot target reference-type '" << path.name << "' in "
           << mod.getModuleName();
@@ -812,6 +812,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
 
     // Add one port per memory address.
     SmallVector<Value> data;
+    Type uintType = builder.getType<UIntType>();
     for (uint64_t i = 0, e = combMem.getType().getNumElements(); i != e; ++i) {
       auto port = builder.create<chirrtl::MemoryPortOp>(
           combMem.getType().getElementType(),
@@ -819,7 +820,8 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
           MemDirAttr::Read, builder.getStringAttr("memTap_" + Twine(i)),
           builder.getArrayAttr({}));
       builder.create<chirrtl::MemoryPortAccessOp>(
-          port.getPort(), builder.create<ConstantOp>(APSInt::get(i)), clock);
+          port.getPort(),
+          builder.create<ConstantOp>(uintType, APSInt::getUnsigned(i)), clock);
       data.push_back(port.getData());
     }
 

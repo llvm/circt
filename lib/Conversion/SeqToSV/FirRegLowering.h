@@ -107,7 +107,7 @@ private:
 
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         const std::function<void(OpBuilder &)> &body,
-                        ResetType resetStyle = {},
+                        sv::ResetType resetStyle = {},
                         sv::EventControl resetEdge = {}, Value reset = {},
                         const std::function<void(OpBuilder &)> &resetBody = {});
 
@@ -127,8 +127,8 @@ private:
     return constant;
   }
 
-  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value, ResetType,
-                                   sv::EventControl, Value>;
+  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
+                                   sv::ResetType, sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
 

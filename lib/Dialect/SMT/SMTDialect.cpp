@@ -28,8 +28,8 @@ Operation *SMTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // BitVectorType constants can materialize into smt.bv.constant
   if (auto bvType = dyn_cast<BitVectorType>(type)) {
     if (auto attrValue = dyn_cast<BitVectorAttr>(value)) {
-      bool typesMatch = bvType == attrValue.getType();
-      assert(typesMatch && "attribute and desired result types have to match");
+      assert(bvType == attrValue.getType() &&
+             "attribute and desired result types have to match");
       return builder.create<BVConstantOp>(loc, attrValue);
     }
   }

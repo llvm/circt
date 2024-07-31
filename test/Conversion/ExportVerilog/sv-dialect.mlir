@@ -3,6 +3,14 @@
 sv.macro.decl @SYNTHESIS
 sv.macro.decl @VERILATOR
 
+// CHECK-NOT: module ReservedName1(
+// CHECK-NOT:   input reservedName2{{$}}
+// CHECK-NOT:   reg reservedName3;
+sv.reserve_names ["ReservedName1", "reservedName2", "reservedName3"]
+hw.module @ReservedName1 (in %reservedName2 : i1) {
+  %reservedName3 = sv.reg : !hw.inout<i1>
+}
+
 // CHECK-LABEL: module M1
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
@@ -473,10 +481,11 @@ hw.module @Aliasing(inout %a : i42, inout %b : i42, inout %c : i42) {
   sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
 }
 
-hw.module @reg_0(in %in4: i4, in %in8: i8, out a: i8, out b: i8) {
+hw.module @reg_0(in %in4: i4, in %in8: i8, in %in8_2: i8, out a: i8, out b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4, //
   // CHECK-NEXT:   input  [7:0] in8, //
+  // CHECK-NEXT:                in8_2, //
   // CHECK-NEXT:   output [7:0] a, //
   // CHECK-NEXT:                b //
   // CHECK-NEXT:  );
@@ -509,6 +518,11 @@ hw.module @reg_0(in %in4: i4, in %in8: i8, out a: i8, out b: i8) {
 
   %subscript2 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   %memout = sv.read_inout %subscript2 : !hw.inout<i8>
+
+  %unpacked_array = sv.unpacked_array_create %in8, %in8_2 : (i8, i8) -> !hw.uarray<2xi8>
+  %unpacked_wire = sv.wire : !hw.inout<uarray<2xi8>>
+  // CHECK: wire [7:0] unpacked_wire[0:1] = '{in8_2, in8};
+  sv.assign %unpacked_wire, %unpacked_array: !hw.uarray<2xi8>
 
   // CHECK-NEXT: assign a = myReg;
   // CHECK-NEXT: assign b = myRegArray1[in4];
@@ -1660,6 +1674,130 @@ hw.module @IndexPartSelect(out a : i3) {
   %c3_i18 = hw.constant 3 : i18
   %c = sv.indexed_part_select %c3_i18[%c3_i3 : 3] : i18,i4
   hw.output %c : i3
+}
+
+// Functions.
+sv.func private @function_declare1(in %in_0 : i2, out out_0: i2, in %in_1 : i2, out out_1 : i1)
+sv.func private @function_declare2(in %in_0 : i2, in %in_1 : i2, out out_0 : i1 {sv.func.explicitly_returned})
+sv.func private @function_declare3(in %in_0 : i2, out out_0 : i2, out out_1 : i1 {sv.func.explicitly_returned})
+sv.func private @function_declare4(in %in: i1, in %in_0 : i8, in %in_1 : i16, in %in_2: i32, in %in_3: i64, in %in_4: i128,
+                                   in %in_5: !hw.struct<a: !hw.array<2x!hw.array<2xi32>>, b: i64>,
+                                   in %in_6: !hw.uarray<2xi64>)
+
+// CHECK-LABEL: func_call
+hw.module @func_call(in %in_0 : i2, in %in_1 : i2, in %in_2: i1, out out: i1) {
+  %fd = hw.constant 0x80000002 : i32
+  // CHECK:      wire        _function_declare2_0;
+  // CHECK-NEXT: logic [1:0] _function_declare3_0;
+  // CHECK-NEXT: logic       _function_declare3_1;
+  // CHECK-NEXT: logic [1:0] _function_declare1_0;
+  // CHECK-NEXT: logic       _function_declare1_1;
+  // CHECK-NEXT: assign _function_declare2_0 = function_declare2(in_0, in_1);
+  %u1 = sv.func.call @function_declare2 (%in_0, %in_1) : (i2, i2) -> i1
+  // CHECK:      initial begin
+  // CHECK-NEXT:  function_declare1(in_0, _function_declare1_0, in_1, _function_declare1_1);
+  // CHECK-NEXT:  _function_declare3_1 = function_declare3(in_0, _function_declare3_0);
+  // CHECK-NEXT:  $fwrite(32'h80000002, "%x %x %x %x\n", _function_declare1_0, _function_declare1_1,
+  // CHECK-NEXT:          _function_declare3_0, _function_declare3_1);
+  // CHECK-NEXT: end
+  sv.initial {
+    %v1, %v2 = sv.func.call.procedural @function_declare1 (%in_0, %in_1) : (i2, i2) -> (i2, i1)
+    %v3, %v4 = sv.func.call.procedural @function_declare3 (%in_0, %in_1) : (i2, i2) -> (i2, i1)
+    sv.fwrite %fd, "%x %x %x %x\n"(%v1, %v2, %v3, %v4) : i2, i1, i2, i1
+  }
+  hw.output %u1: i1
+}
+
+// CHECK-LABEL: function automatic logic func_def(
+// CHECK-NEXT:    input  bit [1:0] in_0,
+// CHECK-NEXT:    output bit out_0,
+// CHECK-NEXT:    input  bit [1:0] in_1
+// CHECK-NEXT:  );
+// CHECK-EMPTY:
+// CHECK-NEXT:    logic [1:0] _GEN = 2'(in_0 + in_1);
+// CHECK-NEXT:    out_0 = _GEN[0];
+// CHECK-NEXT:    func_def = _GEN[1];
+// CHECK-NEXT:  endfunction
+sv.func @func_def(in %in_0 : i2, out out_0: i1, in %in_1: i2, out out_1 : i1 {sv.func.explicitly_returned}) {
+  %add = comb.add %in_0, %in_1: i2
+  %v0 =  comb.extract %add from 0 : (i2) -> i1
+  %v1 =  comb.extract %add from 1 : (i2) -> i1
+  sv.return %v0, %v1: i1, i1
+}
+
+// CHECK-LABEL: function automatic logic [31:0] recurse_add(
+// CHECK-NEXT:   input int n
+// CHECK-NEXT: );
+// CHECK-EMPTY:
+// CHECK-NEXT:   logic           [31:0] _recurse_add_0;
+// CHECK-NEXT:   logic           [31:0] result;
+// CHECK-NEXT:   if (n <= 32'h1)
+// CHECK-NEXT:     result = n;
+// CHECK-NEXT:   else begin
+// CHECK-NEXT:     _recurse_add_0 = recurse_add(32'(n - 32'h1));
+// CHECK-NEXT:     result = 32'(n + _recurse_add_0);
+// CHECK-NEXT:   end
+// CHECK-NEXT:   recurse_add = result
+// CHECK-NEXT: endfunction
+sv.func @recurse_add(in %n : i32, out out : i32 {sv.func.explicitly_returned}) {
+  %one = hw.constant 1 : i32
+  %cond = comb.icmp bin ule %n, %one: i32
+  %result = sv.logic : !hw.inout<i32>
+  sv.if %cond {
+    sv.bpassign %result, %n: i32
+  } else {
+    %n1 = comb.sub %n, %one: i32
+    %v = sv.func.call.procedural @recurse_add(%n1) : (i32) -> i32
+    %add = comb.add %n, %v: i32
+    sv.bpassign %result, %add: i32
+  }
+  %read = sv.read_inout %result: !hw.inout<i32>
+  sv.return %read : i32
+}
+
+// Emit DPI import.
+
+// CHECK-LABEL: import "DPI-C" context linkage_name = function void function_declare1(
+// CHECK-NEXT:    input bit [1:0] in_0,
+// CHECK-NEXT:                    out_0,
+// CHECK-NEXT:                    in_1,
+// CHECK-NEXT:    output bit      out_1
+// CHECK-NEXT: );
+sv.func.dpi.import linkage "linkage_name" @function_declare1
+
+// CHECK-LABEL: import "DPI-C" context function bit function_declare2(
+// CHECK-NEXT:    input bit [1:0] in_0,
+// CHECK-NEXT:                    in_1
+// CHECK-NEXT: );
+sv.func.dpi.import @function_declare2
+
+// CHECK-LABEL: import "DPI-C" context function void function_declare4(
+// CHECK-NEXT:   input bit         in,
+// CHECK-NEXT:   input byte        in_0,
+// CHECK-NEXT:   input shortint    in_1,
+// CHECK-NEXT:   input int         in_2,
+// CHECK-NEXT:   input longint     in_3,
+// CHECK-NEXT:   input bit [127:0] in_4
+// CHECK-NEXT:   input struct packed {bit [1:0][1:0][31:0] a; longint b; } in_5
+// CHECK-NEXT:   input longint in_6[0:1]
+// CHECK-NEXT: );
+sv.func.dpi.import @function_declare4
+
+sv.func private @open_array(in %array : !sv.open_uarray<i8>)
+// CHECK-LABEL: import "DPI-C" context function void open_array
+// CHECK-NEXT:  input byte array[]
+sv.func.dpi.import @open_array
+
+// CHECK-LABEL: test_open_array
+// CHECK: wire [7:0] _GEN[0:1] = '{in_0, in_1};
+// CHECK-NEXT: always @(posedge clock)
+// CHECK-NEXT:   open_array(_GEN);
+hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {
+  %0 = sv.unpacked_array_create %in_1, %in_0 : (i8, i8) -> !hw.uarray<2xi8>
+  %1 = sv.unpacked_open_array_cast %0 : (!hw.uarray<2xi8>) -> !sv.open_uarray<i8>
+  sv.always posedge %clock {
+    sv.func.call.procedural @open_array(%1) : (!sv.open_uarray<i8>) -> ()
+  }
 }
 
 sv.macro.decl @FOO

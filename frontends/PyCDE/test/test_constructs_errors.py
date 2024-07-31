@@ -2,8 +2,9 @@
 
 from pycde import generator, types, Module
 from pycde.common import Clock, Input
-from pycde.constructs import Reg, Wire
+from pycde.constructs import NamedWire, Reg, Wire
 from pycde.testing import unittestmodule
+from pycde.types import Channel, UInt
 
 
 @unittestmodule()
@@ -61,3 +62,15 @@ class RegDoubleAssignTest(Module):
     r.assign(ports.In)
     # CHECK: ValueError: Cannot assign value to Reg twice.
     r.assign(ports.In)
+
+
+# -----
+
+
+@unittestmodule()
+class NamedWireHWError(Module):
+
+  @generator
+  def create(ports):
+    # CHECK: TypeError: NamedWire must have a hardware type, not Channel<UInt<32>, ValidReady>
+    NamedWire(Channel(UInt(32)), "asdf")

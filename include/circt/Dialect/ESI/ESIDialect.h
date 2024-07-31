@@ -27,6 +27,11 @@
 namespace circt {
 namespace esi {
 
+/// Manifest format version number. Increment this whenever the manifest format
+/// changes.
+/// Version 0 is subject to massive, breaking changes.
+constexpr uint64_t esiApiVersion = 0;
+
 void registerESIPasses();
 
 /// Name of dialect attribute which governs whether or not to bundle (i.e. use

@@ -17,17 +17,23 @@
 #include <memory>
 
 namespace circt {
-namespace llhd {
+namespace hw {
+class HWModuleOp;
+} // namespace hw
 
-class ProcOp;
+namespace llhd {
+class ProcessOp;
 
 std::unique_ptr<OperationPass<ModuleOp>> createProcessLoweringPass();
 
 std::unique_ptr<OperationPass<ModuleOp>> createFunctionEliminationPass();
 
-std::unique_ptr<OperationPass<ProcOp>> createMemoryToBlockArgumentPass();
+std::unique_ptr<OperationPass<hw::HWModuleOp>>
+createMemoryToBlockArgumentPass();
 
-std::unique_ptr<OperationPass<ProcOp>> createEarlyCodeMotionPass();
+std::unique_ptr<OperationPass<hw::HWModuleOp>> createEarlyCodeMotionPass();
+
+std::unique_ptr<OperationPass<hw::HWModuleOp>> createTemporalCodeMotionPass();
 
 /// Register the LLHD Transformation passes.
 void initLLHDTransformationPasses();

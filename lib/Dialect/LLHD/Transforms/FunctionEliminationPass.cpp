@@ -10,41 +10,89 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/InliningUtils.h"
+#include "llvm/Support/LogicalResult.h"
 
+namespace circt {
+namespace llhd {
+#define GEN_PASS_DEF_FUNCTIONELIMINATION
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+} // namespace llhd
+} // namespace circt
+
+using namespace mlir;
 using namespace circt;
 
 namespace {
 
+struct FunctionInliner : public InlinerInterface {
+  FunctionInliner(MLIRContext *context) : InlinerInterface(context) {}
+
+  bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return dest->getParentOfType<llhd::ProcessOp>() &&
+           isa<func::FuncOp>(src->getParentOp());
+  }
+  bool isLegalToInline(Operation *op, Region *dest, bool wouldBeCloned,
+                       IRMapping &valueMapping) const override {
+    return true;
+  }
+};
+
 struct FunctionEliminationPass
-    : public llhd::FunctionEliminationBase<FunctionEliminationPass> {
+    : public circt::llhd::impl::FunctionEliminationBase<
+          FunctionEliminationPass> {
   void runOnOperation() override;
+  LogicalResult runOnModule(hw::HWModuleOp module);
 };
 
 void FunctionEliminationPass::runOnOperation() {
-  ModuleOp module = getOperation();
+  for (auto module : getOperation().getOps<hw::HWModuleOp>())
+    if (failed(runOnModule(module)))
+      return signalPassFailure();
 
-  WalkResult result = module.walk([](mlir::func::CallOp op) -> WalkResult {
-    if (isa<llhd::ProcOp>(op->getParentOp()) ||
-        isa<llhd::EntityOp>(op->getParentOp())) {
-      return emitError(
-          op.getLoc(),
-          "Not all functions are inlined, there is at least "
-          "one function call left within a llhd.proc or llhd.entity.");
-    }
-    return WalkResult::advance();
+  getOperation().walk([&](mlir::func::FuncOp op) {
+    if (op.symbolKnownUseEmpty(getOperation()))
+      op.erase();
   });
+}
 
-  if (result.wasInterrupted()) {
-    signalPassFailure();
-    return;
+LogicalResult FunctionEliminationPass::runOnModule(hw::HWModuleOp module) {
+  FunctionInliner inliner(&getContext());
+  SymbolTableCollection table;
+
+  SmallVector<CallOpInterface> calls;
+  module.walk([&](func::CallOp op) { calls.push_back(op); });
+
+  for (auto call : calls) {
+    auto symbol = call.getCallableForCallee().dyn_cast<SymbolRefAttr>();
+    if (!symbol)
+      return call.emitError(
+          "functions not referred to by symbol are not supported");
+
+    auto func = cast<CallableOpInterface>(
+        table.lookupNearestSymbolFrom(module, symbol.getLeafReference()));
+
+    if (succeeded(
+            mlir::inlineCall(inliner, call, func, func.getCallableRegion()))) {
+      call->erase();
+      continue;
+    }
+
+    return call.emitError(
+        "Not all functions are inlined, there is at least "
+        "one function call left within a llhd.process or hw.module.");
   }
 
-  module.walk([](mlir::func::FuncOp op) { op.erase(); });
+  return success();
 }
 } // namespace
 

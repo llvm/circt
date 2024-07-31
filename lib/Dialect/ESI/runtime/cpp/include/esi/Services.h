@@ -93,8 +93,8 @@ public:
 class MMIO : public Service {
 public:
   virtual ~MMIO() = default;
-  virtual uint32_t read(uint32_t addr) const = 0;
-  virtual void write(uint32_t addr, uint32_t data) = 0;
+  virtual uint64_t read(uint32_t addr) const = 0;
+  virtual void write(uint32_t addr, uint64_t data) = 0;
   virtual std::string getServiceSymbol() const override;
 };
 
@@ -113,11 +113,49 @@ private:
   const MMIO *mmio;
 };
 
+class HostMem : public Service {
+public:
+  virtual ~HostMem() = default;
+  virtual std::string getServiceSymbol() const override;
+
+  /// RAII memory region for host memory. Automatically frees the memory when
+  /// deconstructed.
+  struct HostMemRegion {
+    virtual ~HostMemRegion() = default;
+    virtual void *getPtr() const = 0;
+    operator void *() const { return getPtr(); }
+    virtual std::size_t getSize() const = 0;
+  };
+
+  /// Options for allocating host memory.
+  struct Options {
+    bool writeable = false;
+    bool useLargePages = false;
+  };
+
+  /// Allocate a region of host memory in accelerator accessible address space.
+  virtual std::unique_ptr<HostMemRegion> allocate(std::size_t size,
+                                                  Options opts) const = 0;
+
+  /// Try to make a region of host memory accessible to the accelerator. Returns
+  /// 'false' on failure. It is optional for an accelerator backend to implement
+  /// this, so client code needs to have a fallback for when this returns
+  /// 'false'. On success, it is the client's responsibility to ensure that the
+  /// memory eventually gets unmapped.
+  virtual bool mapMemory(void *ptr, std::size_t size, Options opts) const {
+    return false;
+  }
+  /// Unmap memory which was previously mapped with 'mapMemory'. Undefined
+  /// behavior when called with a pointer which was not previously mapped.
+  virtual void unmapMemory(void *ptr) const {}
+};
+
 /// Service for calling functions.
 class FuncService : public Service {
 public:
-  FuncService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
-              ServiceImplDetails details, HWClientDetails clients);
+  FuncService(AcceleratorConnection *acc, AppIDPath id,
+              const std::string &implName, ServiceImplDetails details,
+              HWClientDetails clients);
 
   virtual std::string getServiceSymbol() const override;
   virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
@@ -130,12 +168,51 @@ public:
     Function(AppID id, const std::map<std::string, ChannelPort &> &channels);
 
   public:
+    static Function *get(AppID id, WriteChannelPort &arg,
+                         ReadChannelPort &result);
+
     void connect();
     std::future<MessageData> call(const MessageData &arg);
 
   private:
+    std::mutex callMutex;
     WriteChannelPort &arg;
     ReadChannelPort &result;
+  };
+
+private:
+  std::string symbol;
+};
+
+/// Service for servicing function calls from the accelerator.
+class CallService : public Service {
+public:
+  CallService(AcceleratorConnection *acc, AppIDPath id, std::string implName,
+              ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual ServicePort *getPort(AppIDPath id, const BundleType *type,
+                               const std::map<std::string, ChannelPort &> &,
+                               AcceleratorConnection &) const override;
+
+  /// A function call which gets attached to a service port.
+  class Callback : public ServicePort {
+    friend class CallService;
+    Callback(AcceleratorConnection &acc, AppID id,
+             const std::map<std::string, ChannelPort &> &channels);
+
+  public:
+    /// Connect a callback to code which will be executed when the accelerator
+    /// invokes the callback. The 'quick' flag indicates that the callback is
+    /// sufficiently fast that it could be called in the same thread as the
+    /// port callback.
+    void connect(std::function<MessageData(const MessageData &)> callback,
+                 bool quick = false);
+
+  private:
+    ReadChannelPort &arg;
+    WriteChannelPort &result;
+    AcceleratorConnection &acc;
   };
 
 private:

@@ -22,8 +22,7 @@ set(srcs
   Passes/ESICleanMetadata.cpp
   Passes/ESIBuildManifest.cpp
   Passes/ESIAppIDHier.cpp
-
-  APIUtilities.cpp
+  Passes/ESIVerifyConnections.cpp
 )
 
 set(ESI_LinkLibs
@@ -62,6 +61,16 @@ add_circt_dialect_library(CIRCTESI
   LINK_LIBS PUBLIC
   ${ESI_LinkLibs}
   )
+
+add_custom_target(ESIPrimitives
+SOURCES
+  ESIPrimitives.sv
+)
+add_custom_command(TARGET ESIPrimitives POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/ESIPrimitives.sv
+            ${CMAKE_CURRENT_BINARY_DIR}/ESIPrimitives.sv
+)
 
 option(ESI_RUNTIME "Build and test the ESI runtime" OFF)
 llvm_canonicalize_cmake_booleans(ESI_RUNTIME)

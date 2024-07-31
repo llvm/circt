@@ -32,6 +32,7 @@ struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct LHSTypeStorage;
 struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
@@ -52,6 +53,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class LHSType;
 class PropertyType;
 class StringType;
 class FIntegerType;
@@ -182,8 +184,8 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
-               type);
+           !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
+                      OpenVectorType>(type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -300,8 +302,8 @@ public:
   static IntType get(MLIRContext *context, bool isSigned,
                      int32_t widthOrSentinel = -1, bool isConst = false);
 
-  bool isSigned() { return isa<SIntType>(); }
-  bool isUnsigned() { return isa<UIntType>(); }
+  bool isSigned() { return mlir::isa<SIntType>(*this); }
+  bool isUnsigned() { return mlir::isa<UIntType>(*this); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() const;
@@ -309,7 +311,7 @@ public:
   /// Return a 'const' or non-'const' version of this type.
   IntType getConstType(bool isConst);
 
-  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+  static bool classof(Type type) { return mlir::isa<SIntType, UIntType>(type); }
 };
 
 //===----------------------------------------------------------------------===//

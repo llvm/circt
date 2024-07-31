@@ -6,22 +6,22 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     // CHECK: firrtl.int.sizeof %clk
     %size = firrtl.int.generic "circt.sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    firrtl.strictconnect %s, %size : !firrtl.uint<32>
+    firrtl.matchingconnect %s, %size : !firrtl.uint<32>
 
     // CHECK: firrtl.int.isX
     %isX = firrtl.int.generic "circt.isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    firrtl.strictconnect %io1, %isX : !firrtl.uint<1>
+    firrtl.matchingconnect %io1, %isX : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.test "foo"
     %foo = firrtl.int.generic "circt.plusargs.test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    firrtl.strictconnect %io2, %foo : !firrtl.uint<1>
+    firrtl.matchingconnect %io2, %foo : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     %pav = firrtl.int.generic "circt.plusargs.value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     %found = firrtl.subfield %pav[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %result = firrtl.subfield %pav[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    firrtl.strictconnect %io3, %found : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %result : !firrtl.uint<5>
+    firrtl.matchingconnect %io3, %found : !firrtl.uint<1>
+    firrtl.matchingconnect %io4, %result : !firrtl.uint<5>
   }
   // CHECK-LABEL: @ClockGate
   firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
@@ -49,25 +49,36 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_and"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.or %in0, %in1 :
     firrtl.int.generic "circt_ltl_or"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.intersect %in0, %in1 :
+    firrtl.int.generic "circt_ltl_intersect"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42 :
-    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.goto_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_goto_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.non_consecutive_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_non_consecutive_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
     // CHECK-NEXT: firrtl.int.ltl.concat %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
-    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_concat"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
     firrtl.int.generic "circt_ltl_not"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
     firrtl.int.generic "circt_ltl_implication"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
+    firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.clock %in0, %clk :
     firrtl.int.generic "circt_ltl_clock"  %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.disable %in0, %in1 :
-    firrtl.int.generic "circt_ltl_disable"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @Verif(
@@ -142,5 +153,15 @@ firrtl.circuit "Foo" {
   firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
     // CHECK-NEXT: firrtl.int.fpga_probe %clock, %data : !firrtl.uint<32>
     firrtl.int.generic "circt_fpga_probe"  %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
+  }
+
+  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>)
+  firrtl.module private @DPIIntrinsicTest(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>) {
+    // CHECK-NEXT: %0 = firrtl.int.dpi.call "clocked_result"(%in1, %in2) clock %clock enable %enable {inputNames = ["foo", "bar"], outputName = "baz"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_result", inputNames: none = "foo;bar", outputName: none = "baz"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    // CHECK-NEXT: firrtl.int.dpi.call "clocked_void"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_void"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    // CHECK-NEXT:  %1 = firrtl.int.dpi.call "unclocked_result"(%in1, %in2) enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %1 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 0, functionName: none = "unclocked_result"> %enable, %in1, %in2 : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   }
 }

@@ -17,26 +17,6 @@ class LLHDType<string name> : TypeDef<LLHD_Dialect, name> { }
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-// Declares the llhd::SigType in C++.
-def SigTypeImpl : LLHDType<"Sig"> {
-  let summary = "signal type";
-  let description = [{
-    Signals correspond directly to wires in a physical design, and are used to
-    model propagation delays and timing. Signals are used to carry values across
-    time steps in the LLHD execution model.
-  }];
-
-  let mnemonic = "sig";
-  let parameters = (ins "::mlir::Type":$underlyingType);
-  let assemblyFormat = "`<` $underlyingType `>`";
-
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$underlyingType), [{
-      return $_get(underlyingType.getContext(), underlyingType);
-    }]>
-  ];
-}
-
 // Declares the llhd::PtrType in C++.
 def PtrTypeImpl : LLHDType<"Ptr"> {
   let summary = "pointer type";
@@ -46,12 +26,12 @@ def PtrTypeImpl : LLHDType<"Ptr"> {
   }];
 
   let mnemonic = "ptr";
-  let parameters = (ins "::mlir::Type":$underlyingType);
-  let assemblyFormat = "`<` $underlyingType `>`";
+  let parameters = (ins "::mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
 
   let builders = [
-    AttrBuilderWithInferredContext<(ins "::mlir::Type":$underlyingType), [{
-      return $_get(underlyingType.getContext(), underlyingType);
+    AttrBuilderWithInferredContext<(ins "::mlir::Type":$elementType), [{
+      return $_get(elementType.getContext(), elementType);
     }]>
   ];
 }

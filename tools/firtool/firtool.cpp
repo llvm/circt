@@ -34,6 +34,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
@@ -255,6 +256,29 @@ static cl::opt<bool>
 
 static LoweringOptionsOption loweringOptions(mainCategory);
 
+static cl::list<std::string>
+    enableLayers("enable-layers", cl::desc("enable these layers permanently"),
+                 cl::value_desc("layer-list"), cl::MiscFlags::CommaSeparated,
+                 cl::cat(mainCategory));
+
+static cl::list<std::string>
+    disableLayers("disable-layers",
+                  cl::desc("disable these layers permanently"),
+                  cl::value_desc("layer-list"), cl::MiscFlags::CommaSeparated,
+                  cl::cat(mainCategory));
+
+enum class LayerSpecializationOpt { None, Enable, Disable };
+static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
+    "default-layer-specialization",
+    llvm::cl::desc("The default specialization for layers"),
+    llvm::cl::values(
+        clEnumValN(LayerSpecializationOpt::None, "none", "Layers are disabled"),
+        clEnumValN(LayerSpecializationOpt::Disable, "disable",
+                   "Layers are disabled"),
+        clEnumValN(LayerSpecializationOpt::Enable, "enable",
+                   "Layers are enabled")),
+    cl::init(LayerSpecializationOpt::None), cl::cat(mainCategory)};
+
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
 static bool checkBytecodeOutputToConsole(raw_ostream &os) {
@@ -357,6 +381,21 @@ static LogicalResult processBuffer(
     options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
+    options.enableLayers = enableLayers;
+    options.disableLayers = disableLayers;
+
+    switch (defaultLayerSpecialization) {
+    case LayerSpecializationOpt::None:
+      options.defaultLayerSpecialization = std::nullopt;
+      break;
+    case LayerSpecializationOpt::Enable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Enable;
+      break;
+    case LayerSpecializationOpt::Disable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Disable;
+      break;
+    }
+
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -710,6 +749,8 @@ int main(int argc, char **argv) {
     firrtl::registerPasses();
     om::registerPasses();
     sv::registerPasses();
+    hw::registerFlattenModulesPass();
+    verif::registerVerifyClockedAssertLikePass();
 
     // Export passes:
     registerExportChiselInterfacePass();

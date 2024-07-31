@@ -46,7 +46,17 @@ struct StmtVisitor {
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
-    return success(context.convertExpression(stmt.expr));
+    auto value = context.convertRvalueExpression(stmt.expr);
+    if (!value)
+      return failure();
+
+    // Expressions like calls to void functions return a dummy value that has no
+    // uses. If the returned value is trivially dead, remove it.
+    if (auto *defOp = value.getDefiningOp())
+      if (isOpTriviallyDead(defOp))
+        defOp->erase();
+
+    return success();
   }
 
   // Handle variable declarations.
@@ -58,13 +68,17 @@ struct StmtVisitor {
 
     Value initial;
     if (const auto *init = var.getInitializer()) {
-      initial = context.convertExpression(*init);
+      initial = context.convertRvalueExpression(*init);
       if (!initial)
         return failure();
     }
 
-    builder.create<moore::VariableOp>(loc, type,
-                                      builder.getStringAttr(var.name), initial);
+    // Collect local temporary variables.
+    auto varOp = builder.create<moore::VariableOp>(
+        loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder.getStringAttr(var.name), initial);
+    context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
+                                         &var, varOp);
     return success();
   }
 
@@ -77,7 +91,7 @@ struct StmtVisitor {
       if (condition.pattern)
         return mlir::emitError(loc,
                                "match patterns in if conditions not supported");
-      auto cond = context.convertExpression(*condition.expr);
+      auto cond = context.convertRvalueExpression(*condition.expr);
       if (!cond)
         return failure();
       cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
@@ -112,7 +126,10 @@ struct StmtVisitor {
 
   // Handle case statements.
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
-    auto caseExpr = context.convertExpression(caseStmt.expr);
+    auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
+    if (!caseExpr)
+      return failure();
+
     auto items = caseStmt.items;
     // Used to generate the condition of the default case statement.
     SmallVector<Value> defaultConds;
@@ -122,7 +139,10 @@ struct StmtVisitor {
       // Like case(cond) 0, 1 : y = x; endcase.
       SmallVector<Value> allConds;
       for (const auto *expr : item.expressions) {
-        auto itemExpr = context.convertExpression(*expr);
+        auto itemExpr = context.convertRvalueExpression(*expr);
+        if (!itemExpr)
+          return failure();
+
         auto newEqOp = builder.create<moore::EqOp>(loc, caseExpr, itemExpr);
         allConds.push_back(newEqOp);
       }
@@ -165,13 +185,9 @@ struct StmtVisitor {
 
   // Handle `for` loops.
   LogicalResult visit(const slang::ast::ForLoopStatement &stmt) {
-    if (!stmt.loopVars.empty())
-      return mlir::emitError(loc,
-                             "variables in for loop initializer not supported");
-
     // Generate the initializers.
     for (auto *initExpr : stmt.initializers)
-      if (!context.convertExpression(*initExpr))
+      if (!context.convertRvalueExpression(*initExpr))
         return failure();
 
     // Create the while op.
@@ -180,7 +196,7 @@ struct StmtVisitor {
 
     // In the "before" region, check that the condition holds.
     builder.createBlock(&whileOp.getBefore());
-    auto cond = context.convertExpression(*stmt.stopExpr);
+    auto cond = context.convertRvalueExpression(*stmt.stopExpr);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
@@ -192,7 +208,7 @@ struct StmtVisitor {
     if (failed(context.convertStatement(stmt.body)))
       return failure();
     for (auto *stepExpr : stmt.steps)
-      if (!context.convertExpression(*stepExpr))
+      if (!context.convertRvalueExpression(*stepExpr))
         return failure();
     builder.create<mlir::scf::YieldOp>(loc);
 
@@ -203,10 +219,10 @@ struct StmtVisitor {
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
     // Create the while op and feed in the repeat count as the initial counter
     // value.
-    auto count = context.convertExpression(stmt.count);
+    auto count = context.convertRvalueExpression(stmt.count);
     if (!count)
       return failure();
-    auto type = count.getType();
+    auto type = cast<moore::IntType>(count.getType());
     auto whileOp = builder.create<scf::WhileOp>(loc, type, count);
     OpBuilder::InsertionGuard guard(builder);
 
@@ -237,7 +253,7 @@ struct StmtVisitor {
 
     // In the "before" region, check that the condition holds.
     builder.createBlock(&whileOp.getBefore());
-    auto cond = context.convertExpression(stmt.cond);
+    auto cond = context.convertRvalueExpression(stmt.cond);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
@@ -264,7 +280,7 @@ struct StmtVisitor {
     builder.createBlock(&whileOp.getBefore());
     if (failed(context.convertStatement(stmt.body)))
       return failure();
-    auto cond = context.convertExpression(stmt.cond);
+    auto cond = context.convertRvalueExpression(stmt.cond);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
@@ -298,8 +314,24 @@ struct StmtVisitor {
     return success();
   }
 
-  // Ignore timing control for now.
+  // Handle timing control.
   LogicalResult visit(const slang::ast::TimedStatement &stmt) {
+    if (failed(context.convertTimingControl(stmt.timing)))
+      return failure();
+    if (failed(context.convertStatement(stmt.stmt)))
+      return failure();
+    return success();
+  }
+
+  // Handle return statements.
+  LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
+    Value expr;
+    if (stmt.expr) {
+      expr = context.convertRvalueExpression(*stmt.expr);
+      if (!expr)
+        return failure();
+    }
+    builder.create<mlir::func::ReturnOp>(loc, expr);
     return success();
   }
 

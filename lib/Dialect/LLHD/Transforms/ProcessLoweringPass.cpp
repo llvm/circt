@@ -10,11 +10,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace llhd {
+#define GEN_PASS_DEF_PROCESSLOWERING
+#include "circt/Dialect/LLHD/Transforms/Passes.h.inc"
+} // namespace llhd
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -22,14 +30,14 @@ using namespace circt;
 namespace {
 
 struct ProcessLoweringPass
-    : public llhd::ProcessLoweringBase<ProcessLoweringPass> {
+    : public circt::llhd::impl::ProcessLoweringBase<ProcessLoweringPass> {
   void runOnOperation() override;
 };
 
 /// Backtrack a signal value and make sure that every part of it is in the
 /// observer list at some point. Assumes that there is no operation that adds
 /// parts to a signal that it does not take as input (e.g. something like
-/// llhd.sig.zext %sig : !llhd.sig<i32> -> !llhd.sig<i64>).
+/// llhd.sig.zext %sig : !hw.inout<i32> -> !hw.inout<i64>).
 static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
   // If the value in the observer list, we don't need to backtrack further.
   if (llvm::is_contained(obs, value))
@@ -40,7 +48,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // last point where it could have been observed. As we've already checked
     // that, we can fail here. This includes for example llhd.sig
     if (llvm::none_of(op->getOperands(), [](Value arg) {
-          return isa<llhd::SigType>(arg.getType());
+          return isa<hw::InOutType>(arg.getType());
         }))
       return failure();
 
@@ -49,7 +57,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
     // they are covered by that probe. As soon as we find a signal that is not
     // observed no matter how far we backtrack, we fail.
     return success(llvm::all_of(op->getOperands(), [&](Value arg) {
-      return !isa<llhd::SigType>(arg.getType()) ||
+      return !isa<hw::InOutType>(arg.getType()) ||
              succeeded(checkSignalsAreObserved(obs, arg));
     }));
   }
@@ -60,7 +68,7 @@ static LogicalResult checkSignalsAreObserved(OperandRange obs, Value value) {
   return failure();
 }
 
-static LogicalResult isProcValidToLower(llhd::ProcOp op) {
+static LogicalResult isProcValidToLower(llhd::ProcessOp op) {
   size_t numBlocks = op.getBody().getBlocks().size();
 
   if (numBlocks == 1) {
@@ -74,7 +82,7 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
     Block &first = op.getBody().front();
     Block &last = op.getBody().back();
 
-    if (last.getArguments().size() != 0)
+    if (!last.getArguments().empty())
       return op.emitOpError(
           "during process-lowering: the second block (containing the "
           "llhd.wait) is not allowed to have arguments");
@@ -117,32 +125,18 @@ static LogicalResult isProcValidToLower(llhd::ProcOp op) {
 void ProcessLoweringPass::runOnOperation() {
   ModuleOp module = getOperation();
 
-  WalkResult result = module.walk([](llhd::ProcOp op) -> WalkResult {
+  WalkResult result = module.walk([](llhd::ProcessOp op) -> WalkResult {
     // Check invariants
     if (failed(isProcValidToLower(op)))
       return WalkResult::interrupt();
 
-    OpBuilder builder(op);
-
-    // Replace proc with entity
-    llhd::EntityOp entity =
-        builder.create<llhd::EntityOp>(op.getLoc(), op.getFunctionType(),
-                                       op.getIns(), /*argAttrs=*/ArrayAttr(),
-                                       /*resAttrs=*/ArrayAttr());
-    // Set the symbol name of the entity to the same as the process (as the
-    // process gets deleted anyways).
-    entity.setName(op.getName());
-    // Move all blocks from the process to the entity, the process does not have
-    // a region afterwards.
-    entity.getBody().takeBody(op.getBody());
     // In the case that wait is used to suspend the process, we need to merge
     // the two blocks as we needed the second block to have a target for wait
     // (the entry block cannot be targeted).
-    if (entity.getBody().getBlocks().size() == 2) {
-      Block &first = entity.getBody().front();
-      Block &second = entity.getBody().back();
+    if (op.getBody().getBlocks().size() == 2) {
+      Block &first = op.getBody().front();
+      Block &second = op.getBody().back();
       // Delete the BranchOp operation in the entry block
-      first.getTerminator()->dropAllReferences();
       first.getTerminator()->erase();
       // Move operations of second block in entry block.
       first.getOperations().splice(first.end(), second.getOperations());
@@ -152,16 +146,12 @@ void ProcessLoweringPass::runOnOperation() {
       second.erase();
     }
 
-    // Delete the process as it is now replaced by an entity.
-    op->dropAllReferences();
-    op->dropAllDefinedValueUses();
-    op->erase();
-
     // Remove the remaining llhd.halt or llhd.wait terminator
-    Operation *terminator = entity.getBody().front().getTerminator();
-    terminator->dropAllReferences();
-    terminator->dropAllUses();
-    terminator->erase();
+    op.getBody().front().getTerminator()->erase();
+
+    IRRewriter rewriter(op);
+    rewriter.inlineBlockBefore(&op.getBody().front(), op);
+    op.erase();
 
     return WalkResult::advance();
   });

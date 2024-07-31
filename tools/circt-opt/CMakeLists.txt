@@ -16,6 +16,7 @@ target_link_libraries(circt-opt
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
+  CIRCTBMCTransforms
   CIRCTCalyx
   CIRCTCalyxToHW
   CIRCTCalyxNative
@@ -46,12 +47,12 @@ target_link_libraries(circt-opt
   CIRCTHandshakeTransforms
   CIRCTLECTransforms
   CIRCTLLHD
-  CIRCTLLHDToLLVM
   CIRCTHWToLLVM
   CIRCTCombToArith
   CIRCTCombToLLVM
   CIRCTLLHDTransforms
   CIRCTMoore
+  CIRCTMooreTransforms
   CIRCTMooreToCore
   CIRCTMSFT
   CIRCTMSFTTransforms
@@ -62,7 +63,6 @@ target_link_libraries(circt-opt
   CIRCTIbis
   CIRCTIbisTransforms
   CIRCTInteropDialect
-  CIRCTHWToLLHD
   CIRCTHWToSMT
   CIRCTHWToSystemC
   CIRCTHWToSV
@@ -76,6 +76,7 @@ target_link_libraries(circt-opt
   CIRCTSeqToSV
   CIRCTSeqTransforms
   CIRCTSimToSV
+  CIRCTSimTransforms
   CIRCTSSP
   CIRCTSSPTransforms
   CIRCTCFToHandshake
@@ -93,6 +94,7 @@ target_link_libraries(circt-opt
   CIRCTSystemCTransforms
   CIRCTTransforms
   CIRCTVerif
+  CIRCTVerifTransforms
   CIRCTVerifToSMT
   CIRCTVerifToSV
   CIRCTLTLToCore

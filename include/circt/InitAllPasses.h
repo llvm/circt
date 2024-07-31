@@ -28,12 +28,16 @@
 #include "circt/Dialect/Ibis/IbisPasses.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Pipeline/PipelinePasses.h"
 #include "circt/Dialect/SSP/SSPPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/SystemC/SystemCPasses.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Tools/circt-bmc/Passes.h"
 #include "circt/Tools/circt-lec/Passes.h"
 #include "circt/Transforms/Passes.h"
 
@@ -48,6 +52,9 @@ inline void registerAllPasses() {
 
   // LEC transformation passes
   registerLECTransformsPasses();
+
+  // BMC transformation passes
+  registerBMCTransformsPasses();
 
   // Standard Passes
   arc::registerPasses();
@@ -66,8 +73,11 @@ inline void registerAllPasses() {
   ibis::registerPasses();
   hw::registerPasses();
   pipeline::registerPasses();
+  sim::registerPasses();
   ssp::registerPasses();
   systemc::registerPasses();
+  verif::registerPasses();
+  moore::registerPasses();
 }
 
 } // namespace circt

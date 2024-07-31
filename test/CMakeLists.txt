@@ -38,11 +38,6 @@ if (CIRCT_GTEST_AVAILABLE)
   list(APPEND CIRCT_TEST_DEPENDS CIRCTUnitTests)
 endif()
 
-if(CIRCT_LLHD_SIM_ENABLED)
-  list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
-  list(APPEND CIRCT_TEST_DEPENDS circt-llhd-signals-runtime-wrappers)
-endif()
-
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   list(APPEND CIRCT_TEST_DEPENDS circt-verilog)
 endif()

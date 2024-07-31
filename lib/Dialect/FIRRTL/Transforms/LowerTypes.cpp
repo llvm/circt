@@ -27,7 +27,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -50,6 +52,13 @@
 #include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-lower-types"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERFIRRTLTYPES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -377,7 +386,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitExpr(RefResolveOp op);
   bool visitExpr(RefCastOp op);
   bool visitStmt(ConnectOp op);
-  bool visitStmt(StrictConnectOp op);
+  bool visitStmt(MatchingConnectOp op);
   bool visitStmt(RefDefineOp op);
   bool visitStmt(WhenOp op);
   bool visitStmt(LayerBlockOp op);
@@ -893,7 +902,7 @@ bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
 }
 
 // Expand connects of aggregates
-bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
+bool TypeLoweringVisitor::visitStmt(MatchingConnectOp op) {
   if (processSAPath(op))
     return true;
 
@@ -910,7 +919,7 @@ bool TypeLoweringVisitor::visitStmt(StrictConnectOp op) {
     Value dest = getSubWhatever(op.getDest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    builder->create<StrictConnectOp>(dest, src);
+    builder->create<MatchingConnectOp>(dest, src);
   }
   return true;
 }
@@ -1613,7 +1622,8 @@ bool TypeLoweringVisitor::visitExpr(MultibitMuxOp op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
+struct LowerTypesPass
+    : public circt::firrtl::impl::LowerFIRRTLTypesBase<LowerTypesPass> {
   LowerTypesPass(
       circt::firrtl::PreserveAggregate::PreserveMode preserveAggregateFlag,
       circt::firrtl::PreserveAggregate::PreserveMode preserveMemoriesFlag) {

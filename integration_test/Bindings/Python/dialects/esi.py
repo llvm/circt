@@ -41,13 +41,23 @@ with Context() as ctx:
   assert (bundle_type.resettable)
   print()
 
+# CHECK-LABEL: === testGen called with ops:
+# CHECK-NEXT:  [[R0:%.+]]:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
+# CHECK-NEXT:    [[R2:%.+]] = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:  }
+# CHECK-NEXT:  esi.service.decl @HostComms {
+# CHECK-NEXT:    esi.service.port @Recv : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:  }
+# CHECK-NEXT:  esi.manifest.service_impl #esi.appid<"mstop"> svc @HostComms by "test" with {}
 
-# CHECK-LABEL: === testGen called with op:
-# CHECK:       %0:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
-# CHECK:         %2 = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
-def testGen(reqOp: esi.ServiceImplementReqOp) -> bool:
-  print("=== testGen called with op:")
+
+def testGen(reqOp: Operation, decl_op: Operation, rec_op: Operation) -> bool:
+  print("=== testGen called with ops:")
   reqOp.print()
+  print()
+  decl_op.print()
+  print()
+  rec_op.print()
   print()
   return True
 

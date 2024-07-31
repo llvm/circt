@@ -6,7 +6,7 @@ firrtl.circuit "UnknownIntrinsic" {
     // expected-error @below {{unknown intrinsic}}
     // expected-error @below {{failed to legalize}}
     firrtl.int.generic "unknown_intrinsic" %0 : (!firrtl.uint<32>) -> ()
-    firrtl.strictconnect %0, %data : !firrtl.uint<32>
+    firrtl.matchingconnect %0, %data : !firrtl.uint<32>
   }
 }
 

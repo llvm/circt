@@ -10,13 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -24,11 +24,19 @@
 
 #define DEBUG_TYPE "firrtl-infer-read-write"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERREADWRITE
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
+struct InferReadWritePass
+    : public circt::firrtl::impl::InferReadWriteBase<InferReadWritePass> {
 
   /// This pass performs two memory transformations:
   ///  1. If the multi-bit enable port is connected to a constant 1,
@@ -85,10 +93,10 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
                 sf.getFieldIndex());
             // If this is the enable field, record the product terms(the And
             // expression tree).
-            if (fName.equals("en"))
+            if (fName == "en")
               getProductTerms(sf, isReadPort ? readTerms : writeTerms);
 
-            else if (fName.equals("clk")) {
+            else if (fName == "clk") {
               if (isReadPort)
                 rClock = getConnectSrc(sf);
               else
@@ -164,13 +172,13 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       auto writeClock =
           builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<StrictConnectOp>(
+      builder.create<MatchingConnectOp>(
           addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<StrictConnectOp>(
+      builder.create<MatchingConnectOp>(
           enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
       builder.setInsertionPointToEnd(wmode->getBlock());
-      builder.create<StrictConnectOp>(wmode, complementTerm);
+      builder.create<MatchingConnectOp>(wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
       size_t dbgsIndex = 0;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
@@ -553,7 +561,7 @@ private:
           if (fName.contains("mask")) {
             WireOp dummy = builder.create<WireOp>(oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<StrictConnectOp>(
+            builder.create<MatchingConnectOp>(
                 sf, builder.create<ConstantOp>(
                         UIntType::get(builder.getContext(), 1), APInt(1, 1)));
           } else

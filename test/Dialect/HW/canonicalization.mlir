@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @extract_noop(in %arg0 : i3, out "" : i3) {
 // CHECK-NEXT:    hw.output %arg0

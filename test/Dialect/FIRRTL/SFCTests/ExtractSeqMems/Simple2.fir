@@ -10,6 +10,7 @@
 
 ; Extracted from test/scala/firrtl/ExtractSeqMems.scala
 
+FIRRTL version 4.0.0
 circuit TestHarness : %[[
   {
     "class":"sifive.enterprise.firrtl.ExtractSeqMemsFileAnnotation",
@@ -44,7 +45,7 @@ circuit TestHarness : %[[
   ; TESTHARNESS: module TestHarness
   ; TESTHARNESS: DUTModule dut
   ; TESTHARNESS: mem_ext mem_ext
-  module TestHarness :
+  public module TestHarness :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
