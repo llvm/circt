@@ -1043,10 +1043,6 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
-// Struct Manipulation
-//===----------------------------------------------------------------------===//
-
 def StructCreateOp : MooreOp<"struct_create", [Pure]> {
   let summary = "Create a struct value from individual fields";
   let arguments = (ins Variadic<UnpackedType>:$fields);
