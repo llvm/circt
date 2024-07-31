@@ -454,7 +454,7 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
 }
 
-def StringConstantOp : MooreOp<"string", [Pure, ConstantLike]> {
+def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
   let summary = "Produce a constant string value";
   let description = [{
     Produces a constant value of string type.
@@ -465,7 +465,7 @@ def StringConstantOp : MooreOp<"string", [Pure, ConstantLike]> {
     ```
   }];
   let arguments = (ins StrAttr:$value);
-  let results = (outs SimpleBitVectorType:$result);
+  let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 

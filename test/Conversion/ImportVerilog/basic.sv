@@ -202,13 +202,13 @@ module Basic;
   MyEnum ev1 = VariantA;
   MyEnum ev2 = VariantB;
 
-// CHECK: [[STR_WELCOME:%.+]] = moore.string "Welcome to Moore" : i128
+// CHECK: [[STR_WELCOME:%.+]] = moore.string_constant "Welcome to Moore" : i128
 // CHECK: [[CONV_WELCOME:%.+]] = moore.conversion [[STR_WELCOME]] : !moore.i128 -> !moore.string
 // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
 string s = "Welcome to Moore";
 
 // CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
-// CHECK: [[STR_HELLO:%.+]] = moore.string "Hello World" : i88
+// CHECK: [[STR_HELLO:%.+]] = moore.string_constant "Hello World" : i88
 // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i88 -> !moore.string
 // CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
 string s1; 
