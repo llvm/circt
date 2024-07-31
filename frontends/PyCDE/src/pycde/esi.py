@@ -10,7 +10,7 @@ from .signals import (BitsSignal, BundleSignal, ChannelSignal, Signal,
 from .support import get_user_loc
 from .system import System
 from .types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                    Type, UInt, types, _FromCirctType)
+                    StructType, Type, UInt, types, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -469,6 +469,11 @@ class PureModule(Module):
 
 
 MMIODataType = Bits(64)
+MMIOReadWriteCmdType = StructType([
+    ("write", Bits(1)),
+    ("offset", UInt(32)),
+    ("data", MMIODataType),
+])
 
 
 @ServiceDecl
@@ -479,6 +484,11 @@ class MMIO:
 
   read = Bundle([
       BundledChannel("offset", ChannelDirection.TO, UInt(32)),
+      BundledChannel("data", ChannelDirection.FROM, MMIODataType)
+  ])
+
+  read_write = Bundle([
+      BundledChannel("cmd", ChannelDirection.TO, MMIOReadWriteCmdType),
       BundledChannel("data", ChannelDirection.FROM, MMIODataType)
   ])
 

@@ -232,7 +232,7 @@ public:
                                getType()->getID() + ", got " + desc.type());
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
       throw std::runtime_error("Channel '" + name +
-                               "' is not a to server channel");
+                               "' is not a to client channel");
     assert(desc.name() == name);
 
     // Initiate a stream of messages from the server.
@@ -349,35 +349,49 @@ public:
   CosimMMIO(Context &ctxt, StubContainer *rpcClient) {
     // We have to locate the channels ourselves since this service might be used
     // to retrieve the manifest.
-    ChannelDesc readArg, readResp;
-    if (!rpcClient->getChannelDesc("__cosim_mmio_read.arg", readArg) ||
-        !rpcClient->getChannelDesc("__cosim_mmio_read.result", readResp))
+    ChannelDesc cmdArg, cmdResp;
+    if (!rpcClient->getChannelDesc("__cosim_mmio_read_write.arg", cmdArg) ||
+        !rpcClient->getChannelDesc("__cosim_mmio_read_write.result", cmdResp))
       throw std::runtime_error("Could not find MMIO channels");
 
-    const esi::Type *i32Type = getType(ctxt, new UIntType(readArg.type(), 32));
-    const esi::Type *i64Type = getType(ctxt, new UIntType(readResp.type(), 64));
+    const esi::Type *i64Type = getType(ctxt, new UIntType(cmdResp.type(), 64));
+    const esi::Type *cmdType =
+        getType(ctxt, new StructType(cmdArg.type(),
+                                     {{"write", new BitsType("i1", 1)},
+                                      {"offset", new UIntType("ui32", 32)},
+                                      {"data", new BitsType("i64", 64)}}));
 
     // Get ports, create the function, then connect to it.
-    readArgPort = std::make_unique<WriteCosimChannelPort>(
-        rpcClient->stub.get(), readArg, i32Type, "__cosim_mmio_read.arg");
-    readRespPort = std::make_unique<ReadCosimChannelPort>(
-        rpcClient->stub.get(), readResp, i64Type, "__cosim_mmio_read.result");
-    readMMIO.reset(FuncService::Function::get(AppID("__cosim_mmio_read"),
-                                              *readArgPort, *readRespPort));
-    readMMIO->connect();
+    cmdArgPort = std::make_unique<WriteCosimChannelPort>(
+        rpcClient->stub.get(), cmdArg, cmdType, "__cosim_mmio_read_write.arg");
+    cmdRespPort = std::make_unique<ReadCosimChannelPort>(
+        rpcClient->stub.get(), cmdResp, i64Type,
+        "__cosim_mmio_read_write.result");
+    cmdMMIO.reset(FuncService::Function::get(AppID("__cosim_mmio"), *cmdArgPort,
+                                             *cmdRespPort));
+    cmdMMIO->connect();
   }
+
+  struct MMIOCmd {
+    uint64_t data;
+    uint32_t offset;
+    bool write;
+  } __attribute__((packed));
 
   // Call the read function and wait for a response.
   uint64_t read(uint32_t addr) const override {
-    auto arg = MessageData::from(addr);
-    std::future<MessageData> result = readMMIO->call(arg);
+    MMIOCmd cmd{.offset = addr, .write = false};
+    auto arg = MessageData::from(cmd);
+    std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
     return *result.get().as<uint64_t>();
   }
 
   void write(uint32_t addr, uint64_t data) override {
-    // TODO: this.
-    throw std::runtime_error("Cosim MMIO write not implemented");
+    MMIOCmd cmd{.data = data, .offset = addr, .write = true};
+    auto arg = MessageData::from(cmd);
+    std::future<MessageData> result = cmdMMIO->call(arg);
+    result.wait();
   }
 
 private:
@@ -389,9 +403,9 @@ private:
     ctxt.registerType(type);
     return type;
   }
-  std::unique_ptr<WriteCosimChannelPort> readArgPort;
-  std::unique_ptr<ReadCosimChannelPort> readRespPort;
-  std::unique_ptr<FuncService::Function> readMMIO;
+  std::unique_ptr<WriteCosimChannelPort> cmdArgPort;
+  std::unique_ptr<ReadCosimChannelPort> cmdRespPort;
+  std::unique_ptr<FuncService::Function> cmdMMIO;
 };
 
 class CosimHostMem : public HostMem {
