@@ -53,13 +53,22 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Get the class-like fields objects",
       "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>,
     InterfaceMethod<"Get the class-like field to type map",
-      "llvm::MapVector<mlir::StringAttr, mlir::Type>", "getFieldTypes", (ins),
+      "std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>", "getFieldTypes", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
         llvm::MapVector<mlir::StringAttr, mlir::Type> classFields;
-        for (auto field : $_op.getFields())
-          classFields.insert({field.getName(), field.getType()});
-        return classFields;
+        for (auto field : $_op.getFields()) {
+          auto result = classFields.insert(
+            {field.getName(), field.getType()}
+          );
+          /// TODO: Can we do this verification on construction?
+          if (!result.second) {
+            $_op.getFieldsOp().emitOpError() << "field " << field.getName()
+            << " is defined twice";
+            return std::nullopt;
+          }
+        }
+        return std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>(classFields);
       }]>,
   ];
 }

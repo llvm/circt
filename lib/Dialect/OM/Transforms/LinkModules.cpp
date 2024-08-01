@@ -170,7 +170,12 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return diag;
   };
 
-  llvm::MapVector<StringAttr, Type> classFields = classOp.getFieldTypes();
+
+  auto classFieldsOpt = classOp.getFieldTypes();
+  if (!classFieldsOpt.has_value()) {
+    return emitError(classOp) << "failed getting class op field types";
+  }
+  llvm::MapVector<StringAttr, Type> classFields = classFieldsOpt.value();
 
   for (auto op : classes) {
     if (op == classOp)
@@ -191,7 +196,13 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     }
     // Check declared fields.
     llvm::DenseSet<StringAttr> declaredFields;
-    for (auto [name, type] : op.getFieldTypes()) {
+
+    auto fieldTypes = op.getFieldTypes();
+    if (!fieldTypes.has_value()) {
+      return emitError(op) << "failed getting field types";
+    }
+
+    for (auto [name, type] : fieldTypes.value()) {
       auto *it = classFields.find(name);
 
       // Field not found in its definition.

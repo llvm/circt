@@ -59,14 +59,13 @@ void VerifyObjectFieldsPass::runOnOperation() {
           mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
             ClassLike classLike = entry.first;
             auto &table = entry.second;
-            auto fields = classLike.getFields();
-            for (auto field : fields) {
-              auto name = cast<StringAttr>(field.getName());
-              if (!table.insert({name, field.getType()}).second) {
-                auto emit = classLike.getFieldsOp().emitOpError()
-                            << "field " << name << " is defined twice";
-                return LogicalResult::failure();
-              }
+            std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>
+              fieldTypes = classLike.getFieldTypes();
+            if (!fieldTypes.has_value()) {
+              return LogicalResult::failure();
+            }
+            for (auto [name, type] : fieldTypes.value()) {
+              table.insert({name, type});
             }
             return LogicalResult::success();
           })))
