@@ -454,6 +454,21 @@ def NamedConstantOp : MooreOp<"named_constant", [
   }];
 }
 
+def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = moore.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
+}
+
 def ConversionOp : MooreOp<"conversion", [Pure]> {
   let summary = "A type conversion";
   let description = [{
@@ -645,6 +660,28 @@ class ModOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
 def ModUOp : ModOpBase<"modu">;
 def ModSOp : ModOpBase<"mods">;
+
+class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
+  let summary = "Power";
+  let description = [{
+    Raise the left-hand side to the power of the right-hand side. `powu` treats
+    its operands as unsigned numbers, while `pows` treats them as signed
+    numbers.
+
+    Evaluation rules for `a ** b`:
+
+    |       | a < -1 | a = -1         | a = 0 | a = 1 | a > 1  |
+    |-------|--------|----------------|-------|-------|--------|
+    | b > 0 | a ** b | b odd ? -1 : 1 |     0 |     1 | a ** b |
+    | b = 0 |      1 |              1 |     1 |     1 |      1 |
+    | b < 0 |      0 | b odd ? -1 : 1 |     X |     1 |      0 |
+
+    See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
+  }];
+}
+
+def PowUOp : PowOpBase<"powu">;
+def PowSOp : PowOpBase<"pows">;
 
 def AndOp : BinaryOpBase<"and", [Commutative]> {
   let summary = "Bitwise AND operation";
@@ -924,6 +961,10 @@ def ReplicateOp : MooreOp<"replicate", [
   }];
 }
 
+//===----------------------------------------------------------------------===//
+// Bit/Element Extraction
+//===----------------------------------------------------------------------===//
+
 def ExtractOp : MooreOp<"extract", [Pure]> {
   let summary = "Extract a range or single bits from a value";
   let description = [{
@@ -996,71 +1037,24 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
   }];
 }
 
-def StructCreateOp : MooreOp<"struct_create", [Pure]> {
-  let summary = "Struct Create operation";
-  let description = [{
-    A structure represents a collection of data types
-    that can be referenced as a whole, or the individual data types
-    that make up the structure can be referenced by name.
-    By default, structures are unpacked, meaning that there is
-    an implementation-dependent packing of the data types.
-    Unpacked structures can contain any data type.
-    See IEEE 1800-2017 § 7.2 "Structures"
+//===----------------------------------------------------------------------===//
+// Struct Manipulation
+//===----------------------------------------------------------------------===//
 
-    Example:
-    ```
-    struct { bit [7:0] opcode; bit [23:0] addr; }IR;
-    IR.opcode = 1;   // set field in IR.
-    // anonymous structure
-    // defines variable IR
-    typedef struct {
-    bit [7:0] opcode;
-    bit [23:0] addr;
-    } instruction; // named structure type
-    instruction IR; // define variable
-    ```
-    See IEEE 1800-2017 § 7.2. "Structures".
-  }];
-  let arguments = (ins Variadic<UnpackedType>:$input);
-  let results = (outs RefType:$result);
+def StructCreateOp : MooreOp<"struct_create", [Pure]> {
+  let summary = "Create a struct value from individual fields";
+  let arguments = (ins Variadic<UnpackedType>:$fields);
+  let results = (outs AnyStructType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($input) `->` type($result)
+    $fields attr-dict `:` type($fields) `->` type($result)
   }];
   let hasVerifier = 1;
   let hasFolder = 1;
 }
 
-def StructExtractOp : MooreOp<"struct_extract", [
-  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
-]> {
-  let summary = "Struct Extract operation";
-  let description = [{
-    Structures can be converted to bits preserving the bit pattern.
-    In other words, they can be converted back to the same value
-    without any loss of information. When unpacked data are converted
-    to the packed representation, the order of the data in the packed
-    representation is such that the first field in the structure
-    occupies the MSBs. The effect is the same as a concatenation of
-    the data items (struct fields or array elements) in order.
-    The type of the elements in an unpacked structure or array
-    shall be valid for a packed representation in order to be
-    cast to any other type, whether packed or unpacked.
-    See IEEE 1800-2017 § 6.24.1 "Cast operator"
-
-    Example:
-    ```
-    typedef struct {
-    int addr = 1 + constant;
-    int crc;
-    byte data [4] = '{4{1}};
-    } packet1;
-
-    packet1 p1; // initialization defined by the typedef.
-                // p1.crc will use the default value for an int
-    ```
-    See IEEE 1800-2017 § 7.2.1 "Assigning to structures".
-  }];
-  let arguments = (ins StrAttr:$fieldName, Arg<RefType, "", [MemRead]>:$input);
+def StructExtractOp : MooreOp<"struct_extract", [Pure]> {
+  let summary = "Obtain the value of a struct field";
+  let arguments = (ins StrAttr:$fieldName, AnyStructType:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
@@ -1070,50 +1064,45 @@ def StructExtractOp : MooreOp<"struct_extract", [
 }
 
 def StructExtractRefOp : MooreOp<"struct_extract_ref", [
+  Pure,
   DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>
 ]> {
-  let summary = "Struct Extract operation";
-  let arguments = (ins StrAttr:$fieldName, RefType:$input);
+  let summary = "Create a reference to a struct field";
+  let arguments = (ins StrAttr:$fieldName, AnyStructRefType:$input);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-    $input `,` $fieldName attr-dict `:`
-    type($input) `->` type($result)
+    $input `,` $fieldName attr-dict `:` type($input) `->` type($result)
   }];
   let hasVerifier = 1;
 }
 
-def StructInjectOp : MooreOp<"struct_inject", [Pure]>  {
-  let summary = "Struct Field operation";
+def StructInjectOp : MooreOp<"struct_inject", [
+  Pure,
+  AllTypesMatch<["input", "result"]>
+]> {
+  let summary = "Update the value of a struct field";
   let description = [{
-    A structure can be assigned as a whole and passed to
-    or from a subroutine as a whole. Members of a structure
-    data type can be assigned individual default member
-    values by using an initial assignment with the declaration
-    of each member. The assigned expression shall be
-    a constant expression.
-    See IEEE 1800-2017 § 7.2.2 "Assigning to structures"
-
-    Example:
-    ```
-    typedef struct {
-    int addr = 1 + constant;
-    int crc;
-    byte data [4] = '{4{1}};
-    } packet1;
-
-    packet1 p1; // initialization defined by the typedef.
-                // p1.crc will use the default value for an int
-    ```
-    See IEEE 1800-2017 § 7.2. "Assigning to structures".
+    Takes an existing struct value, sets one of its fields to a new value, and
+    returns the resulting struct value.
   }];
-  let arguments = (ins  RefType:$input, StrAttr:$fieldName,
-  UnpackedType:$newValue);
-  let results = (outs RefType:$result);
-  let hasCustomAssemblyFormat = 1;
+  let arguments = (ins
+    AnyStructType:$input,
+    StrAttr:$fieldName,
+    UnpackedType:$newValue
+  );
+  let results = (outs AnyStructType:$result);
+  let assemblyFormat = [{
+    $input `,` $fieldName `,` $newValue attr-dict
+    `:` type($input) `,` type($newValue)
+  }];
   let hasVerifier = 1;
   let hasFolder = 1;
   let hasCanonicalizeMethod = true;
 }
+
+//===----------------------------------------------------------------------===//
+// Union Manipulation
+//===----------------------------------------------------------------------===//
 
 def UnionCreateOp : MooreOp<"union_create", [Pure]> {
   let summary = "Union Create operation";

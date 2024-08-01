@@ -83,7 +83,7 @@ struct RvalueExprVisitor {
     // value for this expression's symbol to the `context.valueSymbols` table.
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no rvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 
@@ -113,15 +113,6 @@ struct RvalueExprVisitor {
       return {};
     }
 
-    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp.getInput();
-      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
-                                              refOp.getFieldNameAttr(), rhs);
-        refOp->erase();
-        return rhs;
-      }
-    }
     if (expr.isNonBlocking())
       builder.create<moore::NonBlockingAssignOp>(loc, lhs, rhs);
     else
@@ -260,6 +251,18 @@ struct RvalueExprVisitor {
         return createBinary<moore::ModSOp>(lhs, rhs);
       else
         return createBinary<moore::ModUOp>(lhs, rhs);
+    case BinaryOperator::Power: {
+      // Slang casts the LHS and result of the `**` operator to a four-valued
+      // type, since the operator can return X even for two-valued inputs. To
+      // maintain uniform types across operands and results, cast the RHS to
+      // that four-valued type as well.
+      auto rhsCast =
+          builder.create<moore::ConversionOp>(loc, lhs.getType(), rhs);
+      if (expr.type->isSigned())
+        return createBinary<moore::PowSOp>(lhs, rhsCast);
+      else
+        return createBinary<moore::PowUOp>(lhs, rhsCast);
+    }
 
     case BinaryOperator::BinaryAnd:
       return createBinary<moore::AndOp>(lhs, rhs);
@@ -364,9 +367,6 @@ struct RvalueExprVisitor {
         return builder.create<moore::AShrOp>(loc, lhs, rhs);
       return builder.create<moore::ShrOp>(loc, lhs, rhs);
     }
-
-    case BinaryOperator::Power:
-      break;
     }
 
     mlir::emitError(loc, "unsupported binary operator");
@@ -379,17 +379,14 @@ struct RvalueExprVisitor {
       mlir::emitError(loc, "literals with X or Z bits not supported");
       return {};
     }
-    if (value.getBitWidth() > 64) {
-      mlir::emitError(loc, "unsupported bit width: literal is ")
-          << value.getBitWidth() << " bits wide; only 64 supported";
-      return {};
-    }
     auto intType =
         moore::IntType::get(context.getContext(), value.getBitWidth(),
                             value.hasUnknown() ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    auto truncValue = value.as<uint64_t>().value();
-    Value result = builder.create<moore::ConstantOp>(loc, intType, truncValue);
+    Value result = builder.create<moore::ConstantOp>(
+        loc, intType,
+        APInt(value.getBitWidth(),
+              ArrayRef<uint64_t>(value.getRawPtr(), value.getNumWords())));
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
@@ -523,7 +520,7 @@ struct RvalueExprVisitor {
   Value visit(const slang::ast::MemberAccessExpression &expr) {
     auto type = context.convertType(*expr.type);
     auto valueType = expr.value().type;
-    auto value = context.convertLvalueExpression(expr.value());
+    auto value = context.convertRvalueExpression(expr.value());
     if (!type || !value)
       return {};
     if (valueType->isStruct()) {
@@ -715,6 +712,12 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  /// Handle string literals.
+  Value visit(const slang::ast::StringLiteral &expr) {
+    auto type = context.convertType(*expr.type);
+    return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
@@ -758,7 +761,7 @@ struct LvalueExprVisitor {
       return value;
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
     d.attachNote(context.convertLocation(expr.symbol.location))
-        << "no value generated for " << slang::ast::toString(expr.symbol.kind);
+        << "no lvalue generated for " << slang::ast::toString(expr.symbol.kind);
     return {};
   }
 

@@ -300,8 +300,8 @@ class Port:
     if not supports_host:
       raise TypeError(f"unsupported type: {reason}")
 
-  def connect(self):
-    self.cpp_port.connect()
+  def connect(self, buffer_size: Optional[int] = None):
+    self.cpp_port.connect(buffer_size)
     return self
 
 

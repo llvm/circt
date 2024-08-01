@@ -1576,9 +1576,9 @@ circuit BasicProps :
   module Path :
     ; CHECK-SAME: out %path: !firrtl.path
     output path : Path
-    ; CHECK: firrtl.unresolved_path "OMDeleted"
+    ; CHECK: firrtl.unresolved_path "OMDeleted:"
     ; CHECK: firrtl.propassign %path, %0 : !firrtl.path
-    propassign path, path("OMDeleted")
+    propassign path, path("OMDeleted:")
 
   ; CHECK-LABEL: firrtl.class private @SimpleClass(in %a: !firrtl.string, out %b: !firrtl.string) {
   ; CHECK-NEXT:     firrtl.propassign %b, %a : !firrtl.string
@@ -1895,9 +1895,9 @@ circuit GenericIntrinsics:
     ; CHECK-NEXT: %[[PAV:.+]] = firrtl.int.generic "circt_plusargs_value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     ; CHECK-NEXT: %n = firrtl.node interesting_name %[[PAV]]
     node n = intrinsic(circt_plusargs_value<FORMAT = "foo"> : { found : UInt<1>, result : UInt<5> })
-    ; CHECK-NEXT: %[[PAT:.+]] = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "bar"> : () -> !firrtl.uint<3>
+    ; CHECK-NEXT: %[[PAT:.+]] = firrtl.int.generic "circt_plusargs_test" <FORMAT: none = "bar"> : () -> !firrtl.uint<1>
     ; CHECK-NEXT: %n2 = firrtl.node interesting_name %[[PAT]]
-    node n2 = intrinsic(circt_plusargs_test<FORMAT = "bar"> : UInt<3>)
+    node n2 = intrinsic(circt_plusargs_test<FORMAT = "bar"> : UInt<1>)
 
 
     ; Statement with unused return value.

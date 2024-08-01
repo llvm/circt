@@ -38,13 +38,13 @@ def CosimBSP(user_module: Module) -> Module:
     def build(ports):
       user_module(clk=ports.clk, rst=ports.rst)
 
-      mmio_read = esi.FuncService.get_coerced(esi.AppID("__cosim_mmio_read"),
-                                              esi.MMIO.read.type)
+      mmio_read_write = esi.FuncService.get_coerced(
+          esi.AppID("__cosim_mmio_read_write"), esi.MMIO.read_write.type)
       ChannelMMIO(esi.MMIO,
                   appid=esi.AppID("__cosim_mmio"),
                   clk=ports.clk,
                   rst=ports.rst,
-                  read=mmio_read)
+                  cmd=mmio_read_write)
 
   class ESI_Cosim_Top(Module):
     clk = Clock()

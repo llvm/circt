@@ -117,7 +117,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   clk = Clock()
   rst = Input(Bits(1))
 
-  read = Input(esi.MMIO.read.type)
+  cmd = Input(esi.MMIOReadWriteCmdType)
 
   # Amount of register space each client gets. This is a GIANT HACK and needs to
   # be replaced by parameterizable services.
@@ -140,70 +140,75 @@ class ChannelMMIO(esi.ServiceImplementation):
 
   @generator
   def generate(ports, bundles: esi._ServiceGeneratorBundles):
-    read_table, write_table, manifest_loc = ChannelMMIO.build_table(
-        ports, bundles)
-    ChannelMMIO.build_read(ports, manifest_loc, read_table)
-    ChannelMMIO.build_write(ports, write_table)
+    table, manifest_loc = ChannelMMIO.build_table(bundles)
+    ChannelMMIO.build_read(ports, manifest_loc, table)
     return True
 
   @staticmethod
-  def build_table(
-      ports, bundles
-  ) -> Tuple[Dict[int, AssignableSignal], Dict[int, AssignableSignal], int]:
+  def build_table(bundles) -> Tuple[Dict[int, AssignableSignal], int]:
     """Build a table of read and write addresses to BundleSignals."""
     offset = ChannelMMIO.initial_offset
-    read_table: Dict[int, AssignableSignal] = {}
-    write_table: Dict[int, AssignableSignal] = {}
+    table: Dict[int, AssignableSignal] = {}
     for bundle in bundles.to_client_reqs:
       if bundle.port == 'read':
-        read_table[offset] = bundle
-        bundle.add_record({"offset": offset})
+        table[offset] = bundle
+        bundle.add_record({"offset": offset, "type": "ro"})
+        offset += ChannelMMIO.RegisterSpace
+      elif bundle.port == 'read_write':
+        table[offset] = bundle
+        bundle.add_record({"offset": offset, "type": "rw"})
         offset += ChannelMMIO.RegisterSpace
       else:
         assert False, "Unrecognized port name."
 
     manifest_loc = offset
-    return read_table, write_table, manifest_loc
+    return table, manifest_loc
 
   @staticmethod
-  def build_read(ports, manifest_loc: int, read_table: Dict[int,
-                                                            AssignableSignal]):
+  def build_read(ports, manifest_loc: int, table: Dict[int, AssignableSignal]):
     """Builds the read side of the MMIO service."""
 
     # Instantiate the header and manifest ROM. Fill in the read_table with
     # bundle wires to be assigned identically to the other MMIO clients.
     header_bundle_wire = Wire(esi.MMIO.read.type)
-    read_table[0] = header_bundle_wire
+    table[0] = header_bundle_wire
     HeaderMMIO(manifest_loc)(clk=ports.clk,
                              rst=ports.rst,
                              read=header_bundle_wire)
 
     mani_bundle_wire = Wire(esi.MMIO.read.type)
-    read_table[manifest_loc] = mani_bundle_wire
+    table[manifest_loc] = mani_bundle_wire
     ESI_Manifest_ROM_Wrapper(clk=ports.clk, read=mani_bundle_wire)
 
-    # Unpack the read bundle.
+    # Unpack the cmd bundle.
     data_resp_channel = Wire(Channel(esi.MMIODataType))
     counted_output = Wire(Channel(esi.MMIODataType))
-    read_addr_channel = ports.read.unpack(data=counted_output)["offset"]
+    cmd_channel = ports.cmd.unpack(data=counted_output)["cmd"]
     counted_output.assign(data_resp_channel)
 
     # Get the selection index and the address to hand off to the clients.
-    sel_bits, client_address_chan = ChannelMMIO.build_addr_read(
-        read_addr_channel)
+    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(cmd_channel)
 
     # Build the demux/mux and assign the results of each appropriately.
-    read_clients_clog2 = clog2(len(read_table))
-    client_addr_channels = esi.ChannelDemux(
+    read_clients_clog2 = clog2(len(table))
+    client_cmd_channels = esi.ChannelDemux(
         sel=sel_bits.pad_or_truncate(read_clients_clog2),
-        input=client_address_chan,
-        num_outs=len(read_table))
+        input=client_cmd_chan,
+        num_outs=len(table))
     client_data_channels = []
-    for (idx, offset) in enumerate(sorted(read_table.keys())):
-      bundle, bundle_froms = esi.MMIO.read.type.pack(
-          offset=client_addr_channels[idx])
+    for (idx, offset) in enumerate(sorted(table.keys())):
+      bundle_wire = table[offset]
+      bundle_type = bundle_wire.type
+      if bundle_type == esi.MMIO.read.type:
+        offset = client_cmd_channels[idx].transform(lambda cmd: cmd.offset)
+        bundle, bundle_froms = esi.MMIO.read.type.pack(offset=offset)
+      elif bundle_type == esi.MMIO.read_write.type:
+        bundle, bundle_froms = esi.MMIO.read_write.type.pack(
+            cmd=client_cmd_channels[idx])
+      else:
+        assert False, "Unrecognized bundle type."
+      bundle_wire.assign(bundle)
       client_data_channels.append(bundle_froms["data"])
-      read_table[offset].assign(bundle)
     resp_channel = esi.ChannelMux(client_data_channels)
     data_resp_channel.assign(resp_channel)
 
@@ -218,18 +223,21 @@ class ChannelMMIO(esi.ServiceImplementation):
     # change to support more flexibility in addressing. Not clear if what we're
     # doing now it sufficient or not.
 
-    addr_ready_wire = Wire(Bits(1))
-    addr, addr_valid = read_addr_chan.unwrap(addr_ready_wire)
-    addr = addr.as_bits()
+    cmd_ready_wire = Wire(Bits(1))
+    cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
     sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
-    sel_bits.assign(addr[ChannelMMIO.RegisterSpaceBits:])
-    client_addr = NamedWire(Bits(32), "client_addr")
-    client_addr.assign(addr & Bits(32)(ChannelMMIO.AddressMask))
-    client_addr_chan, client_addr_ready = Channel(UInt(32)).wrap(
-        client_addr.as_uint(), addr_valid)
-    addr_ready_wire.assign(client_addr_ready)
+    sel_bits.assign(cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:])
+    client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
+    client_cmd.assign(
+        esi.MMIOReadWriteCmdType({
+            "write":
+                cmd.write,
+            "offset": (cmd.offset.as_bits() &
+                       Bits(32)(ChannelMMIO.AddressMask)).as_uint(),
+            "data":
+                cmd.data
+        }))
+    client_addr_chan, client_addr_ready = Channel(
+        esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
+    cmd_ready_wire.assign(client_addr_ready)
     return sel_bits, client_addr_chan
-
-  def build_write(self, bundles):
-    # TODO: this.
-    pass

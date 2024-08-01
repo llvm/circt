@@ -29,6 +29,15 @@ firrtl.circuit "DisableTwice" attributes {
   firrtl.extmodule @DisableTwice()
 }
 
+// CHECK-LABEL: firrtl.circuit "DefaultSpecialization"
+firrtl.circuit "DefaultSpecialization" attributes {
+    // This option does not get removed - it is idempotent to leave it.
+    // CHECK: default_layer_specialization = #firrtl<layerspecialization enable>
+    default_layer_specialization = #firrtl<layerspecialization enable>
+  } {
+  firrtl.extmodule @DefaultSpecialization()
+}
+
 //===----------------------------------------------------------------------===//
 // Specialize Layer Declarations
 //===----------------------------------------------------------------------===//
@@ -105,7 +114,6 @@ firrtl.circuit "LayerDisableInARow" attributes {
   firrtl.layer @C bind { }
   firrtl.extmodule @LayerDisableInARow()
 }
-
 
 //===----------------------------------------------------------------------===//
 // LayerBlock Specialization
@@ -191,6 +199,52 @@ firrtl.circuit "LayerblockDisableB" attributes {
       firrtl.layerblock @A::@B {
         firrtl.layerblock @A::@B::@C { }
       }
+    }
+  }
+}
+  
+//===----------------------------------------------------------------------===//
+// Default Specialization
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: firrtl.circuit "LayerDefaultEnable"
+firrtl.circuit "LayerDefaultEnable" attributes {
+    disable_layers = [@A],
+    default_layer_specialization = #firrtl<layerspecialization enable>
+  } {
+  firrtl.layer @A bind { }
+  firrtl.layer @B bind { }
+  firrtl.module @LayerDefaultEnable() {
+    // CHECK-NOT: firrtl.layerblock @A
+    // CHECK-NOT: w0 = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %w0 = firrtl.wire : !firrtl.uint<1>
+    }
+    // CHECK-NOT: firrtl.layerblock @C
+    // CHECK:     w1 = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @B {
+      %w1 = firrtl.wire : !firrtl.uint<1>
+    }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "LayerDefaultDisable"
+firrtl.circuit "LayerDefaultDisable" attributes {
+    enable_layers = [@A],
+    default_layer_specialization = #firrtl<layerspecialization disable>
+  } {
+  firrtl.layer @A bind { }
+  firrtl.layer @B bind { }
+  firrtl.module @LayerDefaultDisable() {
+    // CHECK-NOT: firrtl.layerblock @A
+    // CHECK: w0 = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %w0 = firrtl.wire : !firrtl.uint<1>
+    }
+    // CHECK-NOT: firrtl.layerblock @C
+    // CHECK-NOT: w1 = firrtl.wire : !firrtl.uint<1>
+    firrtl.layerblock @B {
+      %w1 = firrtl.wire : !firrtl.uint<1>
     }
   }
 }

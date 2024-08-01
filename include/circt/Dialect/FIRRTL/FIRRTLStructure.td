@@ -35,7 +35,8 @@ def CircuitOp : FIRRTLOp<"circuit",
     StrAttr:$name,
     DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
     OptionalAttr<SymbolRefArrayAttr>:$enable_layers,
-    OptionalAttr<SymbolRefArrayAttr>:$disable_layers
+    OptionalAttr<SymbolRefArrayAttr>:$disable_layers,
+    OptionalAttr<LayerSpecializationAttr>:$default_layer_specialization
   );
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);

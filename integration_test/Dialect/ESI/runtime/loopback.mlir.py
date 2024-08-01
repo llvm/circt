@@ -30,7 +30,7 @@ assert appid.name == "loopback_inst"
 assert appid.idx == 0
 
 mysvc_send = loopback.ports[esiaccel.AppID("mysvc_recv")].write_port("recv")
-mysvc_send.connect()
+mysvc_send.connect(buffer_size=12)
 mysvc_send.write(None)
 print(f"mysvc_send.type: {mysvc_send.type}")
 assert isinstance(mysvc_send.type, types.VoidType)
