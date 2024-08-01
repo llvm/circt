@@ -1011,6 +1011,11 @@ struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
 
 void FSMToSMTPass::runOnOperation() {
 
+  ConversionTarget target(getContext());
+  target.addIllegalDialect<fsm::FSMDialect>();
+  target.addLegalDialect<smt::SMTDialect>();
+
+
   auto module = getOperation();
   auto loc = module.getLoc();
   auto b = OpBuilder(module);
@@ -1021,16 +1026,17 @@ void FSMToSMTPass::runOnOperation() {
     markAllAnalysesPreserved();
     return;
   }
-  
+
   b.setInsertionPointToStart(module.getBody());
 
   for(auto machineOp: machineOps){
 
     smt::SolverOp solver = b.create<smt::SolverOp>(loc, b.getI1Type(), ValueRange{});
 
-    llvm::ArrayRef<Attribute> args = machineOp.getArgAttrsAttr();
-    llvm::ArrayRef<Attribute> argNames = machineOp.getArgNamesAttr();
-
+    mlir::ArrayAttr args = machineOp.getArgAttrsAttr();
+    mlir::ArrayAttr argNames = machineOp.getArgNamesAttr();
+    for(auto a: args)
+      llvm::outs()<<a;
     // int numArgs = populateArgs(mod, vecVal);
 
   }
@@ -1041,7 +1047,7 @@ void FSMToSMTPass::runOnOperation() {
   // output the corresponding assertion
 
 
-  // MLIRContext context();
+  
 
 
 
