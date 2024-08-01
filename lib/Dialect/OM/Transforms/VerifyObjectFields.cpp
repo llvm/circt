@@ -60,7 +60,7 @@ void VerifyObjectFieldsPass::runOnOperation() {
             ClassLike classLike = entry.first;
             auto &table = entry.second;
             std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>
-              fieldTypes = classLike.getFieldTypes();
+                fieldTypes = classLike.getFieldTypes();
             if (!fieldTypes.has_value()) {
               return LogicalResult::failure();
             }

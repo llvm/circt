@@ -170,7 +170,6 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return diag;
   };
 
-
   auto classFieldsOpt = classOp.getFieldTypes();
   if (!classFieldsOpt.has_value()) {
     return emitError(classOp) << "failed getting class op field types";
@@ -211,9 +210,9 @@ static FailureOr<bool> resolveClasses(StringAttr name,
                              << " but not found in its definition";
 
       if (it->second != type)
-        return emitError(op) << "declaration has a field " << name
-                             << " but types don't match, " << it->second
-                             << " vs " << type;
+        return emitError(op)
+               << "declaration has a field " << name
+               << " but types don't match, " << it->second << " vs " << type;
       declaredFields.insert(name);
     }
 
