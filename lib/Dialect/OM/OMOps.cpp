@@ -275,11 +275,6 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
   this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldValues);
 }
 
-//===----------------------------------------------------------------------===//
-// ClassFieldOp
-//===----------------------------------------------------------------------===//
-
-Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
 
 //===----------------------------------------------------------------------===//
 // ClassExternOp

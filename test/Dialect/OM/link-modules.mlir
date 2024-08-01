@@ -39,7 +39,6 @@ module {
     }
     om.class @Conflict() {
       %0 = om.constant 0 : i1
-      om.class.field @c, %0: i1
       om.class.fields {field_names = ["c"]} %0 : i1
     }
     om.class @UseConflict() {

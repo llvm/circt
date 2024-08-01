@@ -1619,18 +1619,6 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
-struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClassFieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldOp>(op, adaptor.getNameAttr(),
-                                              adaptor.getValue());
-    return success();
-  }
-};
-
 struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1646,21 +1634,6 @@ struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
   }
 };
 
-struct ClassExternFieldOpConversion
-    : public OpConversionPattern<ClassExternFieldOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ClassExternFieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto type = typeConverter->convertType(adaptor.getType());
-    if (!type)
-      return failure();
-    rewriter.replaceOpWithNewOp<ClassExternFieldOp>(op, adaptor.getNameAttr(),
-                                                    type);
-    return success();
-  }
-};
 
 struct ClassExternFieldsOpConversion
     : public OpConversionPattern<ClassExternFieldsOp> {
@@ -1910,9 +1883,7 @@ static void populateRewritePatterns(
   patterns.add<AnyCastOpConversion>(converter, patterns.getContext());
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
-  patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
-  patterns.add<ClassExternFieldOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,

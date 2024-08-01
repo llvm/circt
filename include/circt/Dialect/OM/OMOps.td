@@ -58,11 +58,6 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
-class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
-  OMOp<mnemonic, traits # [
-    DeclareOpInterfaceMethods<ClassFieldLike>]> {
-}
-
 class OMClassFieldsLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [Terminator, ReturnLike, Pure,
     DeclareOpInterfaceMethods<ClassFieldsLike>]> {
@@ -104,18 +99,6 @@ def ClassOp : OMClassLike<"class", [
   }];
 }
 
-def ClassFieldOp : OMClassFieldLike<"class.field",
-    [HasParent<"ClassOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$name,
-    AnyType:$value
-  );
-
-  let assemblyFormat = [{
-    $name `,` $value  attr-dict `:` type($value)
-  }];
-}
-
 def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">]> {
   let arguments = (ins Variadic<AnyType>:$fields);
 
@@ -143,18 +126,6 @@ def ClassExternOp : OMClassLike<"class.extern", [
                    llvm::ArrayRef<mlir::Location> locs, 
                    llvm::ArrayRef<mlir::StringAttr> fieldNames,
                    llvm::ArrayRef<mlir::Type> fieldTypes);
-  }];
-}
-
-def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
-    [HasParent<"ClassExternOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$name,
-    TypeAttr:$type
-  );
-
-  let assemblyFormat = [{
-    $name attr-dict `:` $type
   }];
 }
 
