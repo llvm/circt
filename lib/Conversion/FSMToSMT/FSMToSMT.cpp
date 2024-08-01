@@ -1042,31 +1042,77 @@ void FSMTransitionConversion(mlir::TypeConverter& a1, mlir::MLIRContext* a2){
 // Convert FSM to SMT pass
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct ConvertFSMToSMTPass
-    : public circt::impl::ConvertFSMToSMTBase<ConvertFSMToSMTPass> {
+
+struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
   void runOnOperation() override;
 };
+
+
+namespace {
+void FSMToSMTPass::runOnOperation() {
+  // auto module = getOperation();
+  // auto loc = module.getLoc();
+  // auto b = OpBuilder(module);
+
+  // // Identify the machines to lower, bail out if none exist.
+  // auto machineOps = llvm::to_vector(module.getOps<MachineOp>());
+  // if (machineOps.empty()) {
+  //   markAllAnalysesPreserved();
+  //   return;
+  // }
+
+  // Create a typescope shared by all of the FSMs. This typescope will be
+  // emitted in a single separate file to avoid polluting each output file with
+  // typedefs.
+  // b.setInsertionPointToStart(module.getBody());
+  // hw::TypeScopeOp typeScope =
+  //     b.create<hw::TypeScopeOp>(loc, b.getStringAttr("fsm_enum_typedecls"));
+  // typeScope.getBodyRegion().push_back(new Block());
+
+  // auto file = b.create<emit::FileOp>(loc, "fsm_enum_typedefs.sv", [&] {
+  //   b.create<emit::RefOp>(loc,
+  //                         FlatSymbolRefAttr::get(typeScope.getSymNameAttr()));
+  // });
+  // auto fragment = b.create<emit::FragmentOp>(loc, "FSM_ENUM_TYPEDEFS", [&] {
+  //   b.create<sv::VerbatimOp>(loc, "`include \"" + file.getFileName() + "\"");
+  // });
+
+  // auto headerName = FlatSymbolRefAttr::get(fragment.getSymNameAttr());
+
+  // // Traverse all machines and convert.
+  // for (auto machineOp : machineOps) {
+  //   MachineOpConverter converter(b, typeScope, machineOp, headerName);
+
+  //   if (failed(converter.dispatch())) {
+  //     signalPassFailure();
+  //     return;
+  //   }
+  // }
+
+  // // Traverse all machine instances and convert to hw instances.
+  // llvm::SmallVector<HWInstanceOp> instances;
+  // module.walk([&](HWInstanceOp instance) { instances.push_back(instance); });
+  // for (auto instance : instances) {
+  //   auto fsmHWModule =
+  //       module.lookupSymbol<hw::HWModuleOp>(instance.getMachine());
+  //   assert(fsmHWModule &&
+  //          "FSM machine should have been converted to a hw.module");
+
+  //   b.setInsertionPoint(instance);
+  //   llvm::SmallVector<Value, 4> operands;
+  //   llvm::transform(instance.getOperands(), std::back_inserter(operands),
+  //                   [&](auto operand) { return operand; });
+  //   auto hwInstance = b.create<hw::InstanceOp>(
+  //       instance.getLoc(), fsmHWModule, b.getStringAttr(instance.getName()),
+  //       operands, nullptr);
+  //   instance.replaceAllUsesWith(hwInstance);
+  //   instance.erase();
+  // }
+
+  // assert(!typeScope.getBodyBlock()->empty() && "missing type decls");
+}
 } // namespace
 
-void circt::populateFSMToSMTConversionPatterns(TypeConverter &converter,
-                                                 RewritePatternSet &patterns) {
-  patterns.add<FSMTransitionConversion>(
-      converter, patterns.getContext());
-}
-
-void ConvertFSMToSMTPass::runOnOperation() {
-  ConversionTarget target(getContext());
-  target.addIllegalDialect<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>();
-  target.addLegalDialect<smt::SMTDialect>();
-  target.addLegalOp<UnrealizedConversionCastOp>();
-
-  RewritePatternSet patterns(&getContext());
-  TypeConverter converter;
-  populateHWToSMTTypeConverter(converter);
-  populateFSMToSMTConversionPatterns(converter, patterns);
-
-  if (failed(mlir::applyPartialConversion(getOperation(), target,
-                                          std::move(patterns))))
-    return signalPassFailure();
+std::unique_ptr<mlir::Pass> circt::createConvertFSMToSMTPass() {
+  return std::make_unique<FSMToSMTPass>();
 }
