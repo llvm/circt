@@ -78,8 +78,17 @@ struct ModuleInfo {
   mlir::ArrayAttr referredModuleNames;
 };
 
-struct SymbolTarget {
+/// Unique identifier for a value.  All value sources are numbered by apperance,
+/// and values are identified using this numbering (`index`) and an `offset`.
+/// For BlockArgument's, this is the argument number.
+/// For OpResult's, this is the result number.
+struct ValueId {
   uint64_t index;
+  uint64_t offset;
+};
+
+struct SymbolTarget {
+  ValueId index;
   uint64_t fieldID;
 };
 
@@ -161,14 +170,19 @@ private:
 
   void record(void *address) {
     auto size = indices.size();
+    assert(!indices.contains(address));
     indices[address] = size;
   }
 
-  void update(BlockArgument arg) { record(arg.getAsOpaquePointer()); }
+  /// Get the unique id for the specified value.
+  ValueId getId(Value val) {
+    if (auto arg = dyn_cast<BlockArgument>(val))
+      return {indices.at(arg.getOwner()), arg.getArgNumber()};
+    auto result = cast<OpResult>(val);
+    return {indices.at(result.getOwner()), result.getResultNumber()};
+  }
 
   void update(OpResult result) {
-    record(result.getAsOpaquePointer());
-
     // Like instance ops, don't use object ops' result types since they might be
     // replaced by dedup. Record the class names and lazily combine their hashes
     // using the same mechanism as instances and modules.
@@ -180,23 +194,23 @@ private:
     update(result.getType());
   }
 
-  void update(OpOperand &operand) {
-    // We hash the value's index as it apears in the block.
-    auto it = indices.find(operand.get().getAsOpaquePointer());
-    assert(it != indices.end() && "op should have been previously hashed");
-    update(it->second);
+  void update(ValueId index) {
+    update(index.index);
+    update(index.offset);
   }
+
+  void update(OpOperand &operand) { update(getId(operand.get())); }
 
   void update(Operation *op, hw::InnerSymAttr attr) {
     for (auto props : attr)
       innerSymTargets[props.getName()] =
-          SymbolTarget{indices[op], props.getFieldID()};
+          SymbolTarget{{indices.at(op), 0}, props.getFieldID()};
   }
 
   void update(Value value, hw::InnerSymAttr attr) {
     for (auto props : attr)
       innerSymTargets[props.getName()] =
-          SymbolTarget{indices[value.getAsOpaquePointer()], props.getFieldID()};
+          SymbolTarget{getId(value), props.getFieldID()};
   }
 
   void update(const SymbolTarget &target) {
@@ -281,15 +295,6 @@ private:
     }
   }
 
-  void update(Block &block) {
-    // Hash the block arguments.
-    for (auto arg : block.getArguments())
-      update(arg);
-    // Hash the operations in the block.
-    for (auto &op : block)
-      update(&op);
-  }
-
   void update(mlir::OperationName name) {
     // Operation names are interned.
     update(name.getAsOpaquePointer());
@@ -299,26 +304,44 @@ private:
   void update(Operation *op) {
     record(op);
     update(op->getName());
-    update(op, op->getAttrDictionary());
+
     // Hash the operands.
     for (auto &operand : op->getOpOperands())
       update(operand);
+
+    // Number the block pointers, for use numbering their arguments.
+    for (auto &region : op->getRegions())
+      for (auto &block : region.getBlocks())
+        record(&block);
+
+    // This happens after the numbering above, as it uses blockarg numbering
+    // for inner symbols.
+    update(op, op->getAttrDictionary());
+
     // Hash the regions. We need to make sure an empty region doesn't hash the
     // same as no region, so we include the number of regions.
     update(op->getNumRegions());
-    for (auto &region : op->getRegions())
-      for (auto &block : region.getBlocks())
-        update(block);
-    // Record any op results.
+    for (auto &region : op->getRegions()) {
+      update(region.getBlocks().size());
+      for (auto &block : region.getBlocks()) {
+        update(indices.at(&block));
+        for (auto argType : block.getArgumentTypes())
+          update(argType);
+        for (auto &op : block)
+          update(&op);
+      }
+    }
+
+    // Record any op results (types).
     for (auto result : op->getResults())
       update(result);
   }
 
-  // Every operation and value is assigned a unique id based on their order of
-  // appearance
+  // Every operation and block is assigned a unique id based on their order of
+  // appearance.  All values are uniquely identified using these.
   DenseMap<void *, unsigned> indices;
 
-  // Every value is assigned a unique id based on their order of appearance.
+  // Track inner symbol name -> target's unique identification.
   DenseMap<StringAttr, SymbolTarget> innerSymTargets;
 
   // This keeps track of module names in the order of the appearance.
