@@ -60,16 +60,16 @@ void FSMTransitionConversion(mlir::TypeConverter& a1, mlir::MLIRContext* a2){
 
 namespace {
 
-using z3Fun = std::function<expr(SmallVector<expr>)>;
+// using z3Fun = std::function<expr(SmallVector<expr>)>;
 
-using z3FunA = std::function<SmallVector<expr>(SmallVector<expr>)>;
+// using z3FunA = std::function<SmallVector<expr>(SmallVector<expr>)>;
 
-struct transition {
-  int from, to;
-  z3Fun guard;
-  bool isGuard, isAction, isOutput;
-  z3FunA action, output;
-};
+// struct transition {
+//   int from, to;
+//   z3Fun guard;
+//   bool isGuard, isAction, isOutput;
+//   z3FunA action, output;
+// };
 
 
 // // @brief Prints solver assertions
@@ -340,60 +340,60 @@ int populateArgs(Operation &mod, SmallVector<mlir::Value> &vecVal) {
 
 // @brief Parse FSM output and add them to the variable map
 
-int populateOutputs(Operation &mod, SmallVector<mlir::Value> &vecVal,
-                    MLIRContext &context, OwningOpRef<ModuleOp> &module) {
-  int numOutput = 0;
-  for (Region &rg : mod.getRegions()) {
-    for (Block &bl : rg) {
-      for (Operation &op : bl) {
-        if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-          for (auto opr : machine.getFunctionType().getResults()) {
-            // is this conceptually correct?
-            OpBuilder builder(&machine.getBody());
+// int populateOutputs(Operation &mod, SmallVector<mlir::Value> &vecVal,
+//                     MLIRContext &context, OwningOpRef<ModuleOp> &module) {
+//   int numOutput = 0;
+//   for (Region &rg : mod.getRegions()) {
+//     for (Block &bl : rg) {
+//       for (Operation &op : bl) {
+//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
+//           for (auto opr : machine.getFunctionType().getResults()) {
+//             // is this conceptually correct?
+//             OpBuilder builder(&machine.getBody());
 
-            auto loc = builder.getUnknownLoc();
+//             auto loc = builder.getUnknownLoc();
 
-            auto variable = builder.create<fsm::VariableOp>(
-                loc, builder.getIntegerType(opr.getIntOrFloatBitWidth()),
-                IntegerAttr::get(
-                    builder.getIntegerType(opr.getIntOrFloatBitWidth()), 0),
-                builder.getStringAttr("outputVal"));
+//             auto variable = builder.create<fsm::VariableOp>(
+//                 loc, builder.getIntegerType(opr.getIntOrFloatBitWidth()),
+//                 IntegerAttr::get(
+//                     builder.getIntegerType(opr.getIntOrFloatBitWidth()), 0),
+//                 builder.getStringAttr("outputVal"));
 
-            mlir::Value v = variable.getResult();
+//             mlir::Value v = variable.getResult();
 
-            vecVal.push_back(v);
-          }
-        }
-      }
-    }
-  }
-  return numOutput;
-}
+//             vecVal.push_back(v);
+//           }
+//         }
+//       }
+//     }
+//   }
+//   return numOutput;
+// }
 
 
 // @brief Parse FSM variables and add them to the variable map
 
-void populateVars(Operation &mod, SmallVector<mlir::Value> &vecVal,
-                  SmallVector<std::pair<expr, mlir::Value>> &variables,
-                  z3::context &c, int numArgs) {
-  for (Region &rg : mod.getRegions()) {
-    for (Block &bl : rg) {
-      for (Operation &op : bl) {
-        if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-          for (Region &rg : op.getRegions()) {
-            for (Block &block : rg) {
-              for (Operation &op : block) {
-                if (auto varOp = dyn_cast<fsm::VariableOp>(op)) {
-                  vecVal.push_back(varOp.getResult());
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+// void populateVars(Operation &mod, SmallVector<mlir::Value> &vecVal,
+//                   SmallVector<std::pair<expr, mlir::Value>> &variables,
+//                   z3::context &c, int numArgs) {
+//   for (Region &rg : mod.getRegions()) {
+//     for (Block &bl : rg) {
+//       for (Operation &op : bl) {
+//         if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
+//           for (Region &rg : op.getRegions()) {
+//             for (Block &block : rg) {
+//               for (Operation &op : block) {
+//                 if (auto varOp = dyn_cast<fsm::VariableOp>(op)) {
+//                   vecVal.push_back(varOp.getResult());
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       }
+//     }
+//   }
+// }
 
 
 // // @brief Insert state if not present, return position in SmallVector otherwise
@@ -1016,7 +1016,7 @@ void FSMToSMTPass::runOnOperation() {
   auto b = OpBuilder(module);
 
   // only continue if at least one fsm exists
-  auto machineOps = llvm::to_SmallVector(module.getOps<fsm::MachineOp>());
+  auto machineOps = to_vector(module.getOps<fsm::MachineOp>());
   if (machineOps.empty()) {
     markAllAnalysesPreserved();
     return;
@@ -1028,6 +1028,11 @@ void FSMToSMTPass::runOnOperation() {
 
     smt::SolverOp solver = b.create<smt::SolverOp>(loc, b.getI1Type(), ValueRange{});
 
+    llvm::ArrayRef<Attribute> args = machineOp.getArgAttrsAttr();
+    llvm::ArrayRef<Attribute> argNames = machineOp.getArgNamesAttr();
+
+    // int numArgs = populateArgs(mod, vecVal);
+
   }
 
   // parse variables, arguments, outputs separately
@@ -1036,17 +1041,13 @@ void FSMToSMTPass::runOnOperation() {
   // output the corresponding assertion
 
 
-  MLIRContext context();
+  // MLIRContext context();
 
-  SmallVector<mlir::Value> vecVal;
 
-  SmallVector<transition> transitions;
 
-  int numArgs = populateArgs(mod, vecVal);
+  // populateVars(mod, vecVal, numArgs);
 
-  populateVars(mod, vecVal, numArgs);
-
-  int numOutputs = populateOutputs(mod, vecVal, context, module);
+  // int numOutputs = populateOutputs(mod, vecVal, context, module);
 
 
   // SmallVector<string> stateInv;
