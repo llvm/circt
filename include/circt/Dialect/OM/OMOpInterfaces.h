@@ -15,6 +15,7 @@
 
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/MapVector.h"
 
 namespace circt::om {
 

@@ -91,6 +91,7 @@ def ClassOp : OMClassLike<"class", [
     }
 
     llvm::SmallVector<FieldValue> getFieldValues();
+
     // TODO: Should these use ArrayRef<Field> instead?
     void addFields(mlir::OpBuilder &builder, mlir::Location loc,
                    llvm::ArrayRef<mlir::Attribute> fieldNames,

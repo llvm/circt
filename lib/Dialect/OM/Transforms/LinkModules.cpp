@@ -170,9 +170,7 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return diag;
   };
 
-  llvm::MapVector<StringAttr, Type> classFields;
-  for (auto field : classOp.getFields())
-    classFields.insert({field.getName(), field.getType()});
+  llvm::MapVector<StringAttr, Type> classFields = classOp.getFieldTypes();
 
   for (auto op : classes) {
     if (op == classOp)
