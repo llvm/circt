@@ -191,19 +191,19 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     }
     // Check declared fields.
     llvm::DenseSet<StringAttr> declaredFields;
-    for (auto field : op.getFields()) {
-      auto it = classFields.find(field.getName());
+    for (auto [name, type] : op.getFieldTypes()) {
+      auto *it = classFields.find(name);
 
       // Field not found in its definition.
       if (it == classFields.end())
-        return emitError(op) << "declaration has a field " << field.getName()
+        return emitError(op) << "declaration has a field " << name
                              << " but not found in its definition";
 
-      if (it->second != field.getType())
-        return emitError(op) << "declaration has a field " << field.getName()
+      if (it->second != type)
+        return emitError(op) << "declaration has a field " << name
                              << " but types don't match, " << it->second
-                             << " vs " << field.getType();
-      declaredFields.insert(field.getName());
+                             << " vs " << type;
+      declaredFields.insert(name);
     }
 
     for (auto [fieldName, _] : classFields)
