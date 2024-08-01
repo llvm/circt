@@ -384,20 +384,12 @@ def ClassOp : FIRRTLModuleLike<"class", [
   }];
 }
 
-def FormalOp : FIRRTLModuleLike<"formal", [
-    DeclareOpInterfaceMethods<Symbol, ["canDiscardOnUseEmpty"]>,
-    DeclareOpInterfaceMethods<FModuleLike, [
-      "getConventionAttr", "getConvention", "getLayersAttr",
-      "getLayers", "getPortDirectionsAttr", "getPortDirections", 
-      "getPortDirection", "getPortNamesAttr", "getPortNameAttr", 
-      "getPortTypesAttr", "getPortTypeAttr", "getPortAnnotationsAttr", 
-      "getPortLocationsAttr", "getPortSymbolsAttr", "hasPortSymbolAttr",
-      "getPortLocationAttr"
-    ]>,
-    DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface, [
-      "getModuleName", "getModuleNameAttr"
-    ]>,
-    NoTerminator
+def FormalOp : FIRRTLOp<"formal", [
+    DeclareOpInterfaceMethods<FInstanceLike>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getModuleName"
+    ]>
 ]> {
   let summary = "A formal test definition.";
   let description = [{
@@ -409,22 +401,28 @@ def FormalOp : FIRRTLModuleLike<"formal", [
     Example:
     ```mlir
 
-    firrtl.formal @formal1(k=20) {
-      %bar, %out = firrtl.instance foo @Foo(in bar: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
+    // DUT
+    firrtl.module @Foo(in %bar: !firrtl.uint<8>, out %out: !firrtl.uint<8>) { ... }
+
+    // Test harness
+    firrtl.module @FooTest(in %bar_s: !firrtl.uint<8>) {
+      %bar, %out = firrtl.instance foo @Foo(in bar: %bar_s: !firrtl.uint<8>, out out: !firrtl.uint<8>) 
       %c42_8 = firrtl.constant 42 : !firrtl.uint<8>
       firrtl.connect %bar, %c42_8: !firrtl.uint<8>, !firrtl.uint<8>
       %c69_8 = firrtl.constant 69 : !firrtl.uint<8>
       %cond = firrtl.eq %c69_8, %out : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<1>
       firrtl.assert %cond
     }
+
+    // Mark test harness as formal test
+    firrtl.formal @formal1 of @FooTest bound 20
     ```
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, UI64Attr:$k);
+  let arguments = (ins SymbolNameAttr:$sym_name, FlatSymbolRefAttr:$moduleName, UI64Attr:$bound);
   let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name `(` `k` `=` $k `)` attr-dict-with-keyword $body
+    $sym_name `of` $moduleName `bound` $bound attr-dict
   }];
 
   let extraModuleClassDeclaration = [{

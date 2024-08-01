@@ -5210,24 +5210,32 @@ FIRCircuitParser::parseFormalBody(const SymbolTable &circuitSymTbl,
 
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   consumeToken(FIRToken::kw_formal);
-  StringRef id, kSpelling;
-  int64_t k = -1;
+  StringRef id, moduleName, boundSpelling;
+  int64_t bound = -1;
   LocWithInfo info(getToken().getLoc(), this);
 
   // Parse the formal operation
   if (parseId(id, "expected a formal test name") ||
+      parseToken(FIRToken::kw_of,
+                 "expected keyword 'of' after formal test name") ||
+      parseId(moduleName, "expected the name of a module") ||
       parseToken(FIRToken::comma, "expected ','") ||
-      parseGetSpelling(kSpelling) ||
+      parseGetSpelling(boundSpelling) ||
       parseToken(FIRToken::identifier, "expected parameter 'k' after ','") ||
       parseToken(FIRToken::equal, "expected '=' after 'k'") ||
-      parseIntLit(k, "expected integer in k specification") ||
+      parseIntLit(bound, "expected integer in k specification") ||
       parseToken(FIRToken::colon,
                  "expected ':' after option group definition") ||
       info.parseOptionalInfo())
     return failure();
 
+  // Check that the instance is valid
+  auto referencedModule = getReferencedModule(startTok.getLoc(), moduleName);
+  if (!referencedModule)
+    return failure();
+
   // Check that the parameter is valid
-  if (kSpelling != "k" || k <= 0)
+  if (boundSpelling != "bound" || k <= 0)
     return emitError("Invalid parameter given to formal test: ") << kSpelling,
            failure();
 

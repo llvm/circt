@@ -3358,7 +3358,8 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult
 FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  return instance_like_impl::verifyReferencedModule(*this, symbolTable,
+                                                    getModuleNameAttr());
 }
 
 StringRef FormalOp::getModuleName() { return getSymName(); }
@@ -3368,72 +3369,6 @@ mlir::StringAttr FormalOp::getModuleNameAttr() {
 }
 
 ArrayAttr FormalOp::getParameters() { return {}; }
-
-///////////////////////////////////////////
-// Ports: FormalOp can not contain ports
-///////////////////////////////////////////
-
-SmallVector<PortInfo> FormalOp::getPorts() {
-  return SmallVector<PortInfo, 0>();
-}
-
-void FormalOp::erasePorts(const llvm::BitVector &portIndices) {}
-
-void FormalOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {}
-
-SmallVector<::circt::hw::PortInfo> FormalOp::getPortList() {
-  return SmallVector<::circt::hw::PortInfo, 0>();
-}
-
-::circt::hw::PortInfo FormalOp::getPort(size_t idx) {
-  return ::circt::hw::PortInfo();
-}
-
-mlir::DenseBoolArrayAttr FormalOp::getPortDirectionsAttr() {
-  return mlir::DenseBoolArrayAttr::get(getContext(), ArrayRef<bool>());
-}
-
-ArrayRef<bool> FormalOp::getPortDirections() { return ArrayRef<bool>(); }
-
-Direction FormalOp::getPortDirection(size_t portIndex) {
-  return Direction::Out;
-}
-
-mlir::ArrayAttr FormalOp::getPortNamesAttr() {
-  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
-}
-
-StringAttr FormalOp::getPortNameAttr(size_t portIndex) {
-  return StringAttr::get(getContext(), StringRef());
-}
-
-mlir::ArrayAttr FormalOp::getPortTypesAttr() {
-  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
-}
-
-TypeAttr FormalOp::getPortTypeAttr(size_t portIndex) { return TypeAttr(); }
-
-mlir::ArrayAttr FormalOp::getPortAnnotationsAttr() {
-  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
-}
-
-mlir::ArrayAttr FormalOp::getPortLocationsAttr() {
-  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
-}
-
-mlir::ArrayAttr FormalOp::getPortSymbolsAttr() {
-  return mlir::ArrayAttr::get(getContext(), ArrayRef<Attribute>());
-}
-
-bool FormalOp::hasPortSymbolAttr(size_t portIndex) { return false; }
-
-LocationAttr FormalOp::getPortLocationAttr(size_t portIndex) {
-  return LocationAttr();
-}
-
-BlockArgument FormalOp::getArgument(size_t portNumber) {
-  return getBodyBlock()->getArgument(portNumber);
-}
 
 ///////////////////////////////////////////
 // Layers: FormalOp currently ignores layers
