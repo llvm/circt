@@ -554,7 +554,11 @@ static std::optional<uint32_t> getStructFieldIndex(Type type, StringAttr name) {
     return structType.getFieldIndex(name);
   if (auto structType = dyn_cast<UnpackedStructType>(type))
     return structType.getFieldIndex(name);
-  assert(0 && "expected StructType or UnpackedStructType");
+  if (auto unionType = dyn_cast<UnionType>(type))
+    return unionType.getFieldIndex(name);
+  if (auto unionType = dyn_cast<UnpackedUnionType>(type))
+    return unionType.getFieldIndex(name);
+  assert(0 && "expected Struct-Like Type");
   return {};
 }
 
@@ -563,6 +567,10 @@ static ArrayRef<StructLikeMember> getStructMembers(Type type) {
     return structType.getMembers();
   if (auto structType = dyn_cast<UnpackedStructType>(type))
     return structType.getMembers();
+  if (auto unionType = dyn_cast<UnionType>(type))
+    return unionType.getMembers();
+  if (auto unionType = dyn_cast<UnpackedUnionType>(type))
+    return unionType.getMembers();
   return {};
 }
 
@@ -760,23 +768,18 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionCreateOp::verify() {
-  /// checks if the types of the input is exactly equal to the union field
+  auto type = getStructFieldType(getType(), getFieldNameAttr());
+
+  /// checks if the type of the input is exactly equal to the union field
   /// type
-  return TypeSwitch<Type, LogicalResult>(getType())
-      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto resultType = getType();
-        auto fieldName = getFieldName();
-        for (const auto &member : members)
-          if (member.name == fieldName && member.type == resultType)
-            return success();
-        emitOpError("input type must match the union field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be UnionType or UnpackedUnionType");
-        return failure();
-      });
+
+  if (!type)
+    return emitOpError() << "union field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType())
+    return emitOpError() << "result type " << getType()
+                         << " must match union field type " << type;
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -784,47 +787,35 @@ LogicalResult UnionCreateOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionExtractOp::verify() {
-  /// checks if the types of the input is exactly equal to the one of the
-  /// types of the result union fields
-  return TypeSwitch<Type, LogicalResult>(getInput().getType())
-      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto fieldName = getFieldName();
-        auto resultType = getType();
-        for (const auto &member : members)
-          if (member.name == fieldName && member.type == resultType)
-            return success();
-        emitOpError("result type must match the union field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be UnionType or UnpackedUnionType");
-        return failure();
-      });
+  auto type = getStructFieldType(getInput().getType(), getFieldNameAttr());
+
+  /// checks if the type of the input is exactly equal to the type of the result
+  /// union fields
+  if (!type)
+    return emitOpError() << "union field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType())
+    return emitOpError() << "result type " << getType()
+                         << " must match union field type " << type;
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
-// UnionExtractOp
+// UnionExtractRefOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult UnionExtractRefOp::verify() {
-  /// checks if the types of the result is exactly equal to the type of the
-  /// refe union field
-  return TypeSwitch<Type, LogicalResult>(getInput().getType().getNestedType())
-      .Case<UnionType, UnpackedUnionType>([this](auto &type) {
-        auto members = type.getMembers();
-        auto fieldName = getFieldName();
-        auto resultType = getType().getNestedType();
-        for (const auto &member : members)
-          if (member.name == fieldName && member.type == resultType)
-            return success();
-        emitOpError("result type must match the union field type");
-        return failure();
-      })
-      .Default([this](auto &) {
-        emitOpError("input type must be UnionType or UnpackedUnionType");
-        return failure();
-      });
+  auto type = getStructFieldType(getInput().getType().getNestedType(),
+                                 getFieldNameAttr());
+  /// checks if the type of the result is exactly equal to the type of the
+  /// referring union field
+  if (!type)
+    return emitOpError() << "union field " << getFieldNameAttr()
+                         << " which does not exist in " << getInput().getType();
+  if (type != getType())
+    return emitOpError() << "result type " << getType()
+                         << " must match union field type " << type;
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
