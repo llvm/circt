@@ -59,6 +59,10 @@ public:
         nextIndex.insert({strAttr.getValue(), 0});
   }
 
+  /// Removes a symbol from the namespace. Returns true if the symbol was
+  /// removed, false if the symbol was not found.
+  bool erase(llvm::StringRef symbol) { return nextIndex.erase(symbol); }
+
   /// Empty the namespace.
   void clear() { nextIndex.clear(); }
 
