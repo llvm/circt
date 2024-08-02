@@ -50,7 +50,7 @@ using hw::InnerRefAttr;
 // Utility function for classifying a Symbol's dedup-ability.
 //===----------------------------------------------------------------------===//
 
-bool checkVisibility(mlir::SymbolOpInterface symbol) {
+static bool checkVisibility(mlir::SymbolOpInterface symbol) {
   // If module has symbol (name) that must be preserved even if unused,
   // skip it. All symbol uses must be supported, which is not true if
   // non-private.
