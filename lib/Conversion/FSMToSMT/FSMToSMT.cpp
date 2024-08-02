@@ -6,34 +6,44 @@
 //
 //===----------------------------------------------------------------------===//
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/FSM/FSMGraph.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
-#include "circt/Dialect/LTL/LTLDialect.h"
-#include "circt/Dialect/LTL/LTLOps.h"
-#include "fstream"
-#include "iostream"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Parser/Parser.h"
-#include "llvm/Support/raw_ostream.h"
-#include <iostream>
-#include "circt/Conversion/CombToSMT.h"
-#include "circt/Conversion/HWToSMT.h"
-#include "circt/Conversion/SMTToZ3LLVM.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/PrettyStackTrace.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "circt/Conversion/FSMToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
+#include "circt/Dialect/SMT/SMTDialect.h"
+
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FSM/FSMOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/TypeSwitch.h"
+
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+#include <memory>
+#include <optional>
+#include <variant>
+#include <vector>
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTFSMTOSMT
@@ -42,23 +52,74 @@ namespace circt {
 
 using namespace mlir;
 using namespace circt;
-using namespace hw;
+using namespace fsm;
 
 //===----------------------------------------------------------------------===//
 // Conversion pattern
 //===----------------------------------------------------------------------===//
-
-
-
-void FSMTransitionConversion(mlir::TypeConverter& a1, mlir::MLIRContext* a2){
-  llvm::outs()<<"my first pass\n";
-}
-
 //===----------------------------------------------------------------------===//
 // Convert FSM to SMT pass
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+class MachineOpConverter{
+  public: 
+    MachineOpConverter(OpBuilder &builder, MachineOp machineOp)
+      : machineOp(machineOp), b(builder){}
+    LogicalResult dispatch();
+  
+  private: 
+
+    llvm::SmallVector<mlir::Value> var;
+
+    FailureOr<Value> convertArgsAndVars(MachineOp machineOp, llvm::SmallVector<mlir::Value> vars);
+
+
+    // converts StateOp to smt::function_decl
+    // FailureOr<Value> convertState(StateOp state, llvm::SmallVector<mlir::Value> vars);
+  MachineOp machineOp;
+  OpBuilder &b;
+};
+} //namespace 
+
+LogicalResult MachineOpConverter::dispatch(){
+  b.setInsertionPoint(machineOp);
+  auto loc = machineOp.getLoc();
+  llvm::outs()<<"am in dispatcher\n";
+  
+  auto args = machineOp.getArguments();
+
+  llvm::SmallVector<mlir::Type> argVarTypes;
+
+  for (auto a : args)
+    argVarTypes.push_back(a.getType());
+
+  for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
+    argVarTypes.push_back(variableOp.getResult().getType());
+  }
+
+  b.create<smt::DeclareFunOp>(loc, argVarTypes[0]);
+
+
+
+
+
+
+}
+
+
+FailureOr<mlir::Value>
+MachineOpConverter::convertArgsAndVars(MachineOp machine, llvm::SmallVector<mlir::Value> vars){
+  
+    // mlir::ArrayAttr args = machine.getArgAttrsAttr();
+    // mlir::ArrayAttr argNames = machine.getArgNamesAttr();
+
+    // llvm::outs()<<"my first pass\n";
+    // args.print(llvm::outs());
+  
+}
+
 
 // using z3Fun = std::function<expr(SmallVector<expr>)>;
 
@@ -316,26 +377,7 @@ namespace {
 
 // @brief Parse FSM arguments and add them to the variable map
 
-int populateArgs(Operation &mod, SmallVector<mlir::Value> &vecVal) {
-  int numArgs = 0;
-  for (Region &rg : mod.getRegions()) {
-    for (Block &bl : rg) {
-      for (Operation &op : bl) {
-        if (auto machine = dyn_cast<fsm::MachineOp>(op)) {
-          for (Region &rg : op.getRegions()) {
-            for (Block &block : rg) {
-              for (auto a : block.getArguments()) {
-                vecVal.push_back(a);
-                numArgs++;
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return numArgs;
-}
+
 
 
 // @brief Parse FSM output and add them to the variable map
@@ -1003,7 +1045,7 @@ int populateArgs(Operation &mod, SmallVector<mlir::Value> &vecVal) {
 
 //   return 0;
 // }
-
+namespace{
 struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
   void runOnOperation() override;
 };
@@ -1011,35 +1053,39 @@ struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
 
 void FSMToSMTPass::runOnOperation() {
 
-  ConversionTarget target(getContext());
-  target.addIllegalDialect<fsm::FSMDialect>();
-  target.addLegalDialect<smt::SMTDialect>();
-
-
   auto module = getOperation();
   auto loc = module.getLoc();
   auto b = OpBuilder(module);
 
-  // only continue if at least one fsm exists
-  auto machineOps = to_vector(module.getOps<fsm::MachineOp>());
-  if (machineOps.empty()) {
-    markAllAnalysesPreserved();
-    return;
-  }
+  // // only continue if at least one fsm exists
+  // auto machineOps = to_vector(module.getOps<fsm::MachineOp>());
+  // if (machineOps.empty()) {
+  //   markAllAnalysesPreserved();
+  //   return;
+  // }
 
   b.setInsertionPointToStart(module.getBody());
 
-  for(auto machineOp: machineOps){
+  for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
+    MachineOpConverter converter(b, machine);
 
-    smt::SolverOp solver = b.create<smt::SolverOp>(loc, b.getI1Type(), ValueRange{});
-
-    mlir::ArrayAttr args = machineOp.getArgAttrsAttr();
-    mlir::ArrayAttr argNames = machineOp.getArgNamesAttr();
-    for(auto a: args)
-      llvm::outs()<<a;
-    // int numArgs = populateArgs(mod, vecVal);
-
+    if (failed(converter.dispatch())) {
+      signalPassFailure();
+      return;
+    }
   }
+
+  // for(auto machineOp: machineOps){
+
+  //   smt::SolverOp solver = target.create<smt::SolverOp>(loc, b.getI1Type(), ValueRange{});
+
+  //   mlir::ArrayAttr args = machineOp.getArgAttrsAttr();
+  //   mlir::ArrayAttr argNames = machineOp.getArgNamesAttr();
+  //   for(auto a: args)
+  //     llvm::outs()<<a;
+  //   // int numArgs = populateArgs(mod, vecVal);
+
+  // }
 
   // parse variables, arguments, outputs separately
 
