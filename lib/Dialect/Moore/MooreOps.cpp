@@ -16,7 +16,6 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::moore;
