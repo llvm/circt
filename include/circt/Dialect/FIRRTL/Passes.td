@@ -970,4 +970,18 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createProbesToSignalsPass()";
 }
 
+def CheckRecursiveInstantiation : Pass<"firrtl-check-recursive-instantiation",
+    "firrtl::CircuitOp"> {
+  let summary = "Check for illegal recursive instantiation";
+  let description = [{
+    This pass checks for illegal recursive module instantion.  Recursive
+    instantiation is when a module instantiates itself, either directly or
+    indirectly through other modules it instantiates.  Recursive module 
+    instantiation is illegal because it would require infinite hardware to
+    synthesize. Recursive class instantiation is illegal as it would create an
+    infinite loop.
+  }];
+  let constructor = "circt::firrtl::createCheckRecursiveInstantiation()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -214,6 +214,8 @@ std::unique_ptr<mlir::Pass> createLowerDPIPass();
 std::unique_ptr<mlir::Pass>
 createAssignOutputDirsPass(mlir::StringRef outputDir = "");
 
+std::unique_ptr<mlir::Pass> createCheckRecursiveInstantiation();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
