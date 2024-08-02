@@ -88,7 +88,8 @@ struct Context {
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
   // Convert an expression AST node to MLIR ops.
-  Value convertRvalueExpression(const slang::ast::Expression &expr);
+  Value convertRvalueExpression(const slang::ast::Expression &expr,
+                                Type requiredType = {});
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Convert a slang timing control into an MLIR timing control.

@@ -214,6 +214,21 @@ module Basic;
   string s1; 
   assign s1 = "Hello World";
 
+  typedef struct packed { bit x; bit y; } MyStruct;
+  // CHECK: [[VAR_S2:%.+]] = moore.variable : <struct<{x: i1, y: i1}>>
+  MyStruct s2;
+  // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.struct<{x: i1, y: i1}> -> !moore.i2
+  // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i2 -> !moore.struct<{x: i1, y: i1}>
+  // CHECK: moore.assign [[VAR_S2]], [[TMP4]]
+  assign s2 = ~s2;
+  // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
+  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.struct<{x: i1, y: i1}> -> !moore.i2
+  // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
+  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i2 -> !moore.struct<{x: i1, y: i1}>
+  // CHECK: [[VAR_S3:%.+]] = moore.variable [[TMP4]] : <struct<{x: i1, y: i1}>>
+  MyStruct s3 = ~s2;
 endmodule
 
 // CHECK-LABEL: moore.module @Statements
@@ -594,8 +609,7 @@ module Expressions;
     c = -a;
     // CHECK: [[TMP1:%.+]] = moore.read %v
     // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.array<2 x i4> -> !moore.i32
-    // CHECK: [[TMP3:%.+]] = moore.neg [[TMP2]] : i32
-    // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i32 -> !moore.i32
+    // CHECK: moore.neg [[TMP2]] : i32
     c = -v;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: moore.not [[TMP1]] : i32
@@ -665,10 +679,9 @@ module Expressions;
     // CHECK: moore.add [[TMP1]], [[TMP2]] : i32
     c = a + b;
     // CHECK: [[TMP1:%.+]] = moore.read %a
-    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.i32
-    // CHECK: [[TMP3:%.+]] = moore.read %v
-    // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.array<2 x i4> -> !moore.i32
-    // CHECK: moore.add [[TMP2]], [[TMP4]] : i32
+    // CHECK: [[TMP2:%.+]] = moore.read %v
+    // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.array<2 x i4> -> !moore.i32
+    // CHECK: moore.add [[TMP1]], [[TMP3]] : i32
     c = a + v;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
@@ -1080,11 +1093,9 @@ module Conversion;
 
   // Sign conversion.
   // CHECK: [[TMP1:%.+]] = moore.read %b
-  // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i32 -> !moore.i32
-  // CHECK: %d1 = moore.variable [[TMP2]]
-  // CHECK: [[TMP3:%.+]] = moore.read %b
-  // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i32 -> !moore.i32
-  // CHECK: %d2 = moore.variable [[TMP4]]
+  // CHECK: %d1 = moore.variable [[TMP1]]
+  // CHECK: [[TMP2:%.+]] = moore.read %b
+  // CHECK: %d2 = moore.variable [[TMP2]]
   bit signed [31:0] d1 = signed'(b);
   bit [31:0] d2 = unsigned'(b);
 

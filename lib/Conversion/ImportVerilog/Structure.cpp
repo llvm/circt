@@ -364,7 +364,7 @@ struct ModuleVisitor : public BaseVisitor {
 
     Value initial;
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertRvalueExpression(*init);
+      initial = context.convertRvalueExpression(*init, loweredType);
       if (!initial)
         return failure();
     }
@@ -384,7 +384,8 @@ struct ModuleVisitor : public BaseVisitor {
 
     Value assignment;
     if (netNode.getInitializer()) {
-      assignment = context.convertRvalueExpression(*netNode.getInitializer());
+      assignment = context.convertRvalueExpression(*netNode.getInitializer(),
+                                                   loweredType);
       if (!assignment)
         return failure();
     }
@@ -413,21 +414,14 @@ struct ModuleVisitor : public BaseVisitor {
 
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
-
     auto lhs = context.convertLvalueExpression(expr.left());
-    auto rhs = context.convertRvalueExpression(expr.right());
-    if (!lhs || !rhs)
+    if (!lhs)
       return failure();
 
-    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp.getInput();
-      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
-                                              refOp.getFieldNameAttr(), rhs);
-        refOp->erase();
-        return success();
-      }
-    }
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    if (!rhs)
+      return failure();
 
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
