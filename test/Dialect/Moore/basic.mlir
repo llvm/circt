@@ -275,6 +275,9 @@ moore.module @Expressions(
     moore.yield %b : i32
   }
 
+  // CHECK: moore.array_create [[A]], [[B]] : !moore.i32, !moore.i32 -> array<2 x i32>
+  moore.array_create %a, %b : !moore.i32, !moore.i32 -> array<2 x i32>
+
   // CHECK: moore.struct_create [[A]], [[B]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
   moore.struct_create %a, %b : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
   // CHECK: moore.struct_extract [[STRUCT1]], "a" : struct<{a: i32, b: i32}> -> i32

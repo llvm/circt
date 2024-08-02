@@ -1038,6 +1038,20 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def ArrayCreateOp : MooreOp<"array_create", [Pure, SameTypeOperands]> {
+  let summary = "Create an array value from individual elements";
+  let arguments = (ins Variadic<UnpackedType>:$elements);
+  let results = (outs AnyStaticArrayType:$result);
+  let assemblyFormat = [{
+    $elements attr-dict `:` type($elements) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
 
