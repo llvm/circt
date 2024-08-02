@@ -126,7 +126,7 @@ void InferMemoriesPass::runOnOperation() {
       for (unsigned i = 0; i < latency; ++i)
         data = builder.create<seq::CompRegOp>(
             data, clock, builder.getStringAttr(""), Value{}, Value{}, Value{},
-            hw::InnerSymAttr{});
+            Value{}, hw::InnerSymAttr{});
       return data;
     };
 

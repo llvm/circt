@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
@@ -81,6 +82,20 @@ parseOptionalTypeMatch(OpAsmParser &parser, Type refType,
 
 static void printOptionalTypeMatch(OpAsmPrinter &p, Operation *op, Type refType,
                                    Value operand, Type type) {
+  // Nothing to do - this is strictly an implicit parsing helper.
+}
+
+static ParseResult parseOptionalImmutableTypeMatch(
+    OpAsmParser &parser, Type refType,
+    std::optional<OpAsmParser::UnresolvedOperand> operand, Type &type) {
+  if (operand)
+    type = hw::ImmutableType::get(refType);
+  return success();
+}
+
+static void printOptionalImmutableTypeMatch(OpAsmPrinter &p, Operation *op,
+                                            Type refType, Value operand,
+                                            Type type) {
   // Nothing to do - this is strictly an implicit parsing helper.
 }
 
@@ -251,15 +266,13 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_full"
-      << " " << threshold.getInt();
+    p << "almost_full" << " " << threshold.getInt();
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
   if (threshold)
-    p << "almost_empty"
-      << " " << threshold.getInt();
+    p << "almost_empty" << " " << threshold.getInt();
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -1002,6 +1015,20 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
   initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
   initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
   initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
+}
+
+LogicalResult InitialOp::verify() {
+  auto *terminator = this->getBody().front().getTerminator();
+  if (terminator->getOperands().size() != getNumResults())
+    return emitError() << "result type doesn't match with the terminator";
+  for (auto [lhs, rhs] :
+       llvm::zip(terminator->getOperands().getTypes(), getResultTypes())) {
+    if (cast<hw::ImmutableType>(rhs).getInnerType() != lhs) {
+      return emitError() << cast<hw::ImmutableType>(rhs).getInnerType()
+                         << " is expected but got " << lhs;
+    }
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -147,6 +147,21 @@ private:
 
   bool needsRandom = false;
 };
+
+class InitialValueLowering {
+public:
+  InitialValueLowering(sv::InitialOp initialOp) : initialOp(initialOp) {}
+  void lower(seq::InitialOp initial);
+  Value getLoweredValue(Value value) const {
+    assert(isa<hw::ImmutableType>(value.getType()) && "must be immutable type");
+    return mapping.at(value);
+  }
+  LogicalResult finalize();
+
+private:
+  llvm::DenseMap<Value, Value> mapping;
+  sv::InitialOp initialOp;
+};
 } // namespace circt
 
 #endif // CONVERSION_SEQTOSV_FIRREGLOWERING_H

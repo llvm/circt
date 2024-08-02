@@ -97,3 +97,12 @@ hw.module @clock_inv(in %clock: !seq.clock) {
   // CHECK: seq.clock_inv %clock
   %inv = seq.clock_inv %clock
 }
+
+// CHECK-LABEL: @init
+hw.module @init() {
+  // CHECK-NEXT: seq.initial
+  %0 = seq.initial {
+    %1 = hw.constant 32: i32
+    seq.yield %1: i32
+  }: !hw.immutable<i32>
+}

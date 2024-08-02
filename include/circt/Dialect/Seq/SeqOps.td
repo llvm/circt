@@ -14,6 +14,7 @@
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -40,15 +41,17 @@ def CompRegOp : SeqOp<"compreg",
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
     Optional<AnyType>:$powerOnValue,
+    Optional<ImmutableType>:$initialValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk
     (`reset` $reset^ `,` $resetValue)?
-    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    (`powerOn` $powerOnValue^)? (`initial` $initialValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
     custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+    custom<OptionalImmutableTypeMatch>(ref(type($data)), ref($initialValue), type($initialValue))
   }];
   let hasVerifier = 1;
 
@@ -58,22 +61,24 @@ def CompRegOp : SeqOp<"compreg",
       return build($_builder, $_state, input.getType(), input, clk,
                    /*name*/ StringAttr(),
                    /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*powerOnValue*/ Value(), hw::InnerSymAttr());
+                   /*powerOnValue*/ Value(), /*initialValue*/ Value(),
+                   hw::InnerSymAttr());
     }]>,
     /// Create a register with an inner_sym matching the register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
+                   /*powerOnValue*/ Value(), /*initialValue*/ Value(),
+                   hw::InnerSymAttr::get(nameAttr));
     }]>,
     /// Create a register with a reset, with an inner_sym matching the
-    /// register's name, and optional power-on value.
+   /// register's name, and optional power-on value.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
-                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$powerOnValue), [{
+                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$powerOnValue, CArg<"Value", "{}">:$initialValue), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   reset, rstValue, powerOnValue, hw::InnerSymAttr::get(nameAttr));
+                   reset, rstValue, powerOnValue, initialValue, hw::InnerSymAttr::get(nameAttr));
     }]>
   ];
 }
@@ -696,4 +701,36 @@ def FromClockOp : SeqOp<"from_clock", [Pure]> {
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+}
+
+def InitialOp : SeqOp<"initial", [SingleBlock,
+      SingleBlockImplicitTerminator<"YieldOp">,
+      RecursivelySpeculatable,
+      RecursiveMemoryEffects, IsolatedFromAbove]> {
+  let summary = "Procedural block that is executed at simulation startup";
+  let description = [{
+    `seq.initial` op produces a value that is allowed to initialize
+    registers.
+  }];
+
+  let arguments = (ins);
+  let results = (outs Variadic<ImmutableType>); // seq.immutable values
+  let regions = (region SizedRegion<1>:$body);
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $body attr-dict `:` type(results)
+  }];
+}
+
+def YieldOp : SeqOp<"yield",
+                   [Pure, Terminator, HasParent<"InitialOp">]> {
+  let summary = "Yield values";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+    let builders = [
+    OpBuilder<(ins), "build($_builder, $_state, std::nullopt);">
+  ];
+
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }

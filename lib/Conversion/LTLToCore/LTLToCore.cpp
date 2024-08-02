@@ -75,7 +75,7 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
     reg.setValue(rewriter.create<seq::CompRegOp>(
         op.getLoc(), orReset,
         rewriter.createOrFold<seq::ToClockOp>(op.getLoc(), adaptor.getClock()),
-        rewriter.getStringAttr("hbr"), reset, resetval, constZero,
+        rewriter.getStringAttr("hbr"), reset, resetval, constZero, Value(),
         InnerSymAttr{} // inner_sym
         ));
 

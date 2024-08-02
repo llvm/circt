@@ -57,6 +57,7 @@ addressing, meaning that this operation sets / reads the entire value.
 - **resetValue**: A value which the state is set to upon reset. Required iff
 'reset' is present.
 - **powerOn**: A value which will be assigned to the register upon system power-on.
+- **initialValue**: A value which will be assigned to the register in an initial block
 - **name**: A name for the register, defaults to `""`. Inferred from the textual
 SSA value name, or passed explicitly in builder APIs. The name will be passed to
 the `sv.reg` during lowering.
@@ -329,3 +330,8 @@ The fifo operation is configurable with the following parameters:
 Like `seq.hlmem` there are no guarantees that all possible fifo configuration
 are able to be lowered. Available lowering passes will pattern match on the
 requested fifo configuration and attempt to provide a legal lowering.
+
+
+## Register initialization
+
+`seq.initial` op explicitly produces initial values used.

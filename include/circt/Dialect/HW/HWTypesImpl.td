@@ -292,4 +292,22 @@ def HWStringTypeImpl : HWType<"String"> {
   let mnemonic = "string";
 }
 
+// FIXME: This should belong to Sim dialect but currently it's added to HW
+// due cyclic dependency between Sim and Seq
+def HWImmutableTypeImpl : HWType<"Immutable"> {
+  let mnemonic = "immutable";
+
+  let summary = "Value type that is immutable while the simulation execution";
+  let parameters = (ins "::mlir::Type":$innerType);
+
+  let assemblyFormat = "`<` $innerType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$innerType), [{
+      auto *ctx = innerType.getContext();
+      return $_get(ctx, innerType);
+    }]>
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD
