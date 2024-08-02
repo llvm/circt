@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTMoore
   CIRCTHW
   CIRCTSupport
   MLIRIR
+  MLIRFuncDialect
   MLIRInferTypeOpInterface
   MLIRMemorySlotInterfaces
 )

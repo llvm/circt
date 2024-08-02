@@ -22,6 +22,8 @@ using namespace circt;
 using namespace circt::moore;
 using namespace mlir;
 
+static ArrayRef<StructLikeMember> getStructMembers(Type type);
+
 //===----------------------------------------------------------------------===//
 // SVModuleOp
 //===----------------------------------------------------------------------===//
@@ -289,54 +291,55 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
 
 LogicalResult VariableOp::canonicalize(VariableOp op,
                                        ::mlir::PatternRewriter &rewriter) {
+  if (!(isa<SVModuleOp>(op->getParentOp()) ||
+        isa<func::FuncOp>(op->getParentOp())))
+    return failure();
+  auto members = getStructMembers(op.getType().getNestedType());
+  if (!members.empty()) {
+    SmallVector<Value> createFields;
+    if (auto initial = op.getInitial()) {
+      auto addressOp = rewriter.create<AddressOp>(
+          op.getLoc(), RefType::get(cast<UnpackedType>(initial.getType())),
+          initial);
+      for (const auto &member : members) {
+        auto field = rewriter.create<StructExtractOp>(
+            op->getLoc(), cast<UnpackedType>(member.type), member.name,
+            addressOp);
+        createFields.push_back(field);
+      }
+    } else {
+      for (const auto &member : members) {
+        // todo: support 4-domain value
+        auto field = rewriter.create<ConstantOp>(op->getLoc(),
+                                                 cast<IntType>(member.type), 0);
+        createFields.push_back(field);
+      }
+    }
+    auto value = rewriter.create<StructCreateOp>(
+        op->getLoc(), op.getType().getNestedType(), createFields);
+    rewriter.replaceOpWithNewOp<AddressOp>(op, RefType::get(value.getType()),
+                                           value);
+    return success();
+  }
 
-  return TypeSwitch<Type, LogicalResult>(op.getType().getNestedType())
-      .Case<StructType, UnpackedStructType>([&op, &rewriter](auto &type) {
-        SmallVector<Value> createFields;
-        if (auto initial = op.getInitial()) {
-          auto addressOp = rewriter.create<AddressOp>(
-              op.getLoc(), RefType::get(cast<UnpackedType>(initial.getType())),
-              initial);
-          for (const auto &member : type.getMembers()) {
-            auto field = rewriter.create<StructExtractOp>(
-                op->getLoc(), cast<UnpackedType>(member.type), member.name,
-                addressOp);
-            createFields.push_back(field);
-          }
-        } else {
-          for (const auto &member : type.getMembers()) {
-            // todo: support 4-domain value
-            auto field = rewriter.create<ConstantOp>(
-                op->getLoc(), cast<IntType>(member.type), 0);
-            createFields.push_back(field);
-          }
-        }
-        auto value = rewriter.create<StructCreateOp>(
-            op->getLoc(), op.getType().getNestedType(), createFields);
-        rewriter.replaceOpWithNewOp<AddressOp>(
-            op, RefType::get(value.getType()), value);
-        return success();
-      })
-      .Default([&op, &rewriter](auto &) {
-        Value initial;
-        for (auto *user : op->getUsers())
-          if (isa<ContinuousAssignOp>(user) &&
-              (user->getOperand(0) == op.getResult())) {
-            // Don't canonicalize the multiple continuous assignment to the same
-            // variable.
-            if (initial)
-              return failure();
-            initial = user->getOperand(1);
-          }
-
-        if (initial) {
-          rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                                     op.getNameAttr(), initial);
-          return success();
-        }
-
+  Value initial;
+  for (auto *user : op->getUsers())
+    if (isa<ContinuousAssignOp>(user) &&
+        (user->getOperand(0) == op.getResult())) {
+      // Don't canonicalize the multiple continuous assignment to the same
+      // variable.
+      if (initial)
         return failure();
-      });
+      initial = user->getOperand(1);
+    }
+
+  if (initial) {
+    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
+                                               op.getNameAttr(), initial);
+    return success();
+  }
+
+  return failure();
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
@@ -560,7 +563,6 @@ static ArrayRef<StructLikeMember> getStructMembers(Type type) {
     return structType.getMembers();
   if (auto structType = dyn_cast<UnpackedStructType>(type))
     return structType.getMembers();
-  assert(0 && "expected StructType or UnpackedStructType");
   return {};
 }
 
@@ -708,6 +710,9 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
+  if (!(isa<SVModuleOp>(op->getParentOp()) ||
+        isa<func::FuncOp>(op->getParentOp())))
+    return failure();
   auto members = getStructMembers(op.getType());
 
   // Chase a chain of `struct_inject` ops, with an optional final
@@ -906,9 +911,12 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
 
 LogicalResult BlockingAssignOp::canonicalize(BlockingAssignOp op,
                                              PatternRewriter &rewriter) {
+  if (!(isa<SVModuleOp>(op->getParentOp()) ||
+        isa<func::FuncOp>(op->getParentOp())))
+    return failure();
   if (auto refOp = op.getDst().getDefiningOp<moore::StructExtractRefOp>()) {
     auto input = refOp.getInput();
-    if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
+    if (isa<SVModuleOp>(input.getDefiningOp()->getParentOp())) {
       auto value = rewriter.create<ReadOp>(
           op->getLoc(), cast<RefType>(input.getType()).getNestedType(), input);
       auto newOp = rewriter.create<moore::StructInjectOp>(
@@ -967,6 +975,9 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
 }
 
 LogicalResult ReadOp::canonicalize(ReadOp op, PatternRewriter &rewriter) {
+  if (!(isa<SVModuleOp>(op->getParentOp()) ||
+        isa<func::FuncOp>(op->getParentOp())))
+    return failure();
   if (auto addr = op.getInput().getDefiningOp<AddressOp>()) {
     auto value = addr.getInput();
     op.replaceAllUsesWith(value);
