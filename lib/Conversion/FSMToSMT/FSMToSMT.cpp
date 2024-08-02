@@ -96,11 +96,24 @@ LogicalResult MachineOpConverter::dispatch(){
     argVarTypes.push_back(a.getType());
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
+    llvm::outs()<<"\nvar\n";
     argVarTypes.push_back(variableOp.getResult().getType());
   }
 
-  b.create<smt::DeclareFunOp>(loc, argVarTypes[0]);
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    llvm::outs()<<"\nstate\n";
 
+    auto stateName = stateOp.getSymName();
+
+    llvm::outs()<<stateName;
+
+    auto funcType = b.getFunctionType(argVarTypes, b.getType<smt::BoolType>());
+    auto stateFun = b.create<smt::DeclareFunOp>(loc, funcType);
+
+    stateFun.setNamePrefix(stateName);
+
+
+  }
 
 
 
