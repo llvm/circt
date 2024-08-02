@@ -147,6 +147,10 @@ struct TypeVisitor {
     return moore::UnpackedUnionType::get(context.getContext(), members);
   }
 
+  Type visit(const slang::ast::StringType &type) {
+    return moore::StringType::get(context.getContext());
+  }
+
   /// Emit an error for all other types.
   template <typename T>
   Type visit(T &&node) {

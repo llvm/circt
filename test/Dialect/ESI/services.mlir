@@ -206,17 +206,23 @@ hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
 
 esi.service.std.mmio @mmio
 !mmioReq = !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+!mmioRWReq = !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>
 
-// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>) {
+// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>, in %manifestRW : !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>) {
 // CONN-NEXT:     %true = hw.constant true
 // CONN-NEXT:     %c0_i64 = hw.constant 0 : i64
 // CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
 // CONN-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %true : i64
 // CONN-NEXT:     %offset = esi.bundle.unpack %chanOutput from %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+// CONN-NEXT:     esi.manifest.req #esi.appid<"manifestRW">, <@mmio::@read_write> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>
 hw.module @MMIOManifest(in %clk: !seq.clock, in %rst: i1) {
   %req = esi.service.req <@mmio::@read> (#esi.appid<"manifest">) : !mmioReq
   %data = hw.constant 0 : i64
   %valid = hw.constant 1 : i1
   %data_ch, %ready = esi.wrap.vr %data, %valid : i64
   %addr = esi.bundle.unpack %data_ch from %req : !mmioReq
+
+  %reqRW = esi.service.req <@mmio::@read_write> (#esi.appid<"manifestRW">) : !mmioRWReq
+  %dataChannel, %dataChannelReady = esi.wrap.vr %data, %valid: i64
+  %cmdChannel = esi.bundle.unpack %dataChannel from %reqRW : !mmioRWReq
 }

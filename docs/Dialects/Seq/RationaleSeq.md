@@ -146,7 +146,7 @@ Examples of registers:
 A register without a reset lowers directly to an always block:
 
 ```
-always @(posedge clk or [posedge reset]) begin
+always @(posedge clk) begin
   a <= [%input]
 end
 ```

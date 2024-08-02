@@ -38,6 +38,26 @@ read_offset(mmio_client_14_offset, 0, 14)
 read_offset(mmio_client_14_offset, 13, 14)
 
 ################################################################################
+# MMIOReadWriteClient tests
+################################################################################
+
+mmio_rw_client_offset = 262144
+
+
+def read_offset_check(i: int, add_amt: int):
+  d = mmio.read(mmio_rw_client_offset + i)
+  if d == i + 9:
+    print(f"PASS: read_offset_check({mmio_rw_client_offset} + {i}: {d}")
+  else:
+    assert False, f": read_offset_check({mmio_rw_client_offset} + {i}: {d}"
+
+
+mmio.write(mmio_rw_client_offset + 8, 9)
+read_offset_check(0, 9)
+read_offset_check(12, 9)
+read_offset_check(0x1400, 9)
+
+################################################################################
 # Manifest tests
 ################################################################################
 

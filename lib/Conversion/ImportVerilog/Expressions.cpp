@@ -712,6 +712,12 @@ struct RvalueExprVisitor {
     return {};
   }
 
+  /// Handle string literals.
+  Value visit(const slang::ast::StringLiteral &expr) {
+    auto type = context.convertType(*expr.type);
+    return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
