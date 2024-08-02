@@ -97,6 +97,9 @@ struct PackageVisitor : public BaseVisitor {
   // Ignore parameters. These are materialized on-the-fly as `ConstantOp`s.
   LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::SpecparamSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
+    return success();
+  }
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
@@ -106,7 +109,7 @@ struct PackageVisitor : public BaseVisitor {
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
-    mlir::emitError(loc, "unsupported construct: ")
+    mlir::emitError(loc, "unsupported package member: ")
         << slang::ast::toString(node.kind);
     return failure();
   }
@@ -189,6 +192,12 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Skip genvars.
   LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
+    return success();
+  }
+
+  // Ignore type parameters. These have already been handled by Slang's type
+  // checking.
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
     return success();
   }
 
@@ -515,7 +524,7 @@ struct ModuleVisitor : public BaseVisitor {
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
-    mlir::emitError(loc, "unsupported construct: ")
+    mlir::emitError(loc, "unsupported module member: ")
         << slang::ast::toString(node.kind);
     return failure();
   }
@@ -632,7 +641,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // only minor differences in semantics.
   if (module->getDefinition().definitionKind !=
       slang::ast::DefinitionKind::Module) {
-    mlir::emitError(loc) << "unsupported construct: "
+    mlir::emitError(loc) << "unsupported definition: "
                          << module->getDefinition().getKindString();
     return {};
   }

@@ -32,7 +32,7 @@ endmodule
 // CHECK: moore.module private @DedupB(in %a : !moore.i32)
 // CHECK: moore.module private @DedupB_0(in %a : !moore.i16)
 // CHECK-NOT: @DedupB
-module DedupB #(parameter int W)(input bit [W-1:0] a);
+module DedupB #(parameter int W, parameter type T = bit [W-1:0])(input T a);
 endmodule
 
 // CHECK-LABEL: moore.module @Dedup()
