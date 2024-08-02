@@ -93,4 +93,25 @@ def ClockType : SeqType<"Clock"> {
   let mnemonic = "clock";
 }
 
+def ImmutableTypeImpl : SeqType<"Immutable"> {
+  let mnemonic = "immutable";
+
+  let summary = "Value type that is immutable after initialization";
+  let parameters = (ins "::mlir::Type":$innerType);
+
+  let assemblyFormat = "`<` $innerType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$innerType), [{
+      auto *ctx = innerType.getContext();
+      return $_get(ctx, innerType);
+    }]>
+  ];
+}
+
+// A handle to refer to circt::seq::ImmutableType in ODS.
+def ImmutableType : DialectType<SeqDialect,
+    CPred<"isa<circt::seq::ImmutableType>($_self)">,
+          "an ImmutableType", "::circt::seq::ImmutableType">;
+
 #endif // CIRCT_DIALECT_SEQ_SEQTYPES

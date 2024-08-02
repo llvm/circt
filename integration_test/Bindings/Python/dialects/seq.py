@@ -24,11 +24,14 @@ with Context() as ctx, Location.unknown():
     def top(module):
       # CHECK: %[[RESET_VAL:.+]] = hw.constant 0
       reg_reset = hw.ConstantOp.create(i32, 0).result
-      # CHECK: %[[POWERON_VAL:.+]] = hw.constant 42
       poweron_value = hw.ConstantOp.create(i32, 42).result
       # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
       reg_input = hw.ConstantOp.create(i32, 45).result
-      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk reset %rst, %[[RESET_VAL]] powerOn %[[POWERON_VAL]]
+      # CHECK-NEXT: %[[POWERON_VAL:.+]] = seq.initial {
+      # CHECK-NEXT:   %[[C42:.+]] = hw.constant 42 : i32
+      # CHECK-NEXT:   seq.yield %[[C42]] : i32
+      # CHECK-NEXT: } : !seq.immutable<i32>
+      # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk reset %rst, %[[RESET_VAL]] initial %[[POWERON_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
                           module.clk,
