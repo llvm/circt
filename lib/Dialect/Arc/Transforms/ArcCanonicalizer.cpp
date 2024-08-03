@@ -700,29 +700,27 @@ struct DenseMapInfo<SmallVector<Value>> {
 
 LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
                                             PatternRewriter &rewriter) const {
-  BitVector argsToRemove(vecOp.getInputs().size(), false);
   DenseMap<SmallVector<Value>, unsigned> inExists;
   auto &currentBlock = vecOp.getBody().front();
   SmallVector<Value> newOperands;
-  unsigned shuffledBy = 0;
-  bool changed = false;
-  for (auto [argIdx, inputVec] : llvm::enumerate(vecOp.getInputs())) {
-    auto input = SmallVector<Value>(inputVec.begin(), inputVec.end());
+  BitVector argsToRemove(vecOp.getInputs().size(), false);
+  for (size_t argIdx = 0; argIdx < vecOp.getInputs().size(); ++argIdx) {
+    auto input = SmallVector<Value>(vecOp.getInputs()[argIdx].begin(),
+                                    vecOp.getInputs()[argIdx].end());
     if (auto in = inExists.find(input); in != inExists.end()) {
-      argsToRemove.set(argIdx);
-      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx - shuffledBy),
+      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx),
                                   currentBlock.getArgument(in->second));
-      currentBlock.eraseArgument(argIdx - shuffledBy);
-      ++shuffledBy;
-      changed = true;
+      argsToRemove.set(argIdx);
       continue;
     }
     inExists[input] = argIdx;
-    newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+    newOperands.insert(newOperands.end(), input.begin(), input.end());
   }
 
-  if (!changed)
+  if (argsToRemove.none())
     return failure();
+
+  currentBlock.eraseArguments(argsToRemove);
   return updateInputOperands(vecOp, newOperands);
 }
 

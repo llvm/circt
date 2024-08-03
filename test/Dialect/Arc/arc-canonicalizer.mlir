@@ -491,6 +491,25 @@ hw.module @Repeated_input(in %b: i8, in %e: i8, in %h: i8, in %k: i8, in %en: i1
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
 
+
+hw.module @Repeated_again(in %clock : !seq.clock, in %0 : i1, in %in1: i1, in %in2: i1, out oh: i1) {
+  %2:2 = arc.vectorize (%in1, %in2), (%in1, %in2), (%0, %0), (%0, %0) : (i1, i1, i1, i1, i1, i1, i1, i1) -> (i1, i1) {
+  ^bb0(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i1):
+    %4 = comb.or %arg0, %arg1, %arg2, %arg3 : i1
+    arc.vectorize.return %4 : i1
+  }
+  hw.output %2: i1
+}
+
+// CHECK-LABEL: hw.module @Repeated_again(in %clock : !seq.clock, in %0 "" : i1, in %in1 : i1, in %in2 : i1, out oh : i1) {
+// CHECK-NEXT:   [[VEC:%.+]]:2 = arc.vectorize (%in1, %in2), (%0, %0) : (i1, i1, i1, i1) -> (i1, i1) {
+// CHECK-NEXT:   ^[[BLOCK:[[:alnum:]]+]](%arg0: i1, %arg1: i1):
+// CHECK-NEXT:     [[OR:%.+]] = comb.or %arg0, %arg1 : i1
+// CHECK-NEXT:     arc.vectorize.return [[OR]] : i1
+// CHECK-NEXT:   }
+// CHECK-NEXT:   hw.output [[VEC]]#0 : i1
+// CHECK-NEXT: }
+
 hw.module @Repeated_input_1(in %b: i8, in %e: i8, in %h: i8, in %k: i8, in %en: i1, in %clock: !seq.clock) {
   %R:4 = arc.vectorize(%b, %e, %h, %k), (%b, %e, %h, %k): (i8, i8, i8, i8, i8, i8, i8, i8) -> (i8, i8, i8, i8) {
     ^bb0(%arg0: i8, %arg1: i8):
