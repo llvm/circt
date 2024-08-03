@@ -31,6 +31,11 @@ namespace circt {
 std::unique_ptr<mlir::Pass> createExportYosys();
 std::unique_ptr<mlir::Pass> createExportYosysParallel();
 
+/// Register the `(import|export)-rtlil` MLIR translation.
+void registerRTLILImport();
+void registerRTLILExport();
+void registerRTLILTranslation();
+
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_EXPORTRTLIL_H

@@ -27,13 +27,16 @@ exportRTLILDesign(ArrayRef<hw::HWModuleLike> modules,
                   hw::InstanceGraph &instanceGraph);
 
 mlir::FailureOr<std::unique_ptr<Yosys::RTLIL::Design>>
-exportRTLILDesign(mlir::ModuleOp);
+    exportRTLILDesign(mlir::ModuleOp);
 
 mlir::LogicalResult importRTLILDesign(Yosys::RTLIL::Design *design,
                                       mlir::ModuleOp module);
 
 std::string getEscapedName(llvm::StringRef name);
 void init_yosys(bool redirectLog = true);
+
+void registerRTLILImport();
+void registerRTLILExport();
 } // namespace rtlil
 } // namespace circt
 

@@ -20,6 +20,7 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/Support/Debug.h"
 
 // Yosys headers.
@@ -878,4 +879,30 @@ circt::rtlil::exportRTLILDesign(ArrayRef<hw::HWModuleLike> modules,
     return failure();
 
   return std::move(theDesign);
+}
+
+mlir::FailureOr<std::unique_ptr<Yosys::RTLIL::Design>>
+circt::rtlil::exportRTLILDesign(mlir::ModuleOp module) {
+  hw::InstanceGraph instanceGraph(module);
+  SmallVector<hw::HWModuleLike> modules(module.getOps<hw::HWModuleLike>());
+  return exportRTLILDesign(modules, {}, instanceGraph);
+}
+
+void circt::rtlil::registerRTLILExport() {
+  static mlir::TranslateFromMLIRRegistration toRTLIL(
+      "export-rtlil", "export RTLIL",
+      [](ModuleOp module, llvm::raw_ostream &os) {
+        auto value = exportRTLILDesign(module);
+        if (failed(value))
+          return failure();
+        std::ostringstream stream;
+        RTLIL_BACKEND::dump_design(stream, value->get(), false);
+        os << stream.str();
+        return success();
+      },
+      [](mlir::DialectRegistry &registry) {
+        registry.insert<seq::SeqDialect>();
+        registry.insert<comb::CombDialect>();
+        registry.insert<hw::HWDialect>();
+      });
 }

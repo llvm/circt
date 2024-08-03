@@ -188,7 +188,7 @@ void ExportYosysParallelPass::runOnOperation() {
   };
   std::string commands;
   bool first = true;
-  for (const auto& i : passes) {
+  for (const auto &i : passes) {
     if (first) {
       first = false;
     } else {
@@ -236,4 +236,10 @@ std::unique_ptr<mlir::Pass> circt::createExportYosys() {
 
 std::unique_ptr<mlir::Pass> circt::createExportYosysParallel() {
   return std::make_unique<ExportYosysParallelPass>();
+}
+
+/// Entry point as an MLIR translation.
+void circt::registerRTLILTranslation() {
+  rtlil::registerRTLILExport();
+  rtlil::registerRTLILImport();
 }

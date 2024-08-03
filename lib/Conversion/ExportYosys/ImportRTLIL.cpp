@@ -16,11 +16,11 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 
 // Yosys headers.
-#include "backends/rtlil/rtlil_backend.h"
 #include "kernel/rtlil.h"
 #include "kernel/yosys.h"
 
@@ -190,14 +190,12 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName>
-  void addOpPatternBinary(StringRef typeName);
+  template <typename OpName> void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName>
-struct CellOpPattern : public CellPatternBase {
+template <typename OpName> struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -205,8 +203,7 @@ struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd>
-struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -696,4 +693,18 @@ LogicalResult circt::rtlil::importRTLILDesign(RTLIL::Design *design,
                                               ModuleOp module) {
   ImportRTLILDesign importer(design);
   return importer.run(module);
+}
+
+void circt::rtlil::registerRTLILImport() {
+  static TranslateToMLIRRegistration fromRTLIL(
+      "import-rtlil", "import RTLIL",
+      [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+        OwningOpRef<ModuleOp> module(
+            ModuleOp::create(UnknownLoc::get(context)));
+        auto design = std::make_unique<RTLIL::Design>();
+        Yosys::run_pass(command, design);
+        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+          module = {};
+        return module;
+      });
 }
