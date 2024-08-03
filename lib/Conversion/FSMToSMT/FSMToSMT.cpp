@@ -8,11 +8,15 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Value.h"
+#include "mlir/IR/Operation.h"
+
 #include "mlir/Parser/Parser.h"
 #include "circt/Conversion/FSMToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
+#include "circt/Conversion/CombToSMT.h"
 #include "circt/Dialect/SMT/SMTOps.h"
 #include "circt/Dialect/SMT/SMTDialect.h"
 
@@ -37,6 +41,10 @@
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/IR/Region.h"
+#include "mlir/IR/Operation.h"
+
+
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -91,14 +99,20 @@ LogicalResult MachineOpConverter::dispatch(){
   auto args = machineOp.getArguments();
 
   llvm::SmallVector<mlir::Type> argVarTypes;
+  llvm::SmallVector<mlir::Value> argVars;
 
-  for (auto a : args)
+  for (auto a : args){
     argVarTypes.push_back(a.getType());
+    argVars.push_back(a);
+  }
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     llvm::outs()<<"\nvar\n";
     argVarTypes.push_back(variableOp.getResult().getType());
+    argVars.push_back(variableOp.getResult());
   }
+
+  llvm:DenseMap<StringRef, mlir::Value> stateTransitionMap;
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     llvm::outs()<<"\nstate\n";
@@ -112,11 +126,61 @@ LogicalResult MachineOpConverter::dispatch(){
 
     stateFun.setNamePrefix(stateName);
 
-
+    stateTransitionMap.insert({stateName, stateFun});
   }
 
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    // second region (idx 1) always conains the transitions
+    for (auto transitionOp : stateOp->getRegion(1).front().getOps<fsm::TransitionOp>()) {
+
+      auto nextState = transitionOp.getNextState();
+
+      llvm::outs()<<"\nto "<<nextState;
+
+      // auto guard = transitionOp->getRegion(0);
+
+      mlir::PassManager pm(transitionOp.getGuard().getContext());
+
+      pm.addPass(createConvertCombToSMT());
+
+      llvm::DenseMap<mlir::Value, mlir::Value> guardMap;
+
+      // ex:
+      // %tmp1 = comb.add %cnt, 1
+      // %tmp2 = comb.add %tmp1, 1
+      // %tmp3 = comb.icmp ule %tmp2 5
+      // fsm.return %tmp3
+
+      // fsm.return comb.icmp ule (comb.add (comb.add %cnt 1) 1) 5
+
+      for (auto &op : transitionOp->getRegion(0).getOps()) {
+        if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
+          // for (auto e : exprMap) {
+          //   if (e.second == retop.getOperand()) {
+
+          //     return e.first;
+          //   }
+          // }
+        }
+        llvm::SmallVector<mlir::Value> vec;
+        for (auto operand : op.getOperands()) {
+          vec.push_back(guardMap.find(operand)->getFirst());
+        }
+        exprMap.push_back({manageCombExp(op, vec, c), op.getResult(0)});
+        else{
+          pm.run(&op);
+        }
+      }
+
+      // auto result = pm.run(guardOp);
+
+      // auto funcType = b.getFunctionType(argVarTypes, b.getType<smt::BoolType>());
+      // auto chcFun = b.create<smt::ImpliesOp>(loc, funcType);
+
+    }
 
 
+  }
 
 
 }
@@ -1071,6 +1135,7 @@ void FSMToSMTPass::runOnOperation() {
   auto b = OpBuilder(module);
 
   // // only continue if at least one fsm exists
+
   // auto machineOps = to_vector(module.getOps<fsm::MachineOp>());
   // if (machineOps.empty()) {
   //   markAllAnalysesPreserved();
