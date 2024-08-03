@@ -131,8 +131,6 @@ def ProcedureKindAttr: I32EnumAttr<"ProcedureKind", "Procedure kind",
 }
 
 def ProcedureOp : MooreOp<"procedure", [
-  SingleBlock,
-  NoTerminator,
   NoRegionArguments,
   RecursiveMemoryEffects,
   RecursivelySpeculatable
@@ -172,13 +170,20 @@ def ProcedureOp : MooreOp<"procedure", [
     See IEEE 1800-2017 § 9.2 "Structured procedures".
   }];
 
-  let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins ProcedureKindAttr:$kind);
   let results = (outs);
+  let regions = (region AnyRegion:$body);
 
   let assemblyFormat = [{
-    $kind attr-dict-with-keyword $bodyRegion
+    $kind attr-dict-with-keyword $body
   }];
+}
+
+def ReturnOp : MooreOp<"return", [
+  Pure, Terminator, HasParent<"ProcedureOp">
+]> {
+  let summary = "Return from a procedure";
+  let assemblyFormat = [{ attr-dict }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -812,6 +817,16 @@ class CaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
     `case_ne` returns 1). `case_eq` corresponds to the `===` operator and
     `case_ne` to the `!==` operator.
 
+    `casez_eq` treats Z bits in either operand as wildcards and skips them
+    during the comparison. `casexz_eq` treats X and Z bits as wildcards. These
+    are different from the `wildcard_eq` operation, which only considers X/Z in
+    the right-hand operand as wildcards.
+
+    Case statements use this operation to perform case comparisons:
+    - `case` statements use `case_eq`
+    - `casez` statements use `casez_eq`
+    - `casex` statements use `casexz_eq`
+
     See IEEE 1800-2017 § 11.4.5 "Equality operators".
   }];
   let arguments = (ins SimpleBitVectorType:$lhs, SimpleBitVectorType:$rhs);
@@ -823,6 +838,12 @@ class CaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
 
 def CaseEqOp : CaseEqOpBase<"case_eq"> { let summary = "Case equality"; }
 def CaseNeOp : CaseEqOpBase<"case_ne"> { let summary = "Case inequality"; }
+def CaseZEqOp : CaseEqOpBase<"casez_eq"> {
+  let summary = "Case equality with Z as wildcard";
+}
+def CaseXZEqOp : CaseEqOpBase<"casexz_eq"> {
+  let summary = "Case equality with X and Z as wildcard";
+}
 
 class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
@@ -1259,4 +1280,5 @@ def YieldOp : MooreOp<"yield", [
   }];
   let hasVerifier = 1;
 }
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

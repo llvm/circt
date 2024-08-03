@@ -13,8 +13,8 @@
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "slang/ast/ASTVisitor.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
@@ -44,6 +44,15 @@ struct ModuleLowering {
 /// Function lowering information.
 struct FunctionLowering {
   mlir::func::FuncOp op;
+};
+
+/// Information about a loops continuation and exit blocks relevant while
+/// lowering the loop's body statements.
+struct LoopFrame {
+  /// The block to jump to from a `continue` statement.
+  Block *continueBlock;
+  /// The block to jump to from a `break` statement.
+  Block *breakBlock;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -136,6 +145,13 @@ struct Context {
   /// side. This allows expressions to resolve the opaque
   /// `LValueReferenceExpression`s in the AST.
   SmallVector<Value> lvalueStack;
+
+  /// A stack of loop continuation and exit blocks. Each loop will push the
+  /// relevant info onto this stack, lower its loop body statements, and pop the
+  /// info off the stack again. Continue and break statements encountered as
+  /// part of the loop body statements will use this information to branch to
+  /// the correct block.
+  SmallVector<LoopFrame> loopStack;
 };
 
 } // namespace ImportVerilog
