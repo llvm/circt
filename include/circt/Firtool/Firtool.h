@@ -96,7 +96,7 @@ public:
     return allowAddingPortsOnPublic;
   }
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
-  bool shouldReplicateSequentialMemories() const { return replSeqMem; }
+  bool shouldReplaceSequentialMemories() const { return replSeqMem; }
   bool shouldDisableOptimization() const { return disableOptimization; }
   bool shouldLowerMemories() const { return lowerMemories; }
   bool shouldDedup() const { return !noDedup; }
