@@ -60,12 +60,8 @@ struct ExportYosysParallelPass
 
 void ExportYosysPass::runOnOperation() {
   init_yosys(redirectLog.getValue());
-  auto &theInstanceGraph = getAnalysis<hw::InstanceGraph>();
-
-  SmallVector<hw::HWModuleLike> modules(
-      getOperation().getOps<hw::HWModuleLike>());
   auto theDesign =
-      circt::rtlil::exportRTLILDesign(modules, {}, theInstanceGraph);
+      circt::rtlil::exportRTLILDesign(getOperation());
 
   auto *design = theDesign->get();
 

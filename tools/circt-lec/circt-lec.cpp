@@ -71,9 +71,9 @@ static cl::opt<std::string> secondModuleName(
     cl::desc("Specify a named module for the second circuit of the comparison"),
     cl::value_desc("module name"), cl::cat(mainCategory));
 
-static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
-                                          cl::desc("<input file>"),
-                                          cl::cat(mainCategory));
+static cl::list<std::string> inputFilenames(cl::Positional, cl::OneOrMore,
+                                            cl::desc("<input files>"),
+                                            cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
@@ -134,7 +134,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
   {
     auto parserTimer = ts.nest("Parse MLIR input");
     // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
+    module = parseSourceFile<ModuleOp>(inputFilenames[0], &context);
   }
   if (!module)
     return failure();

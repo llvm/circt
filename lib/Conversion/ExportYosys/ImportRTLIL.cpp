@@ -670,9 +670,46 @@ LogicalResult CellPatternBase::convert(ImportRTLILModule &importer,
 
 // RTLIL importer creates a bunch of array wires to mimic bit-sensitive
 // assignments. Eliminate all of them in the post-process.
+struct Range {
+  Range() = default;
+  sv::WireOp root = {};
+  int64_t start = 0;
+  int64_t bitWidth = 0;
+};
+
+static std::optional<int64_t> getConstantValue(Value value) {
+  auto constantIndex = value.template getDefiningOp<hw::ConstantOp>();
+  if (constantIndex)
+    if (constantIndex.getValue().getBitWidth() <= 63)
+      return constantIndex.getValue().getZExtValue();
+
+  return {};
+}
+
+static Range getRoot(Value value) {
+  auto op = value.getDefiningOp();
+  if (!op)
+    return Range();
+  return TypeSwitch<Operation *, Range>(op)
+      .Case<sv::WireOp>([](auto op) {
+        return Range{op, 0,
+                     hw::getBitWidth(
+                         cast<hw::InOutType>(op.getType()).getElementType())};
+      })
+      .Case<sv::ArrayIndexInOutOp>(
+          [](sv::ArrayIndexInOutOp op) { return Range(); })
+      .Case<sv::IndexedPartSelectInOutOp>([](sv::IndexedPartSelectInOutOp op) {
+        auto result = getRoot(op.getInput());
+        auto index = getConstantValue(op.getBase());
+        return result;
+      })
+      .Default([](auto) { return Range(); });
+}
+
 static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
   DenseMap<sv::WireOp, SmallVector<std::pair<unsigned, Value>>> values;
-  module.walk([&](sv::WireOp wire) {});
+  module.walk([&](sv::WireOp wire) { values.insert({wire, {}}); });
+  module.walk([&](sv::AssignOp assign) { assign.getDest(); });
 }
 static LogicalResult postProcess(mlir::ModuleOp module) {}
 
