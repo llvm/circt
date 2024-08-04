@@ -12,6 +12,7 @@
 
 using namespace circt;
 using namespace ImportVerilog;
+using moore::Domain;
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -60,6 +61,18 @@ struct RvalueExprVisitor {
     mlir::emitError(loc, "expression of type ")
         << value.getType() << " cannot be cast to a boolean";
     return {};
+  }
+
+  /// Helper function to convert a value to its "truthy" boolean value and
+  /// convert it to the given domain.
+  Value convertToBool(Value value, Domain domain) {
+    value = convertToBool(value);
+    if (!value)
+      return {};
+    auto type = moore::IntType::get(context.getContext(), 1, domain);
+    if (value.getType() == type)
+      return value;
+    return builder.create<moore::ConversionOp>(loc, type, value);
   }
 
   // Handle references to the left-hand side of a parent assignment.
@@ -242,6 +255,12 @@ struct RvalueExprVisitor {
     if (!rhs)
       return {};
 
+    // Determine the domain of the result.
+    Domain domain = Domain::TwoValued;
+    if (expr.type->isFourState() || expr.left().type->isFourState() ||
+        expr.right().type->isFourState())
+      domain = Domain::FourValued;
+
     using slang::ast::BinaryOperator;
     switch (expr.op) {
     case BinaryOperator::Add:
@@ -322,35 +341,45 @@ struct RvalueExprVisitor {
 
     // See IEEE 1800-2017 § 11.4.7 "Logical operators".
     case BinaryOperator::LogicalAnd: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::AndOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalOr: {
-      // TODO: This should short-circuit. Put the RHS code into an scf.if.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      // TODO: This should short-circuit. Put the RHS code into a separate
+      // block.
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       return builder.create<moore::OrOp>(loc, lhs, rhs);
     }
     case BinaryOperator::LogicalImplication: {
       // `(lhs -> rhs)` equivalent to `(!lhs || rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       return builder.create<moore::OrOp>(loc, notLHS, rhs);
     }
     case BinaryOperator::LogicalEquivalence: {
       // `(lhs <-> rhs)` equivalent to `(lhs && rhs) || (!lhs && !rhs)`.
-      lhs = convertToBool(lhs);
-      rhs = convertToBool(rhs);
-      if (!lhs || !rhs)
+      lhs = convertToBool(lhs, domain);
+      if (!lhs)
+        return {};
+      rhs = convertToBool(rhs, domain);
+      if (!rhs)
         return {};
       auto notLHS = builder.create<moore::NotOp>(loc, lhs);
       auto notRHS = builder.create<moore::NotOp>(loc, rhs);
@@ -620,12 +649,20 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
 
     // Handle condition.
-    Value cond = convertToSimpleBitVector(
-        context.convertRvalueExpression(*expr.conditions.begin()->expr));
-    cond = convertToBool(cond);
-    if (!cond)
+    if (expr.conditions.size() > 1) {
+      mlir::emitError(loc)
+          << "unsupported conditional expression with more than one condition";
       return {};
-    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, cond);
+    }
+    const auto &cond = expr.conditions[0];
+    if (cond.pattern) {
+      mlir::emitError(loc) << "unsupported conditional expression with pattern";
+      return {};
+    }
+    auto value = convertToBool(context.convertRvalueExpression(*cond.expr));
+    if (!value)
+      return {};
+    auto conditionalOp = builder.create<moore::ConditionalOp>(loc, type, value);
 
     // Create blocks for true region and false region.
     conditionalOp.getTrueRegion().emplaceBlock();
@@ -638,6 +675,8 @@ struct RvalueExprVisitor {
     auto trueValue = context.convertRvalueExpression(expr.left());
     if (!trueValue)
       return {};
+    if (trueValue.getType() != type)
+      trueValue = builder.create<moore::ConversionOp>(loc, type, trueValue);
     builder.create<moore::YieldOp>(loc, trueValue);
 
     // Handle right expression.
@@ -645,6 +684,8 @@ struct RvalueExprVisitor {
     auto falseValue = context.convertRvalueExpression(expr.right());
     if (!falseValue)
       return {};
+    if (falseValue.getType() != type)
+      falseValue = builder.create<moore::ConversionOp>(loc, type, falseValue);
     builder.create<moore::YieldOp>(loc, falseValue);
 
     return conditionalOp.getResult();

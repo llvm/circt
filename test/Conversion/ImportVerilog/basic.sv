@@ -858,6 +858,16 @@ module Expressions;
     // CHECK: [[NOT_BOTH:%.+]] = moore.and [[NOT_A]], [[NOT_B]] : i1
     // CHECK: moore.or [[BOTH]], [[NOT_BOTH]] : i1
     c = a <-> b;
+    // CHECK: [[TMP:%.+]] = moore.read %x : <i1>
+    // CHECK: [[Y:%.+]] = moore.read %y : <l1>
+    // CHECK: [[X:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> !moore.l1
+    // CHECK: moore.and [[X]], [[Y]] : l1
+    y = x && y;
+    // CHECK: [[Y:%.+]] = moore.read %y : <l1>
+    // CHECK: [[TMP:%.+]] = moore.read %x : <i1>
+    // CHECK: [[X:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> !moore.l1
+    // CHECK: moore.and [[Y]], [[X]] : l1
+    y = y && x;
 
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
@@ -1590,4 +1600,23 @@ function void funcArgs2();
   // CHECK: call @funcArgs1([[TMP]], %x, %y, %z, %w)
   funcArgs1(42, x, y, z, w);
   // CHECK: return
+endfunction
+
+// CHECK-LABEL: func.func private @ConvertConditionalExprsToResultType(
+function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { bit [15:0] a; } y, bit z);
+  bit [15:0] r;
+  // CHECK: moore.conditional %arg2 : i1 -> i16 {
+  // CHECK:   moore.yield %arg0
+  // CHECK: } {
+  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
+  // CHECK:   moore.yield [[TMP]]
+  // CHECK: }
+  r = z ? x : y;
+  // CHECK: moore.conditional %arg2 : i1 -> i16 {
+  // CHECK:   [[TMP:%.+]] = moore.conversion %arg1
+  // CHECK:   moore.yield [[TMP]]
+  // CHECK: } {
+  // CHECK:   moore.yield %arg0
+  // CHECK: }
+  r = z ? y : x;
 endfunction
