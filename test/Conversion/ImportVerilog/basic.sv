@@ -493,6 +493,10 @@ module Expressions;
   struct packed {
     int a, b;
   } struct0;
+  // CHECK: %ustruct0 = moore.variable : <ustruct<{a: i32, b: i32}>>
+  struct {
+    int a, b;
+  } ustruct0;
   // CHECK: %struct1 = moore.variable : <struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>>
   struct packed {
     struct packed {
@@ -512,6 +516,10 @@ module Expressions;
   // CHECK: %r1 = moore.variable : <real>
   // CHECK: %r2 = moore.variable : <real>
   real r1,r2;
+  // CHECK: %arrayInt = moore.variable : <array<2 x i32>>
+  bit [1:0][31:0] arrayInt;
+  // CHECK: %uarrayInt = moore.variable : <uarray<2 x i32>>
+  bit [31:0] uarrayInt [2];
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -1058,6 +1066,64 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.struct_extract [[TMP1]], "b" : struct<{a: i32, b: i32}> -> i32
     // CHECK: moore.blocking_assign %b, [[TMP2]]
     b = struct0.b;
+
+    //===------------------------------------------------------------------===//
+    // Assignment Patterns
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 17
+    // CHECK: [[TMP1:%.+]] = moore.constant 17
+    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    struct0 = '{default: 17};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 1337
+    // CHECK: [[TMP1:%.+]] = moore.constant 1337
+    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    struct0 = '{int: 1337};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 420
+    // CHECK: moore.struct_create [[TMP0]], [[TMP0]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    struct0 = '{2{420}};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 42
+    // CHECK: [[TMP1:%.+]] = moore.constant 9001
+    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    struct0 = '{a: 42, b: 9001};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    struct0 = '{43, 9002};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 44
+    // CHECK: [[TMP1:%.+]] = moore.constant 9003
+    // CHECK: moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> ustruct<{a: i32, b: i32}>
+    ustruct0 = '{44, 9003};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 1
+    // CHECK: [[TMP1:%.+]] = moore.constant 2
+    // CHECK: [[TMP2:%.+]] = moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    // CHECK: [[TMP0:%.+]] = moore.constant 3
+    // CHECK: [[TMP1:%.+]] = moore.constant 4
+    // CHECK: [[TMP3:%.+]] = moore.struct_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> struct<{a: i32, b: i32}>
+    // CHECK: moore.struct_create [[TMP2]], [[TMP3]] : !moore.struct<{a: i32, b: i32}>, !moore.struct<{a: i32, b: i32}> -> struct<{c: struct<{a: i32, b: i32}>, d: struct<{a: i32, b: i32}>}>
+    struct1 = '{c: '{a: 1, b: 2}, d: '{a: 3, b: 4}};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 42
+    // CHECK: [[TMP1:%.+]] = moore.constant 9001
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> array<2 x i32>
+    arrayInt = '{42, 9001};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 43
+    // CHECK: [[TMP1:%.+]] = moore.constant 9002
+    // CHECK: moore.array_create [[TMP0]], [[TMP1]] : !moore.i32, !moore.i32 -> uarray<2 x i32>
+    uarrayInt = '{43, 9002};
+
+    // CHECK: [[TMP0:%.+]] = moore.constant 1
+    // CHECK: [[TMP1:%.+]] = moore.constant 2
+    // CHECK: [[TMP2:%.+]] = moore.constant 3
+    // CHECK: [[TMP3:%.+]] = moore.array_create [[TMP0]], [[TMP1]], [[TMP2]], [[TMP0]], [[TMP1]], [[TMP2]] : !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4, !moore.i4 -> uarray<6 x i4>
+    // CHECK: moore.array_create [[TMP3]], [[TMP3]], [[TMP3]] : !moore.uarray<6 x i4>, !moore.uarray<6 x i4>, !moore.uarray<6 x i4> -> uarray<3 x uarray<6 x i4>>
+    arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
  
     //===------------------------------------------------------------------===//
     // Builtin Functions

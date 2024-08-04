@@ -727,6 +727,70 @@ struct RvalueExprVisitor {
     return builder.create<moore::StringConstantOp>(loc, type, expr.getValue());
   }
 
+  /// Handle assignment patterns.
+  Value visitAssignmentPattern(
+      const slang::ast::AssignmentPatternExpressionBase &expr,
+      unsigned replCount = 1) {
+    auto type = context.convertType(*expr.type);
+
+    // Convert the individual elements first.
+    auto elementCount = expr.elements().size();
+    SmallVector<Value> elements;
+    elements.reserve(replCount * elementCount);
+    for (auto elementExpr : expr.elements()) {
+      auto value = context.convertRvalueExpression(*elementExpr);
+      if (!value)
+        return {};
+      elements.push_back(value);
+    }
+    for (unsigned replIdx = 1; replIdx < replCount; ++replIdx)
+      for (unsigned elementIdx = 0; elementIdx < elementCount; ++elementIdx)
+        elements.push_back(elements[elementIdx]);
+
+    // Handle packed structs.
+    if (auto structType = dyn_cast<moore::StructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle unpacked structs.
+    if (auto structType = dyn_cast<moore::UnpackedStructType>(type)) {
+      assert(structType.getMembers().size() == elements.size());
+      return builder.create<moore::StructCreateOp>(loc, structType, elements);
+    }
+
+    // Handle packed arrays.
+    if (auto arrayType = dyn_cast<moore::ArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    // Handle unpacked arrays.
+    if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(type)) {
+      assert(arrayType.getSize() == elements.size());
+      return builder.create<moore::ArrayCreateOp>(loc, arrayType, elements);
+    }
+
+    mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
+    return {};
+  }
+
+  Value visit(const slang::ast::SimpleAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::StructuredAssignmentPatternExpression &expr) {
+    return visitAssignmentPattern(expr);
+  }
+
+  Value visit(const slang::ast::ReplicatedAssignmentPatternExpression &expr) {
+    slang::ast::EvalContext evalContext(context.compilation,
+                                        slang::ast::EvalFlags::CacheResults);
+    auto count = expr.count().eval(evalContext).integer().as<unsigned>();
+    assert(count && "Slang guarantees constant non-zero replication count");
+    return visitAssignmentPattern(expr, *count);
+  }
+
   /// Emit an error for all other expressions.
   template <typename T>
   Value visit(T &&node) {
