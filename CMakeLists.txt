@@ -607,12 +607,15 @@ else()
 endif()
 
 option(CIRCT_YOSYS_INTEGRATION_ENABLED "Enables the Yosys integration." ON)
+llvm_canonicalize_cmake_booleans(CIRCT_YOSYS_INTEGRATION_ENABLED)
+
 option(CIRCT_YOSYS_BUILD_FROM_SOURCE
   "Build yosys from source instead of finding an installed package" OFF)
 
 llvm_canonicalize_cmake_booleans(CIRCT_YOSYS_BACKEND_ENABLED)
 
 if(CIRCT_YOSYS_INTEGRATION_ENABLED)
+  # FIXME: Yosys doesn't use cmake so need to manually configure
   message(STATUS "Yosys integration is enabled")
   include(ExternalProject)
   ExternalProject_Add(yosys

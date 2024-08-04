@@ -94,6 +94,10 @@ if config.yosys_path != "":
   tools.append('yosys')
   config.available_features.add('yosys')
 
+# Enable yosys if it has been detected.
+if config.yosys_integration_enabled != "":
+  config.available_features.add('yosys_integration')
+
 # Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
 if config.iverilog_path != "":
   tool_dirs.append(os.path.dirname(config.iverilog_path))

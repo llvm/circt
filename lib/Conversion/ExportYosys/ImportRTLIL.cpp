@@ -668,6 +668,14 @@ LogicalResult CellPatternBase::convert(ImportRTLILModule &importer,
   return importer.connect(location, lhsValue, rhsValue);
 }
 
+// RTLIL importer creates a bunch of array wires to mimic bit-sensitive
+// assignments. Eliminate all of them in the post-process.
+static LogicalResult cleanUpHWModule(hw::HWModuleOp module) {
+  DenseMap<sv::WireOp, SmallVector<std::pair<unsigned, Value>>> values;
+  module.walk([&](sv::WireOp wire) {});
+}
+static LogicalResult postProcess(mlir::ModuleOp module) {}
+
 LogicalResult ImportRTLILDesign::run(mlir::ModuleOp module) {
   SmallVector<ImportRTLILModule> modules;
   OpBuilder builder(module);
