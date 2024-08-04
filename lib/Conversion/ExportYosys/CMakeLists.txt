@@ -42,6 +42,7 @@ add_circt_translation_library(CIRCTExportYosys
   MLIRTransforms
   CIRCTHW
   CIRCTSV
+  CIRCTOM
   CIRCTComb
   libyosys
 )

@@ -16,9 +16,12 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/Support/SourceMgr.h"
+#include "mlir/Support/FileUtilities.h"
+#include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/SourceMgr.h"
 
 // Yosys headers.
 #include "kernel/rtlil.h"
@@ -74,8 +77,8 @@ public:
 private:
   RTLIL::Module *rtlilModule;
   hw::HWModuleLike module;
-  MLIRContext *context;
-  const ImportRTLILDesign &importer;
+  // MLIRContext *context;
+  // const ImportRTLILDesign &importer;
 
   StringAttr getStringAttr(const Yosys::RTLIL::IdString &str) const {
     StringRef s(str.c_str());
@@ -190,12 +193,14 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName> void addOpPatternBinary(StringRef typeName);
+  template <typename OpName>
+  void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName> struct CellOpPattern : public CellPatternBase {
+template <typename OpName>
+struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -203,7 +208,8 @@ template <typename OpName> struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd>
+struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -338,7 +344,7 @@ ImportRTLILModule::ImportRTLILModule(MLIRContext *context,
                                      const ImportRTLILDesign &importer,
                                      RTLIL::Module *rtlilModule,
                                      OpBuilder &moduleBuilder)
-    : rtlilModule(rtlilModule), context(context), importer(importer) {
+    : rtlilModule(rtlilModule) {
   builder = std::make_unique<OpBuilder>(context);
   block = std::make_unique<Block>();
   registerPatterns();
@@ -696,15 +702,38 @@ LogicalResult circt::rtlil::importRTLILDesign(RTLIL::Design *design,
 }
 
 void circt::rtlil::registerRTLILImport() {
-  static TranslateToMLIRRegistration fromRTLIL(
+  static mlir::TranslateToMLIRRegistration fromRTLIL(
       "import-rtlil", "import RTLIL",
       [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         OwningOpRef<ModuleOp> module(
             ModuleOp::create(UnknownLoc::get(context)));
-        auto design = std::make_unique<RTLIL::Design>();
-        Yosys::run_pass(command, design);
-        if (failed(importVerilog(sourceMgr, context, ts, module.get())))
+        if (sourceMgr.getNumBuffers() != 1) {
           module = {};
+          return module;
+        }
+        std::error_code ec;
+        SmallString<128> fileName;
+        if ((ec = llvm::sys::fs::createTemporaryFile("yosys", "rtlil",
+                                                     fileName))) {
+          module->emitError() << ec.message();
+          module = {};
+          return module;
+        }
+        
+        sourceMgr.getMemoryBuffer(0)->getBuffer();
+
+        init_yosys(true);
+
+        auto design = std::make_unique<RTLIL::Design>();
+        std::string cmd = "read_rtlil ";
+        cmd += fileName;
+        Yosys::run_pass(cmd, design.get());
+        Yosys::run_pass("write_rtlil", design.get());
+
+        if (failed(importRTLILDesign(design.get(), module.get()))) {
+          module->emitError() << "lowerindg failed";
+          module = {};
+        }
         return module;
       });
 }

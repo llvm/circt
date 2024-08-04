@@ -19,6 +19,7 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
+#include "circt/Dialect/OM/OMDialect.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "llvm/Support/Debug.h"
@@ -904,5 +905,6 @@ void circt::rtlil::registerRTLILExport() {
         registry.insert<seq::SeqDialect>();
         registry.insert<comb::CombDialect>();
         registry.insert<hw::HWDialect>();
+        registry.insert<om::OMDialect>();
       });
 }
