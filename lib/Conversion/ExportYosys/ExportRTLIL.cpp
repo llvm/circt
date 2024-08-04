@@ -893,6 +893,7 @@ void circt::rtlil::registerRTLILExport() {
   static mlir::TranslateFromMLIRRegistration toRTLIL(
       "export-rtlil", "export RTLIL",
       [](ModuleOp module, llvm::raw_ostream &os) {
+        init_yosys(false);
         auto value = exportRTLILDesign(module);
         if (failed(value))
           return failure();

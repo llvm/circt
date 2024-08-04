@@ -193,14 +193,12 @@ private:
   template <typename OpName>
   void addOpPattern(StringRef typeName, ArrayRef<StringRef> inputPortNames,
                     StringRef outputPortName);
-  template <typename OpName>
-  void addOpPatternBinary(StringRef typeName);
+  template <typename OpName> void addOpPatternBinary(StringRef typeName);
 
   void registerPatterns();
 };
 
-template <typename OpName>
-struct CellOpPattern : public CellPatternBase {
+template <typename OpName> struct CellOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -208,8 +206,7 @@ struct CellOpPattern : public CellPatternBase {
   }
 };
 
-template <bool isAnd>
-struct AndOrNotOpPattern : public CellPatternBase {
+template <bool isAnd> struct AndOrNotOpPattern : public CellPatternBase {
   using CellPatternBase::CellPatternBase;
   Value convert(Cell *cell, OpBuilder &builder, Location location,
                 ValueRange inputValues) override {
@@ -705,6 +702,8 @@ void circt::rtlil::registerRTLILImport() {
   static mlir::TranslateToMLIRRegistration fromRTLIL(
       "import-rtlil", "import RTLIL",
       [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+        context->loadDialect<hw::HWDialect, comb::CombDialect, sv::SVDialect>();
+
         OwningOpRef<ModuleOp> module(
             ModuleOp::create(UnknownLoc::get(context)));
         if (sourceMgr.getNumBuffers() != 1) {
@@ -719,16 +718,19 @@ void circt::rtlil::registerRTLILImport() {
           module = {};
           return module;
         }
-        
-        sourceMgr.getMemoryBuffer(0)->getBuffer();
 
-        init_yosys(true);
+        StringRef ref =
+            sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer();
+        std::ofstream myfile(fileName.c_str());
+        myfile.write(ref.data(), ref.size());
+        myfile.close();
+
+        init_yosys(false);
 
         auto design = std::make_unique<RTLIL::Design>();
         std::string cmd = "read_rtlil ";
         cmd += fileName;
         Yosys::run_pass(cmd, design.get());
-        Yosys::run_pass("write_rtlil", design.get());
 
         if (failed(importRTLILDesign(design.get(), module.get()))) {
           module->emitError() << "lowerindg failed";
