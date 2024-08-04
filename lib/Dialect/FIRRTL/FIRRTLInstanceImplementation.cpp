@@ -16,7 +16,6 @@ LogicalResult
 instance_like_impl::verifyReferencedModule(Operation *instanceOp,
                                            SymbolTableCollection &symbolTable,
                                            mlir::FlatSymbolRefAttr moduleName) {
-  auto module = instanceOp->getParentOfType<FModuleOp>();
   auto referencedModule =
       symbolTable.lookupNearestSymbolFrom<FModuleLike>(instanceOp, moduleName);
   if (!referencedModule) {
@@ -28,15 +27,6 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
     return instanceOp->emitOpError("must instantiate a module not a class")
                .attachNote(referencedModule.getLoc())
            << "class declared here";
-
-  // Check that this instance doesn't recursively instantiate its wrapping
-  // module.
-  if (referencedModule == module) {
-    auto diag = instanceOp->emitOpError()
-                << "is a recursive instantiation of its containing module";
-    return diag.attachNote(module.getLoc())
-           << "containing module declared here";
-  }
 
   // Small helper add a note to the original declaration.
   auto emitNote = [&](InFlightDiagnostic &&diag) -> InFlightDiagnostic && {
