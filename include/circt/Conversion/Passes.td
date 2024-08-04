@@ -800,6 +800,12 @@ def ExportYosys: Pass<"export-yosys",  "mlir::ModuleOp"> {
     Option<"redirectLog", "redirect-log", "bool",
             "false", "">
   ];
+  let dependentDialects = [
+    "circt::comb::CombDialect",
+    "circt::seq::SeqDialect",
+    "circt::sv::SVDialect",
+    "circt::hw::HWDialect"
+  ];
 }
 
 def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
@@ -812,6 +818,12 @@ def ExportYosysParallel: Pass<"export-yosys-parallel",  "mlir::ModuleOp"> {
             "", "top module name">,
     Option<"workspace", "workspace", "std::string",
             "", "workspace to run yosys">
+  ];
+  let dependentDialects = [
+    "circt::comb::CombDialect",
+    "circt::seq::SeqDialect",
+    "circt::sv::SVDialect",
+    "circt::hw::HWDialect"
   ];
 }
 #endif
