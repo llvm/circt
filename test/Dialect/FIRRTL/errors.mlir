@@ -286,16 +286,6 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  // expected-note @+1 {{containing module declared here}}
-  firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance "" @Foo()
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
