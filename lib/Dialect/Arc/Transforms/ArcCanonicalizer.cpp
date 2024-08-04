@@ -619,18 +619,58 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
     // Ensure that the input vector matches the output of the `otherVecOp`
     // Make sure that the results of the otherVecOp have only one use
     auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
-    if (!otherVecOp || inputVec != otherVecOp.getResults() ||
-        otherVecOp == vecOp ||
+    if (!otherVecOp || otherVecOp == vecOp ||
         !llvm::all_of(otherVecOp.getResults(),
-                      [](auto result) { return result.hasOneUse(); })) {
+                      [](auto result) { return result.hasOneUse(); }) ||
+        !llvm::all_of(inputVec, [&](auto result) {
+          return result.template getDefiningOp<VectorizeOp>() == otherVecOp;
+        })) {
       newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
       continue;
     }
+
+    // Here, all elements are from the same `VectorizeOp`.
+    // If all elements of the input vector come from the same `VectorizeOp`
+    // sort the vectors by their indices
+    DenseMap<Value, size_t> resultIdxMap;
+    for (auto [resultIdx, result] : llvm::enumerate(otherVecOp.getResults()))
+      resultIdxMap[result] = resultIdx;
+
+    SmallVector<Value> tempVec(inputVec.begin(), inputVec.end());
+    llvm::sort(tempVec, [&](Value a, Value b) {
+      return resultIdxMap[a] < resultIdxMap[b];
+    });
+
+    // Check if inputVec matches the result after sorting.
+    if (tempVec != SmallVector<Value>(otherVecOp.getResults().begin(),
+                                      otherVecOp.getResults().end())) {
+      newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+      continue;
+    }
+
+    DenseMap<size_t, size_t> fromRealIdxToSortedIdx;
+    for (auto [inIdx, in] : llvm::enumerate(inputVec))
+      fromRealIdxToSortedIdx[inIdx] = resultIdxMap[in];
+
     // If this flag is set that means we changed the IR so we cannot return
     // failure
     canBeMerged = true;
-    newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
-                       otherVecOp.getOperands().end());
+
+    // If the results got shuffled, then shuffle the operands before merging.
+    if (inputVec != otherVecOp.getResults()) {
+      for (auto otherVecOpInputVec : otherVecOp.getInputs()) {
+        // use the tempVec again instead of creating another one.
+        tempVec = SmallVector<Value>(inputVec.size());
+        for (auto [realIdx, opernad] : llvm::enumerate(otherVecOpInputVec))
+          tempVec[realIdx] =
+              otherVecOpInputVec[fromRealIdxToSortedIdx[realIdx]];
+
+        newOperands.insert(newOperands.end(), tempVec.begin(), tempVec.end());
+      }
+
+    } else
+      newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
+                         otherVecOp.getOperands().end());
 
     auto &otherBlock = otherVecOp.getBody().front();
     for (auto &otherArg : otherBlock.getArguments()) {
