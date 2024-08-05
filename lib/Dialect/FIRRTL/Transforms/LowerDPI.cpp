@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
@@ -91,6 +92,71 @@ void LowerDPI::collectIntrinsics() {
       funcNameToCallSites[dpi.getFunctionNameAttr()].push_back(dpi);
 }
 
+// Lower FIRRTL type to core dialect types in which array type is replaced with
+// an open array type.
+static Type lowerDPIArgumentType(Type type) {
+  auto loweredType = lowerType(type);
+  return loweredType.replace([](hw::ArrayType array) {
+    return sv::UnpackedOpenArrayType::get(array.getElementType());
+  });
+}
+
+static Value convertToUnpackedArray(ImplicitLocOpBuilder &builder,
+                                    Value loweredValue) {
+  if (isa<IntegerType>(loweredValue.getType()))
+    return loweredValue;
+
+  auto array = dyn_cast<hw::ArrayType>(loweredValue.getType());
+  if (!array) {
+    // TODO: Support bundle or enum types.
+    return {};
+  }
+
+  SmallVector<Value> values;
+  auto length = array.getNumElements();
+  auto width = llvm::Log2_64_Ceil(length);
+
+  // Create an unpacked array from a packed array.
+  for (int i = length - 1; i >= 0; --i) {
+    auto index = builder.create<hw::ConstantOp>(APInt(width, i));
+    auto elem = convertToUnpackedArray(
+        builder, builder.create<hw::ArrayGetOp>(loweredValue, index));
+    if (!elem)
+      return {};
+    values.push_back(elem);
+  }
+
+  return builder.create<sv::UnpackedArrayCreateOp>(
+      hw::UnpackedArrayType::get(lowerType(array.getElementType()), length),
+      values);
+}
+
+static Value getLowered(ImplicitLocOpBuilder &builder, Value value) {
+  // Insert an unrealized conversion to cast FIRRTL type to HW type.
+  if (!value)
+    return value;
+
+  auto type = lowerType(value.getType());
+  Value result = builder.create<mlir::UnrealizedConversionCastOp>(type, value)
+                     ->getResult(0);
+
+  // We may need to cast the lowered value to a DPI specific type (e.g. open
+  // array). Get a DPI type and check if they are same.
+  auto dpiType = lowerDPIArgumentType(value.getType());
+  if (type == dpiType)
+    return result;
+
+  // Cast into unpacked open array type.
+  result = convertToUnpackedArray(builder, result);
+  if (!result) {
+    mlir::emitError(value.getLoc())
+        << "contains a type that currently not supported";
+    return {};
+  }
+
+  return builder.create<sv::UnpackedOpenArrayCastOp>(dpiType, result);
+}
+
 LogicalResult LowerDPI::lower() {
   for (auto [name, calls] : funcNameToCallSites) {
     auto firstDPICallop = calls.front();
@@ -103,25 +169,21 @@ LogicalResult LowerDPI::lower() {
     ImplicitLocOpBuilder builder(firstDPICallop.getLoc(),
                                  circuitOp.getOperation());
     auto lowerCall = [&](DPICallIntrinsicOp dpiOp) {
-      auto getLowered = [&](Value value) -> Value {
-        // Insert an unrealized conversion to cast FIRRTL type to HW type.
-        if (!value)
-          return value;
-        auto type = lowerType(value.getType());
-        return builder.create<mlir::UnrealizedConversionCastOp>(type, value)
-            ->getResult(0);
-      };
       builder.setInsertionPoint(dpiOp);
-      auto clock = getLowered(dpiOp.getClock());
-      auto enable = getLowered(dpiOp.getEnable());
+      auto clock = getLowered(builder, dpiOp.getClock());
+      auto enable = getLowered(builder, dpiOp.getEnable());
       SmallVector<Value, 4> inputs;
       inputs.reserve(dpiOp.getInputs().size());
-      for (auto input : dpiOp.getInputs())
-        inputs.push_back(getLowered(input));
+      for (auto input : dpiOp.getInputs()) {
+        inputs.push_back(getLowered(builder, input));
+        if (!inputs.back())
+          return failure();
+      }
 
       SmallVector<Type> outputTypes;
       if (dpiOp.getResult())
-        outputTypes.push_back(lowerType(dpiOp.getResult().getType()));
+        outputTypes.push_back(
+            lowerDPIArgumentType(dpiOp.getResult().getType()));
 
       auto call = builder.create<sim::DPICallOp>(
           outputTypes, firstDPIDecl.getSymNameAttr(), clock, enable, inputs);
@@ -188,7 +250,7 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
     port.dir = hw::ModulePort::Direction::Input;
     port.name = inputNames ? cast<StringAttr>(inputNames[idx])
                            : builder.getStringAttr(Twine("in_") + Twine(idx));
-    port.type = lowerType(inType);
+    port.type = lowerDPIArgumentType(inType);
     ports.push_back(port);
   }
 
@@ -198,7 +260,7 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
     port.dir = hw::ModulePort::Direction::Output;
     port.name = outputName ? outputName
                            : builder.getStringAttr(Twine("out_") + Twine(idx));
-    port.type = lowerType(outType);
+    port.type = lowerDPIArgumentType(outType);
     ports.push_back(port);
   }
 
