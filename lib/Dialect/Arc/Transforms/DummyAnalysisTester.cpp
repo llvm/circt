@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This is a dummy pass to test the analysis passes it doesn't do any thing. It
-// just walks over the ops to compute some statistics, you can add any 
+// just walks over the ops to compute some statistics, you can add any
 // statistics you need to compute.
 //
 //===----------------------------------------------------------------------===//
@@ -47,7 +47,6 @@ struct DummyAnalysisTesterPass
   StatisticVars statVars;
 };
 } // namespace
-
 
 void DummyAnalysisTesterPass::runOnOperation() {
   for (auto moduleOp : getOperation().getOps<hw::HWModuleOp>()) {

@@ -37,7 +37,7 @@ public:
   size_t getPackingCost() const { return packingCost; }
   // This is a public interface for other passes to call
   size_t getShufflingCost() const { return shufflingCost; }
-  size_t getVectorizeOpsBodyCost()const { return vectoroizeOpsBodyCost; }
+  size_t getVectorizeOpsBodyCost() const { return vectoroizeOpsBodyCost; }
   size_t getAllVectorizeOpsCost() const { return allVectorizeOpsCost; }
 
 private:
