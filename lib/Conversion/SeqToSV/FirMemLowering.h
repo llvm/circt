@@ -10,6 +10,7 @@
 #ifndef CONVERSION_SEQTOSV_FIRMEMLOWERING_H
 #define CONVERSION_SEQTOSV_FIRMEMLOWERING_H
 
+#include "llvm/ADT/MapVector.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/LLVM.h"
