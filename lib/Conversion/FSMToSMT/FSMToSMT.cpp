@@ -101,6 +101,8 @@ LogicalResult MachineOpConverter::dispatch(){
   llvm::SmallVector<mlir::Type> argVarTypes;
   llvm::SmallVector<mlir::Value> argVars;
 
+  llvm:DenseMap<mlir::Value, mlir::Operation> varExprMap;
+
   for (auto a : args){
     argVarTypes.push_back(a.getType());
     argVars.push_back(a);
@@ -128,6 +130,8 @@ LogicalResult MachineOpConverter::dispatch(){
 
     stateTransitionMap.insert({stateName, stateFun});
   }
+
+
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     // second region (idx 1) always conains the transitions
