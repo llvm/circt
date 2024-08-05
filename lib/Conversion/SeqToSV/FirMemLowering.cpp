@@ -9,6 +9,7 @@
 #include "FirMemLowering.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/ADT/MapVector.h"
 
 using namespace circt;
 using namespace hw;
