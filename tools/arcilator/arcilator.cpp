@@ -62,6 +62,10 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#ifdef ARCILATOR_ENABLE_JIT
+#include "arcilator-jit-env.h"
+#endif
+
 #include <optional>
 
 using namespace mlir;
@@ -430,6 +434,8 @@ static LogicalResult processBuffer(
       return failure();
     }
 
+    arc_jit_runtime_env_init();
+
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.transformer = mlir::makeOptimizingTransformer(
@@ -444,6 +450,8 @@ static LogicalResult processBuffer(
             llvm::errs() << "failed to create execution engine: "
                          << info.message() << "\n";
           });
+
+      arc_jit_runtime_env_deinit();
       return failure();
     }
 
@@ -454,12 +462,15 @@ static LogicalResult processBuffer(
             llvm::errs() << "failed to run simulation: " << info.message()
                          << "\n";
           });
+
+      arc_jit_runtime_env_deinit();
       return failure();
     }
 
     void (*simulationFunc)(void **) = *expectedFunc;
     (*simulationFunc)(nullptr);
 
+    arc_jit_runtime_env_deinit();
     return success();
   }
 #endif // ARCILATOR_ENABLE_JIT

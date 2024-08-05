@@ -7,6 +7,55 @@
 #include <ostream>
 #include <vector>
 
+// Sanity checks for binary compatibility
+#ifdef __BYTE_ORDER__
+#if (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
+#error Unsupported endianess
+#endif
+#endif
+static_assert(sizeof(int) == 4, "Unsupported ABI");
+static_assert(sizeof(long long) == 8, "Unsupported ABI");
+
+// ---  Exports to the IR ---
+
+#ifdef _WIN32
+#define ARCEXPORT(rtype) extern "C" __declspec(dllexport) rtype __cdecl
+#else
+#define ARCEXPORT(rtype) extern "C" rtype
+#endif
+
+// libc Adapters
+ARCEXPORT(int) _arc_libc_fprintf(FILE *stream, const char *format, ...) {
+  int result;
+  va_list args;
+  va_start(args, format);
+  result = vfprintf(stream, format, args);
+  va_end(args);
+  return result;
+}
+
+ARCEXPORT(int) _arc_libc_fputs(const char *str, FILE *stream) {
+  return fputs(str, stream);
+}
+
+ARCEXPORT(int) _arc_libc_fputc(int ch, FILE *stream) {
+  return fputc(ch, stream);
+}
+
+// Runtime Environment calls
+
+#define ARC_ENV_DECL_GET_PRINT_STREAM(idarg)                                   \
+  ARCEXPORT(FILE *) _arc_env_get_print_stream(uint32_t idarg)
+
+#ifndef ARC_NO_DEFAULT_GET_PRINT_STREAM
+ARC_ENV_DECL_GET_PRINT_STREAM(id) {
+  (void)id;
+  return stderr;
+}
+#endif // ARC_NO_DEFAULT_GET_PRINT_STREAM
+
+// ----------------
+
 struct Signal {
   const char *name;
   unsigned offset;
