@@ -1,6 +1,7 @@
 // NOLINTBEGIN
 #pragma once
 #include <array>
+#include <cstdarg>
 #include <cstdint>
 #include <cstring>
 #include <functional>
