@@ -2554,3 +2554,23 @@ firrtl.module @LHSTypes() {
 }
 }
 
+// -----
+
+// expected-error @below {{op does not contain module with same name as circuit}}
+firrtl.circuit "NoMain" { }
+
+// -----
+
+firrtl.circuit "PrivateMain" {
+  // expected-error @below {{main module must be public}}
+  firrtl.module private @PrivateMain() {}
+}
+
+// -----
+
+firrtl.circuit "MainNotModule" {
+  // expected-error @below {{entity with name of circuit must be a module}}
+  func.func @MainNotModule() {
+    return
+  }
+}

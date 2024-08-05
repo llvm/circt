@@ -1,7 +1,7 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lower-intrinsics)))' -verify-diagnostics --split-input-file %s
 
 firrtl.circuit "UnknownIntrinsic" {
-  firrtl.module private @UnknownIntrinsic(in %data: !firrtl.uint<32>) {
+  firrtl.module @UnknownIntrinsic(in %data: !firrtl.uint<32>) {
     %0 = firrtl.wire : !firrtl.uint<32>
     // expected-error @below {{unknown intrinsic}}
     // expected-error @below {{failed to legalize}}
