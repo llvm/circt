@@ -164,6 +164,32 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     builder.create<ConnectOp>(dst, src);
 }
 
+// Get the single outputer for a foreign type value.  This will only return
+// an operation if the value is a block argument or the result of an instance.
+// This is because those are the only things ForeignOutputOps can operate on.
+// If the value is one of these, you should be guaranteed to get an op if one
+// exists (value is not dangling), since the verifier ensures that at most one
+// output exists for each value.
+ForeignOutputOp circt::firrtl::getForeignOutputOf(Value value) {
+  if (isa<FIRRTLType>(value.getType()))
+    return {};
+  ForeignOutputOp result;
+  for (auto &use : value.getUses()) {
+    auto match = dyn_cast<ForeignOutputOp>(use.getOwner());
+    // any non-output uses cancel this.
+    if (!match)
+      return {};
+    // Must be the dest, not the src
+    if (use.getOperandNumber() != 0)
+      return {};
+    // Multiple outputs
+    if (result)
+      return {};
+    result = match;
+  }
+  return result;
+}
+
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
   auto intType = type_cast<IntType>(type);
   assert((!intType.hasWidth() ||

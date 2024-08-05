@@ -808,7 +808,9 @@ bool TypeLoweringVisitor::lowerArg(FModuleLike module, size_t argIndex,
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = type_cast<FIRRTLType>(newArgs[argIndex].pi.type);
+  auto srcType = type_dyn_cast<FIRRTLType>(newArgs[argIndex].pi.type);
+  if (!srcType)
+    return false;
   if (!peelType(srcType, fieldTypes, getPreservationModeForModule(module)))
     return false;
 
@@ -991,7 +993,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
       return false;
     }
     auto wire = builder->create<WireOp>(
-        result.getType(),
+        cast<FIRRTLType>(result.getType()),
         (op.getName() + "_" + op.getPortName(index).getValue()).str());
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
@@ -1220,8 +1222,10 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return builder
-        ->create<WireOp>(mapLoweredType(op.getDataRaw().getType(), field.type),
-                         "", NameKindEnum::DroppableName, attrs, StringAttr{})
+        ->create<WireOp>(
+            mapLoweredType(cast<FIRRTLType>(op.getDataRaw().getType()),
+                           field.type),
+            "", NameKindEnum::DroppableName, attrs, StringAttr{})
         .getResult();
   };
   return lowerProducer(op, clone);

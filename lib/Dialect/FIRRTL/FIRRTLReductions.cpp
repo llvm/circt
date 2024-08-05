@@ -373,12 +373,12 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire =
-          builder
-              .create<firrtl::WireOp>(result.getType(), name,
-                                      firrtl::NameKindEnum::DroppableName,
-                                      instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
+      auto wire = builder
+                      .create<firrtl::WireOp>(
+                          cast<::circt::firrtl::FIRRTLType>(result.getType()),
+                          name, firrtl::NameKindEnum::DroppableName,
+                          instOp.getPortAnnotation(i), StringAttr{})
+                      .getResult();
       invalidateOutputs(builder, wire, invalidCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
@@ -423,12 +423,12 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
       auto result = memOp.getResult(i);
       auto name = builder.getStringAttr(Twine(memOp.getName()) + "_" +
                                         memOp.getPortNameStr(i));
-      auto wire =
-          builder
-              .create<firrtl::WireOp>(result.getType(), name,
-                                      firrtl::NameKindEnum::DroppableName,
-                                      memOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
+      auto wire = builder
+                      .create<firrtl::WireOp>(
+                          cast<firrtl::FIRRTLType>(result.getType()), name,
+                          firrtl::NameKindEnum::DroppableName,
+                          memOp.getPortAnnotation(i), StringAttr{})
+                      .getResult();
       invalidateOutputs(builder, wire, invalidCache, true);
       result.replaceAllUsesWith(wire);
 
@@ -671,7 +671,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
       auto wire =
           builder
               .create<firrtl::WireOp>(
-                  info.type,
+                  cast<firrtl::FIRRTLType>(info.type),
                   (Twine(instOp.getName()) + "_" + info.getName()).str())
               .getResult();
       if (info.isOutput()) {
@@ -785,8 +785,9 @@ struct ConnectSourceOperandForwarder : public Reduction {
     Value newDest;
     if (auto wire = dyn_cast<firrtl::WireOp>(destOp))
       newDest = builder
-                    .create<firrtl::WireOp>(forwardedOperand.getType(),
-                                            wire.getName())
+                    .create<firrtl::WireOp>(
+                        cast<firrtl::FIRRTLType>(forwardedOperand.getType()),
+                        wire.getName())
                     .getResult();
     else {
       auto regName = destOp->getAttrOfType<StringAttr>("name");
@@ -850,7 +851,7 @@ struct DetachSubaccesses : public Reduction {
           op->getLoc(), firrtl::ClockType::get(op->getContext()));
     for (Operation *user : llvm::make_early_inc_range(op->getUsers())) {
       builder.setInsertionPoint(user);
-      auto type = user->getResult(0).getType();
+      auto type = cast<circt::firrtl::FIRRTLType>(user->getResult(0).getType());
       Operation *replOp;
       if (isWire)
         replOp = builder.create<firrtl::WireOp>(user->getLoc(), type);
@@ -911,12 +912,12 @@ struct EagerInliner : public OpReduction<firrtl::InstanceOp> {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
                                         instOp.getPortNameStr(i));
-      auto wire =
-          builder
-              .create<firrtl::WireOp>(result.getType(), name,
-                                      firrtl::NameKindEnum::DroppableName,
-                                      instOp.getPortAnnotation(i), StringAttr{})
-              .getResult();
+      auto wire = builder
+                      .create<firrtl::WireOp>(
+                          cast<firrtl::FIRRTLType>(result.getType()), name,
+                          firrtl::NameKindEnum::DroppableName,
+                          instOp.getPortAnnotation(i), StringAttr{})
+                      .getResult();
       result.replaceAllUsesWith(wire);
       argReplacements.push_back(wire);
     }

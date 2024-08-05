@@ -1243,12 +1243,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Declaration order intentionally reversed to enforce use-before-def in HW
     %sub2_foo, %sub2_bar = firrtl.instance sub2 @moreForeignTypes(in foo: index, out bar: index)
     %sub1_foo, %sub1_bar = firrtl.instance sub1 @moreForeignTypes(in foo: index, out bar: index)
-    firrtl.matchingconnect %sub1_foo, %inOpaque : index
-    firrtl.matchingconnect %sub2_foo, %sub1_bar : index
-    firrtl.matchingconnect %outOpaque, %sub2_bar : index
+    firrtl.foreign_output %sub1_foo, %inOpaque : index
+    firrtl.foreign_output %sub2_foo, %sub1_bar : index
+    firrtl.foreign_output %outOpaque, %sub2_bar : index
   }
   firrtl.module @moreForeignTypes(in %foo: index, out %bar: index) {
-    firrtl.matchingconnect %bar, %foo : index
+    firrtl.foreign_output %bar, %foo : index
   }
 
   // CHECK-LABEL: hw.module @foreignOpsOnForeignTypes
@@ -1258,23 +1258,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:  }
   firrtl.module @foreignOpsOnForeignTypes(in %x: f32, out %y: f32) {
     %0 = arith.addf %x, %x : f32
-    firrtl.matchingconnect %y, %0 : f32
+    firrtl.foreign_output %y, %0 : f32
   }
 
-  // CHECK-LABEL: hw.module @wiresWithForeignTypes
+  // CHECK-LABEL: hw.module @WithForeignTypes
   // CHECK-SAME:      (in %in : f32, out out : f32) {
-  // CHECK-NEXT:    [[ADD1:%.+]] = arith.addf [[ADD2:%.+]], [[ADD2]] : f32
-  // CHECK-NEXT:    [[ADD2]] = arith.addf %in, [[ADD2]] : f32
-  // CHECK-NEXT:    hw.output [[ADD1]] : f32
+  // CHECK-NEXT:    hw.output %in : f32
   // CHECK-NEXT:  }
-  firrtl.module @wiresWithForeignTypes(in %in: f32, out %out: f32) {
-    %w1 = firrtl.wire : f32
-    %w2 = firrtl.wire : f32
-    firrtl.matchingconnect %out, %w2 : f32
-    %0 = arith.addf %w1, %w1 : f32
-    firrtl.matchingconnect %w2, %0 : f32
-    %1 = arith.addf %in, %w1 : f32
-    firrtl.matchingconnect %w1, %1 : f32
+  firrtl.module @WithForeignTypes(in %in: f32, out %out: f32) {
+    firrtl.foreign_output %out, %in : f32
   }
 
   // CHECK-LABEL: LowerReadArrayInoutIntoArrayGet

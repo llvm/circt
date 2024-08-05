@@ -1552,6 +1552,12 @@ LogicalResult FModuleOp::verify() {
           "block argument locations should match signature locations");
   }
 
+  for (auto arg : body->getArguments())
+    if (!isa<FIRRTLType>(arg.getType()) &&
+        getPortDirection(arg.getArgNumber()) == Direction::Out &&
+        !arg.hasOneUse())
+      return emitOpError("output foreign port should have exactly one use");
+
   return success();
 }
 
@@ -2223,6 +2229,14 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 LogicalResult InstanceOp::verify() {
+
+  // Check the foreign types
+  for (auto arg : getResults())
+    if (!isa<FIRRTLType>(arg.getType()) &&
+        getPortDirection(arg.getResultNumber()) == Direction::In &&
+        !arg.hasOneUse())
+      return emitOpError("input foreign port should have exactly one use");
+
   // The instance may only be instantiated under its required layers.
   auto ambientLayers = getAmbientLayersAt(getOperation());
   SmallVector<SymbolRefAttr> missingLayers;
@@ -3663,6 +3677,22 @@ LogicalResult MatchingConnectOp::verify() {
 
   if (failed(checkConnectConditionality(*this)))
     return failure();
+
+  return success();
+}
+
+LogicalResult ForeignOutputOp::verify() {
+  // Check that the flows make sense.
+  if (failed(checkConnectFlow(*this)))
+    return failure();
+
+  if (!isa<BlockArgument>(getDest()) &&
+      !isa<InstanceOp>(getDest().getDefiningOp()))
+    return emitError("foreign output destination must be an instance or port");
+
+  if (!getDest().hasOneUse())
+    return emitError(
+        "foreign value in instance or module must have only one user");
 
   return success();
 }
