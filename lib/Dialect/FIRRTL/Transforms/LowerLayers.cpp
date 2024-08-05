@@ -123,7 +123,8 @@ static SmallString<32> fileNameForLayer(StringRef circuitName,
 }
 
 /// For a layerblock `@A::@B::@C`, the verilog macro is `A_B_C`.
-static SmallString<32> macroNameForLayer(ArrayRef<StringAttr> layerName) {
+static SmallString<32>
+macroNameForLayer(ArrayRef<FlatSymbolRefAttr> layerName) {
   SmallString<32> result;
   for (auto part : layerName)
     appendName(part, result);
@@ -137,8 +138,7 @@ static SmallString<32> macroNameForLayer(ArrayRef<StringAttr> layerName) {
 class LowerLayersPass
     : public circt::firrtl::impl::LowerLayersBase<LowerLayersPass> {
   hw::OutputFileAttr getOutputFile(SymbolRefAttr layerName) {
-    auto layer =
-        cast<LayerOp>(SymbolTable::lookupSymbolIn(getOperation(), layerName));
+    auto layer = symbolToLayer.lookup(layerName);
     if (!layer)
       return nullptr;
     return layer->getAttrOfType<hw::OutputFileAttr>("output_file");
@@ -181,10 +181,11 @@ class LowerLayersPass
   /// Lower an inline layerblock to an ifdef block.
   void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
 
-  /// Create macro declarations for a given layer, and its child layers.
-  void createMacroDecls(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
-                        SmallVector<StringAttr> &stack);
-  void createMacroDecls(CircuitNamespace &ns, LayerOp layer);
+  /// Preprocess layers to build macro declarations and cache information about
+  /// the layers so that this can be quired later.
+  void preprocessLayers(CircuitNamespace &ns, OpBuilder &b, LayerOp layer,
+                        SmallVector<FlatSymbolRefAttr> &stack);
+  void preprocessLayers(CircuitNamespace &ns, LayerOp layer);
 
   /// Entry point for the function.
   void runOnOperation() override;
@@ -197,6 +198,9 @@ class LowerLayersPass
 
   /// A map from inline layers to their macro names.
   DenseMap<LayerOp, FlatSymbolRefAttr> macroNames;
+
+  /// A mapping of symbol name to layer operation.
+  DenseMap<SymbolRefAttr, LayerOp> symbolToLayer;
 };
 
 /// Multi-process safe function to build a module in the circuit and return it.
@@ -352,8 +356,7 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     if (!layerBlock)
       return WalkResult::advance();
 
-    auto layer = cast<LayerOp>(
-        SymbolTable::lookupSymbolIn(getOperation(), layerBlock.getLayerName()));
+    auto layer = symbolToLayer.lookup(layerBlock.getLayerName());
 
     if (layer.getConvention() == LayerConvention::Inline) {
       lowerInlineLayerBlock(layer, layerBlock);
@@ -658,10 +661,14 @@ void LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   });
 }
 
-void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, OpBuilder &b,
+void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, OpBuilder &b,
                                        LayerOp layer,
-                                       SmallVector<StringAttr> &stack) {
-  stack.emplace_back(layer.getSymNameAttr());
+                                       SmallVector<FlatSymbolRefAttr> &stack) {
+  stack.emplace_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
+  ArrayRef stackRef(stack);
+  symbolToLayer.insert(
+      {SymbolRefAttr::get(stackRef.front().getAttr(), stackRef.drop_front()),
+       layer});
   if (layer.getConvention() == LayerConvention::Inline) {
     auto *ctx = &getContext();
     auto macName = macroNameForLayer(stack);
@@ -677,14 +684,14 @@ void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, OpBuilder &b,
     macroNames[layer] = FlatSymbolRefAttr::get(&getContext(), symNameAttr);
   }
   for (auto child : layer.getOps<LayerOp>())
-    createMacroDecls(ns, b, child, stack);
+    preprocessLayers(ns, b, child, stack);
   stack.pop_back();
 }
 
-void LowerLayersPass::createMacroDecls(CircuitNamespace &ns, LayerOp layer) {
+void LowerLayersPass::preprocessLayers(CircuitNamespace &ns, LayerOp layer) {
   OpBuilder b(layer);
-  SmallVector<StringAttr> stack;
-  createMacroDecls(ns, b, layer, stack);
+  SmallVector<FlatSymbolRefAttr> stack;
+  preprocessLayers(ns, b, layer, stack);
 }
 
 /// Process a circuit to remove all layer blocks in each module and top-level
@@ -712,8 +719,9 @@ void LowerLayersPass::runOnOperation() {
       continue;
     }
     // Build verilog macro declarations for each inline layer declarations.
+    // Cache layer symbol refs for lookup later.
     if (auto layerOp = dyn_cast<LayerOp>(op)) {
-      createMacroDecls(ns, layerOp);
+      preprocessLayers(ns, layerOp);
       continue;
     }
   }
