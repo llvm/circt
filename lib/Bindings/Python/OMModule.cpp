@@ -366,15 +366,6 @@ Map::dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key) {
 // Convert a generic MLIR Attribute to a PythonValue. This is basically a C++
 // fast path of the parts of attribute_to_var that we use in the OM dialect.
 static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
-  if (mlirAttributeIsAInteger(attr)) {
-    MlirType type = mlirAttributeGetType(attr);
-    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
-      return py::int_(mlirIntegerAttrGetValueInt(attr));
-    if (mlirIntegerTypeIsSigned(type))
-      return py::int_(mlirIntegerAttrGetValueSInt(attr));
-    return py::int_(mlirIntegerAttrGetValueUInt(attr));
-  }
-
   if (omAttrIsAIntegerAttr(attr)) {
     auto strRef = omIntegerAttrToString(attr);
     return py::int_(py::str(strRef.data, strRef.length));
@@ -389,8 +380,18 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
     return py::str(strRef.data, strRef.length);
   }
 
+  // BoolAttr's are IntegerAttr's, check this first.
   if (mlirAttributeIsABool(attr)) {
     return py::bool_(mlirBoolAttrGetValue(attr));
+  }
+
+  if (mlirAttributeIsAInteger(attr)) {
+    MlirType type = mlirAttributeGetType(attr);
+    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+      return py::int_(mlirIntegerAttrGetValueInt(attr));
+    if (mlirIntegerTypeIsSigned(type))
+      return py::int_(mlirIntegerAttrGetValueSInt(attr));
+    return py::int_(mlirIntegerAttrGetValueUInt(attr));
   }
 
   if (omAttrIsAReferenceAttr(attr)) {
