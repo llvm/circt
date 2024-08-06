@@ -24,6 +24,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-firtool-test
   circt-as
   circt-dis
+  circt-lec
   circt-opt
   circt-translate
   circt-reduce
