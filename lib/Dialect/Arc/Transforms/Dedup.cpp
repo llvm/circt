@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <variant>
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/IR/BuiltinAttributes.h"
