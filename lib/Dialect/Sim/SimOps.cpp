@@ -77,7 +77,7 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
            << getCallee() << "'";
   if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
     return success();
-  return emitError("callee must be sim.dpi.func or func.func but got '")
+  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
          << referencedOp->getName() << "'";
 }
 
