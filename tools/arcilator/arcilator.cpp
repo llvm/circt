@@ -52,6 +52,7 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -434,7 +435,15 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    arc_jit_runtime_env_init();
+    auto envInitResult = arc_jit_runtime_env_init();
+    if (envInitResult != 0) {
+      llvm::errs() << "Initialization of arcilator runtime library failed ("
+                   << envInitResult << ").\n";
+      return failure();
+    }
+
+    auto envDeinit =
+        llvm::make_scope_exit([] { arc_jit_runtime_env_deinit(); });
 
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
@@ -450,8 +459,6 @@ static LogicalResult processBuffer(
             llvm::errs() << "failed to create execution engine: "
                          << info.message() << "\n";
           });
-
-      arc_jit_runtime_env_deinit();
       return failure();
     }
 
@@ -462,15 +469,12 @@ static LogicalResult processBuffer(
             llvm::errs() << "failed to run simulation: " << info.message()
                          << "\n";
           });
-
-      arc_jit_runtime_env_deinit();
       return failure();
     }
 
     void (*simulationFunc)(void **) = *expectedFunc;
     (*simulationFunc)(nullptr);
 
-    arc_jit_runtime_env_deinit();
     return success();
   }
 #endif // ARCILATOR_ENABLE_JIT

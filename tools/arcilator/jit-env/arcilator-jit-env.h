@@ -20,4 +20,4 @@
 // is linked and loaded before the JIT engine starts.
 
 ARCJITENV_API int arc_jit_runtime_env_init(void);
-ARCJITENV_API int arc_jit_runtime_env_deinit(void);
+ARCJITENV_API void arc_jit_runtime_env_deinit(void);
