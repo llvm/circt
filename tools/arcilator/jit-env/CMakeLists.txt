@@ -1,7 +1,7 @@
 add_library(arc-jit-env SHARED arcilator-jit-env.cpp)
 
 if(WIN32)
-# Put the DLL into the binay directory so we don't have
+# Put the DLL into the binary directory so we don't have
 # to worry about it not being found.
 set_target_properties(arc-jit-env
     PROPERTIES
@@ -10,7 +10,8 @@ set_target_properties(arc-jit-env
         CXX_VISIBILITY_PRESET "default"
 )
 install(TARGETS arc-jit-env
-  DESTINATION bin
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   COMPONENT arc-jit-env
 )
 
@@ -23,7 +24,7 @@ set_target_properties(arc-jit-env
         CXX_VISIBILITY_PRESET "default"
 )
 install(TARGETS arc-jit-env
-  DESTINATION lib
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
   COMPONENT arc-jit-env
 )
 
