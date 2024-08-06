@@ -369,6 +369,13 @@ void ContainersToHWPass::runOnOperation() {
   target.addIllegalOp<ContainerOp, ContainerInstanceOp, ThisOp>();
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
+  // Remove the name of the ibis.design's from the namespace - The ibis.design
+  // op will be removed after this pass, and there may be ibis.component's
+  // inside the design that have the same name as the design; we want that
+  // name to persist, and not be falsely considered a duplicate.
+  for (auto designOp : getOperation().getOps<DesignOp>())
+    modNamespace.erase(designOp.getSymName());
+
   // Parts of the conversion patterns will update operations in place, which in
   // turn requires the updated operations to be legalizeable. These in-place ops
   // also include ibis ops that eventually will get replaced once all of the
