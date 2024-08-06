@@ -35,11 +35,13 @@ public:
     nextIndex.insert({"", 0});
   }
   Namespace(const Namespace &other) = default;
-  Namespace(Namespace &&other) : nextIndex(std::move(other.nextIndex)) {}
+  Namespace(Namespace &&other)
+      : nextIndex(std::move(other.nextIndex)), locked(other.locked) {}
 
   Namespace &operator=(const Namespace &other) = default;
   Namespace &operator=(Namespace &&other) {
     nextIndex = std::move(other.nextIndex);
+    locked = other.locked;
     return *this;
   }
 
@@ -61,10 +63,17 @@ public:
 
   /// Removes a symbol from the namespace. Returns true if the symbol was
   /// removed, false if the symbol was not found.
-  bool erase(llvm::StringRef symbol) { return nextIndex.erase(symbol); }
+  /// This is only allowed to be called _before_ any call to newName.
+  bool erase(llvm::StringRef symbol) {
+    assert(!locked && "Cannot erase names from a locked namespace");
+    return nextIndex.erase(symbol);
+  }
 
   /// Empty the namespace.
-  void clear() { nextIndex.clear(); }
+  void clear() {
+    nextIndex.clear();
+    locked = false;
+  }
 
   /// Return a unique name, derived from the input `name`, and add the new name
   /// to the internal namespace.  There are two possible outcomes for the
@@ -74,6 +83,7 @@ public:
   /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
   ///    `0` and incrementing by one each time (`_0`, ...).
   StringRef newName(const Twine &name) {
+    locked = true;
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     llvm::SmallString<64> tryName;
@@ -107,6 +117,7 @@ public:
   /// 2. The name is given a suffix `_<n>_<suffix>` where `<n>` is a number
   ///    starting from `0` and incrementing by one each time.
   StringRef newName(const Twine &name, const Twine &suffix) {
+    locked = true;
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     llvm::SmallString<64> tryName;
@@ -146,6 +157,11 @@ protected:
   // namespace.  It follows that all values less than the "next index" value are
   // already used.
   llvm::StringMap<size_t> nextIndex;
+
+  // When true, no names can be erased from the namespace. This is to prevent
+  // erasing names after they have been used, thus leaving users of the
+  // namespace in an inconsistent state.
+  bool locked = false;
 };
 
 } // namespace circt
