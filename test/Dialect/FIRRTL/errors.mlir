@@ -2072,6 +2072,20 @@ firrtl.circuit "RWProbeUseDef" {
 
 // -----
 
+firrtl.circuit "RWProbeLayerRequirements" {
+  firrtl.layer @A bind { }
+  firrtl.module @RWProbeLayerRequirements(in %cond : !firrtl.uint<1>) {
+    // expected-note @below {{target is missing layer requirements: @A}}
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      // expected-error @below {{target has insufficient layer requirements}}
+      %rw = firrtl.ref.rwprobe <@RWProbeLayerRequirements::@x> : !firrtl.rwprobe<uint<1>>
+    }
+  }
+}
+
+// -----
+
 firrtl.circuit "MissingClassForObjectPortInModule" {
   // expected-error @below {{'firrtl.module' op references unknown class @Missing}}
   firrtl.module @MissingClassForObjectPortInModule(out %o: !firrtl.class<@Missing()>) {}
@@ -2554,3 +2568,23 @@ firrtl.module @LHSTypes() {
 }
 }
 
+// -----
+
+// expected-error @below {{op does not contain module with same name as circuit}}
+firrtl.circuit "NoMain" { }
+
+// -----
+
+firrtl.circuit "PrivateMain" {
+  // expected-error @below {{main module must be public}}
+  firrtl.module private @PrivateMain() {}
+}
+
+// -----
+
+firrtl.circuit "MainNotModule" {
+  // expected-error @below {{entity with name of circuit must be a module}}
+  func.func @MainNotModule() {
+    return
+  }
+}

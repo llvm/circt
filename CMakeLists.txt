@@ -592,6 +592,13 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # harder than it ought to be.
     set_property(
       GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
+    
+    # Disable the installation of headers coming from third-party libraries. We
+    # won't use those APIs directly. Just make them static libraries for the sake
+    # of running slang normally.
+    set_target_properties(fmt PROPERTIES PUBLIC_HEADER "")
+    set_target_properties(unordered_dense PROPERTIES PUBLIC_HEADER "")
+
     install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
   else()
     find_package(slang 3.0 REQUIRED)

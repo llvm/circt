@@ -68,6 +68,11 @@ with Context() as ctx, Location.unknown():
 
       %map = om.map_create %entry1, %entry2: !om.string, !om.integer
       om.class.field @map_create, %map : !om.map<!om.string, !om.integer>
+
+      %true = om.constant true
+      om.class.field @true, %true : i1
+      %false = om.constant false
+      om.class.field @false, %false : i1
     }
 
     om.class @Child(%0: !om.integer) {
@@ -157,7 +162,7 @@ print(obj.get_field_loc("field"))
 
 # CHECK: 14
 print(obj.child.foo)
-# CHECK: loc("-":60:7)
+# CHECK: loc("-":65:7)
 print(obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -223,6 +228,11 @@ for k, v in obj.map_create.items():
   # CHECK-NEXT: X 14
   # CHECK-NEXT: Y 15
   print(k, v)
+
+# CHECK: True
+print(obj.true)
+# CHECK: False
+print(obj.false)
 
 obj = evaluator.instantiate("Client")
 object_dict: Dict[om.Object, str] = {}

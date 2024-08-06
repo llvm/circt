@@ -519,8 +519,16 @@ LogicalResult CircuitOp::verifyRegions() {
 
   mlir::SymbolTable symtbl(getOperation());
 
-  if (!symtbl.lookup(main))
-    return emitOpError().append("Module with same name as circuit not found");
+  auto *mainModule = symtbl.lookup(main);
+  if (!mainModule)
+    return emitOpError().append(
+        "does not contain module with same name as circuit");
+  if (!isa<FModuleLike>(mainModule))
+    return mainModule->emitError(
+        "entity with name of circuit must be a module");
+  if (symtbl.getSymbolVisibility(mainModule) !=
+      mlir::SymbolTable::Visibility::Public)
+    return mainModule->emitError("main module must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -6193,10 +6201,30 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     }
     return success();
   };
+
+  auto checkLayers = [&](Location loc) -> LogicalResult {
+    auto dstLayers = getAmbientLayersAt(target.getOp());
+    auto srcLayers = getLayersFor(getResult());
+    SmallVector<SymbolRefAttr> missingLayers;
+    if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
+      auto diag = emitOpError("target has insufficient layer requirements");
+      auto &note = diag.attachNote(loc);
+      note << "target is missing layer requirements: ";
+      llvm::interleaveComma(missingLayers, note);
+      return failure();
+    }
+    return success();
+  };
+  auto checks = [&](auto type, Location loc) {
+    if (failed(checkLayers(loc)))
+      return failure();
+    return checkFinalType(type, loc);
+  };
+
   if (target.isPort()) {
     auto mod = cast<FModuleLike>(target.getOp());
-    return checkFinalType(mod.getPortType(target.getPort()),
-                          mod.getPortLocation(target.getPort()));
+    return checks(mod.getPortType(target.getPort()),
+                  mod.getPortLocation(target.getPort()));
   }
   hw::InnerSymbolOpInterface symOp =
       cast<hw::InnerSymbolOpInterface>(target.getOp());
@@ -6210,7 +6238,7 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
     return emitOpError("is not dominated by target")
         .attachNote(symOp.getLoc())
         .append("target here");
-  return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
+  return checks(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
 //===----------------------------------------------------------------------===//
