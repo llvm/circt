@@ -231,219 +231,323 @@ module Basic;
   MyStruct s3 = ~s2;
 endmodule
 
+// CHECK-LABEL: func.func private @dummyA(
+// CHECK-LABEL: func.func private @dummyB(
+// CHECK-LABEL: func.func private @dummyC(
+function void dummyA(); endfunction
+function void dummyB(); endfunction
+function void dummyC(); endfunction
+
+// CHECK-LABEL: func.func private @ConditionalStatements(
+// CHECK-SAME: %arg0: !moore.i1
+// CHECK-SAME: %arg1: !moore.i1
+function void ConditionalStatements(bit x, bit y);
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB2]]
+  // CHECK: ^[[BB2]]:
+  if (x) dummyA();
+
+  // CHECK: [[COND1:%.+]] = moore.and %arg0, %arg1
+  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB2]]
+  // CHECK: ^[[BB2]]:
+  if (x &&& y) dummyA();
+
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB3:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB3]]
+  // CHECK: ^[[BB3]]:
+  if (x)
+    dummyA();
+  else
+    dummyB();
+
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB6:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: [[COND:%.+]] = moore.conversion %arg1 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND]], ^[[BB3:.+]], ^[[BB4:.+]]
+  // CHECK: ^[[BB3]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB5:.+]]
+  // CHECK: ^[[BB4]]:
+  // CHECK: call @dummyC()
+  // CHECK: cf.br ^[[BB5]]
+  // CHECK: ^[[BB5]]:
+  // CHECK: cf.br ^[[BB6]]
+  // CHECK: ^[[BB6]]:
+  if (x)
+    dummyA();
+  else if (y)
+    dummyB();
+  else
+    dummyC();
+
+  // CHECK: [[COND:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: return
+  // CHECK: ^[[BB2]]:
+  if (x) return;
+endfunction
+
+// CHECK-LABEL: func.func private @CaseStatements(
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: %arg1: !moore.i32
+// CHECK-SAME: %arg2: !moore.i32
+// CHECK-SAME: %arg3: !moore.i32
+function void CaseStatements(int x, int a, int b, int c);
+  // CHECK: [[FLAG:%.+]] = moore.add %arg0, %arg0
+  case (x + x)
+    // CHECK: [[COND1:%.+]] = moore.case_eq [[FLAG]], %arg1
+    // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+    // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK: call @dummyA()
+    // CHECK: cf.br ^[[BB3:.+]]
+    a: dummyA();
+    // CHECK: ^[[BB2]]:
+    // CHECK: call @dummyB()
+    // CHECK: cf.br ^[[BB3]]
+    default: dummyB();
+    // CHECK: ^[[BB3]]:
+  endcase
+
+  // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, %arg1
+  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB1:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: [[TMP:%.+]] = moore.add %arg2, %arg3
+  // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, [[TMP]]
+  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB_MATCH]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_EXIT]]
+  // CHECK: ^[[BB_EXIT]]:
+  case (x)
+    a, (b+c): dummyA();
+    default: dummyB();
+  endcase
+
+  // CHECK: [[COND1:%.+]] = moore.casez_eq %arg0, %arg1
+  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB3:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: cf.br ^[[BB3]]
+  // CHECK: ^[[BB3]]:
+  casez (x)
+    a: dummyA();
+  endcase
+
+  // CHECK: [[COND1:%.+]] = moore.casexz_eq %arg0, %arg1
+  // CHECK: [[COND2:%.+]] = moore.conversion [[COND1]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB3:.+]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: cf.br ^[[BB3]]
+  // CHECK: ^[[BB3]]:
+  casex (x)
+    a: dummyA();
+  endcase
+endfunction
+
+// CHECK-LABEL: func.func private @ForLoopStatements(
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: %arg1: !moore.i32
+// CHECK-SAME: %arg2: !moore.i1
+function void ForLoopStatements(int a, int b, bit c);
+  int x;
+
+  // CHECK: moore.blocking_assign %x, %arg0
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %x
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (x = a; x < b; dummyB()) dummyA();
+
+  // CHECK: %y = moore.variable %arg0 : <i32>
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %y
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (int y = a; y < b; dummyB()) dummyA();
+
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
+  // CHECK: ^[[BB_TRUE]]:
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_FALSE]]:
+  // CHECK: cf.br ^[[BB_EXIT]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (; c; dummyB())
+    if (c)
+      continue;
+    else
+      break;
+endfunction
+
+// CHECK-LABEL: func.func private @ForeverLoopStatements(
+// CHECK-SAME: %arg0: !moore.i1
+// CHECK-SAME: %arg1: !moore.i1
+function void ForeverLoopStatements(bit x, bit y);
+  // CHECK: cf.br ^[[BB_BODY:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  forever begin
+    if (x) begin
+      // CHECK: call @dummyA()
+      // CHECK: cf.br ^[[BB_EXIT:.+]]
+      dummyA();
+      break;
+    end else begin
+      // CHECK: call @dummyB()
+      // CHECK: cf.br ^[[BB_BODY]]
+      dummyB();
+      continue;
+    end
+  end
+  // CHECK: ^[[BB_EXIT]]:
+
+  // CHECK: cf.br ^[[BB_BODY:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_BODY]]
+  forever dummyA();
+endfunction
+
+// CHECK-LABEL: func.func private @WhileLoopStatements(
+// CHECK-SAME: %arg0: !moore.i1
+// CHECK-SAME: %arg1: !moore.i1
+function void WhileLoopStatements(bit x, bit y);
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  while (x) dummyA();
+
+  // CHECK: cf.br ^[[BB_BODY:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_EXIT]]:
+  do dummyA(); while (x);
+
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg0 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  while (x) begin
+    if (y) begin
+      // CHECK: call @dummyA()
+      // CHECK: cf.br ^[[BB_EXIT]]
+      dummyA();
+      break;
+    end else begin
+      // CHECK: call @dummyB()
+      // CHECK: cf.br ^[[BB_CHECK]]
+      dummyB();
+      continue;
+    end
+  end
+  // CHECK: ^[[BB_EXIT]]:
+endfunction
+
+// CHECK-LABEL: func.func private @RepeatLoopStatements(
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: %arg1: !moore.i1
+function void RepeatLoopStatements(int x, bit y);
+  // CHECK: cf.br ^[[BB_CHECK:.+]](%arg0 : !moore.i32)
+  repeat (x) begin
+    // CHECK: ^[[BB_CHECK]]([[COUNT:%.+]]: !moore.i32):
+    // CHECK: [[TMP1:%.+]] = moore.bool_cast [[COUNT]] : i32 -> i1
+    // CHECK: [[TMP2:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
+    // CHECK: cf.cond_br [[TMP2]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+    // CHECK: ^[[BB_BODY]]:
+    if (y) begin
+      // CHECK: call @dummyA()
+      // CHECK: cf.br ^[[BB_EXIT]]
+      dummyA();
+      break;
+    end else begin
+      // CHECK: call @dummyB()
+      // CHECK: cf.br ^[[BB_STEP:.+]]
+      dummyB();
+      continue;
+    end
+    // CHECK: ^[[BB_STEP]]:
+    // CHECK: [[TMP1:%.+]] = moore.constant 1 : i32
+    // CHECK: [[TMP2:%.+]] = moore.sub [[COUNT]], [[TMP1]] : i32
+    // CHECK: cf.br ^[[BB_CHECK]]([[TMP2]] : !moore.i32)
+  end
+  // CHECK: ^[[BB_EXIT]]:
+endfunction
+
 // CHECK-LABEL: moore.module @Statements
 module Statements;
   bit x, y, z;
   int i;
   initial begin
-    // CHECK: %a = moore.variable  : <i32>
+    // CHECK: %a = moore.variable : <i32>
     automatic int a;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK moore.blocking_assign %i, [[TMP1]] : i32
     i = a;
-
-    //===------------------------------------------------------------------===//
-    // Conditional statements
-
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[COND:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
-    // CHECK: scf.if [[COND]] {
-    // CHECK:   [[TMP2:%.+]] = moore.read %y :
-    // CHECK:   moore.blocking_assign %x, [[TMP2]] : i1
-    // CHECK: }
-    if (x) x = y;
-    
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[TMP2:%.+]] = moore.read %y
-    // CHECK: [[COND0:%.+]] = moore.and [[TMP1]], [[TMP2]]
-    // CHECK: [[COND1:%.+]] = moore.conversion [[COND0]] : !moore.i1 -> i1
-    // CHECK: scf.if [[COND1]] {
-    // CHECK:   [[TMP3:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP3]]
-    // CHECK: }
-    if (x &&& y) x = y;
-    
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[COND:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
-    // CHECK: scf.if [[COND]] {
-    // CHECK:   [[TMP2:%.+]] = moore.read %z
-    // CHECK:   moore.blocking_assign %x, [[TMP2]]
-    // CHECK: } else {
-    // CHECK:   [[TMP3:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP3]]
-    // CHECK: }
-    if (x) x = z; else x = y;
-
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[COND:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
-    // CHECK: scf.if [[COND]] {
-    // CHECK:   [[TMP2:%.+]] = moore.read %x
-    // CHECK:   moore.blocking_assign %x, [[TMP2]]
-    // CHECK: } else {
-    // CHECK:   [[TMP3:%.+]] = moore.read %y
-    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP3]] : !moore.i1 -> i1
-    // CHECK:   scf.if [[COND]] {
-    // CHECK:     [[TMP4:%.+]] = moore.read %y
-    // CHECK:     moore.blocking_assign %x, [[TMP4]]
-    // CHECK:   } else {
-    // CHECK:     [[TMP5:%.+]] = moore.read %z
-    // CHECK:     moore.blocking_assign %x, [[TMP5]]
-    // CHECK:   }
-    // CHECK: }
-    if (x) begin
-      x = x;
-    end else if (y) begin
-      x = y;
-    end else begin
-      x = z;
-    end
-
-    //===------------------------------------------------------------------===//
-    // Case statements
-
-
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[TMP2:%.+]] = moore.read %x
-    // CHECK: [[TMP3:%.+]] = moore.eq [[TMP1]], [[TMP2]] : i1 -> i1
-    // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP4]] {
-    // CHECK:   [[TMP5:%.+]] = moore.read %x
-    // CHECK:   moore.blocking_assign %x, [[TMP5]] : i1
-    // CHECK: }
-    // CHECK: [[TMP6:%.+]] = moore.read %x
-    // CHECK: [[TMP7:%.+]] = moore.eq [[TMP1]], [[TMP6]] : i1 -> i1
-    // CHECK: [[TMP8:%.+]] = moore.read %y
-    // CHECK: [[TMP9:%.+]] = moore.eq [[TMP1]], [[TMP8]] : i1 -> i1
-    // CHECK: [[TMP10:%.+]] = moore.or [[TMP7]], [[TMP9]] : i1
-    // CHECK: [[TMP11:%.+]] = moore.conversion [[TMP10]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP11]] {
-    // CHECK:   [[TMP12:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP12]] : i1
-    // CHECK: }
-    case (x)
-      x: x = x;
-      x, y: x = y;
-    endcase
-
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: [[TMP2:%.+]] = moore.read %x
-    // CHECK: [[TMP3:%.+]] = moore.eq [[TMP1]], [[TMP2]] : i1 -> i1
-    // CHECK: [[TMP4:%.+]] = moore.conversion [[TMP3]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP4]] {
-    // CHECK:   [[TMP5:%.+]] = moore.read %x
-    // CHECK:   moore.blocking_assign %x, [[TMP5]] : i1
-    // CHECK: }
-    // CHECK: [[TMP6:%.+]] = moore.read %x
-    // CHECK: [[TMP7:%.+]] = moore.eq [[TMP1]], [[TMP6]] : i1 -> i1
-    // CHECK: [[TMP8:%.+]] = moore.read %y
-    // CHECK: [[TMP9:%.+]] = moore.eq [[TMP1]], [[TMP8]] : i1 -> i1
-    // CHECK: [[TMP10:%.+]] = moore.or [[TMP7]], [[TMP9]] : i1
-    // CHECK: [[TMP11:%.+]] = moore.conversion [[TMP10]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP11]] {
-    // CHECK:   [[TMP12:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP12]] : i1
-    // CHECK: }
-    // CHECK: [[TMP13:%.+]] = moore.read %z
-    // CHECK: [[TMP14:%.+]] = moore.eq [[TMP1]], [[TMP13]] : i1 -> i1
-    // CHECK: [[TMP15:%.+]] = moore.conversion [[TMP14]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP15]] {
-    // CHECK:   [[TMP16:%.+]] = moore.read %z
-    // CHECK:   moore.blocking_assign %x, [[TMP16]] : i1
-    // CHECK: }
-    // CHECK: [[TMP17:%.+]] = moore.or [[TMP10]], [[TMP14]] : i1
-    // CHECK: [[TMP18:%.+]] = moore.or [[TMP3]], [[TMP17]] : i1
-    // CHECK: [[TMP19:%.+]] = moore.not [[TMP18]] : i1
-    // CHECK: [[TMP20:%.+]] = moore.conversion [[TMP19]] : !moore.i1 -> i1
-    // CHECK: scf.if [[TMP20]] {
-    // CHECK:   [[TMP21:%.+]] = moore.read %x
-    // CHECK:   moore.blocking_assign %x, [[TMP21]] : i1
-    // CHECK: }
-    case (x)
-      x: x = x;
-      x, y: x = y;
-      z: x = z;
-      default x = x;
-    endcase
-
-    //===------------------------------------------------------------------===//
-    // Loop statements
-
-    // CHECK: [[TMP1:%.+]] = moore.read %x
-    // CHECK: moore.blocking_assign %y, [[TMP1]] : i1
-    // CHECK: scf.while : () -> () {
-    // CHECK:   [[TMP2:%.+]] = moore.read %x
-    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[COND]])
-    // CHECK: } do {
-    // CHECK:   [[TMP3:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP3]] : i1
-    // CHECK:   [[TMP4:%.+]] = moore.read %z
-    // CHECK:   moore.blocking_assign %x, [[TMP4]] : i1
-    // CHECK:   scf.yield
-    // CHECK: }
-    for (y = x; x; x = z) x = y;
-
-    // CHECK: [[TMP:%.+]] = moore.constant true : i1
-    // CHECK: %iv = moore.variable [[TMP]] : <i1>
-    // CHECK: scf.while : () -> () {
-    // CHECK:   [[TMP:%.+]] = moore.read %iv
-    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[COND]])
-    // CHECK: } do {
-    // CHECK:   [[TMP:%.+]] = moore.read %iv
-    // CHECK:   moore.blocking_assign %y, [[TMP]] : i1
-    // CHECK:   [[TMP:%.+]] = moore.read %iv
-    // CHECK:   moore.blocking_assign %x, [[TMP]] : i1
-    // CHECK:   scf.yield
-    // CHECK: }
-    for (bit iv = '1; iv; x = iv) y = iv;
-
-    // CHECK: [[TMP1:%.+]] = moore.read %i
-    // CHECK: scf.while (%arg0 = [[TMP1]]) : (!moore.i32) -> !moore.i32 {
-    // CHECK:   [[TMP2:%.+]] = moore.bool_cast %arg0 : i32 -> i1
-    // CHECK:   [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[TMP3]]) %arg0 : !moore.i32
-    // CHECK: } do {
-    // CHECK: ^bb0(%arg0: !moore.i32):
-    // CHECK:   [[TMP4:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP4]] : i1
-    // CHECK:   [[TMP5:%.+]] = moore.constant 1 : i32
-    // CHECK:   [[TMP6:%.+]] = moore.sub %arg0, [[TMP5]] : i32
-    // CHECK:   scf.yield [[TMP6]] : !moore.i32
-    // CHECK: }
-    repeat (i) x = y;
-
-    // CHECK: scf.while : () -> () {
-    // CHECK:   [[TMP1:%.+]] = moore.read %x
-    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP1]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[COND]])
-    // CHECK: } do {
-    // CHECK:   [[TMP2:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP2]] : i1
-    // CHECK:   scf.yield
-    // CHECK: }
-    while (x) x = y;
-
-    // CHECK: scf.while : () -> () {
-    // CHECK:   [[TMP1:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP1]] : i1
-    // CHECK:   [[TMP2:%.+]] = moore.read %x
-    // CHECK:   [[COND:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
-    // CHECK:   scf.condition([[COND]])
-    // CHECK: } do {
-    // CHECK:   scf.yield
-    // CHECK: }
-    do x = y; while (x);
-
-    // CHECK: scf.while : () -> () {
-    // CHECK:   %true = hw.constant true
-    // CHECK:   scf.condition(%true)
-    // CHECK: } do {
-    // CHECK:   [[TMP1:%.+]] = moore.read %y
-    // CHECK:   moore.blocking_assign %x, [[TMP1]] : i1
-    // CHECK:   scf.yield
-    // CHECK: }
-    forever x = y;
 
     //===------------------------------------------------------------------===//
     // Assignments

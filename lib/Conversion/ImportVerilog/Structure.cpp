@@ -440,11 +440,14 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
     auto procOp = builder.create<moore::ProcedureOp>(
         loc, convertProcedureKind(procNode.procedureKind));
-    procOp.getBodyRegion().emplaceBlock();
     OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(procOp.getBody());
+    builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
     Context::ValueSymbolScope scope(context.valueSymbols);
-    return context.convertStatement(procNode.getBody());
+    if (failed(context.convertStatement(procNode.getBody())))
+      return failure();
+    if (builder.getBlock())
+      builder.create<moore::ReturnOp>(loc);
+    return success();
   }
 
   // Handle parameters.
@@ -913,15 +916,15 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // If there was no explicit return statement provided by the user, insert a
   // default one.
-  if (block.empty() || !block.back().hasTrait<OpTrait::IsTerminator>()) {
+  if (builder.getBlock()) {
     if (returnVar && !subroutine.getReturnType().isVoid()) {
-      returnVar = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
-      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), returnVar);
+      Value read = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), read);
     } else {
       builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), ValueRange{});
     }
   }
-  if (returnVar.use_empty())
+  if (returnVar && returnVar.use_empty())
     returnVar.getDefiningOp()->erase();
   return success();
 }
