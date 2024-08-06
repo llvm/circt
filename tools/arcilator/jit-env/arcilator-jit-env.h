@@ -1,4 +1,15 @@
-// Arcilator JIT runtime environment API facing the arcilator.cpp
+//===- arcilator-jit-env.h - Internal arcilator JIT API -------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Declarations of the JIT runtime environment API facing the arcilator.cpp.
+//
+//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #ifdef _WIN32
