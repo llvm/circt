@@ -201,4 +201,16 @@ firrtl.circuit "Test" {
       firrtl.propassign %foo_in, %str : !firrtl.string
     }
   }
+
+  //===--------------------------------------------------------------------===//
+  // RWProbe under Layer
+  //===--------------------------------------------------------------------===//
+
+  firrtl.module @RWProbeInLayer() {
+    firrtl.layerblock @A {
+      %w = firrtl.wire sym @sym : !firrtl.uint<1>
+      %rwp = firrtl.ref.rwprobe <@RWProbeInLayer::@sym> : !firrtl.rwprobe<uint<1>>
+    }
+  }
+
 }
