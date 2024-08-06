@@ -16,6 +16,7 @@
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Support/Version.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
