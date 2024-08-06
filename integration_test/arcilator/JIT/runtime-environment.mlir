@@ -13,13 +13,12 @@ module {
   llvm.mlir.global internal constant @global_hello("He%c%co \00") {addr_space = 0 : i32}
   llvm.mlir.global internal constant @global_world("World\00") {addr_space = 0 : i32}
 
-  arc.model @dut io !hw.modty<input clk : !seq.clock> {
-  ^bb0(%arg0: !arc.storage<1>):
+  arc.model @dut io !hw.modty<> {
+  ^bb0(%arg0: !arc.storage):
     %cst0 = llvm.mlir.constant(0 : i32) : i32
     %ascii_em = llvm.mlir.constant(33 : i32) : i32
     %ascii_lf = llvm.mlir.constant(10 : i32) : i32
     %ascii_l = llvm.mlir.constant(108 : i32) : i32
-    %in_clk = arc.root_input "clk", %arg0 {offset = 0 : i32} : (!arc.storage<1>) -> !arc.state<i1>
     %stderr = llvm.call @_arc_env_get_print_stream(%cst0) : (i32) -> !llvm.ptr
 
     %hello = llvm.mlir.addressof @global_hello : !llvm.ptr
