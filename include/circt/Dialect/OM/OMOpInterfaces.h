@@ -41,6 +41,11 @@ public:
   mlir::Value getValue() { return this->value; };
 };
 
+struct FieldsArg {
+  mlir::StringAttr name;
+  mlir::Value value;
+};
+
 } // namespace circt::om
 
 #include "circt/Dialect/OM/OMOpInterfaces.h.inc"

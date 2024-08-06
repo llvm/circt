@@ -115,16 +115,16 @@ def ClassFieldOp : OMClassFieldLike<"class.field",
   }];
 }
 
-def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">,
-    RegionKindInterface, NoTerminator]> {
-  let regions = (region
-    SizedRegion<1>:$body
-  );
+def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">]> {
+  // let regions = (region
+  //   SizedRegion<1>:$body
+  // );
+  let arguments = (ins Variadic<AnyType>:$fieldArgs);
 
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    mlir::Block *getBodyBlock() { return &getBody().front(); }
+    // mlir::Block *getBodyBlock() { return &getBody().front(); }
     llvm::SmallVector<FieldValue> getFieldsValues();
 
     // Implement RegionKindInterface.

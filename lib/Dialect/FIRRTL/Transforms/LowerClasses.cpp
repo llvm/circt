@@ -1619,6 +1619,21 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
+// struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
+//   using OpConversionPattern::OpConversionPattern;
+//
+//   LogicalResult
+//   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
+//                   ConversionPatternRewriter &rewriter) const override {
+//     rewriter.modifyOpInPlace(op, [&]() {
+//       for (auto field : op.getFields()) {
+//         field.setType(typeConverter->convertType(field.getType()));
+//       }
+//     });
+//     return success();
+//   }
+// };
+
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1880,6 +1895,7 @@ static void populateRewritePatterns(
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
+  //patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,
