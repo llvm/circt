@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <variant>
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -14,6 +13,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/SHA256.h"
+#include <variant>
 
 #define DEBUG_TYPE "arc-dedup"
 
