@@ -43,6 +43,7 @@
         // CHECK: moore.nonblocking_assign %v, %[[TMP2]] : l42
         moore.nonblocking_assign %7, %8 : l9002
       }
+      moore.return
     }
     moore.output
   }
@@ -73,6 +74,7 @@ moore.module @Nested() {
     // CHECK: %[[TMP5:.+]] = moore.extract %[[TMP2]] from 0 : i96 -> i32
     // CHECK: moore.blocking_assign %y, %[[TMP5]] : i32
     moore.blocking_assign %3, %6 : i96
+    moore.return
   }
   moore.output
 }
