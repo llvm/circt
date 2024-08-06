@@ -75,7 +75,10 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!referencedOp)
     return emitError("cannot find function declaration '")
            << getCallee() << "'";
-  return success(isa<func::FuncOp, sim::DPIFuncOp>(referencedOp));
+  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be sim.dpi.func or func.func but got '")
+         << referencedOp->getName() << "'";
 }
 
 void DPIFuncOp::print(OpAsmPrinter &p) {

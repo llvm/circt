@@ -13,13 +13,28 @@ sim.func.dpi @foo(out arg0: i32, in %arg1: i32, out arg2: i32)
 // CHECK-NEXT:    return %4, %5 : i32, i32
 // CHECK-NEXT:   }
 
+// CHECK-LABEL:  func.func @bar_wrapper(%arg0: i32) -> (i32, i32) {
+// CHECK-NEXT:    %0 = llvm.mlir.constant(1 : i64) : i64
+// CHECK-NEXT:    %1 = llvm.alloca %0 x i32 : (i64) -> !llvm.ptr
+// CHECK-NEXT:    %2 = llvm.mlir.constant(1 : i64) : i64
+// CHECK-NEXT:    %3 = llvm.alloca %2 x i32 : (i64) -> !llvm.ptr
+// CHECK-NEXT:    call @bar_c_name(%1, %arg0, %3) : (!llvm.ptr, i32, !llvm.ptr) -> ()
+// CHECK-NEXT:    %4 = llvm.load %1 : !llvm.ptr -> i32
+// CHECK-NEXT:    %5 = llvm.load %3 : !llvm.ptr -> i32
+// CHECK-NEXT:    return %4, %5 : i32, i32
+// CHECK-NEXT:   }
+sim.func.dpi @bar(out arg0: i32, in %arg1: i32, out arg2: i32) attributes {verilogName="bar_c_name"}
+func.func @bar_c_name(%arg0: !llvm.ptr, %arg1: i32, %arg2: !llvm.ptr) {
+  func.return
+}
+
 // CHECK-LABEL: hw.module @dpi_call
 hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i32,
           out o1: i32, out o2: i32, out o3: i32, out o4: i32) {
   // CHECK-NEXT: %0:2 = sim.func.dpi.call @foo_wrapper(%in) clock %clock : (i32) -> (i32, i32)
-  // CHECK-NEXT: %1:2 = sim.func.dpi.call @foo_wrapper(%in) : (i32) -> (i32, i32)
+  // CHECK-NEXT: %1:2 = sim.func.dpi.call @bar_wrapper(%in) : (i32) -> (i32, i32)
   // CHECK-NEXT: hw.output %0#0, %0#1, %1#0, %1#1 : i32, i32, i32, i32
   %0, %1 = sim.func.dpi.call @foo(%in) clock %clock : (i32) -> (i32, i32)
-  %2, %3 = sim.func.dpi.call @foo(%in) : (i32) -> (i32, i32)
+  %2, %3 = sim.func.dpi.call @bar(%in) : (i32) -> (i32, i32)
   hw.output %0, %1, %2, %3 : i32, i32, i32, i32
 }

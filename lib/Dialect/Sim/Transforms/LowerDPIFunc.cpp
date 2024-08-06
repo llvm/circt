@@ -57,6 +57,7 @@ struct LoweringState {
   DenseMap<StringAttr, func::FuncOp> dpiFuncDeclMapping;
   circt::Namespace nameSpace;
 };
+
 struct LowerDPIFuncPass : public sim::impl::LowerDPIFuncBase<LowerDPIFuncPass> {
 
   LogicalResult lowerDPI();
@@ -123,7 +124,7 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   SmallVector<LLVM::AllocaOp> functionOutputAllocas;
 
   size_t inputIndex = 0;
-  for (auto [idx, arg] : llvm::enumerate(moduleType.getPorts())) {
+  for (auto arg : moduleType.getPorts()) {
     if (arg.dir == hw::ModulePort::InOut)
       return funcOp->emitError() << "inout is currently not supported";
 
