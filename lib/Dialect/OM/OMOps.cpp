@@ -15,6 +15,7 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include <iostream>
 
 using namespace mlir;
 using namespace circt::om;
@@ -242,28 +243,19 @@ llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
 }
 
 llvm::SmallVector<FieldValue> circt::om::ClassOp::getFieldValues() {
-  llvm::SmallVector<FieldValue> result;
-  auto fieldsOp = this->getFieldsOp();
-  auto fields = fieldsOp->getOperands();
-  if (fields.empty())
-    return result;
-
-  auto fieldNames = cast<ArrayAttr>(fieldsOp->getAttr("field_names"));
-  assert(fields.size() == fieldNames.size() &&
-         "expected same number of fields and names");
-
-  for (size_t i = 0; i < fields.size(); i++) {
-    auto field = fields[i];
-    result.push_back(FieldValue(cast<StringAttr>(fieldNames[i]), field));
-  }
-
-  return result;
+  ClassFieldsOp fieldsOp = cast<ClassFieldsOp>(this->getFieldsOp());
+  return fieldsOp.getFieldsValues();
 }
 
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
-  auto op = builder.create<ClassFieldsOp>(loc, fieldValues);
+  ClassFieldsOp op = builder.create<ClassFieldsOp>(loc);
+  OpBuilder innerBuilder = OpBuilder::atBlockBegin(op.getBodyBlock());
+  for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
+    // TODO: Unfuse locs, remove string attr
+    innerBuilder.create<ClassFieldOp>(loc, cast<StringAttr>(name).getValue(), value);
+  }
   op.getOperation()->setAttr(
       "field_names", mlir::ArrayAttr::get(this->getContext(), fieldNames));
 }
@@ -273,6 +265,49 @@ void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
   this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldValues);
+}
+
+
+//===----------------------------------------------------------------------===//
+// ClassFieldOp
+//===----------------------------------------------------------------------===//
+
+Type circt::om::ClassFieldOp::getType() { return getValue().getType(); }
+
+void circt::om::ClassFieldOp::setType(Type type) {
+  return getValue().setType(type);
+}
+
+//===----------------------------------------------------------------------===//
+// ClassFieldsOp
+//===----------------------------------------------------------------------===//
+
+llvm::SmallVector<FieldValue>
+circt::om::ClassFieldsOp::getFieldsValues() {
+  llvm::SmallVector<FieldValue> result;
+  this->walk([&](ClassFieldOp field) {
+    result.push_back(FieldValue(
+      StringAttr::get(this->getContext(), field.getName()), field.getValue()));
+  });
+
+  return result;
+}
+
+
+ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
+                                            OperationState &state) {
+  Region *region = state.addRegion();
+  if (parser.parseRegion(*region))
+    return failure();
+  if (region->empty())
+    region->emplaceBlock();
+  return success();
+}
+
+void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
+  printer << " ";
+  printer.printRegion(this->getBody());
+  printer.printOptionalAttrDictWithKeyword(this->getOperation()->getAttrs());
 }
 
 

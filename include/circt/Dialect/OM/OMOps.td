@@ -58,6 +58,11 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
+class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
+  OMOp<mnemonic, traits # [
+    DeclareOpInterfaceMethods<ClassFieldLike>]> {
+}
+
 class OMClassFieldsLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [Terminator, ReturnLike, Pure,
     DeclareOpInterfaceMethods<ClassFieldsLike>]> {
@@ -99,10 +104,40 @@ def ClassOp : OMClassLike<"class", [
   }];
 }
 
-def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">]> {
-  let arguments = (ins Variadic<AnyType>:$fields);
+def ClassFieldOp : OMClassFieldLike<"class.field",
+    [HasParent<"ClassFieldsOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$name,
+    AnyType:$value
+  );
+  let assemblyFormat = [{
+    $name `,` $value  attr-dict `:` type($value)
+  }];
+}
 
-  let assemblyFormat = "attr-dict ($fields^ `:` qualified(type($fields)))?";
+def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">,
+    RegionKindInterface, NoTerminator]> {
+  let regions = (region
+    SizedRegion<1>:$body
+  );
+
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    mlir::Block *getBodyBlock() { return &getBody().front(); }
+    llvm::SmallVector<FieldValue> getFieldsValues();
+
+    // Implement RegionKindInterface.
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::Graph;
+    }
+
+    llvm::SmallVector<Field> getFields() {
+      // TODO: Can we do this cast without a copy?
+      auto values = this->getFieldsValues();
+      return llvm::SmallVector<Field>(values.begin(), values.end());
+    }
+  }];
 }
 
 //===----------------------------------------------------------------------===//
