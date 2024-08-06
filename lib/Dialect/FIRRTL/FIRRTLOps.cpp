@@ -3361,7 +3361,7 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
-// FormalOp and SymbolicOp
+// FormalOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult
@@ -3398,10 +3398,6 @@ bool FormalOp::canDiscardOnUseEmpty() { return false; }
 void FormalOp::getAsmBlockArgumentNames(mlir::Region &region,
                                         mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
-}
-
-void SymbolicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  setNameFn(getResult(), getName());
 }
 
 //===----------------------------------------------------------------------===//

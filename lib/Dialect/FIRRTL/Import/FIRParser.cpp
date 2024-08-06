@@ -1747,7 +1747,6 @@ private:
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
-  ParseResult parseSymbolic();
   ParseResult parseInvalidate();
   ParseResult parseLayerBlockOrGroup(unsigned indent);
 
@@ -2667,8 +2666,6 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
-  case FIRToken::kw_symbolic:
-    return parseSymbolic();
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
@@ -3798,23 +3795,6 @@ ParseResult FIRStmtParser::parseConnect() {
   locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
   return success();
-}
-
-ParseResult FIRStmtParser::parseSymbolic() {
-  auto startTok = consumeToken(FIRToken::kw_symbolic);
-
-  StringRef id;
-  FIRRTLType type;
-  if (parseId(id, "expected symbolic value name") ||
-      parseToken(FIRToken::colon, "expected ':' in symbolic value") ||
-      parseType(type, "expected symbolic value type") || parseOptionalInfo())
-    return failure();
-
-  locationProcessor.setLoc(startTok.getLoc());
-
-  auto result = builder.create<SymbolicOp>(type, id);
-  return moduleContext.addSymbolEntry(id, result.getResult(),
-                                      startTok.getLoc());
 }
 
 /// propassign ::= 'propassign' expr expr
@@ -5209,6 +5189,7 @@ FIRCircuitParser::parseFormalBody(const SymbolTable &circuitSymTbl,
 }
 
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
+  auto startLoc = getToken().getLoc();
   consumeToken(FIRToken::kw_formal);
   StringRef id, moduleName, boundSpelling;
   int64_t bound = -1;
@@ -5221,36 +5202,31 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
       parseId(moduleName, "expected the name of a module") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseGetSpelling(boundSpelling) ||
-      parseToken(FIRToken::identifier, "expected parameter 'k' after ','") ||
-      parseToken(FIRToken::equal, "expected '=' after 'k'") ||
-      parseIntLit(bound, "expected integer in k specification") ||
-      parseToken(FIRToken::colon,
-                 "expected ':' after option group definition") ||
+      parseToken(FIRToken::identifier,
+                 "expected parameter 'bound' after ','") ||
+      parseToken(FIRToken::equal, "expected '=' after 'bound'") ||
+      parseIntLit(bound, "expected integer in bound specification") ||
       info.parseOptionalInfo())
     return failure();
 
+  SymbolTable circuitSymTbl(circuit);
+
   // Check that the instance is valid
-  auto referencedModule = getReferencedModule(startTok.getLoc(), moduleName);
+  auto referencedModule = circuitSymTbl.lookup<FModuleLike>(moduleName);
   if (!referencedModule)
     return failure();
 
   // Check that the parameter is valid
-  if (boundSpelling != "bound" || k <= 0)
-    return emitError("Invalid parameter given to formal test: ") << kSpelling,
+  if (boundSpelling != "bound" || bound <= 0)
+    return emitError("Invalid parameter given to formal test: ")
+               << boundSpelling << " = " << bound,
            failure();
 
   // Build out the firrtl mlir op
   auto builder = circuit.getBodyBuilder();
-  auto formal = builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
-  auto &body = formal.getBody().emplaceBlock();
+  auto formal =
+      builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
 
-  // Defer the parsing of the body
-  deferredBodies.emplace_back(
-      DeferredBodyToParse{body, getLexer().getCursor(), indent});
-
-  // Skip to the end of the body
-  if (skipToModuleEnd(indent))
-    return failure();
   return success();
 }
 
@@ -5595,7 +5571,6 @@ ParseResult FIRCircuitParser::parseCircuit(
   // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
-  deferredBodies.reserve(16);
 
   // Parse any contained modules.
   while (true) {

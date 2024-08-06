@@ -424,31 +424,6 @@ def FormalOp : FIRRTLOp<"formal", [
   let assemblyFormat = [{
     $sym_name `of` $moduleName `bound` $bound attr-dict
   }];
-
-  let extraModuleClassDeclaration = [{
-    Block *getBodyBlock() { return &getBody().front(); }
-
-    using iterator = Block::iterator;
-    iterator begin() { return getBodyBlock()->begin(); }
-    iterator end() { return getBodyBlock()->end(); }
-
-    Block::BlockArgListType getArguments() {
-      return getBodyBlock()->getArguments();
-    }
-
-    // Return the block argument for the port with the specified index.
-    BlockArgument getArgument(size_t portNumber);
-
-    OpBuilder getBodyBuilder() {
-      assert(!getBody().empty() && "Unexpected empty 'body' region.");
-      Block &bodyBlock = getBody().front();
-      return OpBuilder::atBlockEnd(&bodyBlock);
-    }
-
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                                  mlir::OpAsmSetValueNameFn setNameFn);
-    ArrayAttr getParameters();
-  }];
 }
 
 def ExtClassOp : FIRRTLModuleLike<"extclass", [

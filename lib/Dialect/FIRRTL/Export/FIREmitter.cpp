@@ -71,7 +71,6 @@ struct Emitter {
   void emitStatementsInBlock(Block &block);
   void emitStatement(WhenOp op);
   void emitStatement(WireOp op);
-  void emitStatement(SymbolicOp op);
   void emitStatement(RegOp op);
   void emitStatement(RegResetOp op);
   void emitStatement(NodeOp op);
@@ -629,21 +628,16 @@ void Emitter::emitDeclaration(OptionOp op) {
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
   startStatement();
-  ps << "formal " << PPExtString(op.getSymName()) << ", "
-     << "k = ";
-  ps.addAsString(op.getK());
+  ps << "formal " << PPExtString(op.getSymName()) << " of "
+     << PPExtString(op.getModuleName()) << ", bound = ";
+  ps.addAsString(op.getBound());
 
   if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
     ps << ", ";
     ps.writeQuotedEscaped(outputFile.getFilename().getValue());
   }
 
-  ps << " : ";
   emitLocationAndNewLine(op);
-  ps.scopedBox(PP::bbox2, [&]() {
-    // Emit the test's body
-    emitStatementsInBlock(op.getBody().front());
-  });
 }
 
 /// Check if an operation is inlined into the emission of their users. For
@@ -666,8 +660,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
     if (isEmittedInline(&bodyOp))
       continue;
     TypeSwitch<Operation *>(&bodyOp)
-        .Case<WhenOp, WireOp, SymbolicOp, RegOp, RegResetOp, NodeOp, StopOp,
-              SkipOp, PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+        .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
+              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
               AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
@@ -717,16 +711,6 @@ void Emitter::emitStatement(WireOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
-    emitTypeWithColon(op.getResult().getType());
-  });
-  emitLocationAndNewLine(op);
-}
-
-void Emitter::emitStatement(SymbolicOp op) {
-  auto legalName = legalize(op.getNameAttr());
-  startStatement();
-  ps.scopedBox(PP::ibox2, [&]() {
-    ps << "symbolic " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
   });
   emitLocationAndNewLine(op);
