@@ -513,6 +513,39 @@ LogicalResult ConcatRefOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayCreateOp
+//===----------------------------------------------------------------------===//
+
+static std::pair<unsigned, UnpackedType> getArrayElements(Type type) {
+  if (auto arrayType = dyn_cast<ArrayType>(type))
+    return {arrayType.getSize(), arrayType.getElementType()};
+  if (auto arrayType = dyn_cast<UnpackedArrayType>(type))
+    return {arrayType.getSize(), arrayType.getElementType()};
+  assert(0 && "expected ArrayType or UnpackedArrayType");
+  return {};
+}
+
+LogicalResult ArrayCreateOp::verify() {
+  auto [size, elementType] = getArrayElements(getType());
+
+  // Check that the number of operands matches the array size.
+  if (getElements().size() != size)
+    return emitOpError() << "has " << getElements().size()
+                         << " operands, but result type requires " << size;
+
+  // Check that the operand types match the array element type. We only need to
+  // check one of the operands, since the `SameTypeOperands` trait ensures all
+  // operands have the same type.
+  if (size > 0) {
+    auto value = getElements()[0];
+    if (value.getType() != elementType)
+      return emitOpError() << "operands have type " << value.getType()
+                           << ", but array requires " << elementType;
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StructCreateOp
 //===----------------------------------------------------------------------===//
 

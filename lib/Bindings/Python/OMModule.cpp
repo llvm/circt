@@ -380,8 +380,18 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
     return py::str(strRef.data, strRef.length);
   }
 
+  // BoolAttr's are IntegerAttr's, check this first.
   if (mlirAttributeIsABool(attr)) {
     return py::bool_(mlirBoolAttrGetValue(attr));
+  }
+
+  if (mlirAttributeIsAInteger(attr)) {
+    MlirType type = mlirAttributeGetType(attr);
+    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+      return py::int_(mlirIntegerAttrGetValueInt(attr));
+    if (mlirIntegerTypeIsSigned(type))
+      return py::int_(mlirIntegerAttrGetValueSInt(attr));
+    return py::int_(mlirIntegerAttrGetValueUInt(attr));
   }
 
   if (omAttrIsAReferenceAttr(attr)) {

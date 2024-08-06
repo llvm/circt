@@ -47,6 +47,20 @@ using namespace firrtl;
 using hw::InnerRefAttr;
 
 //===----------------------------------------------------------------------===//
+// Utility function for classifying a Symbol's dedup-ability.
+//===----------------------------------------------------------------------===//
+
+static bool checkVisibility(mlir::SymbolOpInterface symbol) {
+  // If module has symbol (name) that must be preserved even if unused,
+  // skip it. All symbol uses must be supported, which is not true if
+  // non-private.
+  // Special handling for class-like's and if symbol reports cannot be
+  // discarded.
+  return symbol.isPrivate() &&
+         (symbol.canDiscardOnUseEmpty() || isa<ClassLike>(*symbol));
+}
+
+//===----------------------------------------------------------------------===//
 // Hashing
 //===----------------------------------------------------------------------===//
 
@@ -786,6 +800,20 @@ struct Equivalence {
     }
     if (AnnotationSet::hasAnnotation(b, noDedupClass)) {
       diag.attachNote(b->getLoc()) << "module marked NoDedup";
+      return;
+    }
+    auto aSymbol = cast<mlir::SymbolOpInterface>(a);
+    auto bSymbol = cast<mlir::SymbolOpInterface>(b);
+    if (!checkVisibility(aSymbol)) {
+      diag.attachNote(a->getLoc())
+          << "module is "
+          << (aSymbol.isPrivate() ? "private but not discardable" : "public");
+      return;
+    }
+    if (!checkVisibility(bSymbol)) {
+      diag.attachNote(b->getLoc())
+          << "module is "
+          << (bSymbol.isPrivate() ? "private but not discardable" : "public");
       return;
     }
     auto aGroup =
@@ -1674,13 +1702,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
               ext && !ext.getDefname().has_value())
             return success();
 
-          // If module has symbol (name) that must be preserved even if unused,
-          // skip it. All symbol uses must be supported, which is not true if
-          // non-private.
-          if (!module.isPrivate() ||
-              (!module.canDiscardOnUseEmpty() && !isa<ClassLike>(*module))) {
+          if (!checkVisibility(module))
             return success();
-          }
 
           StructuralHasher hasher(hasherConstants);
           // Calculate the hash of the module and referred module names.

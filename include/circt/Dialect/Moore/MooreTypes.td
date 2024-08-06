@@ -406,6 +406,12 @@ def BitType : MooreType<CPred<[{
   }];
 }
 
+/// A packed or unpacked array type with a fixed size.
+def AnyStaticArrayType : MooreType<
+  Or<[ArrayType.predicate, UnpackedArrayType.predicate]>,
+  "packed or unpacked static array type",
+  "moore::UnpackedType">;
+
 /// A packed or unpacked struct type.
 def AnyStructType : MooreType<
   Or<[StructType.predicate, UnpackedStructType.predicate]>,

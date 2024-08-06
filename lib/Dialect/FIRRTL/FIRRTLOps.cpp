@@ -519,8 +519,16 @@ LogicalResult CircuitOp::verifyRegions() {
 
   mlir::SymbolTable symtbl(getOperation());
 
-  if (!symtbl.lookup(main))
-    return emitOpError().append("Module with same name as circuit not found");
+  auto *mainModule = symtbl.lookup(main);
+  if (!mainModule)
+    return emitOpError().append(
+        "does not contain module with same name as circuit");
+  if (!isa<FModuleLike>(mainModule))
+    return mainModule->emitError(
+        "entity with name of circuit must be a module");
+  if (symtbl.getSymbolVisibility(mainModule) !=
+      mlir::SymbolTable::Visibility::Public)
+    return mainModule->emitError("main module must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module

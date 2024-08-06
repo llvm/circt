@@ -28,13 +28,13 @@ endmodule
 // -----
 module Foo;
   parameter a = 1;
-  // expected-error @below {{unsupported construct}}
+  // expected-error @below {{unsupported module member}}
   defparam a = 2;
 endmodule
 
 // -----
 module Foo;
-  // expected-error @below {{unsupported construct}}
+  // expected-error @below {{unsupported module member}}
   nettype real x;
 endmodule
 

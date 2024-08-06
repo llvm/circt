@@ -44,7 +44,8 @@ void SimplifyProceduresPass::runOnOperation() {
     // Use to collect blocking assignments that have been replaced by a "shadow"
     // variable.
     DenseSet<Operation *> assignOps;
-    for (auto &nestedOp : procedureOp) {
+    procedureOp.walk([&](Operation *op) {
+      auto &nestedOp = *op;
       // Only create a "shadow" varaible for the global variable used by other
       // operations in the procedure body.
       if (isa<ReadOp>(nestedOp) &&
@@ -54,14 +55,14 @@ void SimplifyProceduresPass::runOnOperation() {
         DenseSet<Operation *> users;
         for (auto *user : nestedOp.getOperand(0).getUsers())
           // Ensuring don't handle the users existing in another procedure body.
-          if (user->getBlock() == procedureOp.getBody())
+          if (procedureOp->isAncestor(user))
             users.insert(user);
 
         // Because the operand of moore.event_wait is net.
         if (auto varOp = llvm::dyn_cast_or_null<VariableOp>(
                 nestedOp.getOperand(0).getDefiningOp())) {
           auto resultType = varOp.getResult().getType();
-          builder.setInsertionPointToStart(procedureOp.getBody());
+          builder.setInsertionPointToStart(&procedureOp.getBody().front());
           auto readOp = builder.create<ReadOp>(
               nestedOp.getLoc(), cast<RefType>(resultType).getNestedType(),
               varOp.getResult());
@@ -96,6 +97,6 @@ void SimplifyProceduresPass::runOnOperation() {
           builder.clearInsertionPoint();
           assignOps.erase(assignOp);
         }
-    }
+    });
   });
 }

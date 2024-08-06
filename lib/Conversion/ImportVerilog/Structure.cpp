@@ -97,6 +97,9 @@ struct PackageVisitor : public BaseVisitor {
   // Ignore parameters. These are materialized on-the-fly as `ConstantOp`s.
   LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::SpecparamSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
+    return success();
+  }
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
@@ -106,7 +109,7 @@ struct PackageVisitor : public BaseVisitor {
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
-    mlir::emitError(loc, "unsupported construct: ")
+    mlir::emitError(loc, "unsupported package member: ")
         << slang::ast::toString(node.kind);
     return failure();
   }
@@ -189,6 +192,12 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Skip genvars.
   LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
+    return success();
+  }
+
+  // Ignore type parameters. These have already been handled by Slang's type
+  // checking.
+  LogicalResult visit(const slang::ast::TypeParameterSymbol &) {
     return success();
   }
 
@@ -364,7 +373,7 @@ struct ModuleVisitor : public BaseVisitor {
 
     Value initial;
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertRvalueExpression(*init);
+      initial = context.convertRvalueExpression(*init, loweredType);
       if (!initial)
         return failure();
     }
@@ -384,7 +393,8 @@ struct ModuleVisitor : public BaseVisitor {
 
     Value assignment;
     if (netNode.getInitializer()) {
-      assignment = context.convertRvalueExpression(*netNode.getInitializer());
+      assignment = context.convertRvalueExpression(*netNode.getInitializer(),
+                                                   loweredType);
       if (!assignment)
         return failure();
     }
@@ -413,21 +423,14 @@ struct ModuleVisitor : public BaseVisitor {
 
     const auto &expr =
         assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
-
     auto lhs = context.convertLvalueExpression(expr.left());
-    auto rhs = context.convertRvalueExpression(expr.right());
-    if (!lhs || !rhs)
+    if (!lhs)
       return failure();
 
-    if (auto refOp = lhs.getDefiningOp<moore::StructExtractRefOp>()) {
-      auto input = refOp.getInput();
-      if (isa<moore::SVModuleOp>(input.getDefiningOp()->getParentOp())) {
-        builder.create<moore::StructInjectOp>(loc, input.getType(), input,
-                                              refOp.getFieldNameAttr(), rhs);
-        refOp->erase();
-        return success();
-      }
-    }
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    if (!rhs)
+      return failure();
 
     builder.create<moore::ContinuousAssignOp>(loc, lhs, rhs);
     return success();
@@ -437,11 +440,14 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::ProceduralBlockSymbol &procNode) {
     auto procOp = builder.create<moore::ProcedureOp>(
         loc, convertProcedureKind(procNode.procedureKind));
-    procOp.getBodyRegion().emplaceBlock();
     OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPointToEnd(procOp.getBody());
+    builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
     Context::ValueSymbolScope scope(context.valueSymbols);
-    return context.convertStatement(procNode.getBody());
+    if (failed(context.convertStatement(procNode.getBody())))
+      return failure();
+    if (builder.getBlock())
+      builder.create<moore::ReturnOp>(loc);
+    return success();
   }
 
   // Handle parameters.
@@ -521,7 +527,7 @@ struct ModuleVisitor : public BaseVisitor {
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
-    mlir::emitError(loc, "unsupported construct: ")
+    mlir::emitError(loc, "unsupported module member: ")
         << slang::ast::toString(node.kind);
     return failure();
   }
@@ -638,7 +644,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // only minor differences in semantics.
   if (module->getDefinition().definitionKind !=
       slang::ast::DefinitionKind::Module) {
-    mlir::emitError(loc) << "unsupported construct: "
+    mlir::emitError(loc) << "unsupported definition: "
                          << module->getDefinition().getKindString();
     return {};
   }
@@ -910,15 +916,15 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // If there was no explicit return statement provided by the user, insert a
   // default one.
-  if (block.empty() || !block.back().hasTrait<OpTrait::IsTerminator>()) {
+  if (builder.getBlock()) {
     if (returnVar && !subroutine.getReturnType().isVoid()) {
-      returnVar = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
-      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), returnVar);
+      Value read = builder.create<moore::ReadOp>(returnVar.getLoc(), returnVar);
+      builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), read);
     } else {
       builder.create<mlir::func::ReturnOp>(lowering->op.getLoc(), ValueRange{});
     }
   }
-  if (returnVar.use_empty())
+  if (returnVar && returnVar.use_empty())
     returnVar.getDefiningOp()->erase();
   return success();
 }
