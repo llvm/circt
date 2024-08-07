@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Utils.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
@@ -32,17 +33,6 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
-
-//===----------------------------------------------------------------------===//
-// Helpers
-//===----------------------------------------------------------------------===//
-
-static bool isAncestor(Operation *op, Value value) {
-  if (auto result = dyn_cast<OpResult>(value))
-    return op->isAncestor(result.getOwner());
-  auto argument = cast<BlockArgument>(value);
-  return op->isAncestor(argument.getOwner()->getParentOp());
-}
 
 namespace {
 
@@ -509,13 +499,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
-        if (!isAncestor(layerBlock, src))
+        if (!isAncestorOfValueOwner(layerBlock, src))
           createInputPort(src, op.getLoc());
         continue;
       }
 
       if (auto refCast = dyn_cast<RefCastOp>(op)) {
-        if (!isAncestor(layerBlock, refCast))
+        if (!isAncestorOfValueOwner(layerBlock, refCast))
           createInputPort(refCast.getInput(), op.getLoc());
         continue;
       }
@@ -523,8 +513,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto connect = dyn_cast<FConnectLike>(op)) {
         auto src = connect.getSrc();
         auto dst = connect.getDest();
-        auto srcInLayerBlock = isAncestor(layerBlock, src);
-        auto dstInLayerBlock = isAncestor(layerBlock, dst);
+        auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
+        auto dstInLayerBlock = isAncestorOfValueOwner(layerBlock, dst);
         if (!srcInLayerBlock && !dstInLayerBlock) {
           connect->moveBefore(layerBlock);
           continue;
@@ -570,7 +560,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
       // For any other ops, create input ports for any captured operands.
       for (auto operand : op.getOperands()) {
-        if (!isAncestor(layerBlock, operand))
+        if (!isAncestorOfValueOwner(layerBlock, operand))
           createInputPort(operand, op.getLoc());
       }
     }
