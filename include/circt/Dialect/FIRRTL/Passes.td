@@ -397,11 +397,13 @@ def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
   let summary = "Infer reset synchronicity and add implicit resets";
   let description = [{
     This pass infers whether resets are synchronous or asynchronous, and extends
-    reset-less registers with an asynchronous reset based on the following
+    reset-less registers with a reset based on the following
     annotations:
 
-    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation`
-    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation`
+    - `circt.FullResetAnnotation`
+    - `circt.ExcludeFromFullResetAnnotation`
+    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
+    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
   }];
   let constructor = "circt::firrtl::createInferResetsPass()";
 }
