@@ -2236,6 +2236,8 @@ template <typename OpTy>
 static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
   static_assert(IsAny<OpTy, SeqOp, StaticSeqOp>(),
                 "Should be a StaticSeqOp or SeqOp.");
+  if (parent.getBodyBlock()->empty())
+    return std::nullopt;
   auto &lastOp = parent.getBodyBlock()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
