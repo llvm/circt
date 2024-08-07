@@ -20,11 +20,11 @@ om.class @Thingy(%blue_1: i8, %blue_2: i32) {
   // CHECK: %[[widget_field:.+]] = om.object.field %[[widget]], [@blue_1] : (!om.class.type<@Widget>) -> i8
   %6 = om.object.field %2, [@blue_1] : (!om.class.type<@Widget>) -> i8
 
-  // CHECK: om.class.fields (
-  om.class.fields (
+  // CHECK: om.class.fields(
+  om.class.fields(
     // CHECK: @widget %[[widget]] : !om.class.type<@Widget>,
     @widget %2 : !om.class.type<@Widget>,
-    // CHECK: @gadget, %[[gadget]] : !om.class.type<@Gadget>,
+    // CHECK: @gadget %[[gadget]] : !om.class.type<@Gadget>,
     @gadget %5 : !om.class.type<@Gadget>,
     // CHECK: @blue_1 %blue_1 : i8,
     @blue_1 %blue_1 : i8,
@@ -36,11 +36,11 @@ om.class @Thingy(%blue_1: i8, %blue_2: i32) {
 // CHECK-LABEL: om.class @Widget
 // CHECK-SAME: (%blue_1: i8, %green_1: i32)
 om.class @Widget(%blue_1: i8, %green_1: i32) {
-  // CHECK: om.class.fields
-  om.class.fields (
+  // CHECK: om.class.fields(
+  om.class.fields(
     // CHECK: @blue_1 %blue_1 : i8,
     @blue_1 %blue_1 : i8,
-    // CHECK: @green_1 %green_1 : i32,
+    // CHECK: @green_1 %green_1 : i32
     @green_1 %green_1 : i32
   )
 }
@@ -48,32 +48,35 @@ om.class @Widget(%blue_1: i8, %green_1: i32) {
 // CHECK-LABEL: om.class @Gadget
 // CHECK-SAME: (%green_1: i8, %green_2: i32)
 om.class @Gadget(%green_1: i8, %green_2: i32) {
-  om.class.fields (
+  om.class.fields(
     // CHECK: @green_1 %green_1 : i8,
     @green_1 %green_1 : i8,
-    // CHECK: @green_2 %green_2 : i32,
+    // CHECK: @green_2 %green_2 : i32
     @green_2 %green_2 : i32
   )
 }
 
-// // CHECK-LABEL: om.class @Empty
-// om.class @Empty() {
-//   om.class.fields {}
-// }
-// 
-// // CHECK-LABEL: om.class @DiscardableAttrs
-// // CHECK-SAME: attributes {foo.bar = "baz"}
-// om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
-//   om.class.fields {}
-// }
-// 
-// // CHECK-LABEL: om.class.extern @Extern
-// // CHECK-SAME: (%param1: i1, %param2: i2)
-// om.class.extern @Extern(%param1: i1, %param2: i2) {
-//   // CHECK: om.class.extern.fields {field1 = i3, field2 = i4}
-//   om.class.extern.fields {field1 = i3, field2 = i4}
-// }
-// 
+// CHECK-LABEL: om.class @Empty
+om.class @Empty() {
+  om.class.fields()
+}
+
+// CHECK-LABEL: om.class @DiscardableAttrs
+// CHECK-SAME: attributes {foo.bar = "baz"}
+om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
+  om.class.fields()
+}
+
+// CHECK-LABEL: om.class.extern @Extern
+// CHECK-SAME: (%param1: i1, %param2: i2)
+om.class.extern @Extern(%param1: i1, %param2: i2) {
+  // CHECK: om.class.extern.fields (@field1: i3, field2: i4)
+  om.class.extern.fields(
+    @field1 : i3,
+    @field2 : i4
+  )
+}
+
 // // CHECK-LABEL: om.class @ExternObject
 // // CHECK-SAME: (%[[P0:.+]]: i1, %[[P1:.+]]: i2)
 // om.class @ExternObject(%param1: i1, %param2: i2) {

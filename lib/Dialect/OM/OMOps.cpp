@@ -350,15 +350,14 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
 }
 
 void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
-  printer << " (";
+  printer << "(";
   printer.increaseIndent();
-  printer.printNewline();
   auto fields = this->getFieldsValues();
   for (unsigned i = 0; i < fields.size(); i++) {
     if (i > 0) {
       printer << ",";
-      printer.printNewline();
     }
+    printer.printNewline();
     printer.printSymbolName(fields[i].getName());
     printer << " ";
     printer.printOperand(fields[i].getValue());
@@ -366,7 +365,8 @@ void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
     printer.printType(fields[i].getType());
   }
   printer.decreaseIndent();
-  printer.printNewline();
+  if (!fields.empty())
+    printer.printNewline();
   printer << ")";
   // printer.printRegion(this->getBody());
   // TODO: attrs
@@ -447,6 +447,85 @@ void circt::om::ClassExternOp::addFields(
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
     llvm::ArrayRef<mlir::Type> fieldTypes) {
   this->addFields(builder, builder.getFusedLoc(locs), fieldNames, fieldTypes);
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
+
+struct ExternFieldParse : OpAsmParser::Argument {
+  StringAttr name;
+};
+
+static ParseResult parseExternFieldName(OpAsmParser &parser, StringAttr &name) {
+  if (failed(parser.parseSymbolName(name)))
+    return parser.emitError(parser.getCurrentLocation(), "expected field name");
+  return success();
+}
+
+static ParseResult parseExternField(OpAsmParser &parser,
+                              FieldParse &result) {
+  NamedAttrList attrs;
+  if (parseExternFieldName(parser, result.name))
+    return failure();
+  if (parser.parseColonType(result.type) ||
+      parser.parseOptionalAttrDict(attrs) ||
+      parser.parseOptionalLocationSpecifier(result.sourceLoc))
+    return failure();
+  result.attrs = attrs.getDictionary(parser.getContext());
+  return success();
+}
+
+
+ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
+                                            OperationState &state) {
+  llvm::SmallVector<FieldParse> parsedFields;
+  auto parseOnePort = [&]() -> ParseResult {
+    return parseExternField(parser, parsedFields.emplace_back());
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseOnePort, " in field list"))
+    return failure();
+  llvm::SmallVector<NamedAttribute> fieldTypes;
+  llvm::SmallVector<Attribute> fieldNames;
+  // TODO: add field values as args
+  auto *ctx = parser.getContext();
+  for (auto &field : parsedFields) {
+    fieldNames.push_back(cast<Attribute>(mlir::StringAttr(field.name)));
+    fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
+                                              mlir::TypeAttr::get(field.type)));
+  }
+  state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+  state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+  // TODO: field attrs
+  // TODO: field locs
+  return success();
+}
+
+void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
+  printer << "(";
+  printer.increaseIndent();
+  // auto fields = this->getFields();
+  mlir::ArrayAttr fieldNames =
+      cast<ArrayAttr>(this->getOperation()->getAttr("fieldNames"));
+  mlir::DictionaryAttr fieldTypes =
+      cast<DictionaryAttr>(this->getOperation()->getAttr("fieldTypes"));
+  for (unsigned i = 0; i < fieldNames.size(); i++) {
+    auto name = cast<StringAttr>(fieldNames[i]).getValue();
+    auto type = cast<TypeAttr>(fieldTypes.get(name)).getValue();
+    if (i > 0) {
+      printer << ",";
+    }
+    printer.printNewline();
+    printer.printSymbolName(name);
+    printer << " : ";
+    printer.printType(type);
+  }
+  printer.decreaseIndent();
+  if (!fieldNames.empty())
+    printer.printNewline();
+  printer << ")";
+  // TODO: attrs
 }
 
 //===----------------------------------------------------------------------===//
