@@ -22,7 +22,7 @@
 
 #else
 
-#define ARCJITENV_API extern "C"
+#define ARCJITENV_API extern "C" __attribute__((visibility("default")))
 
 #endif // _WIN32
 
