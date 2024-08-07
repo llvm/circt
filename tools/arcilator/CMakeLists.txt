@@ -20,6 +20,7 @@ target_link_libraries(arcilator
   CIRCTOM
   CIRCTSeqToSV
   CIRCTSeqTransforms
+  CIRCTSimTransforms
   CIRCTSupport
   CIRCTTransforms
   MLIRBuiltinToLLVMIRTranslation

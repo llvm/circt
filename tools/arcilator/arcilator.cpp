@@ -22,6 +22,8 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
@@ -249,6 +251,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     opts.tapMemories = observeMemories;
     pm.addPass(arc::createInferMemoriesPass(opts));
   }
+  pm.addPass(sim::createLowerDPIFunc());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -567,6 +570,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     mlir::scf::SCFDialect,
     om::OMDialect,
     seq::SeqDialect,
+    sim::SimDialect,
     sv::SVDialect
   >();
   // clang-format on
