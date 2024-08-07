@@ -63,7 +63,7 @@ struct Statistics {
 struct ClockLowering {
   /// The root clock this lowering is for.
   Value clock;
-  /// A `ClockTreeOp` or `PassThroughOp`.
+  /// A `ClockTreeOp` or `PassThroughOp`  or `InitialOp`.
   Operation *treeOp;
   /// Pass statistics.
   Statistics &stats;
@@ -78,7 +78,7 @@ struct ClockLowering {
 
   ClockLowering(Value clock, Operation *treeOp, Statistics &stats)
       : clock(clock), treeOp(treeOp), stats(stats), builder(treeOp) {
-    assert((isa<ClockTreeOp, PassThroughOp>(treeOp)));
+    assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(treeOp)));
     builder.setInsertionPointToStart(&treeOp->getRegion(0).front());
   }
 
@@ -102,6 +102,7 @@ struct ModuleLowering {
   MLIRContext *context;
   DenseMap<Value, std::unique_ptr<ClockLowering>> clockLowerings;
   DenseMap<Value, GatedClockLowering> gatedClockLowerings;
+  std::unique_ptr<ClockLowering> initialLowering;
   Value storageArg;
   OpBuilder clockBuilder;
   OpBuilder stateBuilder;
@@ -112,6 +113,7 @@ struct ModuleLowering {
 
   GatedClockLowering getOrCreateClockLowering(Value clock);
   ClockLowering &getOrCreatePassThrough();
+  ClockLowering &getOrCreateInitial();
   Value replaceValueWithStateRead(Value value, Value state);
 
   void addStorageArg();
@@ -315,6 +317,15 @@ ClockLowering &ModuleLowering::getOrCreatePassThrough() {
     slot = std::make_unique<ClockLowering>(Value{}, treeOp, stats);
   }
   return *slot;
+}
+
+ClockLowering &ModuleLowering::getOrCreateInitial() {
+  if (!initialLowering) {
+    auto treeOp = clockBuilder.create<InitialOp>(moduleOp.getLoc());
+    treeOp.getBody().emplaceBlock();
+    initialLowering = std::make_unique<ClockLowering>(Value{}, treeOp, stats);
+  }
+  return *initialLowering;
 }
 
 /// Replace all uses of a value with a `StateReadOp` on a state.

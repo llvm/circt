@@ -67,7 +67,7 @@ LogicalResult LowerClocksToFuncsPass::lowerModel(ModelOp modelOp) {
   // Find the clocks to extract.
   SmallVector<Operation *> clocks;
   modelOp.walk([&](Operation *op) {
-    if (isa<ClockTreeOp, PassThroughOp>(op))
+    if (isa<ClockTreeOp, PassThroughOp, InitialOp>(op))
       clocks.push_back(op);
   });
 
@@ -84,7 +84,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
                                                  Value modelStorageArg,
                                                  OpBuilder &funcBuilder) {
   LLVM_DEBUG(llvm::dbgs() << "- Lowering clock " << clockOp->getName() << "\n");
-  assert((isa<ClockTreeOp, PassThroughOp>(clockOp)));
+  assert((isa<ClockTreeOp, PassThroughOp, InitialOp>(clockOp)));
 
   // Add a `StorageType` block argument to the clock's body block which we are
   // going to use to pass the storage pointer to the clock once it has been
@@ -104,7 +104,14 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
   // Pick a name for the clock function.
   SmallString<32> funcName;
   funcName.append(clockOp->getParentOfType<ModelOp>().getName());
-  funcName.append(isa<PassThroughOp>(clockOp) ? "_passthrough" : "_clock");
+
+  if (isa<PassThroughOp>(clockOp))
+    funcName.append("_passthrough");
+  else if (isa<InitialOp>(clockOp))
+    funcName.append(initialFunctionSuffix);
+  else
+    funcName.append("_clock");
+
   auto funcOp = funcBuilder.create<func::FuncOp>(
       clockOp->getLoc(), funcName,
       builder.getFunctionType({modelStorageArg.getType()}, {}));
@@ -120,7 +127,7 @@ LogicalResult LowerClocksToFuncsPass::lowerClock(Operation *clockOp,
     auto builder = ifOp.getThenBodyBuilder();
     builder.create<func::CallOp>(clockOp->getLoc(), funcOp,
                                  ValueRange{modelStorageArg});
-  } else {
+  } else if (isa<PassThroughOp>(clockOp)) {
     builder.create<func::CallOp>(clockOp->getLoc(), funcOp,
                                  ValueRange{modelStorageArg});
   }

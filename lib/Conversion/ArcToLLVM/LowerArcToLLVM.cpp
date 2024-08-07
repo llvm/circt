@@ -318,6 +318,7 @@ namespace {
 struct ModelInfoMap {
   size_t numStateBytes;
   llvm::DenseMap<StringRef, StateInfo> states;
+  FlatSymbolRefAttr initialFnSymbol;
 };
 
 template <typename OpTy>
@@ -378,6 +379,16 @@ struct SimInstantiateOpLowering
     Value zero =
         rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
     rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
+
+    // Call the model's 'initial' function if present.
+    if (model.initialFnSymbol) {
+      auto initialFnType = LLVM::LLVMFunctionType::get(
+          LLVM::LLVMVoidType::get(op.getContext()),
+          {LLVM::LLVMPointerType::get(op.getContext())});
+      rewriter.create<LLVM::CallOp>(loc, initialFnType, model.initialFnSymbol,
+                                    ValueRange{allocated});
+    }
+
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});
     rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
@@ -642,11 +653,20 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(models.size());
   for (ModelInfo &modelInfo : models) {
+    FlatSymbolRefAttr initialSymAttr;
+    if (modelInfo.hasInitialFn) {
+      initialSymAttr = FlatSymbolRefAttr::get(
+          StringAttr::get(&getContext(), Twine(modelInfo.name) + "_initial"));
+      assert(!!cache.getDefinition(initialSymAttr) &&
+             "Missing initial function definition");
+    }
+
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
-    modelMap.insert({modelInfo.name,
-                     ModelInfoMap{modelInfo.numStateBytes, std::move(states)}});
+    modelMap.insert(
+        {modelInfo.name, ModelInfoMap{modelInfo.numStateBytes,
+                                      std::move(states), initialSymAttr}});
   }
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,

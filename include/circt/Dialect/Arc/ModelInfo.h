@@ -36,11 +36,12 @@ struct ModelInfo {
   std::string name;
   size_t numStateBytes;
   llvm::SmallVector<StateInfo> states;
+  bool hasInitialFn;
 
   ModelInfo(std::string name, size_t numStateBytes,
-            llvm::SmallVector<StateInfo> states)
+            llvm::SmallVector<StateInfo> states, bool hasInitialFn)
       : name(std::move(name)), numStateBytes(numStateBytes),
-        states(std::move(states)) {}
+        states(std::move(states)), hasInitialFn(hasInitialFn) {}
 };
 
 /// Collects information about states within the provided Arc model storage

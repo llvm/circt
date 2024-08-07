@@ -452,6 +452,17 @@ def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
   }];
 }
 
+def InitialOp : ArcOp<"initial", [NoTerminator, NoRegionArguments]> {
+  let summary = "Clock-less logic called at the start of simulation";
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+  let extraClassDeclaration = [{
+    mlir::Block &getBodyBlock() { return getBody().front(); }
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Storage Allocation
 //===----------------------------------------------------------------------===//

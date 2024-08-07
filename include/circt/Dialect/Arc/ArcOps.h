@@ -24,6 +24,12 @@
 
 #include "circt/Dialect/Arc/ArcInterfaces.h.inc"
 
+namespace circt {
+namespace arc {
+static constexpr StringLiteral initialFunctionSuffix = "_initial";
+} // namespace arc
+} // namespace circt
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.h.inc"
 
