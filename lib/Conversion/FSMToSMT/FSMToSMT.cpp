@@ -91,6 +91,85 @@ class MachineOpConverter{
 };
 } //namespace 
 
+mlir::Value manageCombExp(Operation &op, SmallVector<mlir::Value> &vec, mlir::OpBuilder &b, Location loc) {
+
+  // if (auto add = dyn_cast<comb::AddOp>(op)) {
+  //   auto combFun = b.create<smt::IntAddOp>(loc, vec[0], vec[1]);
+  //   return combFun;
+  // }
+  // if (auto add = dyn_cast<comb::AndOp>(op)) {
+  //   auto combFun = b.create<comb::AndOp>(loc, vec[0], vec[1]);
+  //   llvm::outs()<<"\n\nfrom manageComb: "<<combFun;
+  //   return combFun;
+  // }
+}
+
+mlir::Value getGuardExpr(SmallVector<std::pair<mlir::Value, mlir::Value>> &varExprMap, Region &guard, mlir::OpBuilder &b, Location loc) {
+
+  for (auto &op : guard.getOps()) {
+    llvm::outs()<<"\n\noperation "<<op;
+
+    if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
+      for (auto e : varExprMap) {
+        if (e.first == retop.getOperand()) {
+          llvm::outs()<<"\n\nreturning "<<e.second;
+          return e.second;
+        }
+      }
+    }
+    llvm::SmallVector<mlir::Value> vec;
+    for (auto operand : op.getOperands()) {
+      vec.push_back(operand);
+    }
+    varExprMap.push_back({manageCombExp(op, vec, b, loc), op.getResult(0)});
+  }
+}
+
+
+//   } else if (auto and_op = dyn_cast<comb::AndOp>(op)) {
+//     return expr(vec[0] && vec[1]);
+//   } else if (auto xor_op = dyn_cast<comb::XorOp>(op)) {
+//     return expr(vec[0] ^ vec[1]);
+//   } else if (auto or_op = dyn_cast<comb::OrOp>(op)) {
+//     return expr(vec[0] | vec[1]);
+//   } else if (auto mul_op = dyn_cast<comb::MulOp>(op)) {
+//     return expr(vec[0] * vec[1]);
+//   } else if (auto icmp = dyn_cast<comb::ICmpOp>(op)) {
+//     circt::comb::ICmpPredicate predicate = icmp.getPredicate();
+//     switch (predicate) {
+//     case circt::comb::ICmpPredicate::eq:
+//       return expr(vec[0] == vec[1]);
+//     case circt::comb::ICmpPredicate::ne:
+//       return expr(vec[0] != vec[1]);
+//     case circt::comb::ICmpPredicate::slt:
+//       return expr(vec[0] < vec[1]);
+//     case circt::comb::ICmpPredicate::sle:
+//       return expr(vec[0] <= vec[1]);
+//     case circt::comb::ICmpPredicate::sgt:
+//       return expr(vec[0] > vec[1]);
+//     case circt::comb::ICmpPredicate::sge:
+//       return expr(vec[0] >= vec[1]);
+//     case circt::comb::ICmpPredicate::ult:
+//       return expr(vec[0] < vec[1]);
+//     case circt::comb::ICmpPredicate::ule:
+//       return expr(vec[0] <= vec[1]);
+//     case circt::comb::ICmpPredicate::ugt:
+//       return expr(vec[0] > vec[1]);
+//     case circt::comb::ICmpPredicate::uge:
+//       return expr(vec[0] >= vec[1]);
+//     case circt::comb::ICmpPredicate::ceq:
+//       return expr(vec[0] == vec[1]);
+//     case circt::comb::ICmpPredicate::cne:
+//       return expr(vec[0] != vec[1]);
+//     case circt::comb::ICmpPredicate::weq:
+//       return expr(vec[0] == vec[1]);
+//     case circt::comb::ICmpPredicate::wne:
+//       return expr(vec[0] != vec[1]);
+//     }
+//   }
+//   assert(false && "LLVM unreachable");
+// }
+
 LogicalResult MachineOpConverter::dispatch(){
   b.setInsertionPoint(machineOp);
   auto loc = machineOp.getLoc();
@@ -101,20 +180,28 @@ LogicalResult MachineOpConverter::dispatch(){
   llvm::SmallVector<mlir::Type> argVarTypes;
   llvm::SmallVector<mlir::Value> argVars;
 
-  llvm:DenseMap<mlir::Value, mlir::Operation> varExprMap;
+  SmallVector<std::pair<mlir::Value, mlir::Value>> varExprMap;
 
   for (auto a : args){
-    argVarTypes.push_back(a.getType());
+    if (a.getType().getIntOrFloatBitWidth()>1)
+      argVarTypes.push_back(b.getType<smt::IntType>());
+    else
+      argVarTypes.push_back(b.getType<smt::BoolType>());
     argVars.push_back(a);
+    varExprMap.push_back({a,a});
   }
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     llvm::outs()<<"\nvar\n";
-    argVarTypes.push_back(variableOp.getResult().getType());
+    if (variableOp.getResult().getType().getIntOrFloatBitWidth()>1)
+      argVarTypes.push_back(b.getType<smt::IntType>());
+    else
+      argVarTypes.push_back(b.getType<smt::BoolType>());
     argVars.push_back(variableOp.getResult());
+    varExprMap.push_back({variableOp.getResult(),variableOp.getResult()});
   }
 
-  llvm:DenseMap<StringRef, mlir::Value> stateTransitionMap;
+  llvm::DenseMap<StringRef, mlir::Value> stateTransitionMap;
 
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     llvm::outs()<<"\nstate\n";
@@ -123,17 +210,11 @@ LogicalResult MachineOpConverter::dispatch(){
 
     llvm::outs()<<stateName;
 
-    auto funcType = b.getFunctionType(argVarTypes, b.getType<smt::BoolType>());
-    auto stateFun = b.create<smt::DeclareFunOp>(loc, funcType);
+    auto stateFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, b.getType<smt::BoolType>()));
 
     stateFun.setNamePrefix(stateName);
 
     stateTransitionMap.insert({stateName, stateFun});
-  }
-
-
-
-  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     // second region (idx 1) always conains the transitions
     for (auto transitionOp : stateOp->getRegion(1).front().getOps<fsm::TransitionOp>()) {
 
@@ -143,9 +224,15 @@ LogicalResult MachineOpConverter::dispatch(){
 
       // auto guard = transitionOp->getRegion(0);
 
-      mlir::PassManager pm(transitionOp.getGuard().getContext());
+      if (!transitionOp->getRegion(0).empty()){
+        // guard
+        llvm::SmallVector<mlir::Type> funIn;
+        // auto funcType = b.getFunctionType(funIn, b.getType<smt::BoolType>());
+      }
 
-      pm.addPass(createConvertCombToSMT());
+      // mlir::PassManager pm(transitionOp.getGuard().getContext());
+
+      // pm.addPass(createConvertCombToSMT());
 
       llvm::DenseMap<mlir::Value, mlir::Value> guardMap;
 
@@ -157,26 +244,32 @@ LogicalResult MachineOpConverter::dispatch(){
 
       // fsm.return comb.icmp ule (comb.add (comb.add %cnt 1) 1) 5
 
-      for (auto &op : transitionOp->getRegion(0).getOps()) {
-        if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
-          // for (auto e : exprMap) {
-          //   if (e.second == retop.getOperand()) {
+      // mlir::Value guardVal = getGuardExpr(varExprMap, transitionOp->getRegion(0), b, loc);
 
-          //     return e.first;
-          //   }
-          // }
-        }
-        llvm::SmallVector<mlir::Value> vec;
-        for (auto operand : op.getOperands()) {
-          vec.push_back(guardMap.find(operand)->getFirst());
-        }
-        exprMap.push_back({manageCombExp(op, vec, c), op.getResult(0)});
-        else{
-          pm.run(&op);
-        }
-      }
+      // mlir::Value realGuard;
+      // for (auto &op : transitionOp->getRegion(0).getOps()) {
+      //   llvm::outs()<<"\n\noperation "<<op;
 
-      // auto result = pm.run(guardOp);
+      //   b.create<smt::IntAddOp>(loc, op.getOperand(0), op.getOperand(1));
+
+        // if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
+        //   for (auto e : varExprMap) {
+        //     if (e.first == retop.getOperand()) {
+        //       llvm::outs()<<"\n\nreturning "<<e.second;
+        //       realGuard = e.second;
+        //     }
+        //   }
+        // }
+        // llvm::SmallVector<mlir::Value> vec;
+        // for (auto operand : op.getOperands()) {
+        //   vec.push_back(operand);
+        // }
+        // auto smtConv = pm.run(&op);
+        // llvm::outs()<<"cmtConv: "<<smtConv;
+        // varExprMap.push_back({manageCombExp(op, vec, b, loc), op.getResult(0)});
+      // }
+
+      // auto result = pm.run(realGuard);
 
       // auto funcType = b.getFunctionType(argVarTypes, b.getType<smt::BoolType>());
       // auto chcFun = b.create<smt::ImpliesOp>(loc, funcType);
@@ -185,6 +278,10 @@ LogicalResult MachineOpConverter::dispatch(){
 
 
   }
+
+  machineOp.erase();
+
+  return success();
 
 
 }
@@ -295,53 +392,7 @@ MachineOpConverter::convertArgsAndVars(MachineOp machine, llvm::SmallVector<mlir
 
 // // @brief Returns expression from Comb dialect operator
  
-// expr manageCombExp(Operation &op, SmallVector<expr> &vec, z3::context &c) {
 
-//   if (auto add = dyn_cast<comb::AddOp>(op)) {
-//     return to_expr(c, vec[0] + vec[1]);
-//   } else if (auto and_op = dyn_cast<comb::AndOp>(op)) {
-//     return expr(vec[0] && vec[1]);
-//   } else if (auto xor_op = dyn_cast<comb::XorOp>(op)) {
-//     return expr(vec[0] ^ vec[1]);
-//   } else if (auto or_op = dyn_cast<comb::OrOp>(op)) {
-//     return expr(vec[0] | vec[1]);
-//   } else if (auto mul_op = dyn_cast<comb::MulOp>(op)) {
-//     return expr(vec[0] * vec[1]);
-//   } else if (auto icmp = dyn_cast<comb::ICmpOp>(op)) {
-//     circt::comb::ICmpPredicate predicate = icmp.getPredicate();
-//     switch (predicate) {
-//     case circt::comb::ICmpPredicate::eq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::ne:
-//       return expr(vec[0] != vec[1]);
-//     case circt::comb::ICmpPredicate::slt:
-//       return expr(vec[0] < vec[1]);
-//     case circt::comb::ICmpPredicate::sle:
-//       return expr(vec[0] <= vec[1]);
-//     case circt::comb::ICmpPredicate::sgt:
-//       return expr(vec[0] > vec[1]);
-//     case circt::comb::ICmpPredicate::sge:
-//       return expr(vec[0] >= vec[1]);
-//     case circt::comb::ICmpPredicate::ult:
-//       return expr(vec[0] < vec[1]);
-//     case circt::comb::ICmpPredicate::ule:
-//       return expr(vec[0] <= vec[1]);
-//     case circt::comb::ICmpPredicate::ugt:
-//       return expr(vec[0] > vec[1]);
-//     case circt::comb::ICmpPredicate::uge:
-//       return expr(vec[0] >= vec[1]);
-//     case circt::comb::ICmpPredicate::ceq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::cne:
-//       return expr(vec[0] != vec[1]);
-//     case circt::comb::ICmpPredicate::weq:
-//       return expr(vec[0] == vec[1]);
-//     case circt::comb::ICmpPredicate::wne:
-//       return expr(vec[0] != vec[1]);
-//     }
-//   }
-//   assert(false && "LLVM unreachable");
-// }
 
 
 // // @brief Returns expression from densemap or constant operator

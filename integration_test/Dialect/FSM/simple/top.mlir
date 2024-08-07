@@ -11,6 +11,8 @@
 
 fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
 
+  %c1 = hw.constant 1: i1
+
   fsm.state @A output  {
     %c_0 = hw.constant 0 : i8
     fsm.output %c_0 : i8
@@ -33,7 +35,7 @@ fsm.machine @top(%arg0: i1, %arg1: i1) -> (i8) attributes {initialState = "A"} {
     fsm.output %c_2 : i8
   } transitions {
     fsm.transition @A guard {
-      %g = comb.and %arg0, %arg1 : i1
+      %g = comb.and %arg0, %c1 : i1
       %h = comb.and %arg0, %g : i1
       fsm.return %h
     }

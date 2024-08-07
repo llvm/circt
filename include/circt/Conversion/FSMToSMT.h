@@ -20,6 +20,7 @@ namespace circt {
 #define GEN_PASS_DECL_CONVERTFSMTOSMT
 #include "circt/Conversion/Passes.h.inc"
 
+
 std::unique_ptr<mlir::Pass> createConvertFSMToSMTPass();
 } // namespace circt
 
