@@ -497,6 +497,37 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         continue;
       }
 
+      // If this operation has non-passive operands defined outside the
+      // layerblock, then it may result in a lowering that creates output ports
+      // on the module.  This is illegal in the FIRRTL spec since no layerblock
+      // may write to values outside it.  Try to fix this up if possible.
+      if (llvm::any_of(op.getOperands(), [&](Value a) {
+            auto type = type_dyn_cast<FIRRTLBaseType>(a.getType());
+            return type && !type.isPassive();
+          })) {
+        // If this is a subfield, subindex, or subaccess op, then try to fix the
+        // problem by moving the value outside the layerblock.  This always
+        // works for subfield and subindex, but may fail for subaccess if the
+        // index is defined inside the layerblock.
+        if (isa<SubfieldOp, SubindexOp, SubaccessOp>(op)) {
+          if (llvm::none_of(op.getOperands(), [&](Value a) {
+                return isAncestorOfValueOwner(layerBlock, a);
+              })) {
+            op.moveBefore(layerBlock);
+            continue;
+          }
+          auto diag =
+              op.emitOpError()
+              << "has a non-passive operand and captures a value defined "
+                 "outside its enclosing bind-convention layerblock.  The "
+                 "'LowerLayers' pass cannot lower this as it would create an "
+                 "output port on the resulting module.";
+          diag.attachNote(layerBlock.getLoc())
+              << "the layerblock is defined here";
+          return WalkResult::interrupt();
+        }
+      }
+
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
         if (!isAncestorOfValueOwner(layerBlock, src))
