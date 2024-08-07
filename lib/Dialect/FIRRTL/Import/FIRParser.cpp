@@ -1720,6 +1720,7 @@ private:
   ParseResult parsePrimExp(Value &result);
   ParseResult parseIntegerLiteralExp(Value &result);
   ParseResult parseListExp(Value &result);
+  ParseResult parseListConcatExp(Value &result);
 
   std::optional<ParseResult> parseExpWithLeadingKeyword(FIRToken keyword);
 
@@ -1978,6 +1979,16 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
   }
+
+  case FIRToken::lp_list_concat: {
+    if (isLeadingStmt)
+      return emitError("unexpected list_create() as start of statement");
+    if (requireFeature(nextFIRVersion, "List concat") ||
+        parseListConcatExp(result))
+      return failure();
+    break;
+  }
+
   case FIRToken::lp_path:
     if (isLeadingStmt)
       return emitError("unexpected path() as start of statement");
@@ -2452,6 +2463,44 @@ ParseResult FIRStmtParser::parseListExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = builder.create<ListCreateOp>(listType, operands);
+  return success();
+}
+
+/// list-concat-exp ::= 'list_concat' '(' exp* ')'
+ParseResult FIRStmtParser::parseListConcatExp(Value &result) {
+  consumeToken(FIRToken::lp_list_concat);
+
+  auto loc = getToken().getLoc();
+  ListType type;
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand, "expected expression in List concat expression"))
+          return failure();
+
+        if (!type_isa<ListType>(operand.getType()))
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List concat expression";
+
+        if (!type)
+          type = type_cast<ListType>(operand.getType());
+
+        if (operand.getType() != type)
+          return emitError(loc, "unexpected expression of type ")
+                 << operand.getType() << " in List concat expression of type "
+                 << type;
+
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  if (operands.empty())
+    return emitError(loc, "need at least one List to concatenate");
+
+  locationProcessor.setLoc(loc);
+  result = builder.create<ListConcatOp>(type, operands);
   return success();
 }
 
