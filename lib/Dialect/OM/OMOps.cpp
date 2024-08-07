@@ -289,7 +289,7 @@ circt::om::ClassFieldsOp::getFieldsValues() {
   if (fields.empty())
     return result;
 
-  ArrayAttr names = cast<ArrayAttr>(this->getOperation()->getAttr("names"));
+  ArrayAttr names = cast<ArrayAttr>(this->getOperation()->getAttr("fieldNames"));
   for (size_t i = 0; i < fields.size(); i++) {
     result.push_back(
         FieldValue(cast<StringAttr>(names[i]), fields[i]));
@@ -323,6 +323,19 @@ static ParseResult parseField(OpAsmParser &parser,
   return success();
 }
 
+void buildFieldAttrs(OperationState &state,
+                     mlir::MLIRContext *ctx,
+                     llvm::SmallVector<FieldParse> &parsedFields) {
+  llvm::SmallVector<Attribute> fieldNames;
+  llvm::SmallVector<NamedAttribute> fieldTypes;
+  for (auto &field : parsedFields) {
+    fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
+                                              mlir::TypeAttr::get(field.type)));
+    fieldNames.push_back(field.name);
+  }
+  state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
+  state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+}
 
 ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
@@ -333,17 +346,15 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                      parseOnePort, " in field list"))
     return failure();
-  llvm::SmallVector<FieldsArg> fields;
-  llvm::SmallVector<Attribute> names;
-  // TODO: add field values as args
-  auto *ctx = parser.getContext();
+
+  buildFieldAttrs(state, parser.getContext(), parsedFields);
+
+  // TODO: Could try to fuse this into buildFieldAttrsLoop
   for (auto &field : parsedFields) {
-    //state.addAttribute(field.name, mlir::TypeAttr::get(field.type));
-    names.push_back(field.name);
     if (parser.resolveOperand(field.ssaName, field.type, state.operands))
       return failure();
   }
-  state.addAttribute("names", mlir::ArrayAttr::get(ctx, names));
+
   // TODO: field attrs
   // TODO: field locs
   return success();
@@ -450,7 +461,7 @@ void circt::om::ClassExternOp::addFields(
 }
 
 //===----------------------------------------------------------------------===//
-// ObjectOp
+// ClassExternFieldsOp
 //===----------------------------------------------------------------------===//
 
 struct ExternFieldParse : OpAsmParser::Argument {
@@ -486,17 +497,9 @@ ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                      parseOnePort, " in field list"))
     return failure();
-  llvm::SmallVector<NamedAttribute> fieldTypes;
-  llvm::SmallVector<Attribute> fieldNames;
-  // TODO: add field values as args
-  auto *ctx = parser.getContext();
-  for (auto &field : parsedFields) {
-    fieldNames.push_back(cast<Attribute>(mlir::StringAttr(field.name)));
-    fieldTypes.push_back(mlir::NamedAttribute(mlir::StringAttr(field.name),
-                                              mlir::TypeAttr::get(field.type)));
-  }
-  state.addAttribute("fieldTypes", mlir::DictionaryAttr::get(ctx, fieldTypes));
-  state.addAttribute("fieldNames", mlir::ArrayAttr::get(ctx, fieldNames));
+
+  buildFieldAttrs(state, parser.getContext(), parsedFields);
+
   // TODO: field attrs
   // TODO: field locs
   return success();
