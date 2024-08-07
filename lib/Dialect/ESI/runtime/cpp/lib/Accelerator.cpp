@@ -175,25 +175,48 @@ static void loadBackend(std::string backend) {
 namespace registry {
 namespace internal {
 
-static std::map<std::string, BackendCreate> backendRegistry;
-void registerBackend(std::string name, BackendCreate create) {
-  if (backendRegistry.count(name))
-    throw std::runtime_error("Backend already exists in registry");
-  backendRegistry[name] = create;
+class BackendRegistry {
+public:
+  static void registerBackend(const std::string &name, BackendCreate create) {
+    auto &registry = get().backendRegistry;
+    if (registry.count(name))
+      throw std::runtime_error("Backend already exists in registry");
+    registry[name] = create;
+  }
+
+  static std::unique_ptr<AcceleratorConnection>
+  connect(Context &ctxt, const std::string &backend,
+          const std::string &connection) {
+    auto &registry = get().backendRegistry;
+    auto f = registry.find(backend);
+    if (f == registry.end()) {
+      // If it's not already found in the registry, try to load it dynamically.
+      loadBackend(backend);
+      f = registry.find(backend);
+      if (f == registry.end())
+        throw std::runtime_error("Backend '" + backend + "' not found");
+    }
+    return f->second(ctxt, connection);
+  }
+
+private:
+  static BackendRegistry &get() {
+    static BackendRegistry instance;
+    return instance;
+  }
+
+  std::map<std::string, BackendCreate> backendRegistry;
+};
+
+void registerBackend(const std::string &name, BackendCreate create) {
+  BackendRegistry::registerBackend(name, create);
 }
 } // namespace internal
 
-std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection) {
-  auto f = internal::backendRegistry.find(backend);
-  if (f == internal::backendRegistry.end()) {
-    // If it's not already found in the registry, try to load it dynamically.
-    loadBackend(backend);
-    f = internal::backendRegistry.find(backend);
-    if (f == internal::backendRegistry.end())
-      throw std::runtime_error("Backend '" + backend + "' not found");
-  }
-  return f->second(ctxt, connection);
+std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
+                                               const std::string &backend,
+                                               const std::string &connection) {
+  return internal::BackendRegistry::connect(ctxt, backend, connection);
 }
 
 } // namespace registry
