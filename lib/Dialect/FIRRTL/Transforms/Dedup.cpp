@@ -97,8 +97,8 @@ struct ModuleInfo {
 /// For BlockArgument's, this is the argument number.
 /// For OpResult's, this is the result number.
 struct ValueId {
-  uint64_t index;
-  uint64_t offset;
+  unsigned index;
+  unsigned offset;
 };
 
 struct SymbolTarget {
@@ -154,15 +154,19 @@ struct StructuralHasher {
   }
 
 private:
-  void update(const void *pointer) {
-    auto *addr = reinterpret_cast<const uint8_t *>(&pointer);
-    sha.update(ArrayRef<uint8_t>(addr, sizeof pointer));
-  }
-
-  void update(size_t value) {
+  /// Hash value as array of bytes.
+  template <typename T>
+  void updateImpl(T value) {
     auto *addr = reinterpret_cast<const uint8_t *>(&value);
     sha.update(ArrayRef<uint8_t>(addr, sizeof value));
   }
+
+  void update(const void *pointer) { updateImpl(pointer); }
+  void update(bool value) { updateImpl<uint8_t>(value); }
+  void update(uint8_t value) { updateImpl(value); }
+  void update(uint16_t value) { updateImpl(value); }
+  void update(uint32_t value) { updateImpl(value); }
+  void update(uint64_t value) { updateImpl(value); }
 
   void update(TypeID typeID) { update(typeID.getAsOpaquePointer()); }
 
@@ -209,8 +213,9 @@ private:
   }
 
   void update(ValueId index) {
-    update(index.index);
-    update(index.offset);
+    unsigned vals[2] = {index.index, index.offset};
+    sha.update(ArrayRef<uint8_t>(reinterpret_cast<const uint8_t *>(vals),
+                                 sizeof(vals)));
   }
 
   void update(OpOperand &operand) { update(getId(operand.get())); }
