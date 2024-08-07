@@ -270,8 +270,14 @@ PYBIND11_MODULE(esiCppAccel, m) {
   py::class_<Manifest>(m, "Manifest")
       .def(py::init<Context &, std::string>())
       .def_property_readonly("api_version", &Manifest::getApiVersion)
-      .def("build_accelerator", &Manifest::buildAccelerator,
-           py::return_value_policy::take_ownership)
+      .def(
+          "build_accelerator",
+          [&](Manifest &m, AcceleratorConnection &conn) {
+            auto acc = m.buildAccelerator(conn);
+            conn.getServiceThread()->addPoll(*acc);
+            return acc;
+          },
+          py::return_value_policy::reference)
       .def_property_readonly("type_table", &Manifest::getTypeTable)
       .def_property_readonly("module_infos", &Manifest::getModuleInfos);
 }
