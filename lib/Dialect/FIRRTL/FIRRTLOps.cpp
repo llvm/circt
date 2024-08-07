@@ -3370,34 +3370,19 @@ FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
                                                     getModuleNameAttr());
 }
 
-StringRef FormalOp::getModuleName() { return getSymName(); }
+StringRef FormalOp::getInstanceName() { return getSymName(); }
 
-mlir::StringAttr FormalOp::getModuleNameAttr() {
-  return StringAttr::get(getContext(), getModuleName());
+StringAttr FormalOp::getInstanceNameAttr() {
+  return StringAttr::get(getContext(), getSymName());
 }
 
-ArrayAttr FormalOp::getParameters() { return {}; }
-
-///////////////////////////////////////////
-// Layers: FormalOp currently ignores layers
-///////////////////////////////////////////
-
-Convention FormalOp::getConvention() { return Convention::Internal; }
-
-ConventionAttr FormalOp::getConventionAttr() {
-  return ConventionAttr::get(getContext(), getConvention());
+std::optional<size_t> FormalOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
 }
 
-ArrayAttr FormalOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
-
-ArrayRef<Attribute> FormalOp::getLayers() { return getLayersAttr(); }
-
-// Don't allow formal ops to be removed if not used
-bool FormalOp::canDiscardOnUseEmpty() { return false; }
-
-void FormalOp::getAsmBlockArgumentNames(mlir::Region &region,
-                                        mlir::OpAsmSetValueNameFn setNameFn) {
-  getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+void FormalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  /* Don't do anything because Formal doesn't have any results */
 }
 
 //===----------------------------------------------------------------------===//

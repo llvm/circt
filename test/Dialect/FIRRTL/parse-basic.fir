@@ -1931,7 +1931,7 @@ circuit Foo:
     input s_foo_data : UInt<32>
 
     ; CHECK-NEXT: %foo_data, %foo_c, %foo_out = firrtl.instance foo interesting_name @FooTest(in data: !firrtl.uint<32>, in c: !firrtl.uint<1>, out out: !firrtl.uint<32>)
-    inst foo of FooTest
+    inst foo of Foo
     ; CHECK-NEXT: firrtl.matchingconnect %foo_c, %s_foo_c : !firrtl.uint<1>
     connect foo.c, s_foo_c
     ; CHECK-NEXT: firrtl.matchingconnect %foo_data, %s_foo_data : !firrtl.uint<32>
@@ -1941,7 +1941,7 @@ circuit Foo:
     ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert"  %1 : (!firrtl.uint<1>) -> ()
     intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, s_foo_c, eq(foo.out, s_foo_data)))
 
-  ; CHECK: firrtl.formal @testFormal of @FooTest bound 20
+  ; CHECK-NEXT: firrtl.formal @testFormal of @FooTest bound 20
   formal testFormal of FooTest, bound = 20
 
 
