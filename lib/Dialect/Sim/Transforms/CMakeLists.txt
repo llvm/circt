@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTSimTransforms
+  LowerDPIFunc.cpp
   ProceduralizeSim.cpp
 
 
@@ -12,8 +13,10 @@ add_circt_dialect_library(CIRCTSimTransforms
   CIRCTSV
   CIRCTComb
   CIRCTSupport
+  MLIRFuncDialect
   MLIRIR
   MLIRPass
+  MLIRLLVMDialect
   MLIRSCFDialect
   MLIRTransformUtils
 )

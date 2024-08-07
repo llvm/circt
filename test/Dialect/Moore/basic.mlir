@@ -77,12 +77,12 @@ moore.module @Module() {
   // CHECK: moore.procedure always_comb {
   // CHECK: moore.procedure always_latch {
   // CHECK: moore.procedure always_ff {
-  moore.procedure initial {}
-  moore.procedure final {}
-  moore.procedure always {}
-  moore.procedure always_comb {}
-  moore.procedure always_latch {}
-  moore.procedure always_ff {}
+  moore.procedure initial { moore.return }
+  moore.procedure final { moore.return }
+  moore.procedure always { moore.return }
+  moore.procedure always_comb { moore.return }
+  moore.procedure always_latch { moore.return }
+  moore.procedure always_ff { moore.return }
 
   // CHECK: %[[TMP1:.+]] = moore.read %v2
   // CHECK: moore.assign %v1, %[[TMP1]] : i1
@@ -100,6 +100,7 @@ moore.module @Module() {
     moore.nonblocking_assign %v1, %4 : i1
     // CHECK: %a = moore.variable : <i32>
     %a = moore.variable : <i32>
+    moore.return
   }
 }
 

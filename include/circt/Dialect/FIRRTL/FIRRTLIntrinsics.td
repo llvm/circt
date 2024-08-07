@@ -13,7 +13,11 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 
+include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Generic intrinsic operation for parsing into before lowering.

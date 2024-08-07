@@ -49,8 +49,8 @@ firrtl.circuit "ProbeIntrinsicTest" {
   // CHECK-NOT: firrtl.intmodule private @FPGAProbeIntrinsic
   firrtl.intmodule private @FPGAProbeIntrinsic(in data: !firrtl.uint, in clock: !firrtl.clock) attributes {intrinsic = "circt_fpga_probe"}
 
-  // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
-  firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
+  // CHECK-LABEL: firrtl.module @ProbeIntrinsicTest
+  firrtl.module @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
     // CHECK:      [[DATA:%.+]] = firrtl.wire : !firrtl.uint
     // CHECK-NEXT: [[CLOCK:%.+]] = firrtl.wire : !firrtl.clock
     // CHECK-NEXT: firrtl.int.generic "circt_fpga_probe" [[DATA]], [[CLOCK]] : (!firrtl.uint, !firrtl.clock) -> ()

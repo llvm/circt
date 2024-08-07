@@ -163,3 +163,16 @@ ibis.container "Foo" sym @B top_level {
 
 hw.module.extern @D_Foo(in %theExternModule : i1)
 hw.module.extern @Foo(in %theExternModule : i1)
+
+// -----
+
+// Test that containers with names that alias with the design op are not
+// de-aliased.
+
+// CHECK: hw.module @D
+
+ibis.design @D {
+  ibis.container "D" sym @D top_level {
+    %this = ibis.this <@D::@D>
+  }
+}
