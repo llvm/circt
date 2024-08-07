@@ -4611,16 +4611,6 @@ private:
     unsigned indent;
   };
 
-  struct DeferredBodyToParse {
-    Block &body;
-    FIRLexerCursor lexerCursor;
-    unsigned indent;
-  };
-
-  ParseResult parseFormalBody(const SymbolTable &circuitSymTbl,
-                              DeferredBodyToParse &defferedBody);
-  SmallVector<DeferredBodyToParse, 0> deferredBodies;
-
   ParseResult parseModuleBody(const SymbolTable &circuitSymTbl,
                               DeferredModuleToParse &deferredModule);
 
@@ -5165,29 +5155,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
-ParseResult
-FIRCircuitParser::parseFormalBody(const SymbolTable &circuitSymTbl,
-                                  DeferredBodyToParse &defferedBody) {
-
-  // Create a custom lexer for formal body like in module body parser
-  FIRLexer formalBodyLexer(getLexer().getSourceMgr(), getContext());
-  // Reset the lexer to the top of the body
-  defferedBody.lexerCursor.restore(formalBodyLexer);
-  // Reuse a module context for this as strucutre is similar
-  FIRModuleContext context(getConstants(), formalBodyLexer, version);
-  // Default namespace
-  hw::InnerSymbolNamespace ns;
-  // Create the statement parser needed to parse the body content
-  FIRStmtParser stmtParser(defferedBody.body, context, ns, circuitSymTbl,
-                           version);
-
-  // Parse the internal region
-  auto result = stmtParser.parseSimpleStmtBlock(defferedBody.indent);
-  if (failed(result))
-    return result;
-  return success();
-}
-
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
   auto startLoc = getToken().getLoc();
   consumeToken(FIRToken::kw_formal);
@@ -5658,16 +5625,6 @@ DoneParsing:
         return success();
       });
   if (failed(anyFailed))
-    return failure();
-
-  // Next, parse all the deffered non-module bodies.
-  auto anyBodyFailed = mlir::failableParallelForEachN(
-      getContext(), 0, deferredBodies.size(), [&](size_t index) {
-        if (parseFormalBody(circuitSymTbl, deferredBodies[index]))
-          return failure();
-        return success();
-      });
-  if (failed(anyBodyFailed))
     return failure();
 
   // Helper to transform a layer name specification of the form `A::B::C` into
