@@ -21,13 +21,15 @@ static_assert(sizeof(long long) == 8, "Unsupported ABI");
 // ---  Exports to the IR ---
 
 #ifdef _WIN32
-#define ARCEXPORT(rtype) extern "C" __declspec(dllexport) rtype __cdecl
+#define ARC_EXPORT extern "C" __declspec(dllexport)
 #else
-#define ARCEXPORT(rtype) extern "C" rtype
+#define ARC_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
+#ifndef ARC_NO_LIBC_EXPORTS
+
 // libc Adapters
-ARCEXPORT(int) _arc_libc_fprintf(FILE *stream, const char *format, ...) {
+ARC_EXPORT int _arc_libc_fprintf(FILE *stream, const char *format, ...) {
   int result;
   va_list args;
   va_start(args, format);
@@ -36,18 +38,20 @@ ARCEXPORT(int) _arc_libc_fprintf(FILE *stream, const char *format, ...) {
   return result;
 }
 
-ARCEXPORT(int) _arc_libc_fputs(const char *str, FILE *stream) {
+ARC_EXPORT int _arc_libc_fputs(const char *str, FILE *stream) {
   return fputs(str, stream);
 }
 
-ARCEXPORT(int) _arc_libc_fputc(int ch, FILE *stream) {
+ARC_EXPORT int _arc_libc_fputc(int ch, FILE *stream) {
   return fputc(ch, stream);
 }
+
+#endif // ARC_NO_LIBC_EXPORTS
 
 // Runtime Environment calls
 
 #define ARC_ENV_DECL_GET_PRINT_STREAM(idarg)                                   \
-  ARCEXPORT(FILE *) _arc_env_get_print_stream(uint32_t idarg)
+  ARC_EXPORT FILE *_arc_env_get_print_stream(uint32_t idarg)
 
 #ifndef ARC_NO_DEFAULT_GET_PRINT_STREAM
 ARC_ENV_DECL_GET_PRINT_STREAM(id) {
