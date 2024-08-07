@@ -497,6 +497,18 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         continue;
       }
 
+      // If this operation is a subfield op and it is capturing something
+      // non-passive outside the layerblock, then move this outside the
+      // layerblock.  This avoids creating output ports on the created module.
+      if (isa<SubfieldOp, SubindexOp, SubaccessOp>(op)) {
+        if (llvm::none_of(op.getOperands(), [&](Value a) {
+              return isAncestorOfValueOwner(layerBlock, a);
+            })) {
+          op.moveBefore(layerBlock);
+          continue;
+        }
+      }
+
       if (auto refSend = dyn_cast<RefSendOp>(op)) {
         auto src = refSend.getBase();
         if (!isAncestorOfValueOwner(layerBlock, src))
