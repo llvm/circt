@@ -185,7 +185,7 @@ LogicalResult LowerDPI::lower() {
         outputTypes.push_back(
             lowerDPIArgumentType(dpiOp.getResult().getType()));
 
-      auto call = builder.create<sim::DPICallOp>(
+      auto call = builder.create<sim::CallOp>(
           outputTypes, firstDPIDecl.getSymNameAttr(), clock, enable, inputs);
       if (!call.getResults().empty()) {
         // Insert unrealized conversion cast HW type to FIRRTL type.

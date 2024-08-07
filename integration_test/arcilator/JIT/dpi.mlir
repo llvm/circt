@@ -12,7 +12,7 @@ func.func @adder_func(%arg0: i32, %arg1: i32, %arg2: !llvm.ptr) {
 hw.module @adder(in %clock : i1, in %a : i32, in %b : i32, out c : i32) {
   %seq_clk = seq.to_clock %clock
 
-  %0 = sim.func.dpi.call @dpi(%a, %b) clock %seq_clk : (i32, i32) -> i32
+  %0 = sim.func.call @dpi(%a, %b) clock %seq_clk : (i32, i32) -> i32
   hw.output %0 : i32
 }
 func.func @main() {

@@ -359,7 +359,7 @@ func.func private @func(%arg0: i32, %arg1: i32) -> i32
 // CHECK-LABEL: arc.model @adder
 hw.module @adder(in %clock : i1, in %a : i32, in %b : i32, out c : i32) {
   %0 = seq.to_clock %clock
-  %1 = sim.func.dpi.call @func(%a, %b) clock %0 : (i32, i32) -> i32
+  %1 = sim.func.call @func(%a, %b) clock %0 : (i32, i32) -> i32
   // CHECK:      arc.clock_tree
   // CHECK-NEXT:   %[[A:.+]] = arc.state_read %in_a : <i32>
   // CHECK-NEXT:   %[[B:.+]] = arc.state_read %in_b : <i32>

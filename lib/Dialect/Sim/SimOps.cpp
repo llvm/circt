@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 
 using namespace mlir;
 using namespace circt;
@@ -69,16 +70,42 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 LogicalResult
-sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+sim::CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
   if (!referencedOp)
     return emitError("cannot find function declaration '")
            << getCallee() << "'";
-  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
-    return success();
-  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
-         << referencedOp->getName() << "'";
+  if (!isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
+    return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
+           << referencedOp->getName() << "'";
+
+  // Verify that the operand and result types match the callee.
+  auto fnType = cast<FunctionType>(
+      cast<mlir::FunctionOpInterface>(referencedOp).getFunctionType());
+
+  if (fnType.getNumInputs() != getInputs().size())
+    return emitOpError("incorrect number of operands for callee");
+
+  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i)
+    if (getInputs()[i].getType() != fnType.getInput(i))
+      return emitOpError("operand type mismatch: expected operand type ")
+             << fnType.getInput(i) << ", but provided "
+             << getInputs()[i].getType() << " for operand number " << i;
+
+  if (fnType.getNumResults() != getNumResults())
+    return emitOpError("incorrect number of results for callee");
+
+  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i)
+    if (getResult(i).getType() != fnType.getResult(i)) {
+      auto diag = emitOpError("result type mismatch at index ") << i;
+      diag.attachNote() << "      op result types: " << getResultTypes();
+      diag.attachNote(referencedOp->getLoc())
+          << "function result types: " << fnType.getResults();
+      return diag;
+    }
+
+  return success();
 }
 
 void DPIFuncOp::print(OpAsmPrinter &p) {

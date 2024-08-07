@@ -165,12 +165,12 @@ public:
   }
 };
 
-class DPICallLowering : public SimConversionPattern<DPICallOp> {
+class DPICallLowering : public SimConversionPattern<sim::CallOp> {
 public:
-  using SimConversionPattern<DPICallOp>::SimConversionPattern;
+  using SimConversionPattern<sim::CallOp>::SimConversionPattern;
 
   LogicalResult
-  matchAndRewrite(DPICallOp op, OpAdaptor adaptor,
+  matchAndRewrite(sim::CallOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op.getLoc();
     // Record the callee.

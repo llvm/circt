@@ -164,7 +164,7 @@ LogicalResult LowerDPIFuncPass::lowerDPI() {
     if (failed(lowerDPIFuncOp(simFunc, state, symbolTable)))
       return failure();
 
-  op.walk([&](sim::DPICallOp op) {
+  op.walk([&](sim::CallOp op) {
     auto func = state.dpiFuncDeclMapping.at(op.getCalleeAttr().getAttr());
     op.setCallee(func.getSymNameAttr());
   });

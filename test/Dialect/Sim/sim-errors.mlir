@@ -49,5 +49,26 @@ hw.module.extern @non_func(out arg0: i1, in %arg1: i1, out arg2: i1)
 
 hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
   // expected-error @below {{callee must be 'sim.dpi.func' or 'func.func' but got 'hw.module.extern'}}
-  %0, %1 = sim.func.dpi.call @non_func(%in) : (i1) -> (i1, i1)
+  %0, %1 = sim.func.call @non_func(%in) : (i1) -> (i1, i1)
+}
+
+// -----
+
+sim.func.dpi @mismatch(out arg0: i1, in %arg1: i2, out arg2: i1)
+
+hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
+  // expected-error @below {{'sim.func.call' op operand type mismatch: expected operand type 'i2', but provided 'i1' for operand number 0}}
+  %0, %1 = sim.func.call @mismatch(%in) : (i1) -> (i1, i1)
+}
+
+
+// -----
+
+// expected-note @below {{function result types: 'i1', 'i2'}}
+sim.func.dpi @mismatch(out arg0: i1, in %arg1: i1, out arg2: i2)
+
+hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
+  // expected-error @below {{'sim.func.call' op result type mismatch at index 1}}
+  // expected-note @below {{op result types: 'i1', 'i1'}}
+  %0, %1 = sim.func.call @mismatch(%in) : (i1) -> (i1, i1)
 }
