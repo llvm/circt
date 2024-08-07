@@ -96,21 +96,21 @@ def DPIFuncOp : SimOp<"func.dpi",
   }];
 }
 
-def DPICallOp : SimOp<"func.dpi.call",
+def CallOp : SimOp<"func.call",
      [CallOpInterface, AttrSizedOperandSegments,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
-  let summary = "A call option for DPI function with an optional clock and enable";
+  let summary = "A call option for a function with an optional clock and enable";
   let description = [{
-    `sim.func.dpi.call` represents SystemVerilog DPI function call. There are two
-    optional operands `clock` and `enable`.
+    `sim.func.call` represents a function call. Unlike a call operation in Func dialect,
+    there are two optional operands `clock` and `enable`.
 
     If `clock` is not provided, the callee is invoked when input values are changed.
     If provided, the DPI function is called at clock's posedge. The result values behave
     like registers and the DPI function is used as a state transfer function of them.
 
-    `enable` operand is used to conditionally call the DPI since DPI call could be quite
-    more expensive than native constructs. When `enable` is low, results of unclocked
-    calls are undefined and in SV results they are lowered into `X`. Users are expected
+    `enable` operand is used to conditionally call the function since function call
+    could be quite more expensive than native constructs. When `enable` is low, results
+    of unclocked calls are undefined and in SV they are lowered into `X`. Users are expected
     to gate result values by another `enable` to model a default value of results.
 
     For clocked calls, a low enable means that its register state transfer function is

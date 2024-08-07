@@ -19,7 +19,7 @@ sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
 hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
           out o1: i1, out o2: i1, out o3: i1, out o4: i1, out o5: i1, out o6: i1, out o7: i1, out o8: i1) {
   
-  %0, %1 = sim.func.dpi.call @dpi(%in) clock %clock enable %enable: (i1) -> (i1, i1)
+  %0, %1 = sim.func.call @dpi(%in) clock %clock enable %enable: (i1) -> (i1, i1)
   // CHECK: %[[CLK:.+]] = seq.from_clock %clock
   // CHECK-NEXT:  sv.always posedge %[[CLK]] {
   // CHECK-NEXT:    sv.if %enable {
@@ -36,7 +36,7 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // VERILOG-NEXT:   end
   // VERILOG-NEXT: end 
 
-  %2, %3 = sim.func.dpi.call @dpi(%in) clock %clock : (i1) -> (i1, i1)
+  %2, %3 = sim.func.call @dpi(%in) clock %clock : (i1) -> (i1, i1)
   // CHECK: %[[CLK:.+]] = seq.from_clock %clock
   // CHECK-NEXT:  sv.always posedge %[[CLK]] {
   // CHECK-NEXT:    %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
@@ -49,7 +49,7 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // VERILOG-NEXT:   [[RESULT_3:_.+]] <= [[TMP_RESULT_1]];
   // VERILOG-NEXT: end 
 
-  %4, %5 = sim.func.dpi.call @dpi(%in) enable %enable : (i1) -> (i1, i1)
+  %4, %5 = sim.func.call @dpi(%in) enable %enable : (i1) -> (i1, i1)
   // CHECK:       sv.alwayscomb {
   // CHECK-NEXT:    sv.if %enable {
   // CHECK-NEXT:      %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
@@ -72,7 +72,7 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   // VERILOG-NEXT:   end
   // VERILOG-NEXT: end
 
-  %6, %7 = sim.func.dpi.call @dpi(%in) : (i1) -> (i1, i1)
+  %6, %7 = sim.func.call @dpi(%in) : (i1) -> (i1, i1)
   // CHECK:       sv.alwayscomb {
   // CHECK-NEXT:    %[[RESULT:.+]]:2 = sv.func.call.procedural @dpi(%in) : (i1) -> (i1, i1)
   // CHECK-NEXT:    sv.bpassign %{{.+}}, %[[RESULT]]#0 : i1
@@ -101,7 +101,7 @@ hw.module @Issue7191(out result : i32) {
   // CHECK: call.procedural @create_counter
   // CHECK: call.procedural @increment_counter
 
-  %0 = sim.func.dpi.call @create_counter() : () -> i64
-  %1 = sim.func.dpi.call @increment_counter(%0) : (i64) -> i32
+  %0 = sim.func.call @create_counter() : () -> i64
+  %1 = sim.func.call @increment_counter(%0) : (i64) -> i32
   hw.output %1 : i32
 }

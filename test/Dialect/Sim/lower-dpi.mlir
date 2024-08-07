@@ -38,13 +38,13 @@ sim.func.dpi @baz(out arg0: i32, in %arg1: i32, out arg2: i32) attributes {veril
 // CHECK-LABEL: hw.module @dpi_call
 hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i32,
           out o1: i32, out o2: i32, out o3: i32, out o4: i32, out o5: i32, out o6: i32) {
-  // CHECK-NEXT: %0:2 = sim.func.dpi.call @foo_wrapper(%in) clock %clock : (i32) -> (i32, i32)
-  // CHECK-NEXT: %1:2 = sim.func.dpi.call @bar_wrapper(%in) : (i32) -> (i32, i32)
-  // CHECK-NEXT: %2:2 = sim.func.dpi.call @baz_wrapper(%in) : (i32) -> (i32, i32)
+  // CHECK-NEXT: %0:2 = sim.func.call @foo_wrapper(%in) clock %clock : (i32) -> (i32, i32)
+  // CHECK-NEXT: %1:2 = sim.func.call @bar_wrapper(%in) : (i32) -> (i32, i32)
+  // CHECK-NEXT: %2:2 = sim.func.call @baz_wrapper(%in) : (i32) -> (i32, i32)
   // CHECK-NEXT: hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1 : i32, i32, i32, i32, i32, i32
-  %0, %1 = sim.func.dpi.call @foo(%in) clock %clock : (i32) -> (i32, i32)
-  %2, %3 = sim.func.dpi.call @bar(%in) : (i32) -> (i32, i32)
-  %4, %5 = sim.func.dpi.call @baz(%in) : (i32) -> (i32, i32)
+  %0, %1 = sim.func.call @foo(%in) clock %clock : (i32) -> (i32, i32)
+  %2, %3 = sim.func.call @bar(%in) : (i32) -> (i32, i32)
+  %4, %5 = sim.func.call @baz(%in) : (i32) -> (i32, i32)
 
   hw.output %0, %1, %2, %3, %4, %5 : i32, i32, i32, i32, i32, i32
 }

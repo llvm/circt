@@ -123,7 +123,7 @@ struct ModuleLowering {
                                Value reset, ArrayRef<Value> inputs,
                                FlatSymbolRefAttr callee);
   LogicalResult lowerState(StateOp stateOp);
-  LogicalResult lowerState(sim::DPICallOp dpiCallOp);
+  LogicalResult lowerState(sim::CallOp dpiCallOp);
   LogicalResult lowerState(MemoryOp memOp);
   LogicalResult lowerState(MemoryWritePortOp memWriteOp);
   LogicalResult lowerState(TapOp tapOp);
@@ -145,7 +145,7 @@ static bool shouldMaterialize(Operation *op) {
   return !isa<MemoryOp, AllocStateOp, AllocMemoryOp, AllocStorageOp,
               ClockTreeOp, PassThroughOp, RootInputOp, RootOutputOp,
               StateWriteOp, MemoryWritePortOp, igraph::InstanceOpInterface,
-              StateOp, sim::DPICallOp>(op);
+              StateOp, sim::CallOp>(op);
 }
 
 static bool shouldMaterialize(Value value) {
@@ -396,14 +396,14 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 LogicalResult ModuleLowering::lowerStates() {
   SmallVector<Operation *> opsToLower;
   for (auto &op : *moduleOp.getBodyBlock())
-    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::DPICallOp>(&op))
+    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::CallOp>(&op))
       opsToLower.push_back(&op);
 
   for (auto *op : opsToLower) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << *op << "\n");
     auto result =
         TypeSwitch<Operation *, LogicalResult>(op)
-            .Case<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::DPICallOp>(
+            .Case<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::CallOp>(
                 [&](auto op) { return lowerState(op); })
             .Default(success());
     if (failed(result))
@@ -507,7 +507,7 @@ LogicalResult ModuleLowering::lowerState(StateOp stateOp) {
                                      stateInputs, stateOp.getArcAttr());
 }
 
-LogicalResult ModuleLowering::lowerState(sim::DPICallOp callOp) {
+LogicalResult ModuleLowering::lowerState(sim::CallOp callOp) {
   // Clocked call op can be considered as arc state with single latency.
   auto stateClock = callOp.getClock();
   if (!stateClock)
