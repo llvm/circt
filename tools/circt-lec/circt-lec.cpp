@@ -128,7 +128,7 @@ static FailureOr<StringAttr> mergeModules(ModuleOp dest, ModuleOp src,
                                           StringAttr name) {
 
   SymbolTable destTable(dest), srcTable(src);
-  StringAttr renamed = {};
+  StringAttr newName = {};
   for (auto &op : src.getOps()) {
     if (SymbolOpInterface symbol = dyn_cast<SymbolOpInterface>(op)) {
       auto oldSymbol = symbol.getNameAttr();
@@ -137,19 +137,19 @@ static FailureOr<StringAttr> mergeModules(ModuleOp dest, ModuleOp src,
         return src->emitError() << "failed to rename symbol " << oldSymbol;
 
       if (oldSymbol == name) {
-        assert(!renamed && "symbol must be unique");
-        renamed = *result;
+        assert(!newName && "symbol must be unique");
+        newName = *result;
       }
     }
   }
 
-  if (!name)
+  if (!newName)
     return src->emitError()
            << "module " << name << " was not found in the second module";
 
   dest.getBody()->getOperations().splice(dest.getBody()->begin(),
                                          src.getBody()->getOperations());
-  return renamed;
+  return newName;
 }
 
 // Parse one or two MLIR modules and merge it into a single module.
