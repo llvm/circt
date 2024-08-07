@@ -308,12 +308,12 @@ static ParseResult parseFieldName(OpAsmParser &parser, StringAttr &name) {
   return success();
 }
 
-static ParseResult parseField(OpAsmParser &parser,
-                              FieldParse &result) {
+static ParseResult parseField(OpAsmParser &parser, FieldParse &result,
+                              bool hasOperand = true) {
   NamedAttrList attrs;
   if (parseFieldName(parser, result.name))
     return failure();
-  if (parser.parseOperand(result.ssaName))
+  if (hasOperand && parser.parseOperand(result.ssaName))
     return failure();
   if (parser.parseColonType(result.type) ||
       parser.parseOptionalAttrDict(attrs) ||
@@ -464,35 +464,11 @@ void circt::om::ClassExternOp::addFields(
 // ClassExternFieldsOp
 //===----------------------------------------------------------------------===//
 
-struct ExternFieldParse : OpAsmParser::Argument {
-  StringAttr name;
-};
-
-static ParseResult parseExternFieldName(OpAsmParser &parser, StringAttr &name) {
-  if (failed(parser.parseSymbolName(name)))
-    return parser.emitError(parser.getCurrentLocation(), "expected field name");
-  return success();
-}
-
-static ParseResult parseExternField(OpAsmParser &parser,
-                              FieldParse &result) {
-  NamedAttrList attrs;
-  if (parseExternFieldName(parser, result.name))
-    return failure();
-  if (parser.parseColonType(result.type) ||
-      parser.parseOptionalAttrDict(attrs) ||
-      parser.parseOptionalLocationSpecifier(result.sourceLoc))
-    return failure();
-  result.attrs = attrs.getDictionary(parser.getContext());
-  return success();
-}
-
-
 ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
                                             OperationState &state) {
   llvm::SmallVector<FieldParse> parsedFields;
   auto parseOnePort = [&]() -> ParseResult {
-    return parseExternField(parser, parsedFields.emplace_back());
+    return parseField(parser, parsedFields.emplace_back(), false);
   };
   if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
                                      parseOnePort, " in field list"))
