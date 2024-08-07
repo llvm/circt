@@ -215,6 +215,10 @@ static llvm::cl::opt<std::string>
                                  "simulation to run when output is set to run"),
                   llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
+static llvm::cl::list<std::string> sharedLibs{
+    "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
+    llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -433,11 +437,15 @@ static LogicalResult processBuffer(
       return failure();
     }
 
+    SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
+                                              sharedLibs.end());
+
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.transformer = mlir::makeOptimizingTransformer(
         /*optLevel=*/3, /*sizeLevel=*/0,
         /*targetMachine=*/nullptr);
+    engineOptions.sharedLibPaths = sharedLibraries;
 
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
