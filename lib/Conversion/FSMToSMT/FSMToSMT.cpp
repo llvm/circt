@@ -48,6 +48,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -91,40 +92,57 @@ class MachineOpConverter{
 };
 } //namespace 
 
-mlir::Value manageCombExp(Operation &op, SmallVector<mlir::Value> &vec, mlir::OpBuilder &b, Location loc) {
+// mlir::Value manageCombExp(Operation &op, SmallVector<mlir::Value> &vec, Location &loc, OpBuilder &b) {
 
-  // if (auto add = dyn_cast<comb::AddOp>(op)) {
-  //   auto combFun = b.create<smt::IntAddOp>(loc, vec[0], vec[1]);
-  //   return combFun;
-  // }
-  // if (auto add = dyn_cast<comb::AndOp>(op)) {
-  //   auto combFun = b.create<comb::AndOp>(loc, vec[0], vec[1]);
-  //   llvm::outs()<<"\n\nfrom manageComb: "<<combFun;
-  //   return combFun;
-  // }
-}
+//   if (auto add = dyn_cast<comb::AddOp>(op)) {
+//     auto combFun = b.create<smt::IntAddOp>(loc, vec[0], vec[1]);
+//     return combFun;
+//   }
+//   // if (auto add = dyn_cast<comb::AndOp>(op)) {
+//   //   auto combFun = b.create<comb::AndOp>(loc, vec[0], vec[1]);
+//   //   llvm::outs()<<"\n\nfrom manageComb: "<<combFun;
+//   //   return combFun;
+//   // }
+// }
 
-mlir::Value getGuardExpr(SmallVector<std::pair<mlir::Value, mlir::Value>> &varExprMap, Region &guard, mlir::OpBuilder &b, Location loc) {
+// mlir::Value getExpr(mlir::Value v, SmallVector<std::pair<mlir::Value, mlir::Value>> &exprMap) {
 
-  for (auto &op : guard.getOps()) {
-    llvm::outs()<<"\n\noperation "<<op;
+//   for (auto e : exprMap) {
+//     if (e.second == v)
+//       return e.first;
+//   }
 
-    if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
-      for (auto e : varExprMap) {
-        if (e.first == retop.getOperand()) {
-          llvm::outs()<<"\n\nreturning "<<e.second;
-          return e.second;
-        }
-      }
-    }
-    llvm::SmallVector<mlir::Value> vec;
-    for (auto operand : op.getOperands()) {
-      vec.push_back(operand);
-    }
-    varExprMap.push_back({manageCombExp(op, vec, b, loc), op.getResult(0)});
-  }
-}
+//   if (auto constop = dyn_cast<hw::ConstantOp>(v.getDefiningOp())) {
+//     return v;
+//     // if (constop.getType().getIntOrFloatBitWidth() > 1)
+//     //   hw::ConstantOp r(constop.getValue().getSExtValue());
+//       // return smt::IntConstantOp();
+//     // else
+//     //   return smt::BoolConstantOp();
+//   }
+//   llvm::errs() << "Expression not found.";
+// }
 
+// smt::BoolType getGuardExpr(llvm::SmallVector<std::pair<mlir::Value, mlir::Value>> &varExprMap, Region &guard, Location &loc, OpBuilder &b) {
+
+//   for (auto &op : guard.getOps()) {
+//     if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
+//       for (auto e : varExprMap) {
+//         if (e.second == retop.getOperand()) {
+
+//           return e.first;
+//         }
+//       }
+//     }
+//     SmallVector<mlir::Value> vec;
+//     for (auto operand : op.getOperands()) {
+//       vec.push_back(getExpr(operand, varExprMap));
+//     }
+//     varExprMap.push_back({manageCombExp(op, vec, loc, b), op.getResult(0)});
+//   }
+//   // return expr(c.bool_const("true"));
+//   // }
+// }
 
 //   } else if (auto and_op = dyn_cast<comb::AndOp>(op)) {
 //     return expr(vec[0] && vec[1]);
@@ -179,15 +197,24 @@ LogicalResult MachineOpConverter::dispatch(){
 
   llvm::SmallVector<mlir::Type> argVarTypes;
   llvm::SmallVector<mlir::Value> argVars;
+  llvm::SmallVector<mlir::Value> val;
+
+  MLIRContext ctx = 
+
 
   SmallVector<std::pair<mlir::Value, mlir::Value>> varExprMap;
 
   for (auto a : args){
-    if (a.getType().getIntOrFloatBitWidth()>1)
+    if (a.getType().getIntOrFloatBitWidth()>1){
       argVarTypes.push_back(b.getType<smt::IntType>());
+      // smt::IntType v = smt::IntType::get(b.getContext());
+      val.push_back(a);
+      smt::IntType intVal;
+      argVars.push_back(intVal);
+    }
     else
       argVarTypes.push_back(b.getType<smt::BoolType>());
-    argVars.push_back(a);
+    val.push_back(a);
     varExprMap.push_back({a,a});
   }
 
@@ -197,7 +224,7 @@ LogicalResult MachineOpConverter::dispatch(){
       argVarTypes.push_back(b.getType<smt::IntType>());
     else
       argVarTypes.push_back(b.getType<smt::BoolType>());
-    argVars.push_back(variableOp.getResult());
+    val.push_back(variableOp.getResult());
     varExprMap.push_back({variableOp.getResult(),variableOp.getResult()});
   }
 
@@ -208,78 +235,60 @@ LogicalResult MachineOpConverter::dispatch(){
 
     auto stateName = stateOp.getSymName();
 
-    llvm::outs()<<stateName;
+    llvm::outs()<<stateName<<"\n";
 
-    auto stateFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, b.getType<smt::BoolType>()));
+    auto range = b.getType<smt::BoolType>();
+
+    auto stateFun = b.create<smt::DeclareFunOp>(loc, b.getType<smt::SMTFuncType>(argVarTypes, range));
+
+    llvm::outs()<<"state fun: "<<stateFun;
 
     stateFun.setNamePrefix(stateName);
 
     stateTransitionMap.insert({stateName, stateFun});
+
+    // TODO: output region 
+
     // second region (idx 1) always conains the transitions
     for (auto transitionOp : stateOp->getRegion(1).front().getOps<fsm::TransitionOp>()) {
 
       auto nextState = transitionOp.getNextState();
 
-      llvm::outs()<<"\nto "<<nextState;
-
-      // auto guard = transitionOp->getRegion(0);
+      llvm::outs()<<"\nto "<<nextState<<"\n\n";
 
       if (!transitionOp->getRegion(0).empty()){
         // guard
-        llvm::SmallVector<mlir::Type> funIn;
-        // auto funcType = b.getFunctionType(funIn, b.getType<smt::BoolType>());
-      }
+      } 
 
-      // mlir::PassManager pm(transitionOp.getGuard().getContext());
+      if (!transitionOp->getRegion(1).empty()){
+        // action
+      } 
 
-      // pm.addPass(createConvertCombToSMT());
+      // smt::BoolType rhs;
+      // mlir::Value rhsVal = rhs.build(true);
+      // smt::BoolType lhs;
+      // smt::ImpliesOp io;
 
-      llvm::DenseMap<mlir::Value, mlir::Value> guardMap;
+      // ::mlir::TypeRange resultTypes, ::mlir::Value func, 
+      // llvm::StringRef s = "ciao";
+      auto applyLhsFun = b.create<smt::ApplyFuncOp>(loc, b.getType<smt::BoolType>(), stateFun, val);
+      // mlir::Value tmpVal = b.create<func::ConstantOp>(loc, b.getI1Type(), s);
+      // auto tmpThing = b.create<smt::AssertOp>(loc, tmpVal);
 
-      // ex:
-      // %tmp1 = comb.add %cnt, 1
-      // %tmp2 = comb.add %tmp1, 1
-      // %tmp3 = comb.icmp ule %tmp2 5
-      // fsm.return %tmp3
+      applyLhsFun.dump();
 
-      // fsm.return comb.icmp ule (comb.add (comb.add %cnt 1) 1) 5
+      // io.build(b, boh, lhs, rhs);
 
-      // mlir::Value guardVal = getGuardExpr(varExprMap, transitionOp->getRegion(0), b, loc);
+      // smt::ImpliesOp io(lhs, rhs);
 
-      // mlir::Value realGuard;
-      // for (auto &op : transitionOp->getRegion(0).getOps()) {
-      //   llvm::outs()<<"\n\noperation "<<op;
-
-      //   b.create<smt::IntAddOp>(loc, op.getOperand(0), op.getOperand(1));
-
-        // if (auto retop = dyn_cast<fsm::ReturnOp>(op)) {
-        //   for (auto e : varExprMap) {
-        //     if (e.first == retop.getOperand()) {
-        //       llvm::outs()<<"\n\nreturning "<<e.second;
-        //       realGuard = e.second;
-        //     }
-        //   }
-        // }
-        // llvm::SmallVector<mlir::Value> vec;
-        // for (auto operand : op.getOperands()) {
-        //   vec.push_back(operand);
-        // }
-        // auto smtConv = pm.run(&op);
-        // llvm::outs()<<"cmtConv: "<<smtConv;
-        // varExprMap.push_back({manageCombExp(op, vec, b, loc), op.getResult(0)});
-      // }
-
-      // auto result = pm.run(realGuard);
-
-      // auto funcType = b.getFunctionType(argVarTypes, b.getType<smt::BoolType>());
-      // auto chcFun = b.create<smt::ImpliesOp>(loc, funcType);
+      // smt::ImpliesOp(lhs, rhs);
+      
 
     }
 
-
   }
 
-  machineOp.erase();
+  // machineOp.erase();
 
   return success();
 
@@ -397,22 +406,7 @@ MachineOpConverter::convertArgsAndVars(MachineOp machine, llvm::SmallVector<mlir
 
 // // @brief Returns expression from densemap or constant operator
 
-// expr getExpr(mlir::Value v, SmallVector<std::pair<expr, mlir::Value>> &exprMap,
-//              z3::context &c) {
 
-//   for (auto e : exprMap) {
-//     if (e.second == v)
-//       return e.first;
-//   }
-
-//   if (auto constop = dyn_cast<hw::ConstantOp>(v.getDefiningOp())) {
-//     if (constop.getType().getIntOrFloatBitWidth() > 1)
-//       return c.int_val(constop.getValue().getSExtValue());
-//     else
-//       return c.bool_val(0);
-//   }
-//   llvm::errs() << "Expression not found.";
-// }
 
 
 // // @brief Returns guard expression for input region
