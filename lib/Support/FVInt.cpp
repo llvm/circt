@@ -102,8 +102,9 @@ bool FVInt::tryToString(SmallVectorImpl<char> &str, unsigned radix,
   while (!value.isZero() || !unknown.isZero()) {
     unsigned digitValue = value.getRawData()[0] & radixMask;
     unsigned digitUnknown = unknown.getRawData()[0] & radixMask;
-    value.lshrInPlace(radixLog2);
-    unknown.lshrInPlace(radixLog2);
+    unsigned shiftAmount = std::min(radixLog2, getBitWidth());
+    value.lshrInPlace(shiftAmount);
+    unknown.lshrInPlace(shiftAmount);
 
     // Handle unknown bits. Since we only get to print a single X or Z character
     // to the string, either all bits in the digit have to be X, or all have to
