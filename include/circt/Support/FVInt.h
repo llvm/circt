@@ -31,6 +31,9 @@ namespace circt {
 /// 1/Z), and the other whether the bit is unknown (X or Z).
 class FVInt {
 public:
+  /// Default constructor that creates an zero-bit zero value.
+  explicit FVInt() : FVInt(0, 0) {}
+
   /// Construct an `FVInt` from a 64-bit value. The result has no X or Z bits.
   FVInt(unsigned numBits, uint64_t value, bool isSigned = false)
       : FVInt(APInt(numBits, value, isSigned)) {}
@@ -72,6 +75,25 @@ public:
   /// Return the number of bits this integer has.
   unsigned getBitWidth() const { return value.getBitWidth(); }
 
+  /// Compute the number of active bits in the value. This is the smallest bit
+  /// width to which the value can be truncated without losing information in
+  /// the most significant bits. Or put differently, the value truncated to its
+  /// active bits and zero-extended back to its original width produces the
+  /// original value.
+  unsigned getActiveBits() const {
+    return std::max(value.getActiveBits(), unknown.getActiveBits());
+  }
+
+  /// Compute the minimum bit width necessary to accurately represent this
+  /// integer's value and sign. This is the smallest bit width to which the
+  /// value can be truncated without losing information in the most significant
+  /// bits and without flipping from negative to positive or vice versa. Or put
+  /// differently, the value truncated to its significant bits and sign-extended
+  /// back to its original width produces the original value.
+  unsigned getSignificantBits() const {
+    return std::max(value.getSignificantBits(), unknown.getSignificantBits());
+  }
+
   /// Return the underlying `APInt` used to store whether a bit is 0/X or 1/Z.
   const APInt &getRawValue() const { return value; }
 
@@ -94,9 +116,19 @@ public:
   // Resizing
   //===--------------------------------------------------------------------===//
 
+  /// Truncate the integer to a smaller bit width. This simply discards the
+  /// high-order bits. If the integer is truncated to a bit width less than its
+  /// "active bits", information will be lost and the resulting integer will
+  /// have a different value.
+  FVInt trunc(unsigned bitWidth) const {
+    assert(bitWidth <= getBitWidth());
+    return FVInt(value.trunc(bitWidth), unknown.trunc(bitWidth));
+  }
+
   /// Zero-extend the integer to a new bit width. The additional high-order bits
   /// are filled in with zero.
   FVInt zext(unsigned bitWidth) const {
+    assert(bitWidth >= getBitWidth());
     return FVInt(value.zext(bitWidth), unknown.zext(bitWidth));
   }
 
@@ -105,7 +137,18 @@ public:
   /// also when that sign bit is X or Z. Zero-width integers are extended with
   /// zeros.
   FVInt sext(unsigned bitWidth) const {
+    assert(bitWidth >= getBitWidth());
     return FVInt(value.sext(bitWidth), unknown.sext(bitWidth));
+  }
+
+  /// Truncate or zero-extend to a target bit width.
+  FVInt zextOrTrunc(unsigned bitWidth) const {
+    return bitWidth > getBitWidth() ? zext(bitWidth) : trunc(bitWidth);
+  }
+
+  /// Truncate or sign-extend to a target bit width.
+  FVInt sextOrTrunc(unsigned bitWidth) const {
+    return bitWidth > getBitWidth() ? sext(bitWidth) : trunc(bitWidth);
   }
 
   //===--------------------------------------------------------------------===//
@@ -126,6 +169,14 @@ public:
 
   /// Determine if all bits are Z. This is true for zero-width values.
   bool isAllZ() const { return value.isAllOnes() && unknown.isAllOnes(); }
+
+  /// Determine whether the integer interpreted as a signed number would be
+  /// negative. Returns true if the sign bit is 1, and false if it is 0, X, or
+  /// Z.
+  bool isNegative() const {
+    auto idx = getBitWidth() - 1;
+    return value[idx] && !unknown[idx];
+  }
 
   //===--------------------------------------------------------------------===//
   // Bit Manipulation
@@ -485,8 +536,11 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Determine whether this integer is equal to another. Note that this
-  /// corresponds to SystemVerilog's `===` operator.
+  /// corresponds to SystemVerilog's `===` operator. Returns false if the two
+  /// integers have different bit width.
   bool operator==(const FVInt &other) const {
+    if (getBitWidth() != other.getBitWidth())
+      return false;
     return value == other.value && unknown == other.unknown;
   }
 
@@ -497,7 +551,8 @@ public:
     return value == other && !hasUnknown();
   }
 
-  /// Determine whether this integer is not equal to another.
+  /// Determine whether this integer is not equal to another. Returns true if
+  /// the two integers have different bit width.
   bool operator!=(const FVInt &other) const { return !((*this) == other); }
 
   /// Determine whether this integer is not equal to a two-valued integer.
@@ -586,6 +641,8 @@ inline raw_ostream &operator<<(raw_ostream &os, const FVInt &value) {
   value.print(os);
   return os;
 }
+
+llvm::hash_code hash_value(const FVInt &a);
 
 } // namespace circt
 

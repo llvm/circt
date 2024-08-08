@@ -138,3 +138,7 @@ void FVInt::print(raw_ostream &os) const {
       tryToString(buffer, 2);
   os << buffer;
 }
+
+llvm::hash_code circt::hash_value(const FVInt &a) {
+  return llvm::hash_combine(a.getRawValue(), a.getRawUnknown());
+}
