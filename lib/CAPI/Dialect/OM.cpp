@@ -29,6 +29,12 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(OM, om, OMDialect)
 // Type API.
 //===----------------------------------------------------------------------===//
 
+/// Is the Type an AnyType.
+bool omTypeIsAAnyType(MlirType type) { return isa<AnyType>(unwrap(type)); }
+
+/// Get the TypeID for an AnyType.
+MlirTypeID omAnyTypeGetTypeID(void) { return wrap(AnyType::getTypeID()); }
+
 /// Is the Type a ClassType.
 bool omTypeIsAClassType(MlirType type) { return isa<ClassType>(unwrap(type)); }
 
