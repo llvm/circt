@@ -42,14 +42,14 @@ public:
   virtual void disconnect() = 0;
   virtual bool isConnected() const = 0;
 
-  /// Poll for incoming data. Returns true if data was read into a buffer as a
-  /// result of the poll. Calling the call back could (will) also happen in that
-  /// case. Some backends need this to be called periodically. In the usual
-  /// case, this will be called by a background thread, but the ESI runtime does
-  /// not want to assume that the host processes use standard threads. If the
-  /// user wants to provide their own threads, they need to call this on each
-  /// port occasionally. This is also called from the 'master' poll method in
-  /// the Accelerator class.
+  /// Poll for incoming data. Returns true if data was read or written into a
+  /// buffer as a result of the poll. Calling the call back could (will) also
+  /// happen in that case. Some backends need this to be called periodically. In
+  /// the usual case, this will be called by a background thread, but the ESI
+  /// runtime does not want to assume that the host processes use standard
+  /// threads. If the user wants to provide their own threads, they need to call
+  /// this on each port occasionally. This is also called from the 'master' poll
+  /// method in the Accelerator class.
   bool poll() {
     if (isConnected())
       return pollImpl();
