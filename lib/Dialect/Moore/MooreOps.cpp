@@ -13,6 +13,7 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallString.h"
@@ -385,19 +386,21 @@ void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValueAttr());
+  printFVInt(p, getValue());
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"value"});
   p << " : ";
   p.printStrippedAttrOrType(getType());
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the constant value without bit width.
-  APInt value;
+  // Parse the constant value.
+  FVInt value;
   auto valueLoc = parser.getCurrentLocation();
+  if (parseFVInt(parser, value))
+    return failure();
 
-  if (parser.parseInteger(value) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
+  // Parse any optional attributes and the `:`.
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon())
     return failure();
 
   // Parse the result type.
@@ -417,16 +420,21 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     unsigned neededBits =
         value.isNegative() ? value.getSignificantBits() : value.getActiveBits();
     if (type.getWidth() < neededBits)
-      return parser.emitError(valueLoc,
-                              "constant out of range for result type ")
-             << type;
+      return parser.emitError(valueLoc)
+             << "value requires " << neededBits
+             << " bits, but result type only has " << type.getWidth();
     value = value.trunc(type.getWidth());
   }
 
-  // Build the attribute and op.
-  auto attrType = IntegerType::get(parser.getContext(), type.getWidth());
-  auto attrValue = IntegerAttr::get(attrType, value);
+  // If the constant contains any X or Z bits, the result type must be
+  // four-valued.
+  if (value.hasUnknown() && type.getDomain() != Domain::FourValued)
+    return parser.emitError(valueLoc)
+           << "value contains X or Z bits, but result type " << type
+           << " only allows two-valued bits";
 
+  // Build the attribute and op.
+  auto attrValue = FVIntegerAttr::get(parser.getContext(), value);
   result.addAttribute("value", attrValue);
   result.addTypes(type);
   return success();
@@ -442,11 +450,17 @@ LogicalResult ConstantOp::verify() {
 }
 
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
+                       const FVInt &value) {
+  assert(type.getWidth() == value.getBitWidth() &&
+         "FVInt width must match type width");
+  build(builder, result, type, FVIntegerAttr::get(builder.getContext(), value));
+}
+
+void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
                        const APInt &value) {
   assert(type.getWidth() == value.getBitWidth() &&
          "APInt width must match type width");
-  build(builder, result, type,
-        builder.getIntegerAttr(builder.getIntegerType(type.getWidth()), value));
+  build(builder, result, type, FVInt(value));
 }
 
 /// This builder allows construction of small signed integers like 0, 1, -1

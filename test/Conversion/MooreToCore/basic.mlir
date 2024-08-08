@@ -267,7 +267,7 @@ moore.module @Variable() {
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
-  %1 = moore.constant true : i1
+  %1 = moore.constant 1 : i1
   // CHECK: [[CAST:%.+]] = hw.bitcast %true : (i1) -> i1
   %2 = moore.conversion %1 : !moore.i1 -> !moore.l1
   // CHECK: llhd.sig "l" [[CAST]] : i1

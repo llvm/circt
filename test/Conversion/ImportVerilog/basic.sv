@@ -630,6 +630,10 @@ module Expressions;
     c = '0;
     // CHECK: moore.constant -1 : i32
     c = '1;
+    // CHECK: moore.constant hXXXXXXXX : l32
+    f = 'X;
+    // CHECK: moore.constant hZZZZZZZZ : l32
+    f = 'Z;
     // CHECK: moore.constant 42 : i32
     c = 42;
     // CHECK: moore.constant 42 : i19
@@ -638,6 +642,8 @@ module Expressions;
     c = 19'sd42;
     // CHECK: moore.constant 123456789123456789123456789123456789 : i128
     c = 128'd123456789123456789123456789123456789;
+    // CHECK: moore.constant h123XZ : l19
+    f = 19'h123XZ;
     // CHECK: [[TMP1:%.+]] = moore.read %a
     // CHECK: [[TMP2:%.+]] = moore.read %b
     // CHECK: [[TMP3:%.+]] = moore.read %c
@@ -651,7 +657,7 @@ module Expressions;
     {a, b, c} = a;
     // CHECK: moore.concat_ref %d, %e : (!moore.ref<l32>, !moore.ref<l32>) -> <l64>
     {d, e} = d;
-    // CHECK: [[TMP1:%.+]] = moore.constant false : i1
+    // CHECK: [[TMP1:%.+]] = moore.constant 0 : i1
     // CHECK: [[TMP2:%.+]] = moore.concat [[TMP1]] : (!moore.i1) -> i1
     // CHECK: moore.replicate [[TMP2]] : i1 -> i32
     a = {32{1'b0}};

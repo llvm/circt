@@ -17,6 +17,8 @@ def FVIntegerAttr : AttrDef<MooreDialect, "FVInteger"> {
   let summary = "An attribute containing a four-valued integer";
   let parameters = (ins "FVInt":$value);
   let hasCustomAssemblyFormat = 1;
+  let convertFromStorage = "$_self.getValue()";
+  let returnType = "circt::FVInt";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREATTRIBUTES

@@ -146,7 +146,8 @@ llvm::hash_code circt::hash_value(const FVInt &a) {
 
 void circt::printFVInt(AsmPrinter &p, const FVInt &value) {
   SmallString<32> buffer;
-  if (value.isNegative() && (-value).tryToString(buffer)) {
+  if (value.getBitWidth() > 1 && value.isNegative() &&
+      (-value).tryToString(buffer)) {
     p << "-" << buffer;
   } else if (value.tryToString(buffer)) {
     p << buffer;
