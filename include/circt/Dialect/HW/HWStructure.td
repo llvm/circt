@@ -231,6 +231,10 @@ def HWModuleOp : HWModuleOpBase<"module",
 
     /// Verifies the body of the function.
     LogicalResult verifyBody();
+
+    void appendPorts(
+    ArrayRef<std::tuple<StringAttr, Type, Location>> insertInputs,
+    ArrayRef<std::pair<StringAttr, Value>> insertOutputs);
   }];
 
   let hasCustomAssemblyFormat = 1;
