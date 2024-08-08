@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTMoore
+  MooreAttributes.cpp
   MooreDialect.cpp
   MooreOps.cpp
   MooreTypes.cpp
