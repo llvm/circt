@@ -10,19 +10,19 @@ add_circt_library(CIRCTSupport
   BackedgeBuilder.cpp
   CustomDirectiveImpl.cpp
   Debug.cpp
-  FieldRef.cpp
   FVInt.cpp
+  FieldRef.cpp
+  InstanceGraph.cpp
   JSON.cpp
   LoweringOptions.cpp
   Naming.cpp
+  ParsingUtils.cpp
   Passes.cpp
   Path.cpp
   PrettyPrinter.cpp
   PrettyPrinterHelpers.cpp
-  ParsingUtils.cpp
   SymCache.cpp
   ValueMapper.cpp
-  InstanceGraph.cpp
   "${VERSION_CPP}"
 
   LINK_LIBS PUBLIC
