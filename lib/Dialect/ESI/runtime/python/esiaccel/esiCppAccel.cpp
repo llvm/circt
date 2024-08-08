@@ -161,13 +161,19 @@ PYBIND11_MODULE(esiCppAccel, m) {
            })
       .def("__eq__", [](AppID &a, AppID &b) { return a == b; })
       .def("__hash__", [](AppID &id) {
-        // TODO: This is a bad hash function. Replace it.
-        return std::hash<std::string>{}(id.name) ^
-               (std::hash<uint32_t>{}(id.idx.value_or(-1)) << 1);
+        return utils::hash_combine(std::hash<std::string>{}(id.name),
+                                   std::hash<uint32_t>{}(id.idx.value_or(-1)));
       });
 
+  // py::class_<std::__basic_future<MessageData>>(m, "MessageDataFuture");
   py::class_<std::future<MessageData>>(m, "MessageDataFuture")
-      .def("valid", &std::future<MessageData>::valid)
+      .def("valid",
+           [](std::future<MessageData> &f) {
+             // For some reason, if we just pass the function pointer, pybind11
+             // sees `std::__basic_future` as the type and pybind11_stubgen
+             // emits an error.
+             return f.valid();
+           })
       .def("wait", &std::future<MessageData>::wait)
       .def("get", [](std::future<MessageData> &f) {
         MessageData data = f.get();

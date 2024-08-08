@@ -34,7 +34,6 @@ struct AppID {
   std::string name;
   std::optional<uint32_t> idx;
 
-  AppID(const AppID &) = default;
   AppID(const std::string &name, std::optional<uint32_t> idx = std::nullopt)
       : name(name), idx(idx) {}
 
