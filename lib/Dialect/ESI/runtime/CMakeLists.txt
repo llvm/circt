@@ -131,7 +131,6 @@ IF(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 ENDIF(MSVC)
 
-# The core API. For now, compile the backends into it directly.
 if(ESI_STATIC_RUNTIME)
   add_library(ESICppRuntime STATIC
     ${ESICppRuntimeSources}
@@ -164,11 +163,9 @@ target_link_libraries(ESICppRuntime PUBLIC
   nlohmann_json::nlohmann_json
 )
 if(NOT MSVC)
-  if(NOT ESI_STATIC_RUNTIME)
-    target_link_libraries(ESICppRuntime PRIVATE
-      dl
-    )
-  endif()
+  target_link_libraries(ESICppRuntime PRIVATE
+    dl
+  )
   target_link_options(ESICppRuntime PRIVATE
     -pthread
   )
