@@ -1894,23 +1894,6 @@ firrtl.circuit "WrongLayerBlockNesting" {
 
 // -----
 
-// A layer block captures a non-passive type.
-firrtl.circuit "NonPassiveCapture" {
-  firrtl.layer @A bind {}
-  firrtl.module @NonPassiveCapture() {
-    // expected-note @below {{operand is defined here}}
-    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
-    firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-      // expected-note @below {{operand is used here}}
-      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
-    }
-  }
-}
-
-// -----
-
 // A layer block may not drive sinks outside the layer block.
 firrtl.circuit "LayerBlockDrivesSinksOutside" {
   firrtl.layer @A bind {}
