@@ -998,6 +998,23 @@ OpFoldResult ConversionOp::fold(FoldAdaptor adaptor) {
   // Fold away no-op casts.
   if (getInput().getType() == getResult().getType())
     return getInput();
+
+  // Convert domains of constant integer inputs.
+  auto intInput = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput());
+  auto fromIntType = dyn_cast<IntType>(getInput().getType());
+  auto toIntType = dyn_cast<IntType>(getResult().getType());
+  if (intInput && fromIntType && toIntType &&
+      fromIntType.getWidth() == toIntType.getWidth()) {
+    // If we are going *to* a four-valued type, simply pass through the
+    // constant.
+    if (toIntType.getDomain() == Domain::FourValued)
+      return intInput;
+
+    // Otherwise map all unknown bits to zero (the default in SystemVerilog) and
+    // return a new constant.
+    return FVIntegerAttr::get(getContext(), intInput.getValue().toAPInt(false));
+  }
+
   return {};
 }
 
