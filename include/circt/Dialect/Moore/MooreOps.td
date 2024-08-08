@@ -417,7 +417,7 @@ def EventOp : MooreOp<"wait_event", [
 // Expressions
 //===----------------------------------------------------------------------===//
 
-def ConstantOp : MooreOp<"constant", [Pure]> {
+def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
   let summary = "A constant integer value";
   let arguments = (ins FVIntegerAttr:$value);
   let results = (outs IntType:$result);

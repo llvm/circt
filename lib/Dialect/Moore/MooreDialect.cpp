@@ -32,4 +32,13 @@ void MooreDialect::initialize() {
       >();
 }
 
+Operation *MooreDialect::materializeConstant(OpBuilder &builder,
+                                             Attribute value, Type type,
+                                             Location loc) {
+  if (auto intType = dyn_cast<IntType>(type))
+    if (auto intValue = dyn_cast<FVIntegerAttr>(value))
+      return builder.create<ConstantOp>(loc, intType, intValue);
+  return nullptr;
+}
+
 #include "circt/Dialect/Moore/MooreDialect.cpp.inc"
