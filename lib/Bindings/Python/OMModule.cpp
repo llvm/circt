@@ -626,6 +626,10 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
                      omFrozenBasePathTypeGetTypeID);
 
+  // Add the ListType class definition.
+  mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
+      .def_property_readonly("element_type", omListTypeGetElementType);
+
   // Add the PathType class definition.
   mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
                      omFrozenPathTypeGetTypeID);
