@@ -307,3 +307,8 @@ with Context() as ctx:
       IntegerAttr.get(IntegerType.get_unsigned(64), -42))
   # CHECK: 18446744073709551574
   print(str(int_attr6))
+
+  # Test ListType
+  list_type = Type.parse("!om.list<!om.any>")
+  assert isinstance(list_type, om.ListType)
+  assert isinstance(list_type.element_type, om.AnyType)
