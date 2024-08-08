@@ -296,10 +296,9 @@ moore.module @Variable() {
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
-  %1 = moore.constant 1 : i1
-  %2 = moore.conversion %1 : !moore.i1 -> !moore.l1
+  %1 = moore.constant 1 : l1
   // CHECK: llhd.sig "l" %true : i1
-  %l = moore.variable %2 : <l1>
+  %l = moore.variable %1 : <l1>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
