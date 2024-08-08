@@ -3,8 +3,13 @@
 
 sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
 // CHECK:       sv.func private @dpi(out arg0 : i1, in %arg1 : i1, out arg2 : i1)
+// CHECK-NEXT:  sv.macro.decl @__CIRCT_DPI_IMPORT_DPI
 // CHECK-NEXT:  emit.fragment @dpi_dpi_import_fragument {
-// CHECK-NEXT:    sv.func.dpi.import @dpi
+// CHECK-NEXT:    sv.ifdef @__CIRCT_DPI_IMPORT_DPI {
+// CHECK-NEXT:    } else {
+// CHECK-NEXT:      sv.func.dpi.import @dpi
+// CHECK-NEXT:      sv.macro.def @__CIRCT_DPI_IMPORT_DPI ""
+// CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 // VERILOG:      import "DPI-C" context function void dpi(
