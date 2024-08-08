@@ -1,5 +1,7 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
+// CHECK: #moore.fvint<0 : 0>
+hw.constant false {foo = #moore.fvint<0 : 0>}
 // CHECK: #moore.fvint<42 : 32>
 hw.constant false {foo = #moore.fvint<42 : 32>}
 // CHECK: #moore.fvint<-42 : 32>

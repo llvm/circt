@@ -183,8 +183,11 @@ struct ConstantOpConv : public OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, op.getValueAttr());
+    // FIXME: Discard unknown bits and map them to 0 for now.
+    auto value = op.getValue().toAPInt(false);
+    auto type = rewriter.getIntegerType(value.getBitWidth());
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, type, rewriter.getIntegerAttr(type, value));
     return success();
   }
 };

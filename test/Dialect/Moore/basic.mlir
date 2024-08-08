@@ -140,12 +140,26 @@ moore.module @Expressions(
   // CHECK-SAME: in [[REF_STRUCT1:%.+]] : !moore.ref<struct<{a: i32, b: i32}>>
   in %refStruct1: !moore.ref<struct<{a: i32, b: i32}>>
 ) {
+  // CHECK: moore.constant 0 : i0
+  moore.constant 0 : i0
+  // CHECK: moore.constant 0 : i1
+  moore.constant 0 : i1
+  // CHECK: moore.constant 1 : i1
+  moore.constant 1 : i1
   // CHECK: moore.constant 0 : i32
   moore.constant 0 : i32
   // CHECK: moore.constant -2 : i2
   moore.constant 2 : i2
   // CHECK: moore.constant -2 : i2
   moore.constant -2 : i2
+  // CHECK: moore.constant 1311768467463790320 : i64
+  moore.constant h123456789ABCDEF0 : i64
+  // CHECK: moore.constant h123456789ABCDEF0XZ : l72
+  moore.constant h123456789ABCDEF0XZ : l72
+  // CHECK: moore.constant 10 : i8
+  moore.constant b1010 : i8
+  // CHECK: moore.constant b1010XZ : l8
+  moore.constant b1010XZ : l8
 
   // CHECK: moore.conversion [[A]] : !moore.i32 -> !moore.l32
   moore.conversion %a : !moore.i32 -> !moore.l32

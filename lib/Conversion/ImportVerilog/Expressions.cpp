@@ -14,6 +14,19 @@ using namespace circt;
 using namespace ImportVerilog;
 using moore::Domain;
 
+/// Convert a Slang `SVInt` to a CIRCT `FVInt`.
+static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
+  if (svint.hasUnknown()) {
+    unsigned numWords = svint.getNumWords() / 2;
+    auto value = ArrayRef<uint64_t>(svint.getRawPtr(), numWords);
+    auto unknown = ArrayRef<uint64_t>(svint.getRawPtr() + numWords, numWords);
+    return FVInt(APInt(svint.getBitWidth(), value),
+                 APInt(svint.getBitWidth(), unknown));
+  }
+  auto value = ArrayRef<uint64_t>(svint.getRawPtr(), svint.getNumWords());
+  return FVInt(APInt(svint.getBitWidth(), value));
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct RvalueExprVisitor {
@@ -98,7 +111,7 @@ struct RvalueExprVisitor {
       auto type = context.convertType(*expr.type);
       if (!type)
         return {};
-      return convertSVInt(constant.integer(), type);
+      return materializeSVInt(constant.integer(), type);
     }
 
     // Otherwise some other part of ImportVerilog should have added an MLIR
@@ -411,20 +424,17 @@ struct RvalueExprVisitor {
     return {};
   }
 
-  // Materialize a Slang integer literal as a constant op.
-  Value convertSVInt(const slang::SVInt &value, Type type) {
-    if (value.hasUnknown()) {
-      mlir::emitError(loc, "literals with X or Z bits not supported");
-      return {};
-    }
-    auto intType =
-        moore::IntType::get(context.getContext(), value.getBitWidth(),
-                            value.hasUnknown() ? moore::Domain::FourValued
+  /// Materialize a Slang integer literal as a constant op.
+  Value materializeSVInt(const slang::SVInt &svint, Type type) {
+    auto fvint = convertSVIntToFVInt(svint);
+    bool typeIsFourValued = false;
+    if (auto unpackedType = dyn_cast<moore::UnpackedType>(type))
+      typeIsFourValued = unpackedType.getDomain() == moore::Domain::FourValued;
+    auto intType = moore::IntType::get(
+        context.getContext(), fvint.getBitWidth(),
+        fvint.hasUnknown() || typeIsFourValued ? moore::Domain::FourValued
                                                : moore::Domain::TwoValued);
-    Value result = builder.create<moore::ConstantOp>(
-        loc, intType,
-        APInt(value.getBitWidth(),
-              ArrayRef<uint64_t>(value.getRawPtr(), value.getNumWords())));
+    Value result = builder.create<moore::ConstantOp>(loc, intType, fvint);
     if (result.getType() != type)
       result = builder.create<moore::ConversionOp>(loc, type, result);
     return result;
@@ -435,7 +445,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle integer literals.
@@ -443,7 +453,7 @@ struct RvalueExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return convertSVInt(expr.getValue(), type);
+    return materializeSVInt(expr.getValue(), type);
   }
 
   // Handle concatenations.

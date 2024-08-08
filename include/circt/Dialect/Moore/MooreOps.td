@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREOPS
 #define CIRCT_DIALECT_MOORE_MOOREOPS
 
+include "circt/Dialect/Moore/MooreAttributes.td"
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -417,12 +418,13 @@ def EventOp : MooreOp<"wait_event", [
 
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins FVIntegerAttr:$value);
   let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasFolder = 1;
   let builders = [
+    OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
