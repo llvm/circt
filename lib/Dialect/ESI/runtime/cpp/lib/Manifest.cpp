@@ -534,9 +534,8 @@ std::vector<ModuleInfo> Manifest::getModuleInfos() const {
   return ret;
 }
 
-std::unique_ptr<Accelerator>
-Manifest::buildAccelerator(AcceleratorConnection &acc) const {
-  return impl->buildAccelerator(acc);
+Accelerator *Manifest::buildAccelerator(AcceleratorConnection &acc) const {
+  return acc.takeOwnership(impl->buildAccelerator(acc));
 }
 
 const std::vector<const Type *> &Manifest::getTypeTable() const {
