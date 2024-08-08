@@ -5,6 +5,19 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
+// This file implements a transformation that "tries" to sink as many clock
+// gates as possible. This is a best-effort transformation, no assumptions can
+// be made post this transformation.
+// A clock gate can be sunk through an instance to a module, if all the
+// instances of the module are known and they reference a unique HWModuleOp. If
+// there are instances of a module, that have gated clock while others have
+// un-gated clock, then the un-gated versions add a constant true enable
+// condition. This analysis relies on the fact that the HW instance graph cannot
+// have cycles/recursion. It is guarunteed that any instance operand will be
+// updated only once. This assert checks for it:
+// `assert(llvm::isa_and_nonnull<ConstantOp>(def))`
+// This doesnot handle gated clocks returned from an output port yet.
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -20,7 +33,9 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 #include <string>
 
 namespace circt {
@@ -41,12 +56,15 @@ struct SinkClockGatesPass
     : public circt::seq::impl::SinkClockGatesBase<SinkClockGatesPass> {
   using SinkClockGatesBase::SinkClockGatesBase;
 
-  // TODO: Can be moved to some utils !!
-  /// Append inputs to the instance, and also update the referenced modules.
-  void appendInputsToInstance(HWInstanceLike instance,
-                              ArrayRef<std::pair<StringAttr, Value>> inputs,
-                              ArrayRef<HWModuleOp> refModules) {
+  /// Append input ports to the module and all its instances.
+  /// Add the given values as operands to the `instance`. Add constant true op
+  /// as input to the other instances of the module.
+  void appendInputsToModuleAndInstances(
+      HWInstanceLike instance, ArrayRef<HWInstanceLike> moduleInstances,
+      ArrayRef<std::pair<StringAttr, Value>> inputs, HWModuleOp refMod) {
 
+    if (inputs.empty())
+      return;
     SmallVector<Attribute> argNames;
     if (auto args = instance->getAttrOfType<ArrayAttr>("argNames"))
       argNames.insert(argNames.begin(), args.begin(), args.end());
@@ -70,21 +88,60 @@ struct SinkClockGatesPass
     if (!argNames.empty())
       instance->setAttr("argNames",
                         ArrayAttr::get(instance->getContext(), argNames));
-    // Update all the modules with the new input ports.
-    for (auto refMod : refModules) {
-      refMod.appendPorts(newInputs, {});
+
+    // Now update other instances of the module.
+    for (auto otherInstance : moduleInstances) {
+      if (otherInstance == instance)
+        continue;
+      SmallVector<Value, 2> otherInstanceNewOperands;
+      otherInstanceNewOperands.reserve(inputs.size());
+      mlir::OpBuilder builder(otherInstance);
+      for (unsigned i = 0; i < inputs.size(); ++i)
+        otherInstanceNewOperands.emplace_back(builder.create<ConstantOp>(
+            otherInstance->getLoc(), builder.getI1Type(), 1));
+
+      otherInstance->insertOperands(otherInstance->getNumOperands(),
+                                    otherInstanceNewOperands);
+      if (otherInstance->hasAttr("argNames"))
+        otherInstance->setAttr(
+            "argNames", ArrayAttr::get(instance->getContext(), argNames));
     }
+    // Update all the modules with the new input ports.
+    refMod.appendPorts(newInputs, {});
   }
 
-  /// Get the referenced modules for an instance.
-  SmallVector<HWModuleOp, 1> getReferencedModules(HWInstanceLike inst) {
-    SmallVector<HWModuleOp, 1> refMods;
-    for (auto refModName : inst.getReferencedModuleNamesAttr()) {
-      auto *node = graph->lookup(cast<StringAttr>(refModName));
-      if (auto instModule = dyn_cast_or_null<HWModuleOp>(*node->getModule()))
-        refMods.push_back(instModule);
+  /// Get the referenced module for an instance, and add all the instances of
+  /// the module to `instances`.
+  HWModuleOp getReferencedModules(HWInstanceLike inst,
+                                  SmallVector<HWInstanceLike, 2> &instances) {
+    HWModuleOp instModule = {};
+    auto refModNames = inst.getReferencedModuleNamesAttr();
+    if (refModNames.size() != 1) {
+      inst.emitWarning("expected an instance with a single reference");
+      return {};
     }
-    return refMods;
+    auto *node = graph->lookup(cast<StringAttr>(*refModNames.begin()));
+    if (node)
+      instModule = dyn_cast_or_null<HWModuleOp>(*node->getModule());
+    if (instModule.isPublic())
+      return {};
+
+    for (auto *use : node->uses()) {
+      auto otherInstance = use->getInstance<HWInstanceLike>();
+      if (!otherInstance) {
+        instModule.emitWarning("Cannot find all instances");
+        return {};
+      }
+      if (otherInstance.getReferencedModuleNamesAttr().size() != 1) {
+
+        otherInstance.emitWarning(
+            "expected an instance with a single reference");
+        return {};
+      }
+      instances.push_back(otherInstance);
+    }
+
+    return instModule;
   }
 
   /// If the `argNames` attribute exists, return it.
@@ -126,14 +183,17 @@ struct SinkClockGatesPass
   void runOnOperation() override;
 
 private:
+  using ClockEnablePortPairs = DenseMap<unsigned, unsigned>;
   InstanceGraph *graph;
   DenseSet<Operation *> opsToErase;
   mlir::MLIRContext *context;
+  DenseMap<HWModuleOp, ClockEnablePortPairs> moduleClockGateEnableMap;
 };
 
 void SinkClockGatesPass::runOnOperation() {
   graph = &getAnalysis<circt::hw::InstanceGraph>();
-  DenseSet<HWInstanceLike> instancesWithGatedClk;
+  // A setvector is required for a deterministic output.
+  SetVector<HWInstanceLike> instancesWithGatedClk;
   DenseSet<Operation *> opsWithGatedClock;
   context = getOperation().getContext();
 
@@ -142,7 +202,6 @@ void SinkClockGatesPass::runOnOperation() {
   // This also collapses consecutive clock gates.
   auto findInstancesWithGatedClock = [&](HWModuleOp hwModule) {
     hwModule->walk([&](ClockGateOp clkGate) {
-      bool canErase = true;
       for (auto &use : clkGate->getUses()) {
         auto *useOp = use.getOwner();
         if (auto inst = dyn_cast<HWInstanceLike>(useOp))
@@ -150,12 +209,9 @@ void SinkClockGatesPass::runOnOperation() {
         else if (auto userGate = dyn_cast<ClockGateOp>(useOp)) {
           collapseConsecutiveClockGates(clkGate, userGate);
         } else {
-          canErase = false;
           opsWithGatedClock.insert(useOp);
         }
       }
-      if (canErase)
-        opsToErase.insert(clkGate);
     });
   };
   // Seed phase, find the instances to start the traversal from.
@@ -170,20 +226,30 @@ void SinkClockGatesPass::runOnOperation() {
   while (!instancesWithGatedClk.empty()) {
 
     // Remove an entry from the set.
-    auto entry = instancesWithGatedClk.begin();
+    const auto *entry = instancesWithGatedClk.begin();
     HWInstanceLike inst = *entry;
     instancesWithGatedClk.erase(entry);
 
     // Now, find all the gated clocks that are input to the instance, and
     // duplicate it at the referenced module.
 
-    SmallVector<HWModuleOp> refMods = getReferencedModules(inst);
+    SmallVector<HWInstanceLike, 2> moduleInstances;
+    HWModuleOp refMod = getReferencedModules(inst, moduleInstances);
+    if (!refMod) {
+      // If we cannot identify a unique HWModuleOp, ignore the instance.
+      // Multiple references and extern modules cannot be handled, and gated
+      // clocks cannot be sunk into them.
+      continue;
+    }
     // Index of the instance operands that are a gated clock.
     SmallVector<unsigned> gatedClkPorts;
     // The new enable ports that will be added to the instance.
     SmallVector<std::pair<StringAttr, Value>> enablePorts;
     // The instance may or maynot have argNames attribute.
     SmallVector<StringAttr> argNames = getInstanceArgNames(inst);
+    unsigned enablePortNum = inst->getNumOperands();
+    ClockEnablePortPairs &clockEnablePortIndices =
+        moduleClockGateEnableMap[refMod];
     // Iterate over all instance operands to find a gated clock.
     for (auto [index, in] : llvm::enumerate(inst->getOperands())) {
       if (!isa<seq::ClockType>(in.getType()))
@@ -191,11 +257,27 @@ void SinkClockGatesPass::runOnOperation() {
       auto clkGate = dyn_cast_or_null<ClockGateOp>(in.getDefiningOp());
       if (!clkGate)
         continue;
-      gatedClkPorts.push_back(index);
-      Value enable = getEnable(clkGate);
-
+      if (clkGate->hasOneUse())
+        opsToErase.insert(clkGate);
       // Replace the gated clock with the original base clock.
       inst->setOperand(index, clkGate.getInput());
+      Value enable = getEnable(clkGate);
+      if (clockEnablePortIndices.contains(index)) {
+        // The enable for this clock is already added, (from another instance of
+        // the module).
+        auto oldEnablePort = clockEnablePortIndices[index];
+        auto oldEnableVal = inst->getOperand(oldEnablePort);
+        auto *def = oldEnableVal.getDefiningOp();
+        assert(llvm::isa_and_nonnull<ConstantOp>(def));
+        inst->setOperand(oldEnablePort, enable);
+        if (def->getUses().empty())
+          opsToErase.insert(def);
+        continue;
+      }
+
+      clockEnablePortIndices[index] = enablePortNum++;
+      gatedClkPorts.push_back(index);
+
       // Create a name for the new enable port.
       auto clockIndexStr = std::to_string(index);
       enablePorts.emplace_back(
@@ -206,28 +288,30 @@ void SinkClockGatesPass::runOnOperation() {
                               clockIndexStr),
           enable);
     }
+    if (enablePorts.empty())
+      continue;
     unsigned oldNumInputs = inst->getNumOperands();
+
     // Now update the instance and all the referenced modules with the new
     // enable ports.
-    appendInputsToInstance(inst, enablePorts, refMods);
+    appendInputsToModuleAndInstances(inst, moduleInstances, enablePorts,
+                                     refMod);
     // Third phase, Once all the modules are updated with the additional enable
     // ports, duplicate the clock_gate op in the referenced module.
-    for (auto mod : refMods) {
-      auto *block = mod.getBodyBlock();
-      auto builder = mlir::OpBuilder::atBlockBegin(block);
-      for (auto [index, clkPort] : llvm::enumerate(gatedClkPorts)) {
-        auto clk = block->getArgument(clkPort);
-        assert(isa<ClockType>(clk.getType()));
-        auto enable = block->getArgument(oldNumInputs + index);
-        auto clkGate = builder.create<ClockGateOp>(enable.getLoc(), clk, enable,
-                                                   Value(), hw::InnerSymAttr());
-        // Replace all the original clock users with the gated clock.
-        clk.replaceAllUsesExcept(clkGate.getResult(), clkGate);
-      }
-      // After adding the new clock gates, scan the module for instances that
-      // have a gated clock as input, and continue sinking the clock gates.
-      findInstancesWithGatedClock(mod);
+    auto *block = refMod.getBodyBlock();
+    auto builder = mlir::OpBuilder::atBlockBegin(block);
+    for (auto [index, clkPort] : llvm::enumerate(gatedClkPorts)) {
+      auto clk = block->getArgument(clkPort);
+      assert(isa<ClockType>(clk.getType()));
+      auto enable = block->getArgument(oldNumInputs + index);
+      auto clkGate = builder.create<ClockGateOp>(enable.getLoc(), clk, enable,
+                                                 Value(), hw::InnerSymAttr());
+      // Replace all the original clock users with the gated clock.
+      clk.replaceAllUsesExcept(clkGate.getResult(), clkGate);
     }
+    // After adding the new clock gates, scan the module for instances that
+    // have a gated clock as input, and continue sinking the clock gates.
+    findInstancesWithGatedClock(refMod);
   }
   for (auto *gatedOp : opsWithGatedClock) {
     LLVM_DEBUG(llvm::dbgs() << "\n Gated clock user: " << gatedOp);
