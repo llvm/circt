@@ -107,4 +107,11 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 
+def SinkClockGates : Pass<"sink-clock-gates", "mlir::ModuleOp"> {
+  let summary = "Sink the gated clock enables into the op that is driven by the clock.";
+  let constructor = "circt::seq::createSinkClockGatesPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+}
+
+
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES
