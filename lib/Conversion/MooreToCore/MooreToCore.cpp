@@ -264,15 +264,27 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
   matchAndRewrite(DynExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    auto width = typeConverter->convertType(op.getInput().getType())
-                     .getIntOrFloatBitWidth();
-    Value amount =
-        adjustIntegerWidth(rewriter, adaptor.getLowBit(), width, op->getLoc());
-    Value value =
-        rewriter.create<comb::ShrUOp>(op->getLoc(), adaptor.getInput(), amount);
+    Type inputType = adaptor.getInput().getType();
 
-    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, value, 0);
-    return success();
+    if (auto intType = dyn_cast<IntegerType>(inputType)) {
+      Value amount = adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                                        intType.getWidth(), op->getLoc());
+      Value value = rewriter.create<comb::ShrUOp>(op->getLoc(),
+                                                  adaptor.getInput(), amount);
+
+      rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, value, 0);
+      return success();
+    }
+
+    if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
+      unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getNumElements());
+      Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
+                                     op->getLoc());
+      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
+      return success();
+    }
+
+    return failure();
   }
 };
 
@@ -396,12 +408,20 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
   LogicalResult
   matchAndRewrite(ConversionOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Value amount =
-        adjustIntegerWidth(rewriter, adaptor.getInput(),
-                           resultType.getIntOrFloatBitWidth(), op->getLoc());
+    int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
+    int64_t resultBw = hw::getBitWidth(resultType);
+    if (inputBw == -1 || resultBw == -1)
+      return failure();
 
-    rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, resultType, amount);
+    Value input = rewriter.createOrFold<hw::BitcastOp>(
+        loc, rewriter.getIntegerType(inputBw), adaptor.getInput());
+    Value amount = adjustIntegerWidth(rewriter, input, resultBw, loc);
+
+    Value result =
+        rewriter.createOrFold<hw::BitcastOp>(loc, resultType, amount);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -664,6 +684,22 @@ static void populateLegality(ConversionTarget &target) {
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
     return mlir::IntegerType::get(type.getContext(), type.getWidth());
+  });
+
+  typeConverter.addConversion([&](ArrayType type) {
+    return hw::ArrayType::get(typeConverter.convertType(type.getElementType()),
+                              type.getSize());
+  });
+
+  typeConverter.addConversion([&](StructType type) {
+    SmallVector<hw::StructType::FieldInfo> fields;
+    for (auto field : type.getMembers()) {
+      hw::StructType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      info.name = field.name;
+      fields.push_back(info);
+    }
+    return hw::StructType::get(type.getContext(), fields);
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
