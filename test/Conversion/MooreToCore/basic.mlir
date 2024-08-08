@@ -311,3 +311,10 @@ moore.module @Variable() {
   // CHECK: hw.output
   moore.output
 }
+
+// CHECK-LABEL: func @Struct
+func.func @Struct(%arg0: !moore.struct<{exp_bits: i32, man_bits: i32}>) -> !moore.i32 {
+  // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
+  %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
+  return %0 : !moore.i32
+}
