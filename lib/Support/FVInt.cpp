@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Support/FVInt.h"
+#include "mlir/IR/OpImplementation.h"
 #include "llvm/ADT/StringExtras.h"
 
 #define DEBUG_TYPE "fvint"
@@ -141,4 +142,53 @@ void FVInt::print(raw_ostream &os) const {
 
 llvm::hash_code circt::hash_value(const FVInt &a) {
   return llvm::hash_combine(a.getRawValue(), a.getRawUnknown());
+}
+
+void circt::printFVInt(AsmPrinter &p, const FVInt &value) {
+  SmallString<32> buffer;
+  if (value.isNegative() && (-value).tryToString(buffer)) {
+    p << "-" << buffer;
+  } else if (value.tryToString(buffer)) {
+    p << buffer;
+  } else if (value.tryToString(buffer, 16)) {
+    p << "h" << buffer;
+  } else {
+    value.tryToString(buffer, 2);
+    p << "b" << buffer;
+  }
+}
+
+ParseResult circt::parseFVInt(AsmParser &p, FVInt &result) {
+  // Parse the value as either a keyword (`b[01XZ]+` for binary or
+  // `h[0-9A-FXZ]+` for hexadecimal), or an integer value (for decimal).
+  FVInt value;
+  StringRef strValue;
+  auto valueLoc = p.getCurrentLocation();
+  if (succeeded(p.parseOptionalKeyword(&strValue))) {
+    // Determine the radix based on the `b` or `h` prefix.
+    unsigned base = 0;
+    if (strValue.consume_front("b")) {
+      base = 2;
+    } else if (strValue.consume_front("h")) {
+      base = 16;
+    } else {
+      return p.emitError(valueLoc) << "expected `b` or `h` prefix";
+    }
+
+    // Parse the value.
+    auto parsedValue = FVInt::tryFromString(strValue, base);
+    if (!parsedValue) {
+      return p.emitError(valueLoc)
+             << "expected base-" << base << " four-valued integer";
+    }
+
+    // Add a zero bit at the top to ensure the value reads as positive.
+    result = parsedValue->zext(parsedValue->getBitWidth() + 1);
+  } else {
+    APInt intValue;
+    if (p.parseInteger(intValue))
+      return failure();
+    result = std::move(intValue);
+  }
+  return success();
 }

@@ -644,6 +644,33 @@ inline raw_ostream &operator<<(raw_ostream &os, const FVInt &value) {
 
 llvm::hash_code hash_value(const FVInt &a);
 
+/// Print a four-valued integer usign an `AsmPrinter`. This produces the
+/// following output formats:
+///
+/// - Decimal notation if the integer has no unknown bits. The sign bit is used
+///   to determine whether the value is printed as negative number or not.
+/// - Hexadecimal notation with a leading `h` if the integer the bits in each
+///   hex digit are either all known, all X, or all Z.
+/// - Binary notation with a leading `b` in all other cases.
+void printFVInt(AsmPrinter &p, const FVInt &value);
+
+/// Parse a four-valued integer using an `AsmParser`. This accepts the following
+/// formats:
+///
+/// - `42`/`-42`: positive or negative integer in decimal notation. The sign bit
+///   of the result indicates whether the value was negative. Cannot contain
+///   unknown X or Z digits.
+/// - `h123456789ABCDEF0XZ`: signless integer in hexadecimal notation. Can
+///   contain unknown X or Z digits.
+/// - `b10XZ`: signless integer in binary notation. Can contain unknown X or Z
+///   digits.
+///
+/// The result has enough bits to fully represent the parsed integer, and to
+/// have the sign bit encode whether the integer was written as a negative
+/// number in the input. The result's bit width may be larger than the minimum
+/// number of bits required to represent its value.
+ParseResult parseFVInt(AsmParser &p, FVInt &result);
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_FVINT_H
