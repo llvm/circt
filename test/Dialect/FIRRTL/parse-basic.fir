@@ -1913,7 +1913,7 @@ FIRRTL version 4.0.0
 ; CHECK-LABEL: circuit "Foo"
 circuit Foo:
 
-  ; CHECK-LABEL: firrtl.module @Foo
+  ; CHECK-LABEL: firrtl.module @Foo(in %data: !firrtl.uint<32>, in %c: !firrtl.uint<1>, out %out: !firrtl.uint<32>)
   public module Foo:
     input data : UInt<32>
     input c : UInt<1>
@@ -1925,12 +1925,12 @@ circuit Foo:
     else:
       out <= data
 
-  ; CHECK-LABEL: firrtl.module @FooTest(in %s_foo_c : !firrtl.uint<1>, in %s_foo_data : !firrtl.uint<32>)
-  module FooTest:
+  ; CHECK-LABEL: firrtl.module @FooTest(in %s_foo_c: !firrtl.uint<1>, in %s_foo_data: !firrtl.uint<32>)
+  public module FooTest:
     input s_foo_c : UInt<1>
     input s_foo_data : UInt<32>
 
-    ; CHECK-NEXT: %foo_data, %foo_c, %foo_out = firrtl.instance foo interesting_name @FooTest(in data: !firrtl.uint<32>, in c: !firrtl.uint<1>, out out: !firrtl.uint<32>)
+    ; CHECK-NEXT: %foo_data, %foo_c, %foo_out = firrtl.instance foo interesting_name @Foo(in data: !firrtl.uint<32>, in c: !firrtl.uint<1>, out out: !firrtl.uint<32>)
     inst foo of Foo
     ; CHECK-NEXT: firrtl.matchingconnect %foo_c, %s_foo_c : !firrtl.uint<1>
     connect foo.c, s_foo_c
@@ -1941,7 +1941,7 @@ circuit Foo:
     ; CHECK-NEXT: firrtl.int.generic "circt_verif_assert"  %1 : (!firrtl.uint<1>) -> ()
     intrinsic(circt_verif_assert, intrinsic(circt_ltl_implication : UInt<1>, s_foo_c, eq(foo.out, s_foo_data)))
 
-  ; CHECK-NEXT: firrtl.formal @testFormal of @FooTest bound 20
+  ; CHECK: firrtl.formal @testFormal of @FooTest bound 20
   formal testFormal of FooTest, bound = 20
 
 

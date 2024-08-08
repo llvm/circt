@@ -5176,13 +5176,6 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
       info.parseOptionalInfo())
     return failure();
 
-  SymbolTable circuitSymTbl(circuit);
-
-  // Check that the instance is valid
-  auto referencedModule = circuitSymTbl.lookup<FModuleLike>(moduleName);
-  if (!referencedModule)
-    return failure();
-
   // Check that the parameter is valid
   if (boundSpelling != "bound" || bound <= 0)
     return emitError("Invalid parameter given to formal test: ")

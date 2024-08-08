@@ -42,11 +42,7 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
 
 def FormalOp : ReferableDeclOp<"formal", [
     HasParent<"firrtl::CircuitOp">,
-    DeclareOpInterfaceMethods<FInstanceLike>,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getModuleName"
-    ]>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "A formal test definition.";
   let description = [{

@@ -3366,14 +3366,19 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult
 FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
-  return instance_like_impl::verifyReferencedModule(*this, symbolTable,
-                                                    getModuleNameAttr());
-}
+  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleLike>(
+      *this, getModuleNameAttr());
+  if (!referencedModule) {
+    return (*this)->emitOpError("invalid symbol reference");
+  }
 
-StringRef FormalOp::getInstanceName() { return getSymName(); }
-
-StringAttr FormalOp::getInstanceNameAttr() {
-  return StringAttr::get(getContext(), getSymName());
+  // Check this is not a class.
+  if (isa<ClassOp>(referencedModule))
+    return (*this)
+               ->emitOpError("must instantiate a module not a class")
+               .attachNote(referencedModule.getLoc())
+           << "class declared here";
+  return success();
 }
 
 std::optional<size_t> FormalOp::getTargetResultIndex() {
