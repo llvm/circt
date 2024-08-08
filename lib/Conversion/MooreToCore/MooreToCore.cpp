@@ -288,6 +288,18 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
   }
 };
 
+struct StructExtractOpConversion : public OpConversionPattern<StructExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StructExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::StructExtractOp>(
+        op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    return success();
+  }
+};
+
 struct ReduceAndOpConversion : public OpConversionPattern<ReduceAndOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -741,7 +753,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, DynExtractOpConversion, ConversionOpConversion,
-    ReadOpConversion, NamedConstantOpConv,
+    ReadOpConversion, NamedConstantOpConv, StructExtractOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
