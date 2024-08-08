@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -745,15 +746,29 @@ LogicalResult ComponentOp::verify() {
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
-  bool hasNoControlConstructs =
-      getControlOp().getBodyBlock()->getOperations().empty();
+  bool hasNoControlConstructs = true;
+  getControlOp().walk<WalkOrder::PreOrder>([&](Operation *op) {
+    if (dyn_cast<EnableOp>(op))
+      hasNoControlConstructs = false;
+    if (dyn_cast<InvokeOp>(op))
+      hasNoControlConstructs = false;
+    if (dyn_cast<fsm::MachineOp>(op))
+      hasNoControlConstructs = false;
+    if (hasNoControlConstructs == false)
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
   bool hasNoAssignments =
       getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
     return emitOpError(
-        "The component currently does nothing. It needs to either have "
-        "continuous assignments in the Wires region or control constructs in "
-        "the Control region.");
+               "The component currently does nothing. It needs to either have "
+               "continuous assignments in the Wires region or control "
+               "constructs in "
+               "the Control region.The Control region should involve ")
+           << "'" << EnableOp::getOperationName() << "' , "
+           << "'" << InvokeOp::getOperationName() << "' or "
+           << "'" << fsm::MachineOp::getOperationName() << "'.";
 
   return success();
 }
@@ -843,8 +858,7 @@ LogicalResult CombComponentOp::verify() {
   if (hasNoAssignments)
     return emitOpError(
         "The component currently does nothing. It needs to either have "
-        "continuous assignments in the Wires region or control constructs in "
-        "the Control region.");
+        "continuous assignments in the Wires region.");
 
   // Check that all cells are combinational
   auto cells = getOps<CellInterface>();
