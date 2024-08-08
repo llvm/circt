@@ -134,15 +134,16 @@ namespace registry {
 
 // Connect to an ESI accelerator given a backend name and connection specifier.
 // Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection);
+std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
+                                               const std::string &backend,
+                                               const std::string &connection);
 
 namespace internal {
 
 /// Backends can register themselves to be connected via a connection string.
 using BackendCreate = std::function<std::unique_ptr<AcceleratorConnection>(
     Context &, std::string)>;
-void registerBackend(std::string name, BackendCreate create);
+void registerBackend(const std::string &name, BackendCreate create);
 
 // Helper struct to
 template <typename TAccelerator>

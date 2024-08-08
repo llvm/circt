@@ -175,22 +175,35 @@ static void loadBackend(std::string backend) {
 namespace registry {
 namespace internal {
 
-static std::map<std::string, BackendCreate> backendRegistry;
-void registerBackend(std::string name, BackendCreate create) {
-  if (backendRegistry.count(name))
+class BackendRegistry {
+public:
+  static std::map<std::string, BackendCreate> &get() {
+    static BackendRegistry instance;
+    return instance.backendRegistry;
+  }
+
+private:
+  std::map<std::string, BackendCreate> backendRegistry;
+};
+
+void registerBackend(const std::string &name, BackendCreate create) {
+  auto &registry = BackendRegistry::get();
+  if (registry.count(name))
     throw std::runtime_error("Backend already exists in registry");
-  backendRegistry[name] = create;
+  registry[name] = create;
 }
 } // namespace internal
 
-std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection) {
-  auto f = internal::backendRegistry.find(backend);
-  if (f == internal::backendRegistry.end()) {
+std::unique_ptr<AcceleratorConnection> connect(Context &ctxt,
+                                               const std::string &backend,
+                                               const std::string &connection) {
+  auto &registry = internal::BackendRegistry::get();
+  auto f = registry.find(backend);
+  if (f == registry.end()) {
     // If it's not already found in the registry, try to load it dynamically.
     loadBackend(backend);
-    f = internal::backendRegistry.find(backend);
-    if (f == internal::backendRegistry.end())
+    f = registry.find(backend);
+    if (f == registry.end())
       throw std::runtime_error("Backend '" + backend + "' not found");
   }
   return f->second(ctxt, connection);
