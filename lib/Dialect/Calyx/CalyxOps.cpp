@@ -769,7 +769,6 @@ LogicalResult ComponentOp::verify() {
            << "'" << EnableOp::getOperationName() << "' , "
            << "'" << InvokeOp::getOperationName() << "' or "
            << "'" << fsm::MachineOp::getOperationName() << "'.";
-
   return success();
 }
 
