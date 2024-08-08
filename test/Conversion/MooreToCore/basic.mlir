@@ -62,8 +62,17 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.constant 12 : !moore.i32
   moore.constant 3 : !moore.i6
 
-  // CHECK-NEXT: hw.bitcast %arg0 : (i1) -> i1
   moore.conversion %arg0 : !moore.i1 -> !moore.l1
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i2 
+  // CHECK-NEXT: comb.concat [[V0]], %arg2 : i2, i6 
+  moore.conversion %arg2 : !moore.i6 -> !moore.l8
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
+  // CHECK-NEXT: [[V1:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V2:%.+]] = comb.icmp eq [[V0]], [[V1]] : i2
+  // CHECK-NEXT: [[V3:%.+]] = comb.extract %arg2 from 0 : (i6) -> i4
+  // CHECK-NEXT: [[V4:%.+]] = hw.constant -1 : i4
+  // CHECK-NEXT: comb.mux [[V2]], [[V3]], [[V4]] : i4
+  moore.conversion %arg2 : !moore.i6 -> !moore.l4
 
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i5
   // CHECK-NEXT: [[V1:%.+]] = comb.concat [[V0]], %arg0 : i5, i1
@@ -191,6 +200,26 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   return
 }
 
+// CHECK-LABEL: func @AdvancedConversion
+func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
+  // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
+  %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
+  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
+  %1 = moore.conversion %0 : !moore.i320 -> !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>
+  // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
+  %2 = moore.conversion %arg0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>> -> !moore.i320  
+  // CHECK: return [[V1]], [[V2]]
+  return %1, %2 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320
+}
+
+// CHECK-LABEL: func.func @DynExtractConversion
+func.func @DynExtractConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> !moore.struct<{exp_bits: i32, man_bits: i32}> {
+  %0 = moore.constant 3 : !moore.i32
+  // CHECK: hw.array_get %arg0[{{.*}}] : !hw.array<5xstruct<exp_bits: i32, man_bits: i32>>, i3
+  %1 = moore.dyn_extract %arg0 from %0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i32 -> !moore.struct<{exp_bits: i32, man_bits: i32}>
+  return %1 : !moore.struct<{exp_bits: i32, man_bits: i32}>
+}
+
 // CHECK-LABEL: hw.module @InstanceNull() {
 moore.module @InstanceNull() {
 
@@ -268,9 +297,8 @@ moore.module @Variable() {
 
   // CHECK: %true = hw.constant true
   %1 = moore.constant 1 : i1
-  // CHECK: [[CAST:%.+]] = hw.bitcast %true : (i1) -> i1
   %2 = moore.conversion %1 : !moore.i1 -> !moore.l1
-  // CHECK: llhd.sig "l" [[CAST]] : i1
+  // CHECK: llhd.sig "l" %true : i1
   %l = moore.variable %2 : <l1>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
