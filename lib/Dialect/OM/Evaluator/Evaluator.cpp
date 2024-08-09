@@ -257,16 +257,17 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
       worklist.push({result, actualParams});
     }
 
-  for (FieldValue field : cls.getFieldValues()) {
-    StringAttr name = field.getName();
-    Value value = field.getValue();
-    Location loc = field.getLoc();
+  auto fieldsOp = cls.getFieldsOp();
+  auto fieldNames = fieldsOp.getFieldNames();
+  auto operands = fieldsOp.getOperation()->getOperands();
+  for (auto [name, value] : llvm::zip(fieldNames, operands)) {
+    Location loc = value.getLoc();
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, loc);
     if (failed(result))
       return result;
 
-    fields[name] = result.value();
+    fields[cast<StringAttr>(name)] = result.value();
   }
 
   // If the there is an instance, we must update the object value.

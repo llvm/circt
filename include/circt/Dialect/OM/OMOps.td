@@ -119,16 +119,6 @@ def ClassFieldsOp : OMClassFieldsLike<"class.fields", [HasParent<"ClassOp">]> {
   let arguments = (ins Variadic<AnyType>:$fieldArgs);
 
   let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    llvm::SmallVector<FieldValue> getFieldsValues();
-
-    llvm::SmallVector<Field> getFields() {
-      // TODO: Can we do this cast without a copy?
-      auto values = this->getFieldsValues();
-      return llvm::SmallVector<Field>(values.begin(), values.end());
-    }
-  }];
 }
 
 //===----------------------------------------------------------------------===//

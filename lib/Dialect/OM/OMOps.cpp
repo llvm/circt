@@ -235,17 +235,6 @@ ClassFieldsLike circt::om::ClassOp::getFieldsOp() {
   return cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
 }
 
-llvm::SmallVector<Field> circt::om::ClassOp::getFields() {
-  // TODO: Can we do this cast without a copy?
-  auto values = this->getFieldValues();
-  return llvm::SmallVector<Field>(values.begin(), values.end());
-}
-
-llvm::SmallVector<FieldValue> circt::om::ClassOp::getFieldValues() {
-  ClassFieldsOp fieldsOp = cast<ClassFieldsOp>(this->getFieldsOp());
-  return fieldsOp.getFieldsValues();
-}
-
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
@@ -283,22 +272,6 @@ void circt::om::ClassFieldOp::setType(Type type) {
 //===----------------------------------------------------------------------===//
 // ClassFieldsOpField
 //===----------------------------------------------------------------------===//
-
-llvm::SmallVector<FieldValue>
-circt::om::ClassFieldsOp::getFieldsValues() {
-  llvm::SmallVector<FieldValue> result;
-  auto fields = this->getOperands();
-  if (fields.empty())
-    return result;
-
-  ArrayAttr names = cast<ArrayAttr>(this->getOperation()->getAttr("fieldNames"));
-  for (size_t i = 0; i < fields.size(); i++) {
-    result.push_back(
-        FieldValue(cast<StringAttr>(names[i]), fields[i]));
-  }
-
-  return result;
-}
 
 struct FieldParse : OpAsmParser::Argument {
   StringAttr name;
@@ -365,20 +338,21 @@ ParseResult circt::om::ClassFieldsOp::parse(OpAsmParser &parser,
 void circt::om::ClassFieldsOp::print(OpAsmPrinter &printer) {
   printer << "(";
   printer.increaseIndent();
-  auto fields = this->getFieldsValues();
-  for (unsigned i = 0; i < fields.size(); i++) {
+  auto operands = this->getOperands();
+  auto names = this->getFieldNames();
+  for (unsigned i = 0; i < operands.size(); i++) {
     if (i > 0) {
       printer << ",";
     }
     printer.printNewline();
-    printer.printSymbolName(fields[i].getName());
+    printer.printSymbolName(cast<StringAttr>(names[i]));
     printer << " ";
-    printer.printOperand(fields[i].getValue());
+    printer.printOperand(operands[i]);
     printer << " : ";
-    printer.printType(fields[i].getType());
+    printer.printType(operands[i].getType());
   }
   printer.decreaseIndent();
-  if (!fields.empty())
+  if (!operands.empty())
     printer.printNewline();
   printer << ")";
   // printer.printRegion(this->getBody());
@@ -434,16 +408,6 @@ ClassFieldsLike circt::om::ClassExternOp::getFieldsOp() {
   return cast<ClassExternFieldsOp>(this->getBodyBlock()->getTerminator());
 }
 
-llvm::SmallVector<Field> circt::om::ClassExternOp::getFields() {
-  llvm::SmallVector<Field> result;
-  auto fieldsOp = this->getFieldsOp();
-  for (auto field : fieldsOp->getAttrs()) {
-    result.push_back(Field(field.getName(), fieldsOp.getLoc(),
-                           cast<TypeAttr>(field.getValue()).getValue()));
-  }
-  return result;
-}
-
 void circt::om::ClassExternOp::addFields(
     mlir::OpBuilder &builder, mlir::Location loc,
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
@@ -493,7 +457,6 @@ ParseResult circt::om::ClassExternFieldsOp::parse(OpAsmParser &parser,
 void circt::om::ClassExternFieldsOp::print(OpAsmPrinter &printer) {
   printer << "(";
   printer.increaseIndent();
-  // auto fields = this->getFields();
   mlir::ArrayAttr fieldNames =
       cast<ArrayAttr>(this->getOperation()->getAttr("fieldNames"));
   mlir::DictionaryAttr fieldTypes =
