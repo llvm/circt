@@ -52,6 +52,10 @@ static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
   return modelName + "_eval";
 }
 
+static llvm::Twine initSymbolFromModelName(StringRef modelName) {
+  return modelName + "_init";
+}
+
 namespace {
 
 struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
@@ -59,19 +63,38 @@ struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
   LogicalResult
   matchAndRewrite(arc::ModelOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    {
-      IRRewriter::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToEnd(&op.getBodyBlock());
-      rewriter.create<func::ReturnOp>(op.getLoc());
-    }
-    auto funcName =
+    auto bodyFuncName =
         rewriter.getStringAttr(evalSymbolFromModelName(op.getName()));
-    auto funcType =
+    auto bodyFuncType =
         rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
-    auto func =
-        rewriter.create<mlir::func::FuncOp>(op.getLoc(), funcName, funcType);
-    rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
+    auto bodyFunc = rewriter.create<mlir::func::FuncOp>(
+        op.getLoc(), bodyFuncName, bodyFuncType);
+    rewriter.inlineRegionBefore(op.getBody(), bodyFunc.getBody(),
+                                bodyFunc.end());
+
+    if (!op.hasTrivialInitialRegion()) {
+      auto initFuncName =
+          rewriter.getStringAttr(initSymbolFromModelName(op.getName()));
+      auto initFuncType = rewriter.getFunctionType(
+          op.getInitialRegion().getArgumentTypes(), {});
+      auto initFunc = rewriter.create<mlir::func::FuncOp>(
+          op.getLoc(), initFuncName, initFuncType);
+      rewriter.inlineRegionBefore(op.getInitialRegion(), initFunc.getBody(),
+                                  initFunc.end());
+    }
+
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct YieldStorageOpLowering
+    : public OpConversionPattern<arc::YieldStorageOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::YieldStorageOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<mlir::func::ReturnOp>(op);
     return success();
   }
 };
@@ -623,6 +646,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
+    YieldStorageOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     SeqConstClockLowering,

@@ -131,6 +131,9 @@ struct ModuleLowering {
   LogicalResult lowerExtModule(InstanceOp instOp);
 
   LogicalResult cleanup();
+
+private:
+  SmallDenseMap<Value, TypedAttr> initilaizerMap;
 };
 } // namespace
 
@@ -395,9 +398,22 @@ LogicalResult ModuleLowering::lowerPrimaryOutputs() {
 
 LogicalResult ModuleLowering::lowerStates() {
   SmallVector<Operation *> opsToLower;
-  for (auto &op : *moduleOp.getBodyBlock())
-    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::DPICallOp>(&op))
+  SmallVector<Operation *> opsToDelete;
+
+  for (auto &op : *moduleOp.getBodyBlock()) {
+    if (isa<StateOp, MemoryOp, MemoryWritePortOp, TapOp, sim::DPICallOp>(&op)) {
       opsToLower.push_back(&op);
+    } else if (auto cstInit = dyn_cast<ConstantInitializeOp>(&op)) {
+      assert(!!cstInit.getState().getDefiningOp<StateOp>() && "Yeah, nah...");
+      opsToDelete.push_back(&op);
+      auto &stateInit = initilaizerMap[cstInit.getState()];
+      if (!!stateInit && stateInit != cstInit.getConstant()) {
+        cstInit.emitOpError("confilcts with proevious initialization.");
+        return failure();
+      }
+      stateInit = cstInit.getConstant();
+    }
+  }
 
   for (auto *op : opsToLower) {
     LLVM_DEBUG(llvm::dbgs() << "- Lowering " << *op << "\n");
@@ -409,6 +425,10 @@ LogicalResult ModuleLowering::lowerStates() {
     if (failed(result))
       return failure();
   }
+
+  for (auto *op : opsToDelete)
+    op->erase();
+
   return success();
 }
 
@@ -430,15 +450,18 @@ LogicalResult ModuleLowering::lowerStateLike(
   // Allocate the necessary state within the model.
   SmallVector<Value> allocatedStates;
   for (unsigned stateIdx = 0; stateIdx < stateOp->getNumResults(); ++stateIdx) {
-    auto type = stateOp->getResult(stateIdx).getType();
+    auto stateValue = stateOp->getResult(stateIdx);
+    auto type = stateValue.getType();
     auto intType = dyn_cast<IntegerType>(type);
     if (!intType)
       return stateOp->emitOpError("result ")
              << stateIdx << " has non-integer type " << type
              << "; only integer types are supported";
     auto stateType = StateType::get(intType);
+
     auto state = stateBuilder.create<AllocStateOp>(stateOp->getLoc(), stateType,
-                                                   storageArg);
+                                                   storageArg, /*tap=*/false,
+                                                   initilaizerMap[stateValue]);
     if (auto names = stateOp->getAttrOfType<ArrayAttr>("names"))
       state->setAttr("name", names[stateIdx]);
     allocatedStates.push_back(state);
@@ -862,6 +885,9 @@ LogicalResult LowerStatePass::runOnModule(HWModuleOp moduleOp,
   modelOp.getBody().takeBody(moduleOp.getBody());
   moduleOp->erase();
   sortTopologically(&modelOp.getBodyBlock());
+
+  builder.setInsertionPointToEnd(&modelOp.getBodyBlock());
+  builder.create<YieldStorageOp>(ValueRange{});
 
   return success();
 }

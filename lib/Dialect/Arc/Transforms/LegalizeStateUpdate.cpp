@@ -374,8 +374,7 @@ LogicalResult Legalizer::visitBlock(Block *block) {
       // legalizing, and write it to the temporary.
       ++numLegalizedWrites;
       ImplicitLocOpBuilder builder(state.getLoc(), op);
-      auto tmpState =
-          builder.create<AllocStateOp>(state.getType(), storage, nullptr);
+      auto tmpState = builder.create<AllocStateOp>(state.getType(), storage);
       auto stateValue = builder.create<StateReadOp>(state);
       builder.create<StateWriteOp>(tmpState, stateValue, Value{});
       locallyLegalizedStates.push_back(state);
@@ -571,9 +570,9 @@ void LegalizeStateUpdatePass::runOnOperation() {
 
   for (auto model : module.getOps<ModelOp>()) {
     DenseSet<Value> memories;
-    for (auto memOp : model.getOps<AllocMemoryOp>())
+    for (auto memOp : model.getBody().getOps<AllocMemoryOp>())
       memories.insert(memOp.getResult());
-    for (auto ct : model.getOps<ClockTreeOp>())
+    for (auto ct : model.getBody().getOps<ClockTreeOp>())
       if (failed(
               moveMemoryWritesAfterLastRead(ct.getBody(), memories, domInfo)))
         return signalPassFailure();

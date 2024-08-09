@@ -212,6 +212,18 @@ LogicalResult StateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// AllocStateOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult AllocStateOp::verify() {
+  if (auto init = getInitial())
+    if (init->getType() != getType().getType())
+      return emitOpError(
+          "type of initial value must match inner type of state");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//
 
@@ -296,15 +308,44 @@ void RootOutputOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ModelOp::verify() {
-  if (getBodyBlock().getArguments().size() != 1)
-    return emitOpError("must have exactly one argument");
-  if (auto type = getBodyBlock().getArgument(0).getType();
-      !isa<StorageType>(type))
-    return emitOpError("argument must be of storage type");
+  if (llvm::any_of(getBodyBlock().getArguments(), [](auto arg) -> bool {
+        return !isa<StorageType>(arg.getType());
+      }))
+    return emitOpError("arguments must be of storage type");
+
   for (const hw::ModulePort &port : getIo().getPorts())
     if (port.dir == hw::ModulePort::Direction::InOut)
       return emitOpError("inout ports are not supported");
   return success();
+}
+
+void ModelOp::getRegionInvocationBounds(
+    ArrayRef<Attribute> operands,
+    SmallVectorImpl<InvocationBounds> &invocationBounds) {
+  invocationBounds.assign(2, {getInitialRegion().empty() ? 0U : 1U, 1U});
+}
+
+void ModelOp::getSuccessorRegions(RegionBranchPoint point,
+                                  SmallVectorImpl<RegionSuccessor> &regions) {
+  if (point.isParent()) {
+    if (!getInitialRegion().empty())
+      regions.emplace_back(&getInitialRegion());
+    else
+      regions.emplace_back(&getBody());
+    return;
+  }
+
+  if (point.getRegionOrNull() == &getBody()) {
+    regions.emplace_back(RegionSuccessor());
+    return;
+  }
+
+  regions.emplace_back(&getBody(), getBody().getArguments());
+}
+
+MutableOperandRange
+YieldStorageOp::getMutableSuccessorOperands(RegionBranchPoint point) {
+  return getStoragesMutable();
 }
 
 //===----------------------------------------------------------------------===//

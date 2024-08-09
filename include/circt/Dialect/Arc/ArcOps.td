@@ -16,6 +16,7 @@ include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -26,6 +27,10 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class ArcOp<string mnemonic, list<Trait> traits = []> :
   Op<ArcDialect, mnemonic, traits>;
+
+class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
+  "state and value types must match", state, value,
+  "llvm::cast<StateType>($_self).getType()">;
 
 def DefineOp : ArcOp<"define", [
   IsolatedFromAbove,
@@ -458,11 +463,19 @@ def PassThroughOp : ArcOp<"passthrough", [NoTerminator, NoRegionArguments]> {
 
 def AllocStateOp : ArcOp<"alloc_state", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Allocate internal state";
-  let arguments = (ins StorageType:$storage, UnitAttr:$tap);
+  let arguments = (ins StorageType:$storage, UnitAttr:$tap, OptionalAttr<TypedAttrInterface>:$initial);
   let results = (outs StateType:$state);
   let assemblyFormat = [{
-    $storage (`tap` $tap^)? attr-dict `:` functional-type($storage, $state)
+    $storage (`tap` $tap^)? (`init` `(` $initial^ `)`)? attr-dict `:` functional-type($storage, $state)
   }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$type, "::mlir::Value":$value, "bool":$tap),
+      "build($_builder, $_state, type, value, tap, {});">
+  ];
+
+  // OptionalTypesMatchWith doesn't work with optional attributes :(
+  let hasVerifier = true;
 }
 
 def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
@@ -525,10 +538,6 @@ def StorageGetOp : ArcOp<"storage.get", [Pure]> {
 //===----------------------------------------------------------------------===//
 // State Read/Write
 //===----------------------------------------------------------------------===//
-
-class StateAndValueTypesMatch<string state, string value> : TypesMatchWith<
-  "state and value types must match", state, value,
-  "llvm::cast<StateType>($_self).getType()">;
 
 def StateReadOp : ArcOp<"state_read", [
   MemoryEffects<[MemRead]>,
@@ -651,8 +660,12 @@ def TapOp : ArcOp<"tap"> {
   let assemblyFormat = [{ $value attr-dict `:` type($value) }];
 }
 
-def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
-                              NoTerminator, Symbol]> {
+def ModelOp : ArcOp<"model", [
+    RegionKindInterface, IsolatedFromAbove, Symbol,
+    SingleBlockImplicitTerminator<"YieldStorageOp">,
+    DeclareOpInterfaceMethods<RegionBranchOpInterface,
+      ["getSuccessorRegions", "getRegionInvocationBounds"]>
+]> {
   let summary = "A model with stratified clocks";
   let description = [{
     A model with stratified clocks. The `io` optional attribute
@@ -660,20 +673,44 @@ def ModelOp : ArcOp<"model", [RegionKindInterface, IsolatedFromAbove,
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$body, MaxSizedRegion<1>:$initialRegion);
 
   let assemblyFormat = [{
-    $sym_name `io` $io attr-dict-with-keyword $body
+    $sym_name `io` $io attr-dict-with-keyword $body (`initial` $initialRegion^)?
   }];
 
   let extraClassDeclaration = [{
     static mlir::RegionKind getRegionKind(unsigned index) {
-      return mlir::RegionKind::Graph;
+      return index == 0 ? mlir::RegionKind::Graph : mlir::RegionKind::SSACFG ;
     }
     mlir::Block &getBodyBlock() { return getBody().front(); }
+
+    bool hasTrivialInitialRegion() {
+      if (getInitialRegion().empty())
+        return true;
+      return &getInitialRegion().front().front() == &getInitialRegion().front().back();
+    }
+
   }];
 
   let hasVerifier = 1;
+}
+
+def YieldStorageOp : ArcOp<"yield_storage",
+  [Terminator, Pure, HasParent<"arc::ModelOp">,
+   DeclareOpInterfaceMethods<RegionBranchTerminatorOpInterface>,
+]> {
+  let arguments = (ins Variadic<StorageType>:$storages);
+  let assemblyFormat = [{ attr-dict ($storages^ `:` type($storages))? }];
+  let builders = [
+    OpBuilder<(ins), "build($_builder, $_state, ::mlir::ValueRange{} );">
+  ];
+}
+
+def ConstantInitializeOp : ArcOp<"const_init", [MemoryEffects<[MemWrite]>, SameTypeOperands]> {
+  let summary = "An ugly hack.";
+  let arguments = (ins AnyType:$state, TypedAttrInterface:$constant);
+  let assemblyFormat = "` ` `(` $constant `)` `->` $state attr-dict `:` type($state)";
 }
 
 def LutOp : ArcOp<"lut", [

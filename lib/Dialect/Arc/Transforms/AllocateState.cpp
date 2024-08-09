@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -37,17 +38,40 @@ struct AllocateStatePass
   void runOnOperation() override;
   void allocateBlock(Block *block);
   void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
+  void prepareInitialRegion();
+  void initializeStorage(OpBuilder &builder, AllocStateOp &allocOp,
+                         IntegerAttr offset);
+
+private:
+  hw::HWDialect *hwDialect;
 };
 } // namespace
 
 void AllocateStatePass::runOnOperation() {
+
   ModelOp modelOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Allocating state in `" << modelOp.getName()
                           << "`\n");
 
+  hwDialect = getContext().getLoadedDialect<hw::HWDialect>();
+
+  prepareInitialRegion();
+
   // Walk the blocks from innermost to outermost and group all state allocations
   // in that block in one larger allocation.
-  modelOp.walk([&](Block *block) { allocateBlock(block); });
+  modelOp.getBody().walk([&](Block *block) { allocateBlock(block); });
+
+  // Update initial storage types
+  auto bodyArgs = modelOp.getBody().getArguments();
+  auto initArgs = modelOp.getInitialRegion().getArguments();
+  assert(bodyArgs.size() == initArgs.size());
+
+  for (auto [arg, yield] : llvm::zip(bodyArgs, initArgs)) {
+    assert(isa<StorageType>(arg.getType()) &&
+           isa<StorageType>(yield.getType()));
+    // (chuckles) I'm in danger.
+    yield.setType(arg.getType());
+  }
 }
 
 void AllocateStatePass::allocateBlock(Block *block) {
@@ -68,6 +92,67 @@ void AllocateStatePass::allocateBlock(Block *block) {
     allocateOps(storage, block, ops);
 }
 
+void AllocateStatePass::prepareInitialRegion() {
+  auto &initRegion = getOperation().getInitialRegion();
+
+  ImplicitLocOpBuilder initBuilder(getOperation().getLoc(), &getContext());
+
+  Block *initBlock;
+  YieldStorageOp yield;
+  if (initRegion.empty()) {
+    initBlock = &initRegion.emplaceBlock();
+    initBuilder.setInsertionPointToEnd(initBlock);
+    yield = initBuilder.create<YieldStorageOp>(ValueRange{});
+  } else {
+    initBlock = &initRegion.front();
+    assert(initBlock->getArguments().empty());
+    yield = cast<YieldStorageOp>(initBlock->getTerminator());
+  }
+
+  initRegion.addArguments(getOperation().getBody().getArgumentTypes(),
+                          getOperation().getLoc());
+  yield->setOperands(initRegion.getArguments());
+}
+
+void AllocateStatePass::initializeStorage(OpBuilder &builder,
+                                          AllocStateOp &allocOp,
+                                          IntegerAttr offset) {
+  if (!allocOp.getInitial())
+    return;
+
+  assert(isa<ModelOp>(allocOp->getParentOp()) &&
+         "Unsupported nested allocation");
+  auto storageArg = dyn_cast<BlockArgument>(allocOp.getStorage());
+  assert(!!storageArg && "Unknown storage value");
+  auto argIdx = storageArg.getArgNumber();
+
+  OpBuilder initBuilder(&getContext());
+  Block *initBlock = &getOperation().getInitialRegion().front();
+  Operation *initCstOp;
+  initBuilder.setInsertionPoint(initBlock->getTerminator());
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(*allocOp.getInitial())) {
+    initCstOp = hwDialect->materializeConstant(
+        initBuilder, intAttr, intAttr.getType(), allocOp.getLoc());
+  } else {
+    auto initial = *allocOp.getInitial();
+    auto *opDialect = &initial.getType().getDialect();
+    initCstOp = opDialect->materializeConstant(
+        initBuilder, initial, initial.getType(), allocOp.getLoc());
+  }
+  assert(!!initCstOp && initCstOp->getNumResults() == 1 &&
+         "Failed to materialize single constatnt value");
+
+  auto getOp = initBuilder.create<StorageGetOp>(
+      allocOp.getLoc(), StateType::get(initCstOp->getResult(0).getType()),
+      initBlock->getArgument(argIdx), offset);
+
+  initBuilder.create<StateWriteOp>(allocOp.getLoc(), getOp.getResult(),
+                                   initCstOp->getResult(0), Value());
+
+  allocOp.removeInitialAttr();
+}
+
 void AllocateStatePass::allocateOps(Value storage, Block *block,
                                     ArrayRef<Operation *> ops) {
   SmallVector<std::tuple<Value, Value, IntegerAttr>> gettersToCreate;
@@ -85,6 +170,8 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
 
   // Allocate storage for the operations.
   OpBuilder builder(block->getParentOp());
+  OpBuilder initBuilder(&getContext());
+
   for (auto *op : ops) {
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
@@ -93,6 +180,8 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       gettersToCreate.emplace_back(result, storage, offset);
+      if (auto allocOp = dyn_cast<AllocStateOp>(op))
+        initializeStorage(initBuilder, allocOp, offset);
       continue;
     }
 
