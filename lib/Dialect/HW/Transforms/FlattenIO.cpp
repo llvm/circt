@@ -171,7 +171,6 @@ public:
         results.push_back(type);
       else {
         for (auto field : structType.getElements())
-
           results.push_back(field.type);
       }
       return success();
@@ -187,7 +186,7 @@ public:
                                 ValueRange inputs, Location loc) {
       auto structType = getStructType(type);
       assert(structType && "expected struct type");
-      auto result = builder.create<hw::StructCreateOp>(loc, structType, inputs);
+      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
       return result.getResult();
     });
   }
