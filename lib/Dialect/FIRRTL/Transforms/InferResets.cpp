@@ -1,4 +1,4 @@
-//===- InferResets.cpp - Infer resets and add async reset -------*- C++ -*-===//
+//===- InferResets.cpp - Infer resets and add full reset --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -270,6 +270,15 @@ using ResetNetwork = llvm::iterator_range<
 /// Whether a reset is sync or async.
 enum class ResetKind { Async, Sync };
 
+static StringRef resetKindToStringRef(const ResetKind &kind) {
+  switch (kind) {
+  case ResetKind::Async:
+    return "async";
+  case ResetKind::Sync:
+    return "sync";
+  }
+  llvm_unreachable("unhandled reset kind");
+}
 } // namespace
 
 namespace llvm {
@@ -306,12 +315,11 @@ static T &operator<<(T &os, const ResetKind &kind) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Infer concrete reset types and insert full async reset.
+/// Infer concrete reset types and insert full reset.
 ///
 /// This pass replaces `reset` types in the IR with a concrete `asyncreset` or
-/// `uint<1>` depending on how the reset is used, and adds async resets to
-/// registers in modules marked with the corresponding
-/// `FullAsyncResetAnnotation`.
+/// `uint<1>` depending on how the reset is used, and adds resets to registers
+/// in modules marked with the corresponding `FullResetAnnotation`.
 ///
 /// On a high level, the first stage of the pass that deals with reset inference
 /// operates as follows:
@@ -332,28 +340,27 @@ namespace {
 ///    found in step 2. This will replace all `reset` types in the IR with
 ///    a concrete type.
 ///
-/// The second stage that deals with the addition of async resets operates as
+/// The second stage that deals with the addition of full resets operates as
 /// follows:
 ///
 /// 4. Visit every module in the design and determine if it has an explicit
 ///    reset annotated. Ports of and wires in the module can have a
-///    `FullAsyncResetAnnotation`, which marks that port or wire as the async
-///    reset for the module. A module may also carry a
-///    `IgnoreFullAsyncResetAnnotation`, which marks it as being explicitly not
-///    in a reset domain. These annotations are sparse; it is very much possible
-///    that just the top-level module in the design has a full async reset
-///    annotation. A module can only ever carry one of these annotations, which
-///    puts it into one of three categories from an async reset inference
-///    perspective:
+///    `FullResetAnnotation`, which marks that port or wire as the reset for
+///    the module. A module may also carry a `ExcludeFromFullResetAnnotation`,
+///    which marks it as being explicitly not in a reset domain. These
+///    annotations are sparse; it is very much possible that just the top-level
+///    module in the design has a full reset annotation. A module can only
+///    ever carry one of these annotations, which puts it into one of three
+///    categories from a full reset inference perspective:
 ///
-///      a. unambiguously marks a port or wire as the module's async reset
-///      b. explicitly marks it as not to have any async resets added
+///      a. unambiguously marks a port or wire as the module's full reset
+///      b. explicitly marks it as not to have any full resets added
 ///      c. inherit reset
 ///
-/// 5. For every module in the design, determine the full async reset domain it
+/// 5. For every module in the design, determine the full full reset domain it
 ///    is in. Note that this very narrowly deals with the inference of a
-///    "default" async reset, which basically goes through the IR and attaches
-///    all non-reset registers to a default async reset signal. If a module
+///    "default" full reset, which basically goes through the IR and attaches
+///    all non-reset registers to a default full reset signal. If a module
 ///    carries one of the annotations mentioned in (4), the annotated port or
 ///    wire is used as its reset domain. Otherwise, it inherits the reset domain
 ///    from parent modules. This conceptually involves looking at all the places
@@ -365,7 +372,7 @@ namespace {
 ///    its local ports or wires, or a port or wire within one of its parent
 ///    modules.
 ///
-/// 6. For every module in the design, determine how async resets shall be
+/// 6. For every module in the design, determine how full resets shall be
 ///    implemented. This step handles the following distinct cases:
 ///
 ///      a. Skip a module because it is marked as having no reset domain.
@@ -382,30 +389,30 @@ namespace {
 ///    value to reuse (port or wire), the index of an existing port to reuse,
 ///    and the name of an additional port to insert into its port list.
 ///
-/// 7. For every module in the design, async resets are implemented. This
+/// 7. For every module in the design, full resets are implemented. This
 ///    determines the local value to use as the reset signal and updates the
 ///    `reg` and `regreset` operations in the design. If the register already
-///    has an async reset, it is left unchanged. If it has a sync reset, the
-///    sync reset is moved into a `mux` operation on all `connect`s to the
-///    register (which the Scala code base called the `RemoveResets` pass).
-///    Finally the register is replaced with a `regreset` operation, with the
-///    reset signal determined earlier, and a "zero" value constructed for the
-///    register's type.
+///    has an async reset, or if the type of the full reset is sync, the
+///    register's reset is left unchanged. If it has a sync reset and the full
+///    reset is async, the sync reset is moved into a `mux` operation on all
+///    `connect`s to the register (which the Scala code base called the
+///    `RemoveResets` pass). Finally the register is replaced with a `regreset`
+///    operation, with the reset signal determined earlier, and a "zero" value
+///    constructed for the register's type.
 ///
 ///    Determining the local reset value is trivial if step 6 found a module to
 ///    be of case a or b. Case c is the non-trivial one, because it requires
 ///    modifying the port list of the module. This is done by first determining
 ///    the name of the reset signal in the parent module, which is either the
 ///    name of the port or wire declaration. We then look for an existing
-///    `asyncreset` port in the port list and reuse that as reset. If no port
-///    with that name was found, or the existing port is of the wrong type, a
-///    new port is inserted into the port list.
+///    port of the same type in the port list and reuse that as reset. If no
+///    port with that name was found, or the existing port is of the wrong type,
+///    a new port is inserted into the port list.
 ///
 ///    TODO: This logic is *very* brittle and error-prone. It may make sense to
-///    just add an additional port for the inferred async reset in any case,
-///    with an optimization to use an existing `asyncreset` port if all of the
-///    module's instantiations have that port connected to the desired signal
-///    already.
+///    just add an additional port for the inferred reset in any case, with an
+///    optimization to use an existing port if all of the module's
+///    instantiations have that port connected to the desired signal already.
 ///
 struct InferResetsPass
     : public circt::firrtl::impl::InferResetsBase<InferResetsPass> {
@@ -432,12 +439,12 @@ struct InferResetsPass
   bool updateReset(FieldRef field, FIRRTLBaseType resetType);
 
   //===--------------------------------------------------------------------===//
-  // Async reset implementation
+  // Full reset implementation
 
   LogicalResult collectAnnos(CircuitOp circuit);
-  // Collect async reset annotations in the module and return a reset signal.
+  // Collect reset annotations in the module and return a reset signal.
   // Return `failure()` if there was an error in the annotation processing.
-  // Return `std::nullopt` if there was no async reset annotation.
+  // Return `std::nullopt` if there was no reset annotation.
   // Return `nullptr` if there was `ignore` annotation.
   // Return a non-null Value if the reset was actually provided.
   FailureOr<std::optional<Value>> collectAnnos(FModuleOp module);
@@ -450,9 +457,9 @@ struct InferResetsPass
   void determineImpl();
   void determineImpl(FModuleOp module, ResetDomain &domain);
 
-  LogicalResult implementAsyncReset();
-  LogicalResult implementAsyncReset(FModuleOp module, ResetDomain &domain);
-  void implementAsyncReset(Operation *op, FModuleOp module, Value actualReset);
+  LogicalResult implementFullReset();
+  LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
+  void implementFullReset(Operation *op, FModuleOp module, Value actualReset);
 
   LogicalResult verifyNoAbstractReset();
 
@@ -536,8 +543,8 @@ void InferResetsPass::runOnOperationInner() {
   // Determine how each reset shall be implemented.
   determineImpl();
 
-  // Implement the async resets.
-  if (failed(implementAsyncReset()))
+  // Implement the full resets.
+  if (failed(implementFullReset()))
     return signalPassFailure();
 
   // Require that no Abstract Resets exist on ports in the design.
@@ -1262,7 +1269,7 @@ bool InferResetsPass::updateReset(FieldRef field, FIRRTLBaseType resetType) {
 LogicalResult InferResetsPass::collectAnnos(CircuitOp circuit) {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
-    debugHeader("Gather async reset annotations") << "\n\n";
+    debugHeader("Gather reset annotations") << "\n\n";
   });
   SmallVector<std::pair<FModuleOp, std::optional<Value>>> results;
   for (auto module : circuit.getOps<FModuleOp>())
@@ -1293,15 +1300,15 @@ InferResetsPass::collectAnnos(FModuleOp module) {
   // explicitly assigns it no reset domain.
   bool ignore = false;
   AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
-    if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
+    if (anno.isClass(excludeFromFullResetAnnoClass)) {
       ignore = true;
       conflictingAnnos.insert({anno, module.getLoc()});
       return true;
     }
-    if (anno.isClass(fullAsyncResetAnnoClass)) {
+    if (anno.isClass(fullResetAnnoClass)) {
       anyFailed = true;
-      module.emitError("'FullAsyncResetAnnotation' cannot target module; "
-                       "must target port or wire/node instead");
+      module.emitError("''FullResetAnnotation' cannot target module; must "
+                       "target port or wire/node instead");
       return true;
     }
     return false;
@@ -1311,31 +1318,66 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 
   // Consume any reset annotations on module ports.
   Value reset;
-  AnnotationSet::removePortAnnotations(module, [&](unsigned argNum,
-                                                   Annotation anno) {
-    Value arg = module.getArgument(argNum);
-    if (anno.isClass(fullAsyncResetAnnoClass)) {
-      if (!isa<AsyncResetType>(arg.getType())) {
-        mlir::emitError(arg.getLoc(), "'FullAsyncResetAnnotation' must "
-                                      "target async reset, but targets ")
+  // Helper for checking annotations and determining the reset
+  auto checkAnnotations = [&](Annotation anno, Value arg) {
+    if (anno.isClass(fullResetAnnoClass)) {
+      ResetKind expectedResetKind;
+      if (auto rt = anno.getMember<StringAttr>("resetType")) {
+        if (rt == "sync") {
+          expectedResetKind = ResetKind::Sync;
+        } else if (rt == "async") {
+          expectedResetKind = ResetKind::Async;
+        } else {
+          mlir::emitError(arg.getLoc(),
+                          "'FullResetAnnotation' requires resetType == 'sync' "
+                          "| 'async', but got resetType == ")
+              << rt;
+          anyFailed = true;
+          return true;
+        }
+      } else {
+        mlir::emitError(arg.getLoc(),
+                        "'FullResetAnnotation' requires resetType == "
+                        "'sync' | 'async', but got no resetType");
+        anyFailed = true;
+        return true;
+      }
+      // Check that the type is well-formed
+      bool isAsync = expectedResetKind == ResetKind::Async;
+      bool validUint = false;
+      if (auto uintT = dyn_cast<UIntType>(arg.getType()))
+        validUint = uintT.getWidth() == 1;
+      if ((isAsync && !isa<AsyncResetType>(arg.getType())) ||
+          (!isAsync && !validUint)) {
+        auto kind = resetKindToStringRef(expectedResetKind);
+        mlir::emitError(arg.getLoc(),
+                        "'FullResetAnnotation' with resetType == '")
+            << kind << "' must target " << kind << " reset, but targets "
             << arg.getType();
         anyFailed = true;
         return true;
       }
+
       reset = arg;
       conflictingAnnos.insert({anno, reset.getLoc()});
 
       return false;
     }
-    if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
+    if (anno.isClass(excludeFromFullResetAnnoClass)) {
       anyFailed = true;
       mlir::emitError(arg.getLoc(),
-                      "'IgnoreFullAsyncResetAnnotation' cannot target port; "
-                      "must target module instead");
+                      "'ExcludeFromFullResetAnnotation' cannot "
+                      "target port/wire/node; must target module instead");
       return true;
     }
     return false;
-  });
+  };
+
+  AnnotationSet::removePortAnnotations(module,
+                                       [&](unsigned argNum, Annotation anno) {
+                                         Value arg = module.getArgument(argNum);
+                                         return checkAnnotations(anno, arg);
+                                       });
   if (anyFailed)
     return failure();
 
@@ -1343,8 +1385,8 @@ InferResetsPass::collectAnnos(FModuleOp module) {
   module.getBody().walk([&](Operation *op) {
     // Reset annotations must target wire/node ops.
     if (!isa<WireOp, NodeOp>(op)) {
-      if (AnnotationSet::hasAnnotation(op, fullAsyncResetAnnoClass,
-                                       ignoreFullAsyncResetAnnoClass)) {
+      if (AnnotationSet::hasAnnotation(op, fullResetAnnoClass,
+                                       excludeFromFullResetAnnoClass)) {
         anyFailed = true;
         op->emitError(
             "reset annotations must target module, port, or wire/node");
@@ -1355,27 +1397,8 @@ InferResetsPass::collectAnnos(FModuleOp module) {
     // At this point we know that we have a WireOp/NodeOp. Process the reset
     // annotations.
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-      if (anno.isClass(fullAsyncResetAnnoClass)) {
-        auto resultType = op->getResult(0).getType();
-        if (!isa<AsyncResetType>(resultType)) {
-          mlir::emitError(op->getLoc(), "'FullAsyncResetAnnotation' must "
-                                        "target async reset, but targets ")
-              << resultType;
-          anyFailed = true;
-          return true;
-        }
-        reset = op->getResult(0);
-        conflictingAnnos.insert({anno, reset.getLoc()});
-        return false;
-      }
-      if (anno.isClass(ignoreFullAsyncResetAnnoClass)) {
-        anyFailed = true;
-        op->emitError(
-            "'IgnoreFullAsyncResetAnnotation' cannot target wire/node; must "
-            "target module instead");
-        return true;
-      }
-      return false;
+      auto arg = op->getResult(0);
+      return checkAnnotations(anno, arg);
     });
   });
   if (anyFailed)
@@ -1430,7 +1453,7 @@ InferResetsPass::collectAnnos(FModuleOp module) {
 LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
-    debugHeader("Build async reset domains") << "\n\n";
+    debugHeader("Build full reset domains") << "\n\n";
   });
 
   // Gather the domains.
@@ -1559,7 +1582,7 @@ void InferResetsPass::determineImpl() {
 /// - If the domain is the place where the reset is defined ("top"), fills in
 ///   the existing port/wire/node as reset.
 /// - If the module already has a port with the reset's name:
-///   - If the type is `asyncreset`, reuses that port.
+///   - If the port has the same type as the reset domain, reuses that port.
 ///   - Otherwise appends a `_N` suffix with increasing N to create a
 ///   yet-unused
 ///     port name, and marks that as to be created.
@@ -1629,18 +1652,18 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
 }
 
 //===----------------------------------------------------------------------===//
-// Async Reset Implementation
+// Full Reset Implementation
 //===----------------------------------------------------------------------===//
 
-/// Implement the async resets gathered in the pass' `domains` map.
-LogicalResult InferResetsPass::implementAsyncReset() {
+/// Implement the annotated resets gathered in the pass' `domains` map.
+LogicalResult InferResetsPass::implementFullReset() {
   LLVM_DEBUG({
     llvm::dbgs() << "\n";
-    debugHeader("Implement async resets") << "\n\n";
+    debugHeader("Implement full resets") << "\n\n";
   });
   for (auto &it : domains)
-    if (failed(implementAsyncReset(cast<FModuleOp>(it.first),
-                                   it.second.back().first)))
+    if (failed(implementFullReset(cast<FModuleOp>(it.first),
+                                  it.second.back().first)))
       return failure();
   return success();
 }
@@ -1650,9 +1673,9 @@ LogicalResult InferResetsPass::implementAsyncReset() {
 /// This will add ports to the module as appropriate, update the register ops
 /// in the module, and update any instantiated submodules with their
 /// corresponding reset implementation details.
-LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
-                                                   ResetDomain &domain) {
-  LLVM_DEBUG(llvm::dbgs() << "Implementing async reset for " << module.getName()
+LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
+                                                  ResetDomain &domain) {
+  LLVM_DEBUG(llvm::dbgs() << "Implementing full reset for " << module.getName()
                           << "\n");
 
   // Nothing to do if the module was marked explicitly with no reset domain.
@@ -1666,7 +1689,7 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
   Value actualReset = domain.existingValue;
   if (domain.newPortName) {
     PortInfo portInfo{domain.newPortName,
-                      AsyncResetType::get(&getContext()),
+                      domain.reset.getType(),
                       Direction::In,
                       {},
                       domain.reset.getLoc()};
@@ -1771,15 +1794,15 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
 
   // Update the operations.
   for (auto *op : opsToUpdate)
-    implementAsyncReset(op, module, actualReset);
+    implementFullReset(op, module, actualReset);
 
   return success();
 }
 
-/// Modify an operation in a module to implement an async reset for that
+/// Modify an operation in a module to implement an full reset for that
 /// module.
-void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
-                                          Value actualReset) {
+void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
+                                         Value actualReset) {
   ImplicitLocOpBuilder builder(op->getLoc(), op);
 
   // Handle instances.
@@ -1840,7 +1863,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     if (AnnotationSet::removeAnnotations(regOp, excludeMemToRegAnnoClass))
       return;
 
-    LLVM_DEBUG(llvm::dbgs() << "- Adding async reset to " << regOp << "\n");
+    LLVM_DEBUG(llvm::dbgs() << "- Adding full reset to " << regOp << "\n");
     auto zero = createZeroValue(builder, regOp.getResult().getType());
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getResult().getType(), regOp.getClockVal(), actualReset, zero,
@@ -1855,10 +1878,11 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
-    // If the register already has an async reset, leave it untouched.
-    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType())) {
-      LLVM_DEBUG(llvm::dbgs()
-                 << "- Skipping (has async reset) " << regOp << "\n");
+    // If the register already has an async reset or if the type of the added
+    // reset is sync, leave it alone.
+    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType()) ||
+        type_isa<UIntType>(actualReset.getType())) {
+      LLVM_DEBUG(llvm::dbgs() << "- Skipping (has reset) " << regOp << "\n");
       // The following performs the logic of `CheckResets` in the original
       // Scala source code.
       if (failed(regOp.verifyInvariants()))
@@ -1870,9 +1894,9 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto reset = regOp.getResetSignal();
     auto value = regOp.getResetValue();
 
-    // If we arrive here, the register has a sync reset. In order to add an
-    // async reset, we have to move the sync reset into a mux in front of the
-    // register.
+    // If we arrive here, the register has a sync reset and the added reset is
+    // async. In order to add an async reset, we have to move the sync reset
+    // into a mux in front of the register.
     insertResetMux(builder, regOp.getResult(), reset, value);
     builder.setInsertionPointAfterValue(regOp.getResult());
     auto mux = builder.create<MuxPrimOp>(reset, value, regOp.getResult());
