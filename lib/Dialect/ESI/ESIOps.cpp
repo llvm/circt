@@ -696,6 +696,12 @@ void ServiceRequestRecordOp::getDetails(
 
 StringRef SymbolMetadataOp::getManifestClass() { return "sym_info"; }
 
+StringRef SymbolConstantsOp::getManifestClass() { return "sym_consts"; }
+void SymbolConstantsOp::getDetails(SmallVectorImpl<NamedAttribute> &results) {
+  for (auto &attr : getConstantsAttr())
+    results.push_back(attr);
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/ESI/ESI.cpp.inc"
 
