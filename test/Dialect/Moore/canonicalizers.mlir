@@ -142,6 +142,9 @@ func.func private @useRef(%arg0: !moore.ref<i42>)
 
 // CHECK-LABEL: moore.module @DropRedundantVars
 moore.module @DropRedundantVars(in %a : !moore.i42, out b : !moore.i42, out c : !moore.i42) {
+  // CHECK: [[C9001:%.+]] = moore.constant 9001 : i42
+  %c9001_i42 = moore.constant 9001 : i42
+
   // Remove variables that shadow an input port of the same name.
   // CHECK-NOT: moore.assigned_variable
   // CHECK: dbg.variable "a", %a
@@ -164,13 +167,11 @@ moore.module @DropRedundantVars(in %a : !moore.i42, out b : !moore.i42, out c : 
 
   // Remove variables that shadow an output port of the same name. Variables
   // that shadow an output port of a different name should remain.
-  // CHECK: [[TMP:%.+]] = moore.constant 9001 : i42
   // CHECK-NOT: %b = moore.assigned_variable
-  // CHECK: %w = moore.assigned_variable [[TMP]]
-  // CHECK: moore.output [[TMP]], %w
-  %3 = moore.constant 9001 : i42
-  %b = moore.assigned_variable %3 : i42
-  %w = moore.assigned_variable %3 : i42
+  // CHECK: %w = moore.assigned_variable [[C9001]]
+  // CHECK: moore.output [[C9001]], %w
+  %b = moore.assigned_variable %c9001_i42 : i42
+  %w = moore.assigned_variable %c9001_i42 : i42
   moore.output %b, %w : !moore.i42, !moore.i42
 }
 
@@ -228,4 +229,24 @@ func.func @StructInjectFold3(%arg0: !moore.struct<{a: i32, b: i32}>) -> (!moore.
   %2 = moore.struct_inject %arg0, "a", %0 : struct<{a: i32, b: i32}>, i32
   %3 = moore.struct_inject %2, "a", %1 : struct<{a: i32, b: i32}>, i32
   return %3 : !moore.struct<{a: i32, b: i32}>
+}
+
+// CHECK-LABEL: func.func @ConvertConstantTwoToFourValued
+func.func @ConvertConstantTwoToFourValued() -> (!moore.l42) {
+  // CHECK: [[TMP:%.+]] = moore.constant 9001 : l42
+  // CHECK-NOT: moore.conversion
+  // CHECK: return [[TMP]] :
+  %0 = moore.constant 9001 : i42
+  %1 = moore.conversion %0 : !moore.i42 -> !moore.l42
+  return %1 : !moore.l42
+}
+
+// CHECK-LABEL: func.func @ConvertConstantFourToTwoValued
+func.func @ConvertConstantFourToTwoValued() -> (!moore.i42) {
+  // CHECK: [[TMP:%.+]] = moore.constant 8 : i42
+  // CHECK-NOT: moore.conversion
+  // CHECK: return [[TMP]] :
+  %0 = moore.constant b1XZ0 : l42
+  %1 = moore.conversion %0 : !moore.l42 -> !moore.i42
+  return %1 : !moore.i42
 }
