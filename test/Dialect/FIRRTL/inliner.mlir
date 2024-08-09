@@ -1267,3 +1267,118 @@ firrtl.module private @test3() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
 }
 }
+
+// -----
+
+// Test inlining into nested layer, and cloning operations with blocks + blockargs (match).
+
+firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
+  firrtl.layer @I  inline {
+    firrtl.layer @J  inline { }
+  }
+  // CHECK-NOT: @GChild
+  firrtl.module private @GChild(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %0 = firrtl.not %in : (!firrtl.uint<8>) -> !firrtl.uint<8>
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+  firrtl.module private @Child(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %gc_in, %gc_out = firrtl.instance gc @GChild(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %gc_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %gc_out : !firrtl.uint<8>
+  }
+  // CHECK-NOT: @MatchAgain
+  firrtl.module private @MatchAgain(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>, out %o: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+      case Some(%arg0) {
+        %c_in, %c_out = firrtl.instance c @Child(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+        firrtl.matchingconnect %c_in, %arg0 : !firrtl.uint<8>
+        firrtl.matchingconnect %o, %c_out : !firrtl.uint<8>
+      }
+      case None(%arg0) {
+        %c_in, %c_out = firrtl.instance c @Child(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+        %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+        firrtl.matchingconnect %c_in, %invalid_ui8 : !firrtl.uint<8>
+        firrtl.matchingconnect %o, %c_out : !firrtl.uint<8>
+      }
+    }
+  }
+  // CHECK: @MatchInline
+  firrtl.module @MatchInline(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>,
+                             out %o: !firrtl.probe<uint<8>, @I::@J>) attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK-NEXT: layerblock @I
+    firrtl.layerblock @I {
+      // CHECK-NEXT: layerblock @I::@J
+      firrtl.layerblock @I::@J {
+        // CHECK-NOT: @MatchAgain
+        // CHECK: firrtl.match
+        // CHECK-NEXT: Some(%arg0)
+        // CHECK-NEXT: %c_c_in, %c_c_out = firrtl.instance c_c @Child
+        // CHECK-NEXT: firrtl.matchingconnect %c_c_in, %arg0
+        // CHECK: None(%arg0)
+        // CHECK-NEXT: %c_c_in, %c_c_out = firrtl.instance c_c @Child
+        %c_i, %c_o = firrtl.instance c @MatchAgain(in i: !firrtl.enum<Some: uint<8>, None: uint<0>>, out o: !firrtl.uint<8>)
+        firrtl.matchingconnect %c_i, %i : !firrtl.enum<Some: uint<8>, None: uint<0>>
+        %0 = firrtl.ref.send %c_o : !firrtl.uint<8>
+        %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<8>>) -> !firrtl.probe<uint<8>, @I::@J>
+        firrtl.ref.define %o, %1 : !firrtl.probe<uint<8>, @I::@J>
+      }
+    }
+  }
+}
+
+// -----
+
+// Test inlining module containing various operations with blocks.
+
+firrtl.circuit "InlineBlocks" {
+  firrtl.layer @I  inline {
+    firrtl.layer @J  inline { }
+  }
+  firrtl.module private @HasBlocks(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>,
+                                   in %cond: !firrtl.uint<1>,
+                                   out %p: !firrtl.probe<uint<8>, @I::@J>) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.layerblock @I {
+      firrtl.when %cond : !firrtl.uint<1> {
+        firrtl.layerblock @I::@J {
+          %o = firrtl.wire interesting_name : !firrtl.uint<8>
+          %0 = firrtl.ref.send %o : !firrtl.uint<8>
+          %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<8>>) -> !firrtl.probe<uint<8>, @I::@J>
+          firrtl.ref.define %p, %1 : !firrtl.probe<uint<8>, @I::@J>
+          firrtl.match %i : !firrtl.enum<Some: uint<8>, None: uint<0>> {
+            case Some(%arg0) {
+              firrtl.matchingconnect %o, %arg0 : !firrtl.uint<8>
+            }
+            case None(%arg0) {
+              %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
+              firrtl.matchingconnect %o, %invalid_ui8 : !firrtl.uint<8>
+            }
+          }
+          %unused = firrtl.node %o : !firrtl.uint<8>
+        }
+        %unused = firrtl.node %cond : !firrtl.uint<1>
+      }
+    }
+  }
+  // CHECK: @InlineBlocks
+  firrtl.module @InlineBlocks(in %i: !firrtl.enum<Some: uint<8>, None: uint<0>>, in %cond: !firrtl.uint<1>, out %o: !firrtl.probe<uint<8>, @I::@J>) attributes {convention = #firrtl<convention scalarized>} {
+    // Check inlined structure.
+    // CHECK:      layerblock @I
+    // CHECK-NEXT:   firrtl.when
+    // CHECK-NEXT:     firrtl.layerblock @I::@J
+    // CHECK-NEXT:       firrtl.wire
+    // CHECK:            firrtl.match
+    // CHECK:              Some(
+    // CHECK:              None(
+    // CHECK:              }
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       firrtl.node {{.*}}
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     firrtl.node {{.*}}
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    %c_i, %c_cond, %c_p = firrtl.instance c interesting_name @HasBlocks(in i: !firrtl.enum<Some: uint<8>, None: uint<0>>, in cond: !firrtl.uint<1>, out p: !firrtl.probe<uint<8>, @I::@J>)
+    firrtl.matchingconnect %c_i, %i : !firrtl.enum<Some: uint<8>, None: uint<0>>
+    firrtl.matchingconnect %c_cond, %cond : !firrtl.uint<1>
+    firrtl.ref.define %o, %c_p : !firrtl.probe<uint<8>, @I::@J>
+  }
+}
