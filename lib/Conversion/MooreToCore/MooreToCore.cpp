@@ -848,7 +848,7 @@ static void populateLegality(ConversionTarget &target) {
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
-    return mlir::IntegerType::get(type.getContext(), type.getWidth());
+    return IntegerType::get(type.getContext(), type.getWidth());
   });
 
   typeConverter.addConversion([&](ArrayType type) {
@@ -868,11 +868,15 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    return hw::InOutType::get(typeConverter.convertType(type.getNestedType()));
+    auto innerType = typeConverter.convertType(type.getNestedType());
+    if (innerType)
+      return hw::InOutType::get(innerType);
+    return {};
   });
 
   // Valid target types.
-  typeConverter.addConversion([](mlir::IntegerType type) { return type; });
+  typeConverter.addConversion([](IntegerType type) { return type; });
+
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
