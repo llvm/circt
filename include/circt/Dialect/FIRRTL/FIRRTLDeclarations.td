@@ -40,20 +40,21 @@ class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
       "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
-def FormalOp : ReferableDeclOp<"formal", [
+def FormalOp : FIRRTLOp<"formal", [
     HasParent<"firrtl::CircuitOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    FNamableOp
 ]> {
   let summary = "A formal test definition.";
   let description = [{
     The `firrtl.formal` operation defines a formal verification problem in the same 
     context as the rest of the design. This problem is solved using bounded model 
     checking and should be given a bound k, which represents the number of cycles considered 
-    during model checking.
+    during model checking. This definition marks a test harness defined as an internal module to 
+    be verified using bounded model checking.
 
     Example:
     ```mlir
-
     // DUT
     firrtl.module @Foo(in %bar: !firrtl.uint<8>, out %out: !firrtl.uint<8>) { ... }
 

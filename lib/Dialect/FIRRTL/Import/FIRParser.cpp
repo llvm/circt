@@ -5156,7 +5156,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
 }
 
 ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
-  auto startLoc = getToken().getLoc();
   consumeToken(FIRToken::kw_formal);
   StringRef id, moduleName, boundSpelling;
   int64_t bound = -1;
@@ -5184,8 +5183,7 @@ ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
 
   // Build out the firrtl mlir op
   auto builder = circuit.getBodyBuilder();
-  auto formal =
-      builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
+  builder.create<firrtl::FormalOp>(info.getLoc(), id, moduleName, bound);
 
   return success();
 }

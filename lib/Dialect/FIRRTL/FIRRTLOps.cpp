@@ -3366,28 +3366,13 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 LogicalResult
 FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
-  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleLike>(
+  // The referenced symbol is restricted to FModuleOps
+  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleOp>(
       *this, getModuleNameAttr());
-  if (!referencedModule) {
+  if (!referencedModule)
     return (*this)->emitOpError("invalid symbol reference");
-  }
 
-  // Check this is not a class.
-  if (isa<ClassOp>(referencedModule))
-    return (*this)
-               ->emitOpError("must instantiate a module not a class")
-               .attachNote(referencedModule.getLoc())
-           << "class declared here";
   return success();
-}
-
-std::optional<size_t> FormalOp::getTargetResultIndex() {
-  // Inner symbols on instance operations target the op not any result.
-  return std::nullopt;
-}
-
-void FormalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  /* Don't do anything because Formal doesn't have any results */
 }
 
 //===----------------------------------------------------------------------===//
