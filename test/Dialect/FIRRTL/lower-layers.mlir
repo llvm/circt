@@ -201,6 +201,29 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Test that subfield, subindex, and subaccess are moved out of layerblocks to
+  // avoid capturing non-passive types.
+  //
+  // CHECK:      firrtl.module private @[[SubOpsInLayerBlock_A:[A-Za-z0-9_]+]]
+  // CHECK-SAME:   in %[[port:[A-Za-z0-9_]+]]: !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.node %[[port]]
+  // CHECK-NEXT: }
+  // CHECK:      firrtl.module @SubOpsInLayerBlock
+  // CHECK-NEXT:   firrtl.subaccess
+  // CHECK-NEXT:   firrtl.subindex
+  // CHECK-NEXT:   firrtl.subfield
+  firrtl.module @SubOpsInLayerBlock(
+    in %a: !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>,
+    in %b: !firrtl.uint<1>
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.subaccess %a[%b] : !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>, !firrtl.uint<1>
+      %1 = firrtl.subindex %0[0] : !firrtl.vector<bundle<a: uint<1>, b flip: uint<2>>, 2>
+      %2 = firrtl.subfield %1[a] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
+      %3 = firrtl.node %2 : !firrtl.uint<1>
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Connecting/Defining Refs
   //===--------------------------------------------------------------------===//
