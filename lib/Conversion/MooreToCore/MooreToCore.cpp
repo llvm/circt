@@ -158,6 +158,7 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   LogicalResult
   matchAndRewrite(VariableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Value init = adaptor.getInitial();
     // TODO: Unsupport x/z, so the initial value is 0.
@@ -165,10 +166,18 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
                      Domain::FourValued)
       return failure();
 
-    if (!init)
-      init = rewriter.create<hw::ConstantOp>(op->getLoc(), resultType, 0);
-    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, hw::InOutType::get(resultType),
-                                             op.getNameAttr(), init);
+    if (!init) {
+      Type elementType = cast<hw::InOutType>(resultType).getElementType();
+      int64_t width = hw::getBitWidth(elementType);
+      if (width == -1)
+        return failure();
+
+      Value constZero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
+      init = rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
+    }
+
+    rewriter.replaceOpWithNewOp<llhd::SigOp>(op, resultType, op.getNameAttr(),
+                                             init);
     return success();
   }
 };
@@ -715,10 +724,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    if (isa<IntType, ArrayType, UnpackedArrayType>(type.getNestedType()))
-      return mlir::IntegerType::get(type.getContext(),
-                                    type.getBitSize().value());
-    return std::nullopt;
+    return hw::InOutType::get(typeConverter.convertType(type.getNestedType()));
   });
 
   // Valid target types.

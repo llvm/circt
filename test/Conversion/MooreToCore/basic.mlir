@@ -312,9 +312,20 @@ moore.module @Variable() {
   moore.output
 }
 
-// CHECK-LABEL: func @Struct
-func.func @Struct(%arg0: !moore.struct<{exp_bits: i32, man_bits: i32}>) -> !moore.i32 {
+// CHECK-LABEL: hw.module @Struct
+moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
-  return %0 : !moore.i32
+  
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i64
+  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig "" [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig "" %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
+  %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
+  %2 = moore.variable %arg0 : <struct<{exp_bits: i32, man_bits: i32}>>
+
+  %3 = moore.read %1 : <struct<{exp_bits: i32, man_bits: i32}>>
+  %4 = moore.read %2 : <struct<{exp_bits: i32, man_bits: i32}>>
+
+  moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
