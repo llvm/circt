@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "llvm/ADT/MapVector.h"
 
 using namespace mlir;
 using namespace circt;

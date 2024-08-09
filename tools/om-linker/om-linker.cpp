@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Parser/Parser.h"
