@@ -207,6 +207,23 @@ def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   let hasCustomAssemblyFormat = 1;
 }
 
+def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple lists to produce a new list";
+  let description = [{
+    Produces a value of list type by concatenating the provided lists.
+
+    Example:
+    ```
+    %3 = om.list_concat %0, %1, %2 : !om.list<string>
+    ```
+  }];
+
+  let arguments = (ins Variadic<ListType>:$subLists);
+  let results = (outs ListType:$result);
+
+  let assemblyFormat = "$subLists attr-dict `:` type($result)";
+}
+
 def TupleCreateOp : OMOp<"tuple_create", [Pure, InferTypeOpInterface]> {
   let summary = "Create a tuple of values";
   let description = [{
