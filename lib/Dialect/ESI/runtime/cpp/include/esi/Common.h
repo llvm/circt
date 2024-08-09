@@ -54,12 +54,12 @@ public:
 bool operator<(const AppIDPath &a, const AppIDPath &b);
 
 struct ModuleInfo {
-  const std::optional<std::string> name;
-  const std::optional<std::string> summary;
-  const std::optional<std::string> version;
-  const std::optional<std::string> repo;
-  const std::optional<std::string> commitHash;
-  const std::map<std::string, std::any> extra;
+  std::optional<std::string> name;
+  std::optional<std::string> summary;
+  std::optional<std::string> version;
+  std::optional<std::string> repo;
+  std::optional<std::string> commitHash;
+  std::map<std::string, std::any> extra;
 };
 
 /// A description of a service port. Used pretty exclusively in setting up the
