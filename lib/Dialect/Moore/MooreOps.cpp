@@ -1102,6 +1102,74 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
 }
 
 //===----------------------------------------------------------------------===//
+// PowSOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult powCommonFolding(MLIRContext *ctxt, Attribute lhs,
+                                     Attribute rhs) {
+  auto lhsValue = dyn_cast_or_null<FVIntegerAttr>(lhs);
+  if (lhsValue && lhsValue.getValue() == 1)
+    return lhs;
+
+  auto rhsValue = dyn_cast_or_null<FVIntegerAttr>(rhs);
+  if (rhsValue && rhsValue.getValue().isZero())
+    return FVIntegerAttr::get(ctxt,
+                              FVInt(rhsValue.getValue().getBitWidth(), 1));
+
+  return {};
+}
+
+OpFoldResult PowSOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowSOp::canonicalize(PowSOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      Value constZero = rewriter.create<ConstantOp>(loc, intType, 0);
+      Value shift = rewriter.create<ShlOp>(loc, constOne, op.getRhs());
+      Value isNegative = rewriter.create<SltOp>(loc, op.getRhs(), constZero);
+      auto condOp = rewriter.replaceOpWithNewOp<ConditionalOp>(
+          op, op.getLhs().getType(), isNegative);
+      Block *thenBlock = rewriter.createBlock(&condOp.getTrueRegion());
+      rewriter.setInsertionPointToStart(thenBlock);
+      rewriter.create<YieldOp>(loc, constZero);
+      Block *elseBlock = rewriter.createBlock(&condOp.getFalseRegion());
+      rewriter.setInsertionPointToStart(elseBlock);
+      rewriter.create<YieldOp>(loc, shift);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// PowUOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult PowUOp::fold(FoldAdaptor adaptor) {
+  return powCommonFolding(getContext(), adaptor.getLhs(), adaptor.getRhs());
+}
+
+LogicalResult PowUOp::canonicalize(PowUOp op, PatternRewriter &rewriter) {
+  Location loc = op.getLoc();
+  auto intType = cast<IntType>(op.getRhs().getType());
+  if (auto baseOp = op.getLhs().getDefiningOp<ConstantOp>()) {
+    if (baseOp.getValue() == 2) {
+      Value constOne = rewriter.create<ConstantOp>(loc, intType, 1);
+      rewriter.replaceOpWithNewOp<ShlOp>(op, constOne, op.getRhs());
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

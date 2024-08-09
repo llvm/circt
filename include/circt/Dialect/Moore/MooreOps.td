@@ -686,6 +686,9 @@ class PowOpBase<string mnemonic> : BinaryOpBase<mnemonic> {
 
     See IEEE 1800-2017 § 11.4.3 "Arithmetic operators".
   }];
+
+  let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 }
 
 def PowUOp : PowOpBase<"powu">;

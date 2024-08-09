@@ -250,3 +250,33 @@ func.func @ConvertConstantFourToTwoValued() -> (!moore.i42) {
   %1 = moore.conversion %0 : !moore.l42 -> !moore.i42
   return %1 : !moore.i42
 }
+
+// CHECK-LABEL: func @Pow
+func.func @Pow(%arg0 : !moore.l32) -> (!moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32) {
+  // CHECK-NEXT: [[V0:%.+]] = moore.constant 1 : l32
+  // CHECK-NEXT: [[V1:%.+]] = moore.constant 0 : l32
+  %0 = moore.constant 0 : l32
+  %1 = moore.constant 1 : l32
+  %2 = moore.constant 2 : l32
+
+  %3 = moore.pows %1, %arg0 : l32
+  %4 = moore.pows %arg0, %0 : l32
+
+  %5 = moore.powu %1, %arg0 : l32
+  %6 = moore.powu %arg0, %0 : l32
+
+  // CHECK-NEXT: [[V2:%.+]] = moore.shl [[V0]], %arg0
+  // CHECK-NEXT: [[V3:%.+]] = moore.slt %arg0, [[V1]]
+  // CHECK-NEXT: [[V4:%.+]] = moore.conditional [[V3]]
+  // CHECK-NEXT:   moore.yield [[V1]]
+  // CHECK-NEXT: } {
+  // CHECK-NEXT:   moore.yield [[V2]]
+  // CHECK-NEXT: }
+  %7 = moore.pows %2, %arg0 : l32
+
+  // CHECK-NEXT: [[V5:%.+]] = moore.shl [[V0]], %arg0
+  %8 = moore.powu %2, %arg0 : l32
+
+  // CHECK-NEXT: return [[V0]], [[V0]], [[V0]], [[V0]], [[V4]], [[V5]] :
+  return %3, %4, %5, %6, %7, %8 : !moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32
+}
