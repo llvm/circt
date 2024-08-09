@@ -311,3 +311,8 @@ with Context() as ctx:
   # Test AnyType
   any_type = Type.parse("!om.any")
   assert isinstance(any_type, om.AnyType)
+
+  # Test ListType
+  list_type = Type.parse("!om.list<!om.any>")
+  assert isinstance(list_type, om.ListType)
+  assert isinstance(list_type.element_type, om.AnyType)

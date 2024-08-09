@@ -52,6 +52,15 @@ MLIR_CAPI_EXPORTED bool omTypeIsAFrozenPathType(MlirType type);
 /// Get the TypeID for a FrozenPathType.
 MLIR_CAPI_EXPORTED MlirTypeID omFrozenPathTypeGetTypeID(void);
 
+/// Is the Type a ListType.
+MLIR_CAPI_EXPORTED bool omTypeIsAListType(MlirType type);
+
+/// Get the TypeID for a ListType.
+MLIR_CAPI_EXPORTED MlirTypeID omListTypeGetTypeID(void);
+
+// Return a element type of a ListType.
+MLIR_CAPI_EXPORTED MlirType omListTypeGetElementType(MlirType type);
+
 /// Is the Type a MapType.
 MLIR_CAPI_EXPORTED bool omTypeIsAMapType(MlirType type);
 

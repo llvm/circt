@@ -66,6 +66,17 @@ MlirTypeID omFrozenPathTypeGetTypeID(void) {
   return wrap(FrozenPathType::getTypeID());
 }
 
+/// Is the Type a ListType.
+bool omTypeIsAListType(MlirType type) { return isa<ListType>(unwrap(type)); }
+
+/// Get the TypeID for a ListType.
+MlirTypeID omListTypeGetTypeID(void) { return wrap(ListType::getTypeID()); }
+
+// Return a element type of a ListType.
+MlirType omListTypeGetElementType(MlirType type) {
+  return wrap(cast<ListType>(unwrap(type)).getElementType());
+}
+
 /// Is the Type a StringType.
 bool omTypeIsAStringType(MlirType type) {
   return isa<StringType>(unwrap(type));
