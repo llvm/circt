@@ -748,15 +748,11 @@ LogicalResult ComponentOp::verify() {
   // region, or continuous assignments.
   bool hasNoControlConstructs = true;
   getControlOp().walk<WalkOrder::PreOrder>([&](Operation *op) {
-    if (dyn_cast<EnableOp>(op))
-      hasNoControlConstructs = false;
-    if (dyn_cast<InvokeOp>(op))
-      hasNoControlConstructs = false;
-    if (dyn_cast<fsm::MachineOp>(op))
-      hasNoControlConstructs = false;
-    if (hasNoControlConstructs == false)
-      return WalkResult::interrupt();
-    return WalkResult::advance();
+if (isa<EnableOp, InvokeOp, fsm::MachineOp>(op)) {
+  hasNoControlConstructs = false;
+  return WalkResult::advance();
+}
+return WalkResult::interrupt();
   });
   bool hasNoAssignments =
       getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
