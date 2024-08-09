@@ -108,14 +108,26 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
            BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
                           ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
-  // Write only port.
+  // Read-write port.
+  auto cmdType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "write"),
+                                          IntegerType::get(ctxt, 1)},
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "offset"),
+                    IntegerType::get(
+                        ctxt, 32, IntegerType::SignednessSemantics::Unsigned)},
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                          IntegerType::get(ctxt, 64)},
+            });
   ports.push_back(ServicePortInfo{
-      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "write")),
+      hw::InnerRefAttr::get(getSymNameAttr(),
+                            StringAttr::get(ctxt, "read_write")),
       ChannelBundleType::get(
           ctxt,
-          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
-           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
+          {BundledChannel{StringAttr::get(ctxt, "cmd"), ChannelDirection::to,
+                          ChannelType::get(ctxt, cmdType)},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
                           ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
 }

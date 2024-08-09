@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "DialectModules.h"
+#include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/OM.h"
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
@@ -29,18 +30,27 @@ struct Map;
 struct BasePath;
 struct Path;
 
-/// None is used to by pybind when default initializing a PythonValue. The order
-/// of types in the variant matters here, and we want pybind to try casting to
-/// the Python classes defined in this file first, before MlirAttribute and the
-/// upstream MLIR type casters.  If the MlirAttribute is tried first, then we
-/// can hit an assert inside the MLIR codebase.
+/// These are the Python types that are represented by the different primitive
+/// OMEvaluatorValues as Attributes.
+using PythonPrimitive = std::variant<py::int_, py::float_, py::str, py::bool_,
+                                     py::tuple, py::list, py::dict>;
+
+/// None is used to by pybind when default initializing a PythonValue. The
+/// order of types in the variant matters here, and we want pybind to try
+/// casting to the Python classes defined in this file first, before
+/// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
+/// is tried first, then we can hit an assert inside the MLIR codebase.
 struct None {};
-using PythonValue =
-    std::variant<None, Object, List, Tuple, Map, BasePath, Path, MlirAttribute>;
+using PythonValue = std::variant<None, Object, List, Tuple, Map, BasePath, Path,
+                                 PythonPrimitive>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
-OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result);
+OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
+                                               MlirContext ctx);
+static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr);
+static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
+                                              MlirContext ctx);
 
 /// Provides a List class by simply wrapping the OMObject CAPI.
 struct List {
@@ -79,13 +89,15 @@ struct Map {
   Map(OMEvaluatorValue value) : value(value) {}
 
   /// Return the keys.
-  std::vector<MlirAttribute> getKeys() {
+  std::vector<py::str> getKeys() {
     auto attr = omEvaluatorMapGetKeys(value);
     intptr_t numFieldNames = mlirArrayAttrGetNumElements(attr);
 
-    std::vector<MlirAttribute> pyFieldNames;
-    for (intptr_t i = 0; i < numFieldNames; ++i)
-      pyFieldNames.emplace_back(mlirArrayAttrGetElement(attr, i));
+    std::vector<py::str> pyFieldNames;
+    for (intptr_t i = 0; i < numFieldNames; ++i) {
+      auto name = mlirStringAttrGetValue(mlirArrayAttrGetElement(attr, i));
+      pyFieldNames.emplace_back(py::str(name.data, name.length));
+    }
 
     return pyFieldNames;
   }
@@ -224,7 +236,8 @@ struct Evaluator {
                      std::vector<PythonValue> actualParams) {
     std::vector<OMEvaluatorValue> values;
     for (auto &param : actualParams)
-      values.push_back(pythonValueToOMEvaluatorValue(param));
+      values.push_back(pythonValueToOMEvaluatorValue(
+          param, mlirModuleGetContext(getModule())));
 
     // Instantiate the Object via the CAPI.
     OMEvaluatorValue result = omEvaluatorInstantiate(
@@ -288,7 +301,8 @@ public:
       throw py::stop_iteration();
 
     MlirIdentifier key = omMapAttrGetElementKey(attr, nextIndex);
-    MlirAttribute value = omMapAttrGetElementValue(attr, nextIndex);
+    PythonValue value =
+        omPrimitiveToPythonValue(omMapAttrGetElementValue(attr, nextIndex));
     nextIndex++;
 
     auto keyName = mlirIdentifierStr(key);
@@ -349,6 +363,98 @@ Map::dunderGetItem(std::variant<intptr_t, std::string, MlirAttribute> key) {
   return dunderGetItemAttr(std::get<MlirAttribute>(key));
 }
 
+// Convert a generic MLIR Attribute to a PythonValue. This is basically a C++
+// fast path of the parts of attribute_to_var that we use in the OM dialect.
+static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
+  if (omAttrIsAIntegerAttr(attr)) {
+    auto strRef = omIntegerAttrToString(attr);
+    return py::int_(py::str(strRef.data, strRef.length));
+  }
+
+  if (mlirAttributeIsAFloat(attr)) {
+    return py::float_(mlirFloatAttrGetValueDouble(attr));
+  }
+
+  if (mlirAttributeIsAString(attr)) {
+    auto strRef = mlirStringAttrGetValue(attr);
+    return py::str(strRef.data, strRef.length);
+  }
+
+  // BoolAttr's are IntegerAttr's, check this first.
+  if (mlirAttributeIsABool(attr)) {
+    return py::bool_(mlirBoolAttrGetValue(attr));
+  }
+
+  if (mlirAttributeIsAInteger(attr)) {
+    MlirType type = mlirAttributeGetType(attr);
+    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+      return py::int_(mlirIntegerAttrGetValueInt(attr));
+    if (mlirIntegerTypeIsSigned(type))
+      return py::int_(mlirIntegerAttrGetValueSInt(attr));
+    return py::int_(mlirIntegerAttrGetValueUInt(attr));
+  }
+
+  if (omAttrIsAReferenceAttr(attr)) {
+    auto innerRef = omReferenceAttrGetInnerRef(attr);
+    auto moduleStrRef =
+        mlirStringAttrGetValue(hwInnerRefAttrGetModule(innerRef));
+    auto nameStrRef = mlirStringAttrGetValue(hwInnerRefAttrGetName(innerRef));
+    auto moduleStr = py::str(moduleStrRef.data, moduleStrRef.length);
+    auto nameStr = py::str(nameStrRef.data, nameStrRef.length);
+    return py::make_tuple(moduleStr, nameStr);
+  }
+
+  if (omAttrIsAListAttr(attr)) {
+    py::list results;
+    for (intptr_t i = 0, e = omListAttrGetNumElements(attr); i < e; ++i)
+      results.append(omPrimitiveToPythonValue(omListAttrGetElement(attr, i)));
+    return results;
+  }
+
+  if (omAttrIsAMapAttr(attr)) {
+    py::dict results;
+    for (intptr_t i = 0, e = omMapAttrGetNumElements(attr); i < e; ++i) {
+      auto keyStrRef = mlirIdentifierStr(omMapAttrGetElementKey(attr, i));
+      auto key = py::str(keyStrRef.data, keyStrRef.length);
+      auto value = omPrimitiveToPythonValue(omMapAttrGetElementValue(attr, i));
+      results[key] = value;
+    }
+    return results;
+  }
+
+  mlirAttributeDump(attr);
+  throw py::type_error("Unexpected OM primitive attribute");
+}
+
+// Convert a primitive PythonValue to a generic MLIR Attribute. This is
+// basically a C++ fast path of the parts of var_to_attribute that we use in the
+// OM dialect.
+static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
+                                              MlirContext ctx) {
+  if (auto *intValue = std::get_if<py::int_>(&value)) {
+    auto intType = mlirIntegerTypeGet(ctx, 64);
+    auto intAttr = mlirIntegerAttrGet(intType, intValue->cast<int64_t>());
+    return omIntegerAttrGet(intAttr);
+  }
+
+  if (auto *attr = std::get_if<py::float_>(&value)) {
+    auto floatType = mlirF64TypeGet(ctx);
+    return mlirFloatAttrDoubleGet(ctx, floatType, attr->cast<double>());
+  }
+
+  if (auto *attr = std::get_if<py::str>(&value)) {
+    auto str = attr->cast<std::string>();
+    auto strRef = mlirStringRefCreate(str.data(), str.length());
+    return mlirStringAttrGet(ctx, strRef);
+  }
+
+  if (auto *attr = std::get_if<py::bool_>(&value)) {
+    return mlirBoolAttrGet(ctx, attr->cast<bool>());
+  }
+
+  throw py::type_error("Unexpected OM primitive value");
+}
+
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   // If the result is null, something failed. Diagnostic handling is
   // implemented in pure Python, so nothing to do here besides throwing an
@@ -386,13 +492,11 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
 
   // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
-  return omEvaluatorValueGetPrimitive(result);
+  return omPrimitiveToPythonValue(omEvaluatorValueGetPrimitive(result));
 }
 
-OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
-  if (auto *attr = std::get_if<MlirAttribute>(&result))
-    return omEvaluatorValueFromPrimitive(*attr);
-
+OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
+                                               MlirContext ctx) {
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
 
@@ -408,7 +512,12 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result) {
   if (auto *path = std::get_if<Path>(&result))
     return path->getValue();
 
-  return std::get<Object>(result).getValue();
+  if (auto *object = std::get_if<Object>(&result))
+    return object->getValue();
+
+  auto primitive = std::get<PythonPrimitive>(result);
+  return omEvaluatorValueFromPrimitive(
+      omPythonValueToPrimitive(primitive, ctx));
 }
 
 } // namespace
@@ -503,6 +612,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__len__", &omMapAttrGetNumElements);
   PyMapAttrIterator::bind(m);
 
+  // Add the AnyType class definition.
+  mlir_type_subclass(m, "AnyType", omTypeIsAAnyType, omAnyTypeGetTypeID);
+
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
       .def_property_readonly("name", [](MlirType type) {
@@ -513,6 +625,10 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
   // Add the BasePathType class definition.
   mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
                      omFrozenBasePathTypeGetTypeID);
+
+  // Add the ListType class definition.
+  mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
+      .def_property_readonly("element_type", omListTypeGetElementType);
 
   // Add the PathType class definition.
   mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,

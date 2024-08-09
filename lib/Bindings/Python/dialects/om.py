@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ._om_ops_gen import *
-from .._mlir_libs._circt._om import Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, MapAttr, OMIntegerAttr
+from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, Tuple as BaseTuple, Map as BaseMap, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, MapAttr, OMIntegerAttr
 
 from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
 from ..support import attribute_to_var, var_to_attribute
@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 
 # Wrap a base mlir object with high-level object.
 def wrap_mlir_object(value):
-  # For primitives, return a Python value.
-  if isinstance(value, Attribute):
-    return attribute_to_var(value)
+  # For primitives, return the Python value directly.
+  if isinstance(value, (int, float, str, bool, tuple, list, dict)):
+    return value
 
   if isinstance(value, BaseList):
     return List(value)
@@ -52,12 +52,7 @@ def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
 
 
 def unwrap_python_object(value):
-  # Check if the value is a Primitive.
-  try:
-    return om_var_to_attribute(value)
-  except:
-    pass
-
+  # Check if the value is any of our container or custom types.
   if isinstance(value, List):
     return BaseList(value)
 
@@ -73,9 +68,11 @@ def unwrap_python_object(value):
   if isinstance(value, Path):
     return value
 
-  # Otherwise, it must be an Object. Cast to the mlir object.
-  assert isinstance(value, Object)
-  return BaseObject(value)
+  if isinstance(value, Object):
+    return BaseObject(value)
+
+  # Otherwise, it must be a primitive, so just return it.
+  return value
 
 
 class List(BaseList):

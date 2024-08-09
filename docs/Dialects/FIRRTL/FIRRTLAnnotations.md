@@ -474,7 +474,54 @@ Example:
 }
 ```
 
+### FullResetAnnotation
+
+| Property   | Type   | Description                      |
+| ---------- | ------ | -------------                    |
+| class      | string | `circt.FullAsyncResetAnnotation` |
+| target     | string | Reference target                 |
+| resetType  | string | "async" or "sync"                |
+
+
+The target must be a signal that is a reset. The type of the signal must be (or inferred
+to be) the same as the reset type specified in the annotation.
+
+Indicates that all reset-less registers which are children of the module containing
+the target will have the reset targeted attached, with a reset value of 0.
+
+The module containing the target of this annotation is not allowed to reside in multiple
+hierarchies.
+
+Example:
+```json
+{
+  "class": "circt.FullResetAnnotation",
+  "target": "~Foo|Bar/d:Baz>reset",
+  "resetType": "async"
+}
+```
+
+### ExcludeFromFullResetAnnotation
+
+| Property   | Type   | Description                            |
+| ---------- | ------ | -------------                          |
+| class      | string | `circt.ExcludeFromFullResetAnnotation` |
+| target     | string | Reference target                       |
+
+This annotation indicates that the target moudle should be excluded from the
+FullResetAnnotation of a parent module.
+
+Example:
+```json
+{
+  "class": "circt.IgnoreFullAsyncResetAnnotation",
+  "target": "~Foo|Bar/d:Baz"
+}
+```
+
 ### FullAsyncResetAnnotation
+
+**Deprecated, use FullResetAnnotation**
 
 | Property   | Type   | Description                                         |
 | ---------- | ------ | -------------                                       |
@@ -499,6 +546,8 @@ Example:
 ```
 
 ### IgnoreFullAsyncResetAnnotation
+
+**Deprecated, use ExcludeFromFullResetAnnotation**
 
 | Property   | Type   | Description                                               |
 | ---------- | ------ | -------------                                             |

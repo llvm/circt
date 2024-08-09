@@ -62,8 +62,17 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.constant 12 : !moore.i32
   moore.constant 3 : !moore.i6
 
-  // CHECK-NEXT: hw.bitcast %arg0 : (i1) -> i1
   moore.conversion %arg0 : !moore.i1 -> !moore.l1
+  // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i2 
+  // CHECK-NEXT: comb.concat [[V0]], %arg2 : i2, i6 
+  moore.conversion %arg2 : !moore.i6 -> !moore.l8
+  // CHECK-NEXT: [[V0:%.+]] = comb.extract %arg2 from 4 : (i6) -> i2
+  // CHECK-NEXT: [[V1:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[V2:%.+]] = comb.icmp eq [[V0]], [[V1]] : i2
+  // CHECK-NEXT: [[V3:%.+]] = comb.extract %arg2 from 0 : (i6) -> i4
+  // CHECK-NEXT: [[V4:%.+]] = hw.constant -1 : i4
+  // CHECK-NEXT: comb.mux [[V2]], [[V3]], [[V4]] : i4
+  moore.conversion %arg2 : !moore.i6 -> !moore.l4
 
   // CHECK-NEXT: [[V0:%.+]] = hw.constant 0 : i5
   // CHECK-NEXT: [[V1:%.+]] = comb.concat [[V0]], %arg0 : i5, i1
@@ -191,6 +200,26 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   return
 }
 
+// CHECK-LABEL: func @AdvancedConversion
+func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
+  // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
+  %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
+  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
+  %1 = moore.conversion %0 : !moore.i320 -> !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>
+  // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
+  %2 = moore.conversion %arg0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>> -> !moore.i320  
+  // CHECK: return [[V1]], [[V2]]
+  return %1, %2 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320
+}
+
+// CHECK-LABEL: func.func @DynExtractConversion
+func.func @DynExtractConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> !moore.struct<{exp_bits: i32, man_bits: i32}> {
+  %0 = moore.constant 3 : !moore.i32
+  // CHECK: hw.array_get %arg0[{{.*}}] : !hw.array<5xstruct<exp_bits: i32, man_bits: i32>>, i3
+  %1 = moore.dyn_extract %arg0 from %0 : !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i32 -> !moore.struct<{exp_bits: i32, man_bits: i32}>
+  return %1 : !moore.struct<{exp_bits: i32, man_bits: i32}>
+}
+
 // CHECK-LABEL: hw.module @InstanceNull() {
 moore.module @InstanceNull() {
 
@@ -267,19 +296,164 @@ moore.module @Variable() {
   %b2 = moore.variable %0 : <i8>
 
   // CHECK: %true = hw.constant true
-  %1 = moore.constant true : i1
-  // CHECK: [[CAST:%.+]] = hw.bitcast %true : (i1) -> i1
+  %1 = moore.constant 1 : i1
   %2 = moore.conversion %1 : !moore.i1 -> !moore.l1
-  // CHECK: llhd.sig "l" [[CAST]] : i1
+  // CHECK: llhd.sig "l" %true : i1
   %l = moore.variable %2 : <l1>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
   
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 0e>
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: llhd.drv [[A]], [[TMP2]] after [[TIME]] : !hw.inout<i32>
   moore.assign %a, %3 : i32
 
   // CHECK: hw.output
   moore.output
+}
+
+// CHECK-LABEL: hw.module @Struct
+moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
+  // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
+  %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
+  
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i64
+  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig "" [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: llhd.sig "" %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
+  %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
+  %2 = moore.variable %arg0 : <struct<{exp_bits: i32, man_bits: i32}>>
+
+  %3 = moore.read %1 : <struct<{exp_bits: i32, man_bits: i32}>>
+  %4 = moore.read %2 : <struct<{exp_bits: i32, man_bits: i32}>>
+
+  moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
+}
+
+// CHECK-LABEL: hw.module @Process
+moore.module @Process(in %cond : i1) {
+  // CHECK: [[B:%.+]] = llhd.sig "b"
+  // CHECK: [[C:%.+]] = llhd.sig "c"
+  // CHECK: [[D:%.+]] = llhd.sig "d"
+  // CHECK: [[E:%.+]] = llhd.sig "e"
+  %b = moore.variable : <i1>
+  %c = moore.variable : <i1>
+  %d = moore.variable : <i1>
+  %e = moore.variable : <i1>
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[B]], [[C]] : !hw.inout<i1>, !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[B_CURR:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_OLD:%.+]] = comb.xor [[C_OLD]], %true
+    // CHECK:   [[POSEDGE:%.+]] = comb.and [[NOT_C_OLD]], [[C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[B_CURR]], [[POSEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[B_PRB:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_PRB:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   [[T1:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK:   llhd.drv [[E]], [[RES]] after [[T1]]
+    // CHECK:   cf.br ^[[BB1]]
+    %br = moore.read %b : <i1>
+    moore.wait_event none %br : i1
+    %cr = moore.read %c : <i1>
+    moore.wait_event posedge %cr : i1
+
+    %0 = moore.add %br, %cr : i1
+
+    moore.nonblocking_assign %d, %0 : i1
+    moore.blocking_assign %e, %0 : i1
+    moore.return
+  }
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   llhd.wait ([[B]], [[C]] : !hw.inout<i1>, !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   cf.br ^[[BB3:.+]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[B_PRB:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_PRB:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    %br = moore.read %b : <i1>
+    %cr = moore.read %c : <i1>
+    %0 = moore.add %br, %cr : i1
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  }
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[C]] : !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_OLD:%.+]] = comb.xor [[C_OLD]], %true
+    // CHECK:   [[POSEDGE:%.+]] = comb.and [[NOT_C_OLD]], [[C_CURR]] : i1
+    // CHECK:   [[C_CURR1:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_CURR:%.+]] = comb.xor [[C_CURR1]], %true
+    // CHECK:   [[NEGEDGE:%.+]] = comb.and [[C_OLD]], [[NOT_C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[POSEDGE]], [[NEGEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB:%.+]], [[C_PRB:%.+]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    moore.wait_event edge %cr : i1
+    %0 = moore.add %br, %cr : i1
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  }
+
+  // CHECK: [[B_PRB]] = llhd.prb [[B]]
+  // CHECK: [[C_PRB]] = llhd.prb [[C]]
+  %br = moore.read %b : <i1>
+  %cr = moore.read %c : <i1>
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[C]] : !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_CURR:%.+]] = comb.xor [[C_CURR]], %true
+    // CHECK:   [[NEGEDGE:%.+]] = comb.and [[C_OLD]], [[NOT_C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[NEGEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   cf.cond_br %cond, ^[[BB4:.+]], ^[[BB5:.+]]
+    // CHECK: ^[[BB4]]:
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    // CHECK: ^[[BB5]]:
+    // CHECK:   cf.br ^[[BB1]]
+    moore.wait_event negedge %cr : i1
+    %0 = moore.add %br, %cr : i1
+    cf.cond_br %cond, ^bb1, ^bb2
+  ^bb1:
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  ^bb2:
+    moore.return
+  }
 }

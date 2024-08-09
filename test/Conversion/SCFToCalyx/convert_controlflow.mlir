@@ -572,3 +572,72 @@ module {
     return
   }
 }
+
+// -----
+
+// Test if op with else branch.
+
+module {
+// CHECK-LABEL:   calyx.component @main(
+// CHECK-SAME:                          %[[VAL_0:in0]]: i32,
+// CHECK-SAME:                          %[[VAL_1:in1]]: i32,
+// CHECK-SAME:                          %[[VAL_2:.*]]: i1 {clk},
+// CHECK-SAME:                          %[[VAL_3:.*]]: i1 {reset},
+// CHECK-SAME:                          %[[VAL_4:.*]]: i1 {go}) -> (
+// CHECK-SAME:                          %[[VAL_5:out0]]: i32,
+// CHECK-SAME:                          %[[VAL_6:.*]]: i1 {done}) {
+// CHECK:           %[[VAL_7:.*]] = hw.constant true
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]], %[[VAL_10:.*]] = calyx.std_add @std_add_0 : i32, i32, i32
+// CHECK:           %[[VAL_11:.*]], %[[VAL_12:.*]], %[[VAL_13:.*]] = calyx.std_slt @std_slt_0 : i32, i32, i1
+// CHECK:           %[[VAL_14:.*]], %[[VAL_15:.*]], %[[VAL_16:.*]], %[[VAL_17:.*]], %[[VAL_18:.*]], %[[VAL_19:.*]] = calyx.register @if_res_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]], %[[VAL_22:.*]], %[[VAL_23:.*]], %[[VAL_24:.*]], %[[VAL_25:.*]] = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:           calyx.wires {
+// CHECK:             calyx.assign %[[VAL_5]] = %[[VAL_24]] : i32
+// CHECK:             calyx.group @then_br_0 {
+// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_10]] : i32
+// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_7]] : i1
+// CHECK:               calyx.assign %[[VAL_8]] = %[[VAL_0]] : i32
+// CHECK:               calyx.assign %[[VAL_9]] = %[[VAL_1]] : i32
+// CHECK:               calyx.group_done %[[VAL_19]] : i1
+// CHECK:             }
+// CHECK:             calyx.group @else_br_0 {
+// CHECK:               calyx.assign %[[VAL_14]] = %[[VAL_1]] : i32
+// CHECK:               calyx.assign %[[VAL_15]] = %[[VAL_7]] : i1
+// CHECK:               calyx.group_done %[[VAL_19]] : i1
+// CHECK:             }
+// CHECK:             calyx.comb_group @bb0_0 {
+// CHECK:               calyx.assign %[[VAL_11]] = %[[VAL_0]] : i32
+// CHECK:               calyx.assign %[[VAL_12]] = %[[VAL_1]] : i32
+// CHECK:             }
+// CHECK:             calyx.group @ret_assign_0 {
+// CHECK:               calyx.assign %[[VAL_20]] = %[[VAL_18]] : i32
+// CHECK:               calyx.assign %[[VAL_21]] = %[[VAL_7]] : i1
+// CHECK:               calyx.group_done %[[VAL_25]] : i1
+// CHECK:             }
+// CHECK:           }
+// CHECK:           calyx.control {
+// CHECK:             calyx.seq {
+// CHECK:               calyx.if %[[VAL_13]] with @bb0_0 {
+// CHECK:                 calyx.seq {
+// CHECK:                   calyx.enable @then_br_0
+// CHECK:                 }
+// CHECK:               } else {
+// CHECK:                 calyx.seq {
+// CHECK:                   calyx.enable @else_br_0
+// CHECK:                 }
+// CHECK:               }
+// CHECK:               calyx.enable @ret_assign_0
+// CHECK:             }
+// CHECK:           }
+// CHECK:         } {toplevel}
+  func.func @main(%arg0 : i32, %arg1 : i32) -> i32 {
+    %0 = arith.cmpi slt, %arg0, %arg1 : i32
+    %1 = scf.if %0 -> i32 {
+      %3 = arith.addi %arg0, %arg1 : i32
+      scf.yield %3 : i32
+    } else {
+      scf.yield %arg1 : i32
+    }
+    return %1 : i32
+  }
+}

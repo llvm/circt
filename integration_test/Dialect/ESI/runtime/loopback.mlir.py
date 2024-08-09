@@ -94,4 +94,7 @@ result: List[int] = result_chan.read()
 print(f"result: {result}")
 if platform != "trace":
   assert result == [-21, -22]
+
+acc = None
+
 print("PASS")

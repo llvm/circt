@@ -21,8 +21,9 @@ using namespace circt::moore;
 //===----------------------------------------------------------------------===//
 
 void MooreDialect::initialize() {
-  // Register types.
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<

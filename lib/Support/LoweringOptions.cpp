@@ -121,6 +121,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       caseInsensitiveKeywords = true;
     } else if (option == "emitVerilogLocations") {
       emitVerilogLocations = true;
+    } else if (option == "fixUpEmptyModules") {
+      fixUpEmptyModules = true;
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -180,6 +182,8 @@ std::string LoweringOptions::toString() const {
     options += "caseInsensitiveKeywords,";
   if (emitVerilogLocations)
     options += "emitVerilogLocations,";
+  if (fixUpEmptyModules)
+    options += "fixUpEmptyModules,";
 
   // Remove a trailing comma if present.
   if (!options.empty()) {

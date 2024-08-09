@@ -26,6 +26,47 @@ firrtl.circuit "Test" {
   }
 
   //===--------------------------------------------------------------------===//
+  // Capture Tests
+  //===--------------------------------------------------------------------===//
+
+  firrtl.module @CaptureTests() {
+    %a = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b flip: uint<1>>, 2>
+    %b = firrtl.wire : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
+    firrtl.layerblock @A {
+      %0 = firrtl.subindex %a[0] : !firrtl.vector<bundle<a: uint<1>, b flip: uint<1>>, 2>
+      %1 = firrtl.constant 0 : !firrtl.uint<1>
+      %2 = firrtl.subaccess %a[%1] : !firrtl.vector<bundle<a: uint<1>, b flip: uint<1>>, 2>, !firrtl.uint<1>
+      %3 = firrtl.subfield %b[a] : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
+      %4 = firrtl.ref.send %b : !firrtl.bundle<a: uint<1>, b flip: uint<2>>
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Connect Tests
+  //===--------------------------------------------------------------------===//
+
+  firrtl.module @ConnectTests() {
+    %a = firrtl.wire : !firrtl.uint<1>
+    %b = firrtl.wire : !firrtl.bundle<a: uint<1>>
+    %c = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+    %d = firrtl.wire : !firrtl.bundle<a : bundle< a flip : uint<1>>>
+    %e = firrtl.wire : !firrtl.bundle<a flip : bundle< a flip : uint<1>>>
+    firrtl.layerblock @A {
+      %_a = firrtl.wire : !firrtl.uint<1>
+      %_b = firrtl.wire : !firrtl.bundle<a: uint<1>>
+      %_c = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
+      %_d = firrtl.wire : !firrtl.bundle<a : bundle< a flip : uint<1>>>
+      %_e = firrtl.wire : !firrtl.bundle<a flip : bundle< a flip : uint<1>>>
+
+      firrtl.connect %_a, %a : !firrtl.uint<1>
+      firrtl.connect %_b, %b : !firrtl.bundle<a: uint<1>>
+      firrtl.connect %c, %_c : !firrtl.bundle<a flip: uint<1>>
+      firrtl.connect %d, %_d : !firrtl.bundle<a : bundle< a flip : uint<1>>>
+      firrtl.connect %_e, %e : !firrtl.bundle<a flip : bundle< a flip : uint<1>>>
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
   // Basic Casting Tests
   //===--------------------------------------------------------------------===//
 
@@ -201,4 +242,16 @@ firrtl.circuit "Test" {
       firrtl.propassign %foo_in, %str : !firrtl.string
     }
   }
+
+  //===--------------------------------------------------------------------===//
+  // RWProbe under Layer
+  //===--------------------------------------------------------------------===//
+
+  firrtl.module @RWProbeInLayer() {
+    firrtl.layerblock @A {
+      %w = firrtl.wire sym @sym : !firrtl.uint<1>
+      %rwp = firrtl.ref.rwprobe <@RWProbeInLayer::@sym> : !firrtl.rwprobe<uint<1>>
+    }
+  }
+
 }

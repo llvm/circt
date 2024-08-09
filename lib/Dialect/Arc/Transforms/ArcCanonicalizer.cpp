@@ -619,18 +619,58 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
     // Ensure that the input vector matches the output of the `otherVecOp`
     // Make sure that the results of the otherVecOp have only one use
     auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
-    if (!otherVecOp || inputVec != otherVecOp.getResults() ||
-        otherVecOp == vecOp ||
+    if (!otherVecOp || otherVecOp == vecOp ||
         !llvm::all_of(otherVecOp.getResults(),
-                      [](auto result) { return result.hasOneUse(); })) {
+                      [](auto result) { return result.hasOneUse(); }) ||
+        !llvm::all_of(inputVec, [&](auto result) {
+          return result.template getDefiningOp<VectorizeOp>() == otherVecOp;
+        })) {
       newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
       continue;
     }
+
+    // Here, all elements are from the same `VectorizeOp`.
+    // If all elements of the input vector come from the same `VectorizeOp`
+    // sort the vectors by their indices
+    DenseMap<Value, size_t> resultIdxMap;
+    for (auto [resultIdx, result] : llvm::enumerate(otherVecOp.getResults()))
+      resultIdxMap[result] = resultIdx;
+
+    SmallVector<Value> tempVec(inputVec.begin(), inputVec.end());
+    llvm::sort(tempVec, [&](Value a, Value b) {
+      return resultIdxMap[a] < resultIdxMap[b];
+    });
+
+    // Check if inputVec matches the result after sorting.
+    if (tempVec != SmallVector<Value>(otherVecOp.getResults().begin(),
+                                      otherVecOp.getResults().end())) {
+      newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+      continue;
+    }
+
+    DenseMap<size_t, size_t> fromRealIdxToSortedIdx;
+    for (auto [inIdx, in] : llvm::enumerate(inputVec))
+      fromRealIdxToSortedIdx[inIdx] = resultIdxMap[in];
+
     // If this flag is set that means we changed the IR so we cannot return
     // failure
     canBeMerged = true;
-    newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
-                       otherVecOp.getOperands().end());
+
+    // If the results got shuffled, then shuffle the operands before merging.
+    if (inputVec != otherVecOp.getResults()) {
+      for (auto otherVecOpInputVec : otherVecOp.getInputs()) {
+        // use the tempVec again instead of creating another one.
+        tempVec = SmallVector<Value>(inputVec.size());
+        for (auto [realIdx, opernad] : llvm::enumerate(otherVecOpInputVec))
+          tempVec[realIdx] =
+              otherVecOpInputVec[fromRealIdxToSortedIdx[realIdx]];
+
+        newOperands.insert(newOperands.end(), tempVec.begin(), tempVec.end());
+      }
+
+    } else
+      newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
+                         otherVecOp.getOperands().end());
 
     auto &otherBlock = otherVecOp.getBody().front();
     for (auto &otherArg : otherBlock.getArguments()) {
@@ -700,29 +740,27 @@ struct DenseMapInfo<SmallVector<Value>> {
 
 LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
                                             PatternRewriter &rewriter) const {
-  BitVector argsToRemove(vecOp.getInputs().size(), false);
   DenseMap<SmallVector<Value>, unsigned> inExists;
   auto &currentBlock = vecOp.getBody().front();
   SmallVector<Value> newOperands;
-  unsigned shuffledBy = 0;
-  bool changed = false;
-  for (auto [argIdx, inputVec] : llvm::enumerate(vecOp.getInputs())) {
-    auto input = SmallVector<Value>(inputVec.begin(), inputVec.end());
+  BitVector argsToRemove(vecOp.getInputs().size(), false);
+  for (size_t argIdx = 0; argIdx < vecOp.getInputs().size(); ++argIdx) {
+    auto input = SmallVector<Value>(vecOp.getInputs()[argIdx].begin(),
+                                    vecOp.getInputs()[argIdx].end());
     if (auto in = inExists.find(input); in != inExists.end()) {
-      argsToRemove.set(argIdx);
-      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx - shuffledBy),
+      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx),
                                   currentBlock.getArgument(in->second));
-      currentBlock.eraseArgument(argIdx - shuffledBy);
-      ++shuffledBy;
-      changed = true;
+      argsToRemove.set(argIdx);
       continue;
     }
     inExists[input] = argIdx;
-    newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+    newOperands.insert(newOperands.end(), input.begin(), input.end());
   }
 
-  if (!changed)
+  if (argsToRemove.none())
     return failure();
+
+  currentBlock.eraseArguments(argsToRemove);
   return updateInputOperands(vecOp, newOperands);
 }
 

@@ -159,6 +159,11 @@ constexpr const char *elaborationArtefactsDirectoryAnnoClass =
 constexpr const char *testHarnessPathAnnoClass =
     "sifive.enterprise.firrtl.TestHarnessPathAnnotation";
 /// Annotation that marks a reset (port or wire) and domain.
+constexpr const char *fullResetAnnoClass = "circt.FullResetAnnotation";
+/// Annotation that marks a module as not belonging to any reset domain.
+constexpr const char *excludeFromFullResetAnnoClass =
+    "circt.ExcludeFromFullResetAnnotation";
+/// Annotation that marks a reset (port or wire) and domain.
 constexpr const char *fullAsyncResetAnnoClass =
     "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
 /// Annotation that marks a module as not belonging to any reset domain.

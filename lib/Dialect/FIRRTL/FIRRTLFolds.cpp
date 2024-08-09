@@ -1656,6 +1656,17 @@ LogicalResult MultibitMuxOp::canonicalize(MultibitMuxOp op,
     return success();
   }
 
+  // If the index width is narrower than the size of inputs, drop front
+  // elements.
+  auto indexWidth = op.getIndex().getType().getBitWidthOrSentinel();
+  uint64_t inputSize = op.getInputs().size();
+  if (indexWidth >= 0 && indexWidth < 64 && 1ull << indexWidth < inputSize) {
+    rewriter.modifyOpInPlace(op, [&]() {
+      op.getInputsMutable().erase(0, inputSize - (1ull << indexWidth));
+    });
+    return success();
+  }
+
   // If the op is a vector indexing (e.g. `multbit_mux idx, a[n-1], a[n-2], ...,
   // a[0]`), we can fold the op into subaccess op `a[idx]`.
   if (auto lastSubindex = op.getInputs().back().getDefiningOp<SubindexOp>()) {

@@ -29,5 +29,6 @@ moore.module @LocalVar() {
     moore.blocking_assign %a, %6 : i32
     %7 = moore.read %a : <i32>
     moore.blocking_assign %y, %7 : i32
+    moore.return
   }
 }

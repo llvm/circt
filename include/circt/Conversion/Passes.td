@@ -516,7 +516,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::createConvertMooreToCorePass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
-                           "llhd::LLHDDialect"];
+                           "llhd::LLHDDialect", "mlir::cf::ControlFlowDialect"];
 }
 
 //===----------------------------------------------------------------------===//

@@ -22,6 +22,8 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
@@ -52,6 +54,7 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -61,6 +64,10 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
+
+#ifdef ARCILATOR_ENABLE_JIT
+#include "arcilator-jit-env.h"
+#endif
 
 #include <optional>
 
@@ -213,6 +220,10 @@ static llvm::cl::opt<std::string>
                                  "simulation to run when output is set to run"),
                   llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
+static llvm::cl::list<std::string> sharedLibs{
+    "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
+    llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -249,6 +260,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     opts.tapMemories = observeMemories;
     pm.addPass(arc::createInferMemoriesPass(opts));
   }
+  pm.addPass(sim::createLowerDPIFunc());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
 
@@ -430,11 +442,25 @@ static LogicalResult processBuffer(
       return failure();
     }
 
+    auto envInitResult = arc_jit_runtime_env_init();
+    if (envInitResult != 0) {
+      llvm::errs() << "Initialization of arcilator runtime library failed ("
+                   << envInitResult << ").\n";
+      return failure();
+    }
+
+    auto envDeinit =
+        llvm::make_scope_exit([] { arc_jit_runtime_env_deinit(); });
+
+    SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
+                                              sharedLibs.end());
+
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.transformer = mlir::makeOptimizingTransformer(
         /*optLevel=*/3, /*sizeLevel=*/0,
         /*targetMachine=*/nullptr);
+    engineOptions.sharedLibPaths = sharedLibraries;
 
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
@@ -567,6 +593,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     mlir::scf::SCFDialect,
     om::OMDialect,
     seq::SeqDialect,
+    sim::SimDialect,
     sv::SVDialect
   >();
   // clang-format on

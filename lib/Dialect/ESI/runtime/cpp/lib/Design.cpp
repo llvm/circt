@@ -47,4 +47,13 @@ HWModule::HWModule(std::optional<ModuleInfo> info,
       childIndex(buildIndex(this->children)), services(services),
       ports(std::move(ports)), portIndex(buildIndex(this->ports)) {}
 
+bool HWModule::poll() {
+  bool result = false;
+  for (auto &port : ports)
+    result |= port->poll();
+  for (auto &child : children)
+    result |= child->poll();
+  return result;
+}
+
 } // namespace esi

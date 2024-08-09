@@ -54,21 +54,18 @@ void SFCCompatPass::runOnOperation() {
   bool madeModifications = false;
   SmallVector<InvalidValueOp> invalidOps;
 
-  auto fullAsyncResetAttr =
-      StringAttr::get(&getContext(), fullAsyncResetAnnoClass);
-  auto isFullAsyncResetAnno = [fullAsyncResetAttr](Annotation anno) {
-    return anno.getClassAttr() == fullAsyncResetAttr;
+  auto fullResetAttr = StringAttr::get(&getContext(), fullResetAnnoClass);
+  auto isFullResetAnno = [fullResetAttr](Annotation anno) {
+    auto annoClassAttr = anno.getClassAttr();
+    return annoClassAttr == fullResetAttr;
   };
-  bool fullAsyncResetExists = AnnotationSet::removePortAnnotations(
-      getOperation(), [&](unsigned argNum, Annotation anno) {
-        return isFullAsyncResetAnno(anno);
-      });
-  getOperation()->walk(
-      [isFullAsyncResetAnno, &fullAsyncResetExists](Operation *op) {
-        fullAsyncResetExists |=
-            AnnotationSet::removeAnnotations(op, isFullAsyncResetAnno);
-      });
-  madeModifications |= fullAsyncResetExists;
+  bool fullResetExists = AnnotationSet::removePortAnnotations(
+      getOperation(),
+      [&](unsigned argNum, Annotation anno) { return isFullResetAnno(anno); });
+  getOperation()->walk([isFullResetAnno, &fullResetExists](Operation *op) {
+    fullResetExists |= AnnotationSet::removeAnnotations(op, isFullResetAnno);
+  });
+  madeModifications |= fullResetExists;
 
   auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.
@@ -82,11 +79,10 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization and we
     // are not running FART, then replace it with a `RegOp`.
-    if (!fullAsyncResetExists &&
-        walkDrivers(reg.getResetValue(), true, true, false,
-                    [](FieldRef dst, FieldRef src) {
-                      return src.isa<InvalidValueOp>();
-                    })) {
+    if (!fullResetExists && walkDrivers(reg.getResetValue(), true, true, false,
+                                        [](FieldRef dst, FieldRef src) {
+                                          return src.isa<InvalidValueOp>();
+                                        })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
       RegOp newReg = builder.create<RegOp>(
           reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),

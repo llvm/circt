@@ -252,7 +252,8 @@ Function Declaration:
 
 Types:
 * Operand and result types must be passive.
-* Aggregate types are lowered into corresponding verilog aggregate.
+* A vector is lowered to an unpacked open array type, e.g. `a: Vec<4, UInt<8>>` to `byte a []`.
+* A bundle is lowered to a packed struct.
 * Integer types are lowered into into 2-state types.
 * Small integer types (< 64 bit) must be compatible to C-types and arguments are passed by values. Users are required to use specific integer types for small integers shown in the table below. Large integers are lowered to `bit` and passed by a reference.
 
@@ -267,12 +268,13 @@ Types:
 
 Example SV output:
 ```firrtl
-node result = intrinsic(circt_dpi_call<isClocked = 1, functionName="dpi_func"> : UInt<64>, clock, enable, uint_8_value, uint_32_value)
+node result = intrinsic(circt_dpi_call<isClocked = 1, functionName="dpi_func"> : UInt<64>, clock, enable, uint_8_value, uint_32_value, uint_8_vector)
 ```
 ```verilog
 import "DPI-C" function void dpi_func(
   input  byte    in_0,
          int     in_1,
+         byte    in_2[],
   output longint out_0
 );
 

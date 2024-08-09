@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREOPS
 #define CIRCT_DIALECT_MOORE_MOOREOPS
 
+include "circt/Dialect/Moore/MooreAttributes.td"
 include "circt/Dialect/Moore/MooreDialect.td"
 include "circt/Dialect/Moore/MooreTypes.td"
 include "mlir/IR/OpAsmInterface.td"
@@ -131,8 +132,6 @@ def ProcedureKindAttr: I32EnumAttr<"ProcedureKind", "Procedure kind",
 }
 
 def ProcedureOp : MooreOp<"procedure", [
-  SingleBlock,
-  NoTerminator,
   NoRegionArguments,
   RecursiveMemoryEffects,
   RecursivelySpeculatable
@@ -172,13 +171,20 @@ def ProcedureOp : MooreOp<"procedure", [
     See IEEE 1800-2017 § 9.2 "Structured procedures".
   }];
 
-  let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins ProcedureKindAttr:$kind);
   let results = (outs);
+  let regions = (region AnyRegion:$body);
 
   let assemblyFormat = [{
-    $kind attr-dict-with-keyword $bodyRegion
+    $kind attr-dict-with-keyword $body
   }];
+}
+
+def ReturnOp : MooreOp<"return", [
+  Pure, Terminator, HasParent<"ProcedureOp">
+]> {
+  let summary = "Return from a procedure";
+  let assemblyFormat = [{ attr-dict }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -412,12 +418,13 @@ def EventOp : MooreOp<"wait_event", [
 
 def ConstantOp : MooreOp<"constant", [Pure]> {
   let summary = "A constant integer value";
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins FVIntegerAttr:$value);
   let results = (outs IntType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
   let hasFolder = 1;
   let builders = [
+    OpBuilder<(ins "IntType":$type, "const FVInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(ins "IntType":$type, "int64_t":$value)>,
   ];
@@ -452,6 +459,21 @@ def NamedConstantOp : MooreOp<"named_constant", [
     ``custom<ImplicitSSAName>($name)
     $value `:` type($result) attr-dict
   }];
+}
+
+def StringConstantOp : MooreOp<"string_constant", [Pure, ConstantLike]> {
+  let summary = "Produce a constant string value";
+  let description = [{
+    Produces a constant value of string type.
+
+    Example:
+    ```mlir
+    %0 = moore.string "hello world"
+    ```
+  }];
+  let arguments = (ins StrAttr:$value);
+  let results = (outs IntType:$result);
+  let assemblyFormat = "$value attr-dict `:` type($result)";
 }
 
 def ConversionOp : MooreOp<"conversion", [Pure]> {
@@ -797,6 +819,16 @@ class CaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
     `case_ne` returns 1). `case_eq` corresponds to the `===` operator and
     `case_ne` to the `!==` operator.
 
+    `casez_eq` treats Z bits in either operand as wildcards and skips them
+    during the comparison. `casexz_eq` treats X and Z bits as wildcards. These
+    are different from the `wildcard_eq` operation, which only considers X/Z in
+    the right-hand operand as wildcards.
+
+    Case statements use this operation to perform case comparisons:
+    - `case` statements use `case_eq`
+    - `casez` statements use `casez_eq`
+    - `casex` statements use `casexz_eq`
+
     See IEEE 1800-2017 § 11.4.5 "Equality operators".
   }];
   let arguments = (ins SimpleBitVectorType:$lhs, SimpleBitVectorType:$rhs);
@@ -808,6 +840,12 @@ class CaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
 
 def CaseEqOp : CaseEqOpBase<"case_eq"> { let summary = "Case equality"; }
 def CaseNeOp : CaseEqOpBase<"case_ne"> { let summary = "Case inequality"; }
+def CaseZEqOp : CaseEqOpBase<"casez_eq"> {
+  let summary = "Case equality with Z as wildcard";
+}
+def CaseXZEqOp : CaseEqOpBase<"casexz_eq"> {
+  let summary = "Case equality with X and Z as wildcard";
+}
 
 class WildcardEqOpBase<string mnemonic> : MooreOp<mnemonic, [
   Pure,
@@ -1023,6 +1061,20 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def ArrayCreateOp : MooreOp<"array_create", [Pure, SameTypeOperands]> {
+  let summary = "Create an array value from individual elements";
+  let arguments = (ins Variadic<UnpackedType>:$elements);
+  let results = (outs AnyStaticArrayType:$result);
+  let assemblyFormat = [{
+    $elements attr-dict `:` type($elements) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
 
@@ -1230,4 +1282,5 @@ def YieldOp : MooreOp<"yield", [
   }];
   let hasVerifier = 1;
 }
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

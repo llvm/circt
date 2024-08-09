@@ -335,7 +335,7 @@ firrtl.circuit "AnyCast" {
 // CHECK-LABEL: firrtl.circuit "ModuleWithPropertySubmodule"
 firrtl.circuit "ModuleWithPropertySubmodule" {
   // CHECK: om.class @ModuleWithPropertySubmodule_Class
-  firrtl.module private @ModuleWithPropertySubmodule() {
+  firrtl.module @ModuleWithPropertySubmodule() {
     %c0 = firrtl.integer 0
     // CHECK: om.object @SubmoduleWithProperty_Class
     %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
