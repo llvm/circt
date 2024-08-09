@@ -748,11 +748,11 @@ LogicalResult ComponentOp::verify() {
   // region, or continuous assignments.
   bool hasNoControlConstructs = true;
   getControlOp().walk<WalkOrder::PreOrder>([&](Operation *op) {
-if (isa<EnableOp, InvokeOp, fsm::MachineOp>(op)) {
-  hasNoControlConstructs = false;
-  return WalkResult::advance();
-}
-return WalkResult::interrupt();
+    if (isa<EnableOp, InvokeOp, fsm::MachineOp>(op)) {
+      hasNoControlConstructs = false;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
   });
   bool hasNoAssignments =
       getWiresOp().getBodyBlock()->getOps<AssignOp>().empty();
@@ -761,7 +761,8 @@ return WalkResult::interrupt();
                "The component currently does nothing. It needs to either have "
                "continuous assignments in the Wires region or control "
                "constructs in "
-               "the Control region. The Control region should contain at least one of ")
+               "the Control region. The Control region should contain at least "
+               "one of ")
            << "'" << EnableOp::getOperationName() << "' , "
            << "'" << InvokeOp::getOperationName() << "' or "
            << "'" << fsm::MachineOp::getOperationName() << "'.";

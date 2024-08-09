@@ -886,7 +886,7 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
-  // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region.The Control region should involve 'calyx.enable' , 'calyx.invoke' or 'fsm.machine'.}}
+  // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region. The Control region should contain at least one of 'calyx.enable' , 'calyx.invoke' or 'fsm.machine'.}}
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
     %c64_i32 = hw.constant 64 : i32
@@ -902,7 +902,7 @@ module attributes {calyx.entrypoint = "main"} {
 // -----
 
 module attributes {calyx.entrypoint = "main"} {
-   // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region.The Control region should involve 'calyx.enable' , 'calyx.invoke' or 'fsm.machine'.}}
+   // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region. The Control region should contain at least one of 'calyx.enable' , 'calyx.invoke' or 'fsm.machine'.}}
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
     %eq.left, %eq.right, %eq.out = calyx.std_eq @eq : i1, i1, i1
@@ -916,6 +916,30 @@ module attributes {calyx.entrypoint = "main"} {
           }
         } else {
           calyx.seq {
+          }
+        }
+      }
+    }
+  }
+}
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+   // expected-error @+1 {{'calyx.component' op The component currently does nothing. It needs to either have continuous assignments in the Wires region or control constructs in the Control region. The Control region should contain at least one of 'calyx.enable' , 'calyx.invoke' or 'fsm.machine'.}}
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
+    %eq.left, %eq.right, %eq.out = calyx.std_eq @eq : i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires {
+    }
+    calyx.control {
+      calyx.par {
+        calyx.if %eq.out {
+          calyx.par {
+          }
+        } else {
+          calyx.par {
           }
         }
       }
