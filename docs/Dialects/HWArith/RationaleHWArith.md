@@ -490,11 +490,11 @@ logical result is a boolean, which doesn't have signedness semantics.
 
 |   | LHS type | RHS type | Comparison type                          | Result type |
 | - | :------- | :------- | :--------------------------------------- | :---------- |
-|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`       |
-|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`       |
-|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`       |
-|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`       |
-|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`       |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`        |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`        |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`        |
+|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`        |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`        |
 
 #### Examples
 ```mlir
