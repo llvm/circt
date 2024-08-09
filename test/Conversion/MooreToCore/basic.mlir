@@ -304,7 +304,7 @@ moore.module @Variable() {
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
   
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 0e>
+  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: llhd.drv [[A]], [[TMP2]] after [[TIME]] : !hw.inout<i32>
   moore.assign %a, %3 : i32
 
@@ -328,4 +328,132 @@ moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, o
   %4 = moore.read %2 : <struct<{exp_bits: i32, man_bits: i32}>>
 
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
+}
+
+// CHECK-LABEL: hw.module @Process
+moore.module @Process(in %cond : i1) {
+  // CHECK: [[B:%.+]] = llhd.sig "b"
+  // CHECK: [[C:%.+]] = llhd.sig "c"
+  // CHECK: [[D:%.+]] = llhd.sig "d"
+  // CHECK: [[E:%.+]] = llhd.sig "e"
+  %b = moore.variable : <i1>
+  %c = moore.variable : <i1>
+  %d = moore.variable : <i1>
+  %e = moore.variable : <i1>
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[B]], [[C]] : !hw.inout<i1>, !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[B_CURR:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_OLD:%.+]] = comb.xor [[C_OLD]], %true
+    // CHECK:   [[POSEDGE:%.+]] = comb.and [[NOT_C_OLD]], [[C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[B_CURR]], [[POSEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[B_PRB:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_PRB:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   [[T1:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK:   llhd.drv [[E]], [[RES]] after [[T1]]
+    // CHECK:   cf.br ^[[BB1]]
+    %br = moore.read %b : <i1>
+    moore.wait_event none %br : i1
+    %cr = moore.read %c : <i1>
+    moore.wait_event posedge %cr : i1
+
+    %0 = moore.add %br, %cr : i1
+
+    moore.nonblocking_assign %d, %0 : i1
+    moore.blocking_assign %e, %0 : i1
+    moore.return
+  }
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   llhd.wait ([[B]], [[C]] : !hw.inout<i1>, !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   cf.br ^[[BB3:.+]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[B_PRB:%.+]] = llhd.prb [[B]]
+    // CHECK:   [[C_PRB:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    %br = moore.read %b : <i1>
+    %cr = moore.read %c : <i1>
+    %0 = moore.add %br, %cr : i1
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  }
+
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[C]] : !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_OLD:%.+]] = comb.xor [[C_OLD]], %true
+    // CHECK:   [[POSEDGE:%.+]] = comb.and [[NOT_C_OLD]], [[C_CURR]] : i1
+    // CHECK:   [[C_CURR1:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_CURR:%.+]] = comb.xor [[C_CURR1]], %true
+    // CHECK:   [[NEGEDGE:%.+]] = comb.and [[C_OLD]], [[NOT_C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[POSEDGE]], [[NEGEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB:%.+]], [[C_PRB:%.+]] : i1
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    moore.wait_event edge %cr : i1
+    %0 = moore.add %br, %cr : i1
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  }
+
+  // CHECK: [[B_PRB]] = llhd.prb [[B]]
+  // CHECK: [[C_PRB]] = llhd.prb [[C]]
+  %br = moore.read %b : <i1>
+  %cr = moore.read %c : <i1>
+  // CHECK: llhd.process
+  moore.procedure always {
+    // CHECK:   cf.br ^[[BB1:.+]]
+    // CHECK: ^[[BB1]]:
+    // CHECK:   [[C_OLD:%.+]] = llhd.prb [[C]]
+    // CHECK:   llhd.wait ([[C]] : !hw.inout<i1>), ^[[BB2:.+]]
+    // CHECK: ^[[BB2]]:
+    // CHECK:   [[C_CURR:%.+]] = llhd.prb [[C]]
+    // CHECK:   [[NOT_C_CURR:%.+]] = comb.xor [[C_CURR]], %true
+    // CHECK:   [[NEGEDGE:%.+]] = comb.and [[C_OLD]], [[NOT_C_CURR]] : i1
+    // CHECK:   [[PROCEED:%.+]] = comb.or [[NEGEDGE]] : i1
+    // CHECK:   cf.cond_br [[PROCEED]], ^[[BB3:.+]], ^[[BB1]]
+    // CHECK: ^[[BB3]]:
+    // CHECK:   [[RES:%.+]] = comb.add [[B_PRB]], [[C_PRB]] : i1
+    // CHECK:   cf.cond_br %cond, ^[[BB4:.+]], ^[[BB5:.+]]
+    // CHECK: ^[[BB4]]:
+    // CHECK:   [[T0:%.+]] = llhd.constant_time <0ns, 1d, 0e>
+    // CHECK:   llhd.drv [[D]], [[RES]] after [[T0]]
+    // CHECK:   cf.br ^[[BB1]]
+    // CHECK: ^[[BB5]]:
+    // CHECK:   cf.br ^[[BB1]]
+    moore.wait_event negedge %cr : i1
+    %0 = moore.add %br, %cr : i1
+    cf.cond_br %cond, ^bb1, ^bb2
+  ^bb1:
+    moore.nonblocking_assign %d, %0 : i1
+    moore.return
+  ^bb2:
+    moore.return
+  }
 }
