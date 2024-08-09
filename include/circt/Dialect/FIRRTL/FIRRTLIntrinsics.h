@@ -238,7 +238,9 @@ public:
   }
 
   /// Lowers all intrinsics in a module.  Returns number converted or failure.
-  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
+  template <typename ModuleLikeOp>
+  FailureOr<size_t> lower(ModuleLikeOp mod,
+                          bool allowUnknownIntrinsics = false);
 
 private:
   template <typename T>

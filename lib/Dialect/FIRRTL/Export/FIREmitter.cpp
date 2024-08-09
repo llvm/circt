@@ -60,6 +60,7 @@ struct Emitter {
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
+  void emitDeclaration(FormalOp op);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   void emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -70,6 +71,7 @@ struct Emitter {
   void emitStatementsInBlock(Block &block);
   void emitStatement(WhenOp op);
   void emitStatement(WireOp op);
+  void emitStatement(SymbolicOp op);
   void emitStatement(RegOp op);
   void emitStatement(RegResetOp op);
   void emitStatement(NodeOp op);
@@ -406,6 +408,7 @@ void Emitter::emitCircuit(CircuitOp op) {
           })
           .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
+          .Case<FormalOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -623,6 +626,26 @@ void Emitter::emitDeclaration(OptionOp op) {
   ps << PP::newline << PP::newline;
 }
 
+/// Emit a formal test definition.
+void Emitter::emitDeclaration(FormalOp op) {
+  startStatement();
+  ps << "formal " << PPExtString(op.getSymName()) << ", "
+     << "k = ";
+  ps.addAsString(op.getK());
+
+  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+    ps << ", ";
+    ps.writeQuotedEscaped(outputFile.getFilename().getValue());
+  }
+
+  ps << " : ";
+  emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    // Emit the test's body
+    emitStatementsInBlock(op.getBody().front());
+  });
+}
+
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
@@ -643,8 +666,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
     if (isEmittedInline(&bodyOp))
       continue;
     TypeSwitch<Operation *>(&bodyOp)
-        .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
+        .Case<WhenOp, WireOp, SymbolicOp, RegOp, RegResetOp, NodeOp, StopOp,
+              SkipOp, PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
               MatchingConnectOp, PropAssignOp, InstanceOp, InstanceChoiceOp,
               AttachOp, MemOp, InvalidValueOp, SeqMemOp, CombMemOp,
               MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp,
@@ -694,6 +717,16 @@ void Emitter::emitStatement(WireOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
+    emitTypeWithColon(op.getResult().getType());
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(SymbolicOp op) {
+  auto legalName = legalize(op.getNameAttr());
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "symbolic " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
   });
   emitLocationAndNewLine(op);

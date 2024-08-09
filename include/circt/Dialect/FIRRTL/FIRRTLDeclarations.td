@@ -36,8 +36,8 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 /// located in a hardware-creating context, such as the body of a module.
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
-    ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+    ParentOneOf<[ 
+      "firrtl::FormalOp", "firrtl::FModuleOp", "firrtl::LayerBlockOp",
       "firrtl::WhenOp", "firrtl::MatchOp", "sv::IfDefOp"]>]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
@@ -333,6 +333,31 @@ def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
+  }];
+}
+
+def SymbolicOp : FIRRTLOp<"symbolic", [
+  HasParent<"firrtl::FormalOp">, HasCustomSSAName
+]> {
+  let summary = "Produce a symbolic value (non-deterministic value)";
+  let description = [{
+    The symbolic operation produces a symbolic value of UInt Type. This 
+    is solely used in the context of formal verification in order to reason 
+    about module instance inputs in a symbolic manner.  
+    Example:  
+    ```mlir  
+    %foo.in = firrtl.symbolic : t1
+    %foo.out = firrtl.instance "foo" @Foo(in: %foo.in : t1) -> (t1)
+    %cond = firrtl.geq %foo.in, foo.out : (t1, t1) -> (t1)
+    firrtl.int.verif.assert %cond : t1
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$name);
+  let results = (outs UIntType:$result);
+
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>(attr-dict) `:` qualified(type($result))
   }];
 }
 

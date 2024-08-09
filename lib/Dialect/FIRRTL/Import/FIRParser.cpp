@@ -1747,6 +1747,7 @@ private:
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
   ParseResult parseConnect();
+  ParseResult parseSymbolic();
   ParseResult parseInvalidate();
   ParseResult parseLayerBlockOrGroup(unsigned indent);
 
@@ -2666,6 +2667,8 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseNode();
   case FIRToken::kw_wire:
     return parseWire();
+  case FIRToken::kw_symbolic:
+    return parseSymbolic();
   case FIRToken::kw_reg:
     return parseRegister(stmtIndent);
   case FIRToken::kw_regreset:
@@ -3797,6 +3800,23 @@ ParseResult FIRStmtParser::parseConnect() {
   return success();
 }
 
+ParseResult FIRStmtParser::parseSymbolic() {
+  auto startTok = consumeToken(FIRToken::kw_symbolic);
+
+  StringRef id;
+  FIRRTLType type;
+  if (parseId(id, "expected symbolic value name") ||
+      parseToken(FIRToken::colon, "expected ':' in symbolic value") ||
+      parseType(type, "expected symbolic value type") || parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  auto result = builder.create<SymbolicOp>(type, id);
+  return moduleContext.addSymbolEntry(id, result.getResult(),
+                                      startTok.getLoc());
+}
+
 /// propassign ::= 'propassign' expr expr
 ParseResult FIRStmtParser::parsePropAssign() {
   auto startTok = consumeToken(FIRToken::kw_propassign);
@@ -4585,6 +4605,7 @@ private:
   ParseResult parseExtModule(CircuitOp circuit, unsigned indent);
   ParseResult parseIntModule(CircuitOp circuit, unsigned indent);
   ParseResult parseModule(CircuitOp circuit, bool isPublic, unsigned indent);
+  ParseResult parseFormal(CircuitOp circuit, unsigned indent);
 
   ParseResult parseLayerName(SymbolRefAttr &result);
   ParseResult parseOptionalEnabledLayers(ArrayAttr &result);
@@ -4609,6 +4630,16 @@ private:
     FIRLexerCursor lexerCursor;
     unsigned indent;
   };
+
+  struct DeferredBodyToParse {
+    Block &body;
+    FIRLexerCursor lexerCursor;
+    unsigned indent;
+  };
+
+  ParseResult parseFormalBody(const SymbolTable &circuitSymTbl,
+                              DeferredBodyToParse &defferedBody);
+  SmallVector<DeferredBodyToParse, 0> deferredBodies;
 
   ParseResult parseModuleBody(const SymbolTable &circuitSymTbl,
                               DeferredModuleToParse &deferredModule);
@@ -4890,6 +4921,7 @@ ParseResult FIRCircuitParser::skipToModuleEnd(unsigned indent) {
     case FIRToken::kw_extclass:
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_public:
     case FIRToken::kw_layer:
@@ -5153,6 +5185,67 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, bool isPublic,
   return success();
 }
 
+ParseResult
+FIRCircuitParser::parseFormalBody(const SymbolTable &circuitSymTbl,
+                                  DeferredBodyToParse &defferedBody) {
+
+  // Create a custom lexer for formal body like in module body parser
+  FIRLexer formalBodyLexer(getLexer().getSourceMgr(), getContext());
+  // Reset the lexer to the top of the body
+  defferedBody.lexerCursor.restore(formalBodyLexer);
+  // Reuse a module context for this as strucutre is similar
+  FIRModuleContext context(getConstants(), formalBodyLexer, version);
+  // Default namespace
+  hw::InnerSymbolNamespace ns;
+  // Create the statement parser needed to parse the body content
+  FIRStmtParser stmtParser(defferedBody.body, context, ns, circuitSymTbl,
+                           version);
+
+  // Parse the internal region
+  auto result = stmtParser.parseSimpleStmtBlock(defferedBody.indent);
+  if (failed(result))
+    return result;
+  return success();
+}
+
+ParseResult FIRCircuitParser::parseFormal(CircuitOp circuit, unsigned indent) {
+  consumeToken(FIRToken::kw_formal);
+  StringRef id, kSpelling;
+  int64_t k = -1;
+  LocWithInfo info(getToken().getLoc(), this);
+
+  // Parse the formal operation
+  if (parseId(id, "expected a formal test name") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(kSpelling) ||
+      parseToken(FIRToken::identifier, "expected parameter 'k' after ','") ||
+      parseToken(FIRToken::equal, "expected '=' after 'k'") ||
+      parseIntLit(k, "expected integer in k specification") ||
+      parseToken(FIRToken::colon,
+                 "expected ':' after option group definition") ||
+      info.parseOptionalInfo())
+    return failure();
+
+  // Check that the parameter is valid
+  if (kSpelling != "k" || k <= 0)
+    return emitError("Invalid parameter given to formal test: ") << kSpelling,
+           failure();
+
+  // Build out the firrtl mlir op
+  auto builder = circuit.getBodyBuilder();
+  auto formal = builder.create<firrtl::FormalOp>(info.getLoc(), id, k);
+  auto &body = formal.getBody().emplaceBlock();
+
+  // Defer the parsing of the body
+  deferredBodies.emplace_back(
+      DeferredBodyToParse{body, getLexer().getCursor(), indent});
+
+  // Skip to the end of the body
+  if (skipToModuleEnd(indent))
+    return failure();
+  return success();
+}
+
 ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
                                                       unsigned indent) {
   switch (getToken().getKind()) {
@@ -5167,6 +5260,10 @@ ParseResult FIRCircuitParser::parseToplevelDefinition(CircuitOp circuit,
     return parseExtClass(circuit, indent);
   case FIRToken::kw_extmodule:
     return parseExtModule(circuit, indent);
+  case FIRToken::kw_formal:
+    if (requireFeature({4, 0, 0}, "inline formal tests"))
+      return failure();
+    return parseFormal(circuit, indent);
   case FIRToken::kw_intmodule:
     if (removedFeature({4, 0, 0}, "intrinsic modules"))
       return failure();
@@ -5490,6 +5587,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   // A timer to get execution time of module parsing.
   auto parseTimer = ts.nest("Parse modules");
   deferredModules.reserve(16);
+  deferredBodies.reserve(16);
 
   // Parse any contained modules.
   while (true) {
@@ -5514,6 +5612,7 @@ ParseResult FIRCircuitParser::parseCircuit(
     case FIRToken::kw_extmodule:
     case FIRToken::kw_intmodule:
     case FIRToken::kw_layer:
+    case FIRToken::kw_formal:
     case FIRToken::kw_module:
     case FIRToken::kw_option:
     case FIRToken::kw_public:
@@ -5576,6 +5675,16 @@ DoneParsing:
         return success();
       });
   if (failed(anyFailed))
+    return failure();
+
+  // Next, parse all the deffered non-module bodies.
+  auto anyBodyFailed = mlir::failableParallelForEachN(
+      getContext(), 0, deferredBodies.size(), [&](size_t index) {
+        if (parseFormalBody(circuitSymTbl, deferredBodies[index]))
+          return failure();
+        return success();
+      });
+  if (failed(anyBodyFailed))
     return failure();
 
   // Helper to transform a layer name specification of the form `A::B::C` into

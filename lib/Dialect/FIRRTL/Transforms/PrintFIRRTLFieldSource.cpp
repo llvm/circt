@@ -62,16 +62,26 @@ struct PrintFIRRTLFieldSourcePass
           visitOp(fieldRefs, &op);
   }
 
-  void runOnOperation() override {
-    auto modOp = getOperation();
+  template <typename Op>
+  void runOnOp(Op modOp) {
+    Block *body = modOp.getBodyBlock();
     os << "** " << modOp.getName() << "\n";
     auto &fieldRefs = getAnalysis<FieldSource>();
-    for (auto port : modOp.getBodyBlock()->getArguments())
+    for (auto port : body->getArguments())
       visitValue(fieldRefs, port);
-    for (auto &op : *modOp.getBodyBlock())
+    for (auto &op : *body)
       visitOp(fieldRefs, &op);
 
     markAllAnalysesPreserved();
+  }
+
+  void runOnOperation() override {
+    TypeSwitch<Operation *>(&(*getOperation()))
+        .Case<FModuleOp, ClassOp, FormalOp>([&](auto op) { runOnOp(op); })
+        // All other ops are ignored -- particularly ops that don't implement
+        // the `getBodyBlock()` method. We don't want an error here because the
+        // pass wasn't designed to run on those ops.
+        .Default([&](auto) {});
   }
   raw_ostream &os;
 };
