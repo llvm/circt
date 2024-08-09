@@ -289,25 +289,49 @@ VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
 }
 
 LogicalResult VariableOp::canonicalize(VariableOp op,
-                                       ::mlir::PatternRewriter &rewriter) {
-  Value initial;
-  for (auto *user : op->getUsers())
-    if (isa<ContinuousAssignOp>(user) &&
-        (user->getOperand(0) == op.getResult())) {
-      // Don't canonicalize the multiple continuous assignment to the same
-      // variable.
-      if (initial)
+                                       PatternRewriter &rewriter) {
+  // Check if the variable has one unique continuous assignment to it, all other
+  // uses are reads, and that all uses are in the same block as the variable
+  // itself.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the variable are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the variable.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
         return failure();
-      initial = user->getOperand(1);
+      uniqueAssignOp = assignOp;
+      continue;
     }
 
-  if (initial) {
-    rewriter.replaceOpWithNewOp<AssignedVarOp>(op, op.getType(),
-                                               op.getNameAttr(), initial);
-    return success();
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      return failure();
+  }
+  if (!uniqueAssignOp)
+    return failure();
+
+  // If the original variable had a name, create an `AssignedVariableOp` as a
+  // replacement. Otherwise substitute the assigned value directly.
+  Value assignedValue = uniqueAssignOp.getSrc();
+  if (auto name = op.getNameAttr(); name && !name.empty())
+    assignedValue = rewriter.create<AssignedVariableOp>(
+        op.getLoc(), name, uniqueAssignOp.getSrc());
+
+  // Remove the assign op and replace all reads with the new assigned var op.
+  rewriter.eraseOp(uniqueAssignOp);
+  for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+    auto readOp = cast<ReadOp>(user);
+    rewriter.replaceOp(readOp, assignedValue);
   }
 
-  return failure();
+  // Remove the original variable.
+  rewriter.eraseOp(op);
+  return success();
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
@@ -371,13 +395,116 @@ void NetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
+LogicalResult NetOp::canonicalize(NetOp op, PatternRewriter &rewriter) {
+  bool modified = false;
+
+  // Check if the net has one unique continuous assignment to it, and
+  // additionally if all other users are reads.
+  auto *block = op->getBlock();
+  ContinuousAssignOp uniqueAssignOp;
+  bool allUsesAreReads = true;
+  for (auto *user : op->getUsers()) {
+    // Ensure that all users of the net are in the same block.
+    if (user->getBlock() != block)
+      return failure();
+
+    // Ensure there is at most one unique continuous assignment to the net.
+    if (auto assignOp = dyn_cast<ContinuousAssignOp>(user)) {
+      if (uniqueAssignOp)
+        return failure();
+      uniqueAssignOp = assignOp;
+      continue;
+    }
+
+    // Ensure all other users are reads.
+    if (!isa<ReadOp>(user))
+      allUsesAreReads = false;
+  }
+
+  // If there was one unique assignment, and the `NetOp` does not yet have an
+  // assigned value set, fold the assignment into the net.
+  if (uniqueAssignOp && !op.getAssignment()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getAssignmentMutable().assign(uniqueAssignOp.getSrc()); });
+    rewriter.eraseOp(uniqueAssignOp);
+    modified = true;
+    uniqueAssignOp = {};
+  }
+
+  // If all users of the net op are reads, and any potential unique assignment
+  // has been folded into the net op itself, directly replace the reads with the
+  // net's assigned value.
+  if (!uniqueAssignOp && allUsesAreReads && op.getAssignment()) {
+    // If the original net had a name, create an `AssignedVariableOp` as a
+    // replacement. Otherwise substitute the assigned value directly.
+    auto assignedValue = op.getAssignment();
+    if (auto name = op.getNameAttr(); name && !name.empty())
+      assignedValue =
+          rewriter.create<AssignedVariableOp>(op.getLoc(), name, assignedValue);
+
+    // Replace all reads with the new assigned var op and remove the original
+    // net op.
+    for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+      auto readOp = cast<ReadOp>(user);
+      rewriter.replaceOp(readOp, assignedValue);
+    }
+    rewriter.eraseOp(op);
+    modified = true;
+  }
+
+  return success(modified);
+}
+
 //===----------------------------------------------------------------------===//
-// AssignedVarOp
+// AssignedVariableOp
 //===----------------------------------------------------------------------===//
 
-void AssignedVarOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AssignedVariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   if (getName() && !getName()->empty())
     setNameFn(getResult(), *getName());
+}
+
+LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
+                                               PatternRewriter &rewriter) {
+  // Eliminate chained variables with the same name.
+  // var(name, var(name, x)) -> var(name, x)
+  if (auto otherOp = op.getInput().getDefiningOp<AssignedVariableOp>()) {
+    if (otherOp.getNameAttr() == op.getNameAttr()) {
+      rewriter.replaceOp(op, otherOp);
+      return success();
+    }
+  }
+
+  // Eliminate variables that alias an input port of the same name.
+  if (auto blockArg = dyn_cast<BlockArgument>(op.getInput())) {
+    if (auto moduleOp =
+            dyn_cast<SVModuleOp>(blockArg.getOwner()->getParentOp())) {
+      auto moduleType = moduleOp.getModuleType();
+      auto portName = moduleType.getInputNameAttr(blockArg.getArgNumber());
+      if (portName == op.getNameAttr()) {
+        rewriter.replaceOp(op, blockArg);
+        return success();
+      }
+    }
+  }
+
+  // Eliminate variables that feed an output port of the same name.
+  for (auto &use : op->getUses()) {
+    auto outputOp = dyn_cast<OutputOp>(use.getOwner());
+    if (!outputOp)
+      continue;
+    auto moduleOp = dyn_cast<SVModuleOp>(outputOp.getParentOp());
+    if (!moduleOp)
+      break;
+    auto moduleType = moduleOp.getModuleType();
+    auto portName = moduleType.getOutputNameAttr(use.getOperandNumber());
+    if (portName == op.getNameAttr()) {
+      rewriter.replaceOp(op, op.getInput());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
