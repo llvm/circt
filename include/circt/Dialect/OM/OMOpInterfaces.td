@@ -44,16 +44,21 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
       "mlir::Type", "getFieldType", (ins "mlir::StringAttr":$name),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
-         mlir::DictionaryAttr fieldTypes =
-           cast<mlir::DictionaryAttr>(this->getOperation()->getAttr("fieldTypes"));
-         return cast<mlir::TypeAttr>(fieldTypes.get(name)).getValue();;
-       }]>,
+        mlir::DictionaryAttr fieldTypes =
+          mlir::cast<mlir::DictionaryAttr>(
+            this->getOperation()->getAttr("fieldTypes")
+          );
+        return mlir::cast<mlir::TypeAttr>(fieldTypes.get(name)).getValue();
+      }]>,
     InterfaceMethod<"Get the class-like field names",
       "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),
       /*methodBody=*/[{}],
       /*defaultImplementation=*/[{ 
-         return cast<mlir::ArrayAttr>(this->getOperation()->getAttr("fieldNames")).getValue();
-       }]>,
+        return
+          mlir::cast<mlir::ArrayAttr>(
+            this->getOperation()->getAttr("fieldNames")
+          ).getValue();
+      }]>
   ];
 }
 
@@ -83,21 +88,7 @@ def ClassLike : OpInterface<"ClassLike"> {
     InterfaceMethod<"Get the class-like fields op",
       "circt::om::ClassFieldsLike", "getFieldsOp", (ins)>,
     InterfaceMethod<"Get the class-like fields objects",
-      "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>,
-    //     llvm::MapVector<mlir::StringAttr, mlir::Type> classFields;
-    //     for (auto field : $_op.getFields()) {
-    //       auto result = classFields.insert(
-    //         {field.getName(), field.getType()}
-    //       );
-    //       /// TODO: Can we do this verification on construction?
-    //       if (!result.second) {
-    //         $_op.getFieldsOp().emitOpError() << "field " << field.getName()
-    //         << " is defined twice";
-    //         return std::nullopt;
-    //       }
-    //     }
-    //     return std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>(classFields);
-    //   }]>,
+      "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>
   ];
 }
 

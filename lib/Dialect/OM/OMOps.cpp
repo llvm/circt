@@ -15,7 +15,6 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include <iostream>
 
 using namespace mlir;
 using namespace circt::om;
