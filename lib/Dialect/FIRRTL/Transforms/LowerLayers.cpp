@@ -465,6 +465,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     };
 
     SmallVector<hw::InnerSymAttr> innerSyms;
+    SmallVector<RWProbeOp> rwprobes;
     for (auto &op : llvm::make_early_inc_range(*body)) {
       // Record any operations inside the layer block which have inner symbols.
       // Theses may have symbol users which need to be updated.
@@ -507,6 +508,11 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       if (auto refCast = dyn_cast<RefCastOp>(op)) {
         if (!isAncestorOfValueOwner(layerBlock, refCast))
           createInputPort(refCast.getInput(), op.getLoc());
+        continue;
+      }
+
+      if (auto rwprobe = dyn_cast<RWProbeOp>(op)) {
+        rwprobes.push_back(rwprobe);
         continue;
       }
 
@@ -622,6 +628,22 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       LLVM_DEBUG(llvm::dbgs() << "          - ref: " << oldInnerRef << "\n"
                               << "            splice: " << splice.first << ", "
                               << splice.second << "\n";);
+    }
+
+    // Update RWProbe operations.
+    for (auto rwprobe : rwprobes) {
+      auto target = rwprobe.getTarget();
+      auto mapped = innerRefMap.find(target);
+      if (mapped == innerRefMap.end())
+        return rwprobe.emitError("rwprobe target not moved"),
+               WalkResult::interrupt();
+
+      if (mapped->second.second != newModule.getModuleNameAttr())
+        return rwprobe.emitError("rwprobe target refers to different module"),
+               WalkResult::interrupt();
+
+      rwprobe.setTargetAttr(
+          hw::InnerRefAttr::get(mapped->second.second, target.getName()));
     }
 
     // Connect instance ports to values.
