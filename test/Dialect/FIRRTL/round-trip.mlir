@@ -104,4 +104,20 @@ firrtl.module @PropertyArithmetic() {
   %4 = firrtl.integer.shr %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 }
 
+// CHECK-LABEL: firrtl.module @PropertyListOps
+firrtl.module @PropertyListOps() {
+  %0 = firrtl.integer 0
+  %1 = firrtl.integer 1
+  %2 = firrtl.integer 2
+
+  // CHECK: [[L0:%.+]] = firrtl.list.create %0, %1
+  %l0 = firrtl.list.create %0, %1 : !firrtl.list<integer>
+
+  // CHECK: [[L1:%.+]] = firrtl.list.create %2
+  %l1 = firrtl.list.create %2 : !firrtl.list<integer>
+
+  // CHECK: firrtl.list.concat [[L0]], [[L1]] : !firrtl.list<integer>
+  %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
+}
+
 }
