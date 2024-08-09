@@ -365,7 +365,8 @@ def ContractOp : VerifOp<"contract", [
     and postconditions on a parent module. These are used as an abstraction to 
     better modularize formal verification such that each module containing a contract 
     is checked exactly once. The contract contains a single block where the block arguments 
-    represent the inputs and outputs in the same order as in the module signature.
+    represent the results of the code block that the contract is abstracting over. The 
+    operands represent the SSA values that this contract's results will replace.
           
     e.g. 
     ```
