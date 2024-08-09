@@ -232,11 +232,11 @@ def ICmpOp : HWArithOp<"icmp", [Pure]> {
 
     | LHS type | RHS type | Comparison type                          | Result type |
     | :------- | :------- | :--------------------------------------- | :---------- |
-    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`       |
-    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`       |
-    | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`       |
-    |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`       |
-    | `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`       |
+    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`        |
+    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`        |
+    | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`        |
+    |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`        |
+    | `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`        |
 
     Examples:
     ```mlir
