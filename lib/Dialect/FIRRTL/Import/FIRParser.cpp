@@ -5035,6 +5035,8 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
       if (auto ftype = type_dyn_cast<FIRRTLType>(pi.type)) {
         if (ftype.hasUninferredWidth())
           return emitError(loc, "extmodule port must have known width");
+        if (ftype.hasUninferredReset())
+          return emitError(loc, "extmodule port must have concrete reset type");
       }
     }
   }
