@@ -243,13 +243,8 @@ hw.module @icmp(in %op0: i32, in %op1: i32, out sisi: i1, out siui: i1, out uisi
 // CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %op0, %op1 : i32
   %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui32, ui32
 
-  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
-  %siuiOut = hwarith.cast %siui : (ui1) -> i1
-  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
-  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
-
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
-  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+  hw.output %sisi, %siui, %uisi, %uiui: i1, i1, i1, i1
 }
 
 // -----
@@ -285,13 +280,8 @@ hw.module @icmp_mixed_width(in %op0: i5, in %op1: i7, out sisi: i1, out siui: i1
 // CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %[[OP0_PADDED]], %op1 : i7
   %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui5, ui7
 
-  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
-  %siuiOut = hwarith.cast %siui : (ui1) -> i1
-  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
-  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
-
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
-  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+  hw.output %sisi, %siui, %uisi, %uiui: i1, i1, i1, i1
 }
 
 // -----
