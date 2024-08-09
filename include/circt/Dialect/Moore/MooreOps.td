@@ -266,19 +266,20 @@ def NetOp : MooreOp<"net", [
     `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
-def AssignedVarOp : MooreOp<"assigned_variable", [
+def AssignedVariableOp : MooreOp<"assigned_variable", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-  TypesMatchWith<"initial value and variable types match",
-    "result", "initial", "cast<RefType>($_self).getNestedType()">
+  SameOperandsAndResultType
 ]> {
-  let summary = "The copy of variable must have the initial value";
-  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$initial);
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let summary = "A variable with a unique continuously assigned value";
+  let arguments = (ins OptionalAttr<StrAttr>:$name, UnpackedType:$input);
+  let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    `` custom<ImplicitSSAName>($name) $initial attr-dict `:` type($result)
+    `` custom<ImplicitSSAName>($name) $input attr-dict `:` type($input)
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ReadOp : MooreOp<"read", [
