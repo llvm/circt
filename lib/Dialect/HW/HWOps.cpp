@@ -3349,6 +3349,22 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   b->addArguments(inputs.getTypes(), argLocs);
 }
 
+LogicalResult TriggeredOp::verify() {
+  if (!!getOperation()->getParentOfType<hw::TriggeredOp>())
+    return emitOpError("must not be nested under another TriggeredOp.");
+  return success();
+}
+
+LogicalResult TriggeredOp::verifyRegions() {
+  auto numInputs = getInputs().size();
+  auto numArgs = getBodyBlock()->getNumArguments();
+  if (numInputs != numArgs)
+    return emitOpError("number of inputs (" + Twine(numInputs) +
+                       ") does not match number of body arguments (" +
+                       Twine(numArgs) + ").");
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

@@ -22,12 +22,12 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTHWToLLVM
   CIRCTHWToBTOR2
   CIRCTHWToSMT
-  CIRCTHWToSV
   CIRCTHWToSystemC
   CIRCTLoopScheduleToCalyx
   CIRCTLTLToCore
   CIRCTMooreToCore
   CIRCTPipelineToHW
+  CIRCTProceduralCoreToSV
   CIRCTSCFToCalyx
   CIRCTSeqToSV
   CIRCTSimToSV

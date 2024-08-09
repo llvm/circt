@@ -559,15 +559,15 @@ def ConvertHWToSystemC : Pass<"convert-hw-to-systemc", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// HWToSV
+// ProceduralCoreToSV
 //===----------------------------------------------------------------------===//
 
-def LowerHWToSV : Pass<"lower-hw-to-sv", "hw::HWModuleOp"> {
-  let summary = "Convert HW to SV";
+def ProceduralCoreToSV : Pass<"lower-procedural-core-to-sv", "hw::HWModuleOp"> {
+  let summary = "Lower procedural core dialect operations to SV";
   let description = [{
-    This pass converts various HW contructs to SV.
+    This pass lowers procedural 'hw.triggered' operations and their body
+    regions to the SystemVerilog dialect.
   }];
-  let constructor = "circt::createLowerHWToSVPass()";
   let dependentDialects = ["sv::SVDialect"];
 }
 

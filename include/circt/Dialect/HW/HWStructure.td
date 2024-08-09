@@ -730,6 +730,9 @@ def TriggeredOp : HWOp<"triggered", [
   let builders = [
     OpBuilder<(ins "EventControlAttr":$event, "Value":$trigger, "ValueRange":$inputs)>
   ];
+
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_HW_HWSTRUCTURE_TD

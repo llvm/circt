@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTHWToSV
-  HWToSV.cpp
+add_circt_conversion_library(CIRCTProceduralCoreToSV
+  ProceduralCoreToSV.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -9,7 +9,7 @@ add_circt_conversion_library(CIRCTHWToSV
 
   LINK_LIBS PUBLIC
   CIRCTHW
+  CIRCTSim
   CIRCTSV
-  MLIREmitCDialect
   MLIRTransforms
 )

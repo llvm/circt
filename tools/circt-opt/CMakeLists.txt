@@ -64,11 +64,11 @@ target_link_libraries(circt-opt
   CIRCTInteropDialect
   CIRCTHWToSMT
   CIRCTHWToSystemC
-  CIRCTHWToSV
   CIRCTHWTransforms
   CIRCTLoopSchedule
   CIRCTLoopScheduleToCalyx
   CIRCTLTL
+  CIRCTProceduralCoreToSV
   CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSeq
