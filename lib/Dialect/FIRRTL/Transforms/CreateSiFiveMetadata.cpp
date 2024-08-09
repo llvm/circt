@@ -121,7 +121,7 @@ struct ObjectModelIR {
         buildSimpleClassOp(builderOM, unknownLoc, "ExtraPortsMemorySchema",
                            extraPortFields, extraPortsType);
 
-    mlir::Type classFieldTypes[12] = {
+    mlir::Type classFieldTypes[13] = {
         StringType::get(context),
         FIntegerType::get(context),
         FIntegerType::get(context),
@@ -133,9 +133,11 @@ struct ObjectModelIR {
         FIntegerType::get(context),
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         BoolType::get(context),
-        ListType::get(context,
-                      cast<PropertyType>(detail::getInstanceTypeForClassLike(
-                          extraPortsClass)))};
+        ListType::get(
+            context, cast<PropertyType>(
+                         detail::getInstanceTypeForClassLike(extraPortsClass))),
+        ListType::get(context, cast<PropertyType>(StringType::get(context))),
+    };
 
     memorySchemaClass =
         buildSimpleClassOp(builderOM, unknownLoc, "MemorySchema",
@@ -246,8 +248,13 @@ struct ObjectModelIR {
 
     auto memPaths = instancePathCache.getAbsolutePaths(mem);
     SmallVector<Value> memoryHierPaths;
+    SmallVector<Value> finalInstanceNames;
     for (auto memPath : memPaths) {
-      Operation *finalInst = memPath.leaf();
+      auto finalInst = memPath.leaf();
+      finalInstanceNames.emplace_back(
+          builderOM.create<StringConstantOp>(finalInst.getInstanceNameAttr()));
+      memPath.dropBack();
+      finalInst = memPath.leaf();
       SmallVector<Attribute> namepath;
       bool foundDut = dutMod == nullptr;
       for (auto inst : memPath) {
@@ -272,6 +279,9 @@ struct ObjectModelIR {
       // Create the path operation.
       memoryHierPaths.emplace_back(createPathRef(finalInst, nla, builderOM));
     }
+    auto finalInstNamesList = builderOM.create<ListCreateOp>(
+        ListType::get(context, cast<PropertyType>(StringType::get(context))),
+        finalInstanceNames);
     auto hierpaths = builderOM.create<ListCreateOp>(
         ListType::get(context, cast<PropertyType>(PathType::get(context))),
         memoryHierPaths);
@@ -313,10 +323,13 @@ struct ObjectModelIR {
               .Case("writeLatency", mem.getWriteLatencyAttr())
               .Case("hierarchy", {})
               .Case("inDut", BoolAttr::get(context, inDut))
-              .Case("extraPorts", {}));
+              .Case("extraPorts", {})
+              .Case("preExtInstName", {}));
       if (!propVal) {
         if (field.value() == "hierarchy")
           propVal = hierpaths;
+        else if (field.value() == "preExtInstName")
+          propVal = finalInstNamesList;
         else
           propVal = extraPorts;
       }
@@ -435,10 +448,11 @@ struct ObjectModelIR {
   ClassOp memoryMetadataClass;
   ClassOp retimeModulesMetadataClass, retimeModulesSchemaClass;
   ClassOp blackBoxModulesSchemaClass, blackBoxMetadataClass;
-  StringRef memoryParamNames[12] = {
-      "name",        "depth",      "width",          "maskBits",
-      "readPorts",   "writePorts", "readwritePorts", "writeLatency",
-      "readLatency", "hierarchy",  "inDut",          "extraPorts"};
+  StringRef memoryParamNames[13] = {
+      "name",          "depth",      "width",          "maskBits",
+      "readPorts",     "writePorts", "readwritePorts", "writeLatency",
+      "readLatency",   "hierarchy",  "inDut",          "extraPorts",
+      "preExtInstName"};
   StringRef retimeModulesParamNames[1] = {"moduleName"};
   StringRef blackBoxModulesParamNames[1] = {"moduleName"};
   llvm::SmallDenseSet<StringRef> blackboxModules;
