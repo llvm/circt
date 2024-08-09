@@ -312,9 +312,13 @@ moore.module @Variable() {
 }
 
 // CHECK-LABEL: hw.module @Struct
-moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
+moore.module @Struct(in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
+
+  // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : !hw.inout<struct<exp_bits: i32, man_bits: i32>>
+  %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
+  moore.assign %ref, %0 : !moore.i32
   
   // CHECK: [[C0:%.+]] = hw.constant 0 : i64
   // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>

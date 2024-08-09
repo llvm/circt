@@ -74,10 +74,19 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
   inputs.reserve(moduleTy.getNumInputs());
   outputs.reserve(moduleTy.getNumOutputs());
 
-  for (auto port : moduleTy.getPorts())
+  for (auto port : moduleTy.getPorts()) {
+    Type portTy = typeConverter.convertType(port.type);
+    if (auto ioTy = dyn_cast_or_null<hw::InOutType>(portTy)) {
+      inputs.push_back(hw::PortInfo(
+          {{port.name, ioTy.getElementType(), hw::ModulePort::InOut},
+           inputNum++,
+           {}}));
+      continue;
+    }
+
     if (port.dir == hw::ModulePort::Direction::Output) {
       outputs.push_back(
-          hw::PortInfo({{port.name, port.type, port.dir}, resultNum++, {}}));
+          hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
     } else {
       // FIXME: Once we support net<...>, ref<...> type to represent type of
       // special port like inout or ref port which is not a input or output
@@ -85,8 +94,9 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
       // port or do specified operation to it. Now inout and ref port is treated
       // as input port.
       inputs.push_back(
-          hw::PortInfo({{port.name, port.type, port.dir}, inputNum++, {}}));
+          hw::PortInfo({{port.name, portTy, port.dir}, inputNum++, {}}));
     }
+  }
 
   return hw::ModulePortInfo(inputs, outputs);
 }
@@ -113,6 +123,9 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     SymbolTable::setSymbolVisibility(hwModuleOp,
                                      SymbolTable::getSymbolVisibility(op));
     rewriter.eraseBlock(hwModuleOp.getBodyBlock());
+    if (failed(
+            rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter)))
+      return failure();
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
@@ -451,6 +464,19 @@ struct StructExtractOpConversion : public OpConversionPattern<StructExtractOp> {
   matchAndRewrite(StructExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<hw::StructExtractOp>(
+        op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    return success();
+  }
+};
+
+struct StructExtractRefOpConversion
+    : public OpConversionPattern<StructExtractRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StructExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
         op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();
   }
@@ -908,6 +934,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
     ExtractOpConversion, DynExtractOpConversion, ConversionOpConversion,
     ReadOpConversion, NamedConstantOpConv, StructExtractOpConversion,
+    StructExtractRefOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
