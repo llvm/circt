@@ -50,31 +50,30 @@ void VerifyObjectFieldsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
 
   /// A map from a class and field name to a field.
-  llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Type>> tables;
-  for (auto op : module->getRegion(0).getOps<om::ClassLike>())
-    tables.insert({op, llvm::DenseMap<StringAttr, Type>()});
-
-  // Peel tables parallelly.
-  if (failed(
-          mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
-            ClassLike classLike = entry.first;
-            auto &table = entry.second;
-            std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>
-                fieldTypes = classLike.getFieldTypes();
-            if (!fieldTypes.has_value()) {
-              return LogicalResult::failure();
-            }
-            for (auto [name, type] : fieldTypes.value()) {
-              table.insert({name, type});
-            }
-            return LogicalResult::success();
-          })))
-    return signalPassFailure();
+  // llvm::MapVector<ClassLike, llvm::DenseMap<StringAttr, Type>> tables;
+  // for (auto op : module->getRegion(0).getOps<om::ClassLike>())
+  //   tables.insert({op, llvm::DenseMap<StringAttr, Type>()});
+  //
+  // // Peel tables parallelly.
+  // if (failed(
+  //         mlir::failableParallelForEach(&getContext(), tables, [](auto &entry) {
+  //           ClassLike classLike = entry.first;
+  //           auto &table = entry.second;
+  //           std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>
+  //               fieldTypes = classLike.getFieldTypes();
+  //           if (!fieldTypes.has_value()) {
+  //             return LogicalResult::failure();
+  //           }
+  //           for (auto [name, type] : fieldTypes.value()) {
+  //             table.insert({name, type});
+  //           }
+  //           return LogicalResult::success();
+  //         })))
+  //   return signalPassFailure();
 
   // Run actual verification. Make sure not to mutate `tables`.
   auto result = mlir::failableParallelForEach(
-      &getContext(), tables, [&tables, &symbolTable](const auto &entry) {
-        ClassLike classLike = entry.first;
+      &getContext(), module->getRegion(0).getOps<om::ClassLike>(), [&symbolTable](ClassLike classLike) {
         auto result =
             classLike.walk([&](ObjectFieldOp objectField) -> WalkResult {
               auto objectInstType =
@@ -96,9 +95,9 @@ void VerifyObjectFieldsPass::runOnOperation() {
               for (size_t i = 0, e = fields.size(); i < e; ++i) {
                 // Verify the field exists on the ClassOp.
                 auto field = fields[i];
-                auto *it = tables.find(classDef);
-                assert(it != tables.end() && "must be visited");
-                Type fieldType = it->second.lookup(field.getAttr());
+                // auto *it = tables.find(classDef);
+                // assert(it != tables.end() && "must be visited");
+                Type fieldType = classDef.getFieldsOp().getFieldType(field.getAttr());
 
                 if (!fieldType) {
                   auto error =

@@ -170,12 +170,6 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     return diag;
   };
 
-  auto classFieldsOpt = classOp.getFieldTypes();
-  if (!classFieldsOpt.has_value()) {
-    return emitError(classOp) << "failed getting class op field types";
-  }
-  llvm::MapVector<StringAttr, Type> classFields = classFieldsOpt.value();
-
   for (auto op : classes) {
     if (op == classOp)
       continue;
@@ -196,28 +190,28 @@ static FailureOr<bool> resolveClasses(StringAttr name,
     // Check declared fields.
     llvm::DenseSet<StringAttr> declaredFields;
 
-    auto fieldTypes = op.getFieldTypes();
-    if (!fieldTypes.has_value()) {
-      return emitError(op) << "failed getting field types";
-    }
+    auto fieldNames = op.getFieldsOp().getFieldNames();
 
-    for (auto [name, type] : fieldTypes.value()) {
-      auto *it = classFields.find(name);
+    for (auto name : fieldNames) {
+      auto opType = op.getFieldsOp().getFieldType(cast<StringAttr>(name));
+      // TODO: Store fieldsOp
+      auto classType = classOp.getFieldsOp().getFieldType(cast<StringAttr>(name));
 
       // Field not found in its definition.
-      if (it == classFields.end())
+      // TODO: Validate null find
+      if (!classType)
         return emitError(op) << "declaration has a field " << name
                              << " but not found in its definition";
 
-      if (it->second != type)
+      if (classType != opType)
         return emitError(op)
                << "declaration has a field " << name
-               << " but types don't match, " << it->second << " vs " << type;
-      declaredFields.insert(name);
+               << " but types don't match, " << classType << " vs " << opType;
+      declaredFields.insert(cast<StringAttr>(name));
     }
 
-    for (auto [fieldName, _] : classFields)
-      if (!declaredFields.count(fieldName))
+    for (auto fieldName : classOp.getFieldsOp().getFieldNames())
+      if (!declaredFields.count(cast<StringAttr>(fieldName)))
         return emitError(op) << "definition has a field " << fieldName
                              << " but not found in this declaration";
   }

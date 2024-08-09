@@ -250,14 +250,17 @@ llvm::SmallVector<FieldValue> circt::om::ClassOp::getFieldValues() {
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder, mlir::Location loc,
                                    llvm::ArrayRef<mlir::Attribute> fieldNames,
                                    llvm::ArrayRef<mlir::Value> fieldValues) {
-  // ClassFieldsOp op = builder.create<ClassFieldsOp>(loc);
-  // OpBuilder innerBuilder = OpBuilder::atBlockBegin(op.getBodyBlock());
-  // for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
-  //   // TODO: Unfuse locs, remove string attr
-  //   innerBuilder.create<ClassFieldOp>(loc, cast<StringAttr>(name).getValue(), value);
-  // }
-  // op.getOperation()->setAttr(
-  //     "field_names", mlir::ArrayAttr::get(this->getContext(), fieldNames));
+  ClassFieldsOp op = builder.create<ClassFieldsOp>(loc, fieldValues);
+  llvm::SmallVector<NamedAttribute> fieldTypes;
+  for (auto [name, value] : llvm::zip(fieldNames, fieldValues)) {
+    fieldTypes.push_back(mlir::NamedAttribute(
+        cast<StringAttr>(name),
+        mlir::TypeAttr::get(value.getType())));
+  }
+  op.getOperation()->setAttr(
+      "fieldNames", mlir::ArrayAttr::get(this->getContext(), fieldNames));
+  op.getOperation()->setAttr(
+      "fieldTypes", mlir::DictionaryAttr::get(this->getContext(), fieldTypes));
 }
 
 void circt::om::ClassOp::addFields(mlir::OpBuilder &builder,
@@ -446,11 +449,18 @@ void circt::om::ClassExternOp::addFields(
     mlir::OpBuilder &builder, mlir::Location loc,
     llvm::ArrayRef<mlir::StringAttr> fieldNames,
     llvm::ArrayRef<mlir::Type> fieldTypes) {
-  llvm::SmallVector<NamedAttribute> fieldAttrs;
   auto *op = builder.create<ClassExternFieldsOp>(loc).getOperation();
+  // TODO: Merge with buildFieldAttrs code
+  auto *ctx = builder.getContext();
+  llvm::SmallVector<NamedAttribute> namedAttrs;
+  llvm::SmallVector<Attribute> fieldAttrs;
   for (auto [name, type] : llvm::zip(fieldNames, fieldTypes)) {
-    op->setAttr(name, mlir::TypeAttr::get(type));
+    namedAttrs.push_back(mlir::NamedAttribute(mlir::StringAttr(name),
+                                              mlir::TypeAttr::get(type)));
+    fieldAttrs.push_back(cast<Attribute>(name));
   }
+  op->setAttr("fieldNames", mlir::ArrayAttr::get(ctx, fieldAttrs));
+  op->setAttr("fieldTypes", mlir::DictionaryAttr::get(ctx, namedAttrs));
 }
 
 void circt::om::ClassExternOp::addFields(

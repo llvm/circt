@@ -1619,20 +1619,29 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
-// struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
-//   using OpConversionPattern::OpConversionPattern;
-//
-//   LogicalResult
-//   matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
-//                   ConversionPatternRewriter &rewriter) const override {
-//     rewriter.modifyOpInPlace(op, [&]() {
-//       for (auto field : op.getFields()) {
-//         field.setType(typeConverter->convertType(field.getType()));
-//       }
-//     });
-//     return success();
-//   }
-// };
+struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.modifyOpInPlace(op, [&]() {
+      llvm::SmallVector<NamedAttribute> fieldTypes;
+      for (auto operand : op.getOperands()) {
+        operand.setType(typeConverter->convertType(operand.getType()));
+      }
+      for (auto field : op.getFieldNames()) {
+        auto type = op.getFieldType(cast<StringAttr>(field));
+        fieldTypes.push_back(mlir::NamedAttribute(
+            cast<StringAttr>(field),
+            mlir::TypeAttr::get(typeConverter->convertType(type))));
+      }
+      op->setAttr("fieldTypes",
+                  mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
+    });
+    return success();
+  }
+};
 
 struct ClassFieldOpConversion : public OpConversionPattern<ClassFieldOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1654,12 +1663,16 @@ struct ClassExternFieldsOpConversion
   matchAndRewrite(ClassExternFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.modifyOpInPlace(op, [&]() {
-      auto *operation = op.getOperation();
-      for (auto field : operation->getAttrs()) {
-        Type type = typeConverter->convertType(
-            cast<TypeAttr>(field.getValue()).getValue());
-        operation->setAttr(field.getName(), mlir::TypeAttr::get(type));
+      llvm::SmallVector<NamedAttribute> fieldTypes;
+      // TODO: Unify with non-extern
+      for (auto field : op.getFieldNames()) {
+        auto type = op.getFieldType(cast<StringAttr>(field));
+        fieldTypes.push_back(mlir::NamedAttribute(
+            cast<StringAttr>(field),
+            mlir::TypeAttr::get(typeConverter->convertType(type))));
       }
+      op->setAttr("fieldTypes",
+                  mlir::DictionaryAttr::get(op.getContext(), fieldTypes));
     });
     return success();
   }
@@ -1781,10 +1794,10 @@ static void populateConversionTarget(ConversionTarget &target) {
   // the OM op class.extern.field doesn't have operands or results, so we must
   // check it's type for a firrtl dialect.
   target.addDynamicallyLegalOp<ClassExternFieldsOp>([](ClassExternFieldsOp op) {
-    auto fieldTypes = op.getParentOp().getFieldTypes();
-    if (!fieldTypes.has_value()) return false;
-    return llvm::all_of(fieldTypes.value(), [](auto entry) {
-      return !isa<FIRRTLType>(entry.second);
+    auto fieldNames = op.getFieldNames();
+    return llvm::all_of(fieldNames, [&](auto field) {
+      // TODO: Avoid StringAttr cast?
+      return !isa<FIRRTLType>(op.getFieldType(cast<StringAttr>(field)));
     });
   });
 
@@ -1895,7 +1908,7 @@ static void populateRewritePatterns(
   patterns.add<ObjectSubfieldOpConversion>(converter, patterns.getContext(),
                                            classTypeTable);
   patterns.add<ClassFieldOpConversion>(converter, patterns.getContext());
-  //patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
+  patterns.add<ClassFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassExternFieldsOpConversion>(converter, patterns.getContext());
   patterns.add<ClassOpSignatureConversion>(converter, patterns.getContext());
   patterns.add<ClassExternOpSignatureConversion>(converter,

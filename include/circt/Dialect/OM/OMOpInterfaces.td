@@ -39,6 +39,22 @@ def ClassFieldsLike : OpInterface<"ClassFieldsLike"> {
     Marks the end of a class-like definition by providing a list of accessible
     fields.
   }];
+  let methods = [
+    InterfaceMethod<"Get the class-like field to type map",
+      "mlir::Type", "getFieldType", (ins "mlir::StringAttr":$name),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{ 
+         mlir::DictionaryAttr fieldTypes =
+           cast<mlir::DictionaryAttr>(this->getOperation()->getAttr("fieldTypes"));
+         return cast<mlir::TypeAttr>(fieldTypes.get(name)).getValue();;
+       }]>,
+    InterfaceMethod<"Get the class-like field names",
+      "llvm::ArrayRef<mlir::Attribute>", "getFieldNames", (ins),
+      /*methodBody=*/[{}],
+      /*defaultImplementation=*/[{ 
+         return cast<mlir::ArrayAttr>(this->getOperation()->getAttr("fieldNames")).getValue();
+       }]>,
+  ];
 }
 
 def ClassLike : OpInterface<"ClassLike"> {
@@ -68,24 +84,20 @@ def ClassLike : OpInterface<"ClassLike"> {
       "circt::om::ClassFieldsLike", "getFieldsOp", (ins)>,
     InterfaceMethod<"Get the class-like fields objects",
       "llvm::SmallVector<circt::om::Field>", "getFields", (ins)>,
-    InterfaceMethod<"Get the class-like field to type map",
-      "std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>", "getFieldTypes", (ins),
-      /*methodBody=*/[{}],
-      /*defaultImplementation=*/[{ 
-        llvm::MapVector<mlir::StringAttr, mlir::Type> classFields;
-        for (auto field : $_op.getFields()) {
-          auto result = classFields.insert(
-            {field.getName(), field.getType()}
-          );
-          /// TODO: Can we do this verification on construction?
-          if (!result.second) {
-            $_op.getFieldsOp().emitOpError() << "field " << field.getName()
-            << " is defined twice";
-            return std::nullopt;
-          }
-        }
-        return std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>(classFields);
-      }]>,
+    //     llvm::MapVector<mlir::StringAttr, mlir::Type> classFields;
+    //     for (auto field : $_op.getFields()) {
+    //       auto result = classFields.insert(
+    //         {field.getName(), field.getType()}
+    //       );
+    //       /// TODO: Can we do this verification on construction?
+    //       if (!result.second) {
+    //         $_op.getFieldsOp().emitOpError() << "field " << field.getName()
+    //         << " is defined twice";
+    //         return std::nullopt;
+    //       }
+    //     }
+    //     return std::optional<llvm::MapVector<mlir::StringAttr, mlir::Type>>(classFields);
+    //   }]>,
   ];
 }
 
