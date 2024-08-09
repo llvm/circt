@@ -25,6 +25,12 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(OM, om);
 // Type API.
 //===----------------------------------------------------------------------===//
 
+/// Is the Type an AnyType.
+MLIR_CAPI_EXPORTED bool omTypeIsAAnyType(MlirType type);
+
+/// Get the TypeID for an AnyType.
+MLIR_CAPI_EXPORTED MlirTypeID omAnyTypeGetTypeID(void);
+
 /// Is the Type a ClassType.
 MLIR_CAPI_EXPORTED bool omTypeIsAClassType(MlirType type);
 

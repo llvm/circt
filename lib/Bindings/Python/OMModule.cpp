@@ -612,6 +612,9 @@ void circt::python::populateDialectOMSubmodule(py::module &m) {
       .def("__len__", &omMapAttrGetNumElements);
   PyMapAttrIterator::bind(m);
 
+  // Add the AnyType class definition.
+  mlir_type_subclass(m, "AnyType", omTypeIsAAnyType, omAnyTypeGetTypeID);
+
   // Add the ClassType class definition.
   mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
       .def_property_readonly("name", [](MlirType type) {

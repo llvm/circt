@@ -3,7 +3,7 @@
 
 import circt
 from circt.dialects import om
-from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType
+from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType, Type
 from circt.support import var_to_attribute
 
 from dataclasses import dataclass
@@ -307,3 +307,7 @@ with Context() as ctx:
       IntegerAttr.get(IntegerType.get_unsigned(64), -42))
   # CHECK: 18446744073709551574
   print(str(int_attr6))
+
+  # Test AnyType
+  any_type = Type.parse("!om.any")
+  assert isinstance(any_type, om.AnyType)
