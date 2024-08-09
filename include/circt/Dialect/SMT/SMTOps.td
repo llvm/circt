@@ -90,6 +90,12 @@ def BoolConstantOp : SMTOp<"constant", [
   let assemblyFormat = "$value attr-dict";
 
   let hasFolder = true;
+  
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input), [{
+      build($_builder, $_state, $_builder.getType<smt::BoolType>(), input);
+    }]>,
+  ];
 }
 
 def SolverOp : SMTOp<"solver", [

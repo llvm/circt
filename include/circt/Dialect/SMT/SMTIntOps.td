@@ -34,11 +34,12 @@ def IntConstantOp : SMTIntOp<"constant", [
     SMT-LIB 2.6 standard.
   }];
 
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins APIntAttr:$input);
   let results = (outs IntType:$result);
 
   let hasCustomAssemblyFormat = true;
   let hasFolder = true;
+
 }
 
 class VariadicIntOp<string mnemonic> : SMTIntOp<mnemonic, [Pure, Commutative]> {

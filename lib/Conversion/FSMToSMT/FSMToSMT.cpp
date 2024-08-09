@@ -199,32 +199,41 @@ LogicalResult MachineOpConverter::dispatch(){
   llvm::SmallVector<mlir::Value> argVars;
   llvm::SmallVector<mlir::Value> val;
 
-  MLIRContext ctx = 
 
 
   SmallVector<std::pair<mlir::Value, mlir::Value>> varExprMap;
 
   for (auto a : args){
     if (a.getType().getIntOrFloatBitWidth()>1){
-      argVarTypes.push_back(b.getType<smt::IntType>());
-      // smt::IntType v = smt::IntType::get(b.getContext());
-      val.push_back(a);
-      smt::IntType intVal;
-      argVars.push_back(intVal);
+      auto intVal = b.getType<smt::IntType>();
+      mlir::Value tmp = b.create<smt::IntConstantOp>(loc, a);
+      val.push_back(tmp);
+      argVarTypes.push_back(intVal);
     }
-    else
-      argVarTypes.push_back(b.getType<smt::BoolType>());
-    val.push_back(a);
+    else{
+      auto intVal = b.getType<smt::BoolType>();
+      mlir::Value tmp = b.create<smt::VariadicBoolOp>(loc, a);
+      val.push_back(tmp);
+      argVarTypes.push_back(intVal);
+    }
+    
     varExprMap.push_back({a,a});
   }
 
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     llvm::outs()<<"\nvar\n";
-    if (variableOp.getResult().getType().getIntOrFloatBitWidth()>1)
-      argVarTypes.push_back(b.getType<smt::IntType>());
-    else
-      argVarTypes.push_back(b.getType<smt::BoolType>());
-    val.push_back(variableOp.getResult());
+    if (variableOp.getResult().getType().getIntOrFloatBitWidth()>1){
+      auto intVal = b.getType<smt::IntType>();
+      mlir::Value tmp = b.create<smt::IntConstantOp>(loc, variableOp->getResult(0));
+      val.push_back(tmp);
+      argVarTypes.push_back(intVal);
+    }
+    else{
+      auto intVal = b.getType<smt::BoolType>();
+      mlir::Value tmp = b.create<smt::BoolConstantOp>(loc, variableOp->getResult(0));
+      val.push_back(tmp);
+      argVarTypes.push_back(intVal);
+    }
     varExprMap.push_back({variableOp.getResult(),variableOp.getResult()});
   }
 
@@ -257,11 +266,11 @@ LogicalResult MachineOpConverter::dispatch(){
       llvm::outs()<<"\nto "<<nextState<<"\n\n";
 
       if (!transitionOp->getRegion(0).empty()){
-        // guard
+        // TODO: guard region
       } 
 
       if (!transitionOp->getRegion(1).empty()){
-        // action
+        // TODO: action region
       } 
 
       // smt::BoolType rhs;
@@ -275,7 +284,7 @@ LogicalResult MachineOpConverter::dispatch(){
       // mlir::Value tmpVal = b.create<func::ConstantOp>(loc, b.getI1Type(), s);
       // auto tmpThing = b.create<smt::AssertOp>(loc, tmpVal);
 
-      applyLhsFun.dump();
+      // applyLhsFun.dump();
 
       // io.build(b, boh, lhs, rhs);
 
