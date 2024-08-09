@@ -259,37 +259,19 @@ void VariableOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
-llvm::SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
-  if (isa<SVModuleOp>(getOperation()->getParentOp()))
-    return {};
-  if (getInitial())
-    return {};
-  return {MemorySlot{getResult(), getType()}};
-}
-
-Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
-  if (auto value = getInitial())
-    return value;
-  return builder.create<ConstantOp>(
-      getLoc(),
-      cast<moore::IntType>(cast<RefType>(slot.elemType).getNestedType()), 0);
-}
-
-void VariableOp::handleBlockArgument(const MemorySlot &slot,
-                                     BlockArgument argument,
-                                     OpBuilder &builder) {}
-
-::std::optional<::mlir::PromotableAllocationOpInterface>
-VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
-                                    OpBuilder &builder) {
-  if (defaultValue.use_empty())
-    defaultValue.getDefiningOp()->erase();
-  this->erase();
-  return std::nullopt;
-}
-
 LogicalResult VariableOp::canonicalize(VariableOp op,
                                        PatternRewriter &rewriter) {
+  // If the variable is embedded in an SSACFG region, move the initial value
+  // into an assignment immediately after the variable op. This allows the
+  // mem2reg pass which cannot handle variables with initial values.
+  auto initial = op.getInitial();
+  if (initial && mlir::mayHaveSSADominance(*op->getParentRegion())) {
+    rewriter.modifyOpInPlace(op, [&] { op.getInitialMutable().clear(); });
+    rewriter.setInsertionPointAfter(op);
+    rewriter.create<BlockingAssignOp>(initial.getLoc(), op, initial);
+    return success();
+  }
+
   // Check if the variable has one unique continuous assignment to it, all other
   // uses are reads, and that all uses are in the same block as the variable
   // itself.
@@ -332,6 +314,46 @@ LogicalResult VariableOp::canonicalize(VariableOp op,
   // Remove the original variable.
   rewriter.eraseOp(op);
   return success();
+}
+
+SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
+  // We cannot promote variables with an initial value, since that value may not
+  // dominate the location where the default value needs to be constructed.
+  if (mlir::mayBeGraphRegion(*getOperation()->getParentRegion()) ||
+      getInitial())
+    return {};
+  return {MemorySlot{getResult(), getType().getNestedType()}};
+}
+
+Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
+  auto packedType = dyn_cast<PackedType>(slot.elemType);
+  if (!packedType)
+    return {};
+  auto bitWidth = packedType.getBitSize();
+  if (!bitWidth)
+    return {};
+  auto fvint = packedType.getDomain() == Domain::FourValued
+                   ? FVInt::getAllX(*bitWidth)
+                   : FVInt::getZero(*bitWidth);
+  Value value = builder.create<ConstantOp>(
+      getLoc(), IntType::get(getContext(), *bitWidth, packedType.getDomain()),
+      fvint);
+  if (value.getType() != packedType)
+    builder.create<ConversionOp>(getLoc(), packedType, value);
+  return value;
+}
+
+void VariableOp::handleBlockArgument(const MemorySlot &slot,
+                                     BlockArgument argument,
+                                     OpBuilder &builder) {}
+
+std::optional<mlir::PromotableAllocationOpInterface>
+VariableOp::handlePromotionComplete(const MemorySlot &slot, Value defaultValue,
+                                    OpBuilder &builder) {
+  if (defaultValue && defaultValue.use_empty())
+    defaultValue.getDefiningOp()->erase();
+  this->erase();
+  return {};
 }
 
 SmallVector<DestructurableMemorySlot> VariableOp::getDestructurableSlots() {
@@ -1054,8 +1076,7 @@ bool BlockingAssignOp::canUsesBeRemoved(
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getDst() == slot.ptr &&
-         getSrc() != slot.ptr &&
-         getSrc().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getSrc() != slot.ptr && getSrc().getType() == slot.elemType;
 }
 
 DeletionKind BlockingAssignOp::removeBlockingUses(
@@ -1070,7 +1091,7 @@ DeletionKind BlockingAssignOp::removeBlockingUses(
 //===----------------------------------------------------------------------===//
 
 bool ReadOp::loadsFrom(const MemorySlot &slot) {
-  return getOperand() == slot.ptr;
+  return getInput() == slot.ptr;
 }
 
 bool ReadOp::storesTo(const MemorySlot &slot) { return false; }
@@ -1089,7 +1110,7 @@ bool ReadOp::canUsesBeRemoved(const MemorySlot &slot,
     return false;
   Value blockingUse = (*blockingUses.begin())->get();
   return blockingUse == slot.ptr && getOperand() == slot.ptr &&
-         getResult().getType() == cast<RefType>(slot.elemType).getNestedType();
+         getResult().getType() == slot.elemType;
 }
 
 DeletionKind
