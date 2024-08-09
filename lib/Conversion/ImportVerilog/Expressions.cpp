@@ -178,7 +178,9 @@ struct RvalueExprVisitor {
         isInc ? builder.create<moore::AddOp>(loc, preValue, one).getResult()
               : builder.create<moore::SubOp>(loc, preValue, one).getResult();
     builder.create<moore::BlockingAssignOp>(loc, arg, postValue);
-    return isPost ? preValue : postValue;
+    if (isPost)
+      return preValue;
+    return postValue;
   }
 
   // Handle unary operators.
