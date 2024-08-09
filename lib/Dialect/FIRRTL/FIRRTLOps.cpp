@@ -3362,6 +3362,40 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+//===----------------------------------------------------------------------===//
+// FormalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FormalOp::verifySymbolUses(::mlir::SymbolTableCollection &symbolTable) {
+  auto referencedModule = symbolTable.lookupNearestSymbolFrom<FModuleLike>(
+      *this, getModuleNameAttr());
+  if (!referencedModule) {
+    return (*this)->emitOpError("invalid symbol reference");
+  }
+
+  // Check this is not a class.
+  if (isa<ClassOp>(referencedModule))
+    return (*this)
+               ->emitOpError("must instantiate a module not a class")
+               .attachNote(referencedModule.getLoc())
+           << "class declared here";
+  return success();
+}
+
+std::optional<size_t> FormalOp::getTargetResultIndex() {
+  // Inner symbols on instance operations target the op not any result.
+  return std::nullopt;
+}
+
+void FormalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  /* Don't do anything because Formal doesn't have any results */
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
@@ -3383,6 +3417,10 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
 
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {

@@ -60,6 +60,7 @@ struct Emitter {
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
+  void emitDeclaration(FormalOp op);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
 
   void emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -406,6 +407,7 @@ void Emitter::emitCircuit(CircuitOp op) {
           })
           .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
           .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
+          .Case<FormalOp>([&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -621,6 +623,21 @@ void Emitter::emitDeclaration(OptionOp op) {
     }
   });
   ps << PP::newline << PP::newline;
+}
+
+/// Emit a formal test definition.
+void Emitter::emitDeclaration(FormalOp op) {
+  startStatement();
+  ps << "formal " << PPExtString(op.getSymName()) << " of "
+     << PPExtString(op.getModuleName()) << ", bound = ";
+  ps.addAsString(op.getBound());
+
+  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+    ps << ", ";
+    ps.writeQuotedEscaped(outputFile.getFilename().getValue());
+  }
+
+  emitLocationAndNewLine(op);
 }
 
 /// Check if an operation is inlined into the emission of their users. For
