@@ -158,7 +158,7 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
   LogicalResult
   matchAndRewrite(VariableOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Type resultType = typeConverter->convertType(op.getType().getNestedType());
     Value init = adaptor.getInitial();
     // TODO: Unsupport x/z, so the initial value is 0.
     if (!init && cast<RefType>(op.getResult().getType()).getDomain() ==
@@ -660,18 +660,19 @@ static void populateLegality(ConversionTarget &target) {
 
 static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](IntType type) {
-    return mlir::IntegerType::get(type.getContext(), type.getWidth());
+    return IntegerType::get(type.getContext(), type.getWidth());
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    if (isa<IntType, ArrayType, UnpackedArrayType>(type.getNestedType()))
-      return mlir::IntegerType::get(type.getContext(),
-                                    type.getBitSize().value());
-    return std::nullopt;
+    auto innerType = typeConverter.convertType(type.getNestedType());
+    if (innerType)
+      return hw::InOutType::get(innerType);
+    return {};
   });
 
   // Valid target types.
-  typeConverter.addConversion([](mlir::IntegerType type) { return type; });
+  typeConverter.addConversion([](IntegerType type) { return type; });
+
   typeConverter.addTargetMaterialization(
       [&](mlir::OpBuilder &builder, mlir::Type resultType,
           mlir::ValueRange inputs,
