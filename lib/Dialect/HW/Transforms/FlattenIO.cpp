@@ -184,8 +184,6 @@ public:
 
     addTargetMaterialization([](OpBuilder &builder, hw::TypeAliasType type,
                                 ValueRange inputs, Location loc) {
-      auto structType = getStructType(type);
-      assert(structType && "expected struct type");
       auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
       return result.getResult();
     });
