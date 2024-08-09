@@ -761,7 +761,7 @@ return WalkResult::interrupt();
                "The component currently does nothing. It needs to either have "
                "continuous assignments in the Wires region or control "
                "constructs in "
-               "the Control region.The Control region should involve ")
+               "the Control region. The Control region should contain at least one of ")
            << "'" << EnableOp::getOperationName() << "' , "
            << "'" << InvokeOp::getOperationName() << "' or "
            << "'" << fsm::MachineOp::getOperationName() << "'.";
