@@ -419,10 +419,78 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
   LogicalResult
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    rewriter.replaceOpWithNewOp<comb::ExtractOp>(
-        op, resultType, adaptor.getInput(), adaptor.getLowBit());
-    return success();
+    Type inputType = adaptor.getInput().getType();
+
+    if (isa<IntegerType>(inputType)) {
+      rewriter.replaceOpWithNewOp<comb::ExtractOp>(
+          op, resultType, adaptor.getInput(), adaptor.getLowBit());
+      return success();
+    }
+
+    if (auto arrTy = dyn_cast<hw::ArrayType>(inputType)) {
+      int64_t width = llvm::Log2_64_Ceil(arrTy.getNumElements());
+      Value idx = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), rewriter.getIntegerType(width), adaptor.getLowBit());
+      if (isa<hw::ArrayType>(resultType)) {
+        rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
+                                                      adaptor.getInput(), idx);
+        return success();
+      }
+
+      // Otherwise, it has to be the array's element type
+      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
+      return success();
+    }
+
+    return failure();
+  }
+};
+
+struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: properly handle out-of-bounds accesses
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Type inputType =
+        cast<hw::InOutType>(adaptor.getInput().getType()).getElementType();
+
+    if (auto intType = dyn_cast<IntegerType>(inputType)) {
+      int64_t width = hw::getBitWidth(inputType);
+      if (width == -1)
+        return failure();
+
+      Value lowBit = rewriter.create<hw::ConstantOp>(
+          op.getLoc(), rewriter.getIntegerType(llvm::Log2_64_Ceil(width)),
+          adaptor.getLowBit());
+      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
+          op, resultType, adaptor.getInput(), lowBit);
+      return success();
+    }
+
+    if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
+      Value lowBit = rewriter.create<hw::ConstantOp>(
+          op.getLoc(),
+          rewriter.getIntegerType(llvm::Log2_64_Ceil(arrType.getNumElements())),
+          adaptor.getLowBit());
+
+      if (isa<hw::ArrayType>(
+              cast<hw::InOutType>(resultType).getElementType())) {
+        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
+            op, resultType, adaptor.getInput(), lowBit);
+        return success();
+      }
+
+      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                       lowBit);
+      return success();
+    }
+
+    return failure();
   }
 };
 
@@ -449,11 +517,76 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getNumElements());
       Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
                                      op->getLoc());
+
+      if (isa<hw::ArrayType>(resultType)) {
+        rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
+                                                      adaptor.getInput(), idx);
+        return success();
+      }
+
       rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
 
     return failure();
+  }
+};
+
+struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: properly handle out-of-bounds accesses
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Type inputType =
+        cast<hw::InOutType>(adaptor.getInput().getType()).getElementType();
+
+    if (auto intType = dyn_cast<IntegerType>(inputType)) {
+      int64_t width = hw::getBitWidth(inputType);
+      if (width == -1)
+        return failure();
+
+      Value amount =
+          adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                             llvm::Log2_64_Ceil(width), op->getLoc());
+      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
+          op, resultType, adaptor.getInput(), amount);
+      return success();
+    }
+
+    if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
+      Value idx = adjustIntegerWidth(
+          rewriter, adaptor.getLowBit(),
+          llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
+
+      if (isa<hw::ArrayType>(
+              cast<hw::InOutType>(resultType).getElementType())) {
+        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
+            op, resultType, adaptor.getInput(), idx);
+        return success();
+      }
+
+      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                       idx);
+      return success();
+    }
+
+    return failure();
+  }
+};
+
+struct StructCreateOpConversion : public OpConversionPattern<StructCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StructCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<hw::StructCreateOp>(op, resultType,
+                                                    adaptor.getFields());
+    return success();
   }
 };
 
@@ -932,9 +1065,10 @@ static void populateOpConversion(RewritePatternSet &patterns,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv, ConcatOpConversion, ReplicateOpConversion,
-    ExtractOpConversion, DynExtractOpConversion, ConversionOpConversion,
-    ReadOpConversion, NamedConstantOpConv, StructExtractOpConversion,
-    StructExtractRefOpConversion,
+    ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
+    ConversionOpConversion, ReadOpConversion, NamedConstantOpConv,
+    StructExtractOpConversion, StructExtractRefOpConversion,
+    ExtractRefOpConversion, StructCreateOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
