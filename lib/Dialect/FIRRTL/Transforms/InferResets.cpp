@@ -461,8 +461,6 @@ struct InferResetsPass
   LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
   void implementFullReset(Operation *op, FModuleOp module, Value actualReset);
 
-  LogicalResult verifyNoAbstractReset();
-
   //===--------------------------------------------------------------------===//
   // Utilities
 
@@ -545,10 +543,6 @@ void InferResetsPass::runOnOperationInner() {
 
   // Implement the full resets.
   if (failed(implementFullReset()))
-    return signalPassFailure();
-
-  // Require that no Abstract Resets exist on ports in the design.
-  if (failed(verifyNoAbstractReset()))
     return signalPassFailure();
 }
 
@@ -1908,26 +1902,4 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     regOp.getResetSignalMutable().assign(actualReset);
     regOp.getResetValueMutable().assign(zero);
   }
-}
-
-LogicalResult InferResetsPass::verifyNoAbstractReset() {
-  bool hasAbstractResetPorts = false;
-  for (FModuleLike module :
-       getOperation().getBodyBlock()->getOps<FModuleLike>()) {
-    for (PortInfo port : module.getPorts()) {
-      if (getBaseOfType<ResetType>(port.type)) {
-        auto diag = emitError(port.loc)
-                    << "a port \"" << port.getName()
-                    << "\" with abstract reset type was unable to be "
-                       "inferred by InferResets (is this a top-level port?)";
-        diag.attachNote(module->getLoc())
-            << "the module with this uninferred reset port was defined here";
-        hasAbstractResetPorts = true;
-      }
-    }
-  }
-
-  if (hasAbstractResetPorts)
-    return failure();
-  return success();
 }
