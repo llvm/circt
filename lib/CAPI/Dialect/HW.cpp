@@ -217,6 +217,10 @@ MlirAttribute hwInnerSymAttrGet(MlirAttribute symName) {
   return wrap(InnerSymAttr::get(cast<StringAttr>(unwrap(symName))));
 }
 
+MlirAttribute hwInnerSymAttrGetEmpty(MlirContext ctx) {
+  return wrap(InnerSymAttr::get(unwrap(ctx)));
+}
+
 MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute innerSymAttr) {
   return wrap((Attribute)cast<InnerSymAttr>(unwrap(innerSymAttr)).getSymName());
 }
