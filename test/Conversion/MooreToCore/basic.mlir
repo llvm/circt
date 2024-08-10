@@ -57,6 +57,9 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   moore.replicate %arg0 : i1 -> i2
   moore.replicate %arg1 : l1 -> l2
 
+  // CHECK-NEXT: %name = hw.wire %arg0 : i1
+  %name = moore.assigned_variable %arg0 : !moore.i1
+
   // CHECK-NEXT: %c12_i32 = hw.constant 12 : i32
   // CHECK-NEXT: %c3_i6 = hw.constant 3 : i6
   moore.constant 12 : !moore.i32

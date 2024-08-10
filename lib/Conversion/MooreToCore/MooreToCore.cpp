@@ -928,6 +928,19 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   }
 };
 
+struct AssignedVariableOpConversion
+    : public OpConversionPattern<AssignedVariableOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(AssignedVariableOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::WireOp>(op, adaptor.getInput(),
+                                            adaptor.getNameAttr());
+    return success();
+  }
+};
+
 template <typename OpTy, unsigned DeltaTime, unsigned EpsilonTime>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -1112,6 +1125,7 @@ static void populateOpConversion(RewritePatternSet &patterns,
     AssignOpConversion<ContinuousAssignOp, 0, 1>,
     AssignOpConversion<BlockingAssignOp, 0, 1>,
     AssignOpConversion<NonBlockingAssignOp, 1, 0>,
+    AssignedVariableOpConversion,
 
     // Patterns of branch operations.
     CondBranchOpConversion, BranchOpConversion,
