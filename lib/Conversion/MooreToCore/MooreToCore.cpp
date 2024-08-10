@@ -17,6 +17,7 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
@@ -960,6 +961,39 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
   }
 };
 
+struct ConditionalOpConversion : public OpConversionPattern<ConditionalOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConditionalOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: This lowering is only correct if the condition is two-valued. If
+    // the condition is X or Z, both branches of the conditional must be
+    // evaluated and merged with the appropriate lookup table. See documentation
+    // for `ConditionalOp`.
+    auto type = typeConverter->convertType(op.getType());
+    auto ifOp =
+        rewriter.create<scf::IfOp>(op.getLoc(), type, adaptor.getCondition());
+    rewriter.inlineRegionBefore(op.getTrueRegion(), ifOp.getThenRegion(),
+                                ifOp.getThenRegion().end());
+    rewriter.inlineRegionBefore(op.getFalseRegion(), ifOp.getElseRegion(),
+                                ifOp.getElseRegion().end());
+    rewriter.replaceOp(op, ifOp);
+    return success();
+  }
+};
+
+struct YieldOpConversion : public OpConversionPattern<YieldOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(YieldOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -992,6 +1026,8 @@ static void populateLegality(ConversionTarget &target) {
 
   addGenericLegality<cf::CondBranchOp>(target);
   addGenericLegality<cf::BranchOp>(target);
+  addGenericLegality<scf::IfOp>(target);
+  addGenericLegality<scf::YieldOp>(target);
   addGenericLegality<func::CallOp>(target);
   addGenericLegality<func::ReturnOp>(target);
   addGenericLegality<UnrealizedConversionCastOp>(target);
@@ -1081,7 +1117,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ExtractOpConversion, DynExtractOpConversion, DynExtractRefOpConversion,
     ConversionOpConversion, ReadOpConversion, NamedConstantOpConv,
     StructExtractOpConversion, StructExtractRefOpConversion,
-    ExtractRefOpConversion, StructCreateOpConversion,
+    ExtractRefOpConversion, StructCreateOpConversion, ConditionalOpConversion,
+    YieldOpConversion,
 
     // Patterns of unary operations.
     ReduceAndOpConversion, ReduceOrOpConversion, ReduceXorOpConversion,
