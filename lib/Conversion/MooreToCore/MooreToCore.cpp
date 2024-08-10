@@ -320,18 +320,18 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Value init = adaptor.getInitial();
-    // TODO: Unsupport x/z, so the initial value is 0.
-    if (!init && cast<RefType>(op.getResult().getType()).getDomain() ==
-                     Domain::FourValued)
-      return failure();
 
+    // Determine the initial value of the signal.
+    Value init = adaptor.getInitial();
     if (!init) {
       Type elementType = cast<hw::InOutType>(resultType).getElementType();
       int64_t width = hw::getBitWidth(elementType);
       if (width == -1)
         return failure();
 
+      // TODO: Once the core dialects support four-valued integers, this code
+      // will additionally need to generate an all-X value for four-valued
+      // variables.
       Value constZero = rewriter.create<hw::ConstantOp>(loc, APInt(width, 0));
       init = rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
     }

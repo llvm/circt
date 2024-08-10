@@ -353,6 +353,9 @@ moore.module @Variable() {
   %1 = moore.constant 1 : l1
   // CHECK: llhd.sig "l" %true : i1
   %l = moore.variable %1 : <l1>
+  // CHECK: [[TMP:%.+]] = hw.constant 0 : i19
+  // CHECK: llhd.sig "m" [[TMP]] : i19
+  %m = moore.variable : <l19>
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
