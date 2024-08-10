@@ -9,7 +9,8 @@ moore.module @Foo() {
   // CHECK: moore.procedure always_comb
   moore.procedure always_comb {
     // CHECK: [[TMP:%.+]] = moore.read %a
-    // CHECK: [[LOCAL_A:%.+]] = moore.variable [[TMP]]
+    // CHECK: [[LOCAL_A:%.+]] = moore.variable
+    // CHECK: moore.blocking_assign [[LOCAL_A]], [[TMP]]
 
     // CHECK: [[C1:%.+]] = moore.constant 1
     // CHECK: moore.blocking_assign [[LOCAL_A]], [[C1]]
@@ -40,7 +41,8 @@ moore.module @Foo() {
   // CHECK: moore.procedure always_comb
   moore.procedure always_comb {
     // CHECK: [[TMP:%.+]] = moore.read %a
-    // CHECK: [[LOCAL_A:%.+]] = moore.variable %0
+    // CHECK: [[LOCAL_A:%.+]] = moore.variable
+    // CHECK: moore.blocking_assign [[LOCAL_A]], [[TMP]]
 
     // CHECK: [[TMP:%.+]] = moore.read [[LOCAL_A]]
     // CHECK: moore.blocking_assign %y, [[TMP]]

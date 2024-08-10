@@ -19,6 +19,7 @@
 #include "circt/Reduce/GenericReductions.h"
 #include "circt/Reduce/Tester.h"
 #include "circt/Support/Version.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -424,7 +425,8 @@ int main(int argc, char **argv) {
   // Register all the dialects and create a context to work wtih.
   mlir::DialectRegistry registry;
   registerAllDialects(registry);
-  registry.insert<func::FuncDialect, scf::SCFDialect, LLVM::LLVMDialect>();
+  registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
+                  LLVM::LLVMDialect>();
   arc::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);
   hw::registerReducePatternDialectInterface(registry);

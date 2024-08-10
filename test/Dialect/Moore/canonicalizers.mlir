@@ -280,3 +280,14 @@ func.func @Pow(%arg0 : !moore.l32) -> (!moore.l32, !moore.l32, !moore.l32, !moor
   // CHECK-NEXT: return [[V0]], [[V0]], [[V0]], [[V0]], [[V4]], [[V5]] :
   return %3, %4, %5, %6, %7, %8 : !moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32, !moore.l32
 }
+
+// CHECK-LABEL: func.func @MoveInitialOutOfSSAVariable
+func.func @MoveInitialOutOfSSAVariable() {
+  // CHECK: [[TMP:%.+]] = moore.constant 9001
+  %0 = moore.constant 9001 : i42
+  // CHECK: [[VAR:%.+]] = moore.variable : <i42>
+  // CHECK-NEXT: moore.blocking_assign [[VAR]], [[TMP]]
+  %1 = moore.variable %0 : <i42>
+  func.call @useRef(%1) : (!moore.ref<i42>) -> ()
+  return
+}
