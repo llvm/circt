@@ -552,3 +552,47 @@ moore.module @Process(in %cond : i1) {
     moore.return
   }
 }
+
+// CHECK-LABEL: func.func @CaseXZ(
+func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
+  // CHECK: hw.constant -124 : i8
+  // CHECK: hw.constant -120 : i8
+  %0 = moore.constant b10XX01ZZ : l8
+  %1 = moore.constant b1XX01ZZ0 : l8
+
+  // CHECK: comb.icmp ceq %arg0, %arg1 : i8
+  moore.casez_eq %arg0, %arg1 : l8
+  // CHECK: [[MASK:%.+]] = hw.constant -7 : i8
+  // CHECK: [[TMP1:%.+]] = comb.and %arg0, [[MASK]]
+  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casez_eq %arg0, %1 : l8
+  // CHECK: [[MASK:%.+]] = hw.constant -4 : i8
+  // CHECK: [[TMP1:%.+]] = comb.and %arg1, [[MASK]]
+  // CHECK: [[TMP2:%.+]] = hw.constant -124 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casez_eq %0, %arg1 : l8
+  // CHECK: [[TMP1:%.+]] = hw.constant -128 : i8
+  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casez_eq %0, %1 : l8
+
+  // CHECK: comb.icmp ceq %arg0, %arg1 : i8
+  moore.casexz_eq %arg0, %arg1 : l8
+  // CHECK: [[MASK:%.+]] = hw.constant -103 : i8
+  // CHECK: [[TMP1:%.+]] = comb.and %arg0, [[MASK]]
+  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casexz_eq %arg0, %1 : l8
+  // CHECK: [[MASK:%.+]] = hw.constant -52 : i8
+  // CHECK: [[TMP1:%.+]] = comb.and %arg1, [[MASK]]
+  // CHECK: [[TMP2:%.+]] = hw.constant -124 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casexz_eq %0, %arg1 : l8
+  // CHECK: [[TMP1:%.+]] = hw.constant -128 : i8
+  // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
+  // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
+  moore.casexz_eq %0, %1 : l8
+
+  return
+}

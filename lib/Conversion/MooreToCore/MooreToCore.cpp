@@ -719,13 +719,57 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpAdaptor = typename SourceOp::Adaptor;
 
   LogicalResult
-  matchAndRewrite(SourceOp op, OpAdaptor adapter,
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType =
         ConversionPattern::typeConverter->convertType(op.getResult().getType());
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
-        op, resultType, pred, adapter.getLhs(), adapter.getRhs());
+        op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
+    return success();
+  }
+};
+
+template <typename SourceOp, bool withoutX>
+struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Check each operand if it is a known constant and extract the X and/or Z
+    // bits to be ignored.
+    // TODO: Once the core dialects support four-valued integers, we will have
+    // to create ops that extract X and Z bits from the operands, since we also
+    // have to do the right casez/casex comparison on non-constant inputs.
+    unsigned bitWidth = op.getLhs().getType().getWidth();
+    auto ignoredBits = APInt::getZero(bitWidth);
+    auto detectIgnoredBits = [&](Value value) {
+      auto constOp = value.getDefiningOp<ConstantOp>();
+      if (!constOp)
+        return;
+      auto constValue = constOp.getValue();
+      if (withoutX)
+        ignoredBits |= constValue.getZBits();
+      else
+        ignoredBits |= constValue.getUnknownBits();
+    };
+    detectIgnoredBits(op.getLhs());
+    detectIgnoredBits(op.getRhs());
+
+    // If we have detected any bits to be ignored, mask them in the operands for
+    // the comparison.
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    if (!ignoredBits.isZero()) {
+      ignoredBits.flipAllBits();
+      auto maskOp = rewriter.create<hw::ConstantOp>(op.getLoc(), ignoredBits);
+      lhs = rewriter.createOrFold<comb::AndOp>(op.getLoc(), lhs, maskOp);
+      rhs = rewriter.createOrFold<comb::AndOp>(op.getLoc(), rhs, maskOp);
+    }
+
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, ICmpPredicate::ceq, lhs, rhs);
     return success();
   }
 };
@@ -1151,6 +1195,8 @@ static void populateOpConversion(RewritePatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    CaseXZEqOpConversion<CaseZEqOp, true>,
+    CaseXZEqOpConversion<CaseXZEqOp, false>,
     
     // Patterns of structural operations.
     SVModuleOpConversion, InstanceOpConversion, ProcedureOpConversion,
